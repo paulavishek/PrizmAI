@@ -22,10 +22,18 @@
 {% block content %}
 <div class="container-fluid py-4">
 
+  <!-- View Mode Tabs -->
+  <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+    <li class="nav-item"><a class="nav-link active" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
+  </ul>
+
   <!-- Breadcrumb -->
   <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{% url 'kanban:commitment_dashboard' board.id %}">Commitment Protocols</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'commitment_dashboard' board.id %}">Commitment Protocols</a></li>
       <li class="breadcrumb-item active">{{ commitment.title|truncatechars:40 }}</li>
     </ol>
   </nav>
@@ -331,7 +339,7 @@
   // ── Place bet (AJAX) ─────────────────────────────────────────────────
   var betForm = document.getElementById('bet-form');
   var betFeedback = document.getElementById('bet-feedback');
-  var betUrl = "{% url 'kanban:commitment_place_bet' board.id commitment.id %}";
+  var betUrl = "{% url 'commitment_place_bet' board.id commitment.id %}";
   if (betForm) {
     betForm.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -350,7 +358,7 @@
   // ── Manual signal (AJAX) ─────────────────────────────────────────────
   var signalForm = document.getElementById('signal-form');
   var signalFeedback = document.getElementById('signal-feedback');
-  var signalUrl = "{% url 'kanban:commitment_signal_manual' board.id commitment.id %}";
+  var signalUrl = "{% url 'commitment_signal_manual' board.id commitment.id %}";
   if (signalForm) {
     signalForm.addEventListener('submit', function (e) {
       e.preventDefault();

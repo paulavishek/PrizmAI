@@ -162,7 +162,7 @@ def commitment_create(request, board_id):
             except Exception:
                 pass
 
-            return redirect('kanban:commitment_detail', board_id=board.id, commitment_id=protocol.id)
+            return redirect('commitment_detail', board_id=board.id, commitment_id=protocol.id)
 
         except (ValueError, TypeError) as e:
             return render(request, 'kanban/commitment_create.html', {
@@ -248,9 +248,12 @@ def commitment_place_bet(request, board_id, commitment_id):
     board = get_object_or_404(Board, id=board_id)
     protocol = get_object_or_404(CommitmentProtocol, id=commitment_id, board=board)
 
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
+    if 'application/json' in (request.content_type or ''):
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON body.'}, status=400)
+    else:
         body = request.POST
 
     tokens_wagered = int(body.get('tokens_wagered') or body.get('tokens', 10))
@@ -335,9 +338,12 @@ def commitment_signal_manual(request, board_id, commitment_id):
     board = get_object_or_404(Board, id=board_id)
     protocol = get_object_or_404(CommitmentProtocol, id=commitment_id, board=board)
 
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
+    if 'application/json' in (request.content_type or ''):
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON body.'}, status=400)
+    else:
         body = request.POST
 
     signal_type = body.get('signal_type', 'manual_positive')
@@ -474,7 +480,7 @@ def negotiation_resolve(request, board_id, negotiation_id):
     protocol.status = 'renegotiated'
     protocol.save(update_fields=['status'])
 
-    return redirect('kanban:commitment_detail', board_id=board.id, commitment_id=protocol.id)
+    return redirect('commitment_detail', board_id=board.id, commitment_id=protocol.id)
 
 
 # ---------------------------------------------------------------------------

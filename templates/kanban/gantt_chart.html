@@ -1681,6 +1681,7 @@
         <li class="nav-item"><a class="nav-link" href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
         <li class="nav-item"><a class="nav-link active" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
     </ul>
 
     <div class="gantt-container" style="position: relative;">
