@@ -103,7 +103,25 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "- 0-39  = FRAGILE    (collapses under first real shock)\n"
     "- 40-69 = MODERATE   (survives minor shocks, fails major ones)\n"
     "- 70-89 = RESILIENT  (survives most real-world disruptions)\n"
-    "- 90-100 = ANTIFRAGILE (built-in redundancy, gets stronger under pressure)"
+    "- 90-100 = ANTIFRAGILE (built-in redundancy, gets stronger under pressure)\n\n"
+    "PROGRESSIVE SCORING RULES (CRITICAL):\n"
+    "- If the project has PREVIOUSLY ADDRESSED SCENARIOS, give credit. "
+    "The team has acknowledged those risks and committed to handling them. "
+    "Each addressed scenario should improve the base score by 3-8 points "
+    "depending on its severity.\n"
+    "- If the project has APPLIED VACCINES, give substantial credit. "
+    "These are structural fixes the team has committed to implementing. "
+    "Each applied vaccine should improve the base score by its stated "
+    "projected_score_improvement value (or close to it).\n"
+    "- DO NOT repeat attack types that have already been addressed with applied vaccines. "
+    "Find NEW, DIFFERENT vulnerabilities instead.\n"
+    "- The overall_immunity_score MUST reflect the cumulative benefit of all "
+    "addressed scenarios and applied vaccines on top of the raw board state score.\n"
+    "- If previous sessions exist, the score should generally trend upward "
+    "when vaccines have been applied and scenarios addressed — not stay flat.\n"
+    "- A project with 5+ applied vaccines and 5+ addressed scenarios should "
+    "score at LEAST 15-30 points higher than one with none, even if the "
+    "underlying board data hasn't changed yet."
 )
 
 
@@ -138,6 +156,16 @@ def build_stress_test_user_prompt(board_data):
         f"{_format_assignee_breakdown(board_data.get('assignee_breakdown', {}))}\n\n"
         "BLOCKING DEPENDENCIES:\n"
         f"{_format_dependencies(board_data.get('blocking_dependencies', []))}\n\n"
+        "MITIGATION HISTORY (the team has already taken these actions):\n"
+        "=========================================================\n"
+        f"{_format_score_history(board_data.get('score_history', []))}\n\n"
+        "ADDRESSED SCENARIOS (team has acknowledged and committed to handling these):\n"
+        f"{_format_addressed_scenarios(board_data.get('addressed_scenarios', []))}\n\n"
+        "APPLIED VACCINES (structural fixes the team has committed to implementing):\n"
+        f"{_format_applied_vaccines_detail(board_data.get('applied_vaccines_detail', []))}\n\n"
+        "IMPORTANT: Give credit for the addressed scenarios and applied vaccines above. "
+        "The overall_immunity_score must be HIGHER than it would be without these mitigations. "
+        "Do NOT repeat attack types already covered by applied vaccines — find NEW vulnerabilities.\n\n"
         "Choose the 5 attack types that will cause the most damage to THIS specific plan.\n"
         "Respond with ONLY the JSON object. No other text."
     )
@@ -160,3 +188,39 @@ def _format_dependencies(deps):
         f"  '{d.get('task')}' is blocked by '{d.get('blocked_by')}'"
         for d in deps[:8]
     )
+
+
+def _format_score_history(scores):
+    """Format previous session scores for the prompt."""
+    if not scores:
+        return "  No previous sessions."
+    lines = []
+    for i, s in enumerate(scores, 1):
+        lines.append(f"  Session {i}: Score {s['score']}/100 ({s['band']})")
+    return "\n".join(lines)
+
+
+def _format_addressed_scenarios(scenarios):
+    """Format previously addressed scenarios for the prompt."""
+    if not scenarios:
+        return "  None yet."
+    lines = []
+    for s in scenarios:
+        lines.append(
+            f"  - [{s.get('attack_type', 'unknown')}] "
+            f"{s.get('title', 'Untitled')} (severity {s.get('severity', '?')}/10) — ADDRESSED"
+        )
+    return "\n".join(lines)
+
+
+def _format_applied_vaccines_detail(vaccines):
+    """Format applied vaccines with descriptions for the prompt."""
+    if not vaccines:
+        return "  None yet."
+    lines = []
+    for v in vaccines:
+        lines.append(
+            f"  - {v.get('name', 'Unnamed')} ({v.get('effort_level', 'MEDIUM')} effort): "
+            f"{v.get('description', '')}"
+        )
+    return "\n".join(lines)

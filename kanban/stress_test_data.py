@@ -108,12 +108,39 @@ def build_board_stress_test_data(board, user):
     except Exception:
         pass
 
-    # Previously applied vaccines
-    from kanban.stress_test_models import Vaccine
+    # Previously applied vaccines (with descriptions for AI context)
+    from kanban.stress_test_models import Vaccine, StressTestSession, StressTestScenario
     applied_vaccines = list(
         Vaccine.objects.filter(board=board, is_applied=True)
         .values_list('name', flat=True)
     )
+    applied_vaccines_detail = list(
+        Vaccine.objects.filter(board=board, is_applied=True)
+        .values('name', 'description', 'effort_level')
+    )
+
+    # Previously addressed scenarios from all sessions
+    addressed_scenarios = list(
+        StressTestScenario.objects.filter(
+            session__board=board, is_addressed=True
+        ).values('title', 'attack_type', 'severity')
+    )
+
+    # Previous session immunity scores (most recent first, up to 5)
+    previous_scores = list(
+        StressTestSession.objects.filter(board=board)
+        .select_related('immunity_score')
+        .order_by('-created_at')[:5]
+    )
+    score_history = []
+    for sess in previous_scores:
+        try:
+            score_history.append({
+                'score': sess.immunity_score.overall,
+                'band': sess.immunity_score.get_band(),
+            })
+        except Exception:
+            pass
 
     # Assignee breakdown
     assignee_counts = (
@@ -144,6 +171,9 @@ def build_board_stress_test_data(board, user):
         'column_names': column_names,
         'premortem_scenario_count': premortem_scenario_count,
         'applied_vaccines': applied_vaccines,
+        'applied_vaccines_detail': applied_vaccines_detail,
+        'addressed_scenarios': addressed_scenarios,
+        'score_history': score_history,
         'assignee_breakdown': assignee_breakdown,
         'blocking_dependencies': blocking_deps,
     }
