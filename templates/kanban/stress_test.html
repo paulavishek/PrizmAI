@@ -114,15 +114,39 @@
             <div class="card h-100">
                 <div class="card-body text-center">
                     <h6 class="text-muted mb-3">Immunity Score</h6>
-                    <!-- Half-circle gauge -->
+                    <!-- SVG Arc Gauge -->
                     <div class="immunity-gauge-wrapper">
-                        <div class="immunity-gauge" style="--score: {{ session.immunity_score.overall }}; --color: {{ session.immunity_score.get_band_colour }};">
-                            <div class="gauge-bg"></div>
-                            <div class="gauge-fill"></div>
-                            <div class="gauge-cover">
-                                <span class="gauge-score">{{ session.immunity_score.overall }}</span>
-                            </div>
-                        </div>
+                        <svg viewBox="0 0 200 120" class="immunity-gauge-svg">
+                            <!-- Background arc -->
+                            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e9ecef" stroke-width="14" stroke-linecap="round"/>
+                            <!-- Colored arc (animated via stroke-dashoffset) -->
+                            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none"
+                                  stroke="{{ session.immunity_score.get_band_colour }}"
+                                  stroke-width="14" stroke-linecap="round"
+                                  class="gauge-arc"
+                                  style="--target-pct: {{ session.immunity_score.overall }};"/>
+                            <!-- Tick marks -->
+                            {% for tick_angle in "0,45,90,135,180" %}
+                            {% endfor %}
+                            <line x1="100" y1="100" x2="100" y2="28" stroke="#e9ecef" stroke-width="1" transform="rotate(-90, 100, 100)" opacity="0.4"/>
+                            <line x1="100" y1="100" x2="100" y2="28" stroke="#e9ecef" stroke-width="1" transform="rotate(-45, 100, 100)" opacity="0.4"/>
+                            <line x1="100" y1="100" x2="100" y2="28" stroke="#e9ecef" stroke-width="1" transform="rotate(0, 100, 100)" opacity="0.4"/>
+                            <line x1="100" y1="100" x2="100" y2="28" stroke="#e9ecef" stroke-width="1" transform="rotate(45, 100, 100)" opacity="0.4"/>
+                            <line x1="100" y1="100" x2="100" y2="28" stroke="#e9ecef" stroke-width="1" transform="rotate(90, 100, 100)" opacity="0.4"/>
+                            <!-- Needle -->
+                            <line x1="100" y1="100" x2="100" y2="35"
+                                  stroke="{{ session.immunity_score.get_band_colour }}" stroke-width="2.5" stroke-linecap="round"
+                                  class="gauge-needle"
+                                  style="--target-pct: {{ session.immunity_score.overall }};"/>
+                            <circle cx="100" cy="100" r="5" fill="{{ session.immunity_score.get_band_colour }}"/>
+                            <!-- Score text -->
+                            <text x="100" y="92" text-anchor="middle" class="gauge-score-text"
+                                  fill="{{ session.immunity_score.get_band_colour }}">{{ session.immunity_score.overall }}</text>
+                            <!-- Scale labels -->
+                            <text x="18" y="116" text-anchor="middle" class="gauge-label-text" fill="#999">0</text>
+                            <text x="100" y="22" text-anchor="middle" class="gauge-label-text" fill="#999">50</text>
+                            <text x="182" y="116" text-anchor="middle" class="gauge-label-text" fill="#999">100</text>
+                        </svg>
                     </div>
                     <div class="mt-2">
                         <span class="badge fs-6" style="background-color: {{ session.immunity_score.get_band_colour }}; color: #fff;">
@@ -381,85 +405,153 @@
 
             <!-- Projected score summary -->
             {% if session.vaccines.all %}
-            <div class="card bg-light">
-                <div class="card-body text-center small">
-                    <strong>Projected score if all vaccines applied:</strong>
-                    <span class="text-success fw-bold" id="projected-score"></span>
+            <div class="card border-success bg-light" id="vaccine-summary-card">
+                <div class="card-body text-center">
+                    <h6 class="text-success mb-2">
+                        <i class="fas fa-chart-line me-1"></i> Projected Immunity
+                    </h6>
+                    <div class="d-flex justify-content-center align-items-baseline gap-2">
+                        <span class="text-muted">Current:</span>
+                        <strong>{{ session.immunity_score.overall }}</strong>
+                        <i class="fas fa-arrow-right text-success mx-1"></i>
+                        <span class="text-muted">Projected:</span>
+                        <strong class="text-success fs-5" id="projected-score"></strong>
+                    </div>
+                    <small class="text-muted d-block mt-1" id="pending-vaccines-count"></small>
+                    <small class="text-muted d-block mt-1">Apply all pending vaccines, then re-run to verify your new score.</small>
                 </div>
             </div>
             {% endif %}
         </div>
     </div>
 
+    <!-- ── Attack History Log ── -->
+    {% if all_sessions.count > 1 %}
+    <div class="card mt-4">
+        <div class="card-header bg-white">
+            <h6 class="mb-0"><i class="fas fa-history text-info me-2"></i>Session History</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Date</th>
+                            <th>Run By</th>
+                            <th>Immunity Score</th>
+                            <th>Band</th>
+                            <th>Scenarios</th>
+                            <th>Vaccines Applied</th>
+                            <th>Score Delta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in all_sessions reversed %}
+                        <tr {% if s.id == session.id %}class="table-active"{% endif %}>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ s.created_at|date:"M d, Y H:i" }}</td>
+                            <td>{% if s.run_by %}{{ s.run_by.get_full_name|default:s.run_by.username }}{% else %}—{% endif %}</td>
+                            <td>
+                                {% if s.immunity_score %}
+                                <strong>{{ s.immunity_score.overall }}</strong> / 100
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if s.immunity_score %}
+                                <span class="badge" style="background-color:{{ s.immunity_score.get_band_colour }};color:#fff;">
+                                    {{ s.immunity_score.get_band }}
+                                </span>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {{ s.scenarios.count }} attacks
+                                <small class="text-muted">
+                                    ({{ s.scenarios_fail_count }} failed)
+                                </small>
+                            </td>
+                            <td>{{ s.vaccines_applied_count }} / {{ s.vaccines.count }}</td>
+                            <td>
+                                {% if not forloop.last and s.immunity_score %}
+                                    {% with prev_sessions=all_sessions|slice:"1:" %}
+                                    {% endwith %}
+                                {% endif %}
+                                {% if forloop.counter > 1 and s.immunity_score %}
+                                    —
+                                {% elif s.immunity_score %}
+                                    <span class="text-muted">baseline</span>
+                                {% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% endif %}
 </div>
 
+<!-- Toast container for vaccine notifications -->
+<div class="stress-toast-container" id="stressToastContainer"></div>
+
 <style>
-/* ── Immunity Gauge (CSS half-circle) ── */
+/* ── Immunity Gauge (SVG Arc) ── */
 .immunity-gauge-wrapper {
     display: flex;
     justify-content: center;
     margin-bottom: 0.5rem;
 }
-.immunity-gauge {
-    position: relative;
-    width: 160px;
-    height: 80px;
-    overflow: hidden;
-}
-.gauge-bg {
-    position: absolute;
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    background: #e9ecef;
-    clip-path: inset(50% 0 0 0);
-    transform: translateY(-50%);
-}
-.gauge-fill {
-    position: absolute;
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    background: conic-gradient(
-        var(--color) 0deg,
-        var(--color) calc(var(--score) * 1.8deg),
-        transparent calc(var(--score) * 1.8deg)
-    );
-    clip-path: inset(50% 0 0 0);
-    transform: translateY(-50%);
-    transition: all 0.5s ease;
-}
-.gauge-cover {
-    position: absolute;
-    width: 120px;
+.immunity-gauge-svg {
+    width: 200px;
     height: 120px;
-    border-radius: 50%;
-    background: #fff;
-    top: 20px;
-    left: 20px;
-    clip-path: inset(50% 0 0 0);
-    transform: translateY(-50%);
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 0;
 }
-.gauge-score {
-    font-size: 2rem;
+.gauge-arc {
+    stroke-dasharray: 251.3;  /* π * 80 (arc length of semicircle r=80) */
+    stroke-dashoffset: calc(251.3 - (251.3 * var(--target-pct) / 100));
+    transition: stroke-dashoffset 1.2s ease-out;
+}
+.gauge-needle {
+    transform-origin: 100px 100px;
+    transform: rotate(calc(-90deg + (var(--target-pct) * 1.8deg)));
+    transition: transform 1.2s ease-out;
+}
+.gauge-score-text {
+    font-size: 28px;
     font-weight: 700;
-    color: var(--color);
-    line-height: 1;
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
+}
+.gauge-label-text {
+    font-size: 10px;
+}
+
+/* ── Vaccine checkbox animation ── */
+.form-check-input {
+    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.form-check-input:checked {
+    animation: vaccineApplied 0.4s ease;
+}
+@keyframes vaccineApplied {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.3); }
+    100% { transform: scale(1); }
+}
+
+/* ── Toast container ── */
+.stress-toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 1080;
 }
 </style>
 
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 // ── CSRF Helper ──
 function getCSRFToken() {
@@ -509,6 +601,26 @@ function runStressTest() {
     });
 }
 
+// ── Toast Helper ──
+function showStressToast(message, type) {
+    const container = document.getElementById('stressToastContainer');
+    if (!container) return;
+    const id = 'toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : 'bg-info';
+    const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-info-circle';
+    container.insertAdjacentHTML('beforeend',
+        '<div id="' + id + '" class="toast align-items-center text-white border-0 ' + bgClass + ' show mb-2" role="alert">' +
+        '<div class="d-flex">' +
+        '<div class="toast-body"><i class="fas ' + iconClass + ' me-2"></i>' + message + '</div>' +
+        '<button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest(\'.toast\').remove()"></button>' +
+        '</div></div>'
+    );
+    setTimeout(function() {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    }, 5000);
+}
+
 // ── Toggle Vaccine Applied ──
 function toggleVaccine(vaccineId, checkbox) {
     fetch("{% url 'apply_vaccine' board.id 0 %}".replace('/0/', '/' + vaccineId + '/'), {
@@ -522,12 +634,17 @@ function toggleVaccine(vaccineId, checkbox) {
     .then(data => {
         if (data.success) {
             const card = document.getElementById('vaccine-' + vaccineId);
+            const label = card.querySelector('.form-check-label');
             if (data.is_applied) {
                 card.classList.add('border-success', 'opacity-75');
                 checkbox.checked = true;
+                if (label) label.textContent = 'Applied';
+                showStressToast('Vaccine applied — re-run Stress Test to see your updated score.', 'success');
             } else {
                 card.classList.remove('border-success', 'opacity-75');
                 checkbox.checked = false;
+                if (label) label.textContent = 'Mark as applied';
+                showStressToast('Vaccine unapplied.', 'info');
             }
             updateProjectedScore();
         } else {
@@ -573,13 +690,16 @@ function toggleScenarioAddressed(scenarioId, btn) {
 // ── Projected Score Calculation ──
 function updateProjectedScore() {
     const projectedEl = document.getElementById('projected-score');
+    const pendingEl = document.getElementById('pending-vaccines-count');
     if (!projectedEl) return;
 
     const currentScore = {{ session.immunity_score.overall|default:"0" }};
     let totalImprovement = 0;
+    let pendingCount = 0;
 
     document.querySelectorAll('[id^="vaccine-check-"]').forEach(cb => {
         if (!cb.checked) {
+            pendingCount++;
             const card = cb.closest('.card');
             const badges = card.querySelectorAll('.badge');
             for (const badge of badges) {
@@ -594,6 +714,11 @@ function updateProjectedScore() {
 
     const projected = Math.min(100, currentScore + totalImprovement);
     projectedEl.textContent = projected + ' / 100';
+    if (pendingEl) {
+        pendingEl.textContent = pendingCount > 0
+            ? pendingCount + ' vaccine' + (pendingCount !== 1 ? 's' : '') + ' pending'
+            : 'All vaccines applied!';
+    }
 }
 
 // ── Trend Chart (Chart.js) ──
@@ -603,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('trendChart');
     if (ctx && typeof Chart !== 'undefined') {
         const history = {{ immunity_history|safe }};
-        if (history.length > 1) {
+        if (history.length >= 1) {
             new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -614,7 +739,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         backgroundColor: '{{ session.immunity_score.get_band_colour }}20',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 3,
+                        pointRadius: history.length === 1 ? 5 : 3,
                     }]
                 },
                 options: {
@@ -623,7 +748,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: { legend: { display: false } },
                     scales: {
                         y: { min: 0, max: 100, display: false },
-                        x: { display: false }
+                        x: { display: true, ticks: { font: { size: 9 }, color: '#999' } }
                     }
                 }
             });

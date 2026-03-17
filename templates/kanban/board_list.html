@@ -1,5 +1,6 @@
 ﻿{% extends 'base.html' %}
 {% load crispy_forms_tags %}
+{% load kanban_filters %}
 
 {% block title %}Boards - PrizmAI{% endblock %}
 {% block page_title %}Boards{% endblock %}
@@ -117,7 +118,7 @@
         <div class="col-md-4 mb-4">
             <div class="card dashboard-card h-100 shadow-sm">
                 <div class="card-body">
-                    <h5 class="card-title">{{ board.name }}</h5>
+                    <h5 class="card-title">{{ board.name }} {% board_immunity_badge board %}</h5>
                     <p class="card-text text-muted small">
                         {% if board.description %}
                             {{ board.description|truncatechars:100 }}

@@ -1,6 +1,7 @@
 import json
 from django import template
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from datetime import datetime
 
 register = template.Library()
@@ -242,3 +243,34 @@ def format_coach_action(action_text):
                 html_parts.append('<span>' + escape(part) + '</span>')
 
     return mark_safe('<br>'.join(html_parts))
+
+
+@register.simple_tag
+def board_immunity_badge(board):
+    """
+    Render a small immunity score badge for a board card.
+    Returns empty string if no stress test session exists.
+
+    Usage: {% board_immunity_badge board %}
+    """
+    try:
+        from kanban.stress_test_models import ImmunityScore
+        score_obj = (
+            ImmunityScore.objects
+            .filter(session__board=board)
+            .order_by('-session__created_at')
+            .first()
+        )
+        if not score_obj:
+            return ''
+        colour = score_obj.get_band_colour()
+        band = score_obj.get_band()
+        score = score_obj.overall
+        return mark_safe(
+            f'<span class="badge ms-2" style="background-color:{colour};color:#fff;" '
+            f'title="Immunity: {band}">'
+            f'<i class="fas fa-shield-alt me-1"></i>{score}'
+            f'</span>'
+        )
+    except Exception:
+        return ''

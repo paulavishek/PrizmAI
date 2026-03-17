@@ -156,6 +156,27 @@ PrizmAI recommends:
 
 Every recommendation includes **why** the AI thinks that, so you can verify it makes sense.
 
+### ⚡ **Stress Test Your Project Plan**
+
+Think of this as a fire drill for your project. PrizmAI's AI pretends to be every possible thing that could go wrong — tight deadlines, team members leaving, surprise scope changes — and attacks your plan to see how it holds up.
+
+**How to use it:**
+1. Open any board and look for the **⚡ Stress Test** tile in the AI panel (under "🔮 Simulate")
+2. Click it, then press **Run Stress Test** — the AI will analyse your board and generate attack scenarios
+3. Review your results:
+   - **Immunity Score** — A number from 0 to 100 showing how resilient your plan is. Higher is better.
+   - **Attack Scenarios** — Realistic problems the AI found (e.g. "What if the designer leaves mid-sprint?"). Each one shows severity and whether your plan would survive or fail.
+   - **Vaccines** — Practical fixes you can apply right now to strengthen your plan (e.g. "Cross-train a backup designer"). Check them off as you act on them.
+4. After applying vaccines, run the stress test again to see your Immunity Score improve over time
+
+**What the Immunity Score bands mean:**
+- 🔴 **Fragile** (0–39) — Your plan has serious gaps. Apply the suggested vaccines.
+- 🟠 **Moderate** (40–59) — Some weak spots. A few vaccines will help.
+- 🟢 **Resilient** (60–79) — Solid plan with room for improvement.
+- 🟣 **Antifragile** (80–100) — Your plan actually gets stronger under pressure. Great job!
+
+**Tip:** The Stress Test and Pre-Mortem features work together. You can jump between them using the cross-link banners on each page.
+
 ---
 
 ## 🌟 Real-World Examples

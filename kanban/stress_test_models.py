@@ -28,6 +28,14 @@ class StressTestSession(models.Model):
     def __str__(self):
         return f"Stress Test — {self.board.name} — {self.created_at:%Y-%m-%d}"
 
+    @property
+    def scenarios_fail_count(self):
+        return self.scenarios.filter(outcome='FAIL').count()
+
+    @property
+    def vaccines_applied_count(self):
+        return self.vaccines.filter(is_applied=True).count()
+
 
 class ImmunityScore(models.Model):
     """Composite score and 5 dimension scores for one session."""
