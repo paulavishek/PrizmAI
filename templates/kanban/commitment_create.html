@@ -22,37 +22,33 @@
       <form method="post">
         {% csrf_token %}
 
-        {% if form.errors %}
-        <div class="alert alert-danger">
-          Please correct the errors below.
-          {% for field in form %}{% for error in field.errors %}<div class="small">{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}
-          {% for error in form.non_field_errors %}<div class="small">{{ error }}</div>{% endfor %}
-        </div>
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
 
         <div class="mb-3">
           <label class="form-label fw-semibold">Protocol Title <span class="text-danger">*</span></label>
           <input type="text" name="title" class="form-control" placeholder="e.g. Q3 Feature Delivery"
-                 value="{{ form.title.value|default:'' }}" required>
+                 value="{{ form_data.title|default:'' }}" required>
         </div>
 
         <div class="mb-3">
-          <label class="form-label fw-semibold">Commitment Statement <span class="text-danger">*</span></label>
-          <textarea name="commitment_statement" class="form-control" rows="3"
+          <label class="form-label fw-semibold">Description</label>
+          <textarea name="description" class="form-control" rows="3"
                     placeholder="We commit to delivering X by Y with Z quality level…"
-                    required>{{ form.commitment_statement.value|default:'' }}</textarea>
+                    >{{ form_data.description|default:'' }}</textarea>
         </div>
 
         <div class="row g-3 mb-3">
           <div class="col-md-6">
-            <label class="form-label fw-semibold">Target Date</label>
+            <label class="form-label fw-semibold">Target Date <span class="text-danger">*</span></label>
             <input type="date" name="target_date" class="form-control"
-                   value="{{ form.target_date.value|default:'' }}">
+                   value="{{ form_data.target_date|default:'' }}" required>
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Initial Confidence (%)</label>
-            <input type="number" name="initial_confidence" class="form-control" min="0" max="100" step="1"
-                   value="{{ form.initial_confidence.value|default:'80' }}" required>
+            <input type="number" name="initial_confidence" class="form-control" min="10" max="100" step="1"
+                   value="{{ form_data.initial_confidence|default:'85' }}" required>
           </div>
         </div>
 
@@ -60,23 +56,23 @@
           <div class="col-md-6">
             <label class="form-label fw-semibold">Decay Model</label>
             <select name="decay_model" class="form-select">
-              <option value="exponential" {% if form.decay_model.value == 'exponential' %}selected{% endif %}>Exponential (default)</option>
-              <option value="linear" {% if form.decay_model.value == 'linear' %}selected{% endif %}>Linear</option>
-              <option value="stepped" {% if form.decay_model.value == 'stepped' %}selected{% endif %}>Stepped</option>
+              <option value="exponential" {% if form_data.decay_model == 'exponential' %}selected{% endif %}>Exponential (default)</option>
+              <option value="linear" {% if form_data.decay_model == 'linear' %}selected{% endif %}>Linear</option>
+              <option value="stepped" {% if form_data.decay_model == 'stepped' %}selected{% endif %}>Stepped</option>
             </select>
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Half-life (days)</label>
-            <input type="number" name="decay_halflife_days" class="form-control" min="1" step="1"
-                   value="{{ form.decay_halflife_days.value|default:'30' }}"
+            <input type="number" name="halflife_days" class="form-control" min="1" step="1"
+                   value="{{ form_data.halflife_days|default:'14' }}"
                    title="Number of days for confidence to halve under exponential decay">
           </div>
         </div>
 
         <div class="mb-3">
           <label class="form-label fw-semibold">Negotiation Threshold (%)</label>
-          <input type="number" name="negotiation_threshold" class="form-control" min="0" max="100" step="1"
-                 value="{{ form.negotiation_threshold.value|default:'40' }}"
+          <input type="number" name="negotiation_threshold" class="form-control" min="5" max="90" step="1"
+                 value="{{ form_data.negotiation_threshold|default:'40' }}"
                  title="If confidence drops below this %, the AI coach will trigger a renegotiation session">
           <div class="form-text">AI coach triggers renegotiation when confidence drops below this value.</div>
         </div>
@@ -84,14 +80,23 @@
         <div class="mb-4">
           <label class="form-label fw-semibold">Linked Tasks</label>
           <select name="linked_tasks" class="form-select" multiple size="5">
-            {% for task in board_tasks %}
-            <option value="{{ task.id }}"
-              {% if task.id in form.linked_tasks.value %}selected{% endif %}>
+            {% for task in tasks %}
+            <option value="{{ task.id }}">
               {{ task.title|truncatechars:60 }}
             </option>
             {% endfor %}
           </select>
           <div class="form-text">Hold Ctrl/Cmd to select multiple tasks.</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Stakeholders</label>
+          <select name="stakeholders" class="form-select" multiple size="4">
+            {% for member in members %}
+            <option value="{{ member.id }}">{{ member.get_full_name|default:member.username }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Hold Ctrl/Cmd to select multiple stakeholders.</div>
         </div>
 
         <div class="d-flex gap-2">
