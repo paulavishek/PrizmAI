@@ -282,44 +282,69 @@ def run_stress_test(request, board_id):
     )
 
     # Save scenarios — coerce None → safe defaults (Gemini may return null)
+    # Each save is isolated: one bad field won't abort the rest.
+    scenarios_saved = 0
     for s in result.get('chaos_scenarios', []):
-        outcome_raw = s.get('outcome') or 'SURVIVED'
-        if outcome_raw not in ('FAIL', 'SURVIVED', 'SURVIVED_BARELY'):
-            outcome_raw = 'SURVIVED'
-        StressTestScenario.objects.create(
-            session=session,
-            scenario_number=s.get('id') or 0,
-            attack_type=s.get('attack_type') or '',
-            title=s.get('title') or '',
-            attack_description=s.get('attack_description') or '',
-            cascade_effect=s.get('cascade_effect') or '',
-            outcome=outcome_raw,
-            severity=s.get('severity') or 5,
-            tasks_blocked=s.get('tasks_blocked') or 0,
-            estimated_delay_weeks=s.get('estimated_delay_weeks'),
-            has_recovery_path=bool(s.get('has_recovery_path', False)),
-            early_warning_sign=s.get('early_warning_sign') or '',
-            tags=s.get('tags') or [],
-        )
+        try:
+            outcome_raw = s.get('outcome') or 'SURVIVED'
+            if outcome_raw not in ('FAIL', 'SURVIVED', 'SURVIVED_BARELY'):
+                outcome_raw = 'SURVIVED'
+            StressTestScenario.objects.create(
+                session=session,
+                scenario_number=s.get('id') or 0,
+                attack_type=s.get('attack_type') or '',
+                title=s.get('title') or '',
+                attack_description=s.get('attack_description') or '',
+                cascade_effect=s.get('cascade_effect') or '',
+                outcome=outcome_raw,
+                severity=min(max(int(s.get('severity') or 5), 1), 10),
+                tasks_blocked=max(int(s.get('tasks_blocked') or 0), 0),
+                estimated_delay_weeks=s.get('estimated_delay_weeks'),
+                has_recovery_path=bool(s.get('has_recovery_path', False)),
+                early_warning_sign=s.get('early_warning_sign') or '',
+                tags=s.get('tags') or [],
+            )
+            scenarios_saved += 1
+        except Exception as exc:
+            logger.error(
+                "Stress Test: failed to save scenario %s for session %s: %s",
+                s.get('id'), session.id, exc,
+            )
 
     # Save vaccines — coerce None → safe defaults
+    # Each save is isolated: one bad field won't abort the rest.
+    vaccines_saved = 0
     for v in result.get('vaccines', []):
-        effort_raw = v.get('effort_level') or 'MEDIUM'
-        if effort_raw not in ('LOW', 'MEDIUM', 'HIGH'):
-            effort_raw = 'MEDIUM'
-        Vaccine.objects.create(
-            session=session,
-            board=board,
-            vaccine_number=v.get('id') or 0,
-            targets_scenario_number=v.get('targets_scenario') or 1,
-            name=v.get('name') or '',
-            description=v.get('description') or '',
-            effort_level=effort_raw,
-            effort_rationale=v.get('effort_rationale') or '',
-            projected_score_improvement=v.get('projected_score_improvement') or 0,
-            implementation_hint=v.get('implementation_hint') or '',
-            is_applied=False,
-        )
+        try:
+            effort_raw = v.get('effort_level') or 'MEDIUM'
+            if effort_raw not in ('LOW', 'MEDIUM', 'HIGH'):
+                effort_raw = 'MEDIUM'
+            Vaccine.objects.create(
+                session=session,
+                board=board,
+                vaccine_number=v.get('id') or 0,
+                targets_scenario_number=v.get('targets_scenario') or 1,
+                name=v.get('name') or '',
+                description=v.get('description') or '',
+                effort_level=effort_raw,
+                effort_rationale=v.get('effort_rationale') or '',
+                projected_score_improvement=max(int(v.get('projected_score_improvement') or 0), 0),
+                implementation_hint=v.get('implementation_hint') or '',
+                is_applied=False,
+            )
+            vaccines_saved += 1
+        except Exception as exc:
+            logger.error(
+                "Stress Test: failed to save vaccine %s for session %s: %s",
+                v.get('id'), session.id, exc,
+            )
+
+    logger.info(
+        "Stress Test session %s: saved %d/%d scenarios, %d/%d vaccines",
+        session.id,
+        scenarios_saved, len(result.get('chaos_scenarios', [])),
+        vaccines_saved, len(result.get('vaccines', [])),
+    )
 
     response_time_ms = int((time.time() - start_time) * 1000)
     track_ai_request(
