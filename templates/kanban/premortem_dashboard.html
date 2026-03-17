@@ -217,6 +217,17 @@
     {% endfor %}
     </div>
     {% endif %}
+
+    <!-- Cross-link to Stress Test -->
+    <div class="alert alert-warning d-flex align-items-center mt-4">
+        <i class="fas fa-bolt text-warning me-2 fa-lg"></i>
+        <div>
+            <strong>Take it further:</strong> Stress Test these risk scenarios with adversarial AI simulations.
+        </div>
+        <a href="{% url 'stress_test_dashboard' board.id %}" class="btn btn-warning btn-sm ms-auto">
+            <i class="fas fa-bolt me-1"></i> Run Stress Test
+        </a>
+    </div>
 </div>
 
 <script>
