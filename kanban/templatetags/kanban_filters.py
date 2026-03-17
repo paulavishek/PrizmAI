@@ -1,8 +1,15 @@
+import json
 from django import template
 from django.utils import timezone
 from datetime import datetime
 
 register = template.Library()
+
+
+@register.filter
+def to_json(value):
+    """Serialize a Python object to a compact JSON string safe for HTML attributes."""
+    return json.dumps(value)
 
 
 @register.filter
