@@ -111,7 +111,7 @@ class StressTestScenario(models.Model):
     )
 
     class Meta:
-        ordering = ['-severity']
+        ordering = ['scenario_number']
         verbose_name = 'Stress Test Scenario'
 
     def get_outcome_display_label(self):

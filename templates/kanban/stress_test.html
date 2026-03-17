@@ -107,6 +107,14 @@
     </div>
     {% endif %}
 
+    <!-- Re-run reminder (shown via JS when user makes changes) -->
+    <div id="rerun-reminder-banner" class="alert alert-warning d-none mb-3 d-flex justify-content-between align-items-center" role="alert">
+        <span><i class="fas fa-sync-alt me-2"></i><strong>You've made changes!</strong> The Immunity Score only updates when you re-run the Stress Test.</span>
+        <a href="#" class="btn btn-warning btn-sm ms-3" onclick="runStressTest(); return false;">
+            <i class="fas fa-bolt me-1"></i> Re-run Now
+        </a>
+    </div>
+
     <!-- ── Immunity Score + Stats Row ── -->
     <div class="row mb-4">
         <!-- Immunity Score Gauge -->
@@ -156,6 +164,9 @@
                     {% if session.score_rationale %}
                     <p class="text-muted small mt-2 mb-0">{{ session.score_rationale }}</p>
                     {% endif %}
+                    <p class="text-muted" style="font-size:0.7rem; margin-top:4px; margin-bottom:0;">
+                        <i class="fas fa-info-circle me-1"></i>Score reflects last run · Re-run to update
+                    </p>
 
                     <!-- Mini trend chart -->
                     {% if immunity_history != '[]' %}
@@ -176,7 +187,7 @@
                             <i class="fas fa-crosshairs fa-2x text-danger mb-2"></i>
                             <h3>{{ total_scenarios }}</h3>
                             <p class="text-muted mb-0">Attacks Simulated</p>
-                            <small class="text-muted">{{ scenarios_addressed }} addressed</small>
+                            <small class="text-muted" id="scenarios-addressed-count">{{ scenarios_addressed }} addressed</small>
                         </div>
                     </div>
                 </div>
@@ -656,6 +667,8 @@ function toggleVaccine(vaccineId, checkbox) {
         console.error('Vaccine toggle error:', err);
         checkbox.checked = !checkbox.checked;
     });
+    // Show re-run reminder when a vaccine is toggled
+    showRerunBanner();
 }
 
 // ── Toggle Scenario Addressed ──
@@ -682,9 +695,23 @@ function toggleScenarioAddressed(scenarioId, btn) {
                 btn.classList.add('btn-outline-secondary');
                 btn.innerHTML = '<i class="fas fa-circle me-1"></i> Mark Addressed';
             }
+            // Update the addressed counter in the stat card
+            const counterEl = document.getElementById('scenarios-addressed-count');
+            if (counterEl) {
+                const n = document.querySelectorAll('[id^="scenario-"] .btn-success').length;
+                counterEl.textContent = n + ' addressed';
+            }
+            // Show re-run reminder
+            showRerunBanner();
         }
     })
     .catch(err => console.error('Scenario address error:', err));
+}
+
+// ── Re-run Reminder Banner ──
+function showRerunBanner() {
+    const banner = document.getElementById('rerun-reminder-banner');
+    if (banner) banner.classList.remove('d-none');
 }
 
 // ── Projected Score Calculation ──
