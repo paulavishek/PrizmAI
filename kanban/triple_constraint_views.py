@@ -230,6 +230,22 @@ def triple_constraint_dashboard(request, board_id):
             logger.error('Triple constraint AI view error: %s', e)
             ai_error = 'AI analysis failed. Please check your API key and try again.'
 
+    # ── Commitment Health (Living Commitment Protocols widget) ──────────────────
+    commitment_health = None
+    try:
+        from kanban.commitment_models import CommitmentProtocol
+        cp_qs = CommitmentProtocol.objects.filter(board=board, status__in=['active', 'at_risk', 'critical'])
+        if cp_qs.exists():
+            avg_conf = sum(c.current_confidence for c in cp_qs) / cp_qs.count()
+            commitment_health = {
+                'count': cp_qs.count(),
+                'avg_confidence': round(avg_conf, 1),
+                'critical_count': cp_qs.filter(status='critical').count(),
+                'at_risk_count': cp_qs.filter(status='at_risk').count(),
+            }
+    except Exception:
+        pass  # Non-critical widget — never block the main page
+
     context = {
         'board': board,
         # Scope
@@ -253,6 +269,8 @@ def triple_constraint_dashboard(request, board_id):
         # AI
         'ai_result': ai_result,
         'ai_error': ai_error,
+        # Commitment Protocols widget
+        'commitment_health': commitment_health,
     }
 
     return render(request, 'kanban/triple_constraint_dashboard.html', context)

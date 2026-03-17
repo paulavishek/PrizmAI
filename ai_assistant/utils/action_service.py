@@ -767,3 +767,153 @@ class SpectraActionService:
         except Exception as exc:
             logger.exception('Spectra create_scheduled_automation failed: %s', exc)
             return {'success': False, 'error': str(exc)}
+
+    # ── Living Commitment Protocols ──────────────────────────────────────────
+
+    def get_commitment_status(self, user, board, collected_data):
+        """
+        Return the current confidence and status of a commitment protocol.
+        collected_data keys: board_id, commitment_id
+        """
+        from kanban.commitment_models import CommitmentProtocol
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            commitment_id = collected_data.get('commitment_id')
+            if not commitment_id:
+                return {'success': False, 'error': 'commitment_id is required.'}
+
+            try:
+                protocol = CommitmentProtocol.objects.select_related('owner').get(
+                    pk=commitment_id, board=board
+                )
+            except CommitmentProtocol.DoesNotExist:
+                return {'success': False, 'error': f'Commitment #{commitment_id} not found on this board.'}
+
+            days_left = protocol.days_until_deadline
+
+            message = (
+                f"📊 **{protocol.title}**\n\n"
+                f"- **Status:** {protocol.get_status_display()}\n"
+                f"- **Confidence:** {protocol.current_confidence:.0f}%\n"
+                f"- **Decay model:** {protocol.get_decay_model_display()}\n"
+                f"- **Owner:** {protocol.owner.get_full_name() or protocol.owner.username}\n"
+            )
+            if days_left is not None:
+                message += f"- **Days to deadline:** {days_left}\n"
+            if protocol.ai_reasoning:
+                message += f"\n💡 *AI reasoning:* {protocol.ai_reasoning[:200]}…"
+
+            return {'success': True, 'message': message}
+
+        except Exception as exc:
+            logger.exception('Spectra get_commitment_status failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def list_at_risk_commitments(self, user, board, collected_data):
+        """
+        List all at-risk or critical commitment protocols on a board.
+        collected_data keys: board_id
+        """
+        from kanban.commitment_models import CommitmentProtocol
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            protocols = CommitmentProtocol.objects.filter(
+                board=board,
+                status__in=['at_risk', 'critical'],
+            ).order_by('current_confidence')
+
+            if not protocols.exists():
+                return {
+                    'success': True,
+                    'message': f"✅ No at-risk or critical commitment protocols on **{board.name}**.",
+                }
+
+            lines = [f"⚠️ **At-risk commitments on {board.name}:**\n"]
+            for p in protocols:
+                icon = "🔴" if p.status == 'critical' else "🟡"
+                deadline = p.target_date.strftime('%b %d, %Y') if p.target_date else 'no deadline'
+                lines.append(
+                    f"{icon} **{p.title}** — {p.current_confidence:.0f}% confidence "
+                    f"({p.get_status_display()}, due {deadline})"
+                )
+
+            return {'success': True, 'message': '\n'.join(lines)}
+
+        except Exception as exc:
+            logger.exception('Spectra list_at_risk_commitments failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def place_commitment_bet(self, user, board, collected_data):
+        """
+        Place or update a prediction market bet for the current user.
+        collected_data keys: board_id, commitment_id, predicted_confidence, tokens_wagered
+        """
+        from kanban.commitment_models import CommitmentProtocol, CommitmentBet, UserCredibilityScore
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            commitment_id = collected_data.get('commitment_id')
+            predicted = collected_data.get('predicted_confidence')
+            tokens = int(collected_data.get('tokens_wagered', 1))
+
+            if not commitment_id or predicted is None:
+                return {'success': False, 'error': 'commitment_id and predicted_confidence are required.'}
+
+            try:
+                protocol = CommitmentProtocol.objects.get(pk=commitment_id, board=board)
+            except CommitmentProtocol.DoesNotExist:
+                return {'success': False, 'error': f'Commitment #{commitment_id} not found on this board.'}
+
+            credibility, _ = UserCredibilityScore.objects.get_or_create(
+                user=user,
+                defaults={'tokens_remaining': 100},
+            )
+            existing = CommitmentBet.objects.filter(protocol=protocol, bettor=user).first()
+            tokens_needed = max(0, tokens - (existing.tokens_wagered if existing else 0))
+            if tokens_needed > credibility.tokens_remaining:
+                return {
+                    'success': False,
+                    'error': (
+                        f"Not enough tokens. You have {credibility.tokens_remaining} remaining "
+                        f"but need {tokens_needed} more."
+                    ),
+                }
+
+            with transaction.atomic():
+                if existing:
+                    existing.confidence_estimate = predicted / 100.0
+                    existing.tokens_wagered = tokens
+                    existing.save(update_fields=['confidence_estimate', 'tokens_wagered'])
+                else:
+                    CommitmentBet.objects.create(
+                        protocol=protocol,
+                        bettor=user,
+                        confidence_estimate=predicted / 100.0,
+                        tokens_wagered=tokens,
+                    )
+                credibility.tokens_remaining = max(0, credibility.tokens_remaining - tokens_needed)
+                credibility.save(update_fields=['tokens_remaining'])
+
+            action = "updated" if existing else "placed"
+            return {
+                'success': True,
+                'message': (
+                    f"🎯 **Bet {action}!**\n\n"
+                    f"You predicted **{predicted:.0f}%** confidence on **{protocol.title}**, "
+                    f"wagering **{tokens}** token{'s' if tokens != 1 else ''}.\n"
+                    f"Tokens remaining: **{credibility.tokens_remaining}**."
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra place_commitment_bet failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+

@@ -1,0 +1,373 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ commitment.title }} — Commitment Protocol{% endblock %}
+
+{% block extra_css %}
+<style>
+    .conf-gauge { font-size: 3rem; font-weight: 700; }
+    .tab-pane { animation: fadeIn .2s ease; }
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    .signal-row:hover { background: rgba(0,0,0,.03); }
+    .bet-card { border-left: 4px solid #0d6efd; }
+    .credibility-bar-wrap { background: #e9ecef; border-radius: 4px; height: 6px; }
+    .credibility-bar { height: 6px; border-radius: 4px; background:#0d6efd; }
+    .option-card { cursor: pointer; transition: all .15s ease; border: 2px solid transparent; }
+    .option-card:hover { border-color: #0d6efd; box-shadow: 0 2px 8px rgba(13,110,253,.2); }
+    .option-card.selected { border-color: #0d6efd; background: rgba(13,110,253,.05); }
+    #curve-chart { max-height: 300px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'kanban:commitment_dashboard' board.id %}">Commitment Protocols</a></li>
+      <li class="breadcrumb-item active">{{ commitment.title|truncatechars:40 }}</li>
+    </ol>
+  </nav>
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
+    <div>
+      <h2 class="mb-1">{{ commitment.title }}</h2>
+      <p class="text-muted mb-0">{{ commitment.description }}</p>
+    </div>
+    <div class="d-flex gap-2 flex-shrink-0">
+      <span class="badge fs-6 bg-{% if commitment.status == 'active' %}success{% elif commitment.status == 'at_risk' %}warning text-dark{% elif commitment.status == 'critical' %}danger{% elif commitment.status == 'renegotiated' %}primary{% else %}secondary{% endif %}">
+        {{ commitment.get_status_display }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Key metrics row -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="conf-gauge text-{% if commitment.current_confidence >= 0.7 %}success{% elif commitment.current_confidence >= 0.4 %}warning{% else %}danger{% endif %}">
+          {% widthratio commitment.current_confidence 1 100 %}%
+        </div>
+        <div class="text-muted small">Current Confidence</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold text-info">{% if market.consensus %}{{ market.consensus|floatformat:0 }}%{% else %}—{% endif %}</div>
+        <div class="text-muted small">Market Consensus</div>
+        {% if not market.show_market %}<div class="text-muted" style="font-size:.7rem;">Need 3+ bets</div>{% endif %}
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold">{{ commitment.days_until_deadline }}</div>
+        <div class="text-muted small">Days to Deadline</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold text-secondary">{{ market.bet_count }}</div>
+        <div class="text-muted small">Active Bets</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active negotiation alert -->
+  {% if active_negotiation %}
+  <div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+    <div>
+      <strong>Renegotiation requested by AI coach.</strong>
+      The scope negotiation bot has proposed options to restore confidence.
+      <a href="{% url 'kanban:negotiation_session_detail' board.id active_negotiation.id %}" class="alert-link ms-2">
+        Review Options <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tab navigation -->
+  <ul class="nav nav-tabs mb-4" id="commitmentTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-curve">Confidence Curve</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-market">Prediction Market</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-signals">Signal Log</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-ai">AI Reasoning</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- Tab 1: Confidence Curve -->
+    <div class="tab-pane fade show active" id="tab-curve">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title mb-3">Confidence Decay Curve</h6>
+          <canvas id="curve-chart"></canvas>
+          <!-- Manual signal -->
+          <div class="mt-3 pt-3 border-top">
+            <h6 class="mb-2 small text-muted text-uppercase fw-semibold">Apply Manual Signal</h6>
+            <form id="signal-form" class="row g-2">
+              {% csrf_token %}
+              <div class="col-auto">
+                <select name="signal_type" class="form-select form-select-sm" required>
+                  <option value="">Signal type…</option>
+                  <option value="manual_positive">Positive Signal (+)</option>
+                  <option value="milestone_hit">Milestone Hit (+)</option>
+                  <option value="stakeholder_approval">Stakeholder Approval (+)</option>
+                  <option value="dependency_resolved">Dependency Resolved (+)</option>
+                  <option value="manual_negative">Negative Signal (−)</option>
+                  <option value="blocker_emerged">Blocker Emerged (−)</option>
+                  <option value="team_change">Team Change (−)</option>
+                  <option value="requirement_change">Requirement Change (−)</option>
+                </select>
+              </div>
+              <div class="col-auto">
+                <input type="number" name="signal_value" class="form-control form-control-sm" placeholder="Value 0.01–1" step="0.01" min="0.01" max="1" style="width:120px;">
+              </div>
+              <div class="col">
+                <input type="text" name="description" class="form-control form-control-sm" placeholder="Description (required)…" required>
+              </div>
+              <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+              </div>
+            </form>
+            <div id="signal-feedback" class="mt-2 small"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Prediction Market -->
+    <div class="tab-pane fade" id="tab-market">
+      <div class="row g-3">
+        <div class="col-md-7">
+          <div class="card border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title">Your Prediction</h6>
+
+              {% if user_bet %}
+              <div class="alert alert-success">
+                You predicted <strong>{{ user_bet.confidence_estimate|floatformat:0 }}%</strong> confidence using
+                <strong>{{ user_bet.tokens_wagered }}</strong> token{{ user_bet.tokens_wagered|pluralize }}.
+              </div>
+              {% endif %}
+
+              <form id="bet-form">
+                {% csrf_token %}
+                <div class="mb-3">
+                  <label class="form-label">Your confidence prediction (%)</label>
+                  <input type="range" class="form-range" name="confidence" id="bet-slider" min="0" max="100" step="1"
+                         value="{% if user_bet %}{% widthratio user_bet.confidence_estimate 1 100 %}{% else %}{% widthratio commitment.current_confidence 1 100 %}{% endif %}">
+                  <div class="text-center fw-bold fs-4" id="bet-slider-value">
+                    {% if user_bet %}{% widthratio user_bet.confidence_estimate 1 100 %}{% else %}{% widthratio commitment.current_confidence 1 100 %}{% endif %}%
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Tokens to wager
+                    <span class="text-muted">(You have {{ credibility.tokens_remaining }} remaining)</span>
+                  </label>
+                  <input type="number" name="tokens" class="form-control" min="1" max="{{ credibility.tokens_remaining }}" value="1">
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Place Bet</button>
+              </form>
+              <div id="bet-feedback" class="mt-2 small"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-5">
+          <div class="card border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title">Market Summary</h6>
+              {% if market.show_market %}
+              <div class="text-center my-3">
+                <div class="conf-gauge text-info">{{ market.consensus|floatformat:0 }}%</div>
+                <div class="text-muted small">Weighted consensus from {{ market.bet_count }} bets</div>
+              </div>
+              <table class="table table-sm">
+                <tr><th>Divergence from official</th><td>{{ market.divergence|floatformat:1 }}pp</td></tr>
+                <tr><th>Total tokens wagered</th><td>{{ market.total_tokens }}</td></tr>
+              </table>
+              {% else %}
+              <div class="text-center text-muted py-4">
+                <i class="bi bi-bar-chart-line fs-3"></i>
+                <p class="mt-2 small">Market opens with 3 bets.<br>{{ market.bet_count }} so far.</p>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Credibility score -->
+          <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body">
+              <h6 class="card-title">Your Credibility Score</h6>
+              <div class="d-flex justify-content-between mb-1">
+                <span class="small">{{ credibility.score|floatformat:0 }}%</span>
+                <span class="small text-muted">{{ credibility.total_bets }} bets, {{ credibility.correct_bets }} correct</span>
+              </div>
+              <div class="credibility-bar-wrap">
+                <div class="credibility-bar" style="width:{{ credibility.score }}%"></div>
+              </div>
+              <div class="text-muted small mt-2">Tokens remaining: {{ credibility.tokens_remaining }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Signal Log -->
+    <div class="tab-pane fade" id="tab-signals">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+          {% if signals %}
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Value</th>
+                <th>Before → After</th>
+                <th>Source</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in signals %}
+              <tr>
+                <td class="small text-muted">{{ s.timestamp|date:"M j H:i" }}</td>
+                <td>
+                  <span class="badge bg-{% if s.signal_value >= 0 %}success{% else %}danger{% endif %}-subtle text-{% if s.signal_value >= 0 %}success{% else %}danger{% endif %}">
+                    {{ s.get_signal_type_display }}
+                  </span>
+                </td>
+                <td class="{% if s.signal_value >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  {% if s.signal_value >= 0 %}+{% endif %}{{ s.signal_value|floatformat:2 }}
+                </td>
+                <td class="small">{% widthratio s.confidence_before 1 100 %}% → {% widthratio s.confidence_after 1 100 %}%</td>
+                <td class="small">{{ s.recorded_by|default:"-" }}</td>
+                <td class="small text-muted">{{ s.description|truncatechars:40|default:"-" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="text-center text-muted py-4">No signals recorded yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: AI Reasoning -->
+    <div class="tab-pane fade" id="tab-ai">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title">AI Reasoning</h6>
+          {% if commitment.ai_reasoning %}
+          <p class="mb-0" style="white-space:pre-line;">{{ commitment.ai_reasoning }}</p>
+          {% else %}
+          <p class="text-muted">AI analysis not generated yet. It will appear here automatically after the next decay cycle.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  // ── Confidence Curve (Chart.js) ──────────────────────────────────────
+  var curveData = {{ curve_data_json|safe }};
+  if (curveData && curveData.labels) {
+    var ctx = document.getElementById('curve-chart');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: curveData.labels,
+        datasets: [
+          {
+            label: 'Historical Confidence',
+            data: curveData.historical,
+            borderColor: '#0d6efd',
+            backgroundColor: 'rgba(13,110,253,.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+          },
+          {
+            label: 'Projected Decay',
+            data: curveData.projected,
+            borderColor: '#dc3545',
+            borderDash: [6, 4],
+            backgroundColor: 'rgba(220,53,69,.05)',
+            fill: false,
+            tension: 0.4,
+            pointRadius: 2,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { min: 0, max: 100, title: { display: true, text: 'Confidence (%)' } }
+        },
+        plugins: { legend: { position: 'top' } }
+      }
+    });
+  }
+
+  // ── Bet slider label ─────────────────────────────────────────────────
+  var slider = document.getElementById('bet-slider');
+  var sliderVal = document.getElementById('bet-slider-value');
+  if (slider) {
+    slider.addEventListener('input', function () {
+      sliderVal.textContent = slider.value + '%';
+    });
+  }
+
+  // ── Place bet (AJAX) ─────────────────────────────────────────────────
+  var betForm = document.getElementById('bet-form');
+  var betFeedback = document.getElementById('bet-feedback');
+  var betUrl = "{% url 'kanban:commitment_place_bet' board.id commitment.id %}";
+  if (betForm) {
+    betForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var fd = new FormData(betForm);
+      fetch(betUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(r => r.json())
+        .then(data => {
+          betFeedback.innerHTML = data.ok
+            ? '<span class="text-success">' + data.message + '</span>'
+            : '<span class="text-danger">' + (data.error || 'Error') + '</span>';
+        })
+        .catch(() => { betFeedback.innerHTML = '<span class="text-danger">Network error.</span>'; });
+    });
+  }
+
+  // ── Manual signal (AJAX) ─────────────────────────────────────────────
+  var signalForm = document.getElementById('signal-form');
+  var signalFeedback = document.getElementById('signal-feedback');
+  var signalUrl = "{% url 'kanban:commitment_signal_manual' board.id commitment.id %}";
+  if (signalForm) {
+    signalForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var fd = new FormData(signalForm);
+      fetch(signalUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            signalFeedback.innerHTML = '<span class="text-success">' + data.message + '</span>';
+            setTimeout(function () { location.reload(); }, 1200);
+          } else {
+            signalFeedback.innerHTML = '<span class="text-danger">' + (data.error || 'Error') + '</span>';
+          }
+        })
+        .catch(() => { signalFeedback.innerHTML = '<span class="text-danger">Network error.</span>'; });
+    });
+  }
+})();
+</script>
+{% endblock %}

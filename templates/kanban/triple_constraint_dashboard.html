@@ -647,6 +647,40 @@
         </div>
     </div>
 
+    <!-- ── Living Commitment Protocols widget ─────────────────────────────── -->
+    {% if commitment_health %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2">
+                    <h6 class="mb-0"><i class="bi bi-shield-check me-2 text-primary"></i>Team Commitment Confidence</h6>
+                    <a href="{% url 'kanban:commitment_dashboard' board.id %}" class="btn btn-sm btn-outline-primary">
+                        View All Protocols
+                    </a>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row g-3 text-center">
+                        <div class="col-md-4">
+                            <div class="fs-3 fw-bold text-{% if commitment_health.avg_confidence >= 70 %}success{% elif commitment_health.avg_confidence >= 40 %}warning{% else %}danger{% endif %}">
+                                {{ commitment_health.avg_confidence }}%
+                            </div>
+                            <div class="text-muted small">Avg Portfolio Confidence</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="fs-3 fw-bold text-warning">{{ commitment_health.at_risk_count }}</div>
+                            <div class="text-muted small">At Risk Protocols</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="fs-3 fw-bold text-danger">{{ commitment_health.critical_count }}</div>
+                            <div class="text-muted small">Critical Protocols</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
 </div><!-- /container-fluid -->
 {% endblock %}
 

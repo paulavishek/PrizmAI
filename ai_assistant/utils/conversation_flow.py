@@ -1110,6 +1110,27 @@ class ConversationFlowManager:
             'label': 'creating a scheduled automation',
             'needs_board': True,
         },
+        # Living Commitment Protocols — stateless (no collection needed)
+        'get_commitment_status': {
+            'mode': 'awaiting_confirmation',
+            'pending': 'get_commitment_status',
+            'label': 'getting commitment status',
+            'needs_board': True,
+            'immediate': True,   # skip confirmation, execute right away
+        },
+        'list_at_risk_commitments': {
+            'mode': 'awaiting_confirmation',
+            'pending': 'list_at_risk_commitments',
+            'label': 'listing at-risk commitments',
+            'needs_board': True,
+            'immediate': True,
+        },
+        'place_commitment_bet': {
+            'mode': 'awaiting_confirmation',
+            'pending': 'place_commitment_bet',
+            'label': 'placing a commitment bet',
+            'needs_board': True,
+        },
     }
 
     def _start_fc_flow(self, user, board, message, state, intent):
@@ -1172,6 +1193,19 @@ class ConversationFlowManager:
             if board:
                 data['board_id'] = board.id
                 data['board_name'] = board.name
+
+            # Immediate (stateless) actions — execute without a confirmation step
+            if meta.get('immediate'):
+                state.reset()
+                method_map = {
+                    'get_commitment_status': 'get_commitment_status',
+                    'list_at_risk_commitments': 'list_at_risk_commitments',
+                }
+                method_name = method_map.get(pending)
+                if method_name and hasattr(action_service, method_name):
+                    result_exec = getattr(action_service, method_name)(user, board, data)
+                    return result_exec.get('message', '✅ Done!') if result_exec.get('success') else f"Error: {result_exec.get('error')}"
+                return "Couldn't execute that query right now."
 
             state.mode = 'awaiting_confirmation'
             state.pending_action = pending
@@ -1327,6 +1361,7 @@ class ConversationFlowManager:
             'create_retrospective': self._format_retro_confirmation,
             'create_custom_automation': self._format_custom_auto_confirmation,
             'create_scheduled_automation': self._format_sched_auto_confirmation,
+            'place_commitment_bet': self._format_commitment_bet_confirmation,
         }
         formatter = formatters.get(pending)
         if formatter:
@@ -1410,6 +1445,17 @@ class ConversationFlowManager:
             f"📋 **Filter:** {data.get('task_filter', 'all')} tasks\n"
             f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
             "Type **confirm** to create, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_commitment_bet_confirmation(data):
+        return (
+            "Here's the commitment bet I'll place:\n\n"
+            f"🎯 **Commitment ID:** {data.get('commitment_id', '?')}\n"
+            f"📊 **Your predicted confidence:** {data.get('predicted_confidence', '?')}%\n"
+            f"🪙 **Tokens to wager:** {data.get('tokens_wagered', 1)}\n"
+            f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
+            "Type **confirm** to place the bet, or **cancel** to abort."
         )
 
     def _handle_collecting(self, user, board, message, state):
@@ -1828,6 +1874,10 @@ class ConversationFlowManager:
             'create_retrospective': 'create_retrospective',
             'create_custom_automation': 'create_custom_automation',
             'create_scheduled_automation': 'create_scheduled_automation',
+            # Living Commitment Protocols
+            'get_commitment_status': 'get_commitment_status',
+            'list_at_risk_commitments': 'list_at_risk_commitments',
+            'place_commitment_bet': 'place_commitment_bet',
         }
 
         method_name = method_map.get(pending)

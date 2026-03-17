@@ -32,6 +32,15 @@ from kanban.automation_models import BoardAutomation, ScheduledAutomation
 # Import onboarding models
 from kanban.onboarding_models import OnboardingWorkspacePreview
 
+# Import Living Commitment Protocol models
+from kanban.commitment_models import (
+    CommitmentProtocol,
+    ConfidenceSignal,
+    CommitmentBet,
+    NegotiationSession,
+    UserCredibilityScore,
+)
+
 
 # ---------------------------------------------------------------------------
 # ORGANIZATION GOAL — apex strategic layer

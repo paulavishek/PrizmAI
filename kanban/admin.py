@@ -1071,3 +1071,66 @@ class VaccineAdmin(admin.ModelAdmin):
     list_display = ('session', 'name', 'effort_level', 'projected_score_improvement', 'is_applied')
     list_filter = ('effort_level', 'is_applied')
     search_fields = ('name', 'description')
+
+
+# ── Living Commitment Protocols ───────────────────────────────────────────
+
+from .commitment_models import (
+    CommitmentProtocol, ConfidenceSignal, CommitmentBet,
+    NegotiationSession, UserCredibilityScore,
+)
+
+
+class ConfidenceSignalInline(admin.TabularInline):
+    model = ConfidenceSignal
+    extra = 0
+    readonly_fields = ('timestamp',)
+    fields = ('signal_type', 'signal_value', 'confidence_before', 'confidence_after', 'recorded_by', 'timestamp')
+
+
+class CommitmentBetInline(admin.TabularInline):
+    model = CommitmentBet
+    extra = 0
+    readonly_fields = ('placed_at',)
+    fields = ('bettor', 'confidence_estimate', 'tokens_wagered', 'resolved', 'placed_at')
+
+
+@admin.register(CommitmentProtocol)
+class CommitmentProtocolAdmin(admin.ModelAdmin):
+    list_display = ('title', 'board', 'created_by', 'status', 'current_confidence', 'target_date', 'decay_model', 'created_at')
+    list_filter = ('status', 'decay_model', 'created_at')
+    search_fields = ('title', 'board__name', 'created_by__username', 'description')
+    readonly_fields = ('created_at', 'updated_at', 'ai_reasoning')
+    inlines = [ConfidenceSignalInline, CommitmentBetInline]
+
+
+@admin.register(ConfidenceSignal)
+class ConfidenceSignalAdmin(admin.ModelAdmin):
+    list_display = ('protocol', 'signal_type', 'signal_value', 'confidence_before', 'confidence_after', 'recorded_by', 'timestamp')
+    list_filter = ('signal_type', 'timestamp')
+    search_fields = ('protocol__title', 'description')
+    readonly_fields = ('timestamp',)
+
+
+@admin.register(CommitmentBet)
+class CommitmentBetAdmin(admin.ModelAdmin):
+    list_display = ('protocol', 'bettor', 'confidence_estimate', 'tokens_wagered', 'resolved', 'resolution_correct', 'placed_at')
+    list_filter = ('resolved', 'resolution_correct', 'placed_at')
+    search_fields = ('protocol__title', 'bettor__username')
+    readonly_fields = ('placed_at',)
+
+
+@admin.register(NegotiationSession)
+class NegotiationSessionAdmin(admin.ModelAdmin):
+    list_display = ('protocol', 'status', 'trigger_confidence', 'chosen_option', 'initiated_at', 'resolved_at')
+    list_filter = ('status', 'chosen_option', 'initiated_at')
+    search_fields = ('protocol__title',)
+    readonly_fields = ('initiated_at', 'resolved_at')
+
+
+@admin.register(UserCredibilityScore)
+class UserCredibilityScoreAdmin(admin.ModelAdmin):
+    list_display = ('user', 'score', 'tokens_remaining', 'total_bets', 'correct_bets', 'tokens_reset_date')
+    search_fields = ('user__username',)
+    readonly_fields = ('tokens_reset_date',)
+
