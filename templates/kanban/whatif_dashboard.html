@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static kanban_filters %}
 
 {% block title %}What-If Scenario Analyzer - {{ board.name }} - PrizmAI{% endblock %}
 
@@ -351,7 +351,7 @@
                             </small>
                         </div>
                         <div>
-                            <button class="btn btn-sm btn-outline-primary btn-load-scenario" data-params='{{ s.input_parameters|safe }}'>
+                            <button class="btn btn-sm btn-outline-primary btn-load-scenario" data-params='{{ s.input_parameters|to_json }}'>
                                 <i class="fas fa-upload me-1"></i> Load
                             </button>
                             <button class="btn btn-sm btn-outline-success btn-promote-scenario" data-scenario-id="{{ s.id }}" data-scenario-name="{{ s.name }}" title="Promote to Shadow Branch (living simulation)">
