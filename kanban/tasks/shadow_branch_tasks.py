@@ -5,11 +5,24 @@ Async tasks for recalculating shadow branches whenever real board changes occur.
 All Gemini API calls happen here in the Celery worker, not in the request cycle.
 """
 from celery import shared_task
+from datetime import date as date_type
 from django.utils import timezone
 from django.core.cache import caches
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_date(value):
+    """Safely convert a date value that may be a string, date, or None."""
+    if value is None:
+        return None
+    if isinstance(value, date_type):
+        return value
+    try:
+        return date_type.fromisoformat(str(value)[:10])
+    except (ValueError, TypeError):
+        return None
 
 
 def scale_feasibility(float_score):
@@ -41,6 +54,14 @@ def extract_branch_params(branch):
     """
     latest_snapshot = branch.get_latest_snapshot()
     if not latest_snapshot:
+        # Fallback: read parameters from linked source scenario
+        if branch.source_scenario and branch.source_scenario.input_parameters:
+            params = branch.source_scenario.input_parameters
+            return {
+                'tasks_added': int(params.get('tasks_added', 0)),
+                'team_size_delta': int(params.get('team_size_delta', 0)),
+                'deadline_shift_days': int(params.get('deadline_shift_days', 0)),
+            }
         return {
             'tasks_added': 0,
             'team_size_delta': 0,
@@ -57,7 +78,6 @@ def extract_branch_params(branch):
 @shared_task(
     bind=True,
     name='kanban.recalculate_branches',
-    queue='ai',
     max_retries=2,
     default_retry_delay=10,
     time_limit=120,
@@ -114,13 +134,8 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                     logger.warning(f'Simulate returned empty results for branch {branch.id}')
                     continue
 
-                # Extract and scale new feasibility score
-                old_feasibility = scale_feasibility(results.get('feasibility_score', 0))
-                new_feasibility = old_feasibility  # By definition, we're recalculating with the same params
-
-                # Actually, we want to recalculate based on CURRENT board state
-                # The feasibility score should reflect how this delta affects the CURRENT state
-                # So new_feasibility IS what we get from simulate()
+                # Scale feasibility from 0-1 to 0-100
+                # This captures how the SAME what-if parameters affect the CURRENT board state
                 new_feasibility = scale_feasibility(results.get('feasibility_score', 0))
 
                 # Get previous feasibility score from last snapshot
@@ -136,7 +151,7 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                     team_delta=params['team_size_delta'],
                     deadline_delta_weeks=params['deadline_shift_days'] // 7,  # Convert days back to weeks
                     feasibility_score=new_feasibility,
-                    projected_completion_date=results.get('projected', {}).get('predicted_date'),
+                    projected_completion_date=_parse_date(results.get('projected', {}).get('predicted_date')),
                     projected_budget_utilization=results.get('projected', {}).get('budget_utilization_pct'),
                     conflicts_detected=results.get('new_conflicts', []),
                     gemini_recommendation=results.get('ai_analysis', {}).get('recommendation', ''),

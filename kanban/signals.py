@@ -628,18 +628,6 @@ def trigger_branch_recalculation_on_membership_added(sender, instance, created, 
         )
 
 
-@receiver(post_save, sender='kanban.BoardMembership')
-def trigger_branch_recalculation_on_membership_removed(sender, instance, **kwargs):
-    """
-    Trigger shadow branch recalculation when a team member is removed from the board.
-    """
-    # Note: This handler is also triggered on post_save, so we need to check
-    # if this is actually a deletion event. Django doesn't offer a direct post_delete
-    # for m2m relationships through explicit through models, so we use pre_delete instead.
-    # This is a limitation we'll address in the pre_delete handler below.
-    pass
-
-
 from django.db.models.signals import post_delete
 
 @receiver(post_delete, sender='kanban.BoardMembership')

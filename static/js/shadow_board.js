@@ -23,7 +23,50 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load saved scenarios into select
     loadScenarios();
+
+    // Poll for branches still calculating their first snapshot
+    pollPendingBranches();
 });
+
+/**
+ * Poll branches that are still "Calculating first snapshot..."
+ * Auto-reloads the page when all pending branches have snapshots.
+ */
+function pollPendingBranches() {
+    const pendingCards = document.querySelectorAll('.branch-card[data-pending="true"]');
+    if (pendingCards.length === 0) return;
+
+    const boardId = getBoardId();
+    let pollInterval = setInterval(function() {
+        let stillPending = 0;
+        const checks = [];
+
+        pendingCards.forEach(function(card) {
+            const branchId = card.dataset.branchId;
+            if (!branchId) return;
+
+            const p = fetch(`/api/boards/${boardId}/shadow/branch/${branchId}/snapshots/`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.count && data.count > 0) {
+                        // Snapshot arrived — this branch is ready
+                        return true;
+                    }
+                    stillPending++;
+                    return false;
+                })
+                .catch(() => { stillPending++; return false; });
+            checks.push(p);
+        });
+
+        Promise.all(checks).then(function(results) {
+            if (stillPending === 0) {
+                clearInterval(pollInterval);
+                window.location.reload();
+            }
+        });
+    }, 5000);  // Poll every 5 seconds
+}
 
 /**
  * Render sparklines for each branch

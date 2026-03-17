@@ -109,6 +109,23 @@ class ShadowBoardListView(ListView):
 
         context['branch_impacts_today'] = recent_divergences
 
+        # Auto-heal: if any active branches have no snapshots, re-trigger recalculation
+        branches_without_snapshots = ShadowBranch.objects.filter(
+            board=board, status='active',
+        ).exclude(
+            id__in=BranchSnapshot.objects.values_list('branch_id', flat=True)
+        )
+        if branches_without_snapshots.exists():
+            try:
+                from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+                recalculate_branches_for_board.apply_async(
+                    args=[board.id],
+                    kwargs={'trigger_event': 'Auto-heal: branches missing snapshots'},
+                    countdown=2,
+                )
+            except Exception:
+                pass
+
         return context
 
 
@@ -152,9 +169,20 @@ class CreateBranchView(CreateView):
                 scenario = WhatIfScenario.objects.get(id=scenario_id, board=board)
                 branch.source_scenario = scenario
             except WhatIfScenario.DoesNotExist:
-                pass
+                scenario = None
 
         branch.save()
+
+        # Create initial snapshot from linked scenario's slider values
+        if branch.source_scenario and branch.source_scenario.input_parameters:
+            params = branch.source_scenario.input_parameters
+            BranchSnapshot.objects.create(
+                branch=branch,
+                scope_delta=int(params.get('tasks_added', 0)),
+                team_delta=int(params.get('team_size_delta', 0)),
+                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
+                feasibility_score=0,
+            )
 
         # Trigger initial branch recalculation
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
@@ -190,6 +218,22 @@ class CreateBranchView(CreateView):
                     branch_color=color,
                     source_scenario_id=scenario_id if scenario_id else None,
                 )
+
+                # Create initial snapshot from linked scenario's slider values
+                if scenario_id:
+                    try:
+                        scenario = WhatIfScenario.objects.get(id=scenario_id, board=board)
+                        if scenario.input_parameters:
+                            params = scenario.input_parameters
+                            BranchSnapshot.objects.create(
+                                branch=branch,
+                                scope_delta=int(params.get('tasks_added', 0)),
+                                team_delta=int(params.get('team_size_delta', 0)),
+                                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
+                                feasibility_score=0,
+                            )
+                    except WhatIfScenario.DoesNotExist:
+                        pass
 
                 # Trigger recalculation
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
@@ -304,18 +348,23 @@ class CommitBranchView(DetailView):
                 board=board,
                 status='active',
             ).exclude(id=branch.id)
+            archived_count = other_branches.count()
             other_branches.update(status='archived')
 
             # Create audit log
             SystemAuditLog.objects.create(
                 user=request.user,
                 action_type='branch.committed',
-                board=board,
-                description=f'Committed branch "{branch.name}" and archived {other_branches.count()} others',
-                details={
+                severity='high',
+                object_type='shadow_branch',
+                object_id_backup=branch.id,
+                object_repr=str(branch),
+                board_id=board.id,
+                message=f'Committed branch "{branch.name}" and archived {archived_count} others',
+                additional_data={
                     'branch_id': branch.id,
                     'branch_name': branch.name,
-                    'archived_count': other_branches.count(),
+                    'archived_count': archived_count,
                 },
                 ip_address=self._get_client_ip(request),
             )
@@ -499,6 +548,17 @@ def promote_scenario_to_branch(request, board_id):
             branch_color=color,
         )
 
+        # Create initial snapshot from scenario's slider values
+        if scenario.input_parameters:
+            params = scenario.input_parameters
+            BranchSnapshot.objects.create(
+                branch=branch,
+                scope_delta=int(params.get('tasks_added', 0)),
+                team_delta=int(params.get('team_size_delta', 0)),
+                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
+                feasibility_score=0,  # Will be updated by recalculation
+            )
+
         # Trigger recalculation with scenario's parameters as seed
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
@@ -623,5 +683,30 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
     except Exception as e:
         logger.error(f'Error fetching branches comparison: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def toggle_star_branch(request, board_id, branch_id):
+    """
+    API endpoint: Toggle the is_starred flag on a branch.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if request.user not in board.members.all() and request.user != board.created_by:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+        branch.is_starred = not branch.is_starred
+        branch.save(update_fields=['is_starred'])
+
+        return JsonResponse({
+            'success': True,
+            'is_starred': branch.is_starred,
+        })
+    except Exception as e:
+        logger.error(f'Error toggling star for branch {branch_id}: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 

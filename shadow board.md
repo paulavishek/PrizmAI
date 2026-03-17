@@ -66,3 +66,103 @@ Keep Gemini API calls in the Celery worker, not in the request cycle.
 All new URLs should be registered in the existing urls.py under the boards/ namespace.
 Use the existing AuditLog model for the commit action.
 Please begin with the models, then the Celery task, then the views, then the templates.
+
+
+## Plan: Shadow Board — Parallel Universe Simulator
+
+Here's your comprehensive implementation plan for the Shadow Board feature:
+
+### Overview
+Build a "living simulation" system where project managers promote What-If scenarios into parallel execution branches that auto-recalculate as real project changes occur. Core components: 3 new Django models, Celery async tasks triggered by signals, and a card-based UI integrated into the AI Tools panel.
+
+---
+
+### Phase 1: Database Models → `kanban/shadow_models.py`
+- **ShadowBranch**: board (FK), name, description, created_by, status (active/archived/committed), source_scenario (FK to WhatIfScenario), branch_color (hex), is_starred
+- **BranchSnapshot**: branch (FK), captured_at, scope_delta, team_delta, deadline_delta_weeks (int), feasibility_score (int 0–100), projected_completion_date, projected_budget_utilization, conflicts_detected (JSON), gemini_recommendation
+- **BranchDivergenceLog**: branch (FK), logged_at, old_score, new_score, trigger_event
+
+### Phase 2: Celery Tasks → `kanban/tasks/shadow_branch_tasks.py`
+- **recalculate_branches_for_board** task: Triggered by signals, re-runs WhatIfEngine.simulate() for each active branch, scales feasibility 0–1 → 0–100, logs divergences (delta > 5 points), creates snapshot, caches branch snapshot in Redis (15 min TTL)
+- Helper function: scale_feasibility() and extract_branch_params()
+
+### Phase 3: Views & API → `kanban/shadow_views.py`
+1. **ShadowBoardListView** — GET `/boards/<board_id>/shadow/` → shows all branches as cards + Quantum Standup panel (today's progress + branch deltas)
+2. **CreateBranchView** — POST to create branch, optionally pre-fill from saved scenario
+3. **BranchDetailView** — GET `/boards/<board_id>/shadow/<branch_id>/` → snapshot history timeline, divergence log
+4. **CommitBranchView** — POST to mark branch committed, archive others, create audit log
+5. **MergeConflictCheckAPI** — GET `/api/boards/<board_id>/shadow/conflicts/?branch_a=id1&branch_b=id2` → returns contradictory parameters
+6. **PromoteScenarioView** — POST to convert What-If scenario to Shadow Branch
+- Register 6 new URL patterns in urls.py
+
+### Phase 4: Templates & Frontend
+- **shadow_board_list.html**: Quantum Standup section (collapsible), branch card grid (name, color, feasibility badge, sparkline), compare toggle for diff table
+- **branch_detail.html**: Latest projection, snapshot history, divergence log
+- **create_branch_modal.html**: Form with name, description, scenario selector, color picker
+- **Update board_detail.html**: Add "Shadow Board" tile to AI Tools offcanvas → `/boards/<board_id>/shadow/`
+- **Update whatif_dashboard.html**: Add "Promote to Shadow Branch" button to saved scenarios
+- **static/js/shadow_board.js**: Compare checkbox logic, sparkline rendering, AJAX calls
+
+### Phase 5: Integration Points
+1. **Django Signals** (add to signals.py):
+   - Task post_save (if `_just_completed=True`) → recalculate branches with event "Task XYZ completed"
+   - Board pre_save (if `project_deadline` changed) → recalculate with event "Deadline changed"
+   - BoardMembership post_save/delete → recalculate with event "Team membership changed"
+
+2. **What-If integration**: Promote button in whatif_dashboard.html calls promote_scenario endpoint
+
+3. **Redis caching**: Branch snapshot cached as `branch_snapshot:{branch_id}` with 15-min TTL
+
+4. **AuditLog integration**: CommitBranchView creates SystemAuditLog record with action='branch.committed'
+
+---
+
+### Decisions Made
+✅ Feasibility: 0–100 integer (scaled from 0–1 float)  
+✅ Snapshots: Created only on signal triggers (lean approach)  
+✅ Quantum Standup: Shows tasks + changes that triggered recalculation  
+✅ Compare view: All fields (scope_delta, team_delta, deadline_delta_weeks, feasibility, projections)  
+✅ Conflict detection: Parameter-level contradictions only (e.g., +team vs -team)  
+✅ Branch colors: User selects from predefined palette at creation  
+
+---
+
+### Files to Create/Modify
+
+**Create (7 new files):**
+- `kanban/shadow_models.py` — Models
+- `kanban/shadow_views.py` — Views & API
+- `kanban/tasks/shadow_branch_tasks.py` — Celery tasks
+- `templates/kanban/shadow_board_list.html`
+- `templates/kanban/branch_detail.html`
+- `static/js/shadow_board.js`
+- `tests/test_shadow_board.py` — Tests
+
+**Modify (5 existing files):**
+- urls.py — Add 6 URL patterns
+- signals.py — Add 3 signal handlers
+- board_detail.html — Add Shadow Board tile
+- whatif_dashboard.html — Add Promote button
+
+---
+
+### Verification Steps
+**Automated**: Unit tests for model creation, branch recalculation, audit logging, conflict detection  
+**Manual**:
+1. Promote scenario to branch → verify it appears with correct slider values
+2. Complete task on real board → verify all branches recalculate  
+3. Check branch detail → verify latest snapshot & divergence log  
+4. Create 2 conflicting branches → verify merge_conflict_check flags contradictions  
+5. Commit branch → verify committed/archived states & audit log  
+6. Verify Redis caching: `redis-cli GET "branch_snapshot:{id}"` → should return JSON
+
+---
+
+### Considerations
+- **Sparkline library**: Ensure Chart.js or similar is already in PrizmAI frontend (or add to base.html)
+- **AI call frequency**: Current plan doesn't re-call Gemini on every branch recalc (to avoid rate-limiting); stores original `gemini_recommendation` from source scenario
+- **Performance at scale**: With 50+ branches, consider debouncing recalculations (5–10 sec batch window) or rate-limiting Celery task priority to avoid overwhelming worker queue
+
+---
+
+**Ready to proceed with implementation?** The plan is saved at `/memories/session/plan.md` and covers all requirements from your technical prompt with clear dependencies and integration points.

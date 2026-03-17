@@ -104,6 +104,9 @@ class SystemAuditLog(models.Model):
         ('memory.search', 'Organizational Memory Search'),
         ('memory.created', 'Memory Node Created'),
         ('memory.feedback', 'Memory Feedback Submitted'),
+        
+        # Shadow Board
+        ('branch.committed', 'Branch Committed'),
     ]
     
     SEVERITY_LEVELS = [

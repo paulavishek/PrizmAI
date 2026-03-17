@@ -215,7 +215,7 @@
         <div class="branch-grid" id="branchGrid">
             {% for branch in branches %}
                 {% if branch.status == 'active' or branch.status == 'committed' %}
-                <div class="card branch-card" data-branch-id="{{ branch.id }}" style="--branch-color: {{ branch.branch_color }};">
+                <div class="card branch-card" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
                     <div class="card-body">
                         <!-- Checkbox for compare mode -->
                         <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
