@@ -171,6 +171,22 @@ def _gather_board_data(board):
         sprint_start = today - timedelta(days=14)
         new_tasks_count = all_tasks.filter(created_at__gte=sprint_start).count()
 
+    # ── Commitment Protocols summary ─────────────────────────────────────────
+    commitment_summary = {}
+    try:
+        from kanban.commitment_models import CommitmentProtocol
+        cp_qs = CommitmentProtocol.objects.filter(board=board, status__in=['active', 'at_risk', 'critical'])
+        if cp_qs.exists():
+            avg_conf = sum(c.current_confidence for c in cp_qs) / cp_qs.count()
+            commitment_summary = {
+                'count': cp_qs.count(),
+                'avg_confidence': round(avg_conf, 1),
+                'critical': list(cp_qs.filter(status='critical').values('title', 'current_confidence')[:3]),
+                'at_risk': list(cp_qs.filter(status='at_risk').values('title', 'current_confidence')[:3]),
+            }
+    except Exception:
+        pass
+
     # ── Data-richness warnings ────────────────────────────────────────────────
     warnings = []
     if total_tasks < 5:
@@ -204,6 +220,7 @@ def _gather_board_data(board):
         'budget':           budget_info,
         'milestones':       milestone_list,
         'new_tasks_count':  new_tasks_count,
+        'commitments':      commitment_summary,
     }, warnings
 
 

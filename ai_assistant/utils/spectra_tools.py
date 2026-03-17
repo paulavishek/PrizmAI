@@ -288,6 +288,77 @@ def get_action_tools():
             },
         )
 
+        # ── Living Commitment Protocols ──────────────────────────────────────
+        get_commitment_status = FunctionDeclaration(
+            name='get_commitment_status',
+            description=(
+                'Get the current confidence level and status of a specific commitment protocol '
+                'on a board. Returns confidence %, status, decay model, and days until deadline.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'board_id': {
+                        'type': 'integer',
+                        'description': 'The board ID.',
+                    },
+                    'commitment_id': {
+                        'type': 'integer',
+                        'description': 'The CommitmentProtocol ID to check.',
+                    },
+                },
+                'required': ['board_id', 'commitment_id'],
+            },
+        )
+
+        list_at_risk_commitments = FunctionDeclaration(
+            name='list_at_risk_commitments',
+            description=(
+                'List all commitment protocols on a board that are at risk or critical '
+                '(confidence below 70%). Returns title, confidence, status, and deadline for each.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'board_id': {
+                        'type': 'integer',
+                        'description': 'The board ID to check.',
+                    },
+                },
+                'required': ['board_id'],
+            },
+        )
+
+        place_commitment_bet = FunctionDeclaration(
+            name='place_commitment_bet',
+            description=(
+                'Place (or update) a prediction market bet on behalf of the current user '
+                'for a commitment protocol. Wagers credibility tokens on a confidence prediction.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'board_id': {
+                        'type': 'integer',
+                        'description': 'The board ID.',
+                    },
+                    'commitment_id': {
+                        'type': 'integer',
+                        'description': 'The CommitmentProtocol ID to bet on.',
+                    },
+                    'predicted_confidence': {
+                        'type': 'number',
+                        'description': 'Your predicted final confidence percentage (0–100).',
+                    },
+                    'tokens_wagered': {
+                        'type': 'integer',
+                        'description': 'Number of credibility tokens to wager (minimum 1).',
+                    },
+                },
+                'required': ['board_id', 'commitment_id', 'predicted_confidence', 'tokens_wagered'],
+            },
+        )
+
         # Bundle all declarations into a single Tool
         _cached_tools = [
             Tool(function_declarations=[
@@ -299,9 +370,12 @@ def get_action_tools():
                 create_retrospective,
                 create_automation,
                 create_scheduled_automation,
+                get_commitment_status,
+                list_at_risk_commitments,
+                place_commitment_bet,
             ])
         ]
-        logger.info("Spectra action tool schemas loaded (%d functions)", 8)
+        logger.info("Spectra action tool schemas loaded (%d functions)", 11)
         return _cached_tools
 
     except ImportError:
@@ -322,6 +396,10 @@ FUNCTION_TO_ACTION = {
     'create_retrospective': 'create_retrospective',
     'create_automation': 'create_custom_automation',
     'create_scheduled_automation': 'create_scheduled_automation',
+    # Living Commitment Protocols — these are stateless (no confirmation flow needed)
+    'get_commitment_status': 'get_commitment_status',
+    'list_at_risk_commitments': 'list_at_risk_commitments',
+    'place_commitment_bet': 'place_commitment_bet',
 }
 
 # ── Mapping from AI router intents to collecting modes ───────────────────

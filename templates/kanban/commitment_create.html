@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}New Commitment Protocol — {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:700px;">
+
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'kanban:commitment_dashboard' board.id %}">Commitment Protocols</a>
+      </li>
+      <li class="breadcrumb-item active">New Protocol</li>
+    </ol>
+  </nav>
+
+  <h3 class="mb-4">Create Commitment Protocol</h3>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      <form method="post">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="alert alert-danger">
+          Please correct the errors below.
+          {% for field in form %}{% for error in field.errors %}<div class="small">{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}
+          {% for error in form.non_field_errors %}<div class="small">{{ error }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Protocol Title <span class="text-danger">*</span></label>
+          <input type="text" name="title" class="form-control" placeholder="e.g. Q3 Feature Delivery"
+                 value="{{ form.title.value|default:'' }}" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Commitment Statement <span class="text-danger">*</span></label>
+          <textarea name="commitment_statement" class="form-control" rows="3"
+                    placeholder="We commit to delivering X by Y with Z quality level…"
+                    required>{{ form.commitment_statement.value|default:'' }}</textarea>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Target Date</label>
+            <input type="date" name="target_date" class="form-control"
+                   value="{{ form.target_date.value|default:'' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Initial Confidence (%)</label>
+            <input type="number" name="initial_confidence" class="form-control" min="0" max="100" step="1"
+                   value="{{ form.initial_confidence.value|default:'80' }}" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Decay Model</label>
+            <select name="decay_model" class="form-select">
+              <option value="exponential" {% if form.decay_model.value == 'exponential' %}selected{% endif %}>Exponential (default)</option>
+              <option value="linear" {% if form.decay_model.value == 'linear' %}selected{% endif %}>Linear</option>
+              <option value="stepped" {% if form.decay_model.value == 'stepped' %}selected{% endif %}>Stepped</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Half-life (days)</label>
+            <input type="number" name="decay_halflife_days" class="form-control" min="1" step="1"
+                   value="{{ form.decay_halflife_days.value|default:'30' }}"
+                   title="Number of days for confidence to halve under exponential decay">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Negotiation Threshold (%)</label>
+          <input type="number" name="negotiation_threshold" class="form-control" min="0" max="100" step="1"
+                 value="{{ form.negotiation_threshold.value|default:'40' }}"
+                 title="If confidence drops below this %, the AI coach will trigger a renegotiation session">
+          <div class="form-text">AI coach triggers renegotiation when confidence drops below this value.</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Linked Tasks</label>
+          <select name="linked_tasks" class="form-select" multiple size="5">
+            {% for task in board_tasks %}
+            <option value="{{ task.id }}"
+              {% if task.id in form.linked_tasks.value %}selected{% endif %}>
+              {{ task.title|truncatechars:60 }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Hold Ctrl/Cmd to select multiple tasks.</div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary px-4">Create Protocol</button>
+          <a href="{% url 'kanban:commitment_dashboard' board.id %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

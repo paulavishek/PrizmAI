@@ -53,6 +53,13 @@ from kanban.tasks.shadow_branch_tasks import (
     recalculate_branches_for_board,
 )
 
+from kanban.tasks.commitment_tasks import (
+    run_commitment_decay_all,
+    reset_weekly_tokens,
+    auto_detect_signals_for_board,
+    generate_ai_reasoning_task,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -86,4 +93,9 @@ __all__ = [
     'generate_scope_autopsy',
     # Shadow branch tasks
     'recalculate_branches_for_board',
+    # Commitment protocol tasks
+    'run_commitment_decay_all',
+    'reset_weekly_tokens',
+    'auto_detect_signals_for_board',
+    'generate_ai_reasoning_task',
 ]

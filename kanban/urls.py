@@ -18,6 +18,7 @@ from . import prizmbrief_views
 from . import onboarding_views
 from . import whatif_views
 from . import shadow_views
+from . import commitment_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -328,4 +329,19 @@ urlpatterns = [
 
     # Demo mode toggle (v2)
     path('toggle-demo-mode/', views.toggle_demo_mode, name='toggle_demo_mode'),
+
+    # -----------------------------------------------------------------------
+    # Living Commitment Protocols (Anti-Roadmap)
+    # -----------------------------------------------------------------------
+    path('boards/<int:board_id>/commitments/', commitment_views.commitment_dashboard, name='commitment_dashboard'),
+    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_create, name='commitment_create'),
+    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_detail, name='commitment_detail'),
+    path('boards/<int:board_id>/commitments/<int:commitment_id>/bet/', commitment_views.commitment_place_bet, name='commitment_place_bet'),
+    path('boards/<int:board_id>/commitments/<int:commitment_id>/signal/', commitment_views.commitment_signal_manual, name='commitment_signal_manual'),
+    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/', commitment_views.negotiation_session_detail, name='negotiation_session_detail'),
+    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/resolve/', commitment_views.negotiation_resolve, name='negotiation_resolve'),
+    # Commitment API endpoints (JSON, used by JS auto-refresh and Chart.js)
+    path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
+    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
+    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
 ]

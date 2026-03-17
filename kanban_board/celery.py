@@ -121,6 +121,17 @@ app.conf.beat_schedule = {
         'task': 'exit_protocol.tasks.monitor_all_boards_health',
         'schedule': crontab(hour=2, minute=15),  # Daily 2:15 AM
     },
+    # --- Living Commitment Protocol Tasks ---
+    # Apply Bayesian confidence decay every 4 hours
+    'run-commitment-decay': {
+        'task': 'kanban.run_commitment_decay_all',
+        'schedule': crontab(minute=0, hour='*/4'),  # Every 4 hours
+    },
+    # Refill credibility tokens every Monday at midnight
+    'reset-commitment-tokens': {
+        'task': 'kanban.reset_weekly_tokens',
+        'schedule': crontab(hour=0, minute=0, day_of_week='1'),  # Mon 00:00
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

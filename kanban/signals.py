@@ -655,3 +655,72 @@ def trigger_branch_recalculation_on_membership_deleted(sender, instance, **kwarg
             f'Error triggering branch recalculation for membership removal: {e}',
             exc_info=True
         )
+
+
+# ---------------------------------------------------------------------------
+# Living Commitment Protocols — auto-signal triggers
+# ---------------------------------------------------------------------------
+
+@receiver(post_save, sender='kanban.Task')
+def trigger_commitment_signals_on_task_save(sender, instance, created, **kwargs):
+    """
+    When a Task is saved (created or updated), check whether its board has any
+    active CommitmentProtocols that should receive an auto-detected signal.
+
+    We only fire if the board actually has active/at_risk protocols to avoid
+    unnecessary Celery round-trips on every task save.
+    """
+    try:
+        board = instance.column.board if instance.column_id else None
+        if board is None:
+            return
+
+        from kanban.commitment_models import CommitmentProtocol
+        has_protocols = CommitmentProtocol.objects.filter(
+            board=board,
+            status__in=['active', 'at_risk'],
+        ).exists()
+
+        if has_protocols:
+            from kanban.tasks.commitment_tasks import auto_detect_signals_for_board
+            auto_detect_signals_for_board.apply_async(
+                args=[board.id],
+                countdown=10,  # slight delay to batch rapid consecutive saves
+            )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'trigger_commitment_signals_on_task_save: unexpected error',
+            exc_info=True,
+        )
+
+
+@receiver(post_delete, sender='kanban.Task')
+def trigger_commitment_signals_on_task_delete(sender, instance, **kwargs):
+    """
+    When a Task is deleted, re-scan commitment signals for its board.
+    Deletions can represent scope changes that shift confidence.
+    """
+    try:
+        board = instance.column.board if instance.column_id else None
+        if board is None:
+            return
+
+        from kanban.commitment_models import CommitmentProtocol
+        has_protocols = CommitmentProtocol.objects.filter(
+            board=board,
+            status__in=['active', 'at_risk'],
+        ).exists()
+
+        if has_protocols:
+            from kanban.tasks.commitment_tasks import auto_detect_signals_for_board
+            auto_detect_signals_for_board.apply_async(
+                args=[board.id],
+                countdown=5,
+            )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'trigger_commitment_signals_on_task_delete: unexpected error',
+            exc_info=True,
+        )

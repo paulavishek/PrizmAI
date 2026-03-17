@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Scope Negotiation — {{ negotiation.commitment.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .option-card {
+        cursor: pointer;
+        transition: all .15s ease;
+        border: 2px solid transparent;
+    }
+    .option-card:hover { border-color: #0d6efd; box-shadow: 0 2px 8px rgba(13,110,253,.2); }
+    .option-card.selected {
+        border-color: #0d6efd;
+        background: rgba(13,110,253,.06);
+    }
+    .option-label { font-size: .7rem; text-transform: uppercase; font-weight: 700; letter-spacing: .05em; }
+    .impact-row { font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:800px;">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'kanban:commitment_dashboard' board.id %}">Commitments</a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="{% url 'kanban:commitment_detail' board.id negotiation.commitment.id %}">{{ negotiation.commitment.title|truncatechars:30 }}</a>
+      </li>
+      <li class="breadcrumb-item active">Renegotiation</li>
+    </ol>
+  </nav>
+
+  <div class="card border-0 shadow mb-4">
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="rounded-circle bg-warning d-flex align-items-center justify-content-center" style="width:48px;height:48px;flex-shrink:0;">
+          <i class="bi bi-robot fs-4"></i>
+        </div>
+        <div>
+          <h5 class="mb-0">Scope Negotiation Bot</h5>
+          <p class="text-muted mb-0 small">Triggered at {{ negotiation.initiated_at|date:"M j, Y H:i" }} — Confidence was {{ negotiation.trigger_confidence|floatformat:0 }}%</p>
+        </div>
+      </div>
+      <div class="p-3 bg-light rounded" style="white-space:pre-line;">{{ negotiation.ai_drafted_message }}</div>
+    </div>
+  </div>
+
+  <!-- Option cards -->
+  {% if negotiation.status in 'draft,sent,acknowledged' %}
+  <form method="post" action="{% url 'kanban:negotiation_resolve' board.id negotiation.id %}" id="negotiate-form">
+    {% csrf_token %}
+    <h5 class="mb-3">Choose an option:</h5>
+    <div class="row g-3 mb-4">
+
+      <!-- Option A -->
+      <div class="col-md-4">
+        <div class="card option-card h-100" data-option="A" onclick="selectOption('A')">
+          <div class="card-body">
+            <p class="option-label text-primary mb-2">Option A — Accept as-is</p>
+            <p class="mb-2">{{ negotiation.option_a_description }}</p>
+            {% if negotiation.option_a_impact %}
+            <ul class="list-unstyled impact-row text-muted mb-0">
+              {% for k,v in negotiation.option_a_impact.items %}
+              <li><span class="fw-semibold">{{ k }}:</span> {{ v }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Option B -->
+      <div class="col-md-4">
+        <div class="card option-card h-100" data-option="B" onclick="selectOption('B')">
+          <div class="card-body">
+            <p class="option-label text-warning mb-2">Option B — Extend deadline</p>
+            <p class="mb-2">{{ negotiation.option_b_description }}</p>
+            {% if negotiation.option_b_impact %}
+            <ul class="list-unstyled impact-row text-muted mb-0">
+              {% for k,v in negotiation.option_b_impact.items %}
+              <li><span class="fw-semibold">{{ k }}:</span> {{ v }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Option C -->
+      <div class="col-md-4">
+        <div class="card option-card h-100" data-option="C" onclick="selectOption('C')">
+          <div class="card-body">
+            <p class="option-label text-danger mb-2">Option C — Descope</p>
+            <p class="mb-2">{{ negotiation.option_c_description }}</p>
+            {% if negotiation.option_c_impact %}
+            <ul class="list-unstyled impact-row text-muted mb-0">
+              {% for k,v in negotiation.option_c_impact.items %}
+              <li><span class="fw-semibold">{{ k }}:</span> {{ v }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <input type="hidden" name="chosen_option" id="chosen-option" value="">
+    <div id="option-error" class="text-danger small mb-2" style="display:none;">Please select an option first.</div>
+    <button type="submit" class="btn btn-primary px-4" onclick="return validateChoice()">Confirm Selection</button>
+    <a href="{% url 'kanban:commitment_detail' board.id negotiation.commitment.id %}" class="btn btn-outline-secondary ms-2">Back</a>
+  </form>
+
+  {% else %}
+  <!-- Already resolved -->
+  <div class="alert alert-{% if negotiation.status == 'resolved' %}success{% else %}secondary{% endif %}">
+    <i class="bi bi-check-circle-fill me-2"></i>
+    This negotiation session was <strong>{{ negotiation.get_status_display }}</strong>
+    {% if negotiation.chosen_option %}— Option {{ negotiation.chosen_option }} selected.{% endif %}
+    {% if negotiation.resolved_at %}on {{ negotiation.resolved_at|date:"M j, Y" }}.{% endif %}
+  </div>
+  <a href="{% url 'kanban:commitment_detail' board.id negotiation.commitment.id %}" class="btn btn-outline-primary">
+    Back to Commitment
+  </a>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selectOption(opt) {
+  document.querySelectorAll('.option-card').forEach(function(c) {
+    c.classList.toggle('selected', c.dataset.option === opt);
+  });
+  document.getElementById('chosen-option').value = opt;
+}
+
+function validateChoice() {
+  var val = document.getElementById('chosen-option').value;
+  if (!val) {
+    document.getElementById('option-error').style.display = 'block';
+    return false;
+  }
+  return true;
+}
+</script>
+{% endblock %}
