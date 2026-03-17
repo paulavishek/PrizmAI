@@ -92,7 +92,12 @@
   <div class="cemetery-grid">
     {% for entry in cemetery_entries %}
     <a href="{% url 'exit_protocol:autopsy_report' entry.id %}" class="gravestone {% if entry.is_resurrected %}gravestone-resurrected{% endif %}" style="animation-delay: {{ forloop.counter0|divisibleby:1 }}00ms;">
-      <div class="gravestone-name">{{ entry.project_name }}</div>
+      <div class="gravestone-name">
+        {{ entry.project_name }}
+        {% if entry.is_resurrected %}
+        <span style="display:inline-block;margin-left:0.4rem;font-size:0.7rem;background:#1a3a1a;color:#4caf50;border:1px solid #4caf50;border-radius:3px;padding:0.1rem 0.4rem;">🌱 Resurrected</span>
+        {% endif %}
+      </div>
       <div class="gravestone-dates">
         {% if entry.start_date %}{{ entry.start_date|date:"M Y" }}{% endif %}
         —

@@ -7,6 +7,7 @@ urlpatterns = [
     # Hospice / Dashboard (board-scoped)
     path('boards/<int:board_id>/exit-protocol/', views.exit_protocol_dashboard, name='dashboard'),
     path('boards/<int:board_id>/exit-protocol/initiate/', views.initiate_hospice, name='initiate'),
+    path('boards/<int:board_id>/exit-protocol/recalculate/', views.recalculate_health_score, name='recalculate'),
     path('boards/<int:board_id>/exit-protocol/checklist/<str:item_id>/complete/', views.complete_checklist_item, name='complete_checklist_item'),
     path('boards/<int:board_id>/exit-protocol/transition-memos/', views.view_transition_memos, name='transition_memos'),
     path('boards/<int:board_id>/exit-protocol/bury/', views.bury_project, name='bury'),

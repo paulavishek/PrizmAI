@@ -171,18 +171,53 @@
   </div>
   {% endif %}
 
-  <!-- Actions -->
-  <div class="action-bar">
-    {% if not entry.is_resurrected %}
-    <form method="post" action="{% url 'exit_protocol:resurrect' entry.id %}" style="display:inline;">
-      {% csrf_token %}
-      <button type="submit" class="btn-resurrect" onclick="return confirm('Resurrect this project as a new board? The archive will remain unchanged.');">
-        ✨ Resurrect Project
-      </button>
-    </form>
+  <!-- Resurrection Section -->
+  <div class="autopsy-section resurrection-section">
+    {% if entry.is_resurrected %}
+    <div class="alert alert-info d-flex align-items-center gap-3 mb-0" style="background:#1a2a1a;border:1px solid #3a5a3a;color:#9ed49e;">
+      <span style="font-size:1.5rem;">🌱</span>
+      <div>
+        <strong>This project was resurrected.</strong>
+        <span class="d-block" style="font-size:0.85rem;color:#7ec47e;">
+          A new board was created from this project's knowledge.
+        </span>
+      </div>
+      {% if entry.resurrected_as %}
+      <a href="{% url 'board_detail' board_id=entry.resurrected_as.id %}"
+         class="btn btn-sm ms-auto" style="background:#2e4a2e;color:#7ec47e;border:1px solid #3a5a3a;">
+        View Resurrected Board →
+      </a>
+      {% endif %}
+    </div>
     {% else %}
-    <button class="btn-resurrect" disabled title="Already resurrected">✨ Already Resurrected</button>
+    <div class="d-flex align-items-start gap-4">
+      <span style="font-size:2rem;">🌱</span>
+      <div class="flex-grow-1">
+        <h5 style="color:#e8e0d0;font-family:'Playfair Display',Georgia,serif;">Resurrect This Project</h5>
+        <p style="color:#888;font-size:0.9rem;margin-bottom:0.75rem;">
+          Start fresh with the lessons from this project already loaded. A new board will be created with:
+        </p>
+        <ul style="color:#888;font-size:0.85rem;margin-bottom:0.75rem;padding-left:1.2rem;">
+          <li>All decisions and lessons imported into the Knowledge Graph</li>
+          <li>Original failure risks pre-loaded into Pre-Mortem AI</li>
+          <li>This Cemetery entry preserved permanently for reference</li>
+        </ul>
+        <p style="font-size:0.8rem;color:#555;margin-bottom:0.75rem;">
+          ⚠️ This creates a <strong style="color:#777;">new board</strong> — it does not restore the archived project. The Cemetery entry will remain.
+        </p>
+        <form method="post"
+              action="{% url 'exit_protocol:resurrect' entry.id %}"
+              onsubmit="return confirm('Create a new board from \'{{ entry.project_name }}\'? The Cemetery entry will be preserved.');">
+          {% csrf_token %}
+          <button type="submit" class="btn-resurrect">🌱 Resurrect as New Board</button>
+        </form>
+      </div>
+    </div>
     {% endif %}
+  </div>
+
+  <!-- Export -->
+  <div class="action-bar">
     <a href="{% url 'exit_protocol:export_pdf' entry.id %}" class="btn-export">📄 Export PDF</a>
   </div>
 </div>
