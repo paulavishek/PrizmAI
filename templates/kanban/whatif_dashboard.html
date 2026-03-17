@@ -130,6 +130,18 @@
         </div>
     </div>
 
+    <!-- ── What-If → Shadow Board bridge callout ──────────────── -->
+    <div class="alert alert-info border-0 py-2 px-3 mb-3 d-flex align-items-center gap-2" style="background:#eef4ff;">
+        <i class="fas fa-info-circle text-primary flex-shrink-0"></i>
+        <span class="small">
+            <strong>What-If is your calculator.</strong>
+            Adjust the sliders, run the numbers, save what looks promising &mdash; then
+            <strong>Promote to Shadow Branch</strong> to spin up a live parallel simulation
+            that evolves alongside your real board.
+            <a href="{% url 'shadow_board_list' board.id %}" class="fw-semibold ms-1">Open Shadow Board &rarr;</a>
+        </span>
+    </div>
+
     <!-- ── Warnings ────────────────────────────────────────────── -->
     <div id="warnings-area"></div>
 
@@ -316,19 +328,31 @@
             </div>
 
             <!-- Actions -->
-            <div class="d-flex justify-content-center gap-2 mb-4">
+            <div class="d-flex flex-column align-items-center gap-2 mb-4">
                 <button class="btn btn-success" id="btn-save" type="button">
                     <i class="fas fa-save me-1"></i> Save Scenario
                 </button>
+                <p class="text-muted small mb-0 text-center" id="shadow-nudge">
+                    <i class="fas fa-atom me-1 text-success"></i>
+                    Want to track how this scenario holds up over time?
+                    Save it, then <strong>Promote to Shadow Branch</strong> &mdash;
+                    a living simulation that updates as your real board changes.
+                </p>
             </div>
         </div>
     </div>
 
     <!-- ── Section 4: Saved Scenarios ──────────────────────────── -->
     <div class="card mb-4">
-        <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#saved-panel" role="button">
-            <h5 class="mb-0"><i class="fas fa-history text-secondary me-2"></i>Saved Scenarios</h5>
-            <span class="badge bg-secondary" id="saved-count">{{ saved_scenarios|length }}</span>
+        <div class="card-header bg-light py-3" data-bs-toggle="collapse" data-bs-target="#saved-panel" role="button" style="cursor:pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-history text-secondary me-2"></i>Saved Scenarios</h5>
+                <span class="badge bg-secondary" id="saved-count">{{ saved_scenarios|length }}</span>
+            </div>
+            <p class="text-muted small mb-0 mt-1">
+                Reload a scenario onto the sliders, or <strong>Promote to Shadow Branch</strong>
+                to turn it into a live simulation that tracks progress on a parallel copy of your board.
+            </p>
         </div>
         <div class="collapse {% if saved_scenarios %}show{% endif %}" id="saved-panel">
             <div class="card-body" id="saved-body">
@@ -354,8 +378,8 @@
                             <button class="btn btn-sm btn-outline-primary btn-load-scenario" data-params='{{ s.input_parameters|to_json }}'>
                                 <i class="fas fa-upload me-1"></i> Load
                             </button>
-                            <button class="btn btn-sm btn-outline-success btn-promote-scenario" data-scenario-id="{{ s.id }}" data-scenario-name="{{ s.name }}" title="Promote to Shadow Branch (living simulation)">
-                                <i class="fas fa-atom me-1"></i> Promote
+                            <button class="btn btn-sm btn-success btn-promote-scenario" data-scenario-id="{{ s.id }}" data-scenario-name="{{ s.name }}" title="Spin up a live Shadow Branch from this scenario">
+                                <i class="fas fa-atom me-1"></i> &rarr; Shadow Branch
                             </button>
                             <button class="btn btn-sm btn-outline-danger btn-delete-scenario" data-id="{{ s.id }}">
                                 <i class="fas fa-trash"></i>
