@@ -27,10 +27,10 @@
   <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
       <li class="breadcrumb-item">
-        <a href="{% url 'kanban:commitment_dashboard' board.id %}">Commitments</a>
+        <a href="{% url 'commitment_dashboard' board.id %}">Commitments</a>
       </li>
       <li class="breadcrumb-item">
-        <a href="{% url 'kanban:commitment_detail' board.id negotiation.commitment.id %}">{{ negotiation.commitment.title|truncatechars:30 }}</a>
+        <a href="{% url 'commitment_detail' board.id negotiation.commitment.id %}">{{ negotiation.commitment.title|truncatechars:30 }}</a>
       </li>
       <li class="breadcrumb-item active">Renegotiation</li>
     </ol>
@@ -114,7 +114,7 @@
     <input type="hidden" name="chosen_option" id="chosen-option" value="">
     <div id="option-error" class="text-danger small mb-2" style="display:none;">Please select an option first.</div>
     <button type="submit" class="btn btn-primary px-4" onclick="return validateChoice()">Confirm Selection</button>
-    <a href="{% url 'kanban:commitment_detail' board.id negotiation.commitment.id %}" class="btn btn-outline-secondary ms-2">Back</a>
+    <a href="{% url 'commitment_detail' board.id negotiation.commitment.id %}" class="btn btn-outline-secondary ms-2">Back</a>
   </form>
 
   {% else %}
@@ -125,7 +125,7 @@
     {% if negotiation.chosen_option %}— Option {{ negotiation.chosen_option }} selected.{% endif %}
     {% if negotiation.resolved_at %}on {{ negotiation.resolved_at|date:"M j, Y" }}.{% endif %}
   </div>
-  <a href="{% url 'kanban:commitment_detail' board.id negotiation.commitment.id %}" class="btn btn-outline-primary">
+  <a href="{% url 'commitment_detail' board.id negotiation.commitment.id %}" class="btn btn-outline-primary">
     Back to Commitment
   </a>
   {% endif %}

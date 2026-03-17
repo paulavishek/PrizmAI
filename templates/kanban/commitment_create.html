@@ -9,7 +9,7 @@
   <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
       <li class="breadcrumb-item">
-        <a href="{% url 'kanban:commitment_dashboard' board.id %}">Commitment Protocols</a>
+        <a href="{% url 'commitment_dashboard' board.id %}">Commitment Protocols</a>
       </li>
       <li class="breadcrumb-item active">New Protocol</li>
     </ol>
@@ -96,7 +96,7 @@
 
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-primary px-4">Create Protocol</button>
-          <a href="{% url 'kanban:commitment_dashboard' board.id %}" class="btn btn-outline-secondary">Cancel</a>
+          <a href="{% url 'commitment_dashboard' board.id %}" class="btn btn-outline-secondary">Cancel</a>
         </div>
       </form>
     </div>
