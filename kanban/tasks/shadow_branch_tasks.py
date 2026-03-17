@@ -5,7 +5,7 @@ Async tasks for recalculating shadow branches whenever real board changes occur.
 All Gemini API calls happen here in the Celery worker, not in the request cycle.
 """
 from celery import shared_task
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 from django.utils import timezone
 from django.core.cache import caches
 import logging
@@ -75,13 +75,78 @@ def extract_branch_params(branch):
     }
 
 
+def _format_ai_recommendation(ai_result):
+    """
+    Format the structured AI analysis dict into a readable recommendation string.
+
+    Args:
+        ai_result: dict from WhatIfEngine.analyze_with_ai()
+
+    Returns:
+        str: Human-readable recommendation text, or empty string on failure.
+    """
+    if not ai_result or 'error' in ai_result:
+        return ''
+
+    parts = []
+
+    assessment = ai_result.get('feasibility_assessment', '')
+    if assessment:
+        parts.append(f"Feasibility: {assessment}")
+
+    risk_summary = ai_result.get('risk_summary', '')
+    if risk_summary:
+        parts.append(f"\nRisk Summary:\n{risk_summary}")
+
+    mitigations = ai_result.get('recommended_mitigations', [])
+    if mitigations:
+        items = '\n'.join(f"  • {m}" for m in mitigations if m)
+        parts.append(f"\nRecommended Mitigations:\n{items}")
+
+    trade_off = ai_result.get('trade_off_analysis', '')
+    if trade_off:
+        parts.append(f"\nTrade-off Analysis:\n{trade_off}")
+
+    alternative = ai_result.get('alternative_suggestion', '')
+    if alternative:
+        parts.append(f"\nAlternative Suggestion:\n{alternative}")
+
+    return '\n'.join(parts).strip()
+
+
+def _estimate_completion_date(simulation_results):
+    """
+    Estimate a projected completion date from simulation results when the engine
+    couldn't compute one (e.g. no burndown prediction in the DB).
+
+    Uses velocity and remaining tasks to project a date from today.
+
+    Returns:
+        date or None
+    """
+    projected = simulation_results.get('projected', {})
+    # If the engine already computed a date, use it
+    engine_date = projected.get('predicted_date')
+    if engine_date:
+        return None  # Signal caller to use the engine value
+
+    velocity = projected.get('velocity_per_week', 0)
+    remaining = projected.get('remaining_tasks', 0)
+
+    if velocity and velocity >= 0.5 and remaining > 0:
+        weeks_needed = remaining / velocity
+        return date_type.today() + timedelta(weeks=weeks_needed)
+
+    return None
+
+
 @shared_task(
     bind=True,
     name='kanban.recalculate_branches',
     max_retries=2,
     default_retry_delay=10,
-    time_limit=120,
-    soft_time_limit=100,
+    time_limit=300,
+    soft_time_limit=270,
 )
 def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalculation'):
     """
@@ -144,6 +209,31 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 if latest_snapshot:
                     old_score = latest_snapshot.feasibility_score
 
+                # --- Gemini AI Analysis ---
+                # Call Gemini to generate a recommendation and enrich the snapshot
+                recommendation_text = ''
+                try:
+                    ai_result = engine.analyze_with_ai(params, results)
+                    recommendation_text = _format_ai_recommendation(ai_result)
+                    if recommendation_text:
+                        logger.info(f'Generated AI recommendation for branch {branch.id}')
+                    else:
+                        logger.warning(f'AI analysis returned empty for branch {branch.id}')
+                except Exception as ai_err:
+                    logger.warning(
+                        f'Gemini AI analysis failed for branch {branch.id}: {ai_err}',
+                        exc_info=True,
+                    )
+                    # Graceful degradation — snapshot is still created without recommendation
+
+                # --- Projected Completion Date ---
+                # Try the engine's computed date first, then fall back to velocity estimate
+                projected_date = _parse_date(
+                    results.get('projected', {}).get('predicted_date')
+                )
+                if not projected_date:
+                    projected_date = _estimate_completion_date(results)
+
                 # Create new snapshot with current results
                 new_snapshot = BranchSnapshot.objects.create(
                     branch=branch,
@@ -151,10 +241,10 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                     team_delta=params['team_size_delta'],
                     deadline_delta_weeks=params['deadline_shift_days'] // 7,  # Convert days back to weeks
                     feasibility_score=new_feasibility,
-                    projected_completion_date=_parse_date(results.get('projected', {}).get('predicted_date')),
+                    projected_completion_date=projected_date,
                     projected_budget_utilization=results.get('projected', {}).get('budget_utilization_pct'),
                     conflicts_detected=results.get('new_conflicts', []),
-                    gemini_recommendation=results.get('ai_analysis', {}).get('recommendation', ''),
+                    gemini_recommendation=recommendation_text,
                 )
                 snapshots_created += 1
 
