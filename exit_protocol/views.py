@@ -42,7 +42,8 @@ def exit_protocol_dashboard(request, board_id):
         board=board
     ).order_by('-recorded_at')[:10]
 
-    current_score = signals[0].hospice_risk_score if signals else 0
+    last_signal = signals[0] if signals else None
+    current_score = last_signal.hospice_risk_score if last_signal else 0
 
     hospice_session = HospiceSession.objects.filter(board=board).first()
 
@@ -52,6 +53,31 @@ def exit_protocol_dashboard(request, board_id):
         board=board, user=request.user, expires_at__gt=now
     ).exists()
 
+    # Build per-dimension score breakdown
+    score_breakdown = []
+    if last_signal and last_signal.score_is_valid:
+        WEIGHTS = {'velocity': 0.30, 'budget': 0.25, 'deadlines': 0.25, 'activity': 0.20}
+        available = {}
+        if last_signal.velocity_decline_pct is not None:
+            available['velocity'] = min(max(last_signal.velocity_decline_pct / 100, 0.0), 1.0)
+        if last_signal.budget_spent_pct is not None and last_signal.tasks_complete_pct is not None:
+            available['budget'] = min(
+                (last_signal.budget_spent_pct / 100) * (1 - last_signal.tasks_complete_pct / 100), 1.0
+            )
+        if last_signal.deadlines_missed_30d is not None:
+            available['deadlines'] = min(last_signal.deadlines_missed_30d / 10, 1.0)
+        available['activity'] = min(last_signal.days_since_last_activity / 30, 1.0)
+
+        total_weight = sum(WEIGHTS[k] for k in available)
+        for dim, factor in available.items():
+            adjusted_weight = WEIGHTS[dim] / total_weight
+            score_breakdown.append({
+                'label': dim.replace('_', ' ').title(),
+                'factor_pct': round(factor * 100),
+                'contribution_pct': round(factor * adjusted_weight * 100),
+                'status': 'danger' if factor >= 0.75 else 'warning' if factor >= 0.40 else 'success',
+            })
+
     return render(request, 'exit_protocol/dashboard.html', {
         'board': board,
         'signals': signals,
@@ -59,6 +85,24 @@ def exit_protocol_dashboard(request, board_id):
         'hospice_session': hospice_session,
         'show_initiate_cta': not hospice_session and current_score >= 0.75,
         'banner_dismissed': banner_dismissed,
+        'score_breakdown': score_breakdown,
+        'last_signal': last_signal,
+    })
+
+
+@login_required
+@require_POST
+def recalculate_health_score(request, board_id):
+    """Manually triggers a health score recomputation for this board."""
+    board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
+
+    from .tasks import compute_board_health_score
+    compute_board_health_score.delay(board_id)
+
+    return JsonResponse({
+        'status': 'recalculating',
+        'message': 'Health score recalculation started. Refresh in a few seconds.',
     })
 
 

@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load exit_protocol_tags %}
 
 {% block title %}Exit Protocol: {{ board.name }} — PrizmAI{% endblock %}
 
@@ -59,11 +60,55 @@
   <div class="risk-gauge">
     {% with score=current_risk_score %}
     <div class="gauge-value {% if score >= 0.75 %}gauge-high{% elif score >= 0.4 %}gauge-moderate{% else %}gauge-low{% endif %}">
-      {{ score|floatformat:0|default:"0" }}%
+      {% widthratio score 1 100 %}%
     </div>
     <div class="gauge-label">Hospice Risk Score</div>
     {% endwith %}
   </div>
+
+  <!-- Score Breakdown Table -->
+  {% if score_breakdown %}
+  <div class="score-breakdown mt-3 mb-3" style="max-width: 480px; margin: 0 auto;">
+    <p class="text-muted small text-center mb-2">Score breakdown by dimension</p>
+    <table class="table table-sm table-borderless mb-0">
+      <thead>
+        <tr>
+          <th class="text-muted fw-normal small">Dimension</th>
+          <th class="text-muted fw-normal small text-end">Factor</th>
+          <th class="text-muted fw-normal small text-end">Contribution</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dim in score_breakdown %}
+        <tr>
+          <td style="font-size:0.85rem;">{{ dim.label }}</td>
+          <td class="text-end">
+            <div class="progress d-inline-flex align-middle" style="height:6px;width:80px;vertical-align:middle;">
+              <div class="progress-bar bg-{{ dim.status }}" style="width:{{ dim.factor_pct }}%"></div>
+            </div>
+            <span class="ms-2 small text-{{ dim.status }}">{{ dim.factor_pct }}%</span>
+          </td>
+          <td class="text-end small text-muted">+{{ dim.contribution_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if last_signal %}
+    <p class="text-muted text-center mt-2" style="font-size:0.75rem;">
+      Last calculated: {{ last_signal.recorded_at|timesince }} ago
+      &nbsp;·&nbsp;
+      {{ last_signal.dimensions_available }} dimension{{ last_signal.dimensions_available|pluralize }} available
+    </p>
+    {% endif %}
+    <div class="text-center mt-2">
+      <button id="recalculate-btn" class="btn btn-sm btn-outline-secondary"
+              data-url="{% url 'exit_protocol:recalculate' board.id %}">
+        <i class="bi bi-arrow-clockwise"></i> Recalculate Now
+      </button>
+      <span id="recalculate-status" class="ms-2 small text-muted d-none">Recalculating…</span>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Signal History -->
   {% if signals %}
@@ -105,13 +150,16 @@
         <h5 style="font-size: 1rem;">📋 Knowledge Extraction Checklist</h5>
         {% for category, items in hospice_session.knowledge_checklist.items %}
         <div class="mb-2">
-          <strong style="font-size: 0.85rem; text-transform: capitalize;">{{ category|cut:"_" }}</strong>
+          <strong style="font-size: 0.85rem;">{{ category|humanize_key }}</strong>
           {% for item in items %}
           <div class="form-check" style="margin-left: 1rem;">
             <input class="form-check-input checklist-item" type="checkbox"
               data-item-id="{{ item.id }}"
               {% if item.id in hospice_session.checklist_completed_items %}checked{% endif %}>
-            <label class="form-check-label" style="font-size: 0.85rem;">{{ item.title }}</label>
+            <label class="form-check-label" style="font-size: 0.85rem;">
+              {{ item.title }}
+              {% if item.date %}<small class="text-muted ms-2">{{ item.date }}</small>{% endif %}
+            </label>
           </div>
           {% endfor %}
         </div>
@@ -239,5 +287,33 @@ document.querySelectorAll('.checklist-item').forEach(cb => {
     .catch(err => console.error(err));
   });
 });
+
+// Recalculate Now button
+const recalcBtn = document.getElementById('recalculate-btn');
+if (recalcBtn) {
+  recalcBtn.addEventListener('click', function () {
+    const status = document.getElementById('recalculate-status');
+    recalcBtn.disabled = true;
+    recalcBtn.innerHTML = '<i class="bi bi-arrow-clockwise" style="animation:spin 1s linear infinite;display:inline-block;"></i> Recalculating…';
+    status.classList.remove('d-none');
+    fetch(recalcBtn.dataset.url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+    })
+    .then(res => res.json())
+    .then(() => {
+      status.textContent = 'Done! Refreshing…';
+      setTimeout(() => window.location.reload(), 3000);
+    })
+    .catch(() => {
+      recalcBtn.disabled = false;
+      recalcBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Recalculate Now';
+      status.textContent = 'Failed. Try again.';
+    });
+  });
+}
 </script>
+<style>
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
 {% endblock %}

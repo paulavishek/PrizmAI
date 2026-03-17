@@ -403,6 +403,7 @@ def generate_knowledge_checklist(session_id):
                     'importance': float(node.importance_score) if node.importance_score else 0.5,
                     'node_type': node.node_type,
                     'status': 'pending',
+                    'date': node.created_at.strftime('%b %d, %Y'),
                 })
     except Exception as e:
         logger.error(f"[ExitProtocol] Knowledge checklist failed for session {session_id}: {e}")
