@@ -886,3 +886,83 @@ def unlink_board_from_strategy(request, mission_id, strategy_id, board_id):
         messages.success(request, f'Board "{board.name}" unlinked from strategy.')
 
     return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
+
+
+# ---------------------------------------------------------------------------
+# AJAX endpoints — shared across Goal / Mission / Strategy
+# ---------------------------------------------------------------------------
+
+_LEVEL_MODELS = {
+    'goal': OrganizationGoal,
+    'mission': Mission,
+    'strategy': Strategy,
+}
+
+
+@login_required
+def post_strategic_update(request, level, pk):
+    """AJAX POST — create a StrategicUpdate for any level (goal/mission/strategy)."""
+    from django.http import JsonResponse
+    from django.template.loader import render_to_string
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    status_val = request.POST.get('status', '').strip()
+    message = request.POST.get('message', '').strip()
+
+    valid_statuses = {c[0] for c in StrategicUpdate.STATUS_CHOICES}
+    if status_val not in valid_statuses:
+        return JsonResponse({'success': False, 'error': 'Invalid status.'}, status=400)
+    if not message:
+        return JsonResponse({'success': False, 'error': 'Message is required.'}, status=400)
+    if len(message) > 500:
+        return JsonResponse({'success': False, 'error': 'Message must be 500 characters or fewer.'}, status=400)
+
+    ct = ContentType.objects.get_for_model(record)
+    update = StrategicUpdate.objects.create(
+        content_type=ct,
+        object_id=record.pk,
+        status=status_val,
+        message=message,
+        author=request.user,
+    )
+
+    count = StrategicUpdate.objects.filter(content_type=ct, object_id=record.pk).count()
+
+    html = render_to_string('kanban/partials/_update_entry.html', {'u': update}, request=request)
+
+    return JsonResponse({'success': True, 'html': html, 'count': count})
+
+
+@login_required
+def toggle_follow(request, level, pk):
+    """AJAX POST/DELETE — follow or unfollow any level."""
+    from django.http import JsonResponse
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+    ct = ContentType.objects.get_for_model(record)
+
+    if request.method == 'POST':
+        StrategicFollower.objects.get_or_create(
+            content_type=ct, object_id=record.pk, user=request.user,
+        )
+    elif request.method == 'DELETE':
+        StrategicFollower.objects.filter(
+            content_type=ct, object_id=record.pk, user=request.user,
+        ).delete()
+    else:
+        return JsonResponse({'success': False, 'error': 'POST or DELETE required.'}, status=405)
+
+    count = StrategicFollower.objects.filter(content_type=ct, object_id=record.pk).count()
+    return JsonResponse({'success': True, 'count': count})

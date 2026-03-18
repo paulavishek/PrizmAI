@@ -110,8 +110,54 @@
 
             {# ---- Updates tab ---- #}
             <div class="tab-pane" id="tab-updates">
+                {# Post update form #}
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-3">
+                        <form id="strategic-update-form" method="post"
+                              action="{% url 'post_strategic_update' level=level_name pk=record.pk %}">
+                            {% csrf_token %}
+                            <div class="row g-2 mb-2">
+                                <div class="col-auto">
+                                    <select name="status" class="form-select form-select-sm" required>
+                                        <option value="on_track">On track</option>
+                                        <option value="at_risk">At risk</option>
+                                        <option value="off_track">Off track</option>
+                                        <option value="blocked">Blocked</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <textarea name="message" class="form-control form-control-sm mb-2" rows="3"
+                                      maxlength="500" required
+                                      placeholder="What is the current situation? What moved the needle this week?"></textarea>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">Max 500 characters</small>
+                                <button type="submit" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-paper-plane me-1"></i>Post
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                {# Update feed #}
                 {% block tab_updates %}
-                <p class="text-muted small">No updates yet. Post the first one!</p>
+                {% if updates %}
+                <div id="updates-feed">
+                    {% for u in updates %}
+                    <div class="update-entry">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="update-status {{ u.status }}">{{ u.get_status_display }}</span>
+                            <strong class="small">{{ u.author.get_full_name|default:u.author.username }}</strong>
+                            <small class="text-muted ms-auto">{{ u.created_at|date:"M d, Y H:i" }}</small>
+                        </div>
+                        <p class="mb-0 small">{{ u.message }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div id="updates-feed"></div>
+                <p class="text-muted small" id="no-updates-msg">No updates yet. Post the first one!</p>
+                {% endif %}
                 {% endblock %}
             </div>
 
@@ -166,7 +212,7 @@
                 {% csrf_token %}
                 <button class="btn btn-sm {% if is_following %}btn-primary{% else %}btn-outline-primary{% endif %} w-100"
                         id="btn-follow"
-                        data-url="{% block follow_url %}{% endblock %}"
+                        data-url="{% url 'toggle_follow' level=level_name pk=record.pk %}"
                         data-following="{{ is_following|yesno:'true,false' }}">
                     {% if is_following %}
                     <i class="fas fa-bell-slash me-1"></i>Unfollow
