@@ -69,6 +69,8 @@ urlpatterns = [
     path('missions/<int:mission_id>/', mission_views.mission_detail, name='mission_detail'),
     path('missions/<int:mission_id>/edit/', mission_views.edit_mission, name='edit_mission'),
     path('missions/<int:mission_id>/delete/', mission_views.delete_mission, name='delete_mission'),
+    # Top-level strategy shortcut (spec §8.2)
+    path('strategies/<int:strategy_id>/', mission_views.strategy_detail_shortcut, name='strategy_detail_shortcut'),
     path('missions/<int:mission_id>/strategies/create/', mission_views.create_strategy, name='create_strategy'),
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/', mission_views.strategy_detail, name='strategy_detail'),
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/edit/', mission_views.edit_strategy, name='edit_strategy'),
