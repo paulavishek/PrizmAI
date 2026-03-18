@@ -8,7 +8,10 @@ from .models import (
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, Milestone, StrategicFollower,
 )
-from .automation_models import BoardAutomation, ScheduledAutomation
+from .automation_models import (
+    BoardAutomation, ScheduledAutomation,
+    AutomationRule, AutomationLog, AutomationTemplate,
+)
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 from .burndown_models import (
     TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone
@@ -46,6 +49,31 @@ class ScheduledAutomationAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'schedule_type', 'action', 'task_filter')
     search_fields = ('name', 'board__name')
     readonly_fields = ('periodic_task', 'run_count', 'failure_count', 'last_run_at', 'created_at')
+
+
+# ── New Automation Engine models ───────────────────────────────
+
+@admin.register(AutomationRule)
+class AutomationRuleAdmin(admin.ModelAdmin):
+    list_display = ('name', 'board', 'trigger_type', 'action_type', 'is_active', 'run_count', 'last_run_at')
+    list_filter = ('is_active', 'trigger_type', 'action_type', 'schedule_type')
+    search_fields = ('name', 'board__name')
+    readonly_fields = ('periodic_task', 'run_count', 'failure_count', 'last_run_at', 'created_at')
+
+
+@admin.register(AutomationLog)
+class AutomationLogAdmin(admin.ModelAdmin):
+    list_display = ('rule', 'trigger_event', 'task_affected', 'outcome', 'triggered_at')
+    list_filter = ('outcome',)
+    search_fields = ('rule__name', 'trigger_event')
+    readonly_fields = ('triggered_at',)
+
+
+@admin.register(AutomationTemplate)
+class AutomationTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category', 'trigger_type', 'is_builtin')
+    list_filter = ('category', 'is_builtin')
+    search_fields = ('name', 'description')
 
 
 class MissionInline(admin.TabularInline):
