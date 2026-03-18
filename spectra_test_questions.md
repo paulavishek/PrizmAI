@@ -1,6 +1,6 @@
 # Spectra Test Questions
 
-25 test prompts covering the full spectrum of Spectra's capabilities.
+35 test prompts covering the full spectrum of Spectra's capabilities.
 Use these against a board with tasks, members, and data to validate end-to-end behavior.
 
 ---
@@ -21,38 +21,51 @@ Use these against a board with tasks, members, and data to validate end-to-end b
 9. **Simple task** — "Create a task called Update the login page"
 10. **Rich task** — "Create a high-priority task called Fix payment gateway bug, assign it to Alex, due next Friday"
 11. **Task without board** (test board selection) — Open Spectra without a board selected, then: "Add a task called Write unit tests for auth module"
+12. **Duplicate task warning** — Create a task with the same name as an existing one — Spectra should warn about duplicates
 
 ## Board Creation
 
-12. **Simple board** — "Create a new board called Q2 Marketing Campaign"
-13. **Board with description** — "Create a board called Bug Tracker with description Tracking all production bugs"
+13. **Simple board** — "Create a new board called Q2 Marketing Campaign"
+14. **Board with description** — "Create a board called Bug Tracker with description Tracking all production bugs"
+15. **Duplicate board warning** — Try creating a board with a name that already exists — Spectra should warn
 
 ## Send Message
 
-14. **Direct message** — "Send a message to Alex saying the deployment is scheduled for tonight"
-15. **Intent-based message** — "Tell Sam that the design review has been moved to Thursday"
+16. **Direct message** — "Send a message to Alex saying the deployment is scheduled for tonight"
+17. **Intent-based message** — "Tell Sam that the design review has been moved to Thursday"
+18. **Invalid recipient** — "Send a message to NonExistentUser saying hello" — Spectra should list available members
 
 ## Log Time
 
-16. **Simple time log** — "Log 2 hours on the API integration task"
-17. **Time with date and description** — "Log 1.5 hours on the database migration task for yesterday, worked on schema changes"
+19. **Simple time log** — "Log 2 hours on the API integration task"
+20. **Time with date and description** — "Log 1.5 hours on the database migration task for yesterday, worked on schema changes"
+21. **Fuzzy task match** — "Log 1 hour on API integration" (partial name) — Spectra should match the closest task
 
 ## Schedule Event
 
-18. **Simple meeting** — "Schedule a team standup tomorrow at 10 AM"
-19. **Detailed event** — "Schedule a sprint planning meeting next Monday at 2 PM with Alex and Sam in Conference Room B"
+22. **Simple meeting** — "Schedule a team standup tomorrow at 10 AM"
+23. **Detailed event** — "Schedule a sprint planning meeting next Monday at 2 PM with Alex and Sam in Conference Room B"
 
 ## Create Retrospective
 
-20. **Sprint retro** — "Generate a retrospective for the last two weeks"
-21. **Custom period retro** — "Create a project retrospective from March 1 to March 12"
+24. **Sprint retro** — "Generate a retrospective for the last two weeks"
+25. **Custom period retro** — "Create a project retrospective from March 1 to March 12"
 
 ## Automation
 
-22. **Template automation** — "Set up an automation to mark overdue tasks as urgent"
-23. **Custom trigger automation** — "Create an automation called Notify on completion that sends a notification when a task is completed"
-24. **Scheduled automation** — "Create a daily automation called Morning Digest that sends notifications to board members about incomplete tasks at 9 AM"
+26. **Template automation** — "Set up an automation to mark overdue tasks as urgent"
+27. **Custom trigger automation** — "Create an automation called Notify on completion that sends a notification when a task is completed"
+28. **Scheduled automation** — "Create a daily automation called Morning Digest that sends notifications to board members about incomplete tasks at 9 AM"
 
 ## Flow Control & Edge Cases
 
-25. **Cancel mid-flow** — Start "Create a task called Test", then when asked for due date say "Cancel"
+29. **Cancel mid-flow** — Start "Create a task called Test", then when asked for due date say "Cancel"
+30. **Change details at confirmation** — Start creating a task, get to confirmation, then say "Change the due date to next Monday"
+31. **Switch action mid-flow** — Start creating a task, then say "Actually, send a message to Alex instead" — Spectra should warn about the current flow
+32. **Confirm with natural language** — At a confirmation step, say "Yes, go ahead" or "Looks good" instead of "confirm"
+33. **Skip optional fields** — When asked for a due date, say "skip"; when asked for assignee, say "none"
+
+## Multi-Capability Sequence
+
+34. **Back-to-back actions** — After creating a task, immediately say "Now log 2 hours on that task" — tests state reset between flows
+35. **Q&A after action** — After creating a board, ask "How many boards do I have now?" — tests return to normal Q&A after action

@@ -324,6 +324,9 @@ class SpectraConversationState(models.Model):
         ('create_retrospective', 'Create Retrospective'),
         ('create_custom_automation', 'Create Custom Automation'),
         ('create_scheduled_automation', 'Create Scheduled Automation'),
+        ('get_commitment_status', 'Get Commitment Status'),
+        ('list_at_risk_commitments', 'List At-Risk Commitments'),
+        ('place_commitment_bet', 'Place Commitment Bet'),
     ]
 
     user = models.ForeignKey(
