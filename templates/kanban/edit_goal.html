@@ -15,43 +15,43 @@
 <div class="row justify-content-center">
     <div class="col-md-7">
         <div class="card shadow-sm">
-            <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Edit Organization Goal</h5>
+            <div class="card-header" style="background-color: #7F77DD; color: #fff;">
+                <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Edit Goal</h5>
             </div>
             <div class="card-body">
                 <form method="post">
                     {% csrf_token %}
 
                     <div class="mb-3">
-                        <label for="name" class="form-label fw-semibold">Goal Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="name" name="name"
-                               value="{{ goal.name }}" required>
+                        <label for="id_name" class="form-label fw-semibold">Goal Name <span class="text-danger">*</span></label>
+                        {{ form.name }}
                     </div>
 
                     <div class="mb-3">
-                        <label for="description" class="form-label fw-semibold">Context &amp; Success Criteria</label>
-                        <textarea class="form-control" id="description" name="description" rows="4">{{ goal.description|default:'' }}</textarea>
+                        <label for="id_description" class="form-label fw-semibold">Context &amp; Success Criteria</label>
+                        {{ form.description }}
                     </div>
 
                     <div class="mb-3">
-                        <label for="target_metric" class="form-label fw-semibold">Target Metric</label>
-                        <input type="text" class="form-control" id="target_metric" name="target_metric"
-                               value="{{ goal.target_metric|default:'' }}">
+                        <label for="id_target_metric" class="form-label fw-semibold">Target Metric</label>
+                        {{ form.target_metric }}
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="target_date" class="form-label fw-semibold">Target Date</label>
-                            <input type="date" class="form-control" id="target_date" name="target_date"
-                                   value="{{ goal.target_date|date:'Y-m-d'|default:'' }}">
+                            <label for="id_target_date" class="form-label fw-semibold">Target Date</label>
+                            {{ form.target_date }}
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="status" class="form-label fw-semibold">Status</label>
-                            <select class="form-select" id="status" name="status">
-                                <option value="active" {% if goal.status == 'active' %}selected{% endif %}>Active</option>
-                                <option value="on_hold" {% if goal.status == 'on_hold' %}selected{% endif %}>On Hold</option>
-                                <option value="completed" {% if goal.status == 'completed' %}selected{% endif %}>Completed</option>
-                            </select>
+                            <label for="id_owner" class="form-label fw-semibold">Owner</label>
+                            {{ form.owner }}
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="id_status" class="form-label fw-semibold">Status</label>
+                            {{ form.status }}
                         </div>
                     </div>
 
@@ -69,8 +69,36 @@
                     </div>
                     {% endif %}
 
+                    <hr>
+                    <h6 class="fw-semibold mb-3">Change Reason <span class="text-danger">*</span></h6>
+                    <div class="mb-3">
+                        {% for radio in form.change_reason %}
+                        <div class="form-check">
+                            {{ radio.tag }}
+                            <label class="form-check-label" for="{{ radio.id_for_label }}">
+                                {{ radio.choice_label }}
+                                {% if radio.choice_value == 'minor_tweak' %}
+                                <span class="text-muted small">— wording or typo fix</span>
+                                {% elif radio.choice_value == 'scope_change' %}
+                                <span class="text-muted small">— target, date, or success criteria changed</span>
+                                {% elif radio.choice_value == 'strategic_pivot' %}
+                                <span class="text-muted small">— fundamental direction changed</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        {% endfor %}
+                        {% if form.change_reason.errors %}
+                        <div class="text-danger small mt-1">{{ form.change_reason.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="id_change_notes" class="form-label fw-semibold">Notes <span class="text-muted small">(optional)</span></label>
+                        {{ form.change_notes }}
+                    </div>
+
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-warning text-dark">
+                        <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-1"></i>Save Changes
                         </button>
                         <a href="{% url 'goal_detail' goal.id %}" class="btn btn-outline-secondary">Cancel</a>

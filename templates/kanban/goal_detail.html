@@ -1,141 +1,61 @@
-{% extends 'base.html' %}
+{# Goal Detail — extends the shared strategic skeleton #}
+{% extends 'kanban/partials/strategic_detail_base.html' %}
 
-{% block title %}{{ goal.name }} - Organization Goal - PrizmAI{% endblock %}
-
-{% block extra_css %}
-<style>
-    .status-pill, .risk-pill {
-        display:inline-flex; align-items:center; gap:4px;
-        font-size:0.68rem; font-weight:700; padding:0.2em 0.65em;
-        border-radius:12px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;
-    }
-    .status-pill .pill-dot, .risk-pill .pill-dot {
-        width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0;
-    }
-    .status-pill.on-track  { background:#d1fae5; color:#065f46; }
-    .status-pill.on-track .pill-dot  { background:#10b981; }
-    .status-pill.at-risk   { background:#fef3c7; color:#92400e; }
-    .status-pill.at-risk .pill-dot   { background:#f59e0b; }
-    .status-pill.late      { background:#fee2e2; color:#7f1d1d; }
-    .status-pill.late .pill-dot      { background:#ef4444; }
-    .risk-pill.low    { background:#d1fae5; color:#065f46; }
-    .risk-pill.low .pill-dot    { background:#10b981; }
-    .risk-pill.medium { background:#fef3c7; color:#92400e; }
-    .risk-pill.medium .pill-dot { background:#f59e0b; }
-    .risk-pill.high   { background:#fee2e2; color:#7f1d1d; }
-    .risk-pill.high .pill-dot   { background:#ef4444; }
-</style>
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
+<li class="breadcrumb-item active">{{ goal.name|truncatechars:40 }}</li>
 {% endblock %}
 
-{% block content %}
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
-        <li class="breadcrumb-item active">{{ goal.name|truncatechars:40 }}</li>
-    </ol>
-</nav>
+{% block header_icon %}<i class="fas fa-trophy text-warning me-2"></i>{% endblock %}
 
-<!-- Goal header -->
-<div class="card shadow-sm mb-4" style="border-left: 4px solid #ffc107;">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-                <h2 class="h4 mb-1">
-                    <i class="fas fa-trophy text-warning me-2"></i>{{ goal.name }}
-                </h2>
-                {% if goal.target_metric %}
-                <div class="mb-2">
-                    <span class="badge bg-warning text-dark fs-6 px-3 py-2">
-                        <i class="fas fa-bullseye me-1"></i>Target: {{ goal.target_metric }}
-                    </span>
-                </div>
-                {% endif %}
-                {% if goal.description %}
-                <p class="text-muted mb-0">{{ goal.description }}</p>
-                {% endif %}
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                {% if goal.status == 'active' %}
-                    <span class="badge bg-success fs-6 px-3 py-2">Active</span>
-                {% elif goal.status == 'completed' %}
-                    <span class="badge bg-primary fs-6 px-3 py-2">Completed</span>
-                {% else %}
-                    <span class="badge bg-warning text-dark fs-6 px-3 py-2">On Hold</span>
-                {% endif %}
-                <a href="{% url 'edit_goal' goal.id %}" class="btn btn-sm btn-outline-warning">
-                    <i class="fas fa-edit me-1"></i>Edit
-                </a>
-                <a href="{% url 'delete_goal' goal.id %}" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-trash me-1"></i>Delete
-                </a>
-            </div>
-        </div>
-
-        <hr class="my-3">
-        <div class="row text-muted small g-3">
-            {% if goal.organization %}
-            <div class="col-auto">
-                <i class="fas fa-building me-1"></i>{{ goal.organization.name }}
-            </div>
-            {% endif %}
-            {% if goal.target_date %}
-            <div class="col-auto">
-                <i class="fas fa-calendar-alt me-1"></i>Target Date: {{ goal.target_date|date:"F j, Y" }}
-            </div>
-            {% endif %}
-            <div class="col-auto">
-                <i class="fas fa-user-circle me-1"></i>Created by {{ goal.created_by.get_full_name|default:goal.created_by.username }}
-                on {{ goal.created_at|date:"M d, Y" }}
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Goal Health Summary Bar -->
-{% if goal_total_tasks %}
-<div class="card shadow-sm mb-4" style="border-radius:12px;">
-    <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
-        <span class="fw-semibold small text-muted"><i class="fas fa-heartbeat me-1"></i>Health</span>
-        <span class="status-pill {{ goal_schedule_status|default:'on_track' }}">
-            <span class="pill-dot"></span>{{ goal_schedule_status|default:"on_track"|title }}
-        </span>
-        <span class="risk-pill {{ goal_risk_level|default:'low' }}">
-            <span class="pill-dot"></span>{{ goal_risk_level|default:"low"|title }} Risk
-        </span>
-        <span class="text-muted small">|</span>
-        <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width:300px;">
-            <div class="progress flex-grow-1" style="height:8px; border-radius:4px;">
-                <div class="progress-bar bg-success" style="width:{{ goal_completion_pct }}%"></div>
-            </div>
-            <small class="fw-bold text-nowrap">{{ goal_completion_pct }}%</small>
-        </div>
-        <small class="text-muted">{{ goal_done_tasks }}/{{ goal_total_tasks }} tasks done</small>
-    </div>
+{% block header_subtitle %}
+{% if goal.target_metric %}
+<div class="mb-1">
+    <span class="badge bg-warning text-dark px-2 py-1">
+        <i class="fas fa-bullseye me-1"></i>Target: {{ goal.target_metric }}
+    </span>
 </div>
 {% endif %}
+{% endblock %}
 
-<!-- AI Summary (if populated) -->
-{% if goal.ai_summary %}
-<div class="card border-warning shadow-sm mb-4">
-    <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center">
-        <i class="fas fa-robot text-warning me-2"></i>
-        <strong>AI Goal Assessment</strong>
-        {% if goal.ai_summary_generated_at %}
-        <small class="text-muted ms-auto">Updated {{ goal.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
-        {% endif %}
-    </div>
-    <div class="card-body">
-        <p class="mb-0">{{ goal.ai_summary }}</p>
-    </div>
+{% block header_actions %}
+<a href="{% url 'edit_goal' goal.id %}" class="btn btn-sm btn-outline-warning">
+    <i class="fas fa-edit me-1"></i>Edit
+</a>
+<a href="{% url 'delete_goal' goal.id %}" class="btn btn-sm btn-outline-danger">
+    <i class="fas fa-trash me-1"></i>Delete
+</a>
+{% endblock %}
+
+{% block header_meta %}
+{% if goal.organization %}
+<div class="col-auto"><i class="fas fa-building me-1"></i>{{ goal.organization.name }}</div>
+{% endif %}
+{% if goal.target_date %}
+<div class="col-auto">
+    <i class="fas fa-calendar-alt me-1"></i>Target: {{ goal.target_date|date:"F j, Y" }}
+    {% if days_remaining is not None %}
+    <span class="ms-1 {% if days_remaining < 0 %}text-danger{% elif days_remaining < 14 %}text-warning{% endif %}">({% if days_remaining < 0 %}{{ days_remaining_abs }} day{{ days_remaining_abs|pluralize }} overdue{% else %}{{ days_remaining }} day{{ days_remaining|pluralize }} left{% endif %})</span>
+    {% endif %}
 </div>
 {% endif %}
+{% if goal.owner %}
+<div class="col-auto"><i class="fas fa-user me-1"></i>Owner: {{ goal.owner.get_full_name|default:goal.owner.username }}</div>
+{% endif %}
+<div class="col-auto">
+    <i class="fas fa-user-circle me-1"></i>Created by {{ goal.created_by.get_full_name|default:goal.created_by.username }}
+    on {{ goal.created_at|date:"M d, Y" }}
+</div>
+{% endblock %}
 
-<!-- Missions section -->
+{# ================================================================ #}
+{# OVERVIEW TAB                                                      #}
+{# ================================================================ #}
+{% block tab_overview %}
 <div class="d-flex align-items-center justify-content-between mb-3">
     <h5 class="mb-0">
         <i class="fas fa-bullseye text-primary me-2"></i>Linked Missions
-        <span class="badge bg-primary ms-1">{{ linked_missions.count }}</span>
+        <span class="badge bg-primary ms-1">{{ linked_missions|length }}</span>
     </h5>
     <a href="{% url 'create_mission' %}" class="btn btn-sm btn-outline-primary">
         <i class="fas fa-plus me-1"></i>New Mission
@@ -145,40 +65,27 @@
 {% if linked_missions %}
 <div class="row mb-4">
     {% for mission in linked_missions %}
-    <div class="col-md-4 mb-3">
+    <div class="col-md-6 col-lg-4 mb-3">
         <div class="card h-100 shadow-sm">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <h6 class="card-title mb-0">
                         <i class="fas fa-bullseye text-primary me-1"></i>{{ mission.name }}
                     </h6>
-                    {% if mission.status == 'active' %}
-                        <span class="badge bg-success">Active</span>
-                    {% elif mission.status == 'completed' %}
-                        <span class="badge bg-primary">Completed</span>
-                    {% else %}
-                        <span class="badge bg-warning text-dark">On Hold</span>
-                    {% endif %}
+                    <span class="status-badge {{ mission.status }}">{{ mission.get_status_display }}</span>
                 </div>
                 <p class="card-text text-muted small mb-2">
                     {% if mission.description %}{{ mission.description|truncatechars:100 }}{% else %}<em>No description.</em>{% endif %}
                 </p>
 
-                <!-- Health pills -->
-                <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-                    <span class="status-pill {{ mission.health_schedule }}">
-                        <span class="pill-dot"></span>{{ mission.health_schedule|title }}
-                    </span>
-                    <span class="risk-pill {{ mission.health_risk }}">
-                        <span class="pill-dot"></span>{{ mission.health_risk|title }} Risk
-                    </span>
-                </div>
-
-                <!-- Progress bar -->
-                {% if mission.health_total %}
+                {% if mission.health_score is not None %}
                 <div class="d-flex align-items-center gap-2 mb-2">
-                    <div class="progress flex-grow-1" style="height:6px; border-radius:3px;">
-                        <div class="progress-bar bg-success" style="width:{{ mission.health_pct }}%"></div>
+                    <span class="fw-bold small {% if mission.health_score >= 70 %}text-success{% elif mission.health_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ mission.health_score }}
+                    </span>
+                    <div class="progress flex-grow-1 progress-sm">
+                        <div class="progress-bar {% if mission.health_score >= 70 %}bg-success{% elif mission.health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width:{{ mission.health_pct }}%"></div>
                     </div>
                     <small class="fw-bold text-nowrap">{{ mission.health_pct }}%</small>
                 </div>
@@ -219,48 +126,119 @@
 </div>
 {% endif %}
 
-<!-- Link existing mission -->
+{# Link existing mission #}
 {% if all_missions %}
-<div class="card shadow-sm mb-4">
-    <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-link me-2"></i>Link Existing Mission to this Goal</h6>
+<div class="card shadow-sm mb-3">
+    <div class="card-header py-2">
+        <h6 class="mb-0"><i class="fas fa-link me-2"></i>Link Existing Mission</h6>
     </div>
     <div class="card-body">
         <form method="post" action="{% url 'link_mission_to_goal' goal.id %}" class="row g-2 align-items-end">
             {% csrf_token %}
             <div class="col-md-8">
-                <label for="mission_id" class="form-label fw-semibold">Select Mission</label>
-                <select name="mission_id" id="mission_id" class="form-select" required>
+                <select name="mission_id" class="form-select form-select-sm" required>
                     <option value="">— Choose a mission —</option>
                     {% for m in all_missions %}
-                    <option value="{{ m.id }}">{{ m.name }}{% if m.organization_goal %} (currently linked to: {{ m.organization_goal.name }}){% endif %}</option>
+                    <option value="{{ m.id }}">{{ m.name }}{% if m.organization_goal %} (linked to: {{ m.organization_goal.name }}){% endif %}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-4">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="fas fa-link me-1"></i>Link Mission
+                <button type="submit" class="btn btn-sm btn-primary w-100">
+                    <i class="fas fa-link me-1"></i>Link
                 </button>
             </div>
         </form>
     </div>
 </div>
 {% endif %}
+{% endblock %}
 
-<!-- Hierarchy reminder -->
-<div class="alert alert-light border py-2 mt-4" role="alert" style="background:linear-gradient(135deg,#fffbea,#fff);border-color:#ffe08a!important;">
-    <small class="text-muted">
-        <i class="fas fa-sitemap me-1 text-warning"></i>
-        <strong>Full Hierarchy:</strong>
-        <a href="{% url 'goal_list' %}" class="text-warning fw-semibold text-decoration-none">Organization Goals</a>
-        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
-        <a href="{% url 'mission_list' %}" class="text-primary fw-semibold text-decoration-none">Missions</a>
-        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
-        <span class="text-success fw-semibold">Strategies</span>
-        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
-        <span class="text-info fw-semibold">Boards</span>
-        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
-        <span class="text-secondary fw-semibold">Tasks</span>
-    </small>
+{# ================================================================ #}
+{# UPDATES TAB                                                       #}
+{# ================================================================ #}
+{% block tab_updates %}
+{% if updates %}
+<div id="updates-feed">
+    {% for u in updates %}
+    <div class="update-entry">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="update-status {{ u.status }}">{{ u.get_status_display }}</span>
+            <strong class="small">{{ u.author.get_full_name|default:u.author.username }}</strong>
+            <small class="text-muted ms-auto">{{ u.created_at|date:"M d, Y H:i" }}</small>
+        </div>
+        <p class="mb-0 small">{{ u.message }}</p>
+    </div>
+    {% endfor %}
 </div>
+{% else %}
+<p class="text-muted small">No updates yet.</p>
+{% endif %}
+{% endblock %}
+
+{# ================================================================ #}
+{# VERSION HISTORY TAB                                               #}
+{# ================================================================ #}
+{% block tab_versions %}
+{% if versions %}
+<div class="ps-2">
+    {% for v in versions %}
+    <div class="version-entry">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="fw-bold small">v{{ v.version_number }}</span>
+            <span class="version-reason {{ v.change_reason }}">{{ v.get_change_reason_display }}</span>
+            <small class="text-muted ms-auto">{{ v.changed_at|date:"M d, Y H:i" }}</small>
+        </div>
+        <div class="small text-muted mb-1">
+            By {{ v.changed_by.get_full_name|default:v.changed_by.username }}
+        </div>
+        <div class="small">
+            <strong>{{ v.name }}</strong>
+            {% if v.description %}<span class="text-muted ms-1">— {{ v.description|truncatechars:80 }}</span>{% endif %}
+        </div>
+        {% if v.change_notes %}
+        <div class="small text-muted mt-1"><em>{{ v.change_notes }}</em></div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-muted small">No version history yet — edits will appear here.</p>
+{% endif %}
+{% endblock %}
+
+{# ================================================================ #}
+{# SIDEBAR                                                          #}
+{# ================================================================ #}
+{% block sidebar %}
+{% if goal.target_date %}
+<div class="sidebar-section">
+    <div class="sidebar-label">Target Date</div>
+    <div class="sidebar-value">{{ goal.target_date|date:"M d, Y" }}</div>
+    {% if days_remaining is not None %}
+    <small class="{% if days_remaining < 0 %}text-danger{% elif days_remaining < 14 %}text-warning{% else %}text-muted{% endif %}">
+        {% if days_remaining < 0 %}{{ days_remaining_abs }} day{{ days_remaining_abs|pluralize }} overdue{% else %}{{ days_remaining }} day{{ days_remaining|pluralize }} remaining{% endif %}
+    </small>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if goal.owner %}
+<div class="sidebar-section">
+    <div class="sidebar-label">Owner</div>
+    <div class="sidebar-value">{{ goal.owner.get_full_name|default:goal.owner.username }}</div>
+</div>
+{% endif %}
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Missions</div>
+    <div class="sidebar-value">{{ linked_missions|length }}</div>
+</div>
+
+{% if goal.organization %}
+<div class="sidebar-section">
+    <div class="sidebar-label">Organization</div>
+    <div class="sidebar-value">{{ goal.organization.name }}</div>
+</div>
+{% endif %}
 {% endblock %}

@@ -2,6 +2,8 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 from django.db.models import Q, Sum, Avg, Count
 from colorfield.fields import ColorField
@@ -50,8 +52,10 @@ from kanban.commitment_models import (
 class OrganizationGoal(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
+        ('pending', 'Pending'),
+        ('paused', 'Paused'),
         ('completed', 'Completed'),
-        ('on_hold', 'On Hold'),
+        ('archived', 'Archived'),
     ]
 
     name = models.CharField(
@@ -85,6 +89,18 @@ class OrganizationGoal(models.Model):
     )
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='created_organization_goals'
+    )
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='owned_goals',
+        null=True,
+        blank=True,
+        help_text="Accountable owner of this goal (defaults to creator).",
+    )
+    version = models.IntegerField(
+        default=1,
+        help_text="Current version number — incremented on each edit.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -125,8 +141,10 @@ class OrganizationGoal(models.Model):
 class Mission(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
+        ('pending', 'Pending'),
+        ('paused', 'Paused'),
         ('completed', 'Completed'),
-        ('on_hold', 'On Hold'),
+        ('archived', 'Archived'),
     ]
 
     name = models.CharField(max_length=200)
@@ -138,6 +156,23 @@ class Mission(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='created_missions'
+    )
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='owned_missions',
+        null=True,
+        blank=True,
+        help_text="Accountable owner of this mission.",
+    )
+    due_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Target completion date for this mission.",
+    )
+    version = models.IntegerField(
+        default=1,
+        help_text="Current version number — incremented on each edit.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -190,8 +225,10 @@ class Mission(models.Model):
 class Strategy(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
+        ('pending', 'Pending'),
+        ('paused', 'Paused'),
         ('completed', 'Completed'),
-        ('on_hold', 'On Hold'),
+        ('archived', 'Archived'),
     ]
 
     name = models.CharField(max_length=200)
@@ -206,6 +243,23 @@ class Strategy(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='created_strategies'
+    )
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='owned_strategies',
+        null=True,
+        blank=True,
+        help_text="Accountable owner of this strategy.",
+    )
+    due_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Target completion date for this strategy.",
+    )
+    version = models.IntegerField(
+        default=1,
+        help_text="Current version number — incremented on each edit.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -238,6 +292,182 @@ class Strategy(models.Model):
             'strategy_detail',
             kwargs={'mission_id': self.mission_id, 'strategy_id': self.pk},
         )
+
+
+# ---------------------------------------------------------------------------
+# VERSION HISTORY MODELS — immutable snapshots created on each edit
+# ---------------------------------------------------------------------------
+class GoalVersion(models.Model):
+    CHANGE_REASON_CHOICES = [
+        ('minor_tweak', 'Minor tweak'),
+        ('scope_change', 'Scope change'),
+        ('strategic_pivot', 'Strategic pivot'),
+    ]
+
+    goal = models.ForeignKey(
+        OrganizationGoal, on_delete=models.CASCADE, related_name='versions'
+    )
+    version_number = models.IntegerField()
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    target_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    changed_by = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+    change_reason = models.CharField(max_length=20, choices=CHANGE_REASON_CHOICES)
+    change_notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-version_number']
+        unique_together = [('goal', 'version_number')]
+
+    def __str__(self):
+        return f"{self.goal.name} v{self.version_number}"
+
+
+class MissionVersion(models.Model):
+    CHANGE_REASON_CHOICES = GoalVersion.CHANGE_REASON_CHOICES
+
+    mission = models.ForeignKey(
+        Mission, on_delete=models.CASCADE, related_name='versions'
+    )
+    version_number = models.IntegerField()
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    changed_by = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+    change_reason = models.CharField(max_length=20, choices=CHANGE_REASON_CHOICES)
+    change_notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-version_number']
+        unique_together = [('mission', 'version_number')]
+
+    def __str__(self):
+        return f"{self.mission.name} v{self.version_number}"
+
+
+class StrategyVersion(models.Model):
+    CHANGE_REASON_CHOICES = GoalVersion.CHANGE_REASON_CHOICES
+
+    strategy = models.ForeignKey(
+        Strategy, on_delete=models.CASCADE, related_name='versions'
+    )
+    version_number = models.IntegerField()
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    changed_by = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+    change_reason = models.CharField(max_length=20, choices=CHANGE_REASON_CHOICES)
+    change_notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-version_number']
+        unique_together = [('strategy', 'version_number')]
+
+    def __str__(self):
+        return f"{self.strategy.name} v{self.version_number}"
+
+
+# ---------------------------------------------------------------------------
+# STRATEGIC UPDATES — structured status check-ins at Goal / Mission / Strategy
+# Uses Django's ContentType framework for polymorphism.
+# ---------------------------------------------------------------------------
+class StrategicUpdate(models.Model):
+    STATUS_CHOICES = [
+        ('on_track', 'On track'),
+        ('at_risk', 'At risk'),
+        ('off_track', 'Off track'),
+        ('blocked', 'Blocked'),
+    ]
+
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE
+    )
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    message = models.TextField(
+        max_length=500,
+        help_text="Structured status check-in (max 500 characters).",
+    )
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='strategic_updates')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.author} — {self.get_status_display()} ({self.created_at:%d %b %Y})"
+
+
+# ---------------------------------------------------------------------------
+# MILESTONE — concrete checkpoints unique to the Strategy level
+# ---------------------------------------------------------------------------
+class Milestone(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('complete', 'Complete'),
+        ('missed', 'Missed'),
+    ]
+
+    strategy = models.ForeignKey(
+        Strategy, on_delete=models.CASCADE, related_name='milestones'
+    )
+    name = models.CharField(max_length=255)
+    due_date = models.DateField()
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default='pending'
+    )
+
+    class Meta:
+        ordering = ['due_date']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_status_display()}) — {self.due_date}"
+
+
+# ---------------------------------------------------------------------------
+# STRATEGIC FOLLOWER — polymorphic follower (Goal / Mission / Strategy)
+# ---------------------------------------------------------------------------
+class StrategicFollower(models.Model):
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE
+    )
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='strategic_follows'
+    )
+    followed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('content_type', 'object_id', 'user')]
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user} follows {self.content_type} #{self.object_id}"
 
 
 class Board(models.Model):
