@@ -956,11 +956,26 @@ class ConversationFlowManager:
         state.collected_data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
         state.save()
 
+        # Dynamically list available templates
+        try:
+            from kanban.automation_models import AutomationTemplate
+            templates = list(AutomationTemplate.objects.filter(is_builtin=True).order_by('id').values_list('name', flat=True))
+        except Exception:
+            templates = []
+
+        if templates:
+            lines = [f"{i+1}. **{name}**" for i, name in enumerate(templates)]
+            menu = "\n".join(lines)
+        else:
+            menu = (
+                "1. **Mark overdue tasks as Urgent**\n"
+                "2. **Notify creator when task is completed**\n"
+                "3. **Alert assignee 2 days before deadline**"
+            )
+
         return (
             "I can set up one of these automations for this board:\n\n"
-            "1. **Mark overdue tasks as Urgent**\n"
-            "2. **Notify creator when task is completed**\n"
-            "3. **Alert assignee 2 days before deadline**\n\n"
+            f"{menu}\n\n"
             "Which would you like? (say the number or describe what you need)"
         )
 
@@ -1004,12 +1019,27 @@ class ConversationFlowManager:
             data['step'] = 0
             state.collected_data = data
             state.save()
+
+            try:
+                from kanban.automation_models import AutomationTemplate
+                templates = list(AutomationTemplate.objects.filter(is_builtin=True).order_by('id').values_list('name', flat=True))
+            except Exception:
+                templates = []
+
+            if templates:
+                lines = [f"{i+1}. **{name}**" for i, name in enumerate(templates)]
+                menu = "\n".join(lines)
+            else:
+                menu = (
+                    "1. **Mark overdue tasks as Urgent**\n"
+                    "2. **Notify creator when task is completed**\n"
+                    "3. **Alert assignee 2 days before deadline**"
+                )
+
             return (
                 f"OK, I'll use **{board.name}**.\n\n"
                 "I can set up one of these automations for this board:\n\n"
-                "1. **Mark overdue tasks as Urgent**\n"
-                "2. **Notify creator when task is completed**\n"
-                "3. **Alert assignee 2 days before deadline**\n\n"
+                f"{menu}\n\n"
                 "Which would you like? (say the number or describe what you need)"
             )
 
@@ -1025,11 +1055,19 @@ class ConversationFlowManager:
                 return self._format_automation_confirmation(template_num, data.get('board_name', ''))
             else:
                 # Could not match — ask again
+                try:
+                    from kanban.automation_models import AutomationTemplate
+                    templates = list(AutomationTemplate.objects.filter(is_builtin=True).order_by('id').values_list('name', flat=True))
+                    lines = [f"{i+1}. {name}" for i, name in enumerate(templates)]
+                    menu = "\n".join(lines)
+                except Exception:
+                    menu = (
+                        "1. Mark overdue tasks as Urgent\n"
+                        "2. Notify creator when task is completed\n"
+                        "3. Alert assignee 2 days before deadline"
+                    )
                 return (
-                    "I'm not sure which automation you mean. Could you pick a number?\n\n"
-                    "1. Mark overdue tasks as Urgent\n"
-                    "2. Notify creator when task is completed\n"
-                    "3. Alert assignee 2 days before deadline"
+                    f"I'm not sure which automation you mean. Could you pick a number?\n\n{menu}"
                 )
 
         return self._format_automation_confirmation(
@@ -1040,26 +1078,44 @@ class ConversationFlowManager:
     @staticmethod
     def _match_automation_template(text):
         """
-        Try to match user text to one of the 3 templates.
-        Returns 1, 2, or 3, or ``None``.
+        Try to match user text to a template.
+        Returns a 1-based index, or ``None``.
         """
         t = text.lower().strip()
 
-        # Direct number
-        if t in ('1', 'one', 'first'):
-            return 1
-        if t in ('2', 'two', 'second'):
-            return 2
-        if t in ('3', 'three', 'third'):
-            return 3
+        # Direct number (1-10)
+        try:
+            num = int(t)
+            from kanban.automation_models import AutomationTemplate
+            count = AutomationTemplate.objects.filter(is_builtin=True).count()
+            if 1 <= num <= max(count, 3):
+                return num
+        except (ValueError, Exception):
+            pass
 
-        # Keyword matching
+        word_map = {'one': 1, 'first': 1, 'two': 2, 'second': 2, 'three': 3, 'third': 3,
+                    'four': 4, 'fourth': 4, 'five': 5, 'fifth': 5, 'six': 6, 'seventh': 7,
+                    'eight': 8, 'nine': 9, 'ten': 10}
+        if t in word_map:
+            return word_map[t]
+
+        # Keyword matching (covers the original 3 + common new ones)
         if any(w in t for w in ['overdue', 'urgent', 'escalate']):
             return 1
         if any(w in t for w in ['completed', 'done', 'creator', 'notify creator']):
             return 2
         if any(w in t for w in ['deadline', 'before', 'approaching', 'assignee', 'alert assignee', '2 day']):
             return 3
+
+        # Try fuzzy match against template names
+        try:
+            from kanban.automation_models import AutomationTemplate
+            templates = list(AutomationTemplate.objects.filter(is_builtin=True).order_by('id').values_list('name', flat=True))
+            for i, name in enumerate(templates, 1):
+                if t in name.lower() or name.lower() in t:
+                    return i
+        except Exception:
+            pass
 
         return None
 

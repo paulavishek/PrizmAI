@@ -220,6 +220,7 @@ def get_action_tools():
                             'task_overdue', 'moved_to_column', 'task_created',
                             'task_completed', 'priority_changed', 'task_assigned',
                             'due_date_approaching',
+                            'scheduled_daily', 'scheduled_weekly', 'scheduled_monthly',
                         ],
                         'description': 'What triggers the rule.',
                     },
@@ -230,8 +231,10 @@ def get_action_tools():
                     'action_type': {
                         'type': 'string',
                         'enum': [
-                            'set_priority', 'add_label', 'send_notification',
-                            'move_to_column', 'assign_to_user', 'set_due_date',
+                            'set_priority', 'add_label', 'remove_label',
+                            'send_notification', 'move_to_column',
+                            'assign_to_user', 'set_due_date',
+                            'close_task', 'create_comment', 'log_time_entry',
                         ],
                         'description': 'What action to perform when triggered.',
                     },
@@ -266,7 +269,12 @@ def get_action_tools():
                     },
                     'action': {
                         'type': 'string',
-                        'enum': ['send_notification', 'set_priority'],
+                        'enum': [
+                            'set_priority', 'add_label', 'remove_label',
+                            'send_notification', 'move_to_column',
+                            'assign_to_user', 'set_due_date',
+                            'close_task', 'create_comment', 'log_time_entry',
+                        ],
                         'description': 'Action to perform.',
                     },
                     'notify_target': {

@@ -198,16 +198,24 @@ urlpatterns = [
     path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
     path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
 
-    # Board Automations
-    path('boards/<int:board_id>/automations/', automation_views.automations_list, name='automations_list'),
-    path('boards/<int:board_id>/automations/<int:automation_id>/delete/', automation_views.automation_delete, name='automation_delete'),
-    path('boards/<int:board_id>/automations/<int:automation_id>/toggle/', automation_views.automation_toggle, name='automation_toggle'),
+    # Board Automations (new engine)
+    path('boards/<int:board_id>/automations/', automation_views.automations_page, name='automations_list'),
+    path('boards/<int:board_id>/automations/rules/create/', automation_views.rule_create, name='automation_rule_create'),
+    path('boards/<int:board_id>/automations/rules/<int:rule_id>/', automation_views.rule_detail, name='automation_rule_detail'),
+    path('boards/<int:board_id>/automations/rules/<int:rule_id>/update/', automation_views.rule_update, name='automation_rule_update'),
+    path('boards/<int:board_id>/automations/rules/<int:rule_id>/delete/', automation_views.rule_delete, name='automation_rule_delete'),
+    path('boards/<int:board_id>/automations/rules/<int:rule_id>/toggle/', automation_views.rule_toggle, name='automation_rule_toggle'),
+    path('boards/<int:board_id>/automations/templates/<int:template_id>/use/', automation_views.template_use, name='automation_template_use'),
+    # Legacy form-based endpoints (backward compat)
+    path('boards/<int:board_id>/automations/create-form/', automation_views.rule_create_form, name='automation_create_form'),
+    path('boards/<int:board_id>/automations/<int:automation_id>/delete/', automation_views.rule_delete, name='automation_delete'),
+    path('boards/<int:board_id>/automations/<int:automation_id>/toggle/', automation_views.rule_toggle, name='automation_toggle'),
     path('boards/<int:board_id>/automations/templates/<str:template_id>/activate/', automation_views.automation_activate_template, name='automation_activate_template'),
 
-    # Scheduled Automations
-    path('boards/<int:board_id>/scheduled-automations/create/', scheduled_automation_views.scheduled_automation_create, name='scheduled_automation_create'),
-    path('boards/<int:board_id>/scheduled-automations/<int:automation_id>/toggle/', scheduled_automation_views.scheduled_automation_toggle, name='scheduled_automation_toggle'),
-    path('boards/<int:board_id>/scheduled-automations/<int:automation_id>/delete/', scheduled_automation_views.scheduled_automation_delete, name='scheduled_automation_delete'),
+    # Scheduled Automations (legacy + new)
+    path('boards/<int:board_id>/scheduled-automations/create/', automation_views.scheduled_rule_create_form, name='scheduled_automation_create'),
+    path('boards/<int:board_id>/scheduled-automations/<int:automation_id>/toggle/', automation_views.scheduled_rule_toggle, name='scheduled_automation_toggle'),
+    path('boards/<int:board_id>/scheduled-automations/<int:automation_id>/delete/', automation_views.scheduled_rule_delete, name='scheduled_automation_delete'),
 
     # Task Dependency Management API Endpoints
     path('api/task/<int:task_id>/dependencies/', api_views.get_task_dependencies_api, name='get_task_dependencies_api'),

@@ -249,47 +249,42 @@ class SpectraActionService:
 
     def activate_automation_template(self, user, board, template_number):
         """
-        Activate one of the three preset automation templates.
+        Activate one of the preset automation templates.
 
-        ``template_number``: 1, 2, or 3 (mapped internally to string IDs).
+        Uses the new AutomationTemplate + AutomationRule models.
+        Falls back to legacy BoardAutomation for backward compat.
 
-        Returns ``{'success': True, 'automation': <BoardAutomation>}``
+        Returns ``{'success': True, 'automation': <AutomationRule>}``
         or ``{'success': False, 'error': str}``.
         """
-        from kanban.automation_models import BoardAutomation
-        from kanban.automation_views import TEMPLATE_RULES
+        from kanban.automation_models import AutomationRule, AutomationTemplate
 
         try:
-            # Permission check
             if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            # Map number → template by ID order
+            templates = list(AutomationTemplate.objects.filter(is_builtin=True).order_by('id'))
+            if not templates:
+                return {'success': False, 'error': 'No automation templates available.'}
+
+            idx = template_number - 1
+            if idx < 0 or idx >= len(templates):
                 return {
                     'success': False,
-                    'error': "You don't have access to this board.",
+                    'error': f'Unknown template number {template_number}. Choose 1-{len(templates)}.',
                 }
 
-            tpl_id = TEMPLATE_ID_MAP.get(template_number)
-            if not tpl_id:
-                return {
-                    'success': False,
-                    'error': f'Unknown template number {template_number}. Choose 1, 2, or 3.',
-                }
+            tpl = templates[idx]
 
-            tpl = next((t for t in TEMPLATE_RULES if t['id'] == tpl_id), None)
-            if tpl is None:
-                return {
-                    'success': False,
-                    'error': 'Template definition not found.',
-                }
-
-            # Reuse the same get_or_create logic as the Activate button
-            automation, created = BoardAutomation.objects.get_or_create(
+            automation, created = AutomationRule.objects.get_or_create(
                 board=board,
-                name=tpl['name'],
+                name=tpl.name,
                 defaults=dict(
-                    trigger_type=tpl['trigger_type'],
-                    trigger_value=tpl['trigger_value'],
-                    action_type=tpl['action_type'],
-                    action_value=tpl['action_value'],
+                    trigger_type=tpl.trigger_type,
+                    action_type='send_notification',
+                    action_value='',
+                    rule_definition=tpl.rule_definition,
                     is_active=True,
                     created_by=user,
                 ),
@@ -297,22 +292,21 @@ class SpectraActionService:
 
             if not created:
                 if not automation.is_active:
-                    # Re-activate previously deactivated automation
                     automation.is_active = True
                     automation.save(update_fields=['is_active'])
                     logger.info(
                         'Spectra re-activated automation "%s" on board #%s for user %s',
-                        tpl['name'], board.id, user.username,
+                        tpl.name, board.id, user.username,
                     )
                     return {'success': True, 'automation': automation}
                 return {
                     'success': False,
-                    'error': f'The automation "{tpl["name"]}" is already active on this board.',
+                    'error': f'The automation "{tpl.name}" is already active on this board.',
                 }
 
             logger.info(
                 'Spectra activated automation "%s" on board #%s for user %s',
-                tpl['name'], board.id, user.username,
+                tpl.name, board.id, user.username,
             )
             return {'success': True, 'automation': automation}
 
@@ -651,7 +645,7 @@ class SpectraActionService:
         Expected keys: ``name``, ``trigger_type``, ``action_type``,
         plus optional ``trigger_value``, ``action_value``.
         """
-        from kanban.automation_models import BoardAutomation
+        from kanban.automation_models import AutomationRule
 
         try:
             if not self._user_has_board_access(user, board):
@@ -665,7 +659,7 @@ class SpectraActionService:
                 return {'success': False, 'error': 'Trigger type and action type are required.'}
 
             with transaction.atomic():
-                automation = BoardAutomation.objects.create(
+                automation = AutomationRule.objects.create(
                     board=board,
                     name=name,
                     trigger_type=trigger_type,

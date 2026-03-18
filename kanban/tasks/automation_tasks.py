@@ -246,3 +246,139 @@ def _notify_automation_disabled(sa):
             f'was automatically disabled after 3 consecutive failures.'
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# New AutomationRule task (called by Celery Beat via PeriodicTask)
+# ---------------------------------------------------------------------------
+
+@shared_task(name='kanban.tasks.automation_tasks.run_automation_rule')
+def run_automation_rule(rule_id):
+    """
+    Execute an AutomationRule when its Celery Beat schedule fires.
+
+    Receives the AutomationRule PK, loads the record, filters matching
+    tasks, walks the rule_definition tree, and writes AutomationLog entries.
+    Auto-disables after 3 consecutive failures.
+    """
+    from kanban.automation_models import AutomationRule, AutomationLog
+    from kanban.signals import _execute_rule_tree, _apply_automation_action
+
+    try:
+        rule = AutomationRule.objects.select_related(
+            'board', 'created_by', 'periodic_task',
+        ).get(id=rule_id, is_active=True)
+
+        tasks = _get_filtered_tasks(rule.board, rule.task_filter or 'all')
+        now = timezone.now()
+
+        if not tasks.exists():
+            logger.info(
+                "AutomationRule pk=%s: no tasks matched filter '%s'",
+                rule.pk, rule.task_filter,
+            )
+            rule.run_count += 1
+            rule.last_run_at = now
+            AutomationRule.objects.filter(pk=rule.pk).update(
+                run_count=rule.run_count, last_run_at=now,
+            )
+            AutomationLog.objects.create(
+                rule=rule,
+                trigger_event=rule.trigger_type,
+                task_affected=None,
+                actions_summary='No tasks matched filter',
+                outcome='passed',
+            )
+            return f"No tasks matched filter for automation rule {rule.id}"
+
+        total_actions = 0
+        total_errors = 0
+
+        for task in tasks:
+            actions_taken = []
+            errors = []
+
+            if rule.rule_definition:
+                _execute_rule_tree(rule.rule_definition, task, rule, actions_taken, errors)
+            else:
+                try:
+                    _apply_automation_action(task, rule)
+                    actions_taken.append(f"{rule.action_type}: {rule.action_value}")
+                except Exception as e:
+                    errors.append(str(e))
+
+            total_actions += len(actions_taken)
+            total_errors += len(errors)
+
+            try:
+                AutomationLog.objects.create(
+                    rule=rule,
+                    trigger_event=rule.trigger_type,
+                    task_affected=task,
+                    actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                    outcome='failed' if errors else 'passed',
+                    error_detail='; '.join(errors) if errors else '',
+                )
+            except Exception:
+                logger.exception("Failed to write AutomationLog for rule pk=%s", rule.pk)
+
+        # Update tracking
+        rule.run_count += 1
+        rule.failure_count = 0
+        rule.last_run_at = now
+        AutomationRule.objects.filter(pk=rule.pk).update(
+            run_count=rule.run_count,
+            failure_count=0,
+            last_run_at=now,
+        )
+
+        logger.info(
+            "AutomationRule pk=%s completed: %d actions, %d errors across %d tasks",
+            rule.pk, total_actions, total_errors, tasks.count(),
+        )
+        return f"Automation rule {rule.id} completed successfully"
+
+    except AutomationRule.DoesNotExist:
+        logger.warning("AutomationRule pk=%s not found or inactive", rule_id)
+        return f"Automation rule {rule_id} not found or inactive"
+    except Exception as exc:
+        logger.exception("AutomationRule pk=%s failed: %s", rule_id, exc)
+        # Increment failure_count; auto-disable at 3 consecutive failures
+        try:
+            rule = AutomationRule.objects.get(id=rule_id)
+            rule.failure_count += 1
+            update_fields = ['failure_count']
+            if rule.failure_count >= 3:
+                rule.is_active = False
+                update_fields.append('is_active')
+                if rule.periodic_task:
+                    rule.periodic_task.enabled = False
+                    rule.periodic_task.save(update_fields=['enabled'])
+                _notify_rule_disabled(rule)
+                logger.warning(
+                    "AutomationRule pk=%s auto-disabled after %d failures",
+                    rule.pk, rule.failure_count,
+                )
+            rule.save(update_fields=update_fields)
+        except Exception:
+            logger.exception("Failed to update failure_count for AutomationRule pk=%s", rule_id)
+        raise
+
+
+def _notify_rule_disabled(rule):
+    """Notify the board owner that an automation rule was auto-disabled."""
+    from messaging.models import Notification
+
+    owner = rule.board.created_by
+    sender = rule.created_by or owner
+    if not owner or not sender:
+        return
+    Notification.objects.create(
+        recipient=owner,
+        sender=sender,
+        notification_type='ACTIVITY',
+        text=(
+            f'Automation rule "{rule.name}" on board "{rule.board.name}" '
+            f'was automatically disabled after 3 consecutive failures.'
+        ),
+    )
