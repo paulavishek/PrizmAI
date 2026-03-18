@@ -53,15 +53,22 @@ def _handle_edit_cascade(request, record, change_reason, level):
     for board in boards.select_related():
         board_members.update(board.members.all())
 
-    # Send in-app notifications
+    # Send in-app notifications to board members AND followers
     try:
         from messaging.models import Notification
+        from django.contrib.contenttypes.models import ContentType
         level_display = level.capitalize()
-        for member in board_members:
-            if member == request.user:
-                continue
+        ct = ContentType.objects.get_for_model(record)
+        followers_qs = StrategicFollower.objects.filter(
+            content_type=ct, object_id=record.pk,
+        ).select_related('user')
+        follower_users = {f.user for f in followers_qs}
+
+        # Union of board members and followers, excluding the editor
+        recipients = (board_members | follower_users) - {request.user}
+        for recipient in recipients:
             Notification.objects.create(
-                recipient=member,
+                recipient=recipient,
                 sender=request.user,
                 notification_type='ACTIVITY',
                 text=f'{level_display} "{record.name}" was updated — review impact.',
