@@ -25,7 +25,9 @@
 }
 
 /* Dark Mode Colors */
-body.dark-mode {
+body.dark-mode,
+[data-bs-theme="dark"] body,
+[data-bs-theme="dark"] {
     --bg-primary: #1a1a1a;
     --bg-secondary: #2d2d2d;
     --bg-tertiary: #3a3a3a;
@@ -390,4 +392,41 @@ body::-webkit-scrollbar-thumb:hover {
 /* Animation transitions for theme switching */
 * {
     transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ============================================================
+   DISPLAY-MODE SPECIFIC OVERRIDES
+   ============================================================ */
+
+/* Bootstrap 5 native dark theme — btn-close needs to be light on dark bg */
+[data-bs-theme="dark"] .btn-close {
+    filter: var(--bs-btn-close-white-filter, invert(1) grayscale(100%) brightness(200%));
+}
+
+/* Keep the topbar display-mode icon button unstyled */
+#display-mode-btn {
+    padding: 0.5rem 0.75rem;
+    border-radius: 5px;
+    border: none;
+    background-color: var(--bg-secondary, transparent);
+    color: var(--navbar-text, #fff);
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    font-size: 1rem;
+}
+#display-mode-btn:hover {
+    opacity: 0.8;
+}
+
+/* Mark the active dropdown item with a subtle check indicator */
+.display-mode-option.fw-bold::after {
+    content: " ✓";
+    color: #0d6efd;
+    font-weight: bold;
+}
+
+/* Accessibility mode — ensure class-based overrides from accessibility.css
+   still apply when prizm-accessibility-mode is set on <html> */
+html.prizm-accessibility-mode body {
+    /* Re-assert colorblind-mode inheritance for selectors that target body */
 }

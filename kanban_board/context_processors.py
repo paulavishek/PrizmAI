@@ -18,18 +18,27 @@ def force_auth_layout(request):
 
 
 def user_preferences(request):
-    """Add user AI preferences to template context"""
+    """Add user AI preferences and display mode to template context"""
     if request.user.is_authenticated:
         try:
             from ai_assistant.models import UserPreference
             user_pref = UserPreference.objects.get(user=request.user)
-            return {
-                'user_ai_preferences': user_pref
-            }
+            ai_prefs = user_pref
         except UserPreference.DoesNotExist:
-            pass
+            ai_prefs = None
+
+        try:
+            display_mode = request.user.profile.display_mode or 'light'
+        except Exception:
+            display_mode = 'light'
+
+        return {
+            'user_ai_preferences': ai_prefs,
+            'user_display_mode': display_mode,
+        }
     return {
-        'user_ai_preferences': None
+        'user_ai_preferences': None,
+        'user_display_mode': 'light',
     }
 
 

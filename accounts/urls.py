@@ -28,6 +28,9 @@ urlpatterns = [
     
     # Timezone API
     path('api/set-timezone/', views.set_timezone, name='set_timezone'),
+
+    # Display Mode API
+    path('api/update-display-mode/', views.update_display_mode, name='update_display_mode'),
     
     # Password Reset URLs
     path('password-reset/', 

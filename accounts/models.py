@@ -50,6 +50,20 @@ class UserProfile(models.Model):
         default='Asia/Kolkata',
         help_text="User's preferred timezone for displaying dates and times"
     )
+
+    # Display mode preference
+    DISPLAY_MODE_CHOICES = [
+        ('light', 'Light'),
+        ('dark', 'Dark'),
+        ('auto', 'Browser (Auto)'),
+        ('accessibility', 'Accessibility (Color-blind friendly)'),
+    ]
+    display_mode = models.CharField(
+        max_length=20,
+        choices=DISPLAY_MODE_CHOICES,
+        default='light',
+        help_text='Preferred display mode for the interface'
+    )
     
     # Welcome modal tracking
     has_seen_welcome = models.BooleanField(

@@ -197,14 +197,15 @@ class UserProfileForm(forms.ModelForm):
     
     class Meta:
         model = UserProfile
-        fields = ['profile_picture', 'weekly_capacity_hours', 'timezone']
+        fields = ['profile_picture', 'weekly_capacity_hours', 'timezone', 'display_mode']
         widgets = {
             'profile_picture': forms.FileInput(attrs={'class': 'form-control'}),
             'weekly_capacity_hours': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': 1,
                 'max': 168
-            })
+            }),
+            'display_mode': forms.HiddenInput(),
         }
         labels = {
             'weekly_capacity_hours': 'Weekly Working Hours',
