@@ -81,17 +81,16 @@ def _handle_edit_cascade(request, record, change_reason, level):
             if record.mission_id:
                 generate_mission_summary_task.delay(record.mission_id)
         elif level == 'mission':
-            from kanban.tasks.ai_summary_tasks import generate_mission_summary_task
+            from kanban.tasks.ai_summary_tasks import (
+                generate_mission_summary_task,
+                generate_goal_summary_task,
+            )
             generate_mission_summary_task.delay(record.id)
-            # One level above: regenerate goal summary if linked
             if hasattr(record, 'organization_goal') and record.organization_goal_id:
-                # Goal-level summary regeneration uses the same Celery infrastructure
-                # but the goal summary task may need to be triggered via the API
-                pass
+                generate_goal_summary_task.delay(record.organization_goal_id)
         elif level == 'goal':
-            # Goal is the top level — no level above
-            # Regenerate goal summary (if a goal-level task exists)
-            pass
+            from kanban.tasks.ai_summary_tasks import generate_goal_summary_task
+            generate_goal_summary_task.delay(record.id)
     except Exception as e:
         logger.warning("Failed to trigger AI regeneration: %s", e)
 
@@ -966,3 +965,34 @@ def toggle_follow(request, level, pk):
 
     count = StrategicFollower.objects.filter(content_type=ct, object_id=record.pk).count()
     return JsonResponse({'success': True, 'count': count})
+
+
+@login_required
+def regenerate_summary(request, level, pk):
+    """AJAX POST — trigger Celery task to regenerate AI summary for any level."""
+    from django.http import JsonResponse
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    get_object_or_404(model_cls, pk=pk)  # existence check
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    try:
+        if level == 'goal':
+            from kanban.tasks.ai_summary_tasks import generate_goal_summary_task
+            generate_goal_summary_task.delay(pk)
+        elif level == 'mission':
+            from kanban.tasks.ai_summary_tasks import generate_mission_summary_task
+            generate_mission_summary_task.delay(pk)
+        elif level == 'strategy':
+            from kanban.tasks.ai_summary_tasks import generate_strategy_summary_task
+            generate_strategy_summary_task.delay(pk)
+    except Exception as e:
+        logger.warning("Failed to enqueue AI regeneration for %s %s: %s", level, pk, e)
+        return JsonResponse({'success': False, 'error': 'Failed to enqueue task.'}, status=500)
+
+    return JsonResponse({'success': True})
