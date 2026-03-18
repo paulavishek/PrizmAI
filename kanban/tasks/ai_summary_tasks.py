@@ -479,6 +479,97 @@ def generate_mission_summary_task(self, mission_id):
 
 
 # ---------------------------------------------------------------------------
+# Level 4 — Organization Goal
+# ---------------------------------------------------------------------------
+
+def _goal_lock_key(goal_id):
+    return f'goal_ai_lock_{goal_id}'
+
+
+def _release_goal_lock(goal_id):
+    try:
+        _ai_cache().delete(_goal_lock_key(goal_id))
+    except Exception as exc:
+        logger.warning(f"Could not release goal AI lock for goal {goal_id}: {exc}")
+
+
+@shared_task(
+    bind=True,
+    name='kanban.ai_summary.generate_goal_summary',
+    max_retries=2,
+    default_retry_delay=30,
+    queue='summaries',
+    time_limit=90,
+    soft_time_limit=75,
+)
+def generate_goal_summary_task(self, goal_id):
+    """
+    Aggregate mission summaries into an organization-goal-level executive summary.
+    """
+    try:
+        from django.utils import timezone as tz
+        from kanban.models import OrganizationGoal
+        from kanban.utils.ai_utils import generate_ai_content
+
+        goal = OrganizationGoal.objects.get(pk=goal_id)
+        missions = goal.missions.all()
+
+        mission_lines = []
+        for m in missions:
+            snippet = m.ai_summary
+            if not snippet:
+                snippet = (
+                    (m.description or '').strip()[:200]
+                    or f"Mission '{m.name}' — status: {m.status}"
+                )
+            mission_lines.append(f"- [{m.name}] {snippet}")
+
+        if not mission_lines:
+            summary_text = f"No missions defined for goal '{goal.name}' yet."
+        else:
+            snippets_block = "\n".join(mission_lines)
+            target_line = f"  Target Metric: {goal.target_metric}\n" if goal.target_metric else ""
+            desc_line = f"  Context: {(goal.description or '')[:300]}\n" if goal.description else ""
+            prompt = (
+                f"You are a C-level executive advisor.\n"
+                f"ORGANIZATION GOAL: \"{goal.name}\"\n"
+                f"{target_line}{desc_line}\n"
+                f"Mission summaries (each mission addresses one facet of the goal):\n{snippets_block}\n\n"
+                f"Write 4–6 concise bullet points at the EXECUTIVE level.\n"
+                f"Focus on:\n"
+                f"• Whether the collective missions are on track to achieve the goal within the timeline\n"
+                f"• Cross-mission dependencies or gaps\n"
+                f"• Strategic-level risks that leadership should act on\n"
+                f"• The single most important decision for senior leadership\n\n"
+                f"Be factual — do NOT invent data not listed above.\n"
+                f"Each bullet MUST start with the • character. "
+                f"Output ONLY the bullet list — no headings, no paragraphs, no JSON."
+            )
+            summary_text = generate_ai_content(
+                prompt, task_type='board_analytics_summary', use_cache=False
+            )
+
+        if not summary_text:
+            logger.warning(f"generate_goal_summary_task: empty for goal {goal_id}")
+            return None
+
+        goal.ai_summary = summary_text
+        goal.ai_summary_generated_at = tz.now()
+        goal.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        logger.info(f"Goal {goal_id} AI summary saved")
+        return summary_text
+
+    except Exception as exc:
+        logger.error(f"generate_goal_summary_task error (goal {goal_id}): {exc}")
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            return None
+    finally:
+        _release_goal_lock(goal_id)
+
+
+# ---------------------------------------------------------------------------
 # Daily executive briefing (beat-triggered)
 # ---------------------------------------------------------------------------
 
