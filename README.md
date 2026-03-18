@@ -75,6 +75,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Meeting Transcript Import** — Import from Fireflies, Otter, Zoom, Teams, and Meet with AI extraction
 - **File Attachments with AI Analysis** — Attach files to tasks and let AI extract structured tasks from documents
 - **Per-User Timezone Support** — Users worldwide can set their preferred timezone from the topbar; all dates, times, calendars, and AI responses automatically display in the selected timezone
+- **Unified Display Mode** — A single Display Mode selector in the topbar (and in Profile Settings) gives every user four choices: **Light** (default), **Dark** (Bootstrap 5 native dark theme with full component coverage), **Browser** (follows the OS `prefers-color-scheme` setting and responds to live OS changes), and **Accessibility** (color-blind friendly palette using the Okabe-Ito blue/orange scheme with pattern indicators on priority badges and charts). The preference is persisted to the database and applied before the first CSS paint on every page load, preventing any flash of the wrong theme.
 
 ### Security & Compliance
 
@@ -94,7 +95,6 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Mobile PWA** — Progressive Web App with offline support and home-screen installation
 - **Board Import / Export** — Import and export boards in PrizmAI's JSON format
 - **Lean Six Sigma Classifications** — Built-in LSS task labels (Value-Added, NVA, Waste)
-- **Colorblind Accessibility** — Optimized color palettes with pattern indicators
 
 **→ [Detailed feature documentation](FEATURES.md)**
 
