@@ -1397,12 +1397,18 @@ class ConversationFlowManager:
     def _pending_to_intent(pending_action):
         """Map pending_action back to an intent key."""
         _map = {
+            'create_task': 'create_task',
+            'create_board': 'create_board',
+            'activate_automation': 'activate_automation',
             'send_message': 'send_message',
             'log_time': 'log_time',
             'schedule_event': 'schedule_event',
             'create_retrospective': 'create_retrospective',
             'create_custom_automation': 'create_automation',
             'create_scheduled_automation': 'create_scheduled_automation',
+            'get_commitment_status': 'get_commitment_status',
+            'list_at_risk_commitments': 'list_at_risk_commitments',
+            'place_commitment_bet': 'place_commitment_bet',
         }
         return _map.get(pending_action, 'conversation')
 

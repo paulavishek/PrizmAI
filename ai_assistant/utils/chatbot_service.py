@@ -155,6 +155,32 @@ ACTION_INTENT_PATTERNS = {
         'automatically move', 'automatically notify', 'automatically assign',
         'custom automation', 'create a custom automation',
     ],
+    'send_message': [
+        'send a message', 'send message', 'message to', 'dm ',
+        'tell them', 'tell him', 'tell her', 'tell sam', 'tell alex',
+        'send a dm', 'direct message', 'write a message',
+        'notify ', 'let them know', 'let him know', 'let her know',
+    ],
+    'log_time': [
+        'log time', 'log hours', 'track time', 'record time',
+        'log 1 hour', 'log 2 hour', 'log 3 hour', 'log 4 hour',
+        'log 0.5 hour', 'log 1.5 hour', 'log 2.5 hour',
+        'worked on', 'spent time', 'time entry', 'time spent',
+        'log my time', 'track my time', 'add time entry',
+    ],
+    'schedule_event': [
+        'schedule a meeting', 'schedule meeting', 'book a meeting',
+        'schedule an event', 'schedule event', 'create an event',
+        'set up a meeting', 'plan a meeting', 'arrange a meeting',
+        'calendar event', 'add to calendar', 'meeting at',
+        'standup at', 'standup tomorrow', 'sprint planning',
+    ],
+    'create_retrospective': [
+        'create a retrospective', 'create retrospective', 'generate retrospective',
+        'run a retro', 'sprint retro', 'project retro', 'generate a retro',
+        'retrospective for', 'retro for the last', 'retro from',
+        'create a retro', 'make a retrospective', 'start a retro',
+    ],
     'activate_automation': [
         'set up automation', 'set up an automation', 'setup automation',
         'create automation', 'create an automation', 'automate',
