@@ -47,6 +47,9 @@
                     if (feed && data.html) {
                         feed.insertAdjacentHTML('afterbegin', data.html);
                     }
+                    // Hide "no updates" message
+                    var noMsg = document.getElementById('no-updates-msg');
+                    if (noMsg) noMsg.style.display = 'none';
                     form.reset();
                     // Update count badge if present
                     var badge = document.getElementById('updates-count');

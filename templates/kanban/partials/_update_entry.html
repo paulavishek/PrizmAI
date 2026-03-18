@@ -1,0 +1,8 @@
+<div class="update-entry">
+    <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="update-status {{ u.status }}">{{ u.get_status_display }}</span>
+        <strong class="small">{{ u.author.get_full_name|default:u.author.username }}</strong>
+        <small class="text-muted ms-auto">{{ u.created_at|date:"M d, Y H:i" }}</small>
+    </div>
+    <p class="mb-0 small">{{ u.message }}</p>
+</div>

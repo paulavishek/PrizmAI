@@ -77,6 +77,9 @@ urlpatterns = [
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/delete/', mission_views.delete_strategy, name='delete_strategy'),
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/link-board/', mission_views.link_board_to_strategy, name='link_board_to_strategy'),
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/unlink-board/<int:board_id>/', mission_views.unlink_board_from_strategy, name='unlink_board_from_strategy'),
+    # --- AJAX endpoints (shared across Goal / Mission / Strategy) ---
+    path('api/strategic/<str:level>/<int:pk>/update/', mission_views.post_strategic_update, name='post_strategic_update'),
+    path('api/strategic/<str:level>/<int:pk>/follow/', mission_views.toggle_follow, name='toggle_follow'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/', views.board_detail, name='board_detail'),
     path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
