@@ -202,7 +202,10 @@
                 {% if followers %}
                 <div class="d-flex flex-wrap gap-1 mb-2">
                     {% for f in followers %}
-                    <span class="follower-chip">
+                    <span class="follower-chip"
+                          title="Following since {{ f.followed_at|date:'M j, Y' }}"
+                          data-bs-toggle="tooltip"
+                          data-bs-placement="top">
                         <i class="fas fa-user-circle"></i>
                         {{ f.user.get_full_name|default:f.user.username }}
                     </span>
