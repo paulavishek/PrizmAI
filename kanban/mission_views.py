@@ -661,6 +661,13 @@ def delete_mission(request, mission_id):
 # ---------------------------------------------------------------------------
 
 @login_required
+def strategy_detail_shortcut(request, strategy_id):
+    """Top-level /strategies/<id>/ — redirect to the canonical nested URL."""
+    strategy = get_object_or_404(Strategy, id=strategy_id)
+    return redirect('strategy_detail', mission_id=strategy.mission_id, strategy_id=strategy.id)
+
+
+@login_required
 def create_strategy(request, mission_id):
     """Create a strategy under a mission."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -692,8 +699,8 @@ def create_strategy(request, mission_id):
 
 @login_required
 def strategy_detail(request, mission_id, strategy_id):
-    """Show a strategy and all boards linked to it."""
-    mission = get_object_or_404(Mission, id=mission_id)
+    """Show a strategy with 4-tab layout, health score, milestones, versions, updates, followers."""
+    mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
     linked_boards = strategy.boards.all().order_by('-created_at')
@@ -701,11 +708,90 @@ def strategy_detail(request, mission_id, strategy_id):
     # All boards (for "link existing board" dropdown) — no restriction
     all_boards = Board.objects.exclude(strategy=strategy).order_by('name')
 
+    # --- Board IDs under this strategy ---
+    board_ids = list(linked_boards.values_list('id', flat=True))
+
+    # --- Health score (0-100) ---
+    health_score, completion_pct, total_tasks, done_tasks = _compute_health_score(board_ids)
+
+    # --- Per-board health for board cards ---
+    board_items = []
+    for b in linked_boards:
+        b_health, b_pct, b_total, b_done = _compute_health_score([b.id])
+        overdue_count = Task.objects.filter(
+            column__board=b, due_date__lt=timezone.now(),
+            completed_at__isnull=True, item_type='task',
+        ).count()
+        member_count = b.members.count()
+        board_items.append({
+            'board': b, 'total_tasks': b_total, 'done_tasks': b_done,
+            'completion_pct': b_pct, 'health_score': b_health,
+            'overdue_count': overdue_count, 'member_count': member_count,
+        })
+
+    # --- Milestones ---
+    from .models import Milestone
+    milestones = strategy.milestones.all().order_by('due_date')
+    milestones_missed = milestones.filter(status='missed').count()
+    milestones_complete = milestones.filter(status='complete').count()
+    milestones_pending = milestones.filter(status='pending').count()
+
+    # --- Version history ---
+    versions = StrategyVersion.objects.filter(strategy=strategy).order_by('-version_number')
+
+    # --- Strategic updates ---
+    strategy_ct = ContentType.objects.get_for_model(Strategy)
+    updates = StrategicUpdate.objects.filter(
+        content_type=strategy_ct, object_id=strategy.id,
+    ).select_related('author').order_by('-created_at')
+
+    # --- Followers ---
+    followers = StrategicFollower.objects.filter(
+        content_type=strategy_ct, object_id=strategy.id,
+    ).select_related('user')
+    is_following = followers.filter(user=request.user).exists()
+
+    # --- Stale AI indicator ---
+    ai_is_stale = False
+    if strategy.ai_summary and strategy.ai_summary_generated_at:
+        ai_is_stale = strategy.ai_summary_generated_at < strategy.updated_at
+
+    # --- Days remaining ---
+    days_remaining = None
+    days_remaining_abs = None
+    if strategy.due_date:
+        delta = strategy.due_date - timezone.now().date()
+        days_remaining = delta.days
+        days_remaining_abs = abs(days_remaining)
+
     return render(request, 'kanban/strategy_detail.html', {
+        # Shared skeleton context
+        'record': strategy,
+        'page_title': strategy.name,
+        'header_class': 'strategy-header',
+        'level_name': 'strategy',
+        'health_score': health_score,
+        'completion_pct': completion_pct,
+        'total_tasks': total_tasks,
+        'done_tasks': done_tasks,
+        'versions': versions,
+        'updates': updates,
+        'updates_count': updates.count(),
+        'followers': followers,
+        'is_following': is_following,
+        'ai_is_stale': ai_is_stale,
+        'days_remaining': days_remaining,
+        'days_remaining_abs': days_remaining_abs,
+        # Strategy-specific context
         'mission': mission,
         'strategy': strategy,
         'linked_boards': linked_boards,
+        'board_items': board_items,
         'all_boards': all_boards,
+        'milestones': milestones,
+        'milestones_missed': milestones_missed,
+        'milestones_complete': milestones_complete,
+        'milestones_pending': milestones_pending,
     })
 
 
