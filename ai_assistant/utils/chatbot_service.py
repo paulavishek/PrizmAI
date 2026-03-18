@@ -3689,14 +3689,19 @@ class TaskFlowChatbotService:
 
             # ── 9. Automations ────────────────────────────────────────
             try:
-                from kanban.automation_models import BoardAutomation, ScheduledAutomation
+                from kanban.automation_models import AutomationRule, BoardAutomation, ScheduledAutomation
+                new_rules = AutomationRule.objects.filter(board=board, is_active=True)
                 trigger_autos = BoardAutomation.objects.filter(board=board, is_active=True)
                 scheduled_autos = ScheduledAutomation.objects.filter(board=board, is_active=True)
-                if trigger_autos.exists() or scheduled_autos.exists():
+                if new_rules.exists() or trigger_autos.exists() or scheduled_autos.exists():
                     found_data = True
                     context += f"**⚙️ Active Automations:**\n"
+                    if new_rules.exists():
+                        context += f"  Automation Rules: {new_rules.count()}\n"
+                        for a in new_rules[:5]:
+                            context += f"    • When '{a.get_trigger_type_display()}' → '{a.get_action_type_display()}' (ran {a.run_count}x)\n"
                     if trigger_autos.exists():
-                        context += f"  Trigger-Based: {trigger_autos.count()}\n"
+                        context += f"  Legacy Trigger-Based: {trigger_autos.count()}\n"
                         for a in trigger_autos[:5]:
                             context += f"    • When '{a.get_trigger_type_display()}' → '{a.get_action_type_display()}' (ran {a.run_count}x)\n"
                     if scheduled_autos.exists():

@@ -5,120 +5,159 @@
 
 {% block extra_css %}
 <style>
-  .rule-card          { border-radius:10px; border:1px solid #dee2e6; padding:18px 20px;
-                        background:#fff; transition:box-shadow .2s; }
-  .rule-card:hover    { box-shadow:0 4px 16px rgba(0,0,0,.08); }
-  .rule-card.inactive { opacity:.55; }
+  /* ── Theme-aware tokens ── */
+  .automation-page { color: var(--text-primary); }
+  .auto-card { border-radius:10px; border:1px solid var(--border-color);
+               padding:18px 20px; background:var(--card-bg); transition:box-shadow .2s; }
+  .auto-card:hover { box-shadow:0 4px 16px var(--shadow-color); }
+  .auto-card.inactive { opacity:.55; }
   .trigger-badge { background:#e0f0ff; color:#0d6efd; font-size:.78rem;
                    padding:3px 10px; border-radius:20px; white-space:nowrap; }
   .action-badge  { background:#e8f8e8; color:#198754; font-size:.78rem;
                    padding:3px 10px; border-radius:20px; white-space:nowrap; }
-  .arrow-icon    { font-size:1.1rem; color:#adb5bd; }
-  .create-card {
-    background:linear-gradient(135deg,#f8f9fa,#fff);
-    border-radius:12px; border:2px dashed #dee2e6; padding:26px;
-  }
-  .info-section {
-    background:#fffbeb; border:1px solid #fde68a; border-radius:8px;
-    padding:14px; margin-bottom:22px;
-  }
-  .tpl-card {
-    border-radius:10px; border:1px solid #e9ecef; padding:14px 16px;
-    background:#fff; transition:border-color .2s, box-shadow .2s;
-  }
-  .tpl-card:hover { border-color:#0d6efd33; box-shadow:0 2px 10px rgba(13,110,253,.07); }
-  .tpl-card.activated { opacity:.6; }
-  /* Scheduled Automations */
   .sched-badge   { background:#f0e8ff; color:#7c3aed; font-size:.78rem;
                    padding:3px 10px; border-radius:20px; white-space:nowrap; }
-  .sched-info-section {
-    background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;
-    padding:12px; margin-bottom:16px;
-  }
-  .sched-preview {
-    background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px;
-    padding:10px 14px; font-weight:600; color:#495057;
-  }
+  .arrow-icon    { font-size:1.1rem; color:var(--text-muted); }
+  .create-card { background:var(--card-bg); border-radius:12px;
+                 border:2px dashed var(--border-color); padding:26px; }
+  .info-section { background:#fffbeb; border:1px solid #fde68a; border-radius:8px;
+                  padding:14px; margin-bottom:22px; }
+  .tpl-card { border-radius:10px; border:1px solid var(--border-light); padding:14px 16px;
+              background:var(--card-bg); transition:border-color .2s, box-shadow .2s; cursor:pointer; }
+  .tpl-card:hover { border-color:#0d6efd33; box-shadow:0 2px 10px rgba(13,110,253,.07); }
+  .tpl-card.activated { opacity:.6; }
+  .sched-info-section { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;
+                        padding:12px; margin-bottom:16px; }
+  .sched-preview { background:var(--bg-tertiary); border:1px solid var(--border-color);
+                   border-radius:8px; padding:10px 14px; font-weight:600; color:var(--text-primary); }
+  /* Dark mode overrides for badges */
+  body.dark-mode .trigger-badge { background:rgba(13,110,253,.15); }
+  body.dark-mode .action-badge  { background:rgba(25,135,84,.15); }
+  body.dark-mode .sched-badge   { background:rgba(124,58,237,.15); }
+  body.dark-mode .info-section  { background:rgba(255,251,235,.08); border-color:#5c5630; }
+  body.dark-mode .sched-info-section { background:rgba(239,246,255,.08); border-color:#3b5998; }
+  /* Tabs */
+  .auto-tabs .nav-link { color:var(--text-secondary); border:none; border-bottom:3px solid transparent;
+                         border-radius:0; padding:.6rem 1.2rem; font-weight:600; }
+  .auto-tabs .nav-link:hover { color:var(--text-primary); background:transparent; }
+  .auto-tabs .nav-link.active { color:#0d6efd; border-bottom-color:#0d6efd; background:transparent; }
+  .auto-tabs { border-bottom:2px solid var(--border-light); margin-bottom:24px; }
+  /* Audit log table */
+  .audit-table th { font-size:.78rem; text-transform:uppercase; letter-spacing:.05em;
+                    color:var(--text-secondary); border-bottom:2px solid var(--border-color); }
+  .audit-table td { font-size:.85rem; vertical-align:middle; border-color:var(--border-light); }
+  .badge-passed { background:#d1fae5; color:#065f46; }
+  .badge-failed { background:#fee2e2; color:#991b1b; }
+  body.dark-mode .badge-passed { background:rgba(16,185,129,.2); color:#6ee7b7; }
+  body.dark-mode .badge-failed { background:rgba(239,68,68,.2); color:#fca5a5; }
+  /* Usage stat cards */
+  .stat-card { border-radius:12px; padding:24px; background:var(--card-bg);
+               border:1px solid var(--border-color); text-align:center; }
+  .stat-card .stat-num { font-size:2.2rem; font-weight:700; line-height:1; }
+  .stat-card .stat-label { font-size:.82rem; color:var(--text-secondary); margin-top:6px; }
+  /* Canvas placeholder */
+  .canvas-placeholder { background:var(--bg-tertiary); border:2px dashed var(--border-color);
+                        border-radius:12px; min-height:420px; display:flex;
+                        align-items:center; justify-content:center; flex-direction:column;
+                        gap:14px; color:var(--text-secondary); }
+  .canvas-placeholder i { font-size:3rem; opacity:.35; }
+  /* Category pills */
+  .cat-pill { border-radius:20px; padding:4px 14px; font-size:.82rem; border:1px solid var(--border-color);
+              background:var(--bg-secondary); color:var(--text-secondary); cursor:pointer;
+              text-decoration:none; transition:all .15s; }
+  .cat-pill:hover, .cat-pill.active { background:#0d6efd; color:#fff; border-color:#0d6efd; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4">
+<div class="container-fluid px-4 automation-page">
 
+  <!-- Header -->
   <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
     <div>
       <h1 class="h3 mb-0">
-        <i class="fas fa-bolt me-2 text-warning"></i>Automations
+        <i class="fas fa-bolt me-2 text-warning"></i>Automation Engine
       </h1>
-      <p class="text-muted mb-0">{{ board.name }} — trigger-based rules that run automatically</p>
+      <p class="text-muted mb-0">{{ board.name }} — visual rules that run automatically</p>
     </div>
     <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
       <i class="fas fa-columns me-1"></i> Back to Board
     </a>
   </div>
 
-  <div class="info-section">
-    <strong><i class="fas fa-info-circle me-2 text-warning"></i>How Automations Work</strong>
-    <p class="mb-0 small mt-1">
-      Each rule has a <strong>trigger</strong> (something that happens) and an <strong>action</strong>
-      (what PrizmAI does automatically).<br>
-      Example: <em>"When a task is completed → notify the creator"</em> or
-      <em>"When due date is 2 days away → notify the assignee"</em>.
-    </p>
-  </div>
+  {% if messages %}
+    {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible py-2 small" role="alert">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endif %}
 
-  <div class="row g-4">
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TABS                                            -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <ul class="nav auto-tabs mb-0" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'rules' %}active{% endif %}"
+         href="?tab=rules">
+        <i class="fas fa-list me-1"></i>Rules
+        <span class="badge bg-primary ms-1">{{ rules.count }}</span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'templates' %}active{% endif %}"
+         href="?tab=templates">
+        <i class="fas fa-magic me-1"></i>Templates
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'audit' %}active{% endif %}"
+         href="?tab=audit">
+        <i class="fas fa-history me-1"></i>Audit Log
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'usage' %}active{% endif %}"
+         href="?tab=usage">
+        <i class="fas fa-chart-bar me-1"></i>Usage
+      </a>
+    </li>
+  </ul>
 
-    <!-- LEFT: Templates + Rules -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: RULES                                      -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {% if active_tab == 'rules' %}
+  <div class="row g-4 mt-0">
+
+    <!-- LEFT: canvas + rule list -->
     <div class="col-lg-7">
 
-      {% if templates %}
-      <div class="mb-4">
-        <h6 class="text-uppercase text-muted fw-semibold mb-3" style="letter-spacing:.06em;font-size:.78rem;">
-          <i class="fas fa-magic me-1"></i> Quick-start templates — activate with one click
-        </h6>
-        <div class="row g-2">
-          {% for tpl in templates %}
-          <div class="col-md-4">
-            <div class="tpl-card h-100 {% if tpl.already_active %}activated{% endif %}">
-              <div class="d-flex align-items-center gap-2 mb-1">
-                <span class="text-{{ tpl.color }}"><i class="fas {{ tpl.icon }}"></i></span>
-                <strong class="small">{{ tpl.name }}</strong>
-              </div>
-              <p class="text-muted mb-2" style="font-size:.78rem;line-height:1.4;">{{ tpl.description }}</p>
-              {% if tpl.already_active %}
-                <span class="badge bg-success-subtle text-success border border-success-subtle">
-                  <i class="fas fa-check me-1"></i>Active
-                </span>
-              {% else %}
-                <form method="post" action="{% url 'automation_activate_template' board.id tpl.id %}">
-                  {% csrf_token %}
-                  <button class="btn btn-sm btn-outline-primary w-100">
-                    <i class="fas fa-bolt me-1"></i>Activate
-                  </button>
-                </form>
-              {% endif %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
+      <!-- Visual Canvas Placeholder -->
+      <div id="automationCanvas" class="canvas-placeholder mb-4">
+        <i class="fas fa-project-diagram"></i>
+        <p class="mb-0 fw-semibold">Visual Automation Builder</p>
+        <p class="small mb-0">Select a rule to edit, or click "New Rule" to open the canvas</p>
+        <button class="btn btn-primary btn-sm mt-2" id="btnOpenCanvas">
+          <i class="fas fa-plus me-1"></i>Open Canvas Builder
+        </button>
       </div>
-      {% endif %}
 
-      <h5 class="mb-3">
-        <i class="fas fa-list me-2 text-secondary"></i>Rules ({{ automations.count }})
-      </h5>
+      <!-- Active Rules -->
+      <h6 class="text-uppercase text-muted fw-semibold mb-3" style="letter-spacing:.06em;font-size:.78rem;">
+        <i class="fas fa-bolt me-1"></i> Active Rules ({{ rules.count }})
+      </h6>
 
-      {% if not automations %}
-      <div class="text-center text-muted py-5 border rounded bg-white">
-        <i class="fas fa-bolt fa-3x mb-3 text-light"></i>
+      {% if not rules.exists %}
+      <div class="text-center text-muted py-5 border rounded" style="background:var(--card-bg);">
+        <i class="fas fa-bolt fa-3x mb-3" style="opacity:.2;"></i>
         <p class="mb-1">No automation rules yet.</p>
-        <p class="small">Activate a template above or build a custom rule on the right &rarr;</p>
+        <p class="small mb-0">Use the canvas builder above or the quick-create form on the right &rarr;</p>
       </div>
       {% endif %}
 
-      {% for rule in automations %}
-      <div class="rule-card mb-3 {% if not rule.is_active %}inactive{% endif %}">
+      {% for rule in rules %}
+      <div class="auto-card mb-3 {% if not rule.is_active %}inactive{% endif %}" data-rule-id="{{ rule.id }}">
         <div class="d-flex justify-content-between align-items-start">
           <div class="flex-grow-1">
             <div class="d-flex align-items-center gap-2 mb-2">
@@ -128,47 +167,42 @@
               {% else %}
                 <span class="badge bg-secondary">Paused</span>
               {% endif %}
+              {% if rule.trigger_type|slice:":10" == "scheduled_" %}
+                <span class="badge" style="background:#7c3aed22;color:#7c3aed;">
+                  <i class="fas fa-clock me-1"></i>Scheduled
+                </span>
+              {% endif %}
+              {% if rule.failure_count >= 3 %}
+                <span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Failed</span>
+              {% endif %}
             </div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
               <span class="trigger-badge">
-                <i class="fas fa-play-circle me-1"></i>
-                {% if rule.trigger_type == 'task_overdue' %}Task becomes overdue
-                {% elif rule.trigger_type == 'moved_to_column' %}Moved to column "{{ rule.trigger_value }}"
-                {% elif rule.trigger_type == 'task_created' %}Task is created
-                {% elif rule.trigger_type == 'task_completed' %}Task is completed (100%)
-                {% elif rule.trigger_type == 'priority_changed' %}Priority changes to "{{ rule.trigger_value|title }}"
-                {% elif rule.trigger_type == 'task_assigned' %}Task is assigned
-                {% elif rule.trigger_type == 'due_date_approaching' %}Due date &le; {{ rule.trigger_value }} day{{ rule.trigger_value|pluralize }} away
-                {% else %}{{ rule.get_trigger_type_display }}{% endif %}
+                <i class="fas fa-play-circle me-1"></i>{{ rule.get_trigger_type_display }}
+                {% if rule.trigger_value %}: {{ rule.trigger_value }}{% endif %}
               </span>
               <span class="arrow-icon">&rarr;</span>
               <span class="action-badge">
-                <i class="fas fa-cogs me-1"></i>
-                {% if rule.action_type == 'set_priority' %}Set priority &rarr; {{ rule.action_value|title }}
-                {% elif rule.action_type == 'add_label' %}Add label "{{ rule.action_value }}"
-                {% elif rule.action_type == 'send_notification' %}Notify {{ rule.action_value }}
-                {% elif rule.action_type == 'move_to_column' %}Move to column "{{ rule.action_value }}"
-                {% elif rule.action_type == 'assign_to_user' %}Assign to @{{ rule.action_value }}
-                {% elif rule.action_type == 'set_due_date' %}Set due date &rarr; now + {{ rule.action_value }} day{{ rule.action_value|pluralize }}
-                {% else %}{{ rule.get_action_type_display }}{% endif %}
+                <i class="fas fa-cogs me-1"></i>{{ rule.get_action_type_display }}
+                {% if rule.action_value %}: {{ rule.action_value }}{% endif %}
               </span>
             </div>
             <div class="text-muted small mt-2">
               Fired {{ rule.run_count }} time{{ rule.run_count|pluralize }}
-              {% if rule.last_run_at %}&middot; last run {{ rule.last_run_at|date:"M d, Y H:i" }}{% endif %}
-              &middot; Created by {{ rule.created_by.username|default:"&mdash;" }}
+              {% if rule.last_run_at %}&middot; last {{ rule.last_run_at|date:"M d, H:i" }}{% endif %}
+              &middot; by {{ rule.created_by.username|default:"—" }}
             </div>
           </div>
           <div class="d-flex gap-2 ms-3 flex-shrink-0">
-            <form method="post" action="{% url 'automation_toggle' board.id rule.id %}">
-              {% csrf_token %}
-              <button class="btn btn-sm {% if rule.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
-                      title="{% if rule.is_active %}Pause{% else %}Enable{% endif %}">
-                <i class="fas {% if rule.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
-              </button>
-            </form>
-            <form method="post" action="{% url 'automation_delete' board.id rule.id %}"
-                  onsubmit="return confirm('Delete automation \'{{ rule.name|escapejs }}\'?');">
+            <!-- Toggle -->
+            <button class="btn btn-sm {% if rule.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %} btn-toggle"
+                    data-rule-id="{{ rule.id }}" data-board-id="{{ board.id }}"
+                    title="{% if rule.is_active %}Pause{% else %}Enable{% endif %}">
+              <i class="fas {% if rule.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+            </button>
+            <!-- Delete -->
+            <form method="post" action="{% url 'automation_rule_delete' board.id rule.id %}"
+                  onsubmit="return confirm('Delete rule \'{{ rule.name|escapejs }}\'?');">
               {% csrf_token %}
               <button class="btn btn-sm btn-outline-danger" title="Delete">
                 <i class="fas fa-trash-alt"></i>
@@ -179,123 +213,23 @@
       </div>
       {% endfor %}
 
-      <!-- ============================================================= -->
-      <!-- SCHEDULED AUTOMATIONS LIST                                      -->
-      <!-- ============================================================= -->
-      <div class="mt-5">
-        <h5 class="mb-3">
-          <i class="fas fa-clock me-2 text-purple" style="color:#7c3aed;"></i>Scheduled Rules ({{ scheduled_automations.count }})
-        </h5>
+    </div> <!-- /col-lg-7 -->
 
-        <div class="sched-info-section">
-          <i class="fas fa-info-circle me-1 text-primary"></i>
-          <span class="small">
-            Scheduled rules fire on a recurring clock-based schedule (daily, weekly, monthly)
-            and are <strong>not</strong> triggered by task events.
-            <br>
-            <strong>Note:</strong> Scheduled automations require the Celery Beat worker to be running.
-          </span>
-        </div>
-
-        {% if not scheduled_automations %}
-        <div class="text-center text-muted py-4 border rounded bg-white">
-          <i class="fas fa-clock fa-2x mb-2 text-light"></i>
-          <p class="mb-0 small">No scheduled rules yet. Create one using the form on the right &rarr;</p>
-        </div>
-        {% endif %}
-
-        {% for sa in scheduled_automations %}
-        <div class="rule-card mb-3 {% if not sa.is_active %}inactive{% endif %}">
-          <div class="d-flex justify-content-between align-items-start">
-            <div class="flex-grow-1">
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <strong>{{ sa.name }}</strong>
-                {% if sa.is_active %}
-                  <span class="badge bg-success">Active</span>
-                {% else %}
-                  <span class="badge bg-secondary">Paused</span>
-                {% endif %}
-                {% if sa.failure_count >= 3 %}
-                  <span class="badge bg-danger" title="Auto-disabled after 3 failures">
-                    <i class="fas fa-exclamation-triangle me-1"></i>Failed
-                  </span>
-                {% elif sa.failure_count > 0 %}
-                  <span class="badge bg-warning text-dark" title="{{ sa.failure_count }} failure(s)">
-                    <i class="fas fa-exclamation-circle me-1"></i>{{ sa.failure_count }} fail{{ sa.failure_count|pluralize }}
-                  </span>
-                {% endif %}
-              </div>
-
-              <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="sched-badge">
-                  <i class="fas fa-clock me-1"></i>{{ sa.get_schedule_description }}
-                </span>
-                <span class="arrow-icon">&rarr;</span>
-                <span class="action-badge">
-                  <i class="fas fa-cogs me-1"></i>
-                  {% if sa.action == 'send_notification' %}Notify {{ sa.get_notify_target_display|lower }}
-                  {% elif sa.action == 'set_priority' %}Set priority &rarr; {{ sa.action_value|title }}
-                  {% else %}{{ sa.get_action_display }}{% endif %}
-                </span>
-                <span class="trigger-badge" title="Task filter">
-                  <i class="fas fa-filter me-1"></i>{{ sa.get_task_filter_display }}
-                </span>
-              </div>
-
-              <div class="text-muted small mt-2">
-                Fired {{ sa.run_count }} time{{ sa.run_count|pluralize }}
-                {% if sa.last_run_at %}&middot; last run {{ sa.last_run_at|date:"M d, Y H:i" }}{% endif %}
-                &middot; Created by {{ sa.created_by.username|default:"&mdash;" }}
-              </div>
-            </div>
-
-            <div class="d-flex gap-2 ms-3 flex-shrink-0">
-              <form method="post" action="{% url 'scheduled_automation_toggle' board.id sa.id %}">
-                {% csrf_token %}
-                <button class="btn btn-sm {% if sa.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
-                        title="{% if sa.is_active %}Pause{% else %}Enable{% endif %}">
-                  <i class="fas {% if sa.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
-                </button>
-              </form>
-              <form method="post" action="{% url 'scheduled_automation_delete' board.id sa.id %}"
-                    onsubmit="return confirm('Delete scheduled rule \'{{ sa.name|escapejs }}\'?');">
-                {% csrf_token %}
-                <button class="btn btn-sm btn-outline-danger" title="Delete">
-                  <i class="fas fa-trash-alt"></i>
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-
-    </div>
-
-    <!-- RIGHT: Create Rule Form -->
+    <!-- RIGHT: Quick-create forms -->
     <div class="col-lg-5">
-      <div class="create-card">
-        <h5 class="mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Create New Rule</h5>
 
-        {% if messages %}
-          {% for msg in messages %}
-          <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible py-2 small" role="alert">
-            {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          </div>
-          {% endfor %}
-        {% endif %}
+      <!-- Quick Create Rule (form-based) -->
+      <div class="create-card mb-4">
+        <h5 class="mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Quick Create Rule</h5>
 
-        <form id="createRuleForm" method="post" novalidate>
+        <form id="createRuleForm" method="post" action="{% url 'automation_create_form' board.id %}" novalidate>
           {% csrf_token %}
-
           <div class="mb-3">
             <label class="form-label fw-semibold">Rule Name <span class="text-danger">*</span></label>
             <input type="text" name="name" id="ruleName" class="form-control"
                    placeholder="e.g. Notify assignee before deadline" required maxlength="120">
-            <div class="invalid-feedback">Please enter a rule name.</div>
           </div>
 
-          <!-- TRIGGER -->
           <div class="mb-2">
             <label class="form-label fw-semibold">Trigger</label>
             <select name="trigger_type" id="triggerType" class="form-select" onchange="onTriggerChange()">
@@ -305,7 +239,7 @@
             </select>
           </div>
           <div class="mb-3" id="tvColumnFragment" style="display:none;">
-            <label class="form-label text-muted small">Column name fragment (e.g. "Review" matches "In Review")</label>
+            <label class="form-label text-muted small">Column name fragment</label>
             <input type="text" id="tvColInput" class="form-control form-control-sm" placeholder="e.g. Review">
           </div>
           <div class="mb-3" id="tvPriority" style="display:none;">
@@ -319,10 +253,8 @@
             <label class="form-label text-muted small">Days before due date</label>
             <input type="number" id="tvDaysInput" class="form-control form-control-sm" value="2" min="1" max="365">
           </div>
-          <!-- hidden field — populated by JS before submit -->
           <input type="hidden" name="trigger_value" id="triggerValueHidden">
 
-          <!-- ACTION -->
           <div class="mb-2">
             <label class="form-label fw-semibold">Action</label>
             <select name="action_type" id="actionType" class="form-select" onchange="onActionChange()">
@@ -342,7 +274,7 @@
             <label class="form-label text-muted small">Label</label>
             <select id="avLabelSelect" class="form-select form-select-sm">
               {% for label in labels %}<option value="{{ label.name }}">{{ label.name }}</option>
-              {% empty %}<option value="" disabled>No labels on this board yet</option>{% endfor %}
+              {% empty %}<option value="" disabled>No labels on this board</option>{% endfor %}
             </select>
           </div>
           <div class="mb-3" id="avNotify" style="display:none;">
@@ -357,14 +289,14 @@
             <label class="form-label text-muted small">Destination column</label>
             <select id="avMoveColSelect" class="form-select form-select-sm">
               {% for col in columns %}<option value="{{ col.name }}">{{ col.name }}</option>
-              {% empty %}<option value="" disabled>No columns available</option>{% endfor %}
+              {% empty %}<option value="" disabled>No columns</option>{% endfor %}
             </select>
           </div>
           <div class="mb-3" id="avAssign" style="display:none;">
             <label class="form-label text-muted small">Assign to</label>
             <select id="avAssignSelect" class="form-select form-select-sm">
               {% for member in members %}
-              <option value="{{ member.username }}">{{ member.get_full_name|default:member.username }} (@{{ member.username }})</option>
+              <option value="{{ member.username }}">{{ member.get_full_name|default:member.username }}</option>
               {% endfor %}
             </select>
           </div>
@@ -372,7 +304,6 @@
             <label class="form-label text-muted small">Days from now</label>
             <input type="number" id="avDaysInput" class="form-control form-control-sm" value="7" min="0" max="9999">
           </div>
-          <!-- hidden field — populated by JS before submit -->
           <input type="hidden" name="action_value" id="actionValueHidden">
 
           <button type="button" class="btn btn-primary w-100 mt-1" onclick="openConfirmModal()">
@@ -381,83 +312,60 @@
         </form>
       </div>
 
-      <!-- ============================================================= -->
-      <!-- CREATE SCHEDULED RULE FORM                                      -->
-      <!-- ============================================================= -->
-      <div class="create-card mt-4">
+      <!-- Scheduled Rule Form -->
+      <div class="create-card">
         <h5 class="mb-3"><i class="fas fa-clock me-2" style="color:#7c3aed;"></i>Create Scheduled Rule</h5>
 
         <form id="createSchedForm" method="post" action="{% url 'scheduled_automation_create' board.id %}" novalidate>
           {% csrf_token %}
-
           <div class="mb-3">
             <label class="form-label fw-semibold">Rule Name <span class="text-danger">*</span></label>
             <input type="text" name="sched_name" id="schedName" class="form-control"
                    placeholder="e.g. Daily overdue summary" required maxlength="200">
           </div>
-
-          <!-- SCHEDULE TYPE -->
           <div class="mb-2">
             <label class="form-label fw-semibold">Frequency</label>
             <select name="schedule_type" id="schedType" class="form-select" onchange="onSchedTypeChange()">
-              {% for val, label in sched_schedule_types %}
-              <option value="{{ val }}">{{ label }}</option>
-              {% endfor %}
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
             </select>
           </div>
-
           <div class="mb-3">
             <label class="form-label fw-semibold">Time</label>
             <input type="time" name="scheduled_time" id="schedTime" class="form-control" value="09:00" required>
           </div>
-
           <div class="mb-3" id="schedDayWeekly" style="display:none;">
             <label class="form-label text-muted small">Day of week</label>
             <select name="scheduled_day" id="schedDayOfWeek" class="form-select form-select-sm">
-              <option value="0">Monday</option>
-              <option value="1">Tuesday</option>
-              <option value="2">Wednesday</option>
-              <option value="3">Thursday</option>
-              <option value="4">Friday</option>
-              <option value="5">Saturday</option>
+              <option value="0">Monday</option><option value="1">Tuesday</option>
+              <option value="2">Wednesday</option><option value="3">Thursday</option>
+              <option value="4">Friday</option><option value="5">Saturday</option>
               <option value="6">Sunday</option>
             </select>
           </div>
-
           <div class="mb-3" id="schedDayMonthly" style="display:none;">
             <label class="form-label text-muted small">Day of month (1–28)</label>
             <select name="scheduled_day" id="schedDayOfMonth" class="form-select form-select-sm">
-              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-              <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-              <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-              <option value="13">13</option><option value="14">14</option><option value="15">15</option>
-              <option value="16">16</option><option value="17">17</option><option value="18">18</option>
-              <option value="19">19</option><option value="20">20</option><option value="21">21</option>
-              <option value="22">22</option><option value="23">23</option><option value="24">24</option>
-              <option value="25">25</option><option value="26">26</option><option value="27">27</option>
-              <option value="28">28</option>
+              {% for d in "1234567890123456789012345678"|make_list %}{% if forloop.counter <= 28 %}
+              <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+              {% endif %}{% endfor %}
             </select>
           </div>
-
-          <!-- ACTION -->
           <div class="mb-2">
             <label class="form-label fw-semibold">Action</label>
             <select name="sched_action" id="schedAction" class="form-select" onchange="onSchedActionChange()">
-              {% for val, label in sched_action_choices %}
-              <option value="{{ val }}">{{ label }}</option>
-              {% endfor %}
+              <option value="send_notification">Send notification</option>
+              <option value="set_priority">Set priority</option>
             </select>
           </div>
-
-          <!-- send_notification sub-fields -->
           <div id="schedNotifyFields">
             <div class="mb-3">
               <label class="form-label text-muted small">Notify</label>
               <select name="notify_target" id="schedNotifyTarget" class="form-select form-select-sm">
-                {% for val, label in sched_notify_targets %}
-                <option value="{{ val }}">{{ label }}</option>
-                {% endfor %}
+                <option value="board_members">All board members</option>
+                <option value="assignee">Task assignees</option>
+                <option value="creator">Rule creator</option>
               </select>
             </div>
             <div class="mb-3">
@@ -466,68 +374,274 @@
                      class="form-control form-control-sm" placeholder="Leave blank for auto-generated">
             </div>
           </div>
-
-          <!-- set_priority sub-field -->
           <div id="schedPriorityField" style="display:none;">
             <div class="mb-3">
               <label class="form-label text-muted small">Priority</label>
               <select name="sched_action_value" id="schedPrioritySelect" class="form-select form-select-sm">
-                <option value="urgent">Urgent</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
+                <option value="urgent">Urgent</option><option value="high">High</option>
+                <option value="medium">Medium</option><option value="low">Low</option>
               </select>
             </div>
           </div>
-
-          <!-- Task filter -->
           <div class="mb-3">
             <label class="form-label fw-semibold">Apply to tasks</label>
             <select name="task_filter" id="schedTaskFilter" class="form-select">
-              {% for val, label in sched_task_filters %}
-              <option value="{{ val }}">{{ label }}</option>
-              {% endfor %}
+              <option value="all">All tasks</option>
+              <option value="overdue">Overdue tasks</option>
+              <option value="incomplete">Incomplete tasks</option>
+              <option value="high_priority">High / Urgent priority</option>
             </select>
           </div>
-
-          <!-- Live preview -->
           <div class="sched-preview mb-3" id="schedPreview">
             <i class="fas fa-clock me-1" style="color:#7c3aed;"></i>
-            This rule will run: <span id="schedPreviewText">Every day at 9:00 AM</span>
+            Runs: <span id="schedPreviewText">Every day at 9:00 AM</span>
           </div>
-
           <button type="button" class="btn w-100 mt-1 text-white" style="background:#7c3aed;"
                   onclick="openSchedConfirmModal()">
             <i class="fas fa-eye me-2"></i>Review &amp; Create Scheduled Rule
           </button>
         </form>
       </div>
+
+    </div> <!-- /col-lg-5 -->
+  </div> <!-- /row -->
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: TEMPLATES                                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {% if active_tab == 'templates' %}
+  <div class="mt-0">
+
+    <!-- Category filters -->
+    <div class="d-flex flex-wrap gap-2 mb-4">
+      <a href="?tab=templates" class="cat-pill {% if not active_category %}active{% endif %}">All</a>
+      {% for val, label in categories %}
+      <a href="?tab=templates&category={{ val }}" class="cat-pill {% if active_category == val %}active{% endif %}">{{ label }}</a>
+      {% endfor %}
     </div>
 
+    <div class="row g-3">
+      {% for tpl in templates %}
+      <div class="col-md-4 col-lg-3">
+        <div class="tpl-card h-100">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="badge" style="background:{% if tpl.category == 'notification' %}#e0f0ff{% elif tpl.category == 'workflow' %}#e8f8e8{% elif tpl.category == 'escalation' %}#fee2e2{% elif tpl.category == 'cleanup' %}#fef3c7{% else %}#f3e8ff{% endif %}; color:var(--text-primary); font-size:.72rem;">
+              {{ tpl.get_category_display }}
+            </span>
+            {% if tpl.is_builtin %}<span class="badge bg-light text-muted border" style="font-size:.68rem;">Built-in</span>{% endif %}
+          </div>
+          <strong class="d-block mb-1">{{ tpl.name }}</strong>
+          <p class="text-muted small mb-3" style="line-height:1.4;">{{ tpl.description }}</p>
+          <form method="post" action="{% url 'automation_template_use' board.id tpl.id %}">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-outline-primary w-100">
+              <i class="fas fa-bolt me-1"></i>Use Template
+            </button>
+          </form>
+        </div>
+      </div>
+      {% empty %}
+      <div class="col-12 text-center text-muted py-5">
+        <i class="fas fa-magic fa-3x mb-3" style="opacity:.2;"></i>
+        <p>No templates found for this category.</p>
+      </div>
+      {% endfor %}
+    </div>
   </div>
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: AUDIT LOG                                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {% if active_tab == 'audit' %}
+  <div class="mt-0">
+
+    <!-- Filters -->
+    <div class="d-flex flex-wrap gap-3 mb-4 align-items-end">
+      <div>
+        <label class="form-label small fw-semibold mb-1">Rule</label>
+        <select id="auditRuleFilter" class="form-select form-select-sm" style="min-width:180px;"
+                onchange="applyAuditFilters()">
+          <option value="">All rules</option>
+          {% for r in rules %}
+          <option value="{{ r.id }}" {% if rule_filter == r.id|stringformat:"d" %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label small fw-semibold mb-1">Outcome</label>
+        <select id="auditOutcomeFilter" class="form-select form-select-sm" style="min-width:130px;"
+                onchange="applyAuditFilters()">
+          <option value="">All</option>
+          <option value="passed" {% if outcome_filter == 'passed' %}selected{% endif %}>Passed</option>
+          <option value="failed" {% if outcome_filter == 'failed' %}selected{% endif %}>Failed</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label small fw-semibold mb-1">Date range</label>
+        <select id="auditDateFilter" class="form-select form-select-sm" style="min-width:140px;"
+                onchange="applyAuditFilters()">
+          <option value="">All time</option>
+          <option value="today" {% if date_filter == 'today' %}selected{% endif %}>Today</option>
+          <option value="7days" {% if date_filter == '7days' %}selected{% endif %}>Last 7 days</option>
+          <option value="30days" {% if date_filter == '30days' %}selected{% endif %}>Last 30 days</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table audit-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Rule</th>
+            <th>Trigger</th>
+            <th>Task</th>
+            <th>Actions Taken</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td>{{ log.triggered_at|date:"M d, H:i" }}</td>
+            <td>{{ log.rule.name|default:"(deleted)" }}</td>
+            <td><span class="trigger-badge">{{ log.trigger_event }}</span></td>
+            <td>
+              {% if log.task_affected %}
+                <a href="{% url 'board_detail' board.id %}#task-{{ log.task_affected.id }}">{{ log.task_affected.title|truncatewords:6 }}</a>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="small">{{ log.actions_summary|truncatewords:12 }}</td>
+            <td>
+              <span class="badge {% if log.outcome == 'passed' %}badge-passed{% else %}badge-failed{% endif %}">
+                {{ log.outcome }}
+              </span>
+              {% if log.error_detail %}
+                <i class="fas fa-info-circle text-danger ms-1" title="{{ log.error_detail }}"></i>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">No audit log entries yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if logs.has_other_pages %}
+    <nav>
+      <ul class="pagination justify-content-center">
+        {% if logs.has_previous %}
+        <li class="page-item"><a class="page-link" href="?tab=audit&page={{ logs.previous_page_number }}&rule={{ rule_filter }}&outcome={{ outcome_filter }}&date_range={{ date_filter }}">&laquo;</a></li>
+        {% endif %}
+        {% for num in logs.paginator.page_range %}
+          {% if num == logs.number %}
+          <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+          {% elif num > logs.number|add:"-3" and num < logs.number|add:"3" %}
+          <li class="page-item"><a class="page-link" href="?tab=audit&page={{ num }}&rule={{ rule_filter }}&outcome={{ outcome_filter }}&date_range={{ date_filter }}">{{ num }}</a></li>
+          {% endif %}
+        {% endfor %}
+        {% if logs.has_next %}
+        <li class="page-item"><a class="page-link" href="?tab=audit&page={{ logs.next_page_number }}&rule={{ rule_filter }}&outcome={{ outcome_filter }}&date_range={{ date_filter }}">&raquo;</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: USAGE                                      -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {% if active_tab == 'usage' %}
+  <div class="mt-0">
+    <div class="row g-4 mb-4">
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-num text-primary">{{ active_rules_count }}</div>
+          <div class="stat-label">Active Rules</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--text-primary);">{{ total_rules_count }}</div>
+          <div class="stat-label">Total Rules</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-num text-success">{{ passed_this_month|default:"0" }}</div>
+          <div class="stat-label">Passed (this month)</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+          <div class="stat-num text-danger">{{ failed_this_month|default:"0" }}</div>
+          <div class="stat-label">Failed (this month)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="auto-card">
+          <h6 class="fw-semibold mb-3"><i class="fas fa-chart-line me-2 text-primary"></i>Runs This Month</h6>
+          <div class="d-flex align-items-baseline gap-2">
+            <span style="font-size:2.5rem;font-weight:700;color:var(--text-primary);">{{ runs_this_month|default:"0" }}</span>
+            <span class="text-muted small">total executions</span>
+          </div>
+          {% if runs_this_month %}
+          <div class="progress mt-3" style="height:8px;">
+            {% widthratio passed_this_month runs_this_month 100 as pass_pct %}
+            <div class="progress-bar bg-success" style="width:{% widthratio passed_this_month runs_this_month 100 %}%;"></div>
+            <div class="progress-bar bg-danger" style="width:{% widthratio failed_this_month runs_this_month 100 %}%;"></div>
+          </div>
+          <div class="d-flex justify-content-between mt-1 small text-muted">
+            <span><i class="fas fa-check-circle text-success me-1"></i>{{ passed_this_month }} passed</span>
+            <span><i class="fas fa-times-circle text-danger me-1"></i>{{ failed_this_month }} failed</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="auto-card">
+          <h6 class="fw-semibold mb-3"><i class="fas fa-cogs me-2 text-secondary"></i>Rule Breakdown</h6>
+          {% for rule in rules %}
+          <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="border-color:var(--border-light)!important;">
+            <div>
+              <span class="fw-semibold small">{{ rule.name }}</span>
+              {% if not rule.is_active %}<span class="badge bg-secondary ms-1" style="font-size:.65rem;">Paused</span>{% endif %}
+            </div>
+            <span class="text-muted small">{{ rule.run_count }} run{{ rule.run_count|pluralize }}</span>
+          </div>
+          {% empty %}
+          <p class="text-muted small mb-0">No rules to display.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 
 <!-- CONFIRMATION MODAL (trigger-based rules) -->
 <div class="modal fade" id="confirmRuleModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
+    <div class="modal-content" style="background:var(--card-bg);color:var(--text-primary);">
+      <div class="modal-header" style="border-color:var(--border-color);">
         <h5 class="modal-title"><i class="fas fa-bolt text-warning me-2"></i>Confirm New Rule</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">
-          Review the rule below. Once saved it will start running automatically on
-          <strong>{{ board.name }}</strong>.
-        </p>
-        <div class="bg-light rounded p-3 border" id="confirmRuleSummary"></div>
-        <p class="text-muted small mt-3 mb-0">
-          <i class="fas fa-info-circle me-1"></i>
-          This rule will affect <strong>all current and future tasks</strong> on this board that
-          match the trigger. You can pause or delete it at any time.
-        </p>
+        <p class="text-muted small mb-3">Once saved, this rule runs automatically on <strong>{{ board.name }}</strong>.</p>
+        <div class="rounded p-3 border" id="confirmRuleSummary" style="background:var(--bg-tertiary);border-color:var(--border-color)!important;"></div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="border-color:var(--border-color);">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="submitRuleForm()">
           <i class="fas fa-plus me-1"></i>Create Rule
@@ -537,27 +651,19 @@
   </div>
 </div>
 
-<!-- SCHEDULED AUTOMATION CONFIRMATION MODAL -->
+<!-- SCHEDULED CONFIRMATION MODAL -->
 <div class="modal fade" id="confirmSchedModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
+    <div class="modal-content" style="background:var(--card-bg);color:var(--text-primary);">
+      <div class="modal-header" style="border-color:var(--border-color);">
         <h5 class="modal-title"><i class="fas fa-clock me-2" style="color:#7c3aed;"></i>Confirm Scheduled Rule</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">
-          Review the scheduled rule below. Once saved it will start running on
-          <strong>{{ board.name }}</strong> according to the schedule.
-        </p>
-        <div class="bg-light rounded p-3 border" id="confirmSchedSummary"></div>
-        <p class="text-muted small mt-3 mb-0">
-          <i class="fas fa-info-circle me-1"></i>
-          This rule fires on a recurring schedule and applies to tasks matching the filter.
-          You can pause or delete it at any time.
-        </p>
+        <p class="text-muted small mb-3">Once saved, this runs on <strong>{{ board.name }}</strong> on schedule.</p>
+        <div class="rounded p-3 border" id="confirmSchedSummary" style="background:var(--bg-tertiary);border-color:var(--border-color)!important;"></div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="border-color:var(--border-color);">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn text-white" style="background:#7c3aed;" onclick="submitSchedForm()">
           <i class="fas fa-plus me-1"></i>Create Scheduled Rule
@@ -569,87 +675,62 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/automation_builder.js' %}"></script>
 <script>
-const TRIGGER_LABELS = {
-  task_overdue:'Task becomes overdue (due date passed, not done)',
-  moved_to_column:'Task moved to a column containing\u2026',
-  task_created:'Task is created',
-  task_completed:'Task is marked as complete / done (100%)',
-  priority_changed:'Task priority changes to\u2026',
-  task_assigned:'Task is assigned to a team member',
-  due_date_approaching:'Task due date is approaching (X days before)',
-};
-const ACTION_LABELS = {
-  set_priority:'Set priority', add_label:'Add label',
-  send_notification:'Send notification', move_to_column:'Move task to column',
-  assign_to_user:'Assign to a specific person', set_due_date:'Set due date (now + N days)',
-};
-
+/* ── Trigger / Action dynamic fields ── */
 function onTriggerChange() {
-  const t = document.getElementById('triggerType').value;
-  ['tvColumnFragment','tvPriority','tvDays'].forEach(id =>
-    document.getElementById(id).style.display = 'none');
-  if      (t === 'moved_to_column')       document.getElementById('tvColumnFragment').style.display = 'block';
-  else if (t === 'priority_changed')      document.getElementById('tvPriority').style.display = 'block';
-  else if (t === 'due_date_approaching')  document.getElementById('tvDays').style.display = 'block';
+  const t = document.getElementById('triggerType');
+  if (!t) return;
+  ['tvColumnFragment','tvPriority','tvDays'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  const v = t.value;
+  if (v === 'moved_to_column')         show('tvColumnFragment');
+  else if (v === 'priority_changed')   show('tvPriority');
+  else if (v === 'due_date_approaching') show('tvDays');
 }
 
 function onActionChange() {
-  const a = document.getElementById('actionType').value;
-  ['avPriority','avLabel','avNotify','avMoveCol','avAssign','avDays'].forEach(id =>
-    document.getElementById(id).style.display = 'none');
+  const a = document.getElementById('actionType');
+  if (!a) return;
+  ['avPriority','avLabel','avNotify','avMoveCol','avAssign','avDays'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
   const map = {set_priority:'avPriority',add_label:'avLabel',send_notification:'avNotify',
                move_to_column:'avMoveCol',assign_to_user:'avAssign',set_due_date:'avDays'};
-  if (map[a]) document.getElementById(map[a]).style.display = 'block';
+  if (map[a.value]) show(map[a.value]);
 }
+
+function show(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
 
 function getValues() {
   const triggerType = document.getElementById('triggerType').value;
   const actionType  = document.getElementById('actionType').value;
   let triggerValue = '';
-  if (triggerType === 'moved_to_column')        triggerValue = document.getElementById('tvColInput').value.trim();
-  else if (triggerType === 'priority_changed')  triggerValue = document.getElementById('tvPrioritySelect').value;
-  else if (triggerType === 'due_date_approaching') triggerValue = document.getElementById('tvDaysInput').value;
+  if (triggerType === 'moved_to_column')        triggerValue = (document.getElementById('tvColInput') || {}).value || '';
+  else if (triggerType === 'priority_changed')  triggerValue = (document.getElementById('tvPrioritySelect') || {}).value || '';
+  else if (triggerType === 'due_date_approaching') triggerValue = (document.getElementById('tvDaysInput') || {}).value || '';
   let actionValue = '';
   const avMap = {set_priority:'avPrioritySelect',add_label:'avLabelSelect',
                  send_notification:'avNotifySelect',move_to_column:'avMoveColSelect',
                  assign_to_user:'avAssignSelect',set_due_date:'avDaysInput'};
-  if (avMap[actionType]) actionValue = document.getElementById(avMap[actionType]).value;
-  return {name:document.getElementById('ruleName').value.trim(), triggerType, triggerValue, actionType, actionValue};
+  if (avMap[actionType]) actionValue = (document.getElementById(avMap[actionType]) || {}).value || '';
+  return {name: (document.getElementById('ruleName') || {}).value || '', triggerType, triggerValue, actionType, actionValue};
 }
 
 function openConfirmModal() {
   const form = document.getElementById('createRuleForm');
   if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
   const v = getValues();
-  if (!v.name) { alert('Please enter a rule name.'); return; }
-
+  if (!v.name.trim()) { alert('Please enter a rule name.'); return; }
   document.getElementById('triggerValueHidden').value = v.triggerValue;
   document.getElementById('actionValueHidden').value  = v.actionValue;
-
-  let triggerText = TRIGGER_LABELS[v.triggerType] || v.triggerType;
-  if      (v.triggerType === 'moved_to_column')        triggerText = 'Moved to column containing "' + v.triggerValue + '"';
-  else if (v.triggerType === 'priority_changed')       triggerText = 'Priority changes to "' + v.triggerValue + '"';
-  else if (v.triggerType === 'due_date_approaching')   triggerText = 'Due date \u2264 ' + v.triggerValue + ' day(s) away';
-
-  let actionText = ACTION_LABELS[v.actionType] || v.actionType;
-  if      (v.actionType === 'set_priority')     actionText = 'Set priority to "' + v.actionValue + '"';
-  else if (v.actionType === 'add_label')         actionText = 'Add label "' + v.actionValue + '"';
-  else if (v.actionType === 'send_notification') {
-    const t={assignee:'task assignee',board_members:'all board members',creator:'task creator'};
-    actionText = 'Send notification to ' + (t[v.actionValue] || v.actionValue);
-  }
-  else if (v.actionType === 'move_to_column')   actionText = 'Move task to column "' + v.actionValue + '"';
-  else if (v.actionType === 'assign_to_user')    actionText = 'Assign to @' + v.actionValue;
-  else if (v.actionType === 'set_due_date')      actionText = 'Set due date to now + ' + v.actionValue + ' day(s)';
-
   document.getElementById('confirmRuleSummary').innerHTML =
     '<div class="fw-semibold mb-2">' + esc(v.name) + '</div>' +
     '<div class="d-flex align-items-center gap-2 flex-wrap">' +
-    '<span class="trigger-badge"><i class="fas fa-play-circle me-1"></i>' + esc(triggerText) + '</span>' +
+    '<span class="trigger-badge"><i class="fas fa-play-circle me-1"></i>' + esc(v.triggerType) + (v.triggerValue ? ': ' + esc(v.triggerValue) : '') + '</span>' +
     '<span class="arrow-icon">\u2192</span>' +
-    '<span class="action-badge"><i class="fas fa-cogs me-1"></i>' + esc(actionText) + '</span></div>';
-
+    '<span class="action-badge"><i class="fas fa-cogs me-1"></i>' + esc(v.actionType) + (v.actionValue ? ': ' + esc(v.actionValue) : '') + '</span></div>';
   new bootstrap.Modal(document.getElementById('confirmRuleModal')).show();
 }
 
@@ -663,84 +744,92 @@ function esc(s) {
                   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
-document.addEventListener('DOMContentLoaded', function() { onTriggerChange(); onActionChange(); onSchedTypeChange(); onSchedActionChange(); updateSchedPreview(); });
+/* ── Toggle (PATCH) ── */
+document.querySelectorAll('.btn-toggle').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    const ruleId = this.dataset.ruleId;
+    const boardId = this.dataset.boardId;
+    fetch('/boards/' + boardId + '/automations/rules/' + ruleId + '/toggle/', {
+      method: 'PATCH',
+      headers: {'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json'},
+    }).then(r => r.json()).then(function() { location.reload(); })
+      .catch(function() { location.reload(); });
+  });
+});
 
-/* ------------------------------------------------------------------ */
-/* SCHEDULED AUTOMATION JS                                             */
-/* ------------------------------------------------------------------ */
+function getCookie(name) {
+  const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return m ? m.pop() : '';
+}
+
+/* ── Scheduled form ── */
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 function onSchedTypeChange() {
-  const st = document.getElementById('schedType').value;
-  document.getElementById('schedDayWeekly').style.display  = st === 'weekly'  ? 'block' : 'none';
-  document.getElementById('schedDayMonthly').style.display = st === 'monthly' ? 'block' : 'none';
-  // Disable the unused select so its name='scheduled_day' isn't submitted
-  document.getElementById('schedDayOfWeek').disabled  = st !== 'weekly';
-  document.getElementById('schedDayOfMonth').disabled = st !== 'monthly';
+  const el = document.getElementById('schedType');
+  if (!el) return;
+  const st = el.value;
+  const w = document.getElementById('schedDayWeekly');
+  const m = document.getElementById('schedDayMonthly');
+  if (w) w.style.display = st === 'weekly' ? 'block' : 'none';
+  if (m) m.style.display = st === 'monthly' ? 'block' : 'none';
+  const dow = document.getElementById('schedDayOfWeek');
+  const dom = document.getElementById('schedDayOfMonth');
+  if (dow) dow.disabled = st !== 'weekly';
+  if (dom) dom.disabled = st !== 'monthly';
   updateSchedPreview();
 }
 
 function onSchedActionChange() {
-  const a = document.getElementById('schedAction').value;
-  document.getElementById('schedNotifyFields').style.display  = a === 'send_notification' ? 'block' : 'none';
-  document.getElementById('schedPriorityField').style.display = a === 'set_priority'       ? 'block' : 'none';
-  // Disable hidden fields so they aren't submitted
-  document.getElementById('schedNotifyMessage').disabled  = a !== 'send_notification';
-  document.getElementById('schedNotifyTarget').disabled   = a !== 'send_notification';
-  document.getElementById('schedPrioritySelect').disabled = a !== 'set_priority';
+  const el = document.getElementById('schedAction');
+  if (!el) return;
+  const a = el.value;
+  const nf = document.getElementById('schedNotifyFields');
+  const pf = document.getElementById('schedPriorityField');
+  if (nf) nf.style.display = a === 'send_notification' ? 'block' : 'none';
+  if (pf) pf.style.display = a === 'set_priority' ? 'block' : 'none';
 }
 
 function getSchedPreviewText() {
-  const st   = document.getElementById('schedType').value;
-  const time = document.getElementById('schedTime').value || '09:00';
-
-  // Format time to 12-hour
+  const st = (document.getElementById('schedType') || {}).value || 'daily';
+  const time = (document.getElementById('schedTime') || {}).value || '09:00';
   const [hh, mm] = time.split(':').map(Number);
   const ampm = hh >= 12 ? 'PM' : 'AM';
-  const h12  = hh % 12 || 12;
-  const nice = h12 + ':' + String(mm).padStart(2,'0') + ' ' + ampm;
-
-  if (st === 'daily')  return 'Every day at ' + nice;
+  const nice = (hh % 12 || 12) + ':' + String(mm).padStart(2,'0') + ' ' + ampm;
+  if (st === 'daily') return 'Every day at ' + nice;
   if (st === 'weekly') {
-    const day = DAY_NAMES[document.getElementById('schedDayOfWeek').value] || '?';
+    const day = DAY_NAMES[(document.getElementById('schedDayOfWeek') || {}).value || 0];
     return 'Every ' + day + ' at ' + nice;
   }
   if (st === 'monthly') {
-    const d = document.getElementById('schedDayOfMonth').value || '?';
-    const suffix = (d==1||d==21)?'st':(d==2||d==22)?'nd':(d==3||d==23)?'rd':'th';
-    return 'Every month on the ' + d + suffix + ' at ' + nice;
+    const d = (document.getElementById('schedDayOfMonth') || {}).value || '1';
+    const suf = (d==1||d==21)?'st':(d==2||d==22)?'nd':(d==3||d==23)?'rd':'th';
+    return 'Every month on the ' + d + suf + ' at ' + nice;
   }
   return st;
 }
 
 function updateSchedPreview() {
-  document.getElementById('schedPreviewText').textContent = getSchedPreviewText();
+  const el = document.getElementById('schedPreviewText');
+  if (el) el.textContent = getSchedPreviewText();
 }
 
-// Attach listeners for live preview
-['schedType','schedTime','schedDayOfWeek','schedDayOfMonth'].forEach(function(id){
+['schedType','schedTime','schedDayOfWeek','schedDayOfMonth'].forEach(function(id) {
   var el = document.getElementById(id);
   if (el) el.addEventListener('change', updateSchedPreview);
 });
 
 function openSchedConfirmModal() {
   const form = document.getElementById('createSchedForm');
-  if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
-  const name = document.getElementById('schedName').value.trim();
-  if (!name) { alert('Please enter a rule name.'); return; }
-
+  if (!form || !form.checkValidity()) { if (form) form.classList.add('was-validated'); return; }
+  const name = (document.getElementById('schedName') || {}).value || '';
+  if (!name.trim()) { alert('Please enter a rule name.'); return; }
   const schedText = getSchedPreviewText();
-  const action    = document.getElementById('schedAction').value;
-  let actionText = '';
-  if (action === 'send_notification') {
-    const t = {assignee:'task assignee', board_members:'all board members', creator:'task creator'};
-    actionText = 'Notify ' + (t[document.getElementById('schedNotifyTarget').value] || 'recipients');
-  } else if (action === 'set_priority') {
-    actionText = 'Set priority to "' + document.getElementById('schedPrioritySelect').value + '"';
-  }
-
-  const filterLabel = document.getElementById('schedTaskFilter').selectedOptions[0].text;
-
+  const action = (document.getElementById('schedAction') || {}).value || '';
+  let actionText = action === 'set_priority'
+    ? 'Set priority to "' + ((document.getElementById('schedPrioritySelect') || {}).value || '') + '"'
+    : 'Notify ' + ((document.getElementById('schedNotifyTarget') || {}).selectedOptions[0] || {}).text;
+  const filterLabel = ((document.getElementById('schedTaskFilter') || {}).selectedOptions[0] || {}).text || 'All';
   document.getElementById('confirmSchedSummary').innerHTML =
     '<div class="fw-semibold mb-2">' + esc(name) + '</div>' +
     '<div class="d-flex align-items-center gap-2 flex-wrap mb-2">' +
@@ -748,7 +837,6 @@ function openSchedConfirmModal() {
     '<span class="arrow-icon">\u2192</span>' +
     '<span class="action-badge"><i class="fas fa-cogs me-1"></i>' + esc(actionText) + '</span></div>' +
     '<div class="small text-muted"><i class="fas fa-filter me-1"></i>Applies to: ' + esc(filterLabel) + '</div>';
-
   new bootstrap.Modal(document.getElementById('confirmSchedModal')).show();
 }
 
@@ -756,5 +844,45 @@ function submitSchedForm() {
   bootstrap.Modal.getInstance(document.getElementById('confirmSchedModal')).hide();
   document.getElementById('createSchedForm').submit();
 }
+
+/* ── Audit log filters ── */
+function applyAuditFilters() {
+  const rule = (document.getElementById('auditRuleFilter') || {}).value || '';
+  const outcome = (document.getElementById('auditOutcomeFilter') || {}).value || '';
+  const dt = (document.getElementById('auditDateFilter') || {}).value || '';
+  let url = '?tab=audit';
+  if (rule) url += '&rule=' + encodeURIComponent(rule);
+  if (outcome) url += '&outcome=' + encodeURIComponent(outcome);
+  if (dt) url += '&date_range=' + encodeURIComponent(dt);
+  window.location.href = url;
+}
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', function() {
+  onTriggerChange(); onActionChange(); onSchedTypeChange(); onSchedActionChange(); updateSchedPreview();
+
+  // Canvas builder — open button
+  var openBtn = document.getElementById('btnOpenCanvas');
+  if (openBtn) {
+    openBtn.addEventListener('click', function() {
+      var canvasEl = document.getElementById('automationCanvas');
+      if (canvasEl && window.AutomationBuilder) {
+        AutomationBuilder.init(canvasEl, {{ board.id }});
+      }
+    });
+  }
+
+  // Click a rule card to load it in the canvas
+  document.querySelectorAll('.auto-card[data-rule-id]').forEach(function(card) {
+    card.addEventListener('dblclick', function() {
+      var rid = this.dataset.ruleId;
+      var canvasEl = document.getElementById('automationCanvas');
+      if (canvasEl && window.AutomationBuilder) {
+        AutomationBuilder.init(canvasEl, {{ board.id }});
+        AutomationBuilder.loadRule({{ board.id }}, rid);
+      }
+    });
+  });
+});
 </script>
 {% endblock %}

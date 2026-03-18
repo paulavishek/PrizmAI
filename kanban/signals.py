@@ -2,6 +2,7 @@
 Signal handlers for automatic workload and performance profile updates
 """
 from django.db.models.signals import post_save, pre_save
+from django.db.models import Q
 from django.dispatch import receiver
 from django.contrib.auth.models import User
 from kanban.models import Task, TaskActivity
@@ -94,67 +95,30 @@ def track_column_entry_time(sender, instance, **kwargs):
 @receiver(post_save, sender=Task)
 def run_board_automations(sender, instance, created, **kwargs):
     """
-    Fire active BoardAutomation rules after a task is saved.
-    Handles two triggers:
-      - moved_to_column: fires when a task changes column
-      - task_overdue: fires when an uncompleted task's due date has passed
+    Fire active automation rules after a task is saved.
+    Queries both legacy BoardAutomation and new AutomationRule models.
     """
     from django.utils import timezone as tz
     try:
-        from kanban.automation_models import BoardAutomation
+        from kanban.automation_models import BoardAutomation, AutomationRule, AutomationLog
         from kanban.models import TaskLabel
 
         board = instance.column.board if instance.column_id else None
         if not board:
             return
 
-        automations = BoardAutomation.objects.filter(board=board, is_active=True)
-        if not automations.exists():
-            return
-
         now = tz.now()
-
         old_column_id = getattr(instance, '_old_column_id', None)
         column_changed = (not created) and (old_column_id != instance.column_id)
         priority_changed = getattr(instance, '_priority_changed', False)
         just_completed   = getattr(instance, '_just_completed', False)
         assignment_changed = getattr(instance, '_assignment_changed', False)
 
-        for rule in automations:
-            fired = False
-
-            # --- Trigger: moved_to_column ---
-            if rule.trigger_type == 'moved_to_column' and column_changed:
-                col_name = instance.column.name.lower()
-                if rule.trigger_value.lower() in col_name:
-                    fired = True
-
-            # --- Trigger: task_overdue ---
-            elif rule.trigger_type == 'task_overdue':
-                if (
-                    instance.due_date
-                    and instance.due_date < now
-                    and instance.progress < 100
-                ):
-                    fired = True
-
-            # --- Trigger: task_created ---
-            elif rule.trigger_type == 'task_created' and created:
-                fired = True
-
-            # --- Trigger: task_completed ---
-            elif rule.trigger_type == 'task_completed' and just_completed:
-                fired = True
-
-            # --- Trigger: priority_changed ---
-            elif rule.trigger_type == 'priority_changed' and priority_changed:
-                if instance.priority.lower() == rule.trigger_value.lower():
-                    fired = True
-
-            # --- Trigger: task_assigned ---
-            elif rule.trigger_type == 'task_assigned' and assignment_changed and instance.assigned_to:
-                fired = True
-
+        # ── Fire legacy BoardAutomation rules ──
+        legacy_rules = BoardAutomation.objects.filter(board=board, is_active=True)
+        for rule in legacy_rules:
+            fired = _check_trigger(rule, instance, created, column_changed,
+                                   priority_changed, just_completed, assignment_changed, now)
             if fired:
                 _apply_automation_action(instance, rule)
                 rule.run_count += 1
@@ -164,10 +128,279 @@ def run_board_automations(sender, instance, created, **kwargs):
                     last_run_at=rule.last_run_at,
                 )
 
+        # ── Fire new AutomationRule rules ──
+        new_rules = AutomationRule.objects.filter(board=board, is_active=True).exclude(
+            trigger_type__startswith='scheduled_',
+        )
+        for rule in new_rules:
+            fired = _check_trigger(rule, instance, created, column_changed,
+                                   priority_changed, just_completed, assignment_changed, now)
+            if fired:
+                actions_taken = []
+                errors = []
+
+                if rule.rule_definition:
+                    # Walk the JSON rule_definition tree
+                    _execute_rule_tree(rule.rule_definition, instance, rule, actions_taken, errors)
+                else:
+                    # Legacy single trigger/action
+                    try:
+                        _apply_automation_action(instance, rule)
+                        actions_taken.append(f"{rule.action_type}: {rule.action_value}")
+                    except Exception as e:
+                        errors.append(str(e))
+
+                rule.run_count += 1
+                rule.last_run_at = now
+                AutomationRule.objects.filter(pk=rule.pk).update(
+                    run_count=rule.run_count,
+                    last_run_at=rule.last_run_at,
+                )
+
+                # Write audit log
+                try:
+                    AutomationLog.objects.create(
+                        rule=rule,
+                        trigger_event=rule.trigger_type,
+                        task_affected=instance,
+                        actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                        outcome='failed' if errors else 'passed',
+                        error_detail='; '.join(errors) if errors else '',
+                    )
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("Failed to write AutomationLog")
+
     except Exception:
         # Never let automations crash core task saves
         import logging
-        logging.getLogger(__name__).exception("BoardAutomation runner failed silently")
+        logging.getLogger(__name__).exception("Automation runner failed silently")
+
+
+def _check_trigger(rule, task, created, column_changed, priority_changed,
+                   just_completed, assignment_changed, now):
+    """Check whether a rule's trigger matches the current task save event."""
+    trigger_type = rule.trigger_type
+
+    if trigger_type == 'moved_to_column' and column_changed:
+        col_name = task.column.name.lower()
+        trigger_val = (rule.trigger_value or '').lower()
+        if trigger_val in col_name:
+            return True
+
+    elif trigger_type == 'task_overdue':
+        if task.due_date and task.due_date < now and task.progress < 100:
+            return True
+
+    elif trigger_type == 'task_created' and created:
+        return True
+
+    elif trigger_type == 'task_completed' and just_completed:
+        return True
+
+    elif trigger_type == 'priority_changed' and priority_changed:
+        trigger_val = (rule.trigger_value or '').lower()
+        if not trigger_val or task.priority.lower() == trigger_val:
+            return True
+
+    elif trigger_type == 'task_assigned' and assignment_changed and task.assigned_to:
+        return True
+
+    return False
+
+
+def _execute_rule_tree(node, task, rule, actions_taken, errors):
+    """
+    Recursively walk the rule_definition JSON tree, evaluate conditions,
+    and execute actions.  Fail-and-continue: individual action failures
+    are logged but do not stop remaining actions.
+    """
+    from django.utils import timezone as tz
+
+    node_type = node.get('type', '')
+    block_type = node.get('block_type', '')
+    config = node.get('config', {})
+
+    if node_type == 'trigger':
+        # Trigger already matched — process children
+        for child in node.get('children', []):
+            _execute_rule_tree(child, task, rule, actions_taken, errors)
+
+    elif node_type == 'condition':
+        # Evaluate the condition
+        condition_met = _evaluate_condition(block_type, config, task)
+        if condition_met:
+            for child in node.get('children', []):
+                _execute_rule_tree(child, task, rule, actions_taken, errors)
+        else:
+            for child in node.get('else_children', []):
+                _execute_rule_tree(child, task, rule, actions_taken, errors)
+
+    elif node_type == 'action':
+        try:
+            _execute_action(block_type, config, task, rule)
+            action_desc = f"{block_type}"
+            if config.get('value'):
+                action_desc += f": {config['value']}"
+            actions_taken.append(action_desc)
+        except Exception as e:
+            errors.append(f"{block_type} failed: {e}")
+
+        # Continue to chained actions
+        for child in node.get('children', []):
+            _execute_rule_tree(child, task, rule, actions_taken, errors)
+
+
+def _evaluate_condition(block_type, config, task):
+    """Evaluate a condition block against a task. Returns True/False."""
+    from django.utils import timezone as tz
+
+    if block_type == 'assignee_is':
+        operator = config.get('operator', 'is')
+        value = config.get('value', '')
+        if operator == 'is_empty':
+            return task.assigned_to is None
+        elif operator == 'is_not_empty':
+            return task.assigned_to is not None
+        elif operator == 'is':
+            return task.assigned_to and task.assigned_to.username == value
+        elif operator == 'is_not':
+            return not task.assigned_to or task.assigned_to.username != value
+
+    elif block_type == 'priority_equals':
+        return task.priority.lower() == config.get('value', '').lower()
+
+    elif block_type == 'column_equals':
+        if task.column:
+            return task.column.name.lower() == config.get('value', '').lower()
+        return False
+
+    elif block_type == 'due_date_within':
+        if task.due_date:
+            days = int(config.get('days', 0))
+            return task.due_date <= tz.now() + tz.timedelta(days=days)
+        return False
+
+    elif block_type == 'task_has_label':
+        label_name = config.get('value', '')
+        return task.labels.filter(name__iexact=label_name).exists()
+
+    elif block_type == 'all_children_complete':
+        children = task.subtasks.all() if hasattr(task, 'subtasks') else None
+        if children is None:
+            from kanban.models import Task as TaskModel
+            children = TaskModel.objects.filter(parent_task=task)
+        if not children.exists():
+            return False
+        return not children.filter(progress__lt=100).exists()
+
+    elif block_type == 'progress_gte':
+        threshold = int(config.get('value', 100))
+        return (task.progress or 0) >= threshold
+
+    elif block_type == 'stale_high_priority':
+        if task.priority not in ('high', 'urgent'):
+            return False
+        days_stale = int(config.get('days_stale', 3))
+        if hasattr(task, 'updated_at') and task.updated_at:
+            return task.updated_at < tz.now() - tz.timedelta(days=days_stale)
+        return False
+
+    return False
+
+
+def _execute_action(block_type, config, task, rule):
+    """Execute a single action block against a task."""
+    from django.utils import timezone as tz
+    from kanban.models import Task as TaskModel
+
+    VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
+
+    if block_type == 'set_priority':
+        new_priority = config.get('value', '').lower()
+        if new_priority in VALID_PRIORITIES and task.priority != new_priority:
+            TaskModel.objects.filter(pk=task.pk).update(priority=new_priority)
+
+    elif block_type == 'add_label':
+        from kanban.models import TaskLabel
+        label = TaskLabel.objects.filter(
+            board=task.column.board,
+            name__iexact=config.get('value', ''),
+        ).first()
+        if label:
+            task.labels.add(label)
+
+    elif block_type == 'remove_label':
+        from kanban.models import TaskLabel
+        label = TaskLabel.objects.filter(
+            board=task.column.board,
+            name__iexact=config.get('value', ''),
+        ).first()
+        if label:
+            task.labels.remove(label)
+
+    elif block_type == 'send_notification':
+        _send_automation_notification(task, rule, config)
+
+    elif block_type == 'move_to_column':
+        from kanban.models import Column
+        target_col = Column.objects.filter(
+            board=task.column.board,
+            name__icontains=config.get('value', ''),
+        ).exclude(pk=task.column_id).first()
+        if target_col:
+            TaskModel.objects.filter(pk=task.pk).update(column=target_col)
+
+    elif block_type == 'assign_to_user':
+        from django.contrib.auth.models import User as AuthUser
+        value = config.get('value', '')
+        if value == '__rule_owner__':
+            user = rule.created_by
+        else:
+            user = AuthUser.objects.filter(username=value).first()
+        if user:
+            TaskModel.objects.filter(pk=task.pk).update(assigned_to=user)
+
+    elif block_type in ('set_due_date', 'set_due_date_relative'):
+        try:
+            days = int(config.get('value', 0))
+            new_due = tz.now() + tz.timedelta(days=days)
+            TaskModel.objects.filter(pk=task.pk).update(due_date=new_due)
+        except (ValueError, TypeError):
+            pass
+
+    elif block_type == 'close_task':
+        from kanban.models import Column
+        done_col = Column.objects.filter(
+            board=task.column.board,
+        ).filter(
+            Q(name__icontains='done') | Q(name__icontains='complete')
+        ).first()
+        if done_col:
+            TaskModel.objects.filter(pk=task.pk).update(column=done_col, progress=100)
+
+    elif block_type == 'create_comment':
+        from kanban.models import Comment
+        text = config.get('text', config.get('value', ''))
+        if text:
+            Comment.objects.create(
+                task=task,
+                author=rule.created_by,
+                content=text,
+            )
+
+    elif block_type == 'log_time_entry':
+        try:
+            from kanban.budget_models import TimeEntry
+            hours = float(config.get('value', config.get('hours', 1)))
+            TimeEntry.objects.create(
+                task=task,
+                user=rule.created_by or task.assigned_to,
+                hours=hours,
+                notes=f'Auto-logged by automation "{rule.name}"',
+            )
+        except Exception:
+            pass
 
 
 def _apply_automation_action(task, rule):
@@ -218,7 +451,7 @@ def _apply_automation_action(task, rule):
             log.warning("BoardAutomation set_due_date: couldn't parse days from '%s'", rule.action_value)
 
 
-def _send_automation_notification(task, rule):
+def _send_automation_notification(task, rule, config=None):
     """Send in-app notifications triggered by an automation rule."""
     try:
         from messaging.models import Notification
@@ -230,7 +463,12 @@ def _send_automation_notification(task, rule):
         if not sender:
             return
 
-        recipient_key = rule.action_value.strip().lower()  # assignee / board_members / creator
+        # config['value'] takes precedence over rule.action_value
+        recipient_key = ''
+        if config and config.get('value'):
+            recipient_key = config['value'].strip().lower()
+        elif rule.action_value:
+            recipient_key = rule.action_value.strip().lower()
         recipients = []
 
         if recipient_key == 'assignee' and task.assigned_to:

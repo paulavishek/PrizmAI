@@ -1,6 +1,6 @@
 """
 Utility functions for managing the django-celery-beat PeriodicTask
-records linked to ScheduledAutomation instances.
+records linked to ScheduledAutomation or AutomationRule instances.
 """
 import json
 import logging
@@ -112,3 +112,65 @@ def toggle_periodic_task(scheduled_automation):
     if sa.periodic_task:
         sa.periodic_task.enabled = sa.is_active
         sa.periodic_task.save(update_fields=['enabled'])
+
+
+# ───────────────────────────────────────────────────────
+# AutomationRule equivalents (used by the new engine)
+# ───────────────────────────────────────────────────────
+
+def create_periodic_task_for_rule(rule):
+    """
+    Create a CrontabSchedule + PeriodicTask for an AutomationRule
+    with a scheduled trigger type.
+    """
+    if not rule.scheduled_time:
+        raise ValueError("AutomationRule must have scheduled_time set")
+
+    crontab_kwargs = {
+        'minute': str(rule.scheduled_time.minute),
+        'hour': str(rule.scheduled_time.hour),
+        'day_of_week': '*',
+        'day_of_month': '*',
+        'month_of_year': '*',
+    }
+    if rule.schedule_type == 'weekly' and rule.scheduled_day is not None:
+        crontab_kwargs['day_of_week'] = str(rule.scheduled_day)
+    elif rule.schedule_type == 'monthly' and rule.scheduled_day is not None:
+        crontab_kwargs['day_of_month'] = str(rule.scheduled_day)
+
+    schedule, _ = CrontabSchedule.objects.get_or_create(**crontab_kwargs)
+
+    task_name = f'automation_rule_{rule.id}'
+    periodic_task = PeriodicTask.objects.create(
+        crontab=schedule,
+        name=task_name,
+        task='kanban.tasks.automation_tasks.run_automation_rule',
+        args=json.dumps([rule.id]),
+        enabled=rule.is_active,
+    )
+
+    rule.periodic_task = periodic_task
+    rule.save(update_fields=['periodic_task'])
+
+    logger.info("Created PeriodicTask '%s' for AutomationRule pk=%s", task_name, rule.pk)
+    return periodic_task
+
+
+def delete_periodic_task_for_rule(rule):
+    """
+    Delete the PeriodicTask linked to an AutomationRule.
+    """
+    pt = rule.periodic_task
+    if pt is None:
+        return
+
+    crontab = pt.crontab
+
+    rule.periodic_task = None
+    rule.save(update_fields=['periodic_task'])
+
+    pt.delete()
+    logger.info("Deleted PeriodicTask pk=%s for AutomationRule pk=%s", pt.pk, rule.pk)
+
+    if crontab and not PeriodicTask.objects.filter(crontab=crontab).exists():
+        crontab.delete()
