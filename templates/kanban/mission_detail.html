@@ -1,250 +1,65 @@
-{% extends 'base.html' %}
+{# Mission Detail — extends the shared strategic skeleton #}
+{% extends 'kanban/partials/strategic_detail_base.html' %}
 
-{% block title %}{{ mission.name }} - Mission - PrizmAI{% endblock %}
-
-{% block extra_css %}
-<style>
-    /* Dual-axis health pills (shared with dashboard) */
-    .status-pill, .risk-pill {
-        display:inline-flex; align-items:center; gap:4px;
-        font-size:0.68rem; font-weight:700; padding:0.2em 0.65em;
-        border-radius:12px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;
-    }
-    .status-pill .pill-dot, .risk-pill .pill-dot {
-        width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0;
-    }
-    .status-pill.on-track  { background:#d1fae5; color:#065f46; }
-    .status-pill.on-track .pill-dot  { background:#10b981; }
-    .status-pill.at-risk   { background:#fef3c7; color:#92400e; }
-    .status-pill.at-risk .pill-dot   { background:#f59e0b; }
-    .status-pill.late      { background:#fee2e2; color:#7f1d1d; }
-    .status-pill.late .pill-dot      { background:#ef4444; }
-    .risk-pill.low    { background:#d1fae5; color:#065f46; }
-    .risk-pill.low .pill-dot    { background:#10b981; }
-    .risk-pill.medium { background:#fef3c7; color:#92400e; }
-    .risk-pill.medium .pill-dot { background:#f59e0b; }
-    .risk-pill.high   { background:#fee2e2; color:#7f1d1d; }
-    .risk-pill.high .pill-dot   { background:#ef4444; }
-
-    .board-sub-item { border-left:3px solid #e3e6f0; padding-left:.75rem; margin-bottom:.5rem; }
-    .board-sub-item:last-child { margin-bottom:0; }
-</style>
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Goals</a></li>
+{% if mission.organization_goal %}
+<li class="breadcrumb-item"><a href="{% url 'goal_detail' mission.organization_goal.id %}">{{ mission.organization_goal.name|truncatechars:30 }}</a></li>
+{% endif %}
+<li class="breadcrumb-item"><a href="{% url 'mission_list' %}">Missions</a></li>
+<li class="breadcrumb-item active">{{ mission.name|truncatechars:40 }}</li>
 {% endblock %}
 
-{% block content %}
-<!-- Breadcrumb -->
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Goals</a></li>
-        {% if mission.organization_goal %}
-        <li class="breadcrumb-item"><a href="{% url 'goal_detail' mission.organization_goal.id %}">{{ mission.organization_goal.name|truncatechars:30 }}</a></li>
-        {% endif %}
-        <li class="breadcrumb-item"><a href="{% url 'mission_list' %}">Missions</a></li>
-        <li class="breadcrumb-item active">{{ mission.name }}</li>
-    </ol>
-</nav>
+{% block header_icon %}<i class="fas fa-bullseye text-primary me-2"></i>{% endblock %}
 
+{% block header_subtitle %}
 {% if mission.organization_goal %}
-<!-- Parent Organization Goal banner -->
-<div class="alert py-2 mb-3" role="alert" style="background:linear-gradient(135deg,#fffbea,#fff);border:1px solid #ffe08a;">
-    <div class="d-flex align-items-center gap-2">
-        <i class="fas fa-trophy text-warning"></i>
-        <small class="text-muted">
-            <strong>Contributing to:</strong>
-            <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-warning fw-semibold text-decoration-none">
-                {{ mission.organization_goal.name }}
-            </a>
-            {% if mission.organization_goal.target_metric %}
-            <span class="badge bg-warning text-dark ms-2">{{ mission.organization_goal.target_metric }}</span>
-            {% endif %}
-        </small>
-    </div>
+<div class="mb-1">
+    <span class="badge bg-warning bg-opacity-25 text-dark px-2 py-1" style="font-size:0.72rem;">
+        <i class="fas fa-trophy text-warning me-1"></i>
+        Contributing to: <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-decoration-none text-warning fw-semibold">{{ mission.organization_goal.name|truncatechars:50 }}</a>
+    </span>
 </div>
 {% endif %}
+{% endblock %}
 
-<!-- Mission header -->
-<div class="card shadow-sm mb-4" style="border-left: 4px solid #4e73df;">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <i class="fas fa-bullseye text-primary fa-lg"></i>
-                    <h2 class="h4 mb-0">{{ mission.name }}</h2>
-                    {% if mission.status == 'active' %}
-                        <span class="badge bg-success">Active</span>
-                    {% elif mission.status == 'completed' %}
-                        <span class="badge bg-primary">Completed</span>
-                    {% else %}
-                        <span class="badge bg-warning text-dark">On Hold</span>
-                    {% endif %}
-                </div>
-                <p class="text-muted mb-1 small">
-                    <i class="fas fa-tag me-1"></i><strong>Mission</strong> &bull;
-                    Created by {{ mission.created_by.get_full_name|default:mission.created_by.username }} on {{ mission.created_at|date:"M d, Y" }}
-                </p>
-                {% if mission.description %}
-                <p class="mb-0 mt-2">{{ mission.description }}</p>
-                {% endif %}
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <a href="{% url 'edit_mission' mission.id %}" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-edit me-1"></i>Edit
-                </a>
-                <a href="{% url 'create_strategy' mission.id %}" class="btn btn-sm btn-success">
-                    <i class="fas fa-plus me-1"></i>New Strategy
-                </a>
-                <a href="{% url 'delete_mission' mission.id %}" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-trash me-1"></i>Delete
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% block header_actions %}
+<a href="{% url 'edit_mission' mission.id %}" class="btn btn-sm btn-outline-secondary">
+    <i class="fas fa-edit me-1"></i>Edit
+</a>
+<a href="{% url 'create_strategy' mission.id %}" class="btn btn-sm btn-success">
+    <i class="fas fa-plus me-1"></i>New Strategy
+</a>
+<a href="{% url 'delete_mission' mission.id %}" class="btn btn-sm btn-outline-danger">
+    <i class="fas fa-trash me-1"></i>Delete
+</a>
+{% endblock %}
 
-<!-- Mission Health Summary Bar -->
-{% if mission_total_tasks %}
-<div class="card shadow-sm mb-4" style="border-radius:12px;">
-    <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
-        <span class="fw-semibold small text-muted"><i class="fas fa-heartbeat me-1"></i>Health</span>
-        <span class="status-pill {{ mission_schedule_status|default:'on_track' }}">
-            <span class="pill-dot"></span>{{ mission_schedule_status|default:"on_track"|title }}
-        </span>
-        <span class="risk-pill {{ mission_risk_level|default:'low' }}">
-            <span class="pill-dot"></span>{{ mission_risk_level|default:"low"|title }} Risk
-        </span>
-        <span class="text-muted small">|</span>
-        <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width:300px;">
-            <div class="progress flex-grow-1" style="height:8px; border-radius:4px;">
-                <div class="progress-bar bg-success" style="width:{{ mission_completion_pct }}%"></div>
-            </div>
-            <small class="fw-bold text-nowrap">{{ mission_completion_pct }}%</small>
-        </div>
-        <small class="text-muted">{{ mission_done_tasks }}/{{ mission_total_tasks }} tasks done</small>
-    </div>
+{% block header_meta %}
+{% if mission.due_date %}
+<div class="col-auto">
+    <i class="fas fa-calendar-alt me-1"></i>Due: {{ mission.due_date|date:"F j, Y" }}
+    {% if days_remaining is not None %}
+    <span class="ms-1 {% if days_remaining < 0 %}text-danger{% elif days_remaining < 14 %}text-warning{% endif %}">
+        ({% if days_remaining < 0 %}{{ days_remaining_abs }} day{{ days_remaining_abs|pluralize }} overdue{% else %}{{ days_remaining }} day{{ days_remaining|pluralize }} left{% endif %})
+    </span>
+    {% endif %}
 </div>
 {% endif %}
-
-<!-- AI Executive Summary card -->
-<div class="card shadow-sm mb-4" id="mission-ai-summary-card-{{ mission.id }}">
-    <div class="card-header d-flex align-items-center justify-content-between py-2">
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-robot text-info"></i>
-            <span class="fw-semibold">AI Executive Summary</span>
-            {% if mission.organization_goal %}
-            <span class="badge ms-1 d-flex align-items-center gap-1"
-                  style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.65rem; padding:3px 7px;">
-                <i class="fas fa-trophy" style="font-size:0.6rem;"></i>
-                Goal-Aware
-            </span>
-            <small class="text-muted" style="font-size:0.75rem;">
-                — evaluates progress toward
-                <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-warning fw-semibold text-decoration-none">
-                    {{ mission.organization_goal.name|truncatechars:50 }}
-                </a>
-            </small>
-            {% endif %}
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            {% if mission.ai_summary_generated_at %}
-            <small class="text-muted" id="mission-detail-ts-{{ mission.id }}">
-                <i class="far fa-clock me-1"></i>{{ mission.ai_summary_generated_at|date:"M d, Y H:i" }}
-            </small>
-            {% endif %}
-            <button class="btn btn-sm btn-outline-info generate-summary-btn"
-                    id="mission-detail-gen-btn-{{ mission.id }}"
-                    data-level="mission"
-                    data-id="{{ mission.id }}"
-                    data-url="{% url 'generate_mission_summary_api' mission.id %}"
-                    title="{% if mission.organization_goal %}Generates a goal-aware summary evaluating mission progress against '{{ mission.organization_goal.name }}'{% else %}Generate AI executive summary from all strategy summaries{% endif %}">
-                <i class="fas fa-robot me-1"></i>
-                {% if mission.organization_goal %}
-                    <i class="fas fa-trophy text-warning me-1" style="font-size:0.7rem;"></i>Generate Goal-Aware Summary
-                {% else %}
-                    ✨ Generate Summary
-                {% endif %}
-            </button>
-        </div>
-    </div>
-    <div class="card-body py-3">
-        {% if mission.ai_summary %}
-        <p class="mb-0" id="mission-detail-summary-text-{{ mission.id }}">{{ mission.ai_summary }}</p>
-        {% else %}
-        <p class="text-muted fst-italic mb-0 small" id="mission-detail-summary-text-{{ mission.id }}">
-            <i class="fas fa-info-circle me-1"></i>
-            No AI summary yet.
-            {% if mission.organization_goal %}
-                Click <strong>Generate Goal-Aware Summary</strong> to produce an assessment that explicitly
-                evaluates whether this mission is moving the needle on the
-                <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-warning fw-semibold">
-                    {{ mission.organization_goal.name }}
-                </a> goal.
-            {% else %}
-                Click <strong>Generate Summary</strong> to analyse all strategy summaries and produce an
-                executive briefing. Link this mission to an
-                <a href="{% url 'goal_list' %}">Organization Goal</a> to make the summary goal-aware.
-            {% endif %}
-        </p>
-        {% endif %}
-    </div>
-</div>
-
-<!-- Pre-Mortem Board Risk Overview -->
-{% if premortem_boards %}
-<div class="card shadow-sm mb-4">
-    <div class="card-header d-flex align-items-center gap-2 py-2">
-        <i class="fas fa-shield-alt text-danger"></i>
-        <span class="fw-semibold">Board Risk Overview</span>
-        <small class="text-muted">(Pre-Mortem Summary)</small>
-    </div>
-    <div class="card-body py-2">
-        <div class="table-responsive">
-            <table class="table table-sm mb-0">
-                <thead>
-                    <tr>
-                        <th>Board Name</th>
-                        <th>Risk Level</th>
-                        <th>Last Analyzed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in premortem_boards %}
-                    <tr>
-                        <td><a href="{% url 'board_detail' item.board.id %}">{{ item.board.name }}</a></td>
-                        <td>
-                            {% if item.risk_level == 'high' %}
-                                <span class="badge bg-danger">High</span>
-                            {% elif item.risk_level == 'medium' %}
-                                <span class="badge bg-warning text-dark">Medium</span>
-                            {% elif item.risk_level == 'low' %}
-                                <span class="badge bg-success">Low</span>
-                            {% else %}
-                                <span class="text-muted">— Not run</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if item.created_at %}
-                                {{ item.created_at|timesince }} ago
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% if premortem_high_risk_count > 0 %}
-        <div class="alert alert-warning py-2 mt-2 mb-0 small">
-            <i class="fas fa-exclamation-triangle me-1"></i>
-            {{ premortem_high_risk_count }} of {{ premortem_total_boards }} board{{ premortem_total_boards|pluralize }} {{ premortem_high_risk_count|pluralize:"is,are" }} High Risk. Consider reviewing before proceeding.
-        </div>
-        {% endif %}
-    </div>
-</div>
+{% if mission.owner %}
+<div class="col-auto"><i class="fas fa-user me-1"></i>Owner: {{ mission.owner.get_full_name|default:mission.owner.username }}</div>
 {% endif %}
+<div class="col-auto">
+    <i class="fas fa-user-circle me-1"></i>Created by {{ mission.created_by.get_full_name|default:mission.created_by.username }}
+    on {{ mission.created_at|date:"M d, Y" }}
+</div>
+{% endblock %}
 
-<!-- Strategies -->
+{# ================================================================ #}
+{# OVERVIEW TAB                                                      #}
+{# ================================================================ #}
+{% block tab_overview %}
+{# Strategies section #}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0">
         <i class="fas fa-lightbulb text-success me-2"></i>Strategies
@@ -261,58 +76,46 @@
         <div class="col-lg-6 mb-4">
             <div class="card h-100 shadow-sm" style="border-left:3px solid #1cc88a; border-radius:12px;">
                 <div class="card-body">
-                    <!-- Strategy header -->
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h5 class="card-title mb-0">
                             <i class="fas fa-lightbulb text-success me-1"></i>{{ s.strategy.name }}
                         </h5>
-                        {% if s.strategy.status == 'active' %}
-                            <span class="badge bg-success">Active</span>
-                        {% elif s.strategy.status == 'completed' %}
-                            <span class="badge bg-primary">Completed</span>
-                        {% else %}
-                            <span class="badge bg-warning text-dark">On Hold</span>
-                        {% endif %}
+                        <span class="status-badge {{ s.strategy.status }}">{{ s.strategy.get_status_display }}</span>
                     </div>
 
                     {% if s.strategy.description %}
                     <p class="card-text text-muted small mb-2">{{ s.strategy.description|truncatechars:120 }}</p>
                     {% endif %}
 
-                    <!-- Health pills -->
-                    <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
-                        <span class="status-pill {{ s.schedule_status }}">
-                            <span class="pill-dot"></span>{{ s.schedule_status|title }}
+                    {# Health score + progress #}
+                    {% if s.health_score is not None %}
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="fw-bold small {% if s.health_score >= 70 %}text-success{% elif s.health_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ s.health_score }}
                         </span>
-                        <span class="risk-pill {{ s.risk_level }}">
-                            <span class="pill-dot"></span>{{ s.risk_level|title }} Risk
-                        </span>
-                        {% if s.total_tasks %}
-                        <div class="d-flex align-items-center gap-1 ms-auto" style="max-width:140px;">
-                            <div class="progress flex-grow-1" style="height:6px; border-radius:3px;">
-                                <div class="progress-bar bg-success" style="width:{{ s.completion_pct }}%"></div>
-                            </div>
-                            <small class="fw-bold text-nowrap">{{ s.completion_pct }}%</small>
+                        <div class="progress flex-grow-1 progress-sm">
+                            <div class="progress-bar {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                 style="width:{{ s.completion_pct }}%"></div>
                         </div>
-                        {% endif %}
+                        <small class="fw-bold text-nowrap">{{ s.completion_pct }}%</small>
                     </div>
+                    {% endif %}
 
-                    <!-- Boards sub-list -->
+                    {# Boards sub-list #}
                     {% if s.boards %}
                     <div class="mb-3">
                         <small class="text-muted fw-semibold d-block mb-2">
                             <i class="fas fa-clipboard-list me-1 text-info"></i>{{ s.board_count }} Board{{ s.board_count|pluralize }}
                         </small>
                         {% for bi in s.boards %}
-                        <div class="board-sub-item">
+                        <div style="border-left:3px solid #e3e6f0; padding-left:.75rem; margin-bottom:.5rem;">
                             <div class="d-flex align-items-center gap-2">
                                 <a href="{% url 'board_detail' bi.board.id %}" class="fw-semibold small text-decoration-none">{{ bi.board.name }}</a>
-                                <span class="status-pill {{ bi.schedule_status }}" style="font-size:.6rem; padding:.1em .5em;">
-                                    <span class="pill-dot" style="width:5px; height:5px;"></span>{{ bi.schedule_status|title }}
+                                {% if bi.health_score is not None %}
+                                <span class="small {% if bi.health_score >= 70 %}text-success{% elif bi.health_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ bi.health_score }}
                                 </span>
-                                <span class="risk-pill {{ bi.risk_level }}" style="font-size:.6rem; padding:.1em .5em;">
-                                    <span class="pill-dot" style="width:5px; height:5px;"></span>{{ bi.risk_level|title }}
-                                </span>
+                                {% endif %}
                                 <div class="d-flex align-items-center gap-1 ms-auto" style="max-width:100px;">
                                     <div class="progress flex-grow-1" style="height:4px; border-radius:2px;">
                                         <div class="progress-bar bg-success" style="width:{{ bi.completion_pct }}%"></div>
@@ -338,16 +141,10 @@
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{% url 'strategy_detail' mission.id s.strategy.id %}">
-                                <i class="fas fa-eye me-2"></i>View
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'edit_strategy' mission.id s.strategy.id %}">
-                                <i class="fas fa-edit me-2"></i>Edit
-                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'strategy_detail' mission.id s.strategy.id %}"><i class="fas fa-eye me-2"></i>View</a></li>
+                            <li><a class="dropdown-item" href="{% url 'edit_strategy' mission.id s.strategy.id %}"><i class="fas fa-edit me-2"></i>Edit</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="{% url 'delete_strategy' mission.id s.strategy.id %}">
-                                <i class="fas fa-trash me-2"></i>Delete
-                            </a></li>
+                            <li><a class="dropdown-item text-danger" href="{% url 'delete_strategy' mission.id s.strategy.id %}"><i class="fas fa-trash me-2"></i>Delete</a></li>
                         </ul>
                     </div>
                 </div>
@@ -361,8 +158,7 @@
                 <i class="fas fa-lightbulb fa-4x text-gray-300 mb-3"></i>
                 <h5 class="text-muted mb-2">No Strategies yet</h5>
                 <p class="text-muted mb-4">
-                    Add a <strong>Strategy</strong> to define how you plan to address the Mission.<br>
-                    <small>Example: "Develop Security Software" or "Run Market Research"</small>
+                    Add a <strong>Strategy</strong> to define how you plan to address the Mission.
                 </p>
                 <a href="{% url 'create_strategy' mission.id %}" class="btn btn-success">
                     <i class="fas fa-plus fa-sm me-1"></i>Create First Strategy
@@ -371,5 +167,165 @@
         </div>
     </div>
     {% endif %}
+</div>
+
+{# Pre-Mortem Board Risk Overview #}
+{% if premortem_boards %}
+<div class="card shadow-sm mb-3 mt-2">
+    <div class="card-header d-flex align-items-center gap-2 py-2">
+        <i class="fas fa-shield-alt text-danger"></i>
+        <span class="fw-semibold">Board Risk Overview</span>
+        <small class="text-muted">(Pre-Mortem)</small>
+    </div>
+    <div class="card-body py-2">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Board</th><th>Risk</th><th>Last Analyzed</th></tr></thead>
+                <tbody>
+                    {% for item in premortem_boards %}
+                    <tr>
+                        <td><a href="{% url 'board_detail' item.board.id %}">{{ item.board.name }}</a></td>
+                        <td>
+                            {% if item.risk_level == 'high' %}<span class="badge bg-danger">High</span>
+                            {% elif item.risk_level == 'medium' %}<span class="badge bg-warning text-dark">Medium</span>
+                            {% elif item.risk_level == 'low' %}<span class="badge bg-success">Low</span>
+                            {% else %}<span class="text-muted">— Not run</span>{% endif %}
+                        </td>
+                        <td>{% if item.created_at %}{{ item.created_at|timesince }} ago{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if premortem_high_risk_count > 0 %}
+        <div class="alert alert-warning py-2 mt-2 mb-0 small">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            {{ premortem_high_risk_count }} of {{ premortem_total_boards }} board{{ premortem_total_boards|pluralize }} {{ premortem_high_risk_count|pluralize:"is,are" }} High Risk.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{# ================================================================ #}
+{# UPDATES TAB                                                       #}
+{# ================================================================ #}
+{% block tab_updates %}
+{% if updates %}
+<div id="updates-feed">
+    {% for u in updates %}
+    <div class="update-entry">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="update-status {{ u.status }}">{{ u.get_status_display }}</span>
+            <strong class="small">{{ u.author.get_full_name|default:u.author.username }}</strong>
+            <small class="text-muted ms-auto">{{ u.created_at|date:"M d, Y H:i" }}</small>
+        </div>
+        <p class="mb-0 small">{{ u.message }}</p>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-muted small">No updates yet.</p>
+{% endif %}
+{% endblock %}
+
+{# ================================================================ #}
+{# AI INSIGHTS TAB                                                   #}
+{# ================================================================ #}
+{% block tab_ai %}
+<div class="card border-0 shadow-sm mb-3" id="mission-ai-summary-card-{{ mission.id }}">
+    <div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-robot text-info"></i>
+            <span class="fw-semibold small">AI Executive Summary</span>
+            {% if mission.organization_goal %}
+            <span class="badge ms-1" style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.6rem;">
+                <i class="fas fa-trophy" style="font-size:0.55rem;"></i> Goal-Aware
+            </span>
+            {% endif %}
+        </div>
+        {% if mission.ai_summary_generated_at %}
+        <small class="text-muted"><i class="far fa-clock me-1"></i>{{ mission.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
+        {% endif %}
+    </div>
+    <div class="card-body py-2" id="ai-summary-body">
+        {% if mission.ai_summary %}
+        <p class="mb-0 small">{{ mission.ai_summary }}</p>
+        {% else %}
+        <p class="text-muted fst-italic mb-0 small">
+            <i class="fas fa-info-circle me-1"></i>No AI summary yet.
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{# ================================================================ #}
+{# VERSION HISTORY TAB                                               #}
+{# ================================================================ #}
+{% block tab_versions %}
+{% if versions %}
+<div class="ps-2">
+    {% for v in versions %}
+    <div class="version-entry">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="fw-bold small">v{{ v.version_number }}</span>
+            <span class="version-reason {{ v.change_reason }}">{{ v.get_change_reason_display }}</span>
+            <small class="text-muted ms-auto">{{ v.changed_at|date:"M d, Y H:i" }}</small>
+        </div>
+        <div class="small text-muted mb-1">By {{ v.changed_by.get_full_name|default:v.changed_by.username }}</div>
+        <div class="small">
+            <strong>{{ v.name }}</strong>
+            {% if v.description %}<span class="text-muted ms-1">— {{ v.description|truncatechars:80 }}</span>{% endif %}
+        </div>
+        {% if v.change_notes %}
+        <div class="small text-muted mt-1"><em>{{ v.change_notes }}</em></div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-muted small">No version history yet.</p>
+{% endif %}
+{% endblock %}
+
+{# ================================================================ #}
+{# SIDEBAR                                                          #}
+{# ================================================================ #}
+{% block sidebar %}
+{% if mission.organization_goal %}
+<div class="sidebar-section">
+    <div class="sidebar-label">Parent Goal</div>
+    <div class="sidebar-value">
+        <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-decoration-none text-warning fw-semibold">
+            <i class="fas fa-trophy me-1"></i>{{ mission.organization_goal.name|truncatechars:30 }}
+        </a>
+    </div>
+</div>
+{% endif %}
+
+{% if mission.due_date %}
+<div class="sidebar-section">
+    <div class="sidebar-label">Due Date</div>
+    <div class="sidebar-value">{{ mission.due_date|date:"M d, Y" }}</div>
+    {% if days_remaining is not None %}
+    <small class="{% if days_remaining < 0 %}text-danger{% elif days_remaining < 14 %}text-warning{% else %}text-muted{% endif %}">
+        {% if days_remaining < 0 %}{{ days_remaining_abs }} day{{ days_remaining_abs|pluralize }} overdue{% else %}{{ days_remaining }} day{{ days_remaining|pluralize }} remaining{% endif %}
+    </small>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if mission.owner %}
+<div class="sidebar-section">
+    <div class="sidebar-label">Owner</div>
+    <div class="sidebar-value">{{ mission.owner.get_full_name|default:mission.owner.username }}</div>
+</div>
+{% endif %}
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Strategies</div>
+    <div class="sidebar-value">{{ strategy_tree|length }}</div>
 </div>
 {% endblock %}

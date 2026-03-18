@@ -16,8 +16,195 @@ from django.utils import timezone
 from django.conf import settings as django_settings
 from datetime import timedelta
 
-from .models import OrganizationGoal, Mission, Strategy, Board, Task
+from django.contrib.contenttypes.models import ContentType
+
+from .models import (
+    OrganizationGoal, Mission, Strategy, Board, Task,
+    GoalVersion, MissionVersion, StrategyVersion,
+    StrategicUpdate, StrategicFollower,
+)
+from .forms.strategic_forms import GoalEditForm, MissionEditForm, StrategyEditForm
 from accounts.models import Organization
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+def _handle_edit_cascade(request, record, change_reason, level):
+    """
+    Post-edit cascade logic based on change_reason.
+
+    minor_tweak   → save silently (stale flag handled by timestamp comparison)
+    scope_change  → notify board members + trigger AI regeneration (this level + one above)
+    strategic_pivot → same as scope_change + Spectra warning about linked boards
+    """
+    if change_reason == 'minor_tweak':
+        return  # Nothing extra — stale indicator derives from timestamps
+
+    # Collect board members to notify
+    board_members = set()
+    if level == 'goal':
+        boards = Board.objects.filter(strategy__mission__organization_goal=record)
+    elif level == 'mission':
+        boards = Board.objects.filter(strategy__mission=record)
+    else:  # strategy
+        boards = Board.objects.filter(strategy=record)
+
+    for board in boards.select_related():
+        board_members.update(board.members.all())
+
+    # Send in-app notifications
+    try:
+        from messaging.models import Notification
+        level_display = level.capitalize()
+        for member in board_members:
+            if member == request.user:
+                continue
+            Notification.objects.create(
+                recipient=member,
+                sender=request.user,
+                notification_type='ACTIVITY',
+                text=f'{level_display} "{record.name}" was updated — review impact.',
+                action_url=record.get_absolute_url(),
+            )
+    except Exception as e:
+        logger.warning("Failed to send edit notifications: %s", e)
+
+    # Trigger AI summary regeneration at this level + one level above
+    try:
+        if level == 'strategy':
+            from kanban.tasks.ai_summary_tasks import (
+                generate_strategy_summary_task,
+                generate_mission_summary_task,
+            )
+            generate_strategy_summary_task.delay(record.id)
+            if record.mission_id:
+                generate_mission_summary_task.delay(record.mission_id)
+        elif level == 'mission':
+            from kanban.tasks.ai_summary_tasks import generate_mission_summary_task
+            generate_mission_summary_task.delay(record.id)
+            # One level above: regenerate goal summary if linked
+            if hasattr(record, 'organization_goal') and record.organization_goal_id:
+                # Goal-level summary regeneration uses the same Celery infrastructure
+                # but the goal summary task may need to be triggered via the API
+                pass
+        elif level == 'goal':
+            # Goal is the top level — no level above
+            # Regenerate goal summary (if a goal-level task exists)
+            pass
+    except Exception as e:
+        logger.warning("Failed to trigger AI regeneration: %s", e)
+
+    # Strategic pivot: generate warning about linked boards
+    if change_reason == 'strategic_pivot':
+        board_count = boards.count()
+        if board_count > 0:
+            logger.info(
+                "[StrategicPivot] %s '%s' pivoted — %d linked boards may need review.",
+                level, record.name, board_count,
+            )
+
+
+def _compute_health_score(board_ids):
+    """
+    Derive a 0–100 health score from boards using the same 4-dimension model
+    as the exit-protocol Hospice Risk Score:
+        velocity (30%), budget (25%), missed deadlines (25%), activity (20%).
+
+    Higher = healthier.  Returns (health_score_int, completion_pct, total, done).
+    When no boards / no tasks exist returns (None, 0, 0, 0).
+    """
+    if not board_ids:
+        return None, 0, 0, 0
+
+    now = timezone.now()
+    thirty_days_ago = now - timedelta(days=30)
+
+    # ---- Shared task stats ----
+    all_tasks = Task.objects.filter(column__board_id__in=board_ids, item_type='task')
+    total = all_tasks.count()
+    if total == 0:
+        return None, 0, 0, 0
+    done = all_tasks.filter(progress=100).count()
+    completion_pct = round(done / total * 100, 1)
+
+    # ---- Dimension 1: Velocity (30%) ----
+    velocity_factor = None
+    try:
+        from kanban.burndown_models import TeamVelocitySnapshot
+        snapshots = (
+            TeamVelocitySnapshot.objects
+            .filter(board_id__in=board_ids)
+            .order_by('-period_end')[:30]
+        )
+        if snapshots.count() >= 6:
+            recent = list(snapshots[:6])
+            baseline = list(snapshots[6:])
+            avg_recent = sum(s.tasks_completed for s in recent) / len(recent)
+            if baseline:
+                avg_baseline = sum(s.tasks_completed for s in baseline) / len(baseline)
+                if avg_baseline > 0:
+                    decline = ((avg_baseline - avg_recent) / avg_baseline) * 100
+                    velocity_factor = min(max(decline / 100, 0.0), 1.0)
+    except Exception:
+        pass
+
+    # ---- Dimension 2: Budget (25%) ----
+    budget_factor = None
+    try:
+        from kanban.budget_models import ProjectBudget
+        budgets = ProjectBudget.objects.filter(board_id__in=board_ids)
+        if budgets.exists():
+            spend_ratios = []
+            for b in budgets:
+                spent = b.get_budget_utilization_percent()
+                b_total = Task.objects.filter(column__board=b.board).count()
+                b_done = Task.objects.filter(column__board=b.board, completed_at__isnull=False).count()
+                b_pct = (b_done / b_total * 100) if b_total > 0 else 0
+                if spent is not None:
+                    spend_ratios.append((spent / 100) * (1 - b_pct / 100))
+            if spend_ratios:
+                budget_factor = min(max(sum(spend_ratios) / len(spend_ratios), 0.0), 1.0)
+    except Exception:
+        pass
+
+    # ---- Dimension 3: Deadlines (25%) ----
+    deadline_factor = None
+    with_deadline = all_tasks.filter(due_date__isnull=False).count()
+    if with_deadline > 0:
+        missed = all_tasks.filter(
+            due_date__lt=now, due_date__gte=thirty_days_ago,
+            completed_at__isnull=True,
+        ).count()
+        deadline_factor = min(missed / max(with_deadline * 0.3, 3), 1.0)
+
+    # ---- Dimension 4: Activity (20%) ----
+    last_activity = (
+        Task.objects.filter(column__board_id__in=board_ids)
+        .order_by('-updated_at')
+        .values_list('updated_at', flat=True)
+        .first()
+    )
+    days_inactive = (now - last_activity).days if last_activity else 30
+    activity_factor = min(days_inactive / 30, 1.0)
+
+    # ---- Weighted score (same as exit_protocol) ----
+    weights = {
+        'velocity': (0.30, velocity_factor),
+        'budget':   (0.25, budget_factor),
+        'deadline': (0.25, deadline_factor),
+        'activity': (0.20, activity_factor),
+    }
+    available = {k: v for k, v in weights.items() if v[1] is not None}
+    if len(available) < 2:
+        return round(completion_pct), completion_pct, total, done
+
+    total_weight = sum(w for w, _ in available.values())
+    risk_score = sum((w / total_weight) * f for w, f in available.values())
+    risk_score = min(max(risk_score, 0.0), 1.0)
+
+    health = round((1 - risk_score) * 100)
+    return health, completion_pct, total, done
 
 
 # ---------------------------------------------------------------------------
@@ -38,122 +225,83 @@ def goal_list(request):
 
 @login_required
 def goal_detail(request, goal_id):
-    """Show a single Organization Goal and its linked Missions with health roll-ups."""
+    """Show a single Organization Goal with 4-tab layout, health score, versions, updates, followers."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
     linked_missions = goal.missions.all().annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')
 
-    # All missions not yet linked to this goal (for the link dropdown)
+    # Missions not yet linked (for the link dropdown)
     all_missions = Mission.objects.exclude(organization_goal=goal).order_by('name')
 
-    # --- Health roll-up per mission ---
-    _at_risk_days = getattr(django_settings, 'HEALTH_AT_RISK_DAYS_THRESHOLD', 3)
-    _board_late_thresh = getattr(django_settings, 'HEALTH_BOARD_LATE_THRESHOLD', 0.20)
-    _board_at_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_AT_RISK_THRESHOLD', 0.20)
-    _board_high_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_HIGH_RISK_THRESHOLD', 0.30)
-    _board_med_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_MED_RISK_THRESHOLD', 0.10)
-    _now = timezone.now()
-    _at_risk_cutoff = _now + timedelta(days=_at_risk_days)
-
-    # Gather board IDs for all missions under this goal
-    _all_board_ids = list(Board.objects.filter(
+    # --- Board IDs under this goal ---
+    goal_board_ids = list(Board.objects.filter(
         strategy__mission__organization_goal=goal
     ).values_list('id', flat=True))
 
-    _active_qs = (
-        Task.objects
-        .filter(column__board_id__in=_all_board_ids, item_type='task')
-        .exclude(progress=100)
-        .values('column__board_id')
-        .annotate(
-            active_tasks=Count('id'),
-            late_tasks=Count('id', filter=Q(due_date__lt=_now)),
-            at_risk_tasks=Count('id', filter=Q(
-                due_date__gte=_now, due_date__lte=_at_risk_cutoff, progress__lt=80,
-            )),
-            high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
-        )
-    )
-    _comp_qs = (
-        Task.objects
-        .filter(column__board_id__in=_all_board_ids, item_type='task')
-        .values('column__board_id')
-        .annotate(total_tasks=Count('id'), done_tasks=Count('id', filter=Q(progress=100)))
-    )
-    _comp_map = {r['column__board_id']: r for r in _comp_qs}
-    _bstats = {}
-    for row in _active_qs:
-        bid = row['column__board_id']
-        comp = _comp_map.get(bid, {})
-        _bstats[bid] = {**row, 'total_tasks': comp.get('total_tasks', 0), 'done_tasks': comp.get('done_tasks', 0)}
-    for bid, comp in _comp_map.items():
-        if bid not in _bstats:
-            _bstats[bid] = {
-                'active_tasks': 0, 'late_tasks': 0, 'at_risk_tasks': 0, 'high_risk_tasks': 0,
-                'total_tasks': comp.get('total_tasks', 0), 'done_tasks': comp.get('done_tasks', 0),
-            }
+    # --- Health score (0-100) ---
+    health_score, completion_pct, total_tasks, done_tasks = _compute_health_score(goal_board_ids)
 
-    # Build per-mission health by aggregating boards under each mission's strategies
-    mission_health_map = {}
+    # --- Per-mission health (light version for mission cards) ---
     for m in linked_missions:
-        m_board_ids = Board.objects.filter(strategy__mission=m).values_list('id', flat=True)
-        m_total = 0; m_done = 0; m_active = 0; m_late = 0; m_at_risk = 0; m_high = 0
-        for bid in m_board_ids:
-            bs = _bstats.get(bid, {})
-            m_total += bs.get('total_tasks', 0)
-            m_done += bs.get('done_tasks', 0)
-            m_active += bs.get('active_tasks', 0)
-            m_late += bs.get('late_tasks', 0)
-            m_at_risk += bs.get('at_risk_tasks', 0)
-            m_high += bs.get('high_risk_tasks', 0)
-        sched = 'on_track'
-        if m_active > 0:
-            if m_late / m_active > _board_late_thresh: sched = 'late'
-            elif (m_late + m_at_risk) / m_active > _board_at_risk_thresh: sched = 'at_risk'
-        risk = 'low'
-        if m_active > 0:
-            if m_high / m_active >= _board_high_risk_thresh: risk = 'high'
-            elif m_high / m_active >= _board_med_risk_thresh: risk = 'medium'
-        mission_health_map[m.id] = {
-            'schedule_status': sched, 'risk_level': risk,
-            'total_tasks': m_total, 'done_tasks': m_done,
-            'completion_pct': round(m_done / m_total * 100, 1) if m_total else 0,
-        }
+        m_bids = list(Board.objects.filter(strategy__mission=m).values_list('id', flat=True))
+        m_health, m_pct, m_total, m_done = _compute_health_score(m_bids)
+        m.health_score = m_health
+        m.health_pct = m_pct
+        m.health_total = m_total
+        m.health_done = m_done
 
-    # Goal-level aggregate
-    all_scheds = [v['schedule_status'] for v in mission_health_map.values()]
-    all_risks = [v['risk_level'] for v in mission_health_map.values()]
-    goal_schedule = 'on_track'
-    if 'late' in all_scheds: goal_schedule = 'late'
-    elif 'at_risk' in all_scheds: goal_schedule = 'at_risk'
-    goal_risk = 'low'
-    if 'high' in all_risks: goal_risk = 'high'
-    elif 'medium' in all_risks: goal_risk = 'medium'
-    goal_total = sum(v['total_tasks'] for v in mission_health_map.values())
-    goal_done = sum(v['done_tasks'] for v in mission_health_map.values())
-    goal_pct = round(goal_done / goal_total * 100, 1) if goal_total else 0
+    # --- Version history ---
+    versions = GoalVersion.objects.filter(goal=goal).order_by('-version_number')
 
-    # Attach health data directly to each mission for easy template access
-    for m in linked_missions:
-        h = mission_health_map.get(m.id, {})
-        m.health_schedule = h.get('schedule_status', 'on_track')
-        m.health_risk = h.get('risk_level', 'low')
-        m.health_total = h.get('total_tasks', 0)
-        m.health_done = h.get('done_tasks', 0)
-        m.health_pct = h.get('completion_pct', 0)
+    # --- Strategic updates ---
+    goal_ct = ContentType.objects.get_for_model(OrganizationGoal)
+    updates = StrategicUpdate.objects.filter(
+        content_type=goal_ct, object_id=goal.id,
+    ).select_related('author').order_by('-created_at')
+
+    # --- Followers ---
+    followers = StrategicFollower.objects.filter(
+        content_type=goal_ct, object_id=goal.id,
+    ).select_related('user')
+    is_following = followers.filter(user=request.user).exists()
+
+    # --- Stale AI indicator ---
+    ai_is_stale = False
+    if goal.ai_summary and goal.ai_summary_generated_at:
+        ai_is_stale = goal.ai_summary_generated_at < goal.updated_at
+
+    # --- Days remaining ---
+    days_remaining = None
+    days_remaining_abs = None
+    if goal.target_date:
+        delta = goal.target_date - timezone.now().date()
+        days_remaining = delta.days
+        days_remaining_abs = abs(days_remaining)
 
     return render(request, 'kanban/goal_detail.html', {
+        # Shared skeleton context
+        'record': goal,
+        'page_title': goal.name,
+        'header_class': 'goal-header',
+        'level_name': 'goal',
+        'health_score': health_score,
+        'completion_pct': completion_pct,
+        'total_tasks': total_tasks,
+        'done_tasks': done_tasks,
+        'versions': versions,
+        'updates': updates,
+        'updates_count': updates.count(),
+        'followers': followers,
+        'is_following': is_following,
+        'ai_is_stale': ai_is_stale,
+        'days_remaining': days_remaining,
+        'days_remaining_abs': days_remaining_abs,
+        # Goal-specific context
         'goal': goal,
         'linked_missions': linked_missions,
         'all_missions': all_missions,
-        'mission_health_map': mission_health_map,
-        'goal_schedule_status': goal_schedule,
-        'goal_risk_level': goal_risk,
-        'goal_total_tasks': goal_total,
-        'goal_done_tasks': goal_done,
-        'goal_completion_pct': goal_pct,
     })
 
 
@@ -200,37 +348,48 @@ def create_goal(request):
 
 @login_required
 def edit_goal(request, goal_id):
-    """Edit an existing Organization Goal."""
+    """Edit an existing Organization Goal with version history."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
     organizations = Organization.objects.all().order_by('name')
 
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description', '').strip()
-        target_metric = request.POST.get('target_metric', '').strip()
-        target_date = request.POST.get('target_date', '').strip() or None
-        status = request.POST.get('status', 'active')
-        org_id = request.POST.get('organization', '').strip()
+        form = GoalEditForm(request.POST, instance=goal)
+        if form.is_valid():
+            change_reason = form.cleaned_data['change_reason']
+            change_notes = form.cleaned_data['change_notes']
 
-        if not name:
-            messages.error(request, 'Goal name is required.')
-            return render(request, 'kanban/edit_goal.html', {
-                'goal': goal,
-                'organizations': organizations,
-            })
+            # Snapshot current values BEFORE saving
+            GoalVersion.objects.create(
+                goal=goal,
+                version_number=goal.version,
+                name=goal.name,
+                description=goal.description or '',
+                target_date=goal.target_date,
+                owner=goal.owner,
+                changed_by=request.user,
+                change_reason=change_reason,
+                change_notes=change_notes,
+            )
 
-        goal.name = name
-        goal.description = description or None
-        goal.target_metric = target_metric or None
-        goal.target_date = target_date
-        goal.status = status
-        goal.organization = Organization.objects.filter(id=org_id).first() if org_id else None
-        goal.save()
-        messages.success(request, f'Organization Goal "{goal.name}" updated.')
-        return redirect('goal_detail', goal_id=goal.id)
+            # Save new values and increment version
+            updated_goal = form.save(commit=False)
+            updated_goal.version = goal.version + 1
+            # Handle organization field separately (not in form)
+            org_id = request.POST.get('organization', '').strip()
+            updated_goal.organization = Organization.objects.filter(id=org_id).first() if org_id else goal.organization
+            updated_goal.save()
+
+            # Post-edit cascade logic
+            _handle_edit_cascade(request, goal, change_reason, 'goal')
+
+            messages.success(request, f'Organization Goal "{goal.name}" updated (v{goal.version}).')
+            return redirect('goal_detail', goal_id=goal.id)
+    else:
+        form = GoalEditForm(instance=goal)
 
     return render(request, 'kanban/edit_goal.html', {
         'goal': goal,
+        'form': form,
         'organizations': organizations,
     })
 
@@ -297,128 +456,73 @@ def mission_list(request):
 
 @login_required
 def mission_detail(request, mission_id):
-    """Show a single mission and its strategies with health roll-ups."""
+    """Show a single mission with 4-tab layout, health score, versions, updates, followers."""
     mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
     strategies = mission.strategies.all().annotate(
         board_count=Count('boards', distinct=True)
     ).order_by('-created_at')
 
-    # --- Health roll-up for strategies & boards under this mission ---
+    # --- Board IDs under this mission ---
     board_ids = list(Board.objects.filter(
         strategy__mission=mission
     ).values_list('id', flat=True))
 
-    _at_risk_days = getattr(django_settings, 'HEALTH_AT_RISK_DAYS_THRESHOLD', 3)
-    _board_late_thresh = getattr(django_settings, 'HEALTH_BOARD_LATE_THRESHOLD', 0.20)
-    _board_at_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_AT_RISK_THRESHOLD', 0.20)
-    _board_high_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_HIGH_RISK_THRESHOLD', 0.30)
-    _board_med_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_MED_RISK_THRESHOLD', 0.10)
-    _now = timezone.now()
-    _at_risk_cutoff = _now + timedelta(days=_at_risk_days)
+    # --- Health score (0-100) ---
+    health_score, completion_pct, total_tasks, done_tasks = _compute_health_score(board_ids)
 
-    _active_stats = (
-        Task.objects
-        .filter(column__board_id__in=board_ids, item_type='task')
-        .exclude(progress=100)
-        .values('column__board_id')
-        .annotate(
-            active_tasks=Count('id'),
-            late_tasks=Count('id', filter=Q(due_date__lt=_now)),
-            at_risk_tasks=Count('id', filter=Q(
-                due_date__gte=_now, due_date__lte=_at_risk_cutoff, progress__lt=80,
-            )),
-            high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
-        )
-    )
-    _comp_stats = (
-        Task.objects
-        .filter(column__board_id__in=board_ids, item_type='task')
-        .values('column__board_id')
-        .annotate(
-            total_tasks=Count('id'),
-            done_tasks=Count('id', filter=Q(progress=100)),
-        )
-    )
-    _comp_map = {r['column__board_id']: r for r in _comp_stats}
-    _bstats_map = {}
-    for row in _active_stats:
-        bid = row['column__board_id']
-        comp = _comp_map.get(bid, {})
-        _bstats_map[bid] = {**row, 'total_tasks': comp.get('total_tasks', 0), 'done_tasks': comp.get('done_tasks', 0)}
-    for bid, comp in _comp_map.items():
-        if bid not in _bstats_map:
-            _bstats_map[bid] = {
-                'column__board_id': bid, 'active_tasks': 0, 'late_tasks': 0,
-                'at_risk_tasks': 0, 'high_risk_tasks': 0,
-                'total_tasks': comp.get('total_tasks', 0), 'done_tasks': comp.get('done_tasks', 0),
-            }
-
-    def _board_health(bs):
-        active = bs.get('active_tasks', 0)
-        late = bs.get('late_tasks', 0)
-        at_risk = bs.get('at_risk_tasks', 0)
-        high = bs.get('high_risk_tasks', 0)
-        sched = 'on_track'
-        if active > 0:
-            if late / active > _board_late_thresh: sched = 'late'
-            elif (late + at_risk) / active > _board_at_risk_thresh: sched = 'at_risk'
-        risk = 'low'
-        if active > 0:
-            if high / active >= _board_high_risk_thresh: risk = 'high'
-            elif high / active >= _board_med_risk_thresh: risk = 'medium'
-        return sched, risk
-
-    def _worst_sched(*s):
-        if 'late' in s: return 'late'
-        if 'at_risk' in s: return 'at_risk'
-        return 'on_track'
-    def _worst_risk(*r):
-        if 'high' in r: return 'high'
-        if 'medium' in r: return 'medium'
-        return 'low'
-
-    # Build strategy_tree with boards + health for the template
+    # --- Per-strategy health for the strategy cards ---
     strategy_tree = []
     for strategy in strategies:
+        s_bids = list(Board.objects.filter(strategy=strategy).values_list('id', flat=True))
+        s_health, s_pct, s_total, s_done = _compute_health_score(s_bids)
         s_boards = Board.objects.filter(strategy=strategy).order_by('name')
         board_items = []
         for b in s_boards:
-            bs = _bstats_map.get(b.id, {})
-            total = bs.get('total_tasks', 0)
-            done = bs.get('done_tasks', 0)
-            pct = round(done / total * 100, 1) if total else 0
-            b_sched, b_risk = _board_health(bs)
+            b_bids = [b.id]
+            b_health, b_pct, b_total, b_done = _compute_health_score(b_bids)
             board_items.append({
-                'board': b, 'total_tasks': total, 'done_tasks': done,
-                'completion_pct': pct, 'schedule_status': b_sched, 'risk_level': b_risk,
+                'board': b, 'total_tasks': b_total, 'done_tasks': b_done,
+                'completion_pct': b_pct, 'health_score': b_health,
             })
-        ss = [bi['schedule_status'] for bi in board_items]
-        rs = [bi['risk_level'] for bi in board_items]
         strategy_tree.append({
             'strategy': strategy,
             'boards': board_items,
             'board_count': len(board_items),
-            'schedule_status': _worst_sched(*ss) if ss else 'on_track',
-            'risk_level': _worst_risk(*rs) if rs else 'low',
-            'total_tasks': sum(bi['total_tasks'] for bi in board_items),
-            'done_tasks': sum(bi['done_tasks'] for bi in board_items),
-            'completion_pct': (
-                round(sum(bi['done_tasks'] for bi in board_items) /
-                      sum(bi['total_tasks'] for bi in board_items) * 100, 1)
-                if sum(bi['total_tasks'] for bi in board_items) else 0
-            ),
+            'health_score': s_health,
+            'total_tasks': s_total,
+            'done_tasks': s_done,
+            'completion_pct': s_pct,
         })
 
-    # Mission-level health
-    m_ss = [s['schedule_status'] for s in strategy_tree]
-    m_rs = [s['risk_level'] for s in strategy_tree]
-    mission_schedule = _worst_sched(*m_ss) if m_ss else 'on_track'
-    mission_risk = _worst_risk(*m_rs) if m_rs else 'low'
-    mission_total = sum(s['total_tasks'] for s in strategy_tree)
-    mission_done = sum(s['done_tasks'] for s in strategy_tree)
-    mission_pct = round(mission_done / mission_total * 100, 1) if mission_total else 0
+    # --- Version history ---
+    versions = MissionVersion.objects.filter(mission=mission).order_by('-version_number')
 
-    # Pre-Mortem rollup: gather latest analysis per board under this mission
+    # --- Strategic updates ---
+    mission_ct = ContentType.objects.get_for_model(Mission)
+    updates = StrategicUpdate.objects.filter(
+        content_type=mission_ct, object_id=mission.id,
+    ).select_related('author').order_by('-created_at')
+
+    # --- Followers ---
+    followers = StrategicFollower.objects.filter(
+        content_type=mission_ct, object_id=mission.id,
+    ).select_related('user')
+    is_following = followers.filter(user=request.user).exists()
+
+    # --- Stale AI indicator ---
+    ai_is_stale = False
+    if mission.ai_summary and mission.ai_summary_generated_at:
+        ai_is_stale = mission.ai_summary_generated_at < mission.updated_at
+
+    # --- Days remaining ---
+    days_remaining = None
+    days_remaining_abs = None
+    if mission.due_date:
+        delta = mission.due_date - timezone.now().date()
+        days_remaining = delta.days
+        days_remaining_abs = abs(days_remaining)
+
+    # --- Pre-Mortem rollup ---
     from kanban.premortem_models import PreMortemAnalysis
     pm_analyses = (
         PreMortemAnalysis.objects
@@ -428,7 +532,6 @@ def mission_detail(request, mission_id):
     )
     premortem_boards = []
     seen_boards = set()
-    all_board_ids = set(board_ids)
     for pm in pm_analyses:
         if pm.board_id not in seen_boards:
             seen_boards.add(pm.board_id)
@@ -437,20 +540,33 @@ def mission_detail(request, mission_id):
                 'risk_level': pm.overall_risk_level,
                 'created_at': pm.created_at,
             })
-    unanalyzed_boards = Board.objects.filter(id__in=all_board_ids - seen_boards)
+    unanalyzed_boards = Board.objects.filter(id__in=set(board_ids) - seen_boards)
     for b in unanalyzed_boards:
         premortem_boards.append({'board': b, 'risk_level': None, 'created_at': None})
     high_risk_count = sum(1 for b in premortem_boards if b['risk_level'] == 'high')
 
     return render(request, 'kanban/mission_detail.html', {
+        # Shared skeleton context
+        'record': mission,
+        'page_title': mission.name,
+        'header_class': 'mission-header',
+        'level_name': 'mission',
+        'health_score': health_score,
+        'completion_pct': completion_pct,
+        'total_tasks': total_tasks,
+        'done_tasks': done_tasks,
+        'versions': versions,
+        'updates': updates,
+        'updates_count': updates.count(),
+        'followers': followers,
+        'is_following': is_following,
+        'ai_is_stale': ai_is_stale,
+        'days_remaining': days_remaining,
+        'days_remaining_abs': days_remaining_abs,
+        # Mission-specific context
         'mission': mission,
         'strategies': strategies,
         'strategy_tree': strategy_tree,
-        'mission_schedule_status': mission_schedule,
-        'mission_risk_level': mission_risk,
-        'mission_total_tasks': mission_total,
-        'mission_done_tasks': mission_done,
-        'mission_completion_pct': mission_pct,
         'premortem_boards': premortem_boards,
         'premortem_high_risk_count': high_risk_count,
         'premortem_total_boards': len(premortem_boards),
@@ -485,26 +601,44 @@ def create_mission(request):
 
 @login_required
 def edit_mission(request, mission_id):
-    """Edit an existing mission."""
+    """Edit an existing mission with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
 
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description', '').strip()
-        status = request.POST.get('status', 'active')
+        form = MissionEditForm(request.POST, instance=mission)
+        if form.is_valid():
+            change_reason = form.cleaned_data['change_reason']
+            change_notes = form.cleaned_data['change_notes']
 
-        if not name:
-            messages.error(request, 'Mission name is required.')
-            return render(request, 'kanban/edit_mission.html', {'mission': mission})
+            # Snapshot current values BEFORE saving
+            MissionVersion.objects.create(
+                mission=mission,
+                version_number=mission.version,
+                name=mission.name,
+                description=mission.description or '',
+                due_date=mission.due_date,
+                owner=mission.owner,
+                changed_by=request.user,
+                change_reason=change_reason,
+                change_notes=change_notes,
+            )
 
-        mission.name = name
-        mission.description = description or None
-        mission.status = status
-        mission.save()
-        messages.success(request, f'Mission "{mission.name}" updated.')
-        return redirect('mission_detail', mission_id=mission.id)
+            # Save new values and increment version
+            updated_mission = form.save(commit=False)
+            updated_mission.version = mission.version + 1
+            updated_mission.save()
 
-    return render(request, 'kanban/edit_mission.html', {'mission': mission})
+            _handle_edit_cascade(request, mission, change_reason, 'mission')
+
+            messages.success(request, f'Mission "{mission.name}" updated (v{mission.version}).')
+            return redirect('mission_detail', mission_id=mission.id)
+    else:
+        form = MissionEditForm(instance=mission)
+
+    return render(request, 'kanban/edit_mission.html', {
+        'mission': mission,
+        'form': form,
+    })
 
 
 @login_required
@@ -577,32 +711,45 @@ def strategy_detail(request, mission_id, strategy_id):
 
 @login_required
 def edit_strategy(request, mission_id, strategy_id):
-    """Edit an existing strategy."""
+    """Edit an existing strategy with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        description = request.POST.get('description', '').strip()
-        status = request.POST.get('status', 'active')
+        form = StrategyEditForm(request.POST, instance=strategy)
+        if form.is_valid():
+            change_reason = form.cleaned_data['change_reason']
+            change_notes = form.cleaned_data['change_notes']
 
-        if not name:
-            messages.error(request, 'Strategy name is required.')
-            return render(request, 'kanban/edit_strategy.html', {
-                'mission': mission,
-                'strategy': strategy,
-            })
+            # Snapshot current values BEFORE saving
+            StrategyVersion.objects.create(
+                strategy=strategy,
+                version_number=strategy.version,
+                name=strategy.name,
+                description=strategy.description or '',
+                due_date=strategy.due_date,
+                owner=strategy.owner,
+                changed_by=request.user,
+                change_reason=change_reason,
+                change_notes=change_notes,
+            )
 
-        strategy.name = name
-        strategy.description = description or None
-        strategy.status = status
-        strategy.save()
-        messages.success(request, f'Strategy "{strategy.name}" updated.')
-        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
+            # Save new values and increment version
+            updated_strategy = form.save(commit=False)
+            updated_strategy.version = strategy.version + 1
+            updated_strategy.save()
+
+            _handle_edit_cascade(request, strategy, change_reason, 'strategy')
+
+            messages.success(request, f'Strategy "{strategy.name}" updated (v{strategy.version}).')
+            return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
+    else:
+        form = StrategyEditForm(instance=strategy)
 
     return render(request, 'kanban/edit_strategy.html', {
         'mission': mission,
         'strategy': strategy,
+        'form': form,
     })
 
 

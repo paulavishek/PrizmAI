@@ -5,6 +5,8 @@ from .models import (
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation,
     CalendarEvent,
+    GoalVersion, MissionVersion, StrategyVersion,
+    StrategicUpdate, Milestone, StrategicFollower,
 )
 from .automation_models import BoardAutomation, ScheduledAutomation
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
@@ -56,14 +58,15 @@ class MissionInline(admin.TabularInline):
 
 @admin.register(OrganizationGoal)
 class OrganizationGoalAdmin(admin.ModelAdmin):
-    list_display = ('name', 'organization', 'status', 'target_metric', 'target_date', 'created_by', 'created_at')
+    list_display = ('name', 'organization', 'status', 'owner', 'target_metric', 'target_date', 'created_by', 'created_at')
     list_filter = ('status', 'organization', 'is_demo', 'created_at')
     search_fields = ('name', 'description', 'target_metric')
     inlines = [MissionInline]
     fieldsets = (
         (None, {'fields': ('name', 'description', 'status')}),
         ('Target', {'fields': ('target_metric', 'target_date')}),
-        ('Ownership', {'fields': ('organization', 'created_by')}),
+        ('Ownership', {'fields': ('organization', 'created_by', 'owner')}),
+        ('Versioning', {'fields': ('version',)}),
         ('Demo', {'fields': ('is_demo', 'is_seed_demo_data'), 'classes': ('collapse',)}),
         ('AI Summary', {'fields': ('ai_summary', 'ai_summary_generated_at'), 'classes': ('collapse',)}),
     )
@@ -78,9 +81,53 @@ class MissionAdmin(admin.ModelAdmin):
 
 @admin.register(Strategy)
 class StrategyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'mission', 'status', 'created_by', 'created_at')
+    list_display = ('name', 'mission', 'status', 'owner', 'created_by', 'created_at')
     list_filter = ('status', 'mission', 'created_at')
     search_fields = ('name', 'description', 'mission__name')
+
+
+@admin.register(GoalVersion)
+class GoalVersionAdmin(admin.ModelAdmin):
+    list_display = ('goal', 'version_number', 'change_reason', 'changed_by', 'changed_at')
+    list_filter = ('change_reason', 'changed_at')
+    readonly_fields = ('goal', 'version_number', 'name', 'description', 'target_date',
+                       'owner', 'changed_by', 'changed_at', 'change_reason', 'change_notes')
+
+
+@admin.register(MissionVersion)
+class MissionVersionAdmin(admin.ModelAdmin):
+    list_display = ('mission', 'version_number', 'change_reason', 'changed_by', 'changed_at')
+    list_filter = ('change_reason', 'changed_at')
+    readonly_fields = ('mission', 'version_number', 'name', 'description', 'due_date',
+                       'owner', 'changed_by', 'changed_at', 'change_reason', 'change_notes')
+
+
+@admin.register(StrategyVersion)
+class StrategyVersionAdmin(admin.ModelAdmin):
+    list_display = ('strategy', 'version_number', 'change_reason', 'changed_by', 'changed_at')
+    list_filter = ('change_reason', 'changed_at')
+    readonly_fields = ('strategy', 'version_number', 'name', 'description', 'due_date',
+                       'owner', 'changed_by', 'changed_at', 'change_reason', 'change_notes')
+
+
+@admin.register(StrategicUpdate)
+class StrategicUpdateAdmin(admin.ModelAdmin):
+    list_display = ('author', 'status', 'content_type', 'object_id', 'created_at')
+    list_filter = ('status', 'content_type', 'created_at')
+    readonly_fields = ('content_type', 'object_id', 'author', 'status', 'message', 'created_at')
+
+
+@admin.register(Milestone)
+class MilestoneAdmin(admin.ModelAdmin):
+    list_display = ('name', 'strategy', 'due_date', 'status')
+    list_filter = ('status', 'due_date')
+    search_fields = ('name', 'strategy__name')
+
+
+@admin.register(StrategicFollower)
+class StrategicFollowerAdmin(admin.ModelAdmin):
+    list_display = ('user', 'content_type', 'object_id', 'followed_at')
+    list_filter = ('content_type', 'followed_at')
 
 
 

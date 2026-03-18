@@ -1,0 +1,206 @@
+{# ============================================================
+   Shared skeleton for Goal / Mission / Strategy detail pages.
+   Child templates extend this and fill the blocks.
+   ============================================================ #}
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/strategic_detail.css' %}">
+{% block detail_extra_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+{# --- Breadcrumb --- #}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        {% block breadcrumb_items %}{% endblock %}
+    </ol>
+</nav>
+
+{# --- Header card --- #}
+<div class="card shadow-sm mb-4 strategic-header {{ header_class }}">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <h2 class="h4 mb-1">
+                    {% block header_icon %}{% endblock %}{{ record.name }}
+                    <span class="version-label ms-2">v{{ record.version }}</span>
+                </h2>
+                {% block header_subtitle %}{% endblock %}
+                {% if record.description %}
+                <p class="text-muted mb-0 mt-1">{{ record.description }}</p>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <span class="status-badge {{ record.status }}">{{ record.get_status_display }}</span>
+                {% block header_actions %}{% endblock %}
+            </div>
+        </div>
+
+        <hr class="my-3">
+        <div class="row text-muted small g-3">
+            {% block header_meta %}{% endblock %}
+        </div>
+    </div>
+</div>
+
+{# --- Stale AI banner (shown when summary is outdated) --- #}
+{% if ai_is_stale %}
+<div class="stale-banner mb-3" id="stale-ai-banner">
+    <i class="fas fa-exclamation-triangle text-warning"></i>
+    <span>AI insights may be <strong>outdated</strong> — the {{ level_name }} was modified after the last summary.</span>
+    <button class="btn btn-sm btn-outline-warning ms-auto" id="btn-regenerate-ai"
+            data-url="{% block regenerate_url %}{% endblock %}">
+        <i class="fas fa-sync-alt me-1"></i>Regenerate
+    </button>
+    <button class="btn btn-sm btn-link text-muted" id="dismiss-stale-banner" title="Dismiss">
+        <i class="fas fa-times"></i>
+    </button>
+</div>
+{% endif %}
+
+{# --- Main layout: content left, sidebar right --- #}
+<div class="row g-4">
+    {# Left column: tabs #}
+    <div class="col-lg-9">
+        {# --- Health summary bar --- #}
+        {% if health_score is not None %}
+        <div class="card shadow-sm mb-3" style="border-radius:12px;">
+            <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
+                <div class="health-ring {% if health_score >= 70 %}health-good{% elif health_score >= 40 %}health-warn{% else %}health-danger{% endif %}"
+                     style="--ring-pct:{{ health_score }}">
+                    <span class="ring-inner"><span class="ring-value">{{ health_score }}</span></span>
+                </div>
+                <div>
+                    <div class="fw-semibold small">Health Score</div>
+                    <div class="text-muted" style="font-size:0.75rem">
+                        {% if health_score >= 70 %}On Track{% elif health_score >= 40 %}At Risk{% else %}Needs Attention{% endif %}
+                    </div>
+                </div>
+                <span class="text-muted small">|</span>
+                <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width:300px;">
+                    <div class="progress flex-grow-1 progress-sm">
+                        <div class="progress-bar {% if health_score >= 70 %}bg-success{% elif health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width:{{ completion_pct }}%"></div>
+                    </div>
+                    <small class="fw-bold text-nowrap">{{ completion_pct }}%</small>
+                </div>
+                <small class="text-muted">{{ done_tasks }}/{{ total_tasks }} tasks</small>
+            </div>
+        </div>
+        {% endif %}
+
+        {# --- Tab navigation --- #}
+        <ul class="nav strategic-tabs mb-3" role="tablist">
+            <li class="nav-item"><a class="nav-link active" data-bs-target="#tab-overview" href="#tab-overview">Overview</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-target="#tab-updates" href="#tab-updates">Updates <span class="badge bg-secondary ms-1" id="updates-count">{{ updates_count|default:"0" }}</span></a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-target="#tab-ai" href="#tab-ai">AI Insights</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-target="#tab-versions" href="#tab-versions">Version History</a></li>
+        </ul>
+
+        <div class="tab-content">
+            {# ---- Overview tab ---- #}
+            <div class="tab-pane show active" id="tab-overview">
+                {% block tab_overview %}{% endblock %}
+            </div>
+
+            {# ---- Updates tab ---- #}
+            <div class="tab-pane" id="tab-updates">
+                {% block tab_updates %}
+                <p class="text-muted small">No updates yet. Post the first one!</p>
+                {% endblock %}
+            </div>
+
+            {# ---- AI Insights tab ---- #}
+            <div class="tab-pane" id="tab-ai">
+                {% block tab_ai %}
+                {% if record.ai_summary %}
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body" id="ai-summary-body">
+                        <p class="mb-1">{{ record.ai_summary }}</p>
+                        {% if record.ai_summary_generated_at %}
+                        <small class="text-muted">Generated {{ record.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-robot fa-2x mb-2" style="opacity:0.3;"></i>
+                    <p class="small">No AI summary available yet.</p>
+                </div>
+                {% endif %}
+                {% endblock %}
+            </div>
+
+            {# ---- Version history tab ---- #}
+            <div class="tab-pane" id="tab-versions">
+                {% block tab_versions %}
+                <p class="text-muted small">No version history.</p>
+                {% endblock %}
+            </div>
+        </div>
+    </div>
+
+    {# Right sidebar #}
+    <div class="col-lg-3">
+        <div class="strategic-sidebar">
+            {% block sidebar %}{% endblock %}
+
+            {# Followers section (shared across all levels) #}
+            <div class="sidebar-section">
+                <div class="sidebar-label">Followers</div>
+                {% if followers %}
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                    {% for f in followers %}
+                    <span class="follower-chip">
+                        <i class="fas fa-user-circle"></i>
+                        {{ f.user.get_full_name|default:f.user.username }}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% csrf_token %}
+                <button class="btn btn-sm {% if is_following %}btn-primary{% else %}btn-outline-primary{% endif %} w-100"
+                        id="btn-follow"
+                        data-url="{% block follow_url %}{% endblock %}"
+                        data-following="{{ is_following|yesno:'true,false' }}">
+                    {% if is_following %}
+                    <i class="fas fa-bell-slash me-1"></i>Unfollow
+                    {% else %}
+                    <i class="fas fa-bell me-1"></i>Follow
+                    {% endif %}
+                </button>
+                <small class="text-muted d-block mt-1" style="font-size:0.72rem;">
+                    <span id="follower-count">{{ followers|length }}</span> follower{{ followers|length|pluralize }}
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- Hierarchy reminder (kept from existing page) --- #}
+<div class="alert alert-light border py-2 mt-4" role="alert" style="background:linear-gradient(135deg,#fffbea,#fff);border-color:#ffe08a!important;">
+    <small class="text-muted">
+        <i class="fas fa-sitemap me-1 text-warning"></i>
+        <strong>Hierarchy:</strong>
+        <a href="{% url 'goal_list' %}" class="text-warning fw-semibold text-decoration-none">Goals</a>
+        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
+        <a href="{% url 'mission_list' %}" class="text-primary fw-semibold text-decoration-none">Missions</a>
+        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
+        <span class="text-success fw-semibold">Strategies</span>
+        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
+        <span class="text-info fw-semibold">Boards</span>
+        <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
+        <span class="text-secondary fw-semibold">Tasks</span>
+    </small>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/strategic_detail.js' %}"></script>
+{% block detail_extra_js %}{% endblock %}
+{% endblock %}
