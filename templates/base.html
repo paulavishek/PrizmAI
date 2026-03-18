@@ -89,8 +89,33 @@
     'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
     })(window,document,'script','dataLayer','GTM-N4RMZ4SN');</script>
     <!-- End Google Tag Manager -->
+
+    <!-- Display Mode Anti-Flicker: apply correct theme classes before CSS paints to prevent flash -->
+    <script>
+    (function(){
+        var mode = '{{ user_display_mode|default:"light" }}';
+        var html = document.documentElement;
+        if (mode === 'dark') {
+            html.setAttribute('data-bs-theme', 'dark');
+            html.classList.add('prizm-dark-mode');
+        } else if (mode === 'accessibility') {
+            html.setAttribute('data-bs-theme', 'light');
+            html.classList.add('prizm-accessibility-mode');
+        } else if (mode === 'auto') {
+            var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (prefersDark) {
+                html.setAttribute('data-bs-theme', 'dark');
+                html.classList.add('prizm-dark-mode');
+            } else {
+                html.setAttribute('data-bs-theme', 'light');
+            }
+        } else {
+            html.setAttribute('data-bs-theme', 'light');
+        }
+    })();
+    </script>
 </head>
-<body data-demo-mode="{% if request.session.is_demo_mode %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}"  >
+<body data-demo-mode="{% if request.session.is_demo_mode %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -158,9 +183,39 @@
                     <i class="fas fa-share-alt"></i>
                 </button>
                 {% endif %}
-                <button class="topbar-icon-btn" id="accessibility-toggle" type="button" title="Color Blind Mode: OFF" aria-label="Toggle color blind mode" aria-pressed="false">
-                    <i class="fas fa-eye-slash"></i>
-                </button>
+                <!-- Display Mode Dropdown -->
+                <div class="dropdown" id="display-mode-dropdown">
+                    <button class="topbar-icon-btn" type="button" data-bs-toggle="dropdown"
+                            aria-expanded="false" aria-label="Display Mode"
+                            id="display-mode-btn" title="Display Mode">
+                        <i class="fas fa-sun" id="display-mode-icon"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" style="min-width:210px;">
+                        <li><h6 class="dropdown-header">Display Mode</h6></li>
+                        <li>
+                            <button class="dropdown-item display-mode-option" data-mode="light">
+                                <i class="fas fa-sun me-2 text-warning"></i>Light
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item display-mode-option" data-mode="dark">
+                                <i class="fas fa-moon me-2 text-primary"></i>Dark
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item display-mode-option" data-mode="auto">
+                                <i class="fas fa-desktop me-2 text-secondary"></i>Browser
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item display-mode-option" data-mode="accessibility">
+                                <i class="fas fa-eye me-2 text-info"></i>Accessibility
+                                <small class="d-block text-muted" style="font-size:0.75em;">Color-blind friendly</small>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
                 <!-- Timezone Selector -->
                 {% if user.is_authenticated %}
                 <div id="timezone-dropdown">
@@ -328,15 +383,7 @@
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
-    <!-- Clean up old theme preferences from localStorage -->
-    <script>
-        // Remove theme preference from localStorage if it exists
-        if (localStorage.getItem('theme')) {
-            localStorage.removeItem('theme');
-        }
-        // Remove dark-mode class from body if it exists
-        document.body.classList.remove('dark-mode');
-    </script>
+
     
     <!-- Unread Message Badge Script -->
     <script>
@@ -524,8 +571,8 @@
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>
     
-    <!-- Accessibility Toggle JS -->
-    <script src="{% static 'js/accessibility-toggle.js' %}"></script>
+    <!-- Unified Display Mode JS -->
+    <script src="{% static 'js/display-mode.js' %}"></script>
     
     <!-- Timezone Selector JS -->
     {% if user.is_authenticated %}

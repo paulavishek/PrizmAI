@@ -71,6 +71,24 @@
     .profile-picture-field-row {
         display: none !important;
     }
+    .display-mode-profile-btn {
+        border: 2px solid #dee2e6;
+        border-radius: 10px;
+        padding: 1rem 0.5rem;
+        text-align: center;
+        background: var(--bg-secondary, #fff);
+        color: var(--text-primary, #212529);
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .display-mode-profile-btn:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
+    }
+    .display-mode-profile-btn.active {
+        border-color: #0d6efd;
+        background: rgba(13,110,253,0.08);
+        box-shadow: 0 0 0 3px rgba(13,110,253,0.2);
+    }
 </style>
 {% endblock %}
 
@@ -203,6 +221,50 @@
         
         <div class="card shadow mt-4">
             <div class="profile-section-header card-header">
+                <h5><i class="fas fa-palette me-2"></i>Display Mode</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Choose how PrizmAI looks on your screen. Your preference is saved and applied on every device you log in from.</p>
+                <div class="row g-3" id="display-mode-selector">
+                    <div class="col-6 col-md-3">
+                        <button class="btn display-mode-profile-btn w-100 {% if profile.display_mode == 'light' or not profile.display_mode %}active{% endif %}"
+                                data-mode="light">
+                            <i class="fas fa-sun fa-lg text-warning mb-2 d-block"></i>
+                            <span class="fw-semibold">Light</span>
+                            <small class="d-block text-muted">Default</small>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <button class="btn display-mode-profile-btn w-100 {% if profile.display_mode == 'dark' %}active{% endif %}"
+                                data-mode="dark">
+                            <i class="fas fa-moon fa-lg text-primary mb-2 d-block"></i>
+                            <span class="fw-semibold">Dark</span>
+                            <small class="d-block text-muted">Easy on the eyes</small>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <button class="btn display-mode-profile-btn w-100 {% if profile.display_mode == 'auto' %}active{% endif %}"
+                                data-mode="auto">
+                            <i class="fas fa-desktop fa-lg text-secondary mb-2 d-block"></i>
+                            <span class="fw-semibold">Browser</span>
+                            <small class="d-block text-muted">Match OS setting</small>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <button class="btn display-mode-profile-btn w-100 {% if profile.display_mode == 'accessibility' %}active{% endif %}"
+                                data-mode="accessibility">
+                            <i class="fas fa-eye fa-lg text-info mb-2 d-block"></i>
+                            <span class="fw-semibold">Accessibility</span>
+                            <small class="d-block text-muted">Color-blind friendly</small>
+                        </button>
+                    </div>
+                </div>
+                <div id="display-mode-feedback" class="mt-2" style="min-height:24px;"></div>
+            </div>
+        </div>
+
+        <div class="card shadow mt-4">
+            <div class="profile-section-header card-header">
                 <h5><i class="fas fa-shield-alt me-2"></i>Security Settings</h5>
             </div>
             <div class="card-body">
@@ -247,6 +309,32 @@ document.getElementById('id_profile_picture').addEventListener('change', functio
     };
     reader.readAsDataURL(file);
 });
+
+// Display mode selector on profile page
+(function() {
+    const feedback = document.getElementById('display-mode-feedback');
+    document.querySelectorAll('.display-mode-profile-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const mode = btn.getAttribute('data-mode');
+            // Apply immediately via the global display-mode system
+            if (window.PrizmDisplayMode) {
+                window.PrizmDisplayMode.applyMode(mode);
+                window.PrizmDisplayMode.saveMode(mode);
+            }
+            // Update active state
+            document.querySelectorAll('.display-mode-profile-btn').forEach(function(b) {
+                b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            // Feedback
+            const labels = {light:'Light mode', dark:'Dark mode', auto:'Browser mode', accessibility:'Accessibility mode'};
+            if (feedback) {
+                feedback.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>' + (labels[mode] || mode) + ' applied.</span>';
+                setTimeout(function(){ feedback.innerHTML = ''; }, 3000);
+            }
+        });
+    });
+})();
 </script>
 {% endblock %}
 {% endblock %}

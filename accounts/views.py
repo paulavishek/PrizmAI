@@ -349,3 +349,28 @@ def set_timezone(request):
     request.session['user_timezone'] = tzname
 
     return JsonResponse({'status': 'ok', 'timezone': tzname})
+
+
+@login_required
+@require_POST
+def update_display_mode(request):
+    """API endpoint to update the user's display mode preference via AJAX."""
+    VALID_MODES = {'light', 'dark', 'auto', 'accessibility'}
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+
+    mode = data.get('display_mode', '').strip()
+    if mode not in VALID_MODES:
+        return JsonResponse({'status': 'error', 'message': 'Invalid display mode'}, status=400)
+
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Profile not found'}, status=404)
+
+    profile.display_mode = mode
+    profile.save(update_fields=['display_mode'])
+
+    return JsonResponse({'status': 'ok', 'display_mode': mode})
