@@ -161,7 +161,9 @@
         <div class="d-flex justify-content-between align-items-start">
           <div class="flex-grow-1">
             <div class="d-flex align-items-center gap-2 mb-2">
-              <strong>{{ rule.name }}</strong>
+              <a href="{% url 'automation_rule_detail' board.id rule.id %}" class="text-decoration-none">
+                <strong>{{ rule.name }}</strong>
+              </a>
               {% if rule.is_active %}
                 <span class="badge bg-success">Active</span>
               {% else %}
@@ -212,6 +214,38 @@
         </div>
       </div>
       {% endfor %}
+
+      <!-- Scheduled Automations (created via Spectra / legacy) -->
+      {% if scheduled_automations %}
+      <h6 class="text-uppercase text-muted fw-semibold mb-3 mt-4" style="letter-spacing:.06em;font-size:.78rem;">
+        <i class="fas fa-clock me-1"></i> Scheduled Automations ({{ scheduled_automations|length }})
+      </h6>
+      {% for sa in scheduled_automations %}
+      <div class="auto-card mb-3 {% if not sa.is_active %}inactive{% endif %}">
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <strong>{{ sa.name }}</strong>
+              {% if sa.is_active %}
+                <span class="badge bg-success">Active</span>
+              {% else %}
+                <span class="badge bg-secondary">Paused</span>
+              {% endif %}
+              <span class="badge" style="background:#7c3aed22;color:#7c3aed;">
+                <i class="fas fa-clock me-1"></i>{{ sa.get_schedule_type_display|default:sa.schedule_type }}
+              </span>
+            </div>
+            <div class="text-muted small">
+              <i class="fas fa-play-circle me-1"></i>{{ sa.get_action_display|default:sa.action }}
+              &middot; runs at {{ sa.scheduled_time|time:"H:i" }}
+              {% if sa.scheduled_day is not None %} on day {{ sa.scheduled_day }}{% endif %}
+              &middot; created {{ sa.created_at|date:"M d, Y" }}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
 
     </div> <!-- /col-lg-7 -->
 

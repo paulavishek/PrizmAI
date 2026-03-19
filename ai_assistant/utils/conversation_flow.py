@@ -39,10 +39,12 @@ def build_fc_context(user, board):
     — much smaller than the full Q&A system prompt.
     """
     now = timezone.localtime(timezone.now())
+    tz_name = str(timezone.get_current_timezone())
     user_name = user.get_full_name() or user.username
     parts = [
-        f"Today: {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%H:%M')}.",
+        f"Today: {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%H:%M')} ({tz_name}).",
         f"User: {user_name} (username: {user.username}).",
+        f"All dates and times should be in the user's local timezone ({tz_name}).",
     ]
 
     if board:
@@ -233,6 +235,10 @@ def _parse_date(text):
         dt = dateutil_parser.parse(text, fuzzy=True, dayfirst=False)
         if timezone.is_naive(dt):
             dt = timezone.make_aware(dt)
+        else:
+            # Convert to the project's configured timezone so that
+            # "10 AM" in the user's prompt stays 10 AM local.
+            dt = timezone.localtime(dt)
         return dt
     except (ValueError, OverflowError):
         return None
@@ -723,6 +729,15 @@ class ConversationFlowManager:
                 )
 
             data['step'] = 1
+
+            # If due date already collected (editing from confirmation), skip ahead
+            if 'due_date_display' in data and 'assignee_display' in data:
+                data['step'] = 3
+                state.mode = 'awaiting_confirmation'
+                state.collected_data = data
+                state.save()
+                return self._format_task_confirmation(data)
+
             state.collected_data = data
             state.save()
             return "Got it! **Any due date?** You can say something like 'March 20' or 'skip'."
@@ -732,6 +747,15 @@ class ConversationFlowManager:
             low = msg.lower()
             if any(w in low for w in ['yes', 'still', 'create', 'go ahead', 'another']):
                 data['step'] = 1
+
+                # If due date already collected (editing from confirmation), skip ahead
+                if 'due_date_display' in data and 'assignee_display' in data:
+                    data['step'] = 3
+                    state.mode = 'awaiting_confirmation'
+                    state.collected_data = data
+                    state.save()
+                    return self._format_task_confirmation(data)
+
                 state.collected_data = data
                 state.save()
                 return "OK, I'll create it anyway. **Any due date?** (e.g. 'March 20' or 'skip')"
@@ -753,6 +777,16 @@ class ConversationFlowManager:
             else:
                 data['due_date'] = None
                 data['due_date_display'] = 'Not set'
+
+            # If assignee was already collected (editing from confirmation),
+            # jump back to confirmation instead of re-asking.
+            if 'assignee_display' in data:
+                data['step'] = 3
+                state.mode = 'awaiting_confirmation'
+                state.collected_data = data
+                state.save()
+                return self._format_task_confirmation(data)
+
             data['step'] = 2
             state.collected_data = data
             state.save()
@@ -900,11 +934,14 @@ class ConversationFlowManager:
                 data['description'] = ''
                 data['description_display'] = 'None'
             else:
-                # Strip common command prefixes like "Add this description:"
+                # Strip common command prefixes like "Add this description:" or "description: ..."
                 desc = re.sub(
-                    r'^(?:(?:add|set|use)\s+(?:this\s+)?description\s*[:;\-]?\s*)',
+                    r'^(?:(?:add|set|use)\s+(?:this\s+)?description\s*[:;\-]?\s*'
+                    r'|description\s*[:;\-]\s*)',
                     '', msg, flags=re.IGNORECASE,
                 ).strip() or msg
+                # Strip surrounding quotes (single, double, curly)
+                desc = re.sub(r'^["\u201c\u2018\']+|["\u201d\u2019\']+$', '', desc).strip() or desc
                 data['description'] = desc
                 data['description_display'] = desc
 
@@ -1287,6 +1324,48 @@ class ConversationFlowManager:
         Re-sends the full conversation history to Flash FC.
         """
         data = state.collected_data
+
+        # ── Task disambiguation sub-step ────────────────────────────────
+        if data.get('awaiting_task_disambiguation'):
+            candidates = data.get('task_candidates', [])
+            msg = message.strip()
+            matched = None
+
+            # Try numeric pick first ("1", "2", ...)
+            if msg.isdigit():
+                idx = int(msg) - 1
+                if 0 <= idx < len(candidates):
+                    matched = candidates[idx]
+            # Then try name matching
+            if not matched:
+                msg_lower = msg.lower()
+                for c in candidates:
+                    if msg_lower == c['title'].lower() or msg_lower in c['title'].lower():
+                        matched = c
+                        break
+            # Fuzzy: check if any candidate name is contained in the message
+            if not matched:
+                for c in candidates:
+                    if c['title'].lower() in msg_lower:
+                        matched = c
+                        break
+
+            if matched:
+                # Update task_name to the exact title and re-show confirmation
+                data.pop('awaiting_task_disambiguation')
+                data.pop('task_candidates', None)
+                data['task_name'] = matched['title']
+                state.mode = 'awaiting_confirmation'
+                state.collected_data = data
+                state.save()
+                return self._format_fc_confirmation(state.pending_action, data)
+            else:
+                names_list = '\n'.join(
+                    f'{i+1}. **{c["title"]}**' for i, c in enumerate(candidates)
+                )
+                return (
+                    f"Sorry, I couldn't match that. Please pick one:\n\n{names_list}"
+                )
 
         # Handle board selection if we were waiting for it
         if data.get('awaiting_board'):
@@ -1950,12 +2029,39 @@ class ConversationFlowManager:
         method = getattr(action_service, method_name)
         result = method(user, board, data)
 
-        state.reset()
-
         if result.get('success'):
+            state.reset()
             return result.get('message', '✅ Done!')
-        else:
-            return f"Something went wrong: {result.get('error', 'Unknown error')}. Please try again."
+
+        # ── Task disambiguation — don't reset state, ask user to pick ──
+        if result.get('disambiguation_needed'):
+            candidates = result['candidates']  # list of {'id', 'title'}
+            data['awaiting_task_disambiguation'] = True
+            data['task_candidates'] = candidates
+            # Keep pending_action intact; switch to FC collecting mode so
+            # the next message routes through _continue_fc_flow
+            fc_mode_map = {
+                'log_time': 'collecting_time_entry',
+                'send_message': 'collecting_message',
+            }
+            state.mode = fc_mode_map.get(pending, 'collecting_time_entry')
+            state.collected_data = data
+            state.save()
+            names_list = '\n'.join(
+                f'{i+1}. **{c["title"]}**' for i, c in enumerate(candidates)
+            )
+            return (
+                f"I found multiple tasks that could match. Which one did you mean?\n\n"
+                f"{names_list}\n\n"
+                "Just type the number or the task name."
+            )
+
+        state.reset()
+        error = result.get('error', 'Unknown error')
+        # Surface a friendlier message for common resolvable errors
+        if pending == 'send_message' and 'Could not find' in error:
+            return f"❌ {error}\n\nTry again with one of the names listed, or say **cancel** to stop."
+        return f"Something went wrong: {error}. Please try again."
 
     # ------------------------------------------------------------------
     # Confirmation message formatters

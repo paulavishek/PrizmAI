@@ -977,8 +977,11 @@ def board_list(request):
     demo_mode = getattr(profile, 'is_viewing_demo', False)
 
     if demo_mode:
-        # User explicitly toggled into demo mode — show only official demo boards
-        boards = Board.objects.filter(is_official_demo_board=True).distinct()
+        # Demo mode: show official demo boards + boards created via Spectra
+        boards = Board.objects.filter(
+            Q(is_official_demo_board=True)
+            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+        ).distinct()
     elif profile.onboarding_version >= 2:
         # v2 onboarding (AI-generated or scratch) — never show demo boards
         boards = Board.objects.filter(

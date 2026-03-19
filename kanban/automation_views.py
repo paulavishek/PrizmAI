@@ -75,6 +75,7 @@ def automations_page(request, board_id):
 
     # ── Common context ──
     rules = AutomationRule.objects.filter(board=board).order_by('-created_at')
+    scheduled_automations = ScheduledAutomation.objects.filter(board=board).order_by('-created_at')
     labels = TaskLabel.objects.filter(board=board).order_by('name')
     columns = Column.objects.filter(board=board).order_by('position')
     members = list(board.members.all().order_by('username'))
@@ -84,6 +85,7 @@ def automations_page(request, board_id):
     context = {
         'board': board,
         'rules': rules,
+        'scheduled_automations': scheduled_automations,
         'labels': labels,
         'columns': columns,
         'members': members,
