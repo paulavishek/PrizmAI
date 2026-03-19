@@ -302,6 +302,11 @@ def send_message(request):
         )
 
         if flow_response is not None:
+            # Sync session board from conversation state if it was resolved
+            # during the flow (e.g. user picked a board from a list).
+            if conv_state.board and (not session.board or session.board_id != conv_state.board_id):
+                session.board = conv_state.board
+
             # Spectra handled this message via a conversation flow.
             # Build an assistant message and return immediately —
             # skip the normal Gemini Q&A path.

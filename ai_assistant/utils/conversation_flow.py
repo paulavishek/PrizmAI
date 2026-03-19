@@ -81,6 +81,17 @@ def build_fc_context(user, board):
         if recent_tasks:
             parts.append(f"Recent tasks: {', '.join(recent_tasks)}.")
 
+    # Recent Spectra-created artifacts for cross-session reference
+    from ai_assistant.models import SpectraConversationState
+    global_state = SpectraConversationState.objects.filter(
+        user=user, board__isnull=True,
+    ).first()
+    if global_state:
+        artifacts = (global_state.collected_data or {}).get('_recent_artifacts', [])[:3]
+        if artifacts:
+            art_strs = [f"{a['type']}: {a['name']}" for a in artifacts]
+            parts.append(f"Recently created by Spectra: {', '.join(art_strs)}.")
+
     parts.append(
         "Extract the action parameters from the user's message. "
         "If a required parameter is missing, ask for it concisely."
@@ -419,6 +430,126 @@ class ConversationFlowManager:
     """
 
     # ------------------------------------------------------------------
+    # Board persistence helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _remember_board(state, board):
+        """Persist the last-used board so subsequent actions auto-select it."""
+        if board and state:
+            # Store in the global (board=None) state for the user so it
+            # survives across state resets.
+            global_state = SpectraConversationState.objects.filter(
+                user=state.user, board__isnull=True,
+            ).first()
+            if global_state is None:
+                global_state = state
+            data = global_state.collected_data or {}
+            if data.get('_last_board_id') != board.id:
+                data['_last_board_id'] = board.id
+                data['_last_board_name'] = board.name
+                global_state.collected_data = data
+                global_state.save(update_fields=['collected_data', 'updated_at'])
+
+    @staticmethod
+    def _get_last_board(user, is_demo_mode=False):
+        """Retrieve the last-used board from the global state, if still valid."""
+        from kanban.models import Board
+        global_state = SpectraConversationState.objects.filter(
+            user=user, board__isnull=True,
+        ).first()
+        if not global_state:
+            return None
+        board_id = (global_state.collected_data or {}).get('_last_board_id')
+        if not board_id:
+            return None
+        try:
+            board = Board.objects.get(id=board_id, is_archived=False)
+            # Verify the board is accessible in the current workspace
+            if is_demo_mode:
+                if not (board.is_official_demo_board or
+                        (board.created_by_session or '').startswith(f'spectra_demo_{user.id}')):
+                    return None
+            else:
+                if board.is_official_demo_board or \
+                        (board.created_by_session or '').startswith('spectra_demo_'):
+                    return None
+                if not (board.created_by_id == user.id or board.members.filter(id=user.id).exists()):
+                    return None
+            return board
+        except Board.DoesNotExist:
+            return None
+
+    # ------------------------------------------------------------------
+    # Artifact memory — track recent Spectra-created artifacts
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _remember_artifact(user, artifact_type, artifact_info):
+        """
+        Store a recently created artifact so Spectra can reference it later.
+        Keeps the last 5 artifacts per user in the global state.
+        artifact_info: dict with at minimum 'name' and 'id'.
+        """
+        global_state = SpectraConversationState.objects.filter(
+            user=user, board__isnull=True,
+        ).first()
+        if global_state is None:
+            global_state, _ = SpectraConversationState.objects.get_or_create(
+                user=user, board=None,
+                defaults={'mode': 'normal'},
+            )
+        data = global_state.collected_data or {}
+        artifacts = data.get('_recent_artifacts', [])
+        artifacts.insert(0, {
+            'type': artifact_type,
+            **artifact_info,
+        })
+        data['_recent_artifacts'] = artifacts[:5]  # keep last 5
+        global_state.collected_data = data
+        global_state.save(update_fields=['collected_data', 'updated_at'])
+
+    @staticmethod
+    def _get_recent_artifacts(user, limit=5):
+        """Retrieve recent Spectra-created artifacts for context."""
+        global_state = SpectraConversationState.objects.filter(
+            user=user, board__isnull=True,
+        ).first()
+        if not global_state:
+            return []
+        return (global_state.collected_data or {}).get('_recent_artifacts', [])[:limit]
+
+    # ------------------------------------------------------------------
+    # Compound action detection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_second_action(data):
+        """
+        Check if the original message contained a second action clause
+        after delimiters like 'and then', 'then also', 'and also', ', also'.
+        Returns the second clause text or None.
+        """
+        original = data.get('_original_message') or data.get('original_message', '')
+        if not original:
+            return None
+        import re
+        # Split on compound delimiters
+        parts = re.split(
+            r'\b(?:and\s+then|then\s+also|and\s+also|,\s*also|,\s*then)\b',
+            original, maxsplit=1, flags=re.IGNORECASE,
+        )
+        if len(parts) < 2:
+            return None
+        second = parts[1].strip()
+        # Only return if it looks like an action (reasonably long)
+        if len(second) > 10:
+            intent = detect_action_intent(second)
+            if intent and intent not in ('confirm_action', 'cancel_action'):
+                return second
+        return None
+
+    # ------------------------------------------------------------------
     # Main dispatcher
     # ------------------------------------------------------------------
 
@@ -473,6 +604,9 @@ class ConversationFlowManager:
 
     def _start_task_flow(self, user, board, message, state):
         is_demo = getattr(self, '_is_demo_mode', False)
+        if board is None:
+            # Try last-used board first
+            board = self._get_last_board(user, is_demo)
         if board is None:
             from kanban.models import Board
 
@@ -611,6 +745,25 @@ class ConversationFlowManager:
                 state.reset()
                 return "The board no longer exists. Please try again."
 
+        # Handle inline priority change from confirmation screen
+        if data.get('_awaiting_priority_change'):
+            data.pop('_awaiting_priority_change')
+            new_p = None
+            for p in ('low', 'medium', 'high', 'urgent'):
+                if p in msg.lower():
+                    new_p = p
+                    break
+            if new_p:
+                data['priority'] = new_p
+                state.collected_data = data
+                state.mode = 'awaiting_confirmation'
+                state.save()
+                return self._format_task_confirmation(data)
+            return (
+                "I didn't catch a valid priority. "
+                "Please choose: **Low**, **Medium**, **High**, or **Urgent**."
+            )
+
         if step == -1:
             # Awaiting board selection
             from kanban.models import Board
@@ -645,6 +798,7 @@ class ConversationFlowManager:
             board = selected
             data['board_id'] = board.id
             data['board_name'] = board.name
+            self._remember_board(state, board)
             # Try to extract fields from the original create message
             original = data.pop('original_message', '')
             extracted = _extract_task_fields(original) if original else {}
@@ -1164,6 +1318,7 @@ class ConversationFlowManager:
     _FC_NEW_MODES = frozenset({
         'collecting_message', 'collecting_time_entry',
         'collecting_event', 'collecting_retrospective',
+        'collecting_task_update',
     })
 
     _FC_INTENT_META = {
@@ -1203,6 +1358,12 @@ class ConversationFlowManager:
             'label': 'creating a scheduled automation',
             'needs_board': True,
         },
+        'update_task': {
+            'mode': 'collecting_task_update',
+            'pending': 'update_task',
+            'label': 'updating a task',
+            'needs_board': True,
+        },
         # Living Commitment Protocols — stateless (no collection needed)
         'get_commitment_status': {
             'mode': 'awaiting_confirmation',
@@ -1238,9 +1399,12 @@ class ConversationFlowManager:
         if not meta:
             return None  # caller falls through to Q&A
 
-        # Board requirement check
+        # Board requirement check — try last-used board before asking
         if meta['needs_board'] and board is None:
-            board = self._auto_select_board(user)
+            is_demo = getattr(self, '_is_demo_mode', False)
+            board = self._get_last_board(user, is_demo)
+            if board is None:
+                board = self._auto_select_board(user)
             if board is None:
                 boards = _user_board_names(user)
                 if boards:
@@ -1302,6 +1466,7 @@ class ConversationFlowManager:
 
             state.mode = 'awaiting_confirmation'
             state.pending_action = pending
+            data['_original_message'] = message
             state.collected_data = data
             state.save()
             return self._format_fc_confirmation(pending, data)
@@ -1381,6 +1546,7 @@ class ConversationFlowManager:
             original = data.pop('original_message', message)
             data['board_id'] = board.id
             data['board_name'] = board.name
+            self._remember_board(state, board)
             state.collected_data = data
             state.save()
             # Re-run the original message now that we have a board
@@ -1485,6 +1651,7 @@ class ConversationFlowManager:
             'create_retrospective': 'create_retrospective',
             'create_custom_automation': 'create_automation',
             'create_scheduled_automation': 'create_scheduled_automation',
+            'update_task': 'update_task',
             'get_commitment_status': 'get_commitment_status',
             'list_at_risk_commitments': 'list_at_risk_commitments',
             'place_commitment_bet': 'place_commitment_bet',
@@ -1503,6 +1670,7 @@ class ConversationFlowManager:
             'create_custom_automation': self._format_custom_auto_confirmation,
             'create_scheduled_automation': self._format_sched_auto_confirmation,
             'place_commitment_bet': self._format_commitment_bet_confirmation,
+            'update_task': self._format_update_task_confirmation,
         }
         formatter = formatters.get(pending)
         if formatter:
@@ -1558,6 +1726,7 @@ class ConversationFlowManager:
             f"📅 **Period:** {data.get('period_start', '?')} → {data.get('period_end', '?')}\n"
             f"📝 **Notes:** {data.get('manual_insights', 'None')}\n"
             f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
+            "⏳ *Note: Generation may take a few seconds as I analyze board activity.*\n\n"
             "Type **confirm** to generate, or tell me what to change."
         )
 
@@ -1599,6 +1768,23 @@ class ConversationFlowManager:
             "Type **confirm** to place the bet, or **cancel** to abort."
         )
 
+    @staticmethod
+    def _format_update_task_confirmation(data):
+        field_labels = {
+            'status': '📊 Move to', 'priority': '⚡ New priority',
+            'assignee': '👤 Reassign to', 'due_date': '📅 New due date',
+            'title': '✏️ Rename to', 'description': '📝 New description',
+        }
+        field = data.get('field', '?')
+        label = field_labels.get(field, f'🔧 {field}')
+        return (
+            "Here's the task update I'll apply:\n\n"
+            f"📋 **Task:** {data.get('task_name', 'Unknown')}\n"
+            f"{label}: **{data.get('new_value', '?')}**\n"
+            f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
+            "Type **confirm** to apply, or tell me what to change."
+        )
+
     def _handle_collecting(self, user, board, message, state):
         """Route to the correct continuation handler based on state mode."""
         # First check if user wants to cancel mid-flow
@@ -1631,6 +1817,7 @@ class ConversationFlowManager:
             'create_retrospective': 'collecting_retrospective',
             'create_automation': 'collecting_automation',
             'create_scheduled_automation': 'collecting_automation',
+            'update_task': 'collecting_task_update',
         }
         if intent and intent not in ('confirm_action', 'cancel_action'):
             expected_mode = _INTENT_TO_MODE.get(intent)
@@ -1656,6 +1843,7 @@ class ConversationFlowManager:
                     'collecting_time_entry': 'logging time',
                     'collecting_event': 'scheduling an event',
                     'collecting_retrospective': 'creating a retrospective',
+                    'collecting_task_update': 'updating a task',
                 }.get(state.mode, 'something')
                 return (
                     f"I'm currently in the middle of **{flow_name}** for you. "
@@ -1723,12 +1911,27 @@ class ConversationFlowManager:
                     state.save()
                     return "OK. **Who should this be assigned to?** (Type a name or 'skip')"
                 if any(f in msg_lower for f in ['priority']):
-                    data['step'] = 0
-                    data.pop('title', None)
+                    # Extract new priority inline: "change priority to high"
+                    new_p = None
+                    for p in ('low', 'medium', 'high', 'urgent'):
+                        if p in msg_lower:
+                            new_p = p
+                            break
+                    if new_p:
+                        data['priority'] = new_p
+                        state.collected_data = data
+                        state.mode = 'awaiting_confirmation'
+                        state.save()
+                        return self._format_task_confirmation(data)
+                    # Ask for priority without restarting
+                    data['_awaiting_priority_change'] = True
                     state.mode = 'collecting_task'
                     state.collected_data = data
                     state.save()
-                    return "OK, let's start over. **What should the task be called?**"
+                    return (
+                        "What priority would you like? "
+                        "Options: **Low**, **Medium**, **High**, or **Urgent**."
+                    )
                 # Fallback: restart from beginning
                 data['step'] = 0
                 data.pop('title', None)
@@ -1771,7 +1974,7 @@ class ConversationFlowManager:
             elif pending in (
                 'send_message', 'log_time', 'schedule_event',
                 'create_retrospective', 'create_custom_automation',
-                'create_scheduled_automation',
+                'create_scheduled_automation', 'update_task',
             ):
                 # FC-based actions: restart the FC flow with the change request
                 intent = self._pending_to_intent(pending)
@@ -1835,7 +2038,7 @@ class ConversationFlowManager:
         elif pending in (
             'send_message', 'log_time', 'schedule_event',
             'create_retrospective', 'create_custom_automation',
-            'create_scheduled_automation',
+            'create_scheduled_automation', 'update_task',
         ):
             return self._execute_fc_action(user, board, state, data)
         else:
@@ -1881,11 +2084,23 @@ class ConversationFlowManager:
 
         result = action_service.create_task(user, board, create_data)
 
+        # Persist the board for future context
+        self._remember_board(state, board)
+
+        # Check for compound action before resetting
+        second_action = self._extract_second_action(data)
+
         state.reset()
 
         if result['success']:
             task = result['task']
             url = result['url']
+
+            # Remember this artifact for cross-session context
+            self._remember_artifact(user, 'task', {
+                'name': task.title, 'id': task.id,
+                'board': board.name, 'board_id': board.id,
+            })
 
             # Let the user know the task lives in demo workspace
             demo_note = ''
@@ -1895,11 +2110,33 @@ class ConversationFlowManager:
                     "so you can experiment freely."
                 )
 
+            # Proactive insight: workload check for assignee
+            insight = ''
+            if task.assigned_to:
+                try:
+                    from kanban.models import Task as TaskModel
+                    open_count = TaskModel.objects.filter(
+                        assigned_to=task.assigned_to,
+                        column__board=board,
+                        is_archived=False,
+                    ).exclude(
+                        column__position=board.columns.count() - 1,
+                    ).count()
+                    if open_count > 5:
+                        name = task.assigned_to.get_full_name() or task.assigned_to.username
+                        insight = (
+                            f"\n\n💡 **Heads up:** {name} currently has "
+                            f"**{open_count} open tasks** on this board."
+                        )
+                except Exception:
+                    pass
+
             return (
                 f"✅ **Task created successfully!**\n\n"
                 f"📋 **{task.title}** has been added to **{board.name}** "
                 f"in the **{task.column.name}** column.\n\n"
-                f"[View task]({url}){demo_note}"
+                f"[View task]({url}){demo_note}{insight}"
+                + (f"\n\n💬 I also noticed you wanted to **{second_action}** — just say the word!" if second_action else '')
             )
         else:
             return (
@@ -1924,6 +2161,11 @@ class ConversationFlowManager:
         if result['success']:
             board_obj = result['board']
             url = result['url']
+
+            # Remember this artifact
+            self._remember_artifact(user, 'board', {
+                'name': board_obj.name, 'id': board_obj.id,
+            })
 
             env_note = ''
             if is_demo:
@@ -2015,6 +2257,7 @@ class ConversationFlowManager:
             'create_retrospective': 'create_retrospective',
             'create_custom_automation': 'create_custom_automation',
             'create_scheduled_automation': 'create_scheduled_automation',
+            'update_task': 'update_task',
             # Living Commitment Protocols
             'get_commitment_status': 'get_commitment_status',
             'list_at_risk_commitments': 'list_at_risk_commitments',
@@ -2030,8 +2273,19 @@ class ConversationFlowManager:
         result = method(user, board, data)
 
         if result.get('success'):
+            # Persist the board for future interactions
+            if board:
+                self._remember_board(state, board)
+            msg = result.get('message', '✅ Done!')
+
+            # Check for compound action: did the original message contain
+            # a second action clause after "and then", "then", "also"?
+            second_action = self._extract_second_action(data)
+            if second_action:
+                msg += f"\n\n💬 I also noticed you wanted to **{second_action}** — just say the word and I'll help with that next!"
+
             state.reset()
-            return result.get('message', '✅ Done!')
+            return msg
 
         # ── Task disambiguation — don't reset state, ask user to pick ──
         if result.get('disambiguation_needed'):

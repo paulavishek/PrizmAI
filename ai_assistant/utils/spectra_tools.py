@@ -18,7 +18,7 @@ def get_action_tools():
     Return a list of ``genai.types.Tool`` objects ready to pass to
     ``GeminiClient.get_function_call_response()``.
 
-    The tools cover all eight Spectra action types.
+    The tools cover all Spectra action types including task updates.
     """
     global _cached_tools
     if _cached_tools is not None:
@@ -296,6 +296,44 @@ def get_action_tools():
             },
         )
 
+        # ── 9. Update Task ────────────────────────────────────────────────
+        update_task = FunctionDeclaration(
+            name='update_task',
+            description=(
+                'Update an existing task on a project board. '
+                'Can change status (mark as done, move to column), priority, '
+                'assignee, due date, or title.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'task_name': {
+                        'type': 'string',
+                        'description': 'Name or partial name of the task to update.',
+                    },
+                    'field': {
+                        'type': 'string',
+                        'enum': [
+                            'status', 'priority', 'assignee',
+                            'due_date', 'title', 'description',
+                        ],
+                        'description': 'Which field to update.',
+                    },
+                    'new_value': {
+                        'type': 'string',
+                        'description': (
+                            'The new value for the field. '
+                            'For status: column name or "done"/"complete". '
+                            'For priority: low/medium/high/urgent. '
+                            'For assignee: name or username. '
+                            'For due_date: natural language or ISO date.'
+                        ),
+                    },
+                },
+                'required': ['task_name', 'field', 'new_value'],
+            },
+        )
+
         # ── Living Commitment Protocols ──────────────────────────────────────
         get_commitment_status = FunctionDeclaration(
             name='get_commitment_status',
@@ -378,12 +416,13 @@ def get_action_tools():
                 create_retrospective,
                 create_automation,
                 create_scheduled_automation,
+                update_task,
                 get_commitment_status,
                 list_at_risk_commitments,
                 place_commitment_bet,
             ])
         ]
-        logger.info("Spectra action tool schemas loaded (%d functions)", 11)
+        logger.info("Spectra action tool schemas loaded (%d functions)", 12)
         return _cached_tools
 
     except ImportError:
@@ -404,6 +443,7 @@ FUNCTION_TO_ACTION = {
     'create_retrospective': 'create_retrospective',
     'create_automation': 'create_custom_automation',
     'create_scheduled_automation': 'create_scheduled_automation',
+    'update_task': 'update_task',
     # Living Commitment Protocols — these are stateless (no confirmation flow needed)
     'get_commitment_status': 'get_commitment_status',
     'list_at_risk_commitments': 'list_at_risk_commitments',
@@ -419,4 +459,5 @@ INTENT_TO_MODE = {
     'log_time': 'collecting_time_entry',
     'schedule_event': 'collecting_event',
     'create_retrospective': 'collecting_retrospective',
+    'update_task': 'collecting_task_update',
 }
