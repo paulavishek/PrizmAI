@@ -1232,7 +1232,7 @@ function displayPrioritySuggestion(data) {
         factorsHtml = `
             <div class="mt-2 p-2 bg-light rounded border">
                 <div class="d-flex align-items-start">
-                    <i class="fas fa-brain text-primary me-2 mt-1"></i>
+                    <i class="fas fa-wand-magic-sparkles text-primary me-2 mt-1"></i>
                     <div class="flex-grow-1">
                         <strong class="small text-primary">Why AI chose this:</strong>
                         <div class="small text-muted mt-1">
@@ -1770,7 +1770,7 @@ function repredictDeadlineWithComplexity(complexityScore) {
         const toast = document.createElement('div');
         toast.className = 'alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3 shadow';
         toast.style.zIndex = '9999';
-        toast.innerHTML = `<i class="fas fa-brain me-1"></i> Re-predicting deadline using AI complexity score <strong>${complexityScore}/10</strong>` +
+        toast.innerHTML = `<i class="fas fa-wand-magic-sparkles me-1"></i> Re-predicting deadline using AI complexity score <strong>${complexityScore}/10</strong>` +
             (originalScore && originalScore != complexityScore ? ` (was ${originalScore}/10)` : '') + `…`;
         document.body.appendChild(toast);
 
@@ -1930,7 +1930,7 @@ function displayBoardSetupRecommendations(data, formElements) {
                             </div>
                             <p class="mb-1 small">${data.description || 'No description generated'}</p>
                             <details class="mt-1">
-                                <summary class="text-muted small cursor-pointer"><i class="fas fa-brain me-1"></i>Why this description?</summary>
+                                <summary class="text-muted small cursor-pointer"><i class="fas fa-wand-magic-sparkles me-1"></i>Why this description?</summary>
                                 <p class="small text-muted mt-1 mb-0">${data.description_reasoning || 'Based on project name analysis.'}</p>
                             </details>
                         </div>
@@ -1954,7 +1954,7 @@ function displayBoardSetupRecommendations(data, formElements) {
                                 <small class="text-muted">${data.phase_names.join(' → ')}</small>
                             ` : ''}
                             <details class="mt-1">
-                                <summary class="text-muted small cursor-pointer"><i class="fas fa-brain me-1"></i>Why this count?</summary>
+                                <summary class="text-muted small cursor-pointer"><i class="fas fa-wand-magic-sparkles me-1"></i>Why this count?</summary>
                                 <p class="small text-muted mt-1 mb-0">${data.phases_reasoning || 'Based on project complexity.'}</p>
                             </details>
                         </div>
@@ -1975,7 +1975,7 @@ function displayBoardSetupRecommendations(data, formElements) {
                                 <span class="badge bg-info fs-6">${teamSizeDisplay[data.recommended_team_size] || data.recommended_team_size || 'Medium'}</span>
                             </p>
                             <details class="mt-1">
-                                <summary class="text-muted small cursor-pointer"><i class="fas fa-brain me-1"></i>Why this size?</summary>
+                                <summary class="text-muted small cursor-pointer"><i class="fas fa-wand-magic-sparkles me-1"></i>Why this size?</summary>
                                 <p class="small text-muted mt-1 mb-0">${data.team_size_reasoning || 'Based on project scope.'}</p>
                             </details>
                         </div>
@@ -3388,7 +3388,7 @@ function displayAssigneeSuggestion(data) {
         html += `
                 <div class="mt-2">
                     <a class="small text-decoration-none" data-bs-toggle="collapse" href="#assignee-factors-collapse" role="button">
-                        <i class="fas fa-brain text-primary me-1"></i>
+                        <i class="fas fa-wand-magic-sparkles text-primary me-1"></i>
                         <strong class="text-primary">Why AI chose this person</strong>
                         <i class="fas fa-chevron-down ms-1 small"></i>
                     </a>

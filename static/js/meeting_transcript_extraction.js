@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
         summaryEl.innerHTML = `
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <h5><i class="fas fa-brain me-2"></i>AI Analysis Summary</h5>
+                    <h5><i class="fas fa-wand-magic-sparkles me-2"></i>AI Analysis Summary</h5>
                     <p class="mb-2">${summary.meeting_summary}</p>
                     <small>
                         <span class="confidence-indicator ${confidenceClass}"></span>

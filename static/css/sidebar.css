@@ -58,10 +58,10 @@
 .sidebar-brand:hover { color: #fff; }
 
 .sidebar-brand-icon {
-    font-size: 1.3rem;
     flex-shrink: 0;
     width: 28px;
-    text-align: center;
+    height: 28px;
+    display: block;
 }
 
 .sidebar-toggle-btn {

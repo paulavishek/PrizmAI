@@ -5,9 +5,10 @@
 {% block body %}
 <div class="text-center" style="max-width: 540px;">
     <!-- Logo / icon — matches auth pages -->
+    {% load static %}
     <div class="mb-4">
         <a href="/" style="font-size: 1.8rem; font-weight: 800; color: #4338ca; letter-spacing: -0.5px; text-decoration: none;">
-            <i class="fas fa-brain me-1"></i>Pri<span style="color: #ef4444; font-style: italic;">z</span>mAI
+            <img src="{% static 'kanban/images/logo.svg' %}" alt="PrizmAI logo" width="32" height="32" class="me-1" style="vertical-align:middle;">Pri<span style="color: #ef4444; font-style: italic;">z</span>mAI
         </a>
     </div>
 

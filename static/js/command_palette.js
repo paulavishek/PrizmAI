@@ -295,7 +295,7 @@ function applyAISearchResults(results, query) {
     // Update result count
     const resultCount = document.getElementById('searchResultCount');
     if (resultCount) {
-        resultCount.innerHTML = `<i class="fas fa-brain me-1"></i>${matchCount} AI matches`;
+        resultCount.innerHTML = `<i class="fas fa-wand-magic-sparkles me-1"></i>${matchCount} AI matches`;
         resultCount.style.display = 'inline-block';
     }
     
@@ -314,7 +314,7 @@ function addAIMatchBadge(element, score, reason) {
     const badge = document.createElement('div');
     badge.className = 'ai-match-badge';
     badge.style.cssText = 'position: absolute; top: 5px; right: 5px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; z-index: 10;';
-    badge.innerHTML = `<i class="fas fa-brain me-1"></i>${Math.round(score * 100)}%`;
+    badge.innerHTML = `<i class="fas fa-wand-magic-sparkles me-1"></i>${Math.round(score * 100)}%`;
     badge.title = reason || 'AI match';
     
     element.style.position = 'relative';

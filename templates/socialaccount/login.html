@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-
+{% load static %}
 {% block title %}Connect Google Account - PrizmAI{% endblock %}
 
 {% block navbar_unauthenticated %}{% endblock %}
@@ -125,7 +125,7 @@
         <!-- Brand -->
         <div class="auth-brand">
             <a href="/" class="auth-brand-logo">
-                <i class="fas fa-brain me-1"></i>Pri<span class="z-accent">z</span>mAI
+                <img src="{% static 'kanban/images/logo.svg' %}" alt="PrizmAI logo" width="32" height="32" class="me-1" style="vertical-align:middle;">Pri<span class="z-accent">z</span>mAI
             </a>
         </div>
 
