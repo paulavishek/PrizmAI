@@ -910,6 +910,28 @@ def dashboard(request):
     # Standalone boards: user-accessible boards not linked to any strategy
     standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
 
+    # Flat list of accessible strategies for the "Link to Strategy" dropdown on standalone boards
+    # Query directly using mission IDs already in mission_tree for reliability
+    _accessible_mission_ids = [_mi['mission'].id for _mi in mission_tree]
+    if _accessible_mission_ids:
+        _strat_qs = (
+            Strategy.objects
+            .filter(mission_id__in=_accessible_mission_ids)
+            .select_related('mission')
+            .order_by('mission__name', 'name')
+        )
+        all_strategies = [
+            {
+                'id': s.id,
+                'name': s.name,
+                'mission_name': s.mission.name,
+                'mission_id': s.mission_id,
+            }
+            for s in _strat_qs
+        ]
+    else:
+        all_strategies = []
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -933,6 +955,7 @@ def dashboard(request):
         'mission_tree': mission_tree,
         'goal_tree': goal_tree,
         'standalone_boards': standalone_boards,
+        'all_strategies': all_strategies,
         'mission_count': len(mission_tree),
         'chart_data': chart_data,  # Raw dict for json_script filter
         'chart_missions': chart_missions,
@@ -3548,9 +3571,50 @@ def test_ai_features(request):
     """Test page for AI features debugging"""
     return render(request, 'kanban/test_ai_features.html')
 
+
+@login_required
+def link_board_to_strategy_dashboard(request, board_id):
+    """AJAX POST — link a standalone board to an existing strategy from the dashboard."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    board = get_object_or_404(Board, id=board_id)
+
+    # Access check: user must be the board creator or a member
+    if not (board.created_by == request.user or
+            board.is_official_demo_board or
+            board.members.filter(id=request.user.id).exists()):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
+
+    strategy_id = request.POST.get('strategy_id', '').strip()
+    if not strategy_id:
+        return JsonResponse({'success': False, 'error': 'Please select a strategy.'}, status=400)
+
+    try:
+        strategy_id = int(strategy_id)
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'Invalid strategy.'}, status=400)
+
+    strategy = get_object_or_404(Strategy, id=strategy_id)
+
+    board.strategy = strategy
+    board.save(update_fields=['strategy'])
+
+    from django.urls import reverse
+    return JsonResponse({
+        'success': True,
+        'message': f'"{board.name}" linked to strategy "{strategy.name}".',
+        'strategy_name': strategy.name,
+        'mission_name': strategy.mission.name,
+        'redirect_url': reverse('strategy_detail', kwargs={
+            'mission_id': strategy.mission_id,
+            'strategy_id': strategy.id,
+        }),
+    })
+
+
 @login_required
 def edit_board(request, board_id):
-    board = get_object_or_404(Board, id=board_id)
       # Check if user is the board creator or a member
     # Access restriction removed - all authenticated users can access
 

@@ -2160,7 +2160,7 @@
                     These boards are not linked to any Mission strategy. 
                     Consider <a href="{% url 'mission_list' %}">assigning them to a strategy</a> to keep everything organised.
                 </p>
-                <div class="row">
+                <div class="row standalone-boards-row">
                     {% for board in standalone_boards %}
                     <div class="col-md-4 mb-3">
                         <div class="card h-100 border-left-{% if board.is_official_demo_board %}warning{% else %}secondary{% endif %} shadow-sm">
@@ -2193,6 +2193,39 @@
                                     <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-sm btn-outline-success" title="Budget">
                                         <i class="fas fa-dollar-sign fa-sm"></i>
                                     </a>
+                                    <div class="dropdown d-inline-block">
+                                        <button class="btn btn-sm btn-outline-primary dropdown-toggle standalone-link-dropdown-btn"
+                                                type="button"
+                                                data-bs-toggle="dropdown"
+                                                data-bs-auto-close="true"
+                                                data-bs-boundary="viewport"
+                                                aria-expanded="false"
+                                                title="Link to a strategy">
+                                            <i class="fas fa-link fa-sm"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow standalone-link-dropdown-menu" style="min-width:240px; max-height:300px; overflow-y:auto;">
+                                            <li><h6 class="dropdown-header"><i class="fas fa-link me-1"></i> Link to Strategy</h6></li>
+                                            <li><hr class="dropdown-divider my-1"></li>
+                                            {% if all_strategies %}
+                                                {% for strat in all_strategies %}
+                                                <li>
+                                                    <a class="dropdown-item small link-board-strategy-btn"
+                                                       href="#"
+                                                       data-board-id="{{ board.id }}"
+                                                       data-strategy-id="{{ strat.id }}"
+                                                       data-strategy-name="{{ strat.name }}"
+                                                       data-mission-name="{{ strat.mission_name }}"
+                                                       data-url="{% url 'link_board_to_strategy_dashboard' board.id %}">
+                                                        <span class="text-muted" style="font-size:0.75em;">{{ strat.mission_name }}</span><br>
+                                                        {{ strat.name }}
+                                                    </a>
+                                                </li>
+                                                {% endfor %}
+                                            {% else %}
+                                                <li><span class="dropdown-item-text small text-muted">No strategies found. <a href="{% url 'mission_list' %}">Create one</a>.</span></li>
+                                            {% endif %}
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-footer bg-transparent border-top-0">
@@ -3634,5 +3667,84 @@
             if (label) { label.textContent = pct + '%'; label.style.color = color; }
         });
     });
+</script>
+
+<!-- Link Board to Strategy from Dashboard -->
+<script>
+(function () {
+    // Initialise standalone-board strategy-link dropdowns with Popper's 'fixed'
+    // strategy so they escape any overflow:hidden ancestor on the card.
+    function initLinkDropdowns() {
+        document.querySelectorAll('.standalone-link-dropdown-btn').forEach(function (el) {
+            if (el._bsDropdown) return; // already initialised
+            el._bsDropdown = new bootstrap.Dropdown(el, {
+                popperConfig: function (defaultConfig) {
+                    return Object.assign({}, defaultConfig, { strategy: 'fixed' });
+                }
+            });
+        });
+    }
+    // Run after DOM ready (bootstrap may already be loaded by this point)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initLinkDropdowns);
+    } else {
+        initLinkDropdowns();
+    }
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+        return v ? v.pop() : '';
+    }
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.link-board-strategy-btn');
+        if (!btn) return;
+        e.preventDefault();
+
+        const boardId    = btn.dataset.boardId;
+        const strategyId = btn.dataset.strategyId;
+        const url        = btn.dataset.url;
+        const stratName  = btn.dataset.strategyName;
+        const missName   = btn.dataset.missionName;
+
+        if (!confirm(`Link this board to strategy "${stratName}" (${missName})?`)) return;
+
+        const formData = new FormData();
+        formData.append('strategy_id', strategyId);
+        formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+
+        fetch(url, { method: 'POST', body: formData, headers: { 'X-CSRFToken': getCookie('csrftoken') } })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the board card from the standalone section
+                    const card = btn.closest('.col-md-4');
+                    if (card) {
+                        card.style.transition = 'opacity 0.4s';
+                        card.style.opacity = '0';
+                        setTimeout(() => {
+                            card.remove();
+                            // If no more standalone boards, remove the whole section
+                            const row = document.querySelector('.standalone-boards-row');
+                            if (row && row.querySelectorAll('.col-md-4').length === 0) {
+                                row.closest('.card').closest('.row').remove();
+                            }
+                        }, 400);
+                    }
+                    // Show success toast / alert
+                    const toast = document.createElement('div');
+                    toast.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                    toast.style.cssText = 'top:1rem;right:1rem;z-index:9999;min-width:280px;';
+                    toast.innerHTML = `<i class="fas fa-check-circle me-2"></i>${data.message}
+                        <a href="${data.redirect_url}" class="alert-link ms-2">View Strategy →</a>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+                    document.body.appendChild(toast);
+                    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 6000);
+                } else {
+                    alert('Error: ' + (data.error || 'Could not link board.'));
+                }
+            })
+            .catch(() => alert('Network error. Please try again.'));
+    });
+})();
 </script>
 {% endblock %}

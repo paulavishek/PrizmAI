@@ -105,6 +105,7 @@ urlpatterns = [
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),
+    path('boards/<int:board_id>/link-strategy/', views.link_board_to_strategy_dashboard, name='link_board_to_strategy_dashboard'),
     path('boards/<int:board_id>/create-task/', views.create_task, name='create_task'),
     path('boards/<int:board_id>/columns/<int:column_id>/create-task/', views.create_task, name='create_task_in_column'),
     path('boards/<int:board_id>/create-column/', views.create_column, name='create_column'),
