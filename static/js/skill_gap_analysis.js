@@ -224,7 +224,7 @@ class SkillGapAnalyzer {
                 <div class="row mb-4">
                     <div class="col-md-12">
                         <div class="d-flex justify-content-between align-items-center">
-                            <h3><i class="fas fa-brain me-2"></i>Skill Gap Analysis</h3>
+                            <h3><i class="fas fa-wand-magic-sparkles me-2"></i>Skill Gap Analysis</h3>
                             <button class="btn btn-primary" onclick="skillGapAnalyzer.analyzeGaps()">
                                 <i class="fas fa-sync-alt me-1"></i>Run Analysis
                             </button>

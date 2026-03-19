@@ -80,7 +80,7 @@
             <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-overview" role="tab"><i class="fas fa-edit me-1"></i>Overview</a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-details" role="tab"><i class="fas fa-sliders-h me-1"></i>Details</a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-relationships" role="tab"><i class="fas fa-project-diagram me-1"></i>Relationships</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-ai" role="tab"><i class="fas fa-brain me-1"></i>AI Insights</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-ai" role="tab"><i class="fas fa-wand-magic-sparkles me-1"></i>AI Insights</a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-activity" role="tab"><i class="fas fa-comments me-1"></i>Activity</a></li>
         </ul>
 
@@ -659,7 +659,7 @@
                                     <div class="spinner-border spinner-border-sm text-info" role="status">
                                         <span class="visually-hidden">Analyzing team members...</span>
                                     </div>
-                                    <span class="ms-2 text-muted"><i class="fas fa-brain me-1"></i>Analyzing team skills, workload & performance...</span>
+                                    <span class="ms-2 text-muted"><i class="fas fa-wand-magic-sparkles me-1"></i>Analyzing team skills, workload & performance...</span>
                                 </div>
                                 <div id="assignee-suggestion-result" class="d-none mt-2"></div>
                                 {% if task.assigned_to %}
@@ -717,7 +717,7 @@
                                     <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info"
                                             data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
                                             title="AI-powered deadline prediction">
-                                        <i class="fas fa-brain me-1"></i> Predict Deadline
+                                        <i class="fas fa-wand-magic-sparkles me-1"></i> Predict Deadline
                                     </button>
                                 </div>
                                 <small id="predict-assignee-hint" class="form-text text-warning d-none">
@@ -754,7 +754,7 @@
                                     </div>
                                     <button type="button" id="generate-task-summary-btn" class="btn btn-sm btn-outline-primary"
                                             data-task-id="{{ task.id }}">
-                                        <i class="fas fa-brain me-1"></i> Generate Summary
+                                        <i class="fas fa-wand-magic-sparkles me-1"></i> Generate Summary
                                     </button>
                                 </div>
                                 <div id="task-summary-spinner" class="d-none text-center mt-2">
@@ -1086,7 +1086,7 @@
                 {% if task.progress < 100 %}
                 <div class="mb-3">
                     <label class="text-muted d-flex align-items-center">
-                        <i class="fas fa-brain text-primary me-2"></i> Predicted Completion
+                        <i class="fas fa-wand-magic-sparkles text-primary me-2"></i> Predicted Completion
                         <button type="button" class="btn btn-sm btn-link p-0 ms-2" id="refresh-prediction" data-task-id="{{ task.id }}" title="Refresh prediction">
                             <i class="fas fa-sync-alt"></i>
                         </button>
@@ -1214,7 +1214,7 @@
                             </div>
                         {% else %}
                             <div class="text-muted text-center py-2 prediction-placeholder">
-                                <i class="fas fa-brain mb-2"></i>
+                                <i class="fas fa-wand-magic-sparkles mb-2"></i>
                                 <small class="d-block">No prediction available yet</small>
                                 <small class="d-block text-muted">Set a start date to enable predictions</small>
                             </div>

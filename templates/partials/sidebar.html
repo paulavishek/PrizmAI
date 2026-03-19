@@ -4,7 +4,7 @@
     <!-- Sidebar Header: Logo + Collapse Toggle -->
     <div class="sidebar-header">
         <a href="{% url 'dashboard' %}" class="sidebar-brand" title="PrizmAI Dashboard">
-            <i class="fas fa-brain sidebar-brand-icon"></i>
+            <img src="{% static 'kanban/images/logo-dark.svg' %}" alt="PrizmAI logo" width="28" height="28" class="sidebar-brand-icon">
             <span class="sidebar-label">Pri<span class="stylish-z">z</span>mAI</span>
         </a>
         <button id="sidebarToggleBtn" class="sidebar-toggle-btn" type="button" title="Collapse sidebar" aria-label="Toggle sidebar">
@@ -103,7 +103,7 @@
                 </li>
                 <li class="sidebar-nav-item">
                     <a href="{% url 'organizational_memory' %}" class="sidebar-nav-link" title="Organizational Memory">
-                        <i class="fas fa-brain sidebar-nav-icon"></i>
+                        <i class="fas fa-wand-magic-sparkles sidebar-nav-icon"></i>
                         <span class="sidebar-label">Memory</span>
                     </a>
                 </li>

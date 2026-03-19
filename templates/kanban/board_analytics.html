@@ -67,7 +67,7 @@
         </a>
         {% endif %}
         <a href="{% url 'skill_gap_dashboard' board.id %}" class="btn btn-outline-warning">
-            <i class="fas fa-brain me-1"></i> Skill Gaps
+            <i class="fas fa-wand-magic-sparkles me-1"></i> Skill Gaps
         </a>
         <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info">
             <i class="fas fa-chart-gantt me-1"></i> Gantt Chart
@@ -86,7 +86,7 @@
                 <div>
                     <button id="generate-ai-summary" class="btn btn-sm btn-info" data-board-id="{{ board.id }}">
                         <span id="ai-summary-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
-                        <i class="fas fa-brain me-1"></i> Generate AI Summary
+                        <i class="fas fa-wand-magic-sparkles me-1"></i> Generate AI Summary
                     </button>
                     <button id="download-pdf-summary" class="btn btn-sm btn-success ms-2 d-none" data-board-id="{{ board.id }}">
                         <span id="pdf-download-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>

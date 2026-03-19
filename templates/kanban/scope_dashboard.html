@@ -191,7 +191,7 @@
                         <i class="fas fa-camera me-1"></i> Take Snapshot
                     </button>
                     <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#runAnalysisModal">
-                        <i class="fas fa-brain me-1"></i> AI Analysis
+                        <i class="fas fa-wand-magic-sparkles me-1"></i> AI Analysis
                     </button>
                     {% endif %}
                 </div>
@@ -555,7 +555,7 @@
                     <form method="post" action="{% url 'run_scope_analysis' board.id %}" class="mb-3">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-primary w-100 quick-action-btn">
-                            <i class="fas fa-brain me-2"></i>Run AI Analysis
+                            <i class="fas fa-wand-magic-sparkles me-2"></i>Run AI Analysis
                         </button>
                     </form>
                     <button type="button" class="btn btn-outline-warning w-100 mb-3 quick-action-btn"
@@ -684,7 +684,7 @@
                     <div class="form-check">
                         <input type="checkbox" class="form-check-input" name="ai_analysis" value="true" id="aiAnalysisCheck">
                         <label class="form-check-label" for="aiAnalysisCheck">
-                            <i class="fas fa-brain me-1"></i>Run AI analysis on this snapshot
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>Run AI analysis on this snapshot
                         </label>
                     </div>
                 </div>
@@ -904,7 +904,7 @@ function updateManualPreview() {
             <form method="post" action="{% url 'run_scope_analysis' board.id %}">
                 {% csrf_token %}
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-brain me-2"></i>AI Scope Analysis</h5>
+                    <h5 class="modal-title"><i class="fas fa-wand-magic-sparkles me-2"></i>AI Scope Analysis</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -934,7 +934,7 @@ function updateManualPreview() {
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-brain me-1"></i>Run Analysis
+                        <i class="fas fa-wand-magic-sparkles me-1"></i>Run Analysis
                     </button>
                 </div>
             </form>

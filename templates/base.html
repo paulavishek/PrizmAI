@@ -8,6 +8,7 @@
     <!-- Favicon -->
     {% load static %}
     {% load analytics_filters %}
+    <link rel="icon" type="image/svg+xml" href="{% static 'kanban/images/favicon.svg' %}">
     <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
     
     <!-- Bootstrap CSS -->
@@ -321,7 +322,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="padding: 0.5rem 0;">
         <div class="container-fluid px-3">
             <a class="navbar-brand" href="{% url 'dashboard' %}" style="font-size: 1.25rem; font-weight: 600;">
-                <i class="fas fa-brain me-2"></i>Pri<span class="stylish-z">z</span>mAI
+                <img src="{% static 'kanban/images/logo-dark.svg' %}" alt="PrizmAI logo" width="24" height="24" class="me-2" style="vertical-align:middle;">Pri<span class="stylish-z">z</span>mAI
             </a>
             <ul class="navbar-nav ms-auto align-items-center">
                 <li class="nav-item">
