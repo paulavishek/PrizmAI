@@ -118,10 +118,15 @@ def onboarding_goal_input(request):
         },
     )
 
-    # Dispatch Celery task
+    # Dispatch Celery task (with short broker connect timeout so the user
+    # isn't left waiting 60+ seconds when Redis is down).
     from kanban.tasks.onboarding_tasks import generate_workspace_from_goal_task
     try:
-        result = generate_workspace_from_goal_task.delay(request.user.id, goal_text)
+        result = generate_workspace_from_goal_task.apply_async(
+            args=[request.user.id, goal_text],
+            retry=False,                          # Don't auto-retry dispatch
+            connect_timeout=5,                     # Fail fast if broker is unreachable
+        )
         preview.celery_task_id = result.id
         preview.save(update_fields=['celery_task_id'])
     except Exception as exc:
@@ -164,6 +169,21 @@ def onboarding_generating(request):
     if preview.status == 'committed':
         return redirect('dashboard')
 
+    # If stuck generating for too long when user (re)loads this page, recover
+    from django.utils import timezone
+    STALE_THRESHOLD_SECONDS = 120  # 2 minutes
+    if preview.status == 'generating':
+        age = (timezone.now() - preview.updated_at).total_seconds()
+        if age > STALE_THRESHOLD_SECONDS:
+            logger.warning(
+                f"Stale preview on page load for {request.user.username} "
+                f"(age={age:.0f}s) — recovering"
+            )
+            _recover_stale_preview(preview)
+            preview.refresh_from_db()
+            if preview.status == 'ready':
+                return redirect('onboarding_review')
+
     profile = _get_profile(request)
     return render(request, 'kanban/onboarding/generating.html', {
         'goal_text': preview.goal_text,
@@ -180,16 +200,89 @@ def onboarding_status(request):
     """
     GET /onboarding/status/
     Returns JSON: {"status": "generating|ready|failed", "error": "..."}
+
+    Includes stale-generation recovery: if the preview has been stuck at
+    'generating' for more than STALE_THRESHOLD seconds, re-dispatch the
+    Celery task or fall back to a template workspace.
     """
+    from django.utils import timezone
+
+    STALE_THRESHOLD_SECONDS = 120  # 2 minutes
+
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
     except OnboardingWorkspacePreview.DoesNotExist:
         return JsonResponse({'status': 'failed', 'error': 'No workspace generation in progress.'})
 
+    # --- Stale-generation recovery ---
+    if preview.status == 'generating':
+        age = (timezone.now() - preview.updated_at).total_seconds()
+        if age > STALE_THRESHOLD_SECONDS:
+            logger.warning(
+                f"Stale onboarding preview for {request.user.username} "
+                f"(age={age:.0f}s) — attempting recovery"
+            )
+            _recover_stale_preview(preview)
+            preview.refresh_from_db()
+
     resp = {'status': preview.status}
     if preview.status == 'failed' and preview.error_message:
         resp['error'] = preview.error_message
     return JsonResponse(resp)
+
+
+# ---------------------------------------------------------------------------
+# Stale preview recovery helper
+# ---------------------------------------------------------------------------
+
+def _recover_stale_preview(preview):
+    """
+    Attempt to re-dispatch a stuck 'generating' preview.
+
+    Try Celery first; if the broker is unreachable, generate synchronously;
+    if even that fails, use the static fallback template so the user is
+    never stuck forever.
+    """
+    from kanban.tasks.onboarding_tasks import generate_workspace_from_goal_task
+    from kanban.utils.ai_utils import get_fallback_workspace
+
+    # 1. Try re-dispatching via Celery
+    try:
+        result = generate_workspace_from_goal_task.delay(
+            preview.user_id, preview.goal_text
+        )
+        preview.celery_task_id = result.id
+        # Reset updated_at so the stale check doesn't fire again immediately
+        preview.save(update_fields=['celery_task_id', 'updated_at'])
+        logger.info(f"Re-dispatched workspace task for user {preview.user.username}")
+        return
+    except Exception as exc:
+        logger.warning(f"Celery re-dispatch failed: {exc}")
+
+    # 2. Try synchronous generation
+    try:
+        generate_workspace_from_goal_task(preview.user_id, preview.goal_text)
+        return
+    except Exception as exc:
+        logger.warning(f"Synchronous recovery failed: {exc}")
+
+    # 3. Last resort — static fallback template
+    try:
+        preview.generated_data = get_fallback_workspace(preview.goal_text)
+        preview.status = 'ready'
+        preview.error_message = (
+            'AI generation timed out — using a template workspace. '
+            'You can customise everything on the next screen.'
+        )
+        preview.save(update_fields=[
+            'generated_data', 'status', 'error_message', 'updated_at',
+        ])
+        logger.info(f"Fallback workspace applied for user {preview.user.username}")
+    except Exception as inner:
+        logger.error(f"Even fallback failed for user {preview.user.username}: {inner}")
+        preview.status = 'failed'
+        preview.error_message = 'Workspace generation failed. Please try again.'
+        preview.save(update_fields=['status', 'error_message', 'updated_at'])
 
 
 # ---------------------------------------------------------------------------

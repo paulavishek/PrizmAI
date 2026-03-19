@@ -632,6 +632,9 @@ CELERY_TIMEZONE = 'Asia/Kolkata'  # Indian Standard Time (IST)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True  # Fix Celery 6.0 deprecation warning
+CELERY_BROKER_CONNECTION_RETRY = True             # Retry on connection loss
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 3          # Fail fast for .delay()/.apply_async() — only 3 retries
+CELERY_BROKER_CONNECTION_TIMEOUT = 5              # 5-second connect timeout to Redis
 
 # Use DatabaseScheduler so user-created ScheduledAutomation rules are picked
 # up at runtime.  The existing hardcoded beat_schedule entries in celery.py
