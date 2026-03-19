@@ -8,6 +8,7 @@
     <div class="qv-header">
         <div class="d-flex align-items-start gap-2 flex-grow-1 min-w-0">
             <h5 class="qv-title mb-0">{{ task.title }}</h5>
+            {% include 'partials/favorite_toggle.html' with favorite_type='task' object_id=task.id is_favorited=is_favorited %}
         </div>
         <div class="d-flex align-items-center gap-2 flex-shrink-0">
             <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-primary qv-open-full">

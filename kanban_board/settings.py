@@ -152,6 +152,7 @@ TEMPLATES = [
                 'kanban_board.context_processors.user_timezone',
                 'kanban.context_processors.conflict_count',
                 'kanban.context_processors.demo_context',  # Demo mode context
+                'kanban.context_processors.user_favorites',  # My Favorites sidebar
             ],
         },
     },
@@ -229,7 +230,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Static files cache busting
-STATIC_VERSION = "9"  # Increment this when updating JS/CSS files
+STATIC_VERSION = "10"  # Increment this when updating JS/CSS files
 
 # Media files
 MEDIA_URL = '/media/'

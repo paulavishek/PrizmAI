@@ -7,6 +7,7 @@ from .models import (
     CalendarEvent,
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, Milestone, StrategicFollower,
+    UserFavorite,
 )
 from .automation_models import (
     BoardAutomation, ScheduledAutomation,
@@ -157,6 +158,13 @@ class StrategicFollowerAdmin(admin.ModelAdmin):
     list_display = ('user', 'content_type', 'object_id', 'followed_at')
     list_filter = ('content_type', 'followed_at')
 
+
+@admin.register(UserFavorite)
+class UserFavoriteAdmin(admin.ModelAdmin):
+    list_display = ('user', 'favorite_type', 'display_name', 'position', 'created_at')
+    list_filter = ('favorite_type', 'created_at')
+    search_fields = ('display_name', 'user__username')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(Board)

@@ -470,6 +470,98 @@ class StrategicFollower(models.Model):
         return f"{self.user} follows {self.content_type} #{self.object_id}"
 
 
+# ---------------------------------------------------------------------------
+# USER FAVORITE — polymorphic "My Favorites" sidebar pins
+# ---------------------------------------------------------------------------
+class UserFavorite(models.Model):
+    FAVORITE_TYPES = [
+        ('board', 'Board'),
+        ('goal', 'Goal'),
+        ('mission', 'Mission'),
+        ('wiki_page', 'Wiki Page'),
+        ('task', 'Task'),
+        ('retrospective', 'Retrospective'),
+        ('chat_room', 'Chat Room'),
+        ('conflict', 'Conflict'),
+        ('shadow_branch', 'Shadow Branch'),
+        ('automation', 'Automation Rule'),
+    ]
+
+    ICON_MAP = {
+        'board': 'fas fa-columns',
+        'goal': 'fas fa-trophy',
+        'mission': 'fas fa-bullseye',
+        'wiki_page': 'fas fa-book-open',
+        'task': 'fas fa-check-square',
+        'retrospective': 'fas fa-history',
+        'chat_room': 'fas fa-comments',
+        'conflict': 'fas fa-exclamation-triangle',
+        'shadow_branch': 'fas fa-code-branch',
+        'automation': 'fas fa-cogs',
+    }
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='favorites'
+    )
+    content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE
+    )
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    favorite_type = models.CharField(max_length=20, choices=FAVORITE_TYPES)
+    display_name = models.CharField(
+        max_length=200,
+        help_text="Cached name for sidebar rendering without extra queries"
+    )
+    position = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'content_type', 'object_id')]
+        ordering = ['position', '-created_at']
+        indexes = [
+            models.Index(fields=['user', 'position']),
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user} ♥ {self.display_name}"
+
+    def get_icon_class(self):
+        return self.ICON_MAP.get(self.favorite_type, 'fas fa-star')
+
+    def get_absolute_url(self):
+        """Resolve the detail URL for the favorited object."""
+        from django.urls import reverse
+        try:
+            obj = self.content_object
+            if obj is None:
+                return '#'
+            if self.favorite_type == 'board':
+                return reverse('board_detail', args=[obj.pk])
+            elif self.favorite_type == 'goal':
+                return reverse('goal_detail', args=[obj.pk])
+            elif self.favorite_type == 'mission':
+                return reverse('mission_detail', args=[obj.pk])
+            elif self.favorite_type == 'wiki_page':
+                return reverse('wiki:wiki_page_detail', args=[obj.pk])
+            elif self.favorite_type == 'task':
+                return reverse('board_detail', args=[obj.column.board.pk])
+            elif self.favorite_type == 'retrospective':
+                return reverse('retrospective_detail', args=[obj.board.pk, obj.pk])
+            elif self.favorite_type == 'chat_room':
+                return reverse('messaging:chat_room_detail', args=[obj.pk])
+            elif self.favorite_type == 'conflict':
+                return reverse('conflict_detail', args=[obj.pk])
+            elif self.favorite_type == 'shadow_branch':
+                return reverse('shadow_board_detail', args=[obj.board.pk, obj.pk])
+            elif self.favorite_type == 'automation':
+                return reverse('automation_rule_detail', args=[obj.board.pk, obj.pk])
+        except Exception:
+            return '#'
+        return '#'
+
+
 class Board(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)

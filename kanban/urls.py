@@ -19,6 +19,7 @@ from . import onboarding_views
 from . import whatif_views
 from . import shadow_views
 from . import commitment_views
+from . import favorite_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -359,4 +360,11 @@ urlpatterns = [
     path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
     path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
     path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
+
+    # -----------------------------------------------------------------------
+    # My Favorites
+    # -----------------------------------------------------------------------
+    path('api/favorites/toggle/', favorite_views.toggle_favorite, name='toggle_favorite'),
+    path('api/favorites/reorder/', favorite_views.reorder_favorites, name='reorder_favorites'),
+    path('api/favorites/list/', favorite_views.favorites_list_api, name='favorites_list_api'),
 ]

@@ -78,6 +78,33 @@
             </li>
         </ul>
 
+        <!-- My Favorites section -->
+        <div class="sidebar-favorites-section">
+            <div class="sidebar-favorites-header" title="My Favorites">
+                <i class="fas fa-heart sidebar-nav-icon sidebar-fav-heart-icon"></i>
+                <span class="sidebar-label">My Favorites</span>
+            </div>
+            <ul class="sidebar-favorites-list" id="sidebarFavoritesList">
+                {% for fav in user_favorites %}
+                <li class="sidebar-nav-item sidebar-fav-item">
+                    <a href="{{ fav.get_absolute_url }}" class="sidebar-nav-link sidebar-fav-link" title="{{ fav.display_name }}">
+                        <i class="{{ fav.get_icon_class }} sidebar-nav-icon sidebar-fav-icon"></i>
+                        <span class="sidebar-label sidebar-fav-name">{{ fav.display_name|truncatechars:22 }}</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if not user_favorites %}
+            <p class="sidebar-fav-empty sidebar-label" id="sidebarFavoritesEmpty">
+                <i class="far fa-heart"></i> Add favorites with <i class="fas fa-heart" style="color:#e74c6f;font-size:0.7em;"></i>
+            </p>
+            {% else %}
+            <p class="sidebar-fav-empty sidebar-label" id="sidebarFavoritesEmpty" style="display:none;">
+                <i class="far fa-heart"></i> Add favorites with <i class="fas fa-heart" style="color:#e74c6f;font-size:0.7em;"></i>
+            </p>
+            {% endif %}
+        </div>
+
         <!-- More section (collapsible) -->
         <div class="sidebar-more-section">
             <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="More" aria-expanded="false">
