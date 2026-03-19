@@ -158,8 +158,11 @@ ACTION_INTENT_PATTERNS = {
     'send_message': [
         'send a message', 'send message', 'message to', 'dm ',
         'tell them', 'tell him', 'tell her', 'tell sam', 'tell alex',
+        'tell jordan', 'tell avishek', 'tell the team',
         'send a dm', 'direct message', 'write a message',
         'notify ', 'let them know', 'let him know', 'let her know',
+        'say hello to', 'say hi to', 'say hey to',
+        'ping ', 'reach out to', 'inform ',
     ],
     'log_time': [
         'log time', 'log hours', 'track time', 'record time',
@@ -3933,7 +3936,7 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
 5. **WORKSPACE AWARENESS**: The user is currently in the **{workspace_env}**. You MUST only reference data from this environment:
-   - In "Demo Workspace": Only discuss demo boards, demo tasks, and demo data. If the user asks about something that only exists in their personal workspace, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards."
+   - In "Demo Workspace": Only discuss demo boards, demo tasks, and demo data. If the user asks a **question** about something that only exists in their personal workspace, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards." Do NOT use this message when the user is making an action request (e.g. sending a message to someone) — instead, politely explain the issue (e.g. the person is not a known team member).
    - In "My Workspace": Only discuss the user's personal boards and tasks. If the user asks about demo content, say: "I can only see your personal workspace data right now. Switch to Demo Workspace to explore the demo boards."
    - When creating boards or tasks, they stay in the current environment — demo artifacts don't leak into My Workspace and vice versa.
 5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" — you already know the user is {user_name} and the board context

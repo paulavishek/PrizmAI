@@ -435,12 +435,17 @@ class SpectraActionService:
                         if len(top_matches) == 1:
                             task = best_task
                         else:
-                            names = ', '.join(f'**{t.title}**' for t in top_matches[:3])
                             return {
                                 'success': False,
+                                'disambiguation_needed': True,
+                                'candidates': [
+                                    {'id': t.id, 'title': t.title}
+                                    for t in top_matches[:5]
+                                ],
                                 'error': (
-                                    f'Multiple tasks match "{task_name}": {names}. '
-                                    'Please be more specific.'
+                                    f'Multiple tasks match "{task_name}": '
+                                    + ', '.join(f'**{t.title}**' for t in top_matches[:5])
+                                    + '. Please be more specific.'
                                 ),
                             }
 
