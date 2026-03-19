@@ -311,6 +311,7 @@ class SpectraConversationState(models.Model):
         ('collecting_time_entry', 'Collecting time entry details'),
         ('collecting_event', 'Collecting event details'),
         ('collecting_retrospective', 'Collecting retrospective details'),
+        ('collecting_task_update', 'Collecting task update details'),
         ('awaiting_confirmation', 'Awaiting user confirmation'),
     ]
     PENDING_ACTION_CHOICES = [
@@ -324,6 +325,7 @@ class SpectraConversationState(models.Model):
         ('create_retrospective', 'Create Retrospective'),
         ('create_custom_automation', 'Create Custom Automation'),
         ('create_scheduled_automation', 'Create Scheduled Automation'),
+        ('update_task', 'Update Task'),
         ('get_commitment_status', 'Get Commitment Status'),
         ('list_at_risk_commitments', 'List At-Risk Commitments'),
         ('place_commitment_bet', 'Place Commitment Bet'),

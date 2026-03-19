@@ -293,6 +293,7 @@ class GeminiClient:
             "- \"log_time\" — wants to log time or hours worked on a task\n"
             "- \"schedule_event\" — wants to schedule a meeting, event, or calendar entry\n"
             "- \"create_retrospective\" — wants to generate or create a retrospective\n"
+            "- \"update_task\" — wants to update, edit, or modify an existing task (mark done, change priority, reassign, rename, move to column, change due date)\n"
             "- \"confirm_action\" — saying yes, confirm, go ahead, looks good (affirming a pending action)\n"
             "- \"cancel_action\" — saying no, cancel, stop, nevermind (cancelling a pending action)\n"
         )
@@ -326,7 +327,7 @@ class GeminiClient:
                 'conversation', 'create_task', 'create_board',
                 'activate_automation', 'create_automation', 'create_scheduled_automation',
                 'send_message', 'log_time', 'schedule_event', 'create_retrospective',
-                'confirm_action', 'cancel_action',
+                'update_task', 'confirm_action', 'cancel_action',
             }
             if intent not in valid_intents:
                 intent = 'conversation'

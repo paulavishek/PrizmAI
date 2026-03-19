@@ -400,67 +400,31 @@ class SpectraActionService:
             if not self._user_has_board_access(user, board):
                 return {'success': False, 'error': "You don't have access to this board."}
 
-            # Resolve task by name — multi-tier matching
+            # Resolve task by name using fuzzy matching
             task_name = collected_data.get('task_name', '')
-            board_tasks = Task.objects.filter(column__board=board)
+            board_tasks = list(Task.objects.filter(
+                column__board=board, is_archived=False,
+            ).select_related('column'))
 
-            # Tier 1: exact substring match
-            task = board_tasks.filter(title__icontains=task_name).first()
-
-            # Tier 2: word-overlap matching
-            if not task and task_name:
-                stop_words = {'the', 'a', 'an', 'on', 'in', 'for', 'of', 'to', 'my', 'task'}
-                query_words = {
-                    w.lower() for w in re.sub(r'[^\w\s]', '', task_name).split()
-                } - stop_words
-                if query_words:
-                    best_task = None
-                    best_score = 0
-                    candidates = []
-                    for t in board_tasks.all():
-                        title_words = {
-                            w.lower() for w in re.sub(r'[^\w\s]', '', t.title).split()
-                        } - stop_words
-                        overlap = len(query_words & title_words)
-                        if overlap > 0:
-                            score = overlap / max(len(query_words), 1)
-                            candidates.append((t, score))
-                            if score > best_score:
-                                best_score = score
-                                best_task = t
-                    # Accept if ≥50% of query words matched
-                    if best_task and best_score >= 0.5:
-                        # Check for ambiguity — multiple tasks with same top score
-                        top_matches = [t for t, s in candidates if s == best_score]
-                        if len(top_matches) == 1:
-                            task = best_task
-                        else:
-                            return {
-                                'success': False,
-                                'disambiguation_needed': True,
-                                'candidates': [
-                                    {'id': t.id, 'title': t.title}
-                                    for t in top_matches[:5]
-                                ],
-                                'error': (
-                                    f'Multiple tasks match "{task_name}": '
-                                    + ', '.join(f'**{t.title}**' for t in top_matches[:5])
-                                    + '. Please be more specific.'
-                                ),
-                            }
-
-            if not task:
-                # Suggest closest matches if any exist
-                all_tasks = list(board_tasks.values_list('title', flat=True)[:5])
+            matched = self._fuzzy_match_task(task_name, board_tasks)
+            if isinstance(matched, list):
+                return {
+                    'success': False,
+                    'disambiguation_needed': True,
+                    'candidates': [{'id': t.id, 'title': t.title} for t in matched],
+                }
+            if matched is None:
+                all_titles = [t.title for t in board_tasks[:5]]
                 hint = ''
-                if all_tasks:
+                if all_titles:
                     hint = '\n\nTasks on this board: ' + ', '.join(
-                        f'**{t}**' for t in all_tasks
+                        f'**{t}**' for t in all_titles
                     )
                 return {
                     'success': False,
                     'error': f'Could not find a task matching "{task_name}" on this board.{hint}',
                 }
+            task = matched
 
             hours = collected_data.get('hours', 0)
             try:
@@ -766,6 +730,199 @@ class SpectraActionService:
         except Exception as exc:
             logger.exception('Spectra create_scheduled_automation failed: %s', exc)
             return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Update task
+    # ------------------------------------------------------------------
+
+    def update_task(self, user, board, collected_data):
+        """
+        Update an existing task's field (status, priority, assignee, due date, title).
+
+        Expected keys: ``task_name``, ``field``, ``new_value``.
+        """
+        from kanban.models import Task, Column
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': 'Access denied.'}
+
+            task_name = collected_data.get('task_name', '').strip()
+            field = collected_data.get('field', '').strip().lower()
+            new_value = collected_data.get('new_value', '').strip()
+
+            if not task_name:
+                return {'success': False, 'error': 'No task name provided.'}
+
+            # Resolve the task
+            tasks = list(Task.objects.filter(
+                column__board=board, is_archived=False,
+            ).select_related('column', 'assigned_to'))
+
+            matched = self._fuzzy_match_task(task_name, tasks)
+            if isinstance(matched, list):
+                # Multiple matches — trigger disambiguation
+                return {
+                    'success': False,
+                    'disambiguation_needed': True,
+                    'candidates': [{'id': t.id, 'title': t.title} for t in matched],
+                }
+            if matched is None:
+                return {'success': False, 'error': f'No task matching "{task_name}" found on this board.'}
+
+            task = matched
+
+            # Apply the update based on field
+            if field == 'status':
+                # "done", "complete" → move to last column; otherwise match column name
+                val_lower = new_value.lower()
+                if val_lower in ('done', 'complete', 'completed', 'finished'):
+                    target_col = Column.objects.filter(board=board).order_by('-position').first()
+                else:
+                    target_col = Column.objects.filter(
+                        board=board, name__icontains=new_value,
+                    ).first()
+                if not target_col:
+                    return {'success': False, 'error': f'No column matching "{new_value}" found.'}
+                old_col = task.column.name
+                task.column = target_col
+                task.position = Task.objects.filter(column=target_col).count()
+                task.save(update_fields=['column', 'position', 'updated_at'])
+                # Proactive insight: remaining open tasks
+                insight = ''
+                if val_lower in ('done', 'complete', 'completed', 'finished'):
+                    remaining = Task.objects.filter(
+                        column__board=board, is_archived=False,
+                    ).exclude(column=target_col).count()
+                    if remaining > 0:
+                        insight = f"\n\n💡 **{remaining} tasks** remaining on this board."
+                    else:
+                        insight = "\n\n🎉 **All tasks on this board are done!**"
+                return {
+                    'success': True,
+                    'message': (
+                        f"✅ **Task updated!**\n\n"
+                        f"📋 **{task.title}** moved from **{old_col}** → **{target_col.name}**.{insight}"
+                    ),
+                }
+
+            elif field == 'priority':
+                valid = {'low', 'medium', 'high', 'urgent'}
+                if new_value.lower() not in valid:
+                    return {'success': False, 'error': f'Invalid priority "{new_value}". Choose: low, medium, high, urgent.'}
+                old_priority = task.priority
+                task.priority = new_value.lower()
+                task.save(update_fields=['priority', 'updated_at'])
+                return {
+                    'success': True,
+                    'message': (
+                        f"✅ **Priority updated!**\n\n"
+                        f"📋 **{task.title}**: {old_priority} → **{task.priority}**."
+                    ),
+                }
+
+            elif field == 'assignee':
+                assignee, display = self._resolve_assignee(new_value, board)
+                if not assignee:
+                    return {'success': False, 'error': f'No member matching "{new_value}" found on this board.'}
+                task.assigned_to = assignee
+                task.save(update_fields=['assigned_to', 'updated_at'])
+                return {
+                    'success': True,
+                    'message': (
+                        f"✅ **Assignee updated!**\n\n"
+                        f"📋 **{task.title}** is now assigned to **{display}**."
+                    ),
+                }
+
+            elif field == 'due_date':
+                from ai_assistant.utils.conversation_flow import _parse_date
+                parsed = _parse_date(new_value)
+                if not parsed:
+                    return {'success': False, 'error': f'Could not parse date "{new_value}".'}
+                task.due_date = parsed
+                task.save(update_fields=['due_date', 'updated_at'])
+                return {
+                    'success': True,
+                    'message': (
+                        f"✅ **Due date updated!**\n\n"
+                        f"📋 **{task.title}** due date set to **{parsed.strftime('%A, %B %d, %Y')}**."
+                    ),
+                }
+
+            elif field == 'title':
+                old_title = task.title
+                task.title = new_value
+                task.save(update_fields=['title', 'updated_at'])
+                return {
+                    'success': True,
+                    'message': (
+                        f"✅ **Task renamed!**\n\n"
+                        f"📋 **{old_title}** → **{new_value}**."
+                    ),
+                }
+
+            elif field == 'description':
+                task.description = new_value
+                task.save(update_fields=['description', 'updated_at'])
+                return {
+                    'success': True,
+                    'message': (
+                        f"✅ **Description updated!**\n\n"
+                        f"📋 **{task.title}** description has been updated."
+                    ),
+                }
+
+            else:
+                return {'success': False, 'error': f'Unknown field "{field}". Supported: status, priority, assignee, due_date, title, description.'}
+
+        except Exception as exc:
+            logger.exception('Spectra update_task failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def _fuzzy_match_task(self, query, tasks):
+        """
+        Match a task by name. Returns a single Task if unambiguous,
+        a list of Tasks if multiple match, or None if no match.
+        """
+        query_lower = query.lower()
+
+        # Exact match
+        exact = [t for t in tasks if t.title.lower() == query_lower]
+        if len(exact) == 1:
+            return exact[0]
+
+        # Prefix match
+        prefix = [t for t in tasks if t.title.lower().startswith(query_lower)]
+        if len(prefix) == 1:
+            return prefix[0]
+
+        # Substring match
+        substr = [t for t in tasks if query_lower in t.title.lower()]
+        if len(substr) == 1:
+            return substr[0]
+        if len(substr) > 1 and len(substr) <= 5:
+            return substr  # disambiguation
+
+        # Word overlap scoring
+        query_words = set(query_lower.split())
+        scored = []
+        for t in tasks:
+            title_words = set(t.title.lower().split())
+            if not query_words:
+                continue
+            overlap = len(query_words & title_words) / len(query_words)
+            if overlap >= 0.5:
+                scored.append((overlap, t))
+        scored.sort(key=lambda x: -x[0])
+        if scored:
+            if len(scored) == 1 or (len(scored) > 1 and scored[0][0] > scored[1][0]):
+                return scored[0][1]
+            top = [s[1] for s in scored if s[0] == scored[0][0]]
+            if len(top) <= 5:
+                return top
+
+        return None
 
     # ── Living Commitment Protocols ──────────────────────────────────────────
 
