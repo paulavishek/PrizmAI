@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 import json
 
 from kanban.models import Board
+from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern
 )
@@ -158,6 +159,7 @@ def conflict_detail(request, conflict_id):
             'resolutions': resolutions,
             'similar_conflicts': similar_conflicts,
             'can_resolve': True,
+            'is_favorited': _is_fav(request.user, 'conflict', conflict.pk),
         }
         
         return render(request, 'kanban/conflicts/detail.html', context)

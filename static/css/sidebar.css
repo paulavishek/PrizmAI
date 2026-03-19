@@ -735,3 +735,100 @@
 .board-card-progress .progress {
     border-radius: 2px;
 }
+
+/* ============================================= */
+/* MY FAVORITES — sidebar section                */
+/* ============================================= */
+.sidebar-favorites-section {
+    padding: 6px 0 2px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin-top: 4px;
+}
+.sidebar-favorites-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px 4px;
+    color: rgba(255,255,255,0.55);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.sidebar-fav-heart-icon {
+    color: #e74c6f;
+    font-size: 0.85rem;
+}
+.sidebar-favorites-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+.sidebar-fav-link {
+    padding: 5px 18px !important;
+    font-size: 0.82rem !important;
+    gap: 10px !important;
+}
+.sidebar-fav-icon {
+    font-size: 0.75rem !important;
+    opacity: 0.7;
+    width: 18px;
+    text-align: center;
+}
+.sidebar-fav-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sidebar-fav-empty {
+    padding: 6px 18px;
+    color: rgba(255,255,255,0.3);
+    font-size: 0.72rem;
+    font-style: italic;
+    margin: 0;
+}
+
+/* Collapsed sidebar — favorites */
+.prizm-sidebar.collapsed .sidebar-favorites-header .sidebar-label,
+.prizm-sidebar.collapsed .sidebar-fav-name,
+.prizm-sidebar.collapsed .sidebar-fav-empty {
+    display: none;
+}
+.prizm-sidebar.collapsed .sidebar-favorites-header {
+    justify-content: center;
+    padding: 8px 0 4px;
+}
+.prizm-sidebar.collapsed .sidebar-fav-link {
+    justify-content: center;
+    padding: 5px 0 !important;
+}
+.prizm-sidebar.collapsed .sidebar-fav-icon {
+    font-size: 0.85rem !important;
+    opacity: 1;
+}
+
+/* ============================================= */
+/* FAVORITE HEART TOGGLE BUTTON                  */
+/* ============================================= */
+.favorite-toggle-btn {
+    color: #adb5bd;
+    text-decoration: none !important;
+    line-height: 1;
+    vertical-align: middle;
+    transition: color 0.2s, transform 0.2s;
+}
+.favorite-toggle-btn:hover {
+    color: #e74c6f;
+    transform: scale(1.15);
+}
+.favorite-heart.favorited {
+    color: #e74c6f !important;
+}
+.favorite-heart {
+    font-size: 1rem;
+    transition: color 0.2s;
+}

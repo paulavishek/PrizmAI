@@ -16,6 +16,7 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
 
 from kanban.models import Board
+from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.retrospective_models import (
     ProjectRetrospective, LessonLearned, ImprovementMetric,
     RetrospectiveActionItem, RetrospectiveTrend
@@ -152,6 +153,7 @@ def retrospective_detail(request, board_id, retro_id):
         'stats': stats,
         'is_demo_mode': False,
         'is_demo_board': False,
+        'is_favorited': _is_fav(request.user, 'retrospective', retrospective.pk),
     }
     
     return render(request, 'kanban/retrospective_detail.html', context)

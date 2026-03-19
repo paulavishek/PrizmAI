@@ -29,6 +29,7 @@
                 <h2 class="h4 mb-1">
                     {% block header_icon %}{% endblock %}{{ record.name }}
                     <span class="version-label ms-2">v{{ record.version }}</span>
+                    {% include 'partials/favorite_toggle.html' with favorite_type=favorite_type object_id=record.id is_favorited=is_favorited %}
                 </h2>
                 {% block header_subtitle %}{% endblock %}
                 {% if record.description %}

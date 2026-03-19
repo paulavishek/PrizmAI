@@ -23,6 +23,7 @@ from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskF
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
+from .favorite_views import is_user_favorite as _is_fav
 from .ai_briefing import build_action_plan as _build_action_plan
 
 @login_required
@@ -1457,6 +1458,7 @@ def board_detail(request, board_id):
         'hospice_risk_score': hospice_risk_score,
         'hospice_dismissed': hospice_dismissed,
         'hospice_session': hospice_session,
+        'is_favorited': _is_fav(request.user, 'board', board.pk),
     })
 
 def task_detail(request, task_id):
@@ -1745,6 +1747,7 @@ def task_detail(request, task_id):
         'is_demo_mode': False,
         'is_demo_board': False,
         'board_columns': Column.objects.filter(board=board).order_by('position'),
+        'is_favorited': _is_fav(request.user, 'task', task.pk),
     })
 
 @login_required
@@ -4621,6 +4624,7 @@ def task_quick_view(request, task_id):
         'columns': columns,
         'board_members': board_members,
         'now': now,
+        'is_favorited': _is_fav(request.user, 'task', task.pk),
     })
 
 

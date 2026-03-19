@@ -474,7 +474,9 @@
         <div class="wiki-header">
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
-                    <h1 class="mb-2">{{ page.title }}</h1>
+                    <h1 class="mb-2">{{ page.title }}
+                        {% include 'partials/favorite_toggle.html' with favorite_type='wiki_page' object_id=page.id is_favorited=is_favorited %}
+                    </h1>
                     <span class="badge" style="background-color: {{ page.category.color }}">
                         <i class="fas fa-{{ page.category.icon }}"></i> {{ page.category.name }}
                     </span>

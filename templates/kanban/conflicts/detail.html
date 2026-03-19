@@ -97,6 +97,7 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <h4 class="mb-0">
                             <i class="fas fa-exclamation-triangle"></i> {{ conflict.title }}
+                            {% include 'partials/favorite_toggle.html' with favorite_type='conflict' object_id=conflict.id is_favorited=is_favorited %}
                         </h4>
                         <span class="badge bg-white text-dark">
                             {{ conflict.get_conflict_type_display }}

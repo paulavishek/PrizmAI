@@ -20,6 +20,7 @@ from .forms import (
     WikiPageSearchForm, QuickWikiLinkForm
 )
 from kanban.models import Board, Task
+from kanban.favorite_views import is_user_favorite as _is_fav
 from accounts.models import Organization
 
 
@@ -183,6 +184,7 @@ class WikiPageDetailView(WikiBaseView, DetailView):
         context['versions'] = page.versions.all()[:5]
         context['breadcrumb'] = page.get_breadcrumb()
         context['incoming_links'] = page.incoming_links.select_related('source_page')
+        context['is_favorited'] = _is_fav(self.request.user, 'wiki_page', page.pk)
         
         return context
     

@@ -10,6 +10,7 @@ from django.utils import timezone
 import os
 
 from kanban.models import Board, Task, Column
+from kanban.favorite_views import is_user_favorite as _is_fav
 from .models import ChatRoom, ChatMessage, TaskThreadComment, Notification, FileAttachment
 from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, MentionForm, ChatRoomFileForm
 
@@ -131,6 +132,7 @@ def chat_room_detail(request, room_id):
         'form': form,
         'read_message_ids': read_message_ids,
         'board_columns': board_columns,
+        'is_favorited': _is_fav(request.user, 'chat_room', chat_room.pk),
     }
     return render(request, 'messaging/chat_room_detail.html', context)
 

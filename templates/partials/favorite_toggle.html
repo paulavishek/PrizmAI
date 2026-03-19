@@ -1,0 +1,11 @@
+{# Reusable heart toggle for "My Favorites" #}
+{# Usage: {% include 'partials/favorite_toggle.html' with favorite_type="board" object_id=board.id is_favorited=is_favorited %} #}
+<button type="button"
+        class="btn btn-sm btn-link p-0 ms-2 favorite-toggle-btn"
+        data-favorite-type="{{ favorite_type }}"
+        data-object-id="{{ object_id }}"
+        title="{% if is_favorited %}Remove from favorites{% else %}Add to favorites{% endif %}"
+        aria-label="{% if is_favorited %}Remove from favorites{% else %}Add to favorites{% endif %}"
+        onclick="toggleFavorite(this)">
+    <i class="{% if is_favorited %}fas{% else %}far{% endif %} fa-heart favorite-heart {% if is_favorited %}favorited{% endif %}"></i>
+</button>

@@ -17,6 +17,7 @@ from django.conf import settings as django_settings
 from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
+from kanban.favorite_views import is_user_favorite as _is_fav
 
 from .models import (
     OrganizationGoal, Mission, Strategy, Board, Task,
@@ -308,6 +309,8 @@ def goal_detail(request, goal_id):
         'goal': goal,
         'linked_missions': linked_missions,
         'all_missions': all_missions,
+        'favorite_type': 'goal',
+        'is_favorited': _is_fav(request.user, 'goal', goal.pk),
     })
 
 
@@ -576,6 +579,8 @@ def mission_detail(request, mission_id):
         'premortem_boards': premortem_boards,
         'premortem_high_risk_count': high_risk_count,
         'premortem_total_boards': len(premortem_boards),
+        'favorite_type': 'mission',
+        'is_favorited': _is_fav(request.user, 'mission', mission.pk),
     })
 
 

@@ -203,3 +203,24 @@ def conflict_count(request):
         return {'active_conflict_count': count}
     except:
         return {'active_conflict_count': 0}
+
+
+def user_favorites(request):
+    """
+    Add user's favorites to template context for sidebar rendering.
+    Uses select_related on content_type and cached display_name to avoid N+1.
+    """
+    if not request.user.is_authenticated:
+        return {'user_favorites': []}
+
+    try:
+        from kanban.models import UserFavorite
+        favorites = (
+            UserFavorite.objects
+            .filter(user=request.user)
+            .select_related('content_type')
+            .order_by('position', '-created_at')[:20]
+        )
+        return {'user_favorites': favorites}
+    except Exception:
+        return {'user_favorites': []}
