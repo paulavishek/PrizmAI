@@ -230,7 +230,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Static files cache busting
-STATIC_VERSION = "10"  # Increment this when updating JS/CSS files
+STATIC_VERSION = "11"  # Increment this when updating JS/CSS files
 
 # Media files
 MEDIA_URL = '/media/'
