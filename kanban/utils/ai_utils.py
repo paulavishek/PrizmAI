@@ -5097,6 +5097,8 @@ that will get them operational immediately.
 - Task titles should be concrete actions a team member could start today.
 - Priorities: Critical, High, Medium, Low.
 - Item types: task, bug, feature, story.
+- Do not assign any tasks to any specific user. Leave all task assignees
+  unassigned — the user will assign them to their team members after setup.
 - target_date must be a date string in YYYY-MM-DD format, at least 3 months
   from today ({today}).
 - Keep descriptions concise — 1-3 sentences max.
