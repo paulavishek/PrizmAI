@@ -337,6 +337,7 @@
     {% endblock navbar_unauthenticated %}
 
     <!-- Messages for unauthenticated users -->
+    {% block unauthenticated_messages %}
     {% if messages %}
         <div class="container mt-3">
             {% for message in messages %}
@@ -347,6 +348,7 @@
             {% endfor %}
         </div>
     {% endif %}
+    {% endblock unauthenticated_messages %}
 
     <main class="container my-4">
     {% endif %}

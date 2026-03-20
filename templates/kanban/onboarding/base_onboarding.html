@@ -55,23 +55,23 @@
             margin: 0 auto;
         }
         .btn-prizm {
-            background: linear-gradient(135deg, var(--prizm-primary) 0%, var(--prizm-secondary) 100%);
+            background-color: #5046e5;
+            background-image: none !important;
             color: #fff;
             border: none;
             padding: 0.65rem 1.75rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            transition: opacity 0.2s, transform 0.15s;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: background-color 0.2s;
         }
         .btn-prizm:hover {
-            opacity: 0.92;
+            background-color: #4338ca;
+            background-image: none !important;
             color: #fff;
-            transform: translateY(-1px);
         }
         .btn-prizm:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            transform: none;
         }
         .link-subtle {
             color: #64748b;
@@ -88,7 +88,7 @@
 <body>
     {% block progress %}{% endblock %}
 
-    <main class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 56px); padding: 3.5rem 1rem;">
+    <main class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 56px); padding: 1.5rem 1rem;">
         {% block body %}{% endblock %}
     </main>
 
