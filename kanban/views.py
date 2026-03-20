@@ -946,6 +946,16 @@ def dashboard(request):
     else:
         all_strategies = []
 
+    # Flat counts for the Hierarchy Navigator tabs
+    goal_count = sum(1 for ge in goal_tree if ge['goal'] is not None)
+    strategy_count = sum(mi['strategy_count'] for mi in mission_tree)
+    hierarchy_board_count = sum(
+        len(bi)
+        for mi in mission_tree
+        for si in mi['strategies']
+        for bi in [si['boards']]
+    ) + standalone_boards.count()
+
     # One-time onboarding banner (tasks are unassigned after AI workspace generation)
     show_assign_banner = request.session.pop('show_onboarding_assign_banner', False)
 
@@ -974,6 +984,9 @@ def dashboard(request):
         'standalone_boards': standalone_boards,
         'all_strategies': all_strategies,
         'mission_count': len(mission_tree),
+        'goal_count': goal_count,
+        'strategy_count': strategy_count,
+        'hierarchy_board_count': hierarchy_board_count,
         'chart_data': chart_data,  # Raw dict for json_script filter
         'chart_missions': chart_missions,
         'chart_strategies': chart_strategies,

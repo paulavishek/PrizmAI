@@ -669,23 +669,25 @@
     }
 
     /* ================================================================
-       MISSION OVERVIEW — Scrollable card body
+       HIERARCHY NAVIGATOR — Scrollable tab-content
        ================================================================ */
-    #mission-overview-card .card-body {
+    #hierarchy-navigator .tab-content {
         scrollbar-width: thin;
         scrollbar-color: #c5cbe3 transparent;
+        max-height: 600px;
+        overflow-y: auto;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar {
         width: 6px;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar-track {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar-track {
         background: transparent;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar-thumb {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar-thumb {
         background-color: #c5cbe3;
         border-radius: 3px;
     }
-    #mission-overview-card .card-body::-webkit-scrollbar-thumb:hover {
+    #hierarchy-navigator .tab-content::-webkit-scrollbar-thumb:hover {
         background-color: #8490b5;
     }
 
@@ -894,24 +896,77 @@
     .risk-pill.high .pill-dot    { background: #ef4444; }
 
     /* ================================================================
-       MISSION OVERVIEW CARDS  (progressive disclosure layout)
+       HIERARCHY NAVIGATOR  (tabbed Goal / Mission / Strategy / Board)
        ================================================================ */
-    .mission-summary-card {
-        border: 1px solid #e3e6f0;
+    .hn-tabs {
+        gap: 0;
+        background: #f8fafc;
+    }
+    .hn-tabs .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        border-radius: 0;
+        color: #64748b;
+        font-size: 0.82rem;
+        font-weight: 600;
+        padding: 0.6rem 1rem;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .hn-tabs .nav-link:hover { color: #334155; background: #f1f5f9; }
+    .hn-tabs .nav-link.active { background: transparent; }
+    /* Per-level accent colours on the active underline */
+    #hn-tab-goals.active    { color: #b45309; border-bottom-color: #f59e0b; }
+    #hn-tab-missions.active { color: #1d4ed8; border-bottom-color: #3b82f6; }
+    #hn-tab-strategies.active { color: #047857; border-bottom-color: #10b981; }
+    #hn-tab-boards.active   { color: #6d28d9; border-bottom-color: #8b5cf6; }
+    .hn-count {
+        font-size: 0.62rem;
+        padding: 0.15em 0.5em;
+        margin-left: 4px;
+        background: #e2e8f0;
+        color: #475569;
+        vertical-align: middle;
+    }
+    .hn-tabs .nav-link.active .hn-count { background: currentColor; color: #fff; opacity: 0.85; }
+
+    /* Level badge chips */
+    .hn-level-badge {
+        font-size: 0.55rem; letter-spacing: 0.07em; text-transform: uppercase;
+        padding: 2px 7px; border-radius: 4px; font-weight: 700;
+    }
+    .hn-level-badge--goal     { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .hn-level-badge--mission  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .hn-level-badge--strategy { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .hn-level-badge--board    { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+
+    /* Card items */
+    .hn-item {
+        border: 1px solid #e2e8f0;
         border-radius: 12px;
         transition: box-shadow 0.15s ease, transform 0.15s ease;
-        background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+        cursor: pointer;
     }
-    .mission-summary-card:hover {
-        box-shadow: 0 6px 20px rgba(78,115,223,0.14);
+    .hn-item:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
         transform: translateY(-2px);
     }
-    .mission-summary-card .card-body { padding: 1rem 1.15rem; }
-    .goal-header-card {
-        border-left: 4px solid #ffc107;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #fffbea 0%, #fff 100%);
+    .hn-item--goal     { border-left: 4px solid #f59e0b; background: linear-gradient(135deg,#fffbeb 0%,#fff 100%); }
+    .hn-item--mission  { border-left: 4px solid #3b82f6; background: linear-gradient(135deg,#eff6ff 0%,#fff 100%); }
+    .hn-item--strategy { border-left: 4px solid #10b981; background: linear-gradient(135deg,#ecfdf5 0%,#fff 100%); }
+    .hn-item--board    { border-left: 4px solid #8b5cf6; background: linear-gradient(135deg,#f5f3ff 0%,#fff 100%); }
+    .hn-item .card-body { padding: 0.9rem 1rem; }
+
+    /* Expand panels */
+    .hn-expand {
+        animation: hnSlideDown 0.2s ease-out;
     }
+    @keyframes hnSlideDown {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Filtered-out cards */
+    .hn-card.hn-hidden { display: none !important; }
 
     /* ================================================================
        STEP 8 — DESIGN POLISH  (typography hierarchy + card consistency)
@@ -1636,210 +1691,498 @@
 <!-- /AI Briefing -->
 
 <!-- ============================================================ -->
-<!-- ROW 4: MISSION OVERVIEW — Card-based Progressive Disclosure -->
+<!-- ROW 4: HIERARCHY NAVIGATOR — Tabbed Goal / Mission / Strategy / Board -->
 <!-- ============================================================ -->
-<div class="card shadow mb-4" id="mission-overview-card">
+<div class="card shadow mb-4" id="hierarchy-navigator">
     <div class="card-header py-2 d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
-            <h6 class="m-0 fw-bold text-primary">
-                <i class="fas fa-bullseye me-2 text-primary"></i>Mission Overview
+            <h6 class="m-0 fw-bold" style="color:#334155;">
+                <i class="fas fa-sitemap me-2" style="color:#6366f1;"></i>Hierarchy Navigator
             </h6>
-            {% if mission_count %}
-            <span class="badge bg-primary rounded-pill ms-1">{{ mission_count }}</span>
-            {% endif %}
         </div>
         <div class="d-flex align-items-center gap-2">
-            <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
-                <i class="fas fa-trophy fa-sm"></i><span class="d-none d-md-inline ms-1">Goals</span>
+            <a href="{% url 'create_goal' %}" class="btn btn-sm btn-outline-warning text-dark" title="New Goal">
+                <i class="fas fa-trophy fa-sm"></i><span class="d-none d-lg-inline ms-1">Goal</span>
             </a>
-            <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
-                <i class="fas fa-bullseye fa-sm"></i><span class="d-none d-md-inline ms-1">Missions</span>
+            <a href="{% url 'create_mission' %}" class="btn btn-sm btn-outline-primary" title="New Mission">
+                <i class="fas fa-bullseye fa-sm"></i><span class="d-none d-lg-inline ms-1">Mission</span>
             </a>
-            <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
+            <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary" title="New Board">
                 <i class="fas fa-plus fa-sm"></i>
             </a>
         </div>
     </div>
-    <div class="card-body p-3">
+
+    {# ── Tab pills ── #}
+    <ul class="nav hn-tabs px-3 pt-2 border-bottom" id="hierarchyTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="hn-tab-goals" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-goals" type="button" role="tab"
+                    aria-controls="hn-pane-goals" aria-selected="true">
+                <i class="fas fa-trophy me-1"></i>Goals
+                {% if goal_count %}<span class="badge rounded-pill hn-count">{{ goal_count }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="hn-tab-missions" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-missions" type="button" role="tab"
+                    aria-controls="hn-pane-missions" aria-selected="false">
+                <i class="fas fa-bullseye me-1"></i>Missions
+                {% if mission_count %}<span class="badge rounded-pill hn-count">{{ mission_count }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="hn-tab-strategies" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-strategies" type="button" role="tab"
+                    aria-controls="hn-pane-strategies" aria-selected="false">
+                <i class="fas fa-chess-knight me-1"></i>Strategies
+                {% if strategy_count %}<span class="badge rounded-pill hn-count">{{ strategy_count }}</span>{% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="hn-tab-boards" data-bs-toggle="tab"
+                    data-bs-target="#hn-pane-boards" type="button" role="tab"
+                    aria-controls="hn-pane-boards" aria-selected="false">
+                <i class="fas fa-clipboard-list me-1"></i>Boards
+                {% if hierarchy_board_count %}<span class="badge rounded-pill hn-count">{{ hierarchy_board_count }}</span>{% endif %}
+            </button>
+        </li>
+    </ul>
+
+    {# ── Active-filter banner ── #}
+    <div id="hn-filter-bar" class="d-none px-3 py-2 d-flex align-items-center gap-2" style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+        <i class="fas fa-filter" style="color:#94a3b8; font-size:0.7rem;"></i>
+        <small class="text-muted">Showing <span id="hn-filter-label" class="fw-semibold text-dark"></span></small>
+        <button class="btn btn-sm btn-link text-danger p-0 ms-auto" style="font-size:0.75rem;" onclick="hnClearFilter()">
+            <i class="fas fa-times me-1"></i>Clear filter
+        </button>
+    </div>
+
+    {# ── Tab panes ── #}
+    <div class="tab-content p-3" id="hierarchyTabContent">
+
+        {# ═══════════════════════ GOALS TAB ═══════════════════════ #}
+        <div class="tab-pane fade show active" id="hn-pane-goals" role="tabpanel" aria-labelledby="hn-tab-goals">
         {% if goal_tree %}
-        {% for goal_entry in goal_tree %}
-
-        {# ---- GOAL GROUP HEADER ---- #}
-        {% if goal_entry.goal %}
-        <div class="goal-header-card card border-0 shadow-sm mb-3 p-3">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fas fa-trophy text-warning"></i>
-                    <div>
-                        <span class="badge text-uppercase fw-semibold me-1"
-                              style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.58rem; letter-spacing:0.07em; padding:2px 6px;">
-                            Organization Goal
-                        </span>
-                        <h6 class="mb-0 fw-bold">
-                            <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="text-decoration-none text-dark">{{ goal_entry.goal.name }}</a>
-                        </h6>
-                        {% if goal_entry.goal.target_metric %}
-                        <small class="text-warning fw-semibold"><i class="fas fa-bullseye me-1"></i>{{ goal_entry.goal.target_metric }}</small>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2 flex-shrink-0 flex-wrap">
-                    {% if goal_entry.goal.status == 'active' %}
-                        <span class="badge bg-success">Active</span>
-                    {% elif goal_entry.goal.status == 'completed' %}
-                        <span class="badge bg-primary">Completed</span>
-                    {% else %}
-                        <span class="badge bg-warning text-dark">On Hold</span>
-                    {% endif %}
-                    {# Goal-level health pills #}
-                    <span class="status-pill {{ goal_entry.schedule_status|default:'on_track' }}">
-                        <span class="pill-dot"></span>
-                        {% if goal_entry.schedule_status == 'late' %}Late{% elif goal_entry.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
-                    </span>
-                    <span class="risk-pill {{ goal_entry.risk_level|default:'low' }}">
-                        <span class="pill-dot"></span>
-                        {% if goal_entry.risk_level == 'high' %}High Risk{% elif goal_entry.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
-                    </span>
-                    {% if goal_entry.completion_pct is not None %}
-                    <span class="badge bg-light text-dark border" style="font-size:0.68rem;">
-                        {{ goal_entry.completion_pct }}% complete
-                    </span>
-                    {% endif %}
-                    <span class="badge bg-light text-dark border">
-                        <i class="fas fa-bullseye text-primary me-1"></i>{{ goal_entry.missions|length }} mission{{ goal_entry.missions|length|pluralize }}
-                    </span>
-                    <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" title="Open Goal">
-                        <i class="fas fa-external-link-alt fa-xs"></i>
-                    </a>
-                </div>
-            </div>
-            {% if goal_entry.total_tasks %}
-            <div class="progress mt-2" style="height:5px;">
-                <div class="progress-bar {% if goal_entry.completion_pct < 30 %}bg-danger{% elif goal_entry.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                     role="progressbar" style="width:{{ goal_entry.completion_pct }}%;"></div>
-            </div>
-            {% endif %}
-        </div>
-        {% else %}
-        {# Ungrouped missions #}
-        <div class="text-muted small mb-2 ps-1 mt-3">
-            <i class="fas fa-minus-circle me-1"></i><em>Missions not linked to an Organization Goal</em>
-        </div>
-        {% endif %}
-
-        {# ---- MISSION SUMMARY CARDS (responsive grid) ---- #}
-        <div class="row g-3 mb-4">
-            {% for mission_item in goal_entry.missions %}
-            {% with mission=mission_item.mission %}
-            <div class="col-md-6 col-lg-4">
-                <div class="mission-summary-card card h-100 shadow-sm" style="border-left: 4px solid #4e73df;">
-                    <div class="card-body">
-                        {# Header: Mission name + status #}
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="flex-grow-1 me-2">
-                                <span class="badge text-uppercase fw-semibold me-1"
-                                      style="background:#e8f0fe; color:#3a5bd9; border:1px solid #c0d0f8; font-size:0.55rem; letter-spacing:0.07em; padding:2px 6px;">
-                                    Mission
-                                </span>
-                                <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">
-                                    {{ mission.name }}
-                                </h6>
-                                {% if mission.description %}
-                                <small class="text-muted" style="font-size:0.78rem;">{{ mission.description|truncatechars:90 }}</small>
+            <div class="row g-3">
+            {% for ge in goal_tree %}{% if ge.goal %}
+                <div class="col-md-6 col-lg-4 hn-card" data-goal-id="{{ ge.goal.id }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--goal" role="button"
+                         onclick="hnToggleExpand('goal', {{ ge.goal.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--goal">Goal</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ ge.goal.name }}</h6>
+                                    {% if ge.goal.target_metric %}
+                                    <small class="text-muted" style="font-size:0.76rem;"><i class="fas fa-bullseye me-1" style="color:#d97706;"></i>{{ ge.goal.target_metric }}</small>
+                                    {% endif %}
+                                </div>
+                                {% if ge.goal.status == 'active' %}
+                                    <span class="badge bg-success flex-shrink-0">Active</span>
+                                {% elif ge.goal.status == 'completed' %}
+                                    <span class="badge bg-primary flex-shrink-0">Completed</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark flex-shrink-0">On Hold</span>
                                 {% endif %}
                             </div>
-                            <span class="badge ms-status-badge status-{{ mission.status }} flex-shrink-0">{{ mission.get_status_display }}</span>
-                        </div>
-
-                        {# Progress bar #}
-                        {% if mission_item.total_tasks %}
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <div class="progress flex-grow-1" style="height:6px;">
-                                <div class="progress-bar {% if mission_item.completion_pct < 30 %}bg-danger{% elif mission_item.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                     role="progressbar" style="width:{{ mission_item.completion_pct }}%;"></div>
+                            {% if ge.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:5px;">
+                                    <div class="progress-bar {% if ge.completion_pct < 30 %}bg-danger{% elif ge.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ ge.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ ge.completion_pct }}%</small>
                             </div>
-                            <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ mission_item.completion_pct }}%</small>
-                        </div>
-                        <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
-                            {{ mission_item.done_tasks }}/{{ mission_item.total_tasks }} tasks complete
-                        </small>
-                        {% endif %}
-
-                        {# Dual health pills #}
-                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                            <span class="status-pill {{ mission_item.schedule_status }}">
-                                <span class="pill-dot"></span>
-                                {% if mission_item.schedule_status == 'late' %}Late{% elif mission_item.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
-                            </span>
-                            <span class="risk-pill {{ mission_item.risk_level }}">
-                                <span class="pill-dot"></span>
-                                {% if mission_item.risk_level == 'high' %}High Risk{% elif mission_item.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
-                            </span>
-                        </div>
-
-                        {# Child summary #}
-                        <small class="text-muted d-block mb-2" style="font-size:0.72rem;">
-                            <i class="fas fa-sitemap me-1 text-primary"></i>
-                            {{ mission_item.strategy_count }} strateg{{ mission_item.strategy_count|pluralize:"y,ies" }}{% if mission_item.strategy_count %}:
-                            {% if mission_item.strategies_on_track %}<span class="text-success fw-semibold">{{ mission_item.strategies_on_track }} On Track</span>{% endif %}
-                            {% if mission_item.strategies_at_risk %}<span class="text-warning fw-semibold ms-1">{{ mission_item.strategies_at_risk }} At Risk</span>{% endif %}
-                            {% if mission_item.strategies_late %}<span class="text-danger fw-semibold ms-1">{{ mission_item.strategies_late }} Late</span>{% endif %}
                             {% endif %}
-                        </small>
-
-                        {# View Details button #}
-                        <a href="{{ mission.get_absolute_url }}" class="btn btn-sm btn-outline-primary w-100 mt-1">
-                            View Details <i class="fas fa-arrow-right ms-1"></i>
-                        </a>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ ge.schedule_status|default:'on_track' }}">
+                                    <span class="pill-dot"></span>
+                                    {% if ge.schedule_status == 'late' %}Late{% elif ge.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
+                                </span>
+                                <span class="risk-pill {{ ge.risk_level|default:'low' }}">
+                                    <span class="pill-dot"></span>
+                                    {% if ge.risk_level == 'high' %}High Risk{% elif ge.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                </span>
+                                <span class="badge bg-light text-dark border" style="font-size:0.66rem;">
+                                    <i class="fas fa-bullseye text-primary me-1"></i>{{ ge.missions|length }} mission{{ ge.missions|length|pluralize }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-goal-{{ ge.goal.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#fefce8; border-left:3px solid #f59e0b !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold small" style="color:#92400e;"><i class="fas fa-trophy text-warning me-1"></i>{{ ge.goal.name }}</span>
+                                    <div class="d-flex gap-1">
+                                        <a href="{% url 'goal_detail' ge.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" style="font-size:0.7rem;">
+                                            <i class="fas fa-external-link-alt fa-xs me-1"></i>Full page
+                                        </a>
+                                        <button class="btn btn-sm btn-warning text-dark" style="font-size:0.7rem;"
+                                                onclick="event.stopPropagation(); hnDrillDown('hn-pane-missions','goalId','{{ ge.goal.id }}','missions under {{ ge.goal.name|truncatechars:30 }}')">
+                                            <i class="fas fa-bullseye fa-xs me-1"></i>{{ ge.missions|length }} Mission{{ ge.missions|length|pluralize }} <i class="fas fa-arrow-right fa-xs ms-1"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% if ge.goal.description %}
+                                <p class="text-muted mb-0" style="font-size:0.76rem;">{{ ge.goal.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 </div>
+            {% endif %}{% endfor %}
             </div>
+        {% else %}
+            {# Empty state #}
+            <div class="text-center py-5">
+                {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
+                <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
+                <p class="mb-2 fw-semibold">Your workspace is empty</p>
+                <p class="text-muted small mb-4">
+                    Let AI build a complete workspace from your organization's goal,
+                    or create things manually.
+                </p>
+                <a href="{% url 'onboarding_welcome' %}" class="btn btn-primary">
+                    <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
+                </a>
+                <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
+                    <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
+                </a>
+                {% else %}
+                <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
+                <p class="mb-2 fw-semibold">No Organization Goals yet</p>
+                <p class="text-muted small mb-4">
+                    Define an <strong>Organization Goal</strong> (your North Star),
+                    then add Missions, Strategies and Boards underneath it.
+                </p>
+                <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
+                    <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
+                </a>
+                {% endif %}
+            </div>
+        {% endif %}
+        </div>
+
+        {# ═══════════════════════ MISSIONS TAB ═══════════════════════ #}
+        <div class="tab-pane fade" id="hn-pane-missions" role="tabpanel" aria-labelledby="hn-tab-missions">
+        {% if mission_tree %}
+            <div class="row g-3">
+            {% for mi in mission_tree %}
+            {% with mission=mi.mission %}
+                <div class="col-md-6 col-lg-4 hn-card" data-mission-id="{{ mission.id }}"
+                     data-goal-id="{{ mission.organization_goal_id|default:'' }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--mission" role="button"
+                         onclick="hnToggleExpand('mission', {{ mission.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--mission">Mission</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ mission.name }}</h6>
+                                    {% if mission.description %}
+                                    <small class="text-muted" style="font-size:0.76rem;">{{ mission.description|truncatechars:90 }}</small>
+                                    {% endif %}
+                                </div>
+                                <span class="badge ms-status-badge status-{{ mission.status }} flex-shrink-0">{{ mission.get_status_display }}</span>
+                            </div>
+                            {% if mi.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:6px;">
+                                    <div class="progress-bar {% if mi.completion_pct < 30 %}bg-danger{% elif mi.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ mi.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ mi.completion_pct }}%</small>
+                            </div>
+                            <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                                {{ mi.done_tasks }}/{{ mi.total_tasks }} tasks complete
+                            </small>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ mi.schedule_status }}">
+                                    <span class="pill-dot"></span>
+                                    {% if mi.schedule_status == 'late' %}Late{% elif mi.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
+                                </span>
+                                <span class="risk-pill {{ mi.risk_level }}">
+                                    <span class="pill-dot"></span>
+                                    {% if mi.risk_level == 'high' %}High Risk{% elif mi.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                </span>
+                                <span class="badge bg-light text-dark border" style="font-size:0.66rem;">
+                                    <i class="fas fa-chess-knight text-primary me-1"></i>{{ mi.strategy_count }} strateg{{ mi.strategy_count|pluralize:"y,ies" }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-mission-{{ mission.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#eff6ff; border-left:3px solid #3b82f6 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold small" style="color:#1e40af;"><i class="fas fa-bullseye me-1" style="color:#3b82f6;"></i>{{ mission.name }}</span>
+                                    <div class="d-flex gap-1">
+                                        <a href="{{ mission.get_absolute_url }}" class="btn btn-sm btn-outline-primary" style="font-size:0.7rem;">
+                                            <i class="fas fa-external-link-alt fa-xs me-1"></i>Full page
+                                        </a>
+                                        {% if mi.strategy_count %}
+                                        <button class="btn btn-sm btn-primary" style="font-size:0.7rem;"
+                                                onclick="event.stopPropagation(); hnDrillDown('hn-pane-strategies','missionId','{{ mission.id }}','strategies under {{ mission.name|truncatechars:30 }}')">
+                                            <i class="fas fa-chess-knight fa-xs me-1"></i>{{ mi.strategy_count }} Strateg{{ mi.strategy_count|pluralize:"y,ies" }} <i class="fas fa-arrow-right fa-xs ms-1"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if mi.strategies_on_track or mi.strategies_at_risk or mi.strategies_late %}
+                                <div class="d-flex gap-2 flex-wrap" style="font-size:0.72rem;">
+                                    {% if mi.strategies_on_track %}<span class="text-success fw-semibold">{{ mi.strategies_on_track }} On Track</span>{% endif %}
+                                    {% if mi.strategies_at_risk %}<span class="text-warning fw-semibold">{{ mi.strategies_at_risk }} At Risk</span>{% endif %}
+                                    {% if mi.strategies_late %}<span class="text-danger fw-semibold">{{ mi.strategies_late }} Late</span>{% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             {% endwith %}
             {% endfor %}
-        </div>
-        {% endfor %}
-
+            </div>
         {% else %}
-        <!-- Empty state: no goals or missions yet -->
-        <div class="text-center py-5">
-            {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
-            <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
-            <p class="mb-2 fw-semibold">Your workspace is empty</p>
-            <p class="text-muted small mb-4">
-                Let AI build a complete workspace from your organization's goal,
-                or create things manually.
-            </p>
-            <a href="{% url 'onboarding_welcome' %}" class="btn btn-primary">
-                <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
-            </a>
-            <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
-                <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
-            </a>
-            <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
-                <i class="fas fa-plus fa-sm me-1"></i> New Board
-            </a>
-            {% else %}
-            <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
-            <p class="mb-2 fw-semibold">No Organization Goals or Missions yet</p>
-            <p class="text-muted small mb-4">
-                Start at the top — define an <strong>Organization Goal</strong> (your North Star),
-                then add Missions, Strategies and Boards underneath it.
-            </p>
-            <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
-                <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
-            </a>
-            <a href="{% url 'create_mission' %}" class="btn btn-primary ms-2">
-                <i class="fas fa-bullseye fa-sm me-1"></i> New Mission
-            </a>
-            <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
-                <i class="fas fa-plus fa-sm me-1"></i> New Board
-            </a>
-            {% endif %}
-        </div>
+            <div class="text-center py-4">
+                <i class="fas fa-bullseye fa-3x mb-3" style="opacity:0.2; color:#3b82f6;"></i>
+                <p class="mb-2 fw-semibold text-muted">No missions yet</p>
+                <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary"><i class="fas fa-plus fa-sm me-1"></i>New Mission</a>
+            </div>
         {% endif %}
-    </div>
+        </div>
+
+        {# ═══════════════════════ STRATEGIES TAB ═══════════════════════ #}
+        <div class="tab-pane fade" id="hn-pane-strategies" role="tabpanel" aria-labelledby="hn-tab-strategies">
+        {% if mission_tree %}
+            <div class="row g-3">
+            {% for mi in mission_tree %}{% for si in mi.strategies %}
+            {% with strategy=si.strategy %}
+                <div class="col-md-6 col-lg-4 hn-card"
+                     data-strategy-id="{{ strategy.id }}"
+                     data-mission-id="{{ mi.mission.id }}"
+                     data-goal-id="{{ mi.mission.organization_goal_id|default:'' }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--strategy" role="button"
+                         onclick="hnToggleExpand('strategy', {{ strategy.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--strategy">Strategy</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ strategy.name }}</h6>
+                                    <small class="text-muted" style="font-size:0.72rem;">
+                                        <i class="fas fa-bullseye me-1" style="color:#3b82f6;"></i>{{ mi.mission.name|truncatechars:35 }}
+                                    </small>
+                                </div>
+                                <span class="badge bg-light text-dark border flex-shrink-0" style="font-size:0.66rem;">
+                                    {{ si.board_count }} board{{ si.board_count|pluralize }}
+                                </span>
+                            </div>
+                            {% if si.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:6px;">
+                                    <div class="progress-bar {% if si.completion_pct < 30 %}bg-danger{% elif si.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ si.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ si.completion_pct }}%</small>
+                            </div>
+                            <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                                {{ si.done_tasks }}/{{ si.total_tasks }} tasks
+                            </small>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ si.schedule_status }}">
+                                    <span class="pill-dot"></span>
+                                    {% if si.schedule_status == 'late' %}Late{% elif si.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
+                                </span>
+                                <span class="risk-pill {{ si.risk_level }}">
+                                    <span class="pill-dot"></span>
+                                    {% if si.risk_level == 'high' %}High Risk{% elif si.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-strategy-{{ strategy.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#ecfdf5; border-left:3px solid #10b981 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold small" style="color:#065f46;"><i class="fas fa-chess-knight me-1" style="color:#10b981;"></i>{{ strategy.name }}</span>
+                                    <div class="d-flex gap-1">
+                                        <a href="{% url 'strategy_detail' mi.mission.id strategy.id %}"
+                                           class="btn btn-sm btn-outline-success" style="font-size:0.7rem;">
+                                            <i class="fas fa-external-link-alt fa-xs me-1"></i>Full page
+                                        </a>
+                                        {% if si.board_count %}
+                                        <button class="btn btn-sm btn-success" style="font-size:0.7rem;"
+                                                onclick="event.stopPropagation(); hnDrillDown('hn-pane-boards','strategyId','{{ strategy.id }}','boards under {{ strategy.name|truncatechars:30 }}')">
+                                            <i class="fas fa-clipboard-list fa-xs me-1"></i>{{ si.board_count }} Board{{ si.board_count|pluralize }} <i class="fas fa-arrow-right fa-xs ms-1"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if strategy.description %}
+                                <p class="text-muted mb-0" style="font-size:0.76rem;">{{ strategy.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endwith %}
+            {% endfor %}{% endfor %}
+            </div>
+            {% if not strategy_count %}
+            <div class="text-center py-4">
+                <i class="fas fa-chess-knight fa-3x mb-3" style="opacity:0.2; color:#10b981;"></i>
+                <p class="mb-2 fw-semibold text-muted">No strategies yet</p>
+                <p class="text-muted small">Create strategies under your missions to track execution.</p>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-chess-knight fa-3x mb-3" style="opacity:0.2; color:#10b981;"></i>
+                <p class="mb-2 fw-semibold text-muted">No strategies yet</p>
+                <p class="text-muted small">Create missions first, then add strategies to track execution.</p>
+            </div>
+        {% endif %}
+        </div>
+
+        {# ═══════════════════════ BOARDS TAB ═══════════════════════ #}
+        <div class="tab-pane fade" id="hn-pane-boards" role="tabpanel" aria-labelledby="hn-tab-boards">
+        {% if mission_tree or standalone_boards %}
+            <div class="row g-3">
+            {# Boards linked to strategies #}
+            {% for mi in mission_tree %}{% for si in mi.strategies %}{% for bi in si.boards %}
+                <div class="col-md-6 col-lg-4 hn-card"
+                     data-board-id="{{ bi.board.id }}"
+                     data-strategy-id="{{ si.strategy.id }}"
+                     data-mission-id="{{ mi.mission.id }}"
+                     data-goal-id="{{ mi.mission.organization_goal_id|default:'' }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--board" role="button"
+                         onclick="hnToggleExpand('board', {{ bi.board.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--board">Board</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ bi.board.name }}</h6>
+                                    <small class="text-muted" style="font-size:0.72rem;">
+                                        <i class="fas fa-chess-knight me-1" style="color:#10b981;"></i>{{ si.strategy.name|truncatechars:35 }}
+                                    </small>
+                                </div>
+                                {% if bi.board.project_deadline %}
+                                <span class="badge bg-light text-dark border flex-shrink-0" style="font-size:0.64rem;">
+                                    <i class="far fa-calendar me-1"></i>{{ bi.board.project_deadline|date:"M j" }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% if bi.total_tasks %}
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="progress flex-grow-1" style="height:6px;">
+                                    <div class="progress-bar {% if bi.completion_pct < 30 %}bg-danger{% elif bi.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ bi.completion_pct }}%;"></div>
+                                </div>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ bi.completion_pct }}%</small>
+                            </div>
+                            <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                                {{ bi.done_tasks }}/{{ bi.total_tasks }} tasks
+                            </small>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="status-pill {{ bi.schedule_status }}">
+                                    <span class="pill-dot"></span>
+                                    {% if bi.schedule_status == 'late' %}Late{% elif bi.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
+                                </span>
+                                <span class="risk-pill {{ bi.risk_level }}">
+                                    <span class="pill-dot"></span>
+                                    {% if bi.risk_level == 'high' %}High Risk{% elif bi.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                </span>
+                                {% if bi.high_risk_tasks %}
+                                <small class="text-danger" style="font-size:0.68rem;"><i class="fas fa-exclamation-triangle me-1"></i>{{ bi.high_risk_tasks }} risk</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Inline expansion panel ── #}
+                    <div class="hn-expand d-none" id="hn-expand-board-{{ bi.board.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#f5f3ff; border-left:3px solid #8b5cf6 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold small" style="color:#5b21b6;"><i class="fas fa-clipboard-list me-1" style="color:#8b5cf6;"></i>{{ bi.board.name }}</span>
+                                    <a href="{% url 'board_detail' bi.board.id %}" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;">
+                                        <i class="fas fa-external-link-alt fa-xs me-1"></i>Open board
+                                    </a>
+                                </div>
+                                {% if bi.board.description %}
+                                <p class="text-muted mb-0 mt-1" style="font-size:0.76rem;">{{ bi.board.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}{% endfor %}{% endfor %}
+
+            {# Standalone boards (no strategy) #}
+            {% for board in standalone_boards %}
+                <div class="col-md-6 col-lg-4 hn-card" data-board-id="{{ board.id }}">
+                    <div class="card h-100 shadow-sm hn-item hn-item--board hn-item--standalone" role="button"
+                         onclick="hnToggleExpand('board', {{ board.id }})">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1 me-2">
+                                    <span class="badge hn-level-badge hn-level-badge--board">Board</span>
+                                    <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">{{ board.name }}</h6>
+                                    <small class="text-muted fst-italic" style="font-size:0.72rem;">
+                                        <i class="fas fa-unlink me-1"></i>Not linked to a strategy
+                                    </small>
+                                </div>
+                                {% if board.project_deadline %}
+                                <span class="badge bg-light text-dark border flex-shrink-0" style="font-size:0.64rem;">
+                                    <i class="far fa-calendar me-1"></i>{{ board.project_deadline|date:"M j" }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hn-expand d-none" id="hn-expand-board-{{ board.id }}">
+                        <div class="card border-0 shadow-sm mt-2" style="background:#f5f3ff; border-left:3px solid #8b5cf6 !important;">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold small" style="color:#5b21b6;"><i class="fas fa-clipboard-list me-1" style="color:#8b5cf6;"></i>{{ board.name }}</span>
+                                    <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;">
+                                        <i class="fas fa-external-link-alt fa-xs me-1"></i>Open board
+                                    </a>
+                                </div>
+                                {% if board.description %}
+                                <p class="text-muted mb-0 mt-1" style="font-size:0.76rem;">{{ board.description|truncatechars:200 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+
+            {% if not hierarchy_board_count %}
+            <div class="text-center py-4">
+                <i class="fas fa-clipboard-list fa-3x mb-3" style="opacity:0.2; color:#8b5cf6;"></i>
+                <p class="mb-2 fw-semibold text-muted">No boards yet</p>
+                <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary"><i class="fas fa-plus fa-sm me-1"></i>New Board</a>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-clipboard-list fa-3x mb-3" style="opacity:0.2; color:#8b5cf6;"></i>
+                <p class="mb-2 fw-semibold text-muted">No boards yet</p>
+                <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary"><i class="fas fa-plus fa-sm me-1"></i>New Board</a>
+            </div>
+        {% endif %}
+        </div>
+
+    </div>{# /tab-content #}
 </div>
-<!-- /Mission Overview -->
+<!-- /Hierarchy Navigator -->
 
 <!-- ============================================================ -->
 <!-- ZONE 3: PERFORMANCE ANALYTICS (collapsed by default)        -->
@@ -3168,6 +3511,106 @@
             });
         });
     }
+
+    /* ==========================================================
+       HIERARCHY NAVIGATOR — Tab filtering & inline expansion
+       ========================================================== */
+    (function() {
+        var _hnFilter = null;  // { tabId, attr, value, label }
+
+        /**
+         * Show/hide cards within a tab pane based on a data-attribute filter.
+         * If attr is null, all cards are shown.
+         */
+        function _filterCards(paneId, attr, value) {
+            var pane = document.getElementById(paneId);
+            if (!pane) return;
+            pane.querySelectorAll('.hn-card').forEach(function(card) {
+                if (!attr || card.dataset[attr] === String(value)) {
+                    card.classList.remove('hn-hidden');
+                } else {
+                    card.classList.add('hn-hidden');
+                }
+            });
+        }
+
+        /** Switch to a tab and apply an optional filter. */
+        window.hnDrillDown = function(targetPaneId, filterAttr, filterValue, label) {
+            // Activate the target tab
+            var tabBtnId = targetPaneId.replace('hn-pane-', 'hn-tab-');
+            var tabBtn = document.getElementById(tabBtnId);
+            if (tabBtn && typeof bootstrap !== 'undefined') {
+                bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+            }
+            // Apply the filter
+            _filterCards(targetPaneId, filterAttr, filterValue);
+            // Show filter banner
+            var bar = document.getElementById('hn-filter-bar');
+            var lbl = document.getElementById('hn-filter-label');
+            if (bar && lbl) {
+                lbl.textContent = label;
+                bar.classList.remove('d-none');
+                bar.classList.add('d-flex');
+            }
+            _hnFilter = { tabId: targetPaneId, attr: filterAttr, value: filterValue, label: label };
+            // Collapse any expanded panels in the source tab
+            document.querySelectorAll('.hn-expand:not(.d-none)').forEach(function(p) {
+                p.classList.add('d-none');
+            });
+        };
+
+        /** Clear the active filter — show all cards in the currently-filtered tab. */
+        window.hnClearFilter = function() {
+            if (_hnFilter) {
+                _filterCards(_hnFilter.tabId, null, null);
+            }
+            var bar = document.getElementById('hn-filter-bar');
+            if (bar) { bar.classList.add('d-none'); bar.classList.remove('d-flex'); }
+            _hnFilter = null;
+        };
+
+        /**
+         * Toggle inline expansion panel for a card.
+         * Only one panel per tab is open at a time.
+         */
+        window.hnToggleExpand = function(level, id) {
+            var panel = document.getElementById('hn-expand-' + level + '-' + id);
+            if (!panel) return;
+            var wasHidden = panel.classList.contains('d-none');
+            // Collapse all panels within the active tab pane
+            var tabPane = panel.closest('.tab-pane');
+            if (tabPane) {
+                tabPane.querySelectorAll('.hn-expand').forEach(function(p) {
+                    p.classList.add('d-none');
+                });
+            }
+            if (wasHidden) {
+                panel.classList.remove('d-none');
+                // Scroll into view if needed
+                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        };
+
+        // When switching tabs, clear the filter if the user manually clicks a different tab
+        var tabContainer = document.getElementById('hierarchyTabs');
+        if (tabContainer) {
+            tabContainer.addEventListener('shown.bs.tab', function(e) {
+                var newPaneId = e.target.getAttribute('data-bs-target');
+                if (newPaneId) newPaneId = newPaneId.replace('#', '');
+                // If the user switched away from the filtered tab, clear filter
+                if (_hnFilter && _hnFilter.tabId !== newPaneId) {
+                    _filterCards(_hnFilter.tabId, null, null);
+                    var bar = document.getElementById('hn-filter-bar');
+                    if (bar) { bar.classList.add('d-none'); bar.classList.remove('d-flex'); }
+                    _hnFilter = null;
+                }
+                // Collapse any open expand panels
+                document.querySelectorAll('.hn-expand:not(.d-none)').forEach(function(p) {
+                    p.classList.add('d-none');
+                });
+            });
+        }
+    })();
 
     /* ==========================================================
        MISSION OVERVIEW — AI summary AJAX (strategy toggle removed)
