@@ -353,6 +353,9 @@ def onboarding_commit(request):
             'commit_error': 'Something went wrong while creating your workspace. Please try again.',
         })
 
+    # Show a one-time banner on the dashboard reminding the user to assign tasks
+    request.session['show_onboarding_assign_banner'] = True
+
     return redirect('dashboard')
 
 

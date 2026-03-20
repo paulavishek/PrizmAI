@@ -1059,6 +1059,15 @@
 </div>
 {% endif %}
 
+{% if show_assign_banner %}
+<!-- One-time onboarding banner: remind user to assign tasks -->
+<div class="alert alert-info alert-dismissible fade show d-flex align-items-center mb-3" role="alert" id="onboarding-assign-banner">
+    <i class="fas fa-info-circle me-2"></i>
+    <span>Your AI-generated tasks are currently <strong>unassigned</strong>. Head to any board to assign them to your team members.</span>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
 <!-- ============================================================ -->
 <!-- DECISION CENTER WIDGET                                      -->
 <!-- ============================================================ -->
@@ -1409,7 +1418,7 @@
                     {% for board in boards %}
                     <div class="col-md-6 col-xl-4">
                         <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
-                            <div class="board-card-grid">
+                            <div class="board-card-grid" style="border-left:4px solid {% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' %};">
                                 <div class="d-flex align-items-start justify-content-between mb-2">
                                     <h6 class="board-card-title mb-0">{{ board.name }}</h6>
                                     {% with status=board.get_current_scope_status %}
@@ -1544,6 +1553,13 @@
 {% if daily_briefing.has_content %}
 <div class="card shadow-sm mb-3" id="daily-briefing-card">
     <div class="card-body p-3">
+        {% if daily_briefing.workspace_is_new %}
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-robot" style="color:#0e9f6e;"></i>
+            <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
+        </div>
+        <p class="mt-2 mb-0 small" style="color:#374151;">Your workspace is all set. Open a board and move your first task forward to get started.</p>
+        {% else %}
         <div class="d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center gap-2" role="button" data-bs-toggle="collapse" data-bs-target="#briefingDetail" 
                  aria-expanded="false" aria-controls="briefingDetail" style="cursor:pointer;">
@@ -1613,6 +1629,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
@@ -1894,19 +1911,24 @@
             <div class="card-body p-3" style="max-height:220px; overflow-y:auto;">
                 {% if chart_boards %}
                 {% for b in chart_boards %}
+                {% with bp_color=forloop.counter0|divisibleby:1 %}
                 <div class="mb-2">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="small fw-semibold text-truncate" style="max-width:140px;" title="{{ b.name }}">{{ b.name }}</span>
+                        <span class="small fw-semibold text-truncate d-flex align-items-center gap-1" style="max-width:145px;" title="{{ b.name }}">
+                            <span style="width:9px;height:9px;border-radius:50%;background:{% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' as bp_dot %};flex-shrink:0;display:inline-block;"></span>
+                            <span class="text-truncate">{{ b.name }}</span>
+                        </span>
                         <span class="small text-muted fw-bold">{{ b.completion_pct }}%</span>
                     </div>
-                    <div class="progress" style="height:10px; border-radius:6px;">
-                        <div class="progress-bar {% if b.completion_pct < 30 %}bg-danger{% elif b.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                             role="progressbar" style="width:{{ b.completion_pct }}%; border-radius:6px;"></div>
+                    <div class="progress" style="height:10px; border-radius:6px; background:#e9ecef;">
+                        <div class="progress-bar" role="progressbar"
+                             style="width:{{ b.completion_pct }}%; border-radius:6px; background:{{ bp_dot }};"></div>
                     </div>
                     {% if b.high_risk > 0 %}
                     <small class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>{{ b.high_risk }} high-risk task{{ b.high_risk|pluralize }}</small>
                     {% endif %}
                 </div>
+                {% endwith %}
                 {% endfor %}
                 {% else %}
                 <div class="d-flex flex-column align-items-center justify-content-center h-100 text-center text-muted">
@@ -1920,6 +1942,7 @@
         </div>
     </div>
     <!-- Scope Creep Index -->
+    {% if scope_creep_data.has_data %}
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">
             <div class="card-header py-2 d-flex align-items-center" style="background:#fdf4ff;">
@@ -1992,6 +2015,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
     <!-- Velocity Sparkline -->
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">
@@ -2000,23 +2024,24 @@
                 <span class="fw-semibold small">Team Velocity (tasks/week)</span>
             </div>
             <div class="card-body p-2" style="height:220px; position:relative;">
+                {% if has_velocity_data %}
                 <canvas id="velocityChart"></canvas>
-                <div id="velocity-empty" class="d-none d-flex flex-column align-items-center justify-content-center h-100 text-center text-muted small">
-                    <div>
-                        <i class="fas fa-tachometer-alt fa-2x mb-2 d-block" style="opacity:0.15;color:#f59e0b;"></i>
-                        <p class="small mb-1 fw-semibold">No velocity data yet</p>
-                        <p style="font-size:0.7rem;" class="mb-2">Complete tasks across weeks to see team throughput trends.</p>
-                        <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;"><i class="fas fa-columns me-1"></i>Open Boards</a>
-                    </div>
+                {% else %}
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-center text-muted small">
+                    <i class="fas fa-clock fa-2x mb-3" style="color:#f59e0b; opacity:0.45;"></i>
+                    <p class="small mb-0 fw-semibold" style="color:#6b7280;">Velocity tracking begins after your first week of activity</p>
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
 <!-- Row 3: SPI/CPI Gauges + Risk Heatmap -->
+{% if has_schedule_data or has_time_log_data or risk_heatmap_data.has_data %}
 <div class="row g-3 mb-4">
     <!-- SPI Gauge -->
+    {% if has_schedule_data %}
     <div class="col-lg-3 col-md-6">
         <div class="card shadow-sm h-100">
             <div class="card-header py-2 text-center" style="background:#eff6ff;">
@@ -2038,7 +2063,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
     <!-- CPI Gauge -->
+    {% if has_time_log_data %}
     <div class="col-lg-3 col-md-6">
         <div class="card shadow-sm h-100">
             <div class="card-header py-2 text-center" style="background:#f0fdf4;">
@@ -2060,7 +2087,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
     <!-- Risk Heatmap -->
+    {% if risk_heatmap_data.has_data %}
     <div class="col-lg-6">
         <div class="card shadow-sm h-100">
             <div class="card-header py-2 d-flex align-items-center" style="background:#fef2f2;">
@@ -2132,7 +2161,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
+{% endif %}
 <!-- /Zone 3 -->
 </div><!-- /card-body -->
 </div><!-- /collapse analyticsZone3 -->

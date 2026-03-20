@@ -179,7 +179,8 @@ def dashboard(request):
     # Base query for My Tasks - exclude only completed tasks (progress=100)
     my_tasks_query = Task.objects.filter(
         column__board__in=boards,
-        assigned_to=request.user
+        assigned_to=request.user,
+        item_type='task',
     ).exclude(
         progress=100
     ).select_related('column', 'column__board', 'assigned_to')
@@ -200,7 +201,7 @@ def dashboard(request):
                 """,
                 'due_date_order': "CASE WHEN due_date IS NULL THEN 1 ELSE 0 END"
             }
-        ).order_by('due_date_order', 'due_date', 'priority_order', 'created_at')[:8]
+        ).order_by('due_date_order', 'due_date', 'priority_order', 'created_at')
     elif sort_by == 'priority':
         # Sort by: 1) Priority level, 2) Due date, 3) Creation date
         my_tasks = my_tasks_query.extra(
@@ -216,7 +217,7 @@ def dashboard(request):
                 """,
                 'due_date_order': "CASE WHEN due_date IS NULL THEN 1 ELSE 0 END"
             }
-        ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')[:8]
+        ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')
     elif sort_by == 'recent':
         # Sort by: 1) Most recently created/updated, 2) Priority
         my_tasks = my_tasks_query.extra(
@@ -231,7 +232,7 @@ def dashboard(request):
                     END
                 """
             }
-        ).order_by('-updated_at', '-created_at', 'priority_order')[:8]
+        ).order_by('-updated_at', '-created_at', 'priority_order')
     else:  # Default: 'urgency'
         # Sort by: 1) Overdue tasks first, 2) Priority level, 3) Due date, 4) Creation date
         my_tasks = my_tasks_query.extra(
@@ -247,19 +248,10 @@ def dashboard(request):
                     END
                 """
             }
-        ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')[:8]
+        ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')
     
-    # Count of my tasks (for stats) — exclude milestones
-    my_tasks_count = Task.objects.filter(
-        column__board__in=boards,
-        assigned_to=request.user,
-        item_type='task'
-    ).exclude(
-        Q(column__name__icontains='done') |
-        Q(column__name__icontains='closed') |
-        Q(column__name__icontains='completed') |
-        Q(progress=100)
-    ).count()
+    # Count of my tasks (for stats) — derived from the same base query to stay in sync
+    my_tasks_count = my_tasks_query.count()
 
     # ------------------------------------------------------------------
     # Mission tree data for the new dashboard hierarchy panel
@@ -750,6 +742,26 @@ def dashboard(request):
     }
 
     # ----------------------------------------------------------------
+    # Data-readiness flags — used to conditionally hide empty widgets
+    # ----------------------------------------------------------------
+    # SPI only has meaning when there are tasks past their due date (SPI = EV/PV).
+    # Derive directly from already-computed spi_cpi_data so the flag stays in sync.
+    has_schedule_data = any(b.get('spi') is not None for b in spi_cpi_data)
+
+    # CPI requires actual budget spend recorded against a board.
+    has_time_log_data = any(b.get('cpi') is not None for b in spi_cpi_data)
+
+    # Velocity chart is meaningful only after at least one task has been completed.
+    has_velocity_data = completed_count > 0
+
+    _oldest_board_time = boards.order_by('created_at').values_list('created_at', flat=True).first()
+    workspace_is_new = (
+        _oldest_board_time is not None
+        and (timezone.now() - _oldest_board_time).total_seconds() < 86400
+        and completed_count == 0
+    )
+
+    # ----------------------------------------------------------------
     # Daily AI Briefing  (synthesised from stored summaries — no AI call)
     # ----------------------------------------------------------------
     briefing_pulse  = None
@@ -872,7 +884,8 @@ def dashboard(request):
         'action_plan':    briefing_action_plan,
         'action_summary': briefing_action_summary,
         'ai_powered':     briefing_ai_powered,
-        'has_content':    bool(briefing_pulse or briefing_risk or briefing_action),
+        'workspace_is_new': workspace_is_new,
+        'has_content':    bool(briefing_pulse or briefing_risk or briefing_action or workspace_is_new),
     }
 
     # Pass raw dict for json_script filter (don't pre-serialize with json.dumps)
@@ -933,6 +946,9 @@ def dashboard(request):
     else:
         all_strategies = []
 
+    # One-time onboarding banner (tasks are unassigned after AI workspace generation)
+    show_assign_banner = request.session.pop('show_onboarding_assign_banner', False)
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -968,8 +984,12 @@ def dashboard(request):
         'spi_cpi_data':      spi_cpi_data,
         'risk_heatmap_data': risk_heatmap_data,
         'scope_creep_data':  scope_creep_data,
+        'has_schedule_data': has_schedule_data,
+        'has_time_log_data': has_time_log_data,
+        'has_velocity_data': has_velocity_data,
         'daily_briefing':    daily_briefing,
         'premortem_risk_map': premortem_risk_map,
+        'show_assign_banner': show_assign_banner,
         })
 
 

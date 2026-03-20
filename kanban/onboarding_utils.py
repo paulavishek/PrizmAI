@@ -122,6 +122,9 @@ def commit_onboarding_workspace(user, preview):
                         created_by=user,
                     )
                     board.members.add(user)
+                    # Auto-set task_prefix for readable task IDs
+                    board.task_prefix = board.get_default_prefix()
+                    board.save(update_fields=['task_prefix'])
 
                     # ── Columns ────────────────────────────────────────
                     columns_names = b_data.get('columns', ['To Do', 'In Progress', 'Done'])
@@ -164,7 +167,7 @@ def commit_onboarding_workspace(user, preview):
                             start_date=today,
                             due_date=due_dt,
                             created_by=user,
-                            assigned_to=user,
+                            assigned_to=None,
                         )
 
         # ── Finalise preview + profile ─────────────────────────────────
