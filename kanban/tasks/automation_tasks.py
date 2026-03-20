@@ -181,6 +181,18 @@ def _get_filtered_tasks(board, task_filter):
 def _execute_scheduled_notification(sa, tasks):
     """Create in-app Notification records for matching tasks."""
     from messaging.models import Notification
+    from django.urls import reverse
+
+    # Do not send automated notifications for official demo boards.
+    # Real users are added as board members when they browse the demo workspace,
+    # so firing automations on demo boards would leak demo data into their
+    # personal notification feed.
+    if sa.board.is_official_demo_board:
+        logger.info(
+            "ScheduledAutomation pk=%s: skipped — board is an official demo board",
+            sa.pk,
+        )
+        return
 
     task_count = tasks.count()
     message = sa.action_value or (
@@ -191,6 +203,12 @@ def _execute_scheduled_notification(sa, tasks):
     if not sender:
         logger.warning("ScheduledAutomation pk=%s: no valid sender for notification", sa.pk)
         return
+
+    # Build a clickable link to the board so recipients can act immediately.
+    try:
+        board_url = reverse('board_detail', args=[sa.board.id])
+    except Exception:
+        board_url = None
 
     # Determine recipients
     recipients = set()
@@ -212,6 +230,7 @@ def _execute_scheduled_notification(sa, tasks):
             sender=sender,
             notification_type='ACTIVITY',
             text=message,
+            action_url=board_url,
         )
 
     logger.info(

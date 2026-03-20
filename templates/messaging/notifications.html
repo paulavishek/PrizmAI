@@ -178,6 +178,13 @@
                                onclick="markAsRead(event, this)">
                                 <i class="fas fa-arrow-right me-1"></i> View Message
                             </a>
+                        {% elif notification.action_url %}
+                            <a href="{{ notification.action_url }}"
+                               class="btn btn-sm btn-primary"
+                               data-notification-id="{{ notification.id }}"
+                               onclick="markAsRead(event, this)">
+                                <i class="fas fa-arrow-right me-1"></i> View Board
+                            </a>
                         {% endif %}
                         {% if not notification.is_read %}
                             <button type="button" class="btn btn-sm btn-outline-secondary" 
