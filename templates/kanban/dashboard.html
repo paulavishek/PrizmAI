@@ -1926,6 +1926,9 @@
                                     {% if mi.strategies_late %}<span class="text-danger fw-semibold">{{ mi.strategies_late }} Late</span>{% endif %}
                                 </div>
                                 {% endif %}
+                                {% if mission.description %}
+                                <p class="text-muted mb-0 mt-1" style="font-size:0.76rem;">{{ mission.description|truncatechars:200 }}</p>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
