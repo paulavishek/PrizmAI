@@ -9,13 +9,8 @@
 {% block header_icon %}<i class="fas fa-trophy text-warning me-2"></i>{% endblock %}
 
 {% block header_subtitle %}
-{% if goal.target_metric %}
-<div class="mb-1">
-    <span class="badge bg-warning text-dark px-2 py-1">
-        <i class="fas fa-bullseye me-1"></i>Target: {{ goal.target_metric }}
-    </span>
-</div>
-{% endif %}
+<p class="text-muted small mb-0">Goal · Organisational{% if goal.target_metric %} — {{ goal.target_metric }}{% endif %}</p>
+<p class="text-muted small mb-0">v{{ record.version }} · edited {{ record.updated_at|timesince }} ago</p>
 {% endblock %}
 
 {% block header_actions %}
@@ -219,4 +214,12 @@
     <div class="sidebar-value">{{ goal.organization.name }}</div>
 </div>
 {% endif %}
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Version</div>
+    <div class="sidebar-value">
+        v{{ record.version }}
+        · <a href="#tab-versions" class="text-decoration-none" onclick="document.querySelector('[data-bs-target=\"#tab-versions\"]').click();">View history</a>
+    </div>
+</div>
 {% endblock %}
