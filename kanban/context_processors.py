@@ -187,12 +187,21 @@ def conflict_count(request):
         except UserProfile.DoesNotExist:
             return {'active_conflict_count': 0}
         
-        # MVP Mode: Get all boards the user has access to
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # Get boards scoped to the user's current workspace (demo vs real)
+        demo_mode = getattr(profile, 'is_viewing_demo', False)
+
+        if demo_mode:
+            boards = Board.objects.filter(
+                Q(is_official_demo_board=True)
+                | Q(created_by_session=f'spectra_demo_{request.user.id}')
+            ).distinct()
+        else:
+            boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user),
+                is_official_demo_board=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).distinct()
         
         # Count active conflicts
         count = ConflictDetection.objects.filter(

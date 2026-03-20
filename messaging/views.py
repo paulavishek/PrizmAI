@@ -388,13 +388,24 @@ def get_unread_message_count(request):
     - Boards user created
     - Boards user is a member of
     """
-    # Get boards accessible to the user (same logic as messaging_hub)
-    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards_query = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    )
-    accessible_boards = (demo_boards | user_boards_query).distinct()
+    # Get boards scoped to the user's current workspace (demo vs real)
+    try:
+        demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
+    except Exception:
+        demo_mode = False
+
+    if demo_mode:
+        accessible_boards = Board.objects.filter(
+            Q(is_official_demo_board=True)
+            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+        ).distinct()
+    else:
+        accessible_boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user),
+            is_official_demo_board=False,
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
+        ).distinct()
     
     # Get chat rooms from accessible boards where user is a member
     user_chat_rooms = ChatRoom.objects.filter(
