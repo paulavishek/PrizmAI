@@ -13,14 +13,8 @@
 {% block header_icon %}<i class="fas fa-bullseye text-primary me-2"></i>{% endblock %}
 
 {% block header_subtitle %}
-{% if mission.organization_goal %}
-<div class="mb-1">
-    <span class="badge bg-warning bg-opacity-25 text-dark px-2 py-1" style="font-size:0.72rem;">
-        <i class="fas fa-trophy text-warning me-1"></i>
-        Contributing to: <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-decoration-none text-warning fw-semibold">{{ mission.organization_goal.name|truncatechars:50 }}</a>
-    </span>
-</div>
-{% endif %}
+<p class="text-muted small mb-0">Mission{% if mission.organization_goal %} · Under goal: <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-decoration-none">{{ mission.organization_goal.name|truncatechars:50 }}</a>{% endif %}</p>
+<p class="text-muted small mb-0">v{{ record.version }} · created {{ record.created_at|date:"M d" }}</p>
 {% endblock %}
 
 {% block header_actions %}
@@ -80,25 +74,34 @@
                         <h5 class="card-title mb-0">
                             <i class="fas fa-lightbulb text-success me-1"></i>{{ s.strategy.name }}
                         </h5>
-                        <span class="status-badge {{ s.strategy.status }}">{{ s.strategy.get_status_display }}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if s.health_score is not None %}
+                            <span class="badge {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                {% if s.health_score >= 70 %}On track{% elif s.health_score >= 40 %}At risk{% else %}Off track{% endif %}
+                            </span>
+                            {% endif %}
+                            <span class="status-badge {{ s.strategy.status }}">{{ s.strategy.get_status_display }}</span>
+                        </div>
                     </div>
 
                     {% if s.strategy.description %}
                     <p class="card-text text-muted small mb-2">{{ s.strategy.description|truncatechars:120 }}</p>
                     {% endif %}
 
-                    {# Health score + progress #}
+                    {# Per-strategy progress bar #}
                     {% if s.health_score is not None %}
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <span class="fw-bold small {% if s.health_score >= 70 %}text-success{% elif s.health_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
-                            {{ s.health_score }}
-                        </span>
-                        <div class="progress flex-grow-1 progress-sm">
-                            <div class="progress-bar {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                                 style="width:{{ s.completion_pct }}%"></div>
-                        </div>
-                        <small class="fw-bold text-nowrap">{{ s.completion_pct }}%</small>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Progress</span>
+                        <span class="fw-bold small">{{ s.completion_pct }}%</span>
                     </div>
+                    <div class="progress mb-2" style="height: 6px;">
+                        <div class="progress-bar {% if s.health_score >= 70 %}bg-success{% elif s.health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width:{{ s.completion_pct }}%"></div>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        {{ s.board_count }} board{{ s.board_count|pluralize }} · {{ s.total_tasks }} task{{ s.total_tasks|pluralize }} ·
+                        <a href="{% url 'strategy_detail' mission.id s.strategy.id %}" class="text-decoration-none">Open →</a>
+                    </p>
                     {% endif %}
 
                     {# Boards sub-list #}
@@ -304,6 +307,19 @@
 
 <div class="sidebar-section">
     <div class="sidebar-label">Strategies</div>
-    <div class="sidebar-value">{{ strategy_tree|length }}</div>
+    <div class="sidebar-value">{{ strategy_tree|length }} total</div>
+    {% if on_track_count or at_risk_count or off_track_count %}
+    <small class="text-muted">
+        {% if on_track_count %}{{ on_track_count }} on track{% endif %}{% if on_track_count and at_risk_count or on_track_count and off_track_count %} · {% endif %}{% if at_risk_count %}{{ at_risk_count }} at risk{% endif %}{% if at_risk_count and off_track_count %} · {% endif %}{% if off_track_count %}{{ off_track_count }} off track{% endif %}
+    </small>
+    {% endif %}
+</div>
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Version</div>
+    <div class="sidebar-value">
+        v{{ record.version }}
+        · <a href="#tab-versions" class="text-decoration-none" onclick="document.querySelector('[data-bs-target=\"#tab-versions\"]').click();">View history</a>
+    </div>
 </div>
 {% endblock %}

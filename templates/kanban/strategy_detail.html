@@ -14,12 +14,8 @@
 {% block header_icon %}<i class="fas fa-lightbulb text-success me-2"></i>{% endblock %}
 
 {% block header_subtitle %}
-<div class="mb-1">
-    <span class="badge bg-info bg-opacity-15 text-dark px-2 py-1" style="font-size:0.72rem;">
-        <i class="fas fa-bullseye text-primary me-1"></i>
-        Under mission: <a href="{% url 'mission_detail' mission.id %}" class="text-decoration-none text-primary fw-semibold">{{ mission.name|truncatechars:50 }}</a>
-    </span>
-</div>
+<p class="text-muted small mb-0">Strategy · Under mission: <a href="{% url 'mission_detail' mission.id %}" class="text-decoration-none">{{ mission.name|truncatechars:50 }}</a></p>
+<p class="text-muted small mb-0">v{{ record.version }} · created {{ record.created_at|date:"M d" }}</p>
 {% endblock %}
 
 {% block header_actions %}
@@ -146,7 +142,7 @@
                     {# Details line #}
                     <div class="small text-muted mb-3">
                         {{ bi.completion_pct }}% complete
-                        {% if bi.board.due_date %}&middot; Due {{ bi.board.due_date|date:"d M" }}{% endif %}
+                        {% if bi.board.project_deadline %}&middot; Due {{ bi.board.project_deadline|date:"d M" }}{% endif %}
                         {% if bi.overdue_count > 0 %}
                         &middot; <span class="text-danger fw-semibold">{{ bi.overdue_count }} overdue task{{ bi.overdue_count|pluralize }}</span>
                         {% endif %}
@@ -350,6 +346,14 @@
         {% if milestones_complete > 0 %}<span class="text-success"><i class="fas fa-check-circle me-1"></i>{{ milestones_complete }} complete</span><br>{% endif %}
         {% if milestones_pending > 0 %}<span class="text-muted"><i class="far fa-circle me-1"></i>{{ milestones_pending }} upcoming</span>{% endif %}
         {% if not milestones %}—{% endif %}
+    </div>
+</div>
+
+<div class="sidebar-section">
+    <div class="sidebar-label">Version</div>
+    <div class="sidebar-value">
+        v{{ record.version }}
+        · <a href="#tab-versions" class="text-decoration-none" onclick="document.querySelector('[data-bs-target=\"#tab-versions\"]').click();">View history</a>
     </div>
 </div>
 {% endblock %}
