@@ -287,33 +287,46 @@ class Command(BaseCommand):
             for member in board.members.all():
                 recipients.add(member)
 
-        # ── Look up real objects so notification text is always accurate ──────
+        # ── Look up real objects so notification text and links are always accurate ──
         from kanban.models import Task, Column
+        from django.urls import reverse
 
-        # Collect real task titles from the demo boards for each "status bucket"
-        def pick_task(keywords):
-            """Return the title of the first task whose title contains any keyword (case-insensitive)."""
+        def pick_task_obj(keywords):
+            """Return the first Task whose title contains any keyword (case-insensitive)."""
             for board in self.demo_boards:
                 for kw in keywords:
-                    t = Task.objects.filter(
-                        column__board=board,
-                        title__icontains=kw
-                    ).values_list('title', flat=True).first()
+                    t = Task.objects.filter(column__board=board, title__icontains=kw).first()
                     if t:
                         return t
             return None
 
-        # Map placeholders to real task titles (fallback to a safe default)
-        task_auth      = pick_task(['authentication', 'auth']) or 'Authentication System'
-        task_db        = pick_task(['database', 'schema', 'migration']) or 'Database Schema & Migrations'
-        task_deploy    = pick_task(['deploy', 'ci/cd', 'automation']) or 'Deployment Automation'
-        task_api       = pick_task(['api', 'base api', 'rate limit']) or 'Base API Structure'
-        task_done      = pick_task(['documentation', 'final doc', 'launch']) or 'Final Documentation'
-        task_review    = pick_task(['code review', 'core features', 'integration test']) or 'Core Features Code Review'
+        # Resolve real Task objects (with fallback titles for text only)
+        obj_auth   = pick_task_obj(['authentication', 'auth'])
+        obj_db     = pick_task_obj(['database', 'schema', 'migration'])
+        obj_deploy = pick_task_obj(['deploy', 'ci/cd', 'automation'])
+        obj_api    = pick_task_obj(['api', 'base api', 'rate limit'])
+        obj_done   = pick_task_obj(['documentation', 'final doc', 'launch'])
+        obj_review = pick_task_obj(['code review', 'core features', 'integration test'])
 
-        # Real chat room names
-        room_general  = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='general').values_list('name', flat=True).first() or 'General Discussion'
-        room_reviews  = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='review').values_list('name', flat=True).first() or 'Code Reviews'
+        task_auth   = obj_auth.title   if obj_auth   else 'Authentication System'
+        task_db     = obj_db.title     if obj_db     else 'Database Schema & Migrations'
+        task_deploy = obj_deploy.title if obj_deploy else 'Deployment Automation'
+        task_api    = obj_api.title    if obj_api    else 'Base API Structure'
+        task_done   = obj_done.title   if obj_done   else 'Final Documentation'
+        task_review = obj_review.title if obj_review else 'Core Features Code Review'
+
+        # Build action URLs that point to real pages
+        def task_url(task_obj):
+            return reverse('task_detail', kwargs={'task_id': task_obj.id}) if task_obj else None
+
+        # Real chat rooms
+        room_general_obj = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='general').first()
+        room_reviews_obj = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='review').first()
+        room_general     = room_general_obj.name if room_general_obj else 'General Discussion'
+        room_reviews     = room_reviews_obj.name if room_reviews_obj else 'Code Reviews'
+
+        def room_url(room_obj):
+            return reverse('messaging:chat_room_detail', kwargs={'room_id': room_obj.id}) if room_obj else None
 
         # Real sender display names
         def display(user):
@@ -328,6 +341,7 @@ class Command(BaseCommand):
                 'type': 'MENTION',
                 'sender_key': 'alex',
                 'text': f'{alex_name} mentioned you in {room_general}: "Can you review the latest changes on {task_api}?"',
+                'action_url': room_url(room_general_obj),
                 'minutes_ago': 25,
                 'is_read': False,
             },
@@ -335,6 +349,7 @@ class Command(BaseCommand):
                 'type': 'COMMENT',
                 'sender_key': 'sam',
                 'text': f'{sam_name} replied to your comment on "{task_deploy}": "Great catch! I\'ve incorporated your feedback into the workflow."',
+                'action_url': task_url(obj_deploy),
                 'minutes_ago': 85,
                 'is_read': False,
             },
@@ -342,6 +357,7 @@ class Command(BaseCommand):
                 'type': 'ACTIVITY',
                 'sender_key': 'jordan',
                 'text': f'{jordan_name} moved "{task_auth}" to In Review.',
+                'action_url': task_url(obj_auth),
                 'minutes_ago': 175,
                 'is_read': False,
             },
@@ -349,6 +365,7 @@ class Command(BaseCommand):
                 'type': 'MENTION',
                 'sender_key': 'sam',
                 'text': f'{sam_name} mentioned you in {room_reviews}: "PR is ready for your approval — ping me with questions."',
+                'action_url': room_url(room_reviews_obj),
                 'minutes_ago': 240,
                 'is_read': True,
             },
@@ -356,6 +373,7 @@ class Command(BaseCommand):
                 'type': 'TASK_ASSIGNED_CAL',
                 'sender_key': 'alex',
                 'text': f'You were assigned to "{task_db}" — due in 3 days.',
+                'action_url': task_url(obj_db),
                 'minutes_ago': 360,
                 'is_read': True,
             },
@@ -363,6 +381,7 @@ class Command(BaseCommand):
                 'type': 'COMMENT',
                 'sender_key': 'jordan',
                 'text': f'{jordan_name} commented on "{task_api}": "I\'ve added the rate-limiting logic — please verify on staging."',
+                'action_url': task_url(obj_api),
                 'minutes_ago': 480,
                 'is_read': True,
             },
@@ -370,6 +389,7 @@ class Command(BaseCommand):
                 'type': 'ACTIVITY',
                 'sender_key': 'alex',
                 'text': f'{alex_name} marked "{task_done}" as complete. 🎉',
+                'action_url': task_url(obj_done),
                 'minutes_ago': 720,
                 'is_read': True,
             },
@@ -377,6 +397,7 @@ class Command(BaseCommand):
                 'type': 'COMMENT',
                 'sender_key': 'sam',
                 'text': f'{sam_name} left a review comment on "{task_review}": "Looks good overall — added a few inline suggestions."',
+                'action_url': task_url(obj_review),
                 'minutes_ago': 1440,
                 'is_read': True,
             },
@@ -410,13 +431,19 @@ class Command(BaseCommand):
                 if not sender or sender == recipient:
                     continue
 
-                # Avoid duplicates across repeated runs
-                if Notification.objects.filter(
+                # Avoid duplicates across repeated runs; but patch action_url if
+                # the existing record was created before URL support was added.
+                new_url = template.get('action_url') or ''
+                existing = Notification.objects.filter(
                     recipient=recipient,
                     sender=sender,
                     notification_type=template['type'],
                     text=template['text'],
-                ).exists():
+                ).first()
+                if existing:
+                    if new_url and not existing.action_url:
+                        existing.action_url = new_url
+                        existing.save(update_fields=['action_url'])
                     continue
 
                 notif = Notification.objects.create(
@@ -424,6 +451,7 @@ class Command(BaseCommand):
                     sender=sender,
                     notification_type=template['type'],
                     text=template['text'],
+                    action_url=template.get('action_url') or '',
                     is_read=template['is_read'],
                 )
                 # Back-date the notification so timestamps look natural
