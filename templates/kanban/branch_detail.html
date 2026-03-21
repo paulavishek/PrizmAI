@@ -402,7 +402,7 @@
         fetch('{% url "commit_shadow_branch" board.id branch.id %}', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value,
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ confirm: true })

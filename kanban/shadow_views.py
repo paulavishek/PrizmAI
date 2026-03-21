@@ -10,6 +10,7 @@ Handles all HTTP requests for Shadow Board functionality:
 """
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+import json
 from django.views.generic import ListView, CreateView, DetailView
 from django.views.decorators.http import require_POST, require_http_methods
 from django.http import JsonResponse
@@ -66,12 +67,13 @@ class ShadowBoardListView(ListView):
         if self.request.user not in board.members.all() and self.request.user != board.created_by:
             self.permission_denied()
         
-        # Return active + archived from last 7 days
+        # Return active, committed, and recently archived branches (last 7 days)
         cutoff_date = timezone.now() - timedelta(days=7)
         return ShadowBranch.objects.filter(
             board=board,
         ).filter(
             models.Q(status='active') |
+            models.Q(status='committed') |
             models.Q(status='archived', updated_at__gte=cutoff_date)
         ).select_related('created_by', 'source_scenario').prefetch_related('snapshots')
 
@@ -336,8 +338,12 @@ class CommitBranchView(DetailView):
         if self.request.user not in board.members.all() and self.request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
-        # Check for confirmation
-        confirm = request.POST.get('confirm', 'false').lower() == 'true'
+        # Check for confirmation (supports both JSON body and form POST)
+        try:
+            body_data = json.loads(request.body)
+            confirm = body_data.get('confirm', False) is True
+        except (json.JSONDecodeError, AttributeError):
+            confirm = request.POST.get('confirm', 'false').lower() == 'true'
         if not confirm:
             return JsonResponse({'error': 'Confirmation required'}, status=400)
 
