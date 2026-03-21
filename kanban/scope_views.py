@@ -422,8 +422,9 @@ def run_scope_analysis(request, board_id):
     
     # Deduplication check: reuse a recent snapshot if it matches current metrics
     dedupe_cutoff = timezone.now() - timedelta(minutes=30)
-    current_task_count = board.tasks.count()
-    current_complexity = board.tasks.aggregate(
+    board_tasks = Task.objects.filter(column__board=board)
+    current_task_count = board_tasks.count()
+    current_complexity = board_tasks.aggregate(
         total=Sum('complexity_score')
     )['total'] or 0
 
