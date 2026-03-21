@@ -304,6 +304,7 @@ urlpatterns = [
     path('api/boards/<int:board_id>/shadow/branches/<int:branch_a_id>/<int:branch_b_id>/', shadow_views.get_branches_comparison, name='get_branches_comparison'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/toggle-star/', shadow_views.toggle_star_branch, name='toggle_star_branch'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/delete/', shadow_views.delete_branch, name='delete_shadow_branch'),
+    path('api/boards/<int:board_id>/shadow/<int:branch_id>/restore/', shadow_views.restore_branch, name='restore_shadow_branch'),
     path('boards/<int:board_id>/shadow/promote-scenario/', shadow_views.promote_scenario_to_branch, name='promote_scenario'),
     
     # Resource Leveling URLs
