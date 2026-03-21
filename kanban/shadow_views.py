@@ -760,18 +760,8 @@ def link_scenario_to_branch(request, board_id, branch_id):
         branch.source_scenario = scenario
         branch.save(update_fields=['source_scenario'])
 
-        # Create a new snapshot seeded from the scenario's parameters
-        if scenario.input_parameters:
-            params = scenario.input_parameters
-            BranchSnapshot.objects.create(
-                branch=branch,
-                scope_delta=int(params.get('tasks_added', 0)),
-                team_delta=int(params.get('team_size_delta', 0)),
-                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,
-            )
-
-        # Trigger recalculation with the new scenario parameters
+        # Trigger recalculation — extract_branch_params now reads directly from
+        # source_scenario.input_parameters, so no zero-score seed snapshot is needed.
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
             args=[board_id],
