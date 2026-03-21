@@ -334,7 +334,35 @@ function initBranchCardActions() {
             const branchName = deleteBtn.dataset.branchName || 'this branch';
             showDeleteConfirmation(branchId, branchName);
         }
+
+        const restoreBtn = e.target.closest('.btn-restore');
+        if (restoreBtn) {
+            const branchId = restoreBtn.dataset.branchId;
+            restoreBranch(branchId);
+        }
     });
+}
+
+/**
+ * Restore an archived branch back to active
+ */
+function restoreBranch(branchId) {
+    fetch(`/api/boards/${getBoardId()}/shadow/${branchId}/restore/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            setTimeout(() => window.location.reload(), 400);
+        } else {
+            alertError('Could not restore branch: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(e => alertError('Could not restore branch: ' + e.message));
 }
 
 /**

@@ -724,10 +724,37 @@ def delete_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+def restore_branch(request, board_id, branch_id):
+    """
+    API endpoint: Restore an archived branch back to active status.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if request.user not in board.members.all() and request.user != board.created_by:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+
+        if branch.status != 'archived':
+            return JsonResponse({'error': 'Only archived branches can be restored'}, status=400)
+
+        branch.status = 'active'
+        branch.save(update_fields=['status'])
+
+        logger.info(f'Branch "{branch.name}" (id={branch_id}) restored by {request.user.username}')
+        return JsonResponse({
+            'success': True,
+            'message': f'Branch "{branch.name}" restored to active.',
+        })
+    except Exception as e:
+        logger.error(f'Error restoring branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
 def toggle_star_branch(request, board_id, branch_id):
-    """
-    API endpoint: Toggle the is_starred flag on a branch.
-    """
     try:
         board = get_object_or_404(Board, id=board_id)
 

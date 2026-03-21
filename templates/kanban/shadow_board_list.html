@@ -270,6 +270,11 @@
                                     <i class="fas fa-check"></i>
                                 </button>
                                 {% endif %}
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore branch to active">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                {% endif %}
                                 <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch">
                                     <i class="fas fa-trash"></i>
                                 </button>

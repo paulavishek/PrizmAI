@@ -299,12 +299,12 @@
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to commit <strong>{{ branch.name }}</strong>?</p>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
+                <div class="alert alert-warning">
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>Warning:</strong>
                     This will:
                     <ul class="mb-0 mt-2">
                         <li>Mark this branch as the accepted reality</li>
-                        <li>Archive all other active branches</li>
+                        <li><strong>Archive all other active branches</strong> (they can be restored later)</li>
                         <li>Create an audit log entry</li>
                     </ul>
                 </div>
