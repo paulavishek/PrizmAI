@@ -271,7 +271,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'   Created {attachments_created} file attachments'))
 
     def create_notifications(self):
-        """Create rich demo notifications for all demo users and superusers"""
+        """Create demo notifications referencing real tasks and chat rooms from the demo board"""
         self.stdout.write(self.style.NOTICE('\n🔔 Creating Notifications...'))
 
         notifications_created = 0
@@ -287,67 +287,122 @@ class Command(BaseCommand):
             for member in board.members.all():
                 recipients.add(member)
 
-        # Curated standalone notification templates that don't rely on @mentions
-        # being present in chat messages. sender_key must be a different user from
-        # the recipient so we skip self-notifications below.
+        # ── Look up real objects so notification text is always accurate ──────
+        from kanban.models import Task, Column
+
+        # Collect real task titles from the demo boards for each "status bucket"
+        def pick_task(keywords):
+            """Return the title of the first task whose title contains any keyword (case-insensitive)."""
+            for board in self.demo_boards:
+                for kw in keywords:
+                    t = Task.objects.filter(
+                        column__board=board,
+                        title__icontains=kw
+                    ).values_list('title', flat=True).first()
+                    if t:
+                        return t
+            return None
+
+        # Map placeholders to real task titles (fallback to a safe default)
+        task_auth      = pick_task(['authentication', 'auth']) or 'Authentication System'
+        task_db        = pick_task(['database', 'schema', 'migration']) or 'Database Schema & Migrations'
+        task_deploy    = pick_task(['deploy', 'ci/cd', 'automation']) or 'Deployment Automation'
+        task_api       = pick_task(['api', 'base api', 'rate limit']) or 'Base API Structure'
+        task_done      = pick_task(['documentation', 'final doc', 'launch']) or 'Final Documentation'
+        task_review    = pick_task(['code review', 'core features', 'integration test']) or 'Core Features Code Review'
+
+        # Real chat room names
+        room_general  = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='general').values_list('name', flat=True).first() or 'General Discussion'
+        room_reviews  = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='review').values_list('name', flat=True).first() or 'Code Reviews'
+
+        # Real sender display names
+        def display(user):
+            return user.get_full_name() if user and user.get_full_name().strip() else (user.username if user else 'A teammate')
+
+        alex_name   = display(self.alex)
+        sam_name    = display(self.sam)
+        jordan_name = display(self.jordan)
+
         standalone_templates = [
             {
                 'type': 'MENTION',
                 'sender_key': 'alex',
-                'text': 'Alex Chen mentioned you in General Discussion: "Can you review the updated API specs?"',
+                'text': f'{alex_name} mentioned you in {room_general}: "Can you review the latest changes on {task_api}?"',
                 'minutes_ago': 25,
                 'is_read': False,
             },
             {
                 'type': 'COMMENT',
                 'sender_key': 'sam',
-                'text': 'Sam Rivera replied to your comment on "Set up CI/CD pipeline": "Great catch! I\'ve incorporated your feedback into the workflow."',
+                'text': f'{sam_name} replied to your comment on "{task_deploy}": "Great catch! I\'ve incorporated your feedback into the workflow."',
                 'minutes_ago': 85,
                 'is_read': False,
             },
             {
                 'type': 'ACTIVITY',
                 'sender_key': 'jordan',
-                'text': 'Jordan Taylor moved "User Authentication Module" to In Review.',
+                'text': f'{jordan_name} moved "{task_auth}" to In Review.',
                 'minutes_ago': 175,
                 'is_read': False,
             },
             {
                 'type': 'MENTION',
                 'sender_key': 'sam',
-                'text': 'Sam Rivera mentioned you in Code Reviews: "PR #142 is ready for your approval — ping me with questions."',
+                'text': f'{sam_name} mentioned you in {room_reviews}: "PR is ready for your approval — ping me with questions."',
                 'minutes_ago': 240,
                 'is_read': True,
             },
             {
                 'type': 'TASK_ASSIGNED_CAL',
                 'sender_key': 'alex',
-                'text': 'You were assigned to "Database Schema Design" — due in 3 days.',
+                'text': f'You were assigned to "{task_db}" — due in 3 days.',
                 'minutes_ago': 360,
                 'is_read': True,
             },
             {
                 'type': 'COMMENT',
                 'sender_key': 'jordan',
-                'text': 'Jordan Taylor commented on "API Gateway Configuration": "I\'ve added the rate-limiting logic — please verify on staging."',
+                'text': f'{jordan_name} commented on "{task_api}": "I\'ve added the rate-limiting logic — please verify on staging."',
                 'minutes_ago': 480,
                 'is_read': True,
             },
             {
                 'type': 'ACTIVITY',
                 'sender_key': 'alex',
-                'text': 'Alex Chen marked "Sprint Planning" as complete. 🎉',
+                'text': f'{alex_name} marked "{task_done}" as complete. 🎉',
                 'minutes_ago': 720,
                 'is_read': True,
             },
             {
-                'type': 'EVENT_INVITED',
+                'type': 'COMMENT',
                 'sender_key': 'sam',
-                'text': 'You have been invited to "Q2 Sprint Review" on Friday at 3:00 PM.',
+                'text': f'{sam_name} left a review comment on "{task_review}": "Looks good overall — added a few inline suggestions."',
                 'minutes_ago': 1440,
                 'is_read': True,
             },
         ]
+
+        # Delete any previously created standalone notifications whose text no
+        # longer matches (e.g. from the old hard-coded version) so re-running
+        # --clear first is not required.
+        old_texts = [
+            'You have been invited to "Q2 Sprint Review" on Friday at 3:00 PM.',
+            'Alex Chen marked "Sprint Planning" as complete. 🎉',
+            'Jordan Taylor moved "User Authentication Module" to In Review.',
+            'You were assigned to "Database Schema Design" — due in 3 days.',
+            'Jordan Taylor commented on "API Gateway Configuration":',
+            'Sam Rivera replied to your comment on "Set up CI/CD pipeline":',
+            'Alex Chen mentioned you in General Discussion:',
+            'Sam Rivera mentioned you in Code Reviews:',
+        ]
+        for old_text_fragment in old_texts:
+            Notification.objects.filter(
+                recipient__in=recipients,
+                text__startswith=old_text_fragment.split('"')[0],  # match by prefix
+            ).filter(
+                chat_message__isnull=True,
+                task_thread_comment__isnull=True,
+            ).delete()
 
         for recipient in recipients:
             for template in standalone_templates:
