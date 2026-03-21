@@ -725,10 +725,74 @@ def delete_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+def link_scenario_to_branch(request, board_id, branch_id):
+    """
+    API endpoint: Link (or unlink) a saved WhatIfScenario to an existing branch.
+
+    POST body (JSON):
+    - scenario_id: int ID of the scenario to link, or null/empty to unlink
+
+    On link: updates branch.source_scenario and creates a new snapshot from the
+    scenario's input_parameters, then triggers a recalculation.
+    On unlink: clears branch.source_scenario only (existing snapshots are kept).
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if request.user not in board.members.all() and request.user != board.created_by:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+
+        try:
+            body = json.loads(request.body)
+            scenario_id = body.get('scenario_id')
+        except (json.JSONDecodeError, AttributeError):
+            scenario_id = request.POST.get('scenario_id')
+
+        if not scenario_id:
+            # Unlink
+            branch.source_scenario = None
+            branch.save(update_fields=['source_scenario'])
+            return JsonResponse({'success': True, 'linked': False, 'message': 'Scenario unlinked from branch.'})
+
+        scenario = get_object_or_404(WhatIfScenario, id=scenario_id, board=board)
+        branch.source_scenario = scenario
+        branch.save(update_fields=['source_scenario'])
+
+        # Create a new snapshot seeded from the scenario's parameters
+        if scenario.input_parameters:
+            params = scenario.input_parameters
+            BranchSnapshot.objects.create(
+                branch=branch,
+                scope_delta=int(params.get('tasks_added', 0)),
+                team_delta=int(params.get('team_size_delta', 0)),
+                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
+                feasibility_score=0,
+            )
+
+        # Trigger recalculation with the new scenario parameters
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        recalculate_branches_for_board.apply_async(
+            args=[board_id],
+            kwargs={'trigger_event': f'Linked scenario "{scenario.name}" to branch "{branch.name}"'},
+        )
+
+        return JsonResponse({
+            'success': True,
+            'linked': True,
+            'scenario_name': scenario.name,
+            'message': f'Scenario "{scenario.name}" linked to branch. Recalculating...',
+        })
+
+    except Exception as e:
+        logger.error(f'Error linking scenario to branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
 def restore_branch(request, board_id, branch_id):
-    """
-    API endpoint: Restore an archived branch back to active status.
-    """
     try:
         board = get_object_or_404(Board, id=board_id)
 
