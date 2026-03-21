@@ -116,7 +116,7 @@
             </span>
             {% endif %}
             <span class="badge market-badge bg-light text-dark border">
-              <i class="bi bi-person me-1"></i>{{ c.created_by.get_full_name|default:c.created_by.username }}
+              <i class="bi bi-person me-1"></i>{% if c.created_by %}{{ c.created_by.get_full_name|default:c.created_by.username }}{% else %}Unknown{% endif %}
             </span>
             {% if c.decay_model %}
             <span class="badge market-badge bg-light text-dark border">
