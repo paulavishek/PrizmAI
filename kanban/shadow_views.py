@@ -247,6 +247,7 @@ class CreateBranchView(CreateView):
                 return JsonResponse({
                     'success': True,
                     'branch_id': branch.id,
+                    'branch_name': branch.name,
                     'redirect_url': f'/boards/{board_id}/shadow/',
                 })
             except Exception as e:
