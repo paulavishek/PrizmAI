@@ -64,8 +64,17 @@ class Command(BaseCommand):
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
 
         if not self.demo_admin:
-            self.stdout.write(self.style.ERROR('❌ demo_admin_solo user not found!'))
-            return
+            # Fall back to the first available demo persona or any superuser so
+            # the command can still run in environments without demo_admin_solo.
+            self.demo_admin = self.alex or self.sam or self.jordan or \
+                User.objects.filter(is_superuser=True).first()
+            if self.demo_admin:
+                self.stdout.write(self.style.WARNING(
+                    f'⚠️  demo_admin_solo not found — using {self.demo_admin.username} as fallback'
+                ))
+            else:
+                self.stdout.write(self.style.ERROR('❌ No usable admin/demo user found!'))
+                return
 
         # Clear existing data if requested
         if options['clear']:
@@ -262,26 +271,132 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'   Created {attachments_created} file attachments'))
 
     def create_notifications(self):
-        """Create notifications for the demo user"""
+        """Create rich demo notifications for all demo users and superusers"""
         self.stdout.write(self.style.NOTICE('\n🔔 Creating Notifications...'))
-        
-        notifications_created = 0
 
+        notifications_created = 0
+        now = timezone.now()
+
+        # Build the set of recipients: all demo users + every member of any demo
+        # board so that any user the developer logs in as (e.g. testuser1) also
+        # sees the demo notifications.
+        recipients = set(u for u in self.demo_users if u)
+        for su in User.objects.filter(is_superuser=True):
+            recipients.add(su)
+        for board in self.demo_boards:
+            for member in board.members.all():
+                recipients.add(member)
+
+        # Curated standalone notification templates that don't rely on @mentions
+        # being present in chat messages. sender_key must be a different user from
+        # the recipient so we skip self-notifications below.
+        standalone_templates = [
+            {
+                'type': 'MENTION',
+                'sender_key': 'alex',
+                'text': 'Alex Chen mentioned you in General Discussion: "Can you review the updated API specs?"',
+                'minutes_ago': 25,
+                'is_read': False,
+            },
+            {
+                'type': 'COMMENT',
+                'sender_key': 'sam',
+                'text': 'Sam Rivera replied to your comment on "Set up CI/CD pipeline": "Great catch! I\'ve incorporated your feedback into the workflow."',
+                'minutes_ago': 85,
+                'is_read': False,
+            },
+            {
+                'type': 'ACTIVITY',
+                'sender_key': 'jordan',
+                'text': 'Jordan Taylor moved "User Authentication Module" to In Review.',
+                'minutes_ago': 175,
+                'is_read': False,
+            },
+            {
+                'type': 'MENTION',
+                'sender_key': 'sam',
+                'text': 'Sam Rivera mentioned you in Code Reviews: "PR #142 is ready for your approval — ping me with questions."',
+                'minutes_ago': 240,
+                'is_read': True,
+            },
+            {
+                'type': 'TASK_ASSIGNED_CAL',
+                'sender_key': 'alex',
+                'text': 'You were assigned to "Database Schema Design" — due in 3 days.',
+                'minutes_ago': 360,
+                'is_read': True,
+            },
+            {
+                'type': 'COMMENT',
+                'sender_key': 'jordan',
+                'text': 'Jordan Taylor commented on "API Gateway Configuration": "I\'ve added the rate-limiting logic — please verify on staging."',
+                'minutes_ago': 480,
+                'is_read': True,
+            },
+            {
+                'type': 'ACTIVITY',
+                'sender_key': 'alex',
+                'text': 'Alex Chen marked "Sprint Planning" as complete. 🎉',
+                'minutes_ago': 720,
+                'is_read': True,
+            },
+            {
+                'type': 'EVENT_INVITED',
+                'sender_key': 'sam',
+                'text': 'You have been invited to "Q2 Sprint Review" on Friday at 3:00 PM.',
+                'minutes_ago': 1440,
+                'is_read': True,
+            },
+        ]
+
+        for recipient in recipients:
+            for template in standalone_templates:
+                sender = self.get_user_by_key(template['sender_key'])
+                if not sender or sender == recipient:
+                    continue
+
+                # Avoid duplicates across repeated runs
+                if Notification.objects.filter(
+                    recipient=recipient,
+                    sender=sender,
+                    notification_type=template['type'],
+                    text=template['text'],
+                ).exists():
+                    continue
+
+                notif = Notification.objects.create(
+                    recipient=recipient,
+                    sender=sender,
+                    notification_type=template['type'],
+                    text=template['text'],
+                    is_read=template['is_read'],
+                )
+                # Back-date the notification so timestamps look natural
+                Notification.objects.filter(pk=notif.pk).update(
+                    created_at=now - timedelta(minutes=template['minutes_ago'])
+                )
+                notifications_created += 1
+
+        # Also create mention notifications from actual @mentions in chat messages
         for board in self.demo_boards:
             rooms = ChatRoom.objects.filter(board=board)
             for room in rooms:
-                messages = ChatMessage.objects.filter(chat_room=room, mentioned_users=self.demo_admin)
+                messages = ChatMessage.objects.filter(chat_room=room).exclude(mentioned_users=None)
                 for msg in messages:
-                    if not Notification.objects.filter(
-                        recipient=self.demo_admin,
-                        chat_message=msg,
-                        notification_type='MENTION'
-                    ).exists() and msg.author != self.demo_admin:
+                    for mentioned_user in msg.mentioned_users.all():
+                        if msg.author == mentioned_user:
+                            continue
+                        if Notification.objects.filter(
+                            recipient=mentioned_user,
+                            chat_message=msg,
+                            notification_type='MENTION',
+                        ).exists():
+                            continue
                         Notification.objects.create(
-                            recipient=self.demo_admin,
+                            recipient=mentioned_user,
                             sender=msg.author,
                             notification_type='MENTION',
-                            text=f'{msg.author.username} mentioned you in {room.name}',
+                            text=f'{msg.author.get_full_name() or msg.author.username} mentioned you in {room.name}',
                             chat_message=msg,
                             is_read=False,
                         )
