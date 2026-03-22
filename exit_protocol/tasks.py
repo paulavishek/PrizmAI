@@ -393,9 +393,22 @@ def generate_knowledge_checklist(session_id):
 
         nodes = MemoryNode.objects.filter(board=board).order_by('-importance_score')
 
+        # Track seen scope-change percentages to deduplicate repeat alerts at the same level
+        seen_scope_pcts = set()
+
         for node in nodes:
             category = type_to_category.get(node.node_type)
             if category:
+                # Deduplicate scope_change nodes that have the same percentage
+                # (can accumulate when alerts are dismissed and re-fired at the same level)
+                if node.node_type == 'scope_change' and node.context_data:
+                    pct = node.context_data.get('scope_increase_pct')
+                    if pct is not None:
+                        pct_key = round(float(pct), 1)
+                        if pct_key in seen_scope_pcts:
+                            continue
+                        seen_scope_pcts.add(pct_key)
+
                 checklist[category].append({
                     'id': str(node.id),
                     'title': node.title,
@@ -739,8 +752,9 @@ def perform_burial(session_id):
     board = session.board
     user = session.initiated_by
 
-    # Idempotency: skip if already buried
-    if CemeteryEntry.objects.filter(hospice_session=session).exists():
+    # Idempotency: skip only if the session is already marked buried (fully processed).
+    # A pre-created stub entry (burial_pending) should still be updated with AI content.
+    if session.status == 'buried':
         logger.info(f"[ExitProtocol] Session {session_id} already buried, skipping")
         return
 
@@ -920,38 +934,42 @@ def perform_burial(session_id):
             logger.debug(f"[ExitProtocol] Tag generation failed: {e}")
             tags = [cause, board.name.lower()]
 
-    # ── Create CemeteryEntry ──
-    entry = CemeteryEntry.objects.create(
-        board=board,
+    # ── Create or update CemeteryEntry ──
+    # A stub entry may already exist (created synchronously in the view on "Proceed to Burial"
+    # so the cemetery list shows it immediately). Update it with the full AI-generated data.
+    entry, _created = CemeteryEntry.objects.update_or_create(
         hospice_session=session,
-        project_name=board.name,
-        project_description=board.description or '',
-        board_id_snapshot=board.id,
-        team_size=team_size,
-        total_tasks=total_tasks,
-        completed_tasks=completed_tasks,
-        budget_allocated=budget_allocated,
-        budget_spent=budget_spent,
-        start_date=board.created_at.date() if board.created_at else None,
-        end_date=now.date(),
-        cause_of_death=cause,
-        ai_cause_rationale=cause_rationale,
-        contributing_factors=contributing_factors,
-        autopsy_report={
-            'cause_of_death': cause,
-            'rationale': cause_rationale,
-            'contributing_factors': contributing_factors,
-            'lessons_to_repeat': lessons_to_repeat,
-            'lessons_to_avoid': lessons_to_avoid,
-            'open_questions': open_questions,
-            'decline_timeline': decline_timeline,
-        },
-        autopsy_summary=autopsy_summary,
-        lessons_to_repeat=lessons_to_repeat,
-        lessons_to_avoid=lessons_to_avoid,
-        open_questions=open_questions,
-        decline_timeline=decline_timeline,
-        tags=tags,
+        defaults=dict(
+            board=board,
+            project_name=board.name,
+            project_description=board.description or '',
+            board_id_snapshot=board.id,
+            team_size=team_size,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            budget_allocated=budget_allocated,
+            budget_spent=budget_spent,
+            start_date=board.created_at.date() if board.created_at else None,
+            end_date=now.date(),
+            cause_of_death=cause,
+            ai_cause_rationale=cause_rationale,
+            contributing_factors=contributing_factors,
+            autopsy_report={
+                'cause_of_death': cause,
+                'rationale': cause_rationale,
+                'contributing_factors': contributing_factors,
+                'lessons_to_repeat': lessons_to_repeat,
+                'lessons_to_avoid': lessons_to_avoid,
+                'open_questions': open_questions,
+                'decline_timeline': decline_timeline,
+            },
+            autopsy_summary=autopsy_summary,
+            lessons_to_repeat=lessons_to_repeat,
+            lessons_to_avoid=lessons_to_avoid,
+            open_questions=open_questions,
+            decline_timeline=decline_timeline,
+            tags=tags,
+        ),
     )
 
     # ── 7. Archive board ──
