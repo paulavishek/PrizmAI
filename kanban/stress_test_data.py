@@ -108,7 +108,7 @@ def build_board_stress_test_data(board, user):
     except Exception:
         pass
 
-    # Previously applied vaccines (with descriptions for AI context)
+    # Previously applied vaccines (with descriptions and projected improvements for AI context)
     from kanban.stress_test_models import Vaccine, StressTestSession, StressTestScenario
     applied_vaccines = list(
         Vaccine.objects.filter(board=board, is_applied=True)
@@ -116,7 +116,11 @@ def build_board_stress_test_data(board, user):
     )
     applied_vaccines_detail = list(
         Vaccine.objects.filter(board=board, is_applied=True)
-        .values('name', 'description', 'effort_level')
+        .values('name', 'description', 'effort_level', 'projected_score_improvement')
+    )
+    total_vaccine_improvement = sum(
+        v.get('projected_score_improvement', 0) or 0
+        for v in applied_vaccines_detail
     )
 
     # Previously addressed scenarios from all sessions
@@ -126,12 +130,15 @@ def build_board_stress_test_data(board, user):
         ).values('title', 'attack_type', 'severity')
     )
 
-    # Previous session immunity scores (most recent first, up to 5)
+    # Previous session immunity scores — fetch most recent 5 then reverse to
+    # present them in chronological (oldest-first) order so the AI sees an
+    # improving trend rather than reading the most-recent score as "Session 1".
     previous_scores = list(
         StressTestSession.objects.filter(board=board)
         .select_related('immunity_score')
         .order_by('-created_at')[:5]
     )
+    previous_scores.reverse()  # chronological order for AI context
     score_history = []
     for sess in previous_scores:
         try:
@@ -172,6 +179,9 @@ def build_board_stress_test_data(board, user):
         'premortem_scenario_count': premortem_scenario_count,
         'applied_vaccines': applied_vaccines,
         'applied_vaccines_detail': applied_vaccines_detail,
+        'total_vaccine_improvement': total_vaccine_improvement,
+        'last_immunity_score': score_history[-1]['score'] if score_history else None,
+        'last_immunity_band': score_history[-1]['band'] if score_history else None,
         'addressed_scenarios': addressed_scenarios,
         'score_history': score_history,
         'assignee_breakdown': assignee_breakdown,

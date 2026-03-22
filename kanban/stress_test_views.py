@@ -410,6 +410,39 @@ def apply_vaccine(request, board_id, vaccine_id):
 
 @login_required
 @require_POST
+def reset_stress_test_history(request, board_id):
+    """Delete all stress test sessions (and cascaded data) for this board.
+    Only the board creator may do this.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if board.created_by != request.user and not request.user.is_staff:
+        return JsonResponse(
+            {'success': False, 'error': 'Only the board owner can reset stress test history.'},
+            status=403,
+        )
+
+    deleted_count, _ = StressTestSession.objects.filter(board=board).delete()
+
+    try:
+        log_audit(
+            'stress_test.history_reset',
+            user=request.user,
+            request=request,
+            object_type='board',
+            object_id=board.id,
+            object_repr=str(board),
+            board_id=board.id,
+            changes={'sessions_deleted': {'old': deleted_count, 'new': 0}},
+        )
+    except Exception:
+        logger.warning("Audit log for stress_test.history_reset failed", exc_info=True)
+
+    return JsonResponse({'success': True, 'deleted': deleted_count})
+
+
+@login_required
+@require_POST
 def mark_scenario_addressed(request, board_id, scenario_id):
     """Toggle a scenario's is_addressed state."""
     scenario = get_object_or_404(

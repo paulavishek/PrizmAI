@@ -439,8 +439,13 @@
     <!-- ── Attack History Log ── -->
     {% if all_sessions.count > 1 %}
     <div class="card mt-4">
-        <div class="card-header bg-white">
+        <div class="card-header bg-white d-flex align-items-center justify-content-between">
             <h6 class="mb-0"><i class="fas fa-history text-info me-2"></i>Session History</h6>
+            {% if request.user == board.created_by or request.user.is_staff %}
+            <button class="btn btn-outline-danger btn-sm" onclick="confirmResetHistory()">
+                <i class="fas fa-trash-alt me-1"></i> Reset History
+            </button>
+            {% endif %}
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -782,5 +787,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// ── Reset Stress Test History ──
+function confirmResetHistory() {
+    if (!confirm('Delete ALL stress test sessions for this board?\n\nThis will permanently remove all session history, immunity scores, scenarios, and vaccines. This cannot be undone.')) {
+        return;
+    }
+    fetch("{% url 'reset_stress_test_history' board.id %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            showStressToast('History cleared (' + data.deleted + ' session' + (data.deleted !== 1 ? 's' : '') + ' deleted). Reloading…', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert(data.error || 'Failed to reset history.');
+        }
+    })
+    .catch(err => {
+        console.error('Reset history error:', err);
+        alert('Failed to reset history. Please try again.');
+    });
+}
 </script>
 {% endblock %}

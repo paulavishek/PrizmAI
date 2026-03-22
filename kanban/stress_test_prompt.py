@@ -104,23 +104,30 @@ STRESS_TEST_SYSTEM_PROMPT = (
     "- 40-69 = MODERATE   (survives minor shocks, fails major ones)\n"
     "- 70-89 = RESILIENT  (survives most real-world disruptions)\n"
     "- 90-100 = ANTIFRAGILE (built-in redundancy, gets stronger under pressure)\n\n"
-    "PROGRESSIVE SCORING RULES (CRITICAL):\n"
+    "PROGRESSIVE SCORING RULES (NON-NEGOTIABLE):\n"
     "- If the project has PREVIOUSLY ADDRESSED SCENARIOS, give credit. "
     "The team has acknowledged those risks and committed to handling them. "
     "Each addressed scenario should improve the base score by 3-8 points "
     "depending on its severity.\n"
-    "- If the project has APPLIED VACCINES, give substantial credit. "
+    "- If the project has APPLIED VACCINES, give MANDATORY credit. "
     "These are structural fixes the team has committed to implementing. "
-    "Each applied vaccine should improve the base score by its stated "
-    "projected_score_improvement value (or close to it).\n"
+    "Each applied vaccine MUST improve the score by its stated "
+    "projected_score_improvement value. The data payload will show each vaccine "
+    "with its exact projected improvement — you MUST add those points.\n"
     "- DO NOT repeat attack types that have already been addressed with applied vaccines. "
     "Find NEW, DIFFERENT vulnerabilities instead.\n"
     "- The overall_immunity_score MUST reflect the cumulative benefit of all "
     "addressed scenarios and applied vaccines on top of the raw board state score.\n"
-    "- If previous sessions exist, the score should generally trend upward "
-    "when vaccines have been applied and scenarios addressed — not stay flat.\n"
+    "- The SCORE CALCULATION GUIDANCE section in the user prompt gives you the "
+    "last session score, the total vaccine credit, and the MINIMUM score you are "
+    "allowed to return. You MUST NOT return a score below that minimum.\n"
+    "- A project with applied vaccines CAN still score lower than the last session "
+    "ONLY if you uncover genuinely new, catastrophic structural risks that dwarf "
+    "the vaccine improvements. Even then, the drop must not exceed 10 points.\n"
+    "- Score trends should be upward when vaccines have been applied and scenarios "
+    "addressed. Downward trends require explicit justification in score_rationale.\n"
     "- A project with 5+ applied vaccines and 5+ addressed scenarios should "
-    "score at LEAST 15-30 points higher than one with none, even if the "
+    "score at LEAST 20-30 points higher than one with none, even if the "
     "underlying board data hasn't changed yet."
 )
 
@@ -163,6 +170,19 @@ def build_stress_test_user_prompt(board_data):
         f"{_format_addressed_scenarios(board_data.get('addressed_scenarios', []))}\n\n"
         "APPLIED VACCINES (structural fixes the team has committed to implementing):\n"
         f"{_format_applied_vaccines_detail(board_data.get('applied_vaccines_detail', []))}\n\n"
+        "SCORE CALCULATION GUIDANCE (MANDATORY — READ BEFORE SETTING overall_immunity_score):\n"
+        f"  Last session score  : {board_data.get('last_immunity_score', 'N/A')}/100 "
+        f"({board_data.get('last_immunity_band', 'N/A')})\n"
+        f"  Applied vaccine credit: +{board_data.get('total_vaccine_improvement', 0)} pts "
+        f"(sum of all projected_score_improvement values above)\n"
+        f"  Number of applied vaccines: {len(board_data.get('applied_vaccines_detail', []))}\n"
+        f"  Minimum allowed score: "
+        f"{max(1, (board_data.get('last_immunity_score') or 0) - 5)}/100\n"
+        "  You MUST add the full vaccine credit on top of your raw board assessment. "
+        "If the last score was 58 and vaccines add +50 pts, the new score must be at "
+        "least 53 (last score minus 5) — NOT lower.\n"
+        "  Only score below the minimum if you can explicitly justify catastrophic NEW "
+        "structural collapse not covered by any vaccine.\n\n"
         "IMPORTANT: Give credit for the addressed scenarios and applied vaccines above. "
         "The overall_immunity_score must be HIGHER than it would be without these mitigations. "
         "Do NOT repeat attack types already covered by applied vaccines — find NEW vulnerabilities.\n\n"
@@ -214,13 +234,15 @@ def _format_addressed_scenarios(scenarios):
 
 
 def _format_applied_vaccines_detail(vaccines):
-    """Format applied vaccines with descriptions for the prompt."""
+    """Format applied vaccines with descriptions and projected improvements for the prompt."""
     if not vaccines:
         return "  None yet."
     lines = []
     for v in vaccines:
+        improvement = v.get('projected_score_improvement', 0) or 0
         lines.append(
-            f"  - {v.get('name', 'Unnamed')} ({v.get('effort_level', 'MEDIUM')} effort): "
+            f"  - {v.get('name', 'Unnamed')} ({v.get('effort_level', 'MEDIUM')} effort, "
+            f"+{improvement}pts credit): "
             f"{v.get('description', '')}"
         )
     return "\n".join(lines)
