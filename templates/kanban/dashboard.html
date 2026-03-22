@@ -674,8 +674,6 @@
     #hierarchy-navigator .tab-content {
         scrollbar-width: thin;
         scrollbar-color: #c5cbe3 transparent;
-        max-height: 600px;
-        overflow-y: auto;
     }
     #hierarchy-navigator .tab-content::-webkit-scrollbar {
         width: 6px;
@@ -689,6 +687,24 @@
     }
     #hierarchy-navigator .tab-content::-webkit-scrollbar-thumb:hover {
         background-color: #8490b5;
+    }
+    /* Scrollable card grid within each tab pane */
+    #hierarchy-navigator .hn-cards-grid {
+        max-height: 420px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #c5cbe3 transparent;
+        padding-right: 2px;
+    }
+    #hierarchy-navigator .hn-cards-grid::-webkit-scrollbar {
+        width: 5px;
+    }
+    #hierarchy-navigator .hn-cards-grid::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    #hierarchy-navigator .hn-cards-grid::-webkit-scrollbar-thumb {
+        background-color: #c5cbe3;
+        border-radius: 3px;
     }
 
     /* ================================================================
@@ -956,14 +972,49 @@
     .hn-item--board    { border-left: 4px solid #8b5cf6; background: linear-gradient(135deg,#f5f3ff 0%,#fff 100%); }
     .hn-item .card-body { padding: 0.9rem 1rem; }
 
-    /* Expand panels */
+    /* Expand panels — kept hidden in template; content cloned to preview slot */
     .hn-expand {
-        animation: hnSlideDown 0.2s ease-out;
+        display: none !important;   /* always hidden; JS clones content to .hn-preview-slot */
     }
     @keyframes hnSlideDown {
         from { opacity: 0; transform: translateY(-6px); }
         to   { opacity: 1; transform: translateY(0); }
     }
+
+    /* Full-width preview slot below the cards grid */
+    .hn-preview-slot {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 2px solid #e2e8f0;
+        animation: hnSlideDown 0.25s ease-out;
+    }
+    .hn-preview-slot .hn-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        margin-bottom: 4px;
+    }
+    .hn-preview-slot .hn-preview-close {
+        cursor: pointer;
+        color: #94a3b8;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #f8fafc;
+        transition: all 0.15s;
+    }
+    .hn-preview-slot .hn-preview-close:hover {
+        color: #ef4444;
+        border-color: #fca5a5;
+        background: #fef2f2;
+    }
+
+    /* Active/selected card highlight */
+    .hn-item--active.hn-item--goal     { box-shadow: 0 0 0 2px #f59e0b, 0 4px 16px rgba(245,158,11,0.18) !important; transform: translateY(-2px); }
+    .hn-item--active.hn-item--mission  { box-shadow: 0 0 0 2px #3b82f6, 0 4px 16px rgba(59,130,246,0.18) !important; transform: translateY(-2px); }
+    .hn-item--active.hn-item--strategy { box-shadow: 0 0 0 2px #10b981, 0 4px 16px rgba(16,185,129,0.18) !important; transform: translateY(-2px); }
+    .hn-item--active.hn-item--board    { box-shadow: 0 0 0 2px #8b5cf6, 0 4px 16px rgba(139,92,246,0.18) !important; transform: translateY(-2px); }
 
     /* Filtered-out cards */
     .hn-card.hn-hidden { display: none !important; }
@@ -974,6 +1025,7 @@
 
     /* -- Global card radius consistency -- */
     .card { border-radius: 12px !important; overflow: hidden; }
+    #hierarchy-navigator { overflow: visible !important; }
     .card .card-header { border-radius: 0 !important; }
 
     /* -- Dashboard page heading -- */
@@ -1751,6 +1803,7 @@
         {# ═══════════════════════ GOALS TAB ═══════════════════════ #}
         <div class="tab-pane fade show active" id="hn-pane-goals" role="tabpanel" aria-labelledby="hn-tab-goals">
         {% if goal_tree %}
+            <div class="hn-cards-grid">
             <div class="row g-3">
             {% for ge in goal_tree %}{% if ge.goal %}
                 <div class="col-md-6 col-lg-4 hn-card" data-goal-id="{{ ge.goal.id }}">
@@ -1822,6 +1875,7 @@
                 </div>
             {% endif %}{% endfor %}
             </div>
+            </div>{# /hn-cards-grid #}
         {% else %}
             {# Empty state #}
             <div class="text-center py-5">
@@ -1856,6 +1910,7 @@
         {# ═══════════════════════ MISSIONS TAB ═══════════════════════ #}
         <div class="tab-pane fade" id="hn-pane-missions" role="tabpanel" aria-labelledby="hn-tab-missions">
         {% if mission_tree %}
+            <div class="hn-cards-grid">
             <div class="row g-3">
             {% for mi in mission_tree %}
             {% with mission=mi.mission %}
@@ -1936,6 +1991,7 @@
             {% endwith %}
             {% endfor %}
             </div>
+            </div>{# /hn-cards-grid #}
         {% else %}
             <div class="text-center py-4">
                 <i class="fas fa-bullseye fa-3x mb-3" style="opacity:0.2; color:#3b82f6;"></i>
@@ -1948,6 +2004,7 @@
         {# ═══════════════════════ STRATEGIES TAB ═══════════════════════ #}
         <div class="tab-pane fade" id="hn-pane-strategies" role="tabpanel" aria-labelledby="hn-tab-strategies">
         {% if mission_tree %}
+            <div class="hn-cards-grid">
             <div class="row g-3">
             {% for mi in mission_tree %}{% for si in mi.strategies %}
             {% with strategy=si.strategy %}
@@ -2023,6 +2080,7 @@
             {% endwith %}
             {% endfor %}{% endfor %}
             </div>
+            </div>{# /hn-cards-grid #}
             {% if not strategy_count %}
             <div class="text-center py-4">
                 <i class="fas fa-chess-knight fa-3x mb-3" style="opacity:0.2; color:#10b981;"></i>
@@ -2042,6 +2100,7 @@
         {# ═══════════════════════ BOARDS TAB ═══════════════════════ #}
         <div class="tab-pane fade" id="hn-pane-boards" role="tabpanel" aria-labelledby="hn-tab-boards">
         {% if mission_tree or standalone_boards %}
+            <div class="hn-cards-grid">
             <div class="row g-3">
             {# Boards linked to strategies #}
             {% for mi in mission_tree %}{% for si in mi.strategies %}{% for bi in si.boards %}
@@ -2153,6 +2212,7 @@
                 </div>
             {% endfor %}
             </div>
+            </div>{# /hn-cards-grid #}
 
             {% if not hierarchy_board_count %}
             <div class="text-center py-4">
@@ -3543,9 +3603,10 @@
                 bar.classList.add('d-flex');
             }
             _hnFilter = { tabId: targetPaneId, attr: filterAttr, value: filterValue, label: label };
-            // Collapse any expanded panels in the source tab
-            document.querySelectorAll('.hn-expand:not(.d-none)').forEach(function(p) {
-                p.classList.add('d-none');
+            // Close any open preview slots and clear active highlights
+            document.querySelectorAll('.hn-preview-slot').forEach(function(s) { s.remove(); });
+            document.querySelectorAll('.hn-item--active').forEach(function(c) {
+                c.classList.remove('hn-item--active');
             });
         };
 
@@ -3560,25 +3621,73 @@
         };
 
         /**
-         * Toggle inline expansion panel for a card.
-         * Only one panel per tab is open at a time.
+         * Toggle expansion for a card.
+         * Clones the expansion content into a full-width preview slot
+         * below the cards grid so it never gets clipped by other cards.
          */
         window.hnToggleExpand = function(level, id) {
             var panel = document.getElementById('hn-expand-' + level + '-' + id);
             if (!panel) return;
-            var wasHidden = panel.classList.contains('d-none');
-            // Collapse all panels within the active tab pane
+
+            // Find the tab pane containing this card
             var tabPane = panel.closest('.tab-pane');
-            if (tabPane) {
-                tabPane.querySelectorAll('.hn-expand').forEach(function(p) {
-                    p.classList.add('d-none');
-                });
+            if (!tabPane) return;
+
+            // Check if this card's preview is already showing
+            var existingSlot = tabPane.querySelector('.hn-preview-slot');
+            var isAlreadyShowing = existingSlot &&
+                existingSlot.dataset.panelId === (level + '-' + id);
+
+            // Clear active highlights
+            tabPane.querySelectorAll('.hn-item--active').forEach(function(el) {
+                el.classList.remove('hn-item--active');
+            });
+
+            // Remove existing preview slot
+            if (existingSlot) existingSlot.remove();
+
+            // If toggling off the same card, just close
+            if (isAlreadyShowing) return;
+
+            // Highlight the clicked card
+            var sourceCol = panel.closest('.hn-card');
+            if (sourceCol) {
+                var cardEl = sourceCol.querySelector('.hn-item');
+                if (cardEl) cardEl.classList.add('hn-item--active');
             }
-            if (wasHidden) {
-                panel.classList.remove('d-none');
-                // Scroll into view if needed
-                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
+
+            // Build the full-width preview slot below the grid
+            var grid = tabPane.querySelector('.hn-cards-grid');
+            if (!grid) return;
+
+            var slot = document.createElement('div');
+            slot.className = 'hn-preview-slot';
+            slot.dataset.panelId = level + '-' + id;
+
+            // Close button + cloned expansion content
+            var inner = panel.querySelector('.card');
+            slot.innerHTML =
+                '<div class="hn-preview-header">' +
+                '  <button class="hn-preview-close" onclick="hnClosePreview()" title="Close preview">' +
+                '    <i class="fas fa-times me-1"></i>Close' +
+                '  </button>' +
+                '</div>' +
+                (inner ? inner.outerHTML : '');
+
+            grid.after(slot);
+
+            // Scroll preview into view
+            setTimeout(function() {
+                slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 60);
+        };
+
+        /** Close the currently-open preview slot. */
+        window.hnClosePreview = function() {
+            document.querySelectorAll('.hn-preview-slot').forEach(function(s) { s.remove(); });
+            document.querySelectorAll('.hn-item--active').forEach(function(c) {
+                c.classList.remove('hn-item--active');
+            });
         };
 
         // When switching tabs, clear the filter if the user manually clicks a different tab
@@ -3594,9 +3703,10 @@
                     if (bar) { bar.classList.add('d-none'); bar.classList.remove('d-flex'); }
                     _hnFilter = null;
                 }
-                // Collapse any open expand panels
-                document.querySelectorAll('.hn-expand:not(.d-none)').forEach(function(p) {
-                    p.classList.add('d-none');
+                // Close preview slots and clear active highlights
+                document.querySelectorAll('.hn-preview-slot').forEach(function(s) { s.remove(); });
+                document.querySelectorAll('.hn-item--active').forEach(function(c) {
+                    c.classList.remove('hn-item--active');
                 });
             });
         }
