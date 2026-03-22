@@ -63,11 +63,14 @@ def collect_scope_history(board):
 
     baseline = calculate_baseline(board)
     baseline_date = baseline['baseline_date']
+    now = timezone.now()
     events = []
 
     # ── SOURCE 1: Scope Creep Alerts ────────────────────────────────────
     try:
-        alerts = ScopeCreepAlert.objects.filter(board=board).order_by('detected_at')
+        alerts = ScopeCreepAlert.objects.filter(
+            board=board, detected_at__lte=now
+        ).order_by('detected_at')
         for alert in alerts:
             events.append({
                 'date': alert.detected_at,
@@ -87,7 +90,11 @@ def collect_scope_history(board):
     # ── SOURCE 2: Task creation after baseline ──────────────────────────
     try:
         post_baseline_tasks = (
-            Task.objects.filter(column__board=board, created_at__gt=baseline_date)
+            Task.objects.filter(
+                column__board=board,
+                created_at__gt=baseline_date,
+                created_at__lte=now,
+            )
             .select_related('created_by')
             .order_by('created_at')
         )
@@ -131,8 +138,7 @@ def collect_scope_history(board):
     try:
         conflicts = ConflictDetection.objects.filter(
             board=board,
-            status__in=['resolved', 'auto_resolved'],
-        ).order_by('resolved_at')
+            status__in=['resolved', 'auto_resolved'],            resolved_at__lte=now,        ).order_by('resolved_at')
 
         for conflict in conflicts:
             task_count = conflict.tasks.count()
@@ -158,8 +164,7 @@ def collect_scope_history(board):
         transcripts = MeetingTranscript.objects.filter(
             board=board,
             processing_status='completed',
-            tasks_created_count__gt=0,
-        ).order_by('created_at')
+            tasks_created_count__gt=0,            created_at__lte=now,        ).order_by('created_at')
 
         for transcript in transcripts:
             events.append({
