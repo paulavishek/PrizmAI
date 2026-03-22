@@ -456,12 +456,26 @@ def _send_automation_notification(task, rule, config=None):
     try:
         from messaging.models import Notification
         from django.contrib.auth.models import User as AuthUser
+        from django.urls import reverse
 
         board = task.column.board
+
+        # Do not send automated notifications for official demo boards.
+        # Real users are added as board members when they browse the demo, so
+        # firing automations on those boards would leak demo data to real users.
+        if board.is_official_demo_board:
+            return
+
         # Determine sender: use the automation creator or board creator
         sender = rule.created_by or board.created_by
         if not sender:
             return
+
+        # Build a clickable link to the board
+        try:
+            board_url = reverse('board_detail', args=[board.id])
+        except Exception:
+            board_url = None
 
         # config['value'] takes precedence over rule.action_value
         recipient_key = ''
@@ -490,6 +504,7 @@ def _send_automation_notification(task, rule, config=None):
                 sender=sender,
                 notification_type='ACTIVITY',
                 text=text,
+                action_url=board_url,
             )
     except Exception:
         import logging

@@ -25,4 +25,9 @@ urlpatterns = [
     path('board/<int:board_id>/stress-test/scenario/<int:scenario_id>/address/',
          stress_test_views.mark_scenario_addressed,
          name='mark_scenario_addressed'),
+
+    # Reset (delete) all session history for this board (POST, owner only)
+    path('board/<int:board_id>/stress-test/reset-history/',
+         stress_test_views.reset_stress_test_history,
+         name='reset_stress_test_history'),
 ]

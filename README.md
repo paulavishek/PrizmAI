@@ -100,6 +100,111 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ---
 
+## Project Stress Test — Red Team AI
+
+> **In plain English:** Most project planning is optimistic. The Stress Test is the opposite — an AI that deliberately tries to *break* your project plan before real life does. It invents the five most damaging things that could go wrong, scores how resilient your plan is, and then tells you exactly how to fix the weak spots. Think of it as a fire drill for your project.
+
+### Why it exists
+
+Plans feel solid until the moment they aren't. A key team member leaves. A vendor doubles their price. A stakeholder demands a complete redesign at 70% completion. These things happen — and most project plans have no structural answer for them.
+
+The Stress Test forces you to confront those failures *before* they happen, when you still have time to build in safeguards.
+
+### How it works
+
+Navigate to any board and click **Stress Test** → **Run Stress Test**. The Red Team AI reads your live project data — every task, assignee, dependency, budget figure, deadline, and conflict — and then does three things:
+
+1. **Simulates five targeted attacks** — It picks the five attack types most likely to damage *your specific plan* (not generic risks, but ones that exploit your actual data). Examples: removing the team member with the most tasks, discovering a critical skill gap mid-project, or a sudden 40% price increase from a key vendor.
+
+2. **Scores your resilience (Immunity Score)** — A score from 0–100 across five dimensions: Schedule, Budget, Team, Dependencies, and Scope Stability. Think of it like a credit score for your project's robustness.
+
+3. **Prescribes structural vaccines** — For each attack, the AI recommends one concrete structural fix — not "communicate better" but real changes like cross-training a backup for your critical task owner, adding a budget contingency line, or decoupling a high-risk dependency.
+
+### The two actions — and why they're different
+
+This is the most important thing to understand. The Stress Test page shows two columns: **Attack Scenarios** on the left and **Vaccines** on the right. They look similar but mean very different things.
+
+#### 🎯 Attack Scenarios — "Mark Addressed"
+
+An attack scenario is something the AI *invented* as a hypothetical future threat. "Sam Rivera Vanishes" didn't happen — the AI simulated it because Sam has 11 tasks and no backup.
+
+**"Mark Addressed"** means: *"I, the project manager, have read this scenario, I understand the risk it describes, and I am actively watching for the early warning signs."*
+
+This is a **managerial acknowledgment**. You're not saying you've fixed anything — you're saying it's on your radar. Think of it like circling a risk in red on a whiteboard and writing your initials next to it.
+
+The AI gives credit (3–8 points) for addressed scenarios because a team that's aware of a risk is less likely to be blindsided by it.
+
+#### 💉 Vaccines — "Mark as Applied"
+
+A vaccine is a **structural change** the AI prescribes to close the specific gap that made the attack possible. "Implement Critical Role Redundancy" means: actually cross-train a second person on Sam's top tasks, document that knowledge, and schedule regular knowledge-transfer sessions.
+
+**"Mark as Applied"** means: *"We have actually made this structural change."* The budget contingency exists. The cross-training happened. The dependency was decoupled.
+
+The AI gives substantial credit (8–20 points each) for applied vaccines — and importantly, it **stops attacking that same weakness** in the next run and finds new vulnerabilities instead.
+
+#### The key difference at a glance
+
+| | Mark Addressed | Apply Vaccine |
+|---|---|---|
+| **What it means** | "I'm aware of this risk" | "I've structurally fixed this weakness" |
+| **Score impact** | +3–8 pts | +8–20 pts each |
+| **Effort required** | None — just a click | Real project work |
+| **Effect on next run** | AI still probes same area | AI finds NEW weaknesses instead |
+| **Analogy** | Knowing a road is icy | Gritting the road |
+
+#### What happens if you only apply vaccines (without marking scenarios addressed)?
+
+You get the full vaccine score credit and the AI will stop attacking those weaknesses. You miss the small awareness credit (3–8 pts per scenario). **This is still the more impactful action** — vaccines are what actually move the needle.
+
+#### What happens if you only mark scenarios addressed (without applying vaccines)?
+
+You get a small awareness credit (3–8 pts per scenario). But the underlying structural weaknesses remain. The AI will keep finding new angles to exploit them in future runs. Score improves only slightly. **Awareness without structural change doesn't build real resilience.**
+
+#### Should you do both?
+
+Yes — but start with vaccines. The recommended workflow is:
+
+1. **Run the Stress Test** — read all five attacks and their cascade effects carefully
+2. **Apply vaccines** where it's feasible to make the structural change
+3. **Mark scenarios addressed** for every risk you understand and are monitoring, even if you can't fully fix it yet
+4. **Re-run the test** — the AI will see both your vaccines and acknowledged risks, score you accordingly, and attack new weak spots
+5. **Repeat** until you hit your target resilience band
+
+**Best practice:** When you apply a vaccine, also mark its corresponding scenario as addressed — it signals that both the structural fix is in place *and* the team is monitoring for that specific risk pattern.
+
+### The Immunity Score bands
+
+| Score | Band | What it means |
+|---|---|---|
+| 90–100 | **ANTIFRAGILE** | Built-in redundancy; the plan gets stronger under pressure |
+| 70–89 | **RESILIENT** | Survives most real-world disruptions |
+| 40–69 | **MODERATE** | Handles minor shocks; fails major ones |
+| 0–39 | **FRAGILE** | Collapses under first real disruption |
+
+### Progressive scoring across runs
+
+The Immunity Score is **cumulative** — it builds across sessions. Each time you re-run the test:
+- All previously applied vaccines are remembered and credited
+- All addressed scenarios are remembered
+- The AI is explicitly told not to repeat attack types already covered by vaccines
+- The minimum score the AI can return is anchored to your last session score, preventing the score from dropping just because the AI got creative with new scenarios
+
+This means every vaccine you apply and every scenario you address is permanently banked — your score can only trend upward as you strengthen the plan.
+
+### Session History and Reset
+
+The **Session History** table at the bottom of the Stress Test page shows every run — date, who ran it, score, band, and vaccines applied. This history feeds into progressive scoring.
+
+If you want to start fresh (e.g., after a major project restructure, or during testing), the board creator can use the **Reset History** button to clear all sessions and start with a clean slate.
+
+### Getting to the Stress Test
+
+- From any board, click **Stress Test** in the board navigation
+- Or navigate directly to `/board/<board-id>/stress-test/`
+- The page links back to the **Pre-Mortem** feature — run Pre-Mortem first to identify failure scenarios before stress-testing your defences against them
+
+---
+
 ## Exit Protocol — Project Wind-Down System
 
 > **In plain English:** Every project eventually ends — but most just *fade out*. Work stops, the team scatters, and nobody writes down what went wrong or what was worth keeping. Exit Protocol is PrizmAI's answer to that: a guided process that helps you close a project properly, preserve everything valuable, and carry the lessons forward.

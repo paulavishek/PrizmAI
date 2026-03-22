@@ -9,7 +9,17 @@
     <div class="row mb-4">
         <div class="col-md-8">
             <h2><i class="fas fa-bolt text-warning"></i> Project Stress Test — {{ board.name }}</h2>
-            <p class="text-muted">Simulate failure before it happens. Measure how much your plan can take.</p>
+            <p class="text-muted mb-1">Simulate failure before it happens. Measure how much your plan can take.</p>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none text-muted"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#stressTestGuide"
+                    aria-expanded="false"
+                    aria-controls="stressTestGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="guide-toggle-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1" style="font-size:0.7rem;"></i>
+            </button>
         </div>
         <div class="col-md-4 text-end">
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary me-2">
@@ -24,6 +34,134 @@
                 <i class="fas fa-lock me-1"></i> AI Quota Exceeded
             </button>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="stressTestGuide">
+        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0;">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="text-warning mb-2"><i class="fas fa-bolt me-2"></i>What is the Stress Test?</h6>
+                        <p class="mb-0 small" style="color:#c8c8d8;">The Red Team AI reads your live project data and deliberately tries to break your plan. It invents the five most damaging failure scenarios specific to your project, scores your resilience from 0–100, and prescribes structural fixes. Think of it as a fire drill — better to discover the weakness now than when it happens for real.</p>
+                    </div>
+
+                    <div class="col-12"><hr style="border-color:#ffffff20; margin:0;"></div>
+
+                    <!-- Two columns: Scenarios vs Vaccines -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-crosshairs fa-2x text-danger"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1" style="color:#fff;">Attack Scenarios <span class="badge bg-danger ms-1" style="font-size:0.65rem;">Left column</span></h6>
+                                <p class="small mb-2" style="color:#c8c8d8;">Hypothetical futures the AI simulated against your plan. None of these have happened yet — the AI invented them by analysing your weakest points.</p>
+                                <div class="p-2 rounded mb-1" style="background:#ffffff10; border-left: 3px solid #e74c3c;">
+                                    <p class="small mb-0" style="color:#e0e0e0;"><strong style="color:#f39c12;"><i class="fas fa-circle me-1"></i>Mark Addressed</strong> means: <em>"I&rsquo;ve read this, I understand the risk, and I&rsquo;m actively watching for it."</em> It&rsquo;s an acknowledgment — you&rsquo;re not saying it&rsquo;s fixed, just that it&rsquo;s on your radar.</p>
+                                </div>
+                                <p class="small mb-0 mt-1" style="color:#aaa;"><i class="fas fa-coins text-warning me-1"></i>Score impact: <strong style="color:#f39c12;">+3 to +8 pts</strong> per acknowledged scenario.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-syringe fa-2x text-success"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1" style="color:#fff;">Vaccines <span class="badge bg-success ms-1" style="font-size:0.65rem;">Right column</span></h6>
+                                <p class="small mb-2" style="color:#c8c8d8;">Structural changes the AI prescribes to close the specific gap that made each attack possible. These are real, concrete project changes — not just awareness.</p>
+                                <div class="p-2 rounded mb-1" style="background:#ffffff10; border-left: 3px solid #27ae60;">
+                                    <p class="small mb-0" style="color:#e0e0e0;"><strong style="color:#2ecc71;"><i class="fas fa-check-circle me-1"></i>Mark as Applied</strong> means: <em>"We have actually made this structural change."</em> The AI banks this permanently and stops attacking that weakness — finding new ones instead.</p>
+                                </div>
+                                <p class="small mb-0 mt-1" style="color:#aaa;"><i class="fas fa-coins text-warning me-1"></i>Score impact: <strong style="color:#2ecc71;">+8 to +20 pts</strong> per vaccine applied. <strong>Much higher than Addressing alone.</strong></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr style="border-color:#ffffff20; margin:0;"></div>
+
+                    <!-- Comparison table -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2" style="color:#fff;"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0" style="color:#c8c8d8; font-size:0.8rem;">
+                                <thead>
+                                    <tr style="border-color:#ffffff20;">
+                                        <th style="color:#aaa; border-color:#ffffff20;"></th>
+                                        <th style="color:#e74c3c; border-color:#ffffff20;"><i class="fas fa-circle me-1"></i>Mark Addressed</th>
+                                        <th style="color:#27ae60; border-color:#ffffff20;"><i class="fas fa-syringe me-1"></i>Apply Vaccine</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="border-color:#ffffff15;">
+                                        <td style="color:#aaa;">What it means</td>
+                                        <td>&ldquo;I&rsquo;m aware of this risk&rdquo;</td>
+                                        <td>&ldquo;I&rsquo;ve structurally fixed this&rdquo;</td>
+                                    </tr>
+                                    <tr style="border-color:#ffffff15;">
+                                        <td style="color:#aaa;">Score boost</td>
+                                        <td style="color:#f39c12;">+3–8 pts</td>
+                                        <td style="color:#2ecc71;">+8–20 pts each</td>
+                                    </tr>
+                                    <tr style="border-color:#ffffff15;">
+                                        <td style="color:#aaa;">Effort needed</td>
+                                        <td>One click</td>
+                                        <td>Real project work</td>
+                                    </tr>
+                                    <tr style="border-color:#ffffff15;">
+                                        <td style="color:#aaa;">AI behaviour next run</td>
+                                        <td>Still probes same area</td>
+                                        <td>Finds NEW weaknesses</td>
+                                    </tr>
+                                    <tr style="border-color:#ffffff15;">
+                                        <td style="color:#aaa;">Analogy</td>
+                                        <td>Knowing a road is icy</td>
+                                        <td>Gritting the road</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Recommended workflow + bands -->
+                    <div class="col-md-5">
+                        <h6 class="mb-2" style="color:#fff;"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-3" style="color:#c8c8d8;">
+                            <li class="mb-1">Run the Stress Test &amp; read all five attacks carefully</li>
+                            <li class="mb-1"><strong style="color:#2ecc71;">Apply vaccines</strong> where you can make the real structural change</li>
+                            <li class="mb-1"><strong style="color:#f39c12;">Mark scenarios addressed</strong> for risks you&rsquo;re monitoring</li>
+                            <li class="mb-1">Re-run the test — the AI will score your progress and find new weak spots</li>
+                            <li>Repeat until you reach your target band</li>
+                        </ol>
+                        <h6 class="mb-2" style="color:#fff;"><i class="fas fa-shield-alt me-1 text-info"></i>Immunity bands</h6>
+                        <div class="d-flex flex-column gap-1">
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#0891b2; min-width:90px;">ANTIFRAGILE</span>
+                                <span style="color:#aaa;">90–100 &bull; Gets stronger under pressure</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#059669; min-width:90px;">RESILIENT</span>
+                                <span style="color:#aaa;">70–89 &bull; Survives most disruptions</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#d97706; min-width:90px;">MODERATE</span>
+                                <span style="color:#aaa;">40–69 &bull; Fails major shocks</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#c0392b; min-width:90px;">FRAGILE</span>
+                                <span style="color:#aaa;">0–39 &bull; Collapses under first shock</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
         </div>
     </div>
 
@@ -284,7 +422,13 @@
     <div class="row">
         <!-- Attack Scenarios -->
         <div class="col-lg-7 mb-4">
-            <h5 class="mb-3"><i class="fas fa-crosshairs text-danger me-2"></i>Attack Scenarios</h5>
+            <h5 class="mb-3">
+                <i class="fas fa-crosshairs text-danger me-2"></i>Attack Scenarios
+                <span data-bs-toggle="tooltip" data-bs-placement="right"
+                      title="Hypothetical failures the AI simulated against your plan. &lsquo;Mark Addressed&rsquo; = you&rsquo;re aware &amp; monitoring (+3–8 pts). Applying the linked Vaccine has much higher impact (+8–20 pts).">
+                    <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.75rem; cursor:help;"></i>
+                </span>
+            </h5>
             {% for scenario in session.scenarios.all %}
             <div class="card mb-3 border-start border-4
                 {% if scenario.outcome == 'FAIL' %}border-danger
@@ -340,9 +484,11 @@
                     </div>
                     {% endif %}
 
-                    <div class="d-flex gap-2 mt-2">
+                    <div class="d-flex gap-2 mt-2 align-items-center">
                         <button class="btn btn-sm {% if scenario.is_addressed %}btn-success{% else %}btn-outline-secondary{% endif %}"
-                                onclick="toggleScenarioAddressed({{ scenario.id }}, this)">
+                                onclick="toggleScenarioAddressed({{ scenario.id }}, this)"
+                                data-bs-toggle="tooltip" data-bs-placement="top"
+                                title="Acknowledge you&rsquo;re monitoring this risk. +3–8 pts on next run. Apply the linked vaccine for much higher score impact.">
                             <i class="fas {% if scenario.is_addressed %}fa-check-circle{% else %}fa-circle{% endif %} me-1"></i>
                             {% if scenario.is_addressed %}Addressed{% else %}Mark Addressed{% endif %}
                         </button>
@@ -356,7 +502,13 @@
 
         <!-- Vaccine Shelf -->
         <div class="col-lg-5 mb-4">
-            <h5 class="mb-3"><i class="fas fa-syringe text-success me-2"></i>Vaccine Shelf</h5>
+            <h5 class="mb-3">
+                <i class="fas fa-syringe text-success me-2"></i>Vaccine Shelf
+                <span data-bs-toggle="tooltip" data-bs-placement="left"
+                      title="Structural fixes that close the gaps making each attack possible. &lsquo;Mark as Applied&rsquo; = you&rsquo;ve made the real change (+8–20 pts each). Each applied vaccine is permanently banked and the AI finds new weaknesses next run instead.">
+                    <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.75rem; cursor:help;"></i>
+                </span>
+            </h5>
 
             <!-- Pending Vaccines -->
             {% for vaccine in session.vaccines.all %}
@@ -407,6 +559,10 @@
                             Mark as applied
                             {% endif %}
                         </label>
+                        <span data-bs-toggle="tooltip" data-bs-placement="top"
+                              title="Tick this when you&rsquo;ve actually made this structural change. +{{ vaccine.projected_score_improvement }} pts banked permanently. Also mark the linked scenario as Addressed.">
+                            <i class="fas fa-question-circle text-muted" style="font-size:0.7rem; cursor:help;"></i>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -439,8 +595,13 @@
     <!-- ── Attack History Log ── -->
     {% if all_sessions.count > 1 %}
     <div class="card mt-4">
-        <div class="card-header bg-white">
+        <div class="card-header bg-white d-flex align-items-center justify-content-between">
             <h6 class="mb-0"><i class="fas fa-history text-info me-2"></i>Session History</h6>
+            {% if request.user == board.created_by or request.user.is_staff %}
+            <button class="btn btn-outline-danger btn-sm" onclick="confirmResetHistory()">
+                <i class="fas fa-trash-alt me-1"></i> Reset History
+            </button>
+            {% endif %}
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -752,6 +913,24 @@ function updateProjectedScore() {
 document.addEventListener('DOMContentLoaded', function() {
     updateProjectedScore();
 
+    // Initialise Bootstrap tooltips
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { html: true });
+    });
+
+    // Update the collapse toggle label when opened/closed
+    var guide = document.getElementById('stressTestGuide');
+    if (guide) {
+        guide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('guide-toggle-label');
+            if (label) label.textContent = 'Hide guide';
+        });
+        guide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('guide-toggle-label');
+            if (label) label.textContent = 'How does this work?';
+        });
+    }
+
     const ctx = document.getElementById('trendChart');
     if (ctx && typeof Chart !== 'undefined') {
         const history = {{ immunity_history|safe }};
@@ -782,5 +961,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// ── Reset Stress Test History ──
+function confirmResetHistory() {
+    if (!confirm('Delete ALL stress test sessions for this board?\n\nThis will permanently remove all session history, immunity scores, scenarios, and vaccines. This cannot be undone.')) {
+        return;
+    }
+    fetch("{% url 'reset_stress_test_history' board.id %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            showStressToast('History cleared (' + data.deleted + ' session' + (data.deleted !== 1 ? 's' : '') + ' deleted). Reloading…', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert(data.error || 'Failed to reset history.');
+        }
+    })
+    .catch(err => {
+        console.error('Reset history error:', err);
+        alert('Failed to reset history. Please try again.');
+    });
+}
 </script>
 {% endblock %}

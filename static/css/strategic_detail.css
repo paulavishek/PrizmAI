@@ -3,10 +3,10 @@
    ============================================================ */
 
 /* Color-bar accents */
-.strategic-header { border-radius: 12px; overflow: hidden; }
-.strategic-header.goal-header    { border-left: 5px solid #7F77DD; }
-.strategic-header.mission-header { border-left: 5px solid #1D9E75; }
-.strategic-header.strategy-header{ border-left: 5px solid #378ADD; }
+.strategic-header { border-radius: 12px; overflow: hidden; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.strategic-header.goal-header    { border-left: 4px solid #7F77DD; }
+.strategic-header.mission-header { border-left: 4px solid #1D9E75; }
+.strategic-header.strategy-header{ border-left: 4px solid #378ADD; }
 
 /* Status badges */
 .status-badge { font-size: 0.72rem; font-weight: 600; padding: 0.25em 0.7em; border-radius: 10px; text-transform: capitalize; }

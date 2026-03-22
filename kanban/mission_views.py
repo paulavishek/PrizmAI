@@ -503,6 +503,11 @@ def mission_detail(request, mission_id):
             'completion_pct': s_pct,
         })
 
+    # --- Strategy status breakdown (based on health-score thresholds) ---
+    on_track_count = sum(1 for s in strategy_tree if s['health_score'] is not None and s['health_score'] >= 70)
+    at_risk_count = sum(1 for s in strategy_tree if s['health_score'] is not None and 40 <= s['health_score'] < 70)
+    off_track_count = sum(1 for s in strategy_tree if s['health_score'] is not None and s['health_score'] < 40)
+
     # --- Version history ---
     versions = MissionVersion.objects.filter(mission=mission).order_by('-version_number')
 
@@ -576,6 +581,9 @@ def mission_detail(request, mission_id):
         'mission': mission,
         'strategies': strategies,
         'strategy_tree': strategy_tree,
+        'on_track_count': on_track_count,
+        'at_risk_count': at_risk_count,
+        'off_track_count': off_track_count,
         'premortem_boards': premortem_boards,
         'premortem_high_risk_count': high_risk_count,
         'premortem_total_boards': len(premortem_boards),

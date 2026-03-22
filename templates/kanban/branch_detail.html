@@ -91,6 +91,11 @@
                     <i class="fas fa-link me-1"></i>From scenario: {{ branch.source_scenario.name }}
                 </div>
                 {% endif %}
+                {% if branch.status == 'active' %}
+                <button class="btn btn-sm btn-outline-secondary mt-2" data-bs-toggle="modal" data-bs-target="#linkScenarioModal">
+                    <i class="fas fa-link me-1"></i>{% if branch.source_scenario %}Change Scenario{% else %}Link Scenario{% endif %}
+                </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -289,6 +294,39 @@
     </div>
 </div>
 
+<!-- Link Scenario Modal -->
+<div class="modal fade" id="linkScenarioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-link me-2"></i>Link What-If Scenario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Linking a scenario will seed a new snapshot from its parameters and trigger a recalculation.</p>
+                <div class="mb-3">
+                    <label for="linkScenarioSelect" class="form-label">Select Scenario</label>
+                    <select class="form-select" id="linkScenarioSelect">
+                        <option value="">— None (unlink) —</option>
+                    </select>
+                    <div id="linkScenarioLoading" class="form-text text-muted" style="display:none;"><i class="fas fa-spinner fa-spin me-1"></i>Loading scenarios...</div>
+                </div>
+                {% if branch.source_scenario %}
+                <div class="alert alert-info py-2 small mb-0" id="currentScenarioInfo">
+                    <i class="fas fa-info-circle me-1"></i>Currently linked: <strong>{{ branch.source_scenario.name }}</strong>
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmLinkScenarioBtn">
+                    <i class="fas fa-save me-1"></i>Apply
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Commit Confirmation Modal -->
 <div class="modal fade" id="commitModal" tabindex="-1">
     <div class="modal-dialog">
@@ -299,12 +337,12 @@
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to commit <strong>{{ branch.name }}</strong>?</p>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
+                <div class="alert alert-warning">
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>Warning:</strong>
                     This will:
                     <ul class="mb-0 mt-2">
                         <li>Mark this branch as the accepted reality</li>
-                        <li>Archive all other active branches</li>
+                        <li><strong>Archive all other active branches</strong> (they can be restored later)</li>
                         <li>Create an audit log entry</li>
                     </ul>
                 </div>
@@ -402,7 +440,7 @@
         fetch('{% url "commit_shadow_branch" board.id branch.id %}', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value,
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ confirm: true })
@@ -417,5 +455,65 @@
         })
         .catch(e => alert('Error: ' + e.message));
     });
+
+    // Link Scenario modal: load scenarios when modal opens
+    const linkScenarioModal = document.getElementById('linkScenarioModal');
+    if (linkScenarioModal) {
+        linkScenarioModal.addEventListener('show.bs.modal', function() {
+            const select = document.getElementById('linkScenarioSelect');
+            const loading = document.getElementById('linkScenarioLoading');
+            // Only populate once
+            if (select.options.length > 1) return;
+            loading.style.display = 'block';
+            fetch(`/boards/{{ board.id }}/what-if/history/`)
+                .then(r => r.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    if (data.scenarios) {
+                        data.scenarios.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.id;
+                            opt.textContent = `${s.name} (${s.scenario_type})`;
+                            if ({{ branch.source_scenario.id|default:"null" }} === s.id) {
+                                opt.selected = true;
+                            }
+                            select.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(() => { loading.style.display = 'none'; });
+        });
+
+        document.getElementById('confirmLinkScenarioBtn')?.addEventListener('click', function() {
+            const scenarioId = document.getElementById('linkScenarioSelect').value || null;
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+
+            fetch(`/api/boards/{{ board.id }}/shadow/{{ branch.id }}/link-scenario/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ scenario_id: scenarioId ? parseInt(scenarioId) : null })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save me-1"></i>Apply';
+                    alert('Error: ' + (data.error || 'Could not link scenario'));
+                }
+            })
+            .catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save me-1"></i>Apply';
+                alert('Error: ' + e.message);
+            });
+        });
+    }
 </script>
 {% endblock %}

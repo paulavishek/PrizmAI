@@ -21,6 +21,10 @@
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
+    .notification-item.has-link {
+        cursor: pointer;
+    }
+
     .notification-item.unread {
         background: #f0f4ff;
         border-left-color: #764ba2;
@@ -135,7 +139,7 @@
     {% if notifications %}
         <div class="notifications-list">
             {% for notification in notifications %}
-                <div class="notification-item {% if not notification.is_read %}unread{% endif %}">
+                <div class="notification-item {% if not notification.is_read %}unread{% endif %}{% if notification.task_thread_comment or notification.chat_message or notification.action_url %} has-link{% endif %}">  
                     <div class="notification-header">
                         <span class="notification-type">
                             {% if notification.notification_type == 'mention' %}
@@ -177,6 +181,19 @@
                                data-notification-id="{{ notification.id }}"
                                onclick="markAsRead(event, this)">
                                 <i class="fas fa-arrow-right me-1"></i> View Message
+                            </a>
+                        {% elif notification.action_url %}
+                            <a href="{{ notification.action_url }}"
+                               class="btn btn-sm btn-primary"
+                               data-notification-id="{{ notification.id }}"
+                               onclick="markAsRead(event, this)">
+                                <i class="fas fa-arrow-right me-1"></i>
+                                {% if notification.notification_type == 'MENTION' %}View Conversation
+                                {% elif notification.notification_type == 'COMMENT' %}View Thread
+                                {% elif notification.notification_type == 'ACTIVITY' %}View Task
+                                {% elif notification.notification_type == 'TASK_ASSIGNED_CAL' %}View Task
+                                {% elif notification.notification_type == 'EVENT_INVITED' %}View Calendar
+                                {% else %}View Details{% endif %}
                             </a>
                         {% endif %}
                         {% if not notification.is_read %}

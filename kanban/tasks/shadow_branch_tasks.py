@@ -42,32 +42,39 @@ def scale_feasibility(float_score):
 
 def extract_branch_params(branch):
     """
-    Extract the current slider parameter values from a branch's latest snapshot.
-    
-    Used to re-run the what-if simulation with the same parameters.
-    
+    Extract the current slider parameter values for a branch.
+
+    Priority:
+    1. If the branch has a linked source_scenario, use its input_parameters.
+       This ensures that after linking/changing a scenario, the very next
+       recalculation always picks up the scenario's values — even before a
+       snapshot with those values has been stored.
+    2. Otherwise fall back to the latest snapshot's stored delta fields.
+
     Args:
         branch: ShadowBranch instance
-    
+
     Returns:
         dict with keys: tasks_added, team_size_delta, deadline_shift_days
     """
+    # Priority 1: use the linked scenario's parameters directly
+    if branch.source_scenario and branch.source_scenario.input_parameters:
+        params = branch.source_scenario.input_parameters
+        return {
+            'tasks_added': int(params.get('tasks_added', 0)),
+            'team_size_delta': int(params.get('team_size_delta', 0)),
+            'deadline_shift_days': int(params.get('deadline_shift_days', 0)),
+        }
+
+    # Priority 2: read stored deltas from the latest snapshot
     latest_snapshot = branch.get_latest_snapshot()
     if not latest_snapshot:
-        # Fallback: read parameters from linked source scenario
-        if branch.source_scenario and branch.source_scenario.input_parameters:
-            params = branch.source_scenario.input_parameters
-            return {
-                'tasks_added': int(params.get('tasks_added', 0)),
-                'team_size_delta': int(params.get('team_size_delta', 0)),
-                'deadline_shift_days': int(params.get('deadline_shift_days', 0)),
-            }
         return {
             'tasks_added': 0,
             'team_size_delta': 0,
             'deadline_shift_days': 0,
         }
-    
+
     return {
         'tasks_added': latest_snapshot.scope_delta,
         'team_size_delta': latest_snapshot.team_delta,

@@ -214,8 +214,7 @@
 
         <div class="branch-grid" id="branchGrid">
             {% for branch in branches %}
-                {% if branch.status == 'active' or branch.status == 'committed' %}
-                <div class="card branch-card" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
+                <div class="card branch-card{% if branch.status == 'archived' %} opacity-50{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
                     <div class="card-body">
                         <!-- Checkbox for compare mode -->
                         <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
@@ -231,7 +230,7 @@
                                 </h6>
                                 <small class="text-muted">Created {{ branch.created_at|date:"M d, Y" }}</small>
                             </div>
-                            <span class="badge {% if branch.status == 'committed' %}bg-success{% else %}bg-secondary{% endif %}">
+                            <span class="badge {% if branch.status == 'committed' %}bg-success{% elif branch.status == 'archived' %}bg-secondary{% else %}bg-primary{% endif %}">
                                 {{ branch.get_status_display }}
                             </span>
                         </div>
@@ -271,6 +270,11 @@
                                     <i class="fas fa-check"></i>
                                 </button>
                                 {% endif %}
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore branch to active">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                {% endif %}
                                 <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch">
                                     <i class="fas fa-trash"></i>
                                 </button>
@@ -281,7 +285,6 @@
                         {% endif %}
                     </div>
                 </div>
-                {% endif %}
             {% empty %}
             <div class="col-12">
                 <div class="alert alert-info text-center">

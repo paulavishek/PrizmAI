@@ -10,6 +10,7 @@ Handles all HTTP requests for Shadow Board functionality:
 """
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+import json
 from django.views.generic import ListView, CreateView, DetailView
 from django.views.decorators.http import require_POST, require_http_methods
 from django.http import JsonResponse
@@ -66,12 +67,13 @@ class ShadowBoardListView(ListView):
         if self.request.user not in board.members.all() and self.request.user != board.created_by:
             self.permission_denied()
         
-        # Return active + archived from last 7 days
+        # Return active, committed, and recently archived branches (last 7 days)
         cutoff_date = timezone.now() - timedelta(days=7)
         return ShadowBranch.objects.filter(
             board=board,
         ).filter(
             models.Q(status='active') |
+            models.Q(status='committed') |
             models.Q(status='archived', updated_at__gte=cutoff_date)
         ).select_related('created_by', 'source_scenario').prefetch_related('snapshots')
 
@@ -245,6 +247,7 @@ class CreateBranchView(CreateView):
                 return JsonResponse({
                     'success': True,
                     'branch_id': branch.id,
+                    'branch_name': branch.name,
                     'redirect_url': f'/boards/{board_id}/shadow/',
                 })
             except Exception as e:
@@ -336,8 +339,12 @@ class CommitBranchView(DetailView):
         if self.request.user not in board.members.all() and self.request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
-        # Check for confirmation
-        confirm = request.POST.get('confirm', 'false').lower() == 'true'
+        # Check for confirmation (supports both JSON body and form POST)
+        try:
+            body_data = json.loads(request.body)
+            confirm = body_data.get('confirm', False) is True
+        except (json.JSONDecodeError, AttributeError):
+            confirm = request.POST.get('confirm', 'false').lower() == 'true'
         if not confirm:
             return JsonResponse({'error': 'Confirmation required'}, status=400)
 
@@ -718,10 +725,91 @@ def delete_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+def link_scenario_to_branch(request, board_id, branch_id):
+    """
+    API endpoint: Link (or unlink) a saved WhatIfScenario to an existing branch.
+
+    POST body (JSON):
+    - scenario_id: int ID of the scenario to link, or null/empty to unlink
+
+    On link: updates branch.source_scenario and creates a new snapshot from the
+    scenario's input_parameters, then triggers a recalculation.
+    On unlink: clears branch.source_scenario only (existing snapshots are kept).
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if request.user not in board.members.all() and request.user != board.created_by:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+
+        try:
+            body = json.loads(request.body)
+            scenario_id = body.get('scenario_id')
+        except (json.JSONDecodeError, AttributeError):
+            scenario_id = request.POST.get('scenario_id')
+
+        if not scenario_id:
+            # Unlink
+            branch.source_scenario = None
+            branch.save(update_fields=['source_scenario'])
+            return JsonResponse({'success': True, 'linked': False, 'message': 'Scenario unlinked from branch.'})
+
+        scenario = get_object_or_404(WhatIfScenario, id=scenario_id, board=board)
+        branch.source_scenario = scenario
+        branch.save(update_fields=['source_scenario'])
+
+        # Trigger recalculation — extract_branch_params now reads directly from
+        # source_scenario.input_parameters, so no zero-score seed snapshot is needed.
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        recalculate_branches_for_board.apply_async(
+            args=[board_id],
+            kwargs={'trigger_event': f'Linked scenario "{scenario.name}" to branch "{branch.name}"'},
+        )
+
+        return JsonResponse({
+            'success': True,
+            'linked': True,
+            'scenario_name': scenario.name,
+            'message': f'Scenario "{scenario.name}" linked to branch. Recalculating...',
+        })
+
+    except Exception as e:
+        logger.error(f'Error linking scenario to branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def restore_branch(request, board_id, branch_id):
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if request.user not in board.members.all() and request.user != board.created_by:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+
+        if branch.status != 'archived':
+            return JsonResponse({'error': 'Only archived branches can be restored'}, status=400)
+
+        branch.status = 'active'
+        branch.save(update_fields=['status'])
+
+        logger.info(f'Branch "{branch.name}" (id={branch_id}) restored by {request.user.username}')
+        return JsonResponse({
+            'success': True,
+            'message': f'Branch "{branch.name}" restored to active.',
+        })
+    except Exception as e:
+        logger.error(f'Error restoring branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
 def toggle_star_branch(request, board_id, branch_id):
-    """
-    API endpoint: Toggle the is_starred flag on a branch.
-    """
     try:
         board = get_object_or_404(Board, id=board_id)
 

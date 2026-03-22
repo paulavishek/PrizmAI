@@ -64,8 +64,17 @@ class Command(BaseCommand):
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
 
         if not self.demo_admin:
-            self.stdout.write(self.style.ERROR('❌ demo_admin_solo user not found!'))
-            return
+            # Fall back to the first available demo persona or any superuser so
+            # the command can still run in environments without demo_admin_solo.
+            self.demo_admin = self.alex or self.sam or self.jordan or \
+                User.objects.filter(is_superuser=True).first()
+            if self.demo_admin:
+                self.stdout.write(self.style.WARNING(
+                    f'⚠️  demo_admin_solo not found — using {self.demo_admin.username} as fallback'
+                ))
+            else:
+                self.stdout.write(self.style.ERROR('❌ No usable admin/demo user found!'))
+                return
 
         # Clear existing data if requested
         if options['clear']:
@@ -262,26 +271,215 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'   Created {attachments_created} file attachments'))
 
     def create_notifications(self):
-        """Create notifications for the demo user"""
+        """Create demo notifications referencing real tasks and chat rooms from the demo board"""
         self.stdout.write(self.style.NOTICE('\n🔔 Creating Notifications...'))
-        
-        notifications_created = 0
 
+        notifications_created = 0
+        now = timezone.now()
+
+        # Build the set of recipients: all demo users + every member of any demo
+        # board so that any user the developer logs in as (e.g. testuser1) also
+        # sees the demo notifications.
+        recipients = set(u for u in self.demo_users if u)
+        for su in User.objects.filter(is_superuser=True):
+            recipients.add(su)
+        for board in self.demo_boards:
+            for member in board.members.all():
+                recipients.add(member)
+
+        # ── Look up real objects so notification text and links are always accurate ──
+        from kanban.models import Task, Column
+        from django.urls import reverse
+
+        def pick_task_obj(keywords):
+            """Return the first Task whose title contains any keyword (case-insensitive)."""
+            for board in self.demo_boards:
+                for kw in keywords:
+                    t = Task.objects.filter(column__board=board, title__icontains=kw).first()
+                    if t:
+                        return t
+            return None
+
+        # Resolve real Task objects (with fallback titles for text only)
+        obj_auth   = pick_task_obj(['authentication', 'auth'])
+        obj_db     = pick_task_obj(['database', 'schema', 'migration'])
+        obj_deploy = pick_task_obj(['deploy', 'ci/cd', 'automation'])
+        obj_api    = pick_task_obj(['api', 'base api', 'rate limit'])
+        obj_done   = pick_task_obj(['documentation', 'final doc', 'launch'])
+        obj_review = pick_task_obj(['code review', 'core features', 'integration test'])
+
+        task_auth   = obj_auth.title   if obj_auth   else 'Authentication System'
+        task_db     = obj_db.title     if obj_db     else 'Database Schema & Migrations'
+        task_deploy = obj_deploy.title if obj_deploy else 'Deployment Automation'
+        task_api    = obj_api.title    if obj_api    else 'Base API Structure'
+        task_done   = obj_done.title   if obj_done   else 'Final Documentation'
+        task_review = obj_review.title if obj_review else 'Core Features Code Review'
+
+        # Build action URLs that point to real pages
+        def task_url(task_obj):
+            return reverse('task_detail', kwargs={'task_id': task_obj.id}) if task_obj else None
+
+        # Real chat rooms
+        room_general_obj = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='general').first()
+        room_reviews_obj = ChatRoom.objects.filter(board__in=self.demo_boards, name__icontains='review').first()
+        room_general     = room_general_obj.name if room_general_obj else 'General Discussion'
+        room_reviews     = room_reviews_obj.name if room_reviews_obj else 'Code Reviews'
+
+        def room_url(room_obj):
+            return reverse('messaging:chat_room_detail', kwargs={'room_id': room_obj.id}) if room_obj else None
+
+        # Real sender display names
+        def display(user):
+            return user.get_full_name() if user and user.get_full_name().strip() else (user.username if user else 'A teammate')
+
+        alex_name   = display(self.alex)
+        sam_name    = display(self.sam)
+        jordan_name = display(self.jordan)
+
+        standalone_templates = [
+            {
+                'type': 'MENTION',
+                'sender_key': 'alex',
+                'text': f'{alex_name} mentioned you in {room_general}: "Can you review the latest changes on {task_api}?"',
+                'action_url': room_url(room_general_obj),
+                'minutes_ago': 25,
+                'is_read': False,
+            },
+            {
+                'type': 'COMMENT',
+                'sender_key': 'sam',
+                'text': f'{sam_name} replied to your comment on "{task_deploy}": "Great catch! I\'ve incorporated your feedback into the workflow."',
+                'action_url': task_url(obj_deploy),
+                'minutes_ago': 85,
+                'is_read': False,
+            },
+            {
+                'type': 'ACTIVITY',
+                'sender_key': 'jordan',
+                'text': f'{jordan_name} moved "{task_auth}" to In Review.',
+                'action_url': task_url(obj_auth),
+                'minutes_ago': 175,
+                'is_read': False,
+            },
+            {
+                'type': 'MENTION',
+                'sender_key': 'sam',
+                'text': f'{sam_name} mentioned you in {room_reviews}: "PR is ready for your approval — ping me with questions."',
+                'action_url': room_url(room_reviews_obj),
+                'minutes_ago': 240,
+                'is_read': True,
+            },
+            {
+                'type': 'TASK_ASSIGNED_CAL',
+                'sender_key': 'alex',
+                'text': f'You were assigned to "{task_db}" — due in 3 days.',
+                'action_url': task_url(obj_db),
+                'minutes_ago': 360,
+                'is_read': True,
+            },
+            {
+                'type': 'COMMENT',
+                'sender_key': 'jordan',
+                'text': f'{jordan_name} commented on "{task_api}": "I\'ve added the rate-limiting logic — please verify on staging."',
+                'action_url': task_url(obj_api),
+                'minutes_ago': 480,
+                'is_read': True,
+            },
+            {
+                'type': 'ACTIVITY',
+                'sender_key': 'alex',
+                'text': f'{alex_name} marked "{task_done}" as complete. 🎉',
+                'action_url': task_url(obj_done),
+                'minutes_ago': 720,
+                'is_read': True,
+            },
+            {
+                'type': 'COMMENT',
+                'sender_key': 'sam',
+                'text': f'{sam_name} left a review comment on "{task_review}": "Looks good overall — added a few inline suggestions."',
+                'action_url': task_url(obj_review),
+                'minutes_ago': 1440,
+                'is_read': True,
+            },
+        ]
+
+        # Delete any previously created standalone notifications whose text no
+        # longer matches (e.g. from the old hard-coded version) so re-running
+        # --clear first is not required.
+        old_texts = [
+            'You have been invited to "Q2 Sprint Review" on Friday at 3:00 PM.',
+            'Alex Chen marked "Sprint Planning" as complete. 🎉',
+            'Jordan Taylor moved "User Authentication Module" to In Review.',
+            'You were assigned to "Database Schema Design" — due in 3 days.',
+            'Jordan Taylor commented on "API Gateway Configuration":',
+            'Sam Rivera replied to your comment on "Set up CI/CD pipeline":',
+            'Alex Chen mentioned you in General Discussion:',
+            'Sam Rivera mentioned you in Code Reviews:',
+        ]
+        for old_text_fragment in old_texts:
+            Notification.objects.filter(
+                recipient__in=recipients,
+                text__startswith=old_text_fragment.split('"')[0],  # match by prefix
+            ).filter(
+                chat_message__isnull=True,
+                task_thread_comment__isnull=True,
+            ).delete()
+
+        for recipient in recipients:
+            for template in standalone_templates:
+                sender = self.get_user_by_key(template['sender_key'])
+                if not sender or sender == recipient:
+                    continue
+
+                # Avoid duplicates across repeated runs; but patch action_url if
+                # the existing record was created before URL support was added.
+                new_url = template.get('action_url') or ''
+                existing = Notification.objects.filter(
+                    recipient=recipient,
+                    sender=sender,
+                    notification_type=template['type'],
+                    text=template['text'],
+                ).first()
+                if existing:
+                    if new_url and not existing.action_url:
+                        existing.action_url = new_url
+                        existing.save(update_fields=['action_url'])
+                    continue
+
+                notif = Notification.objects.create(
+                    recipient=recipient,
+                    sender=sender,
+                    notification_type=template['type'],
+                    text=template['text'],
+                    action_url=template.get('action_url') or '',
+                    is_read=template['is_read'],
+                )
+                # Back-date the notification so timestamps look natural
+                Notification.objects.filter(pk=notif.pk).update(
+                    created_at=now - timedelta(minutes=template['minutes_ago'])
+                )
+                notifications_created += 1
+
+        # Also create mention notifications from actual @mentions in chat messages
         for board in self.demo_boards:
             rooms = ChatRoom.objects.filter(board=board)
             for room in rooms:
-                messages = ChatMessage.objects.filter(chat_room=room, mentioned_users=self.demo_admin)
+                messages = ChatMessage.objects.filter(chat_room=room).exclude(mentioned_users=None)
                 for msg in messages:
-                    if not Notification.objects.filter(
-                        recipient=self.demo_admin,
-                        chat_message=msg,
-                        notification_type='MENTION'
-                    ).exists() and msg.author != self.demo_admin:
+                    for mentioned_user in msg.mentioned_users.all():
+                        if msg.author == mentioned_user:
+                            continue
+                        if Notification.objects.filter(
+                            recipient=mentioned_user,
+                            chat_message=msg,
+                            notification_type='MENTION',
+                        ).exists():
+                            continue
                         Notification.objects.create(
-                            recipient=self.demo_admin,
+                            recipient=mentioned_user,
                             sender=msg.author,
                             notification_type='MENTION',
-                            text=f'{msg.author.username} mentioned you in {room.name}',
+                            text=f'{msg.author.get_full_name() or msg.author.username} mentioned you in {room.name}',
                             chat_message=msg,
                             is_read=False,
                         )

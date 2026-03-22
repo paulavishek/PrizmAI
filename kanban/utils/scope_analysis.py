@@ -251,14 +251,15 @@ def create_scope_alert_if_needed(snapshot):
     if not severity:
         return None
     
-    # Check if there's already an active alert for this board
+    # Check any existing alert for the same baseline (regardless of status) to prevent
+    # re-alerting at the same level after an alert was dismissed or resolved.
     from kanban.models import ScopeCreepAlert
     existing_alert = ScopeCreepAlert.objects.filter(
         board=snapshot.board,
-        status__in=['active', 'acknowledged']
+        snapshot__baseline_snapshot=snapshot.baseline_snapshot,
     ).order_by('-detected_at').first()
-    
-    # Only create new alert if scope has increased since last alert
+
+    # Only create a new alert if scope has genuinely grown beyond the last alerted level
     if existing_alert and existing_alert.scope_increase_percentage >= snapshot.scope_change_percentage:
         return None
     
