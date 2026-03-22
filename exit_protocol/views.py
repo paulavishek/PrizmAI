@@ -229,11 +229,37 @@ def bury_project(request, board_id):
             '"I confirm I want to archive this project"'
         )
 
-    from .tasks import perform_burial
-    perform_burial.delay(session.id)
+    # Create a stub CemeteryEntry immediately so the cemetery page shows the project
+    # right after redirect. perform_burial (Celery) will fill in AI-generated fields.
+    if not CemeteryEntry.objects.filter(hospice_session=session).exists():
+        from kanban.models import Task as KanbanTask
+        _total = KanbanTask.objects.filter(column__board=board).count()
+        _done = KanbanTask.objects.filter(column__board=board, completed_at__isnull=False).count()
+        try:
+            from kanban.permission_models import BoardMembership
+            _team = BoardMembership.objects.filter(board=board, is_active=True).count()
+        except Exception:
+            _team = board.members.count()
+        CemeteryEntry.objects.create(
+            board=board,
+            hospice_session=session,
+            project_name=board.name,
+            project_description=board.description or '',
+            board_id_snapshot=board.id,
+            team_size=_team,
+            total_tasks=_total,
+            completed_tasks=_done,
+            start_date=board.created_at.date() if board.created_at else None,
+            end_date=timezone.now().date(),
+            cause_of_death='zombie_death',
+            autopsy_summary=f"Archiving '{board.name}'\u2026 AI analysis in progress.",
+        )
 
     session.status = 'burial_pending'
     session.save(update_fields=['status'])
+
+    from .tasks import perform_burial
+    perform_burial.delay(session.id)
 
     messages.success(
         request,
@@ -505,7 +531,7 @@ def autopsy_report(request, entry_id):
     # Get related organ transplants
     transplants = OrganTransplant.objects.filter(
         organ__source_board=entry.board
-    ).select_related('organ', 'target_board', 'transplanted_by')
+    ).select_related('organ', 'target_board', 'approved_by')
 
     return render(request, 'exit_protocol/cemetery/autopsy_report.html', {
         'entry': entry,
