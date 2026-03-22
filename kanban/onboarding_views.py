@@ -60,7 +60,15 @@ def onboarding_welcome(request):
     profile = _get_profile(request)
 
     if profile.onboarding_status in ('completed', 'skipped'):
-        return redirect('dashboard')
+        # User has already completed onboarding but wants to set up an
+        # additional goal-based workspace.  Reset the status so the full
+        # flow is available again.  Any previously committed Goals /
+        # Missions / Strategies / Boards are untouched — the next run
+        # simply adds a new hierarchy alongside them.
+        profile.onboarding_status = 'pending'
+        profile.onboarding_goal_text = ''
+        profile.save(update_fields=['onboarding_status', 'onboarding_goal_text'])
+        OnboardingWorkspacePreview.objects.filter(user=request.user).delete()
 
     # Resume mid-flow states
     if profile.onboarding_status == 'goal_submitted':
