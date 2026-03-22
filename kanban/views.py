@@ -45,12 +45,18 @@ def dashboard(request):
     # ── Onboarding v2 redirect guard ────────────────────────────────
     # Covers: pending, goal_submitted, workspace_generated, demo_exploring
     if profile.onboarding_version >= 2:
-        if profile.onboarding_status == 'pending':
-            return redirect('onboarding_welcome')
         if profile.onboarding_status == 'goal_submitted':
             return redirect('onboarding_generating')
         if profile.onboarding_status == 'workspace_generated':
             return redirect('onboarding_review')
+        if profile.onboarding_status == 'pending':
+            # Only redirect brand-new users who have no data yet.
+            # Returning users whose status was reset (e.g. mid-new-setup)
+            # should still reach the dashboard if they navigate away.
+            from kanban.models import OrganizationGoal
+            has_goals = OrganizationGoal.objects.filter(created_by=request.user).exists()
+            if not has_goals:
+                return redirect('onboarding_welcome')
         # demo_exploring, completed, skipped → continue to dashboard
     
     # MVP Mode: Organization is optional (can be None)
