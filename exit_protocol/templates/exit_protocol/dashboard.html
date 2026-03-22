@@ -130,7 +130,7 @@
       </p>
       <p style="font-size: 0.85rem; color: #888;">
         Initiated {{ hospice_session.initiated_at|timesince }} ago
-        by {{ hospice_session.initiated_by.get_full_name|default:hospice_session.initiated_by.username }}
+        by {% if hospice_session.initiated_by %}{{ hospice_session.initiated_by.get_full_name|default:hospice_session.initiated_by.username }}{% else %}Unknown user{% endif %}
       </p>
 
       {% if hospice_session.ai_assessment %}
