@@ -37,6 +37,7 @@ def calculate_baseline(board):
     cutoff = board.created_at + timedelta(hours=24)
     count = Task.objects.filter(
         column__board=board,
+        item_type='task',
         created_at__lte=cutoff,
     ).count()
 
@@ -92,6 +93,7 @@ def collect_scope_history(board):
         post_baseline_tasks = (
             Task.objects.filter(
                 column__board=board,
+                item_type='task',
                 created_at__gt=baseline_date,
                 created_at__lte=now,
             )
@@ -217,7 +219,7 @@ def estimate_cost_impact(events, board):
     """
     from kanban.models import Task
 
-    total_tasks = Task.objects.filter(column__board=board).count() or 1
+    total_tasks = Task.objects.filter(column__board=board, item_type='task').count() or 1
 
     # Try to get average task duration from completed tasks
     completed = Task.objects.filter(
@@ -264,6 +266,7 @@ def has_scope_change_history(board):
     baseline = calculate_baseline(board)
     post_baseline = Task.objects.filter(
         column__board=board,
+        item_type='task',
         created_at__gt=baseline['baseline_date'],
     ).exists()
 
