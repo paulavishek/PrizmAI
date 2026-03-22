@@ -57,7 +57,7 @@ def generate_scope_autopsy(self, report_id):
         events = estimate_cost_impact(events, board)
 
         # 4. Compute final numbers
-        final_task_count = Task.objects.filter(column__board=board).count()
+        final_task_count = Task.objects.filter(column__board=board, item_type='task').count()
         report.final_task_count = final_task_count
 
         if baseline['task_count'] > 0:

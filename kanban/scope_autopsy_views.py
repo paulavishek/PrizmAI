@@ -44,7 +44,7 @@ def scope_autopsy_dashboard(request, board_id):
 
     has_changes = has_scope_change_history(board)
     baseline = calculate_baseline(board)
-    current_task_count = Task.objects.filter(column__board=board).count()
+    current_task_count = Task.objects.filter(column__board=board, item_type='task').count()
 
     # Growth calculation
     if baseline['task_count'] > 0:
