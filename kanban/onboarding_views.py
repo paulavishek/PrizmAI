@@ -292,6 +292,9 @@ def onboarding_review(request):
     GET /onboarding/review/
     Show the review page with the generated hierarchy.
     """
+    from django.utils import timezone
+    import datetime
+
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
     except OnboardingWorkspacePreview.DoesNotExist:
@@ -304,10 +307,16 @@ def onboarding_review(request):
 
     data = preview.edited_data if preview.edited_data else preview.generated_data
 
+    # Detect stale previews (generated >6 hours ago and never committed)
+    age = timezone.now() - preview.created_at
+    is_stale = age > datetime.timedelta(hours=6)
+
     return render(request, 'kanban/onboarding/review.html', {
         'preview': preview,
         'data': data,
         'data_json': json.dumps(data),
+        'is_stale': is_stale,
+        'preview_age_hours': int(age.total_seconds() // 3600),
     })
 
 
@@ -459,11 +468,15 @@ def onboarding_validate(request):
             }]
         })
 
+    mission_names = [m.get('name', '') for m in workspace_data.get('missions', [])]
+    logger.info(f"[validate] user={request.user.username} missions={mission_names}")
+
     start_time = time.time()
     try:
         result = validate_workspace_coherence(workspace_data)
 
         response_time_ms = int((time.time() - start_time) * 1000)
+        logger.info(f"[validate] result status={result.get('status')} flags={len(result.get('flags', []))}")
         track_ai_request(
             user=request.user,
             feature='onboarding_validation',
@@ -472,15 +485,16 @@ def onboarding_validate(request):
             response_time_ms=response_time_ms,
         )
         log_audit(
-            'onboarding_workspace_validated',
+            'system.warning',
             user=request.user,
-            details=f"Validation result: {result.get('status', 'unknown')}",
+            message=f"Onboarding workspace validated: {result.get('status', 'unknown')}",
         )
 
         return JsonResponse(result)
 
     except Exception as exc:
         response_time_ms = int((time.time() - start_time) * 1000)
+        logger.error(f"[validate] Workspace validation error: {exc}", exc_info=True)
         track_ai_request(
             user=request.user,
             feature='onboarding_validation',
@@ -489,9 +503,8 @@ def onboarding_validate(request):
             error_message=str(exc),
             response_time_ms=response_time_ms,
         )
-        logger.error(f"Workspace validation error: {exc}")
-        # Graceful degradation — return 'clear' so user can proceed
-        return JsonResponse({'status': 'clear', 'flags': []})
+        # Return service_error so the frontend shows a warning rather than faking 'clear'
+        return JsonResponse({'status': 'service_error', 'flags': []})
 
 
 # ---------------------------------------------------------------------------
@@ -550,9 +563,9 @@ def onboarding_regenerate_children(request):
                 response_time_ms=response_time_ms,
             )
             log_audit(
-                'onboarding_children_regenerated',
+                'system.warning',
                 user=request.user,
-                details=f"Regenerated {len(titles)} child titles for {parent_level}: {parent_title}",
+                message=f"Onboarding children regenerated: {len(titles)} titles for {parent_level}: {parent_title}",
             )
             return JsonResponse({'success': True, 'titles': titles})
         else:
