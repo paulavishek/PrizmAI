@@ -18,6 +18,12 @@
 
 {% block body %}
 <div class="text-center" style="max-width: 480px;">
+    <!-- Back to dashboard -->
+    <div class="mb-3 text-start">
+        <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
+            <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+        </a>
+    </div>
     <!-- Live status area -->
     <div id="statusArea">
         <div class="mb-4">
