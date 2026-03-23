@@ -5,10 +5,19 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Retrospectives</li>
+        </ol>
+    </nav>
+
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-chart-line"></i> Improvement Dashboard - {{ board.name }}</h2>
-            <p class="text-muted">Track organizational learning and continuous improvement over time</p>
+            <h2><i class="fas fa-chart-line"></i> Improvement Dashboard</h2>
+            <p class="text-muted">{{ board.name }} — Track organizational learning and continuous improvement over time</p>
         </div>
         <div class="col-md-4">
             <div class="d-flex justify-content-end gap-2">
@@ -59,7 +68,7 @@
             <div class="card text-center {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
                 <div class="card-body">
                     <h3>{{ stats.recurring_issues }}</h3>
-                    <p class="text-muted mb-0">Recurring Issues</p>
+                    <p class="text-muted mb-0">Recurring Themes</p>
                 </div>
             </div>
         </div>
@@ -90,7 +99,7 @@
             </div>
             
             {% if trend.recurring_issues %}
-            <h6 class="mt-3">Recurring Issues</h6>
+            <h6 class="mt-3">Recurring Themes</h6>
             <ul class="list-group">
                 {% for issue in trend.recurring_issues %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -113,11 +122,16 @@
                 </div>
                 <div class="card-body">
                     {% if lessons_by_category %}
-                    <div class="list-group">
+                    <div class="list-group list-group-flush">
                         {% for cat in lessons_by_category %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ cat.category|title }}
-                            <span class="badge bg-primary rounded-pill">{{ cat.count }}</span>
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span>{{ cat.category|title }}</span>
+                                <span class="badge bg-primary rounded-pill">{{ cat.count }}</span>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar {% if cat.category == 'process' %}bg-primary{% elif cat.category == 'technical' %}bg-info{% elif cat.category == 'team' %}bg-success{% elif cat.category == 'communication' %}bg-warning{% else %}bg-secondary{% endif %}" role="progressbar" style="width: {% widthratio cat.count stats.total_lessons 100 %}%;"></div>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>

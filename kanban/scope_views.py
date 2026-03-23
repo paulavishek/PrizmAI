@@ -549,6 +549,10 @@ def scope_comparison(request, board_id):
         snapshot1 = get_object_or_404(ScopeChangeSnapshot, id=snapshot1_id, board=board)
         snapshot2 = get_object_or_404(ScopeChangeSnapshot, id=snapshot2_id, board=board)
         
+        # Auto-swap if dates are in wrong order (SCP-03)
+        if snapshot1.snapshot_date > snapshot2.snapshot_date:
+            snapshot1, snapshot2 = snapshot2, snapshot1
+        
         comparison = {
             'tasks_diff': snapshot2.total_tasks - snapshot1.total_tasks,
             'complexity_diff': snapshot2.total_complexity_points - snapshot1.total_complexity_points,

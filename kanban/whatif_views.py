@@ -145,7 +145,7 @@ def whatif_history(request, board_id):
             'input_parameters': params,
             'delay_probability': projected.get('delay_probability', '—'),
             'risk_level': projected.get('risk_level', '—'),
-            'feasibility_score': results.get('feasibility_score', '—'),
+            'feasibility_score': round(results.get('feasibility_score', 0) * 100) if isinstance(results.get('feasibility_score'), (int, float)) else '—',
         })
 
     return JsonResponse({'success': True, 'scenarios': data})

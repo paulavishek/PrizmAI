@@ -96,6 +96,14 @@
   .pb-slide-body li { margin-bottom: 0.25rem; }
   .pb-slide-body p  { margin-bottom: 0.5rem; }
   .pb-slide-body strong { color: #212529; }
+  .pb-slide-body em {
+    display: block;
+    margin-top: 0.8rem;
+    color: #667eea;
+    font-size: 0.85rem;
+    border-left: 3px solid #667eea;
+    padding-left: 0.6rem;
+  }
 
   /* ── Per-slide copy button ─────────────────────────────────── */
   .pb-copy-slide-btn {
@@ -173,17 +181,19 @@
 {% block content %}
 <div class="container-fluid py-4 pb-results-wrap">
 
-  <!-- Back link -->
-  <div class="mb-3" style="font-size:0.9rem;">
-    <a href="{% url 'board_detail' board.id %}" class="text-decoration-none text-muted">
-      ← Back to {{ board.name }}
-    </a>
-  </div>
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item active">PrizmBrief Results</li>
+    </ol>
+  </nav>
 
-  <!-- ── Zone 1: Info banner ─────────────────────────────────── -->
+  <!-- ── Zone 1: Info banner ─────────────────────────────────────── -->
   <div class="pb-info-banner">
     <div>
-      <div style="font-size:1.15rem; font-weight:700;">✨ PrizmBrief</div>
+      <div style="font-size:1.15rem; font-weight:700; color:#1f2937;">✨ PrizmBrief</div>
       <div class="pb-meta">
         Generated from live board data &nbsp;·&nbsp; <strong>{{ board.name }}</strong>
         &nbsp;·&nbsp; {{ report_date }} at {{ report_time }}

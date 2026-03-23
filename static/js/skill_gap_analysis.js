@@ -472,8 +472,8 @@ class SkillGapAnalyzer {
                 ${progressBar}
                 <div class="mt-2">
                     <small class="text-muted">
-                        ${plan.target_users.length} team member(s) • 
-                        ${plan.estimated_hours ? plan.estimated_hours + 'h' : 'No time estimate'}
+                        ${plan.target_users.length === 0 ? 'No team members assigned' : plan.target_users.length + ' team member' + (plan.target_users.length !== 1 ? 's' : '')} • 
+                        ${plan.estimated_hours ? Math.round(plan.estimated_hours) + 'h' : 'No time estimate'}
                     </small>
                 </div>
             </div>
@@ -625,7 +625,7 @@ class SkillGapAnalyzer {
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
-                                <strong>Gap Size:</strong> Need ${gap.gap_count} more team member(s)<br>
+                                <strong>Gap Size:</strong> Need ${gap.gap_count} more team member${gap.gap_count !== 1 ? 's' : ''}<br>
                                 <strong>Currently Available:</strong> ${gap.available_count}<br>
                                 <strong>Severity:</strong> ${this.getSeverityBadge(gap.severity)}<br>
                                 <strong>Status:</strong> ${this.getStatusBadge(gap.status)}

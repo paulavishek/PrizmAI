@@ -312,7 +312,7 @@
             <div id="ai-section">
                 <div class="text-center mb-4" id="ai-trigger">
                     <button class="btn btn-outline-primary btn-lg" id="btn-ai" type="button">
-                        <i class="fas fa-robot me-2"></i> Enhance with AI Analysis
+                        <i class="fas fa-wand-magic-sparkles me-2"></i> Generate AI Recommendation
                     </button>
                 </div>
                 <div id="ai-loading" class="text-center py-4" style="display:none;">
@@ -370,7 +370,7 @@
                                     {% if p.deadline_shift_days %} Deadline: {{ p.deadline_shift_days|stringformat:"+d" }}d{% endif %}
                                 {% endwith %}
                                 {% with r=s.impact_results %}
-                                    {% if r.feasibility_score %} → Feasibility: {{ r.feasibility_score|floatformat:0 }}%{% endif %}
+                                    {% if r.feasibility_score %} → Feasibility: {% widthratio r.feasibility_score 1 100 %}%{% endif %}
                                 {% endwith %}
                             </small>
                         </div>
@@ -407,7 +407,7 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label for="scenario-name" class="form-label">Scenario Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="scenario-name" maxlength="200" placeholder="e.g., Aggressive Q4 push">
+                    <input type="text" class="form-control" id="scenario-name" maxlength="200" placeholder="e.g., Hire 2 devs + cut 10 tasks">
                 </div>
             </div>
             <div class="modal-footer">

@@ -251,15 +251,17 @@
                         </div>
                         <div class="col-md-3">
                             <strong>Days Remaining:</strong><br>
-                            {{ burn_rate.days_remaining_display|default:"No deadline set" }}</div>
+                            {% if burn_rate.days_remaining_display %}{{ burn_rate.days_remaining_display }}{% else %}<span class="text-muted small">Set a deadline to enable projections</span>{% endif %}</div>
                         </div>
                         <div class="col-md-3">
                             <strong>Projected End:</strong><br>
-                            {{ burn_rate.projected_end_date|default:"N/A" }}
+                            {% if burn_rate.projected_end_date %}{{ burn_rate.projected_end_date }}{% else %}<span class="text-muted small">Set a deadline to enable projections</span>{% endif %}
                         </div>
                         <div class="col-md-3">
                             <strong>Sustainability:</strong><br>
-                            <span class="badge bg-{% if burn_rate.is_sustainable %}success{% else %}danger{% endif %}">
+                            <span class="badge bg-{% if burn_rate.is_sustainable %}success{% else %}danger{% endif %}"
+                                  data-bs-toggle="tooltip" data-bs-placement="top"
+                                  title="{% if burn_rate.is_sustainable %}Current spend rate can be sustained within budget through the deadline{% else %}At current burn rate, budget may run out before the project deadline{% endif %}">
                                 {% if burn_rate.is_sustainable %}Sustainable{% else %}At Risk{% endif %}
                             </span>
                         </div>

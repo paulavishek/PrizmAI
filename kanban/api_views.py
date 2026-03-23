@@ -870,16 +870,18 @@ def download_analytics_summary_pdf(request, board_id):
         # Task distribution by user
         user_queryset = Task.objects.filter(
             column__board=board
-        ).values('assigned_to__username').annotate(
+        ).values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name').annotate(
             count=Count('id')
         ).order_by('-count')
         
         tasks_by_user = []
         for item in user_queryset:
-            username = item['assigned_to__username'] or 'Unassigned'
+            raw_username = item['assigned_to__username'] or 'Unassigned'
+            full_name = f"{item.get('assigned_to__first_name', '')} {item.get('assigned_to__last_name', '')}".strip()
+            display_name = full_name or raw_username
             user_tasks = Task.objects.filter(
                 column__board=board, 
-                assigned_to__username=username
+                assigned_to__username=raw_username
             )
             completed_by_user = user_tasks.filter(progress=100).count()
             user_completion_rate = 0
@@ -887,7 +889,7 @@ def download_analytics_summary_pdf(request, board_id):
                 user_completion_rate = (completed_by_user / item['count']) * 100
             
             tasks_by_user.append({
-                'username': username,
+                'username': display_name,
                 'count': item['count'],
                 'completion_rate': int(user_completion_rate)
             })
@@ -1886,10 +1888,12 @@ def analyze_workflow_optimization_api(request):
             tasks_by_priority.append({'priority': priority_name, 'count': item['count']})
         
         # Task distribution by user
-        user_queryset = all_tasks.values('assigned_to__username').annotate(count=Count('id'))
+        user_queryset = all_tasks.values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name').annotate(count=Count('id'))
         tasks_by_user = []
         for item in user_queryset:
-            username = item['assigned_to__username'] or 'Unassigned'
+            raw_username = item['assigned_to__username'] or 'Unassigned'
+            full_name = f"{item.get('assigned_to__first_name', '')} {item.get('assigned_to__last_name', '')}".strip()
+            display_name = full_name or raw_username
             completed_user_tasks = completed_tasks.filter(
                 assigned_to__username=item['assigned_to__username']
             ).count()
@@ -1899,7 +1903,7 @@ def analyze_workflow_optimization_api(request):
                 completion_rate = (completed_user_tasks / item['count']) * 100
                 
             tasks_by_user.append({
-                'username': username,
+                'username': display_name,
                 'count': item['count'],
                 'completion_rate': int(completion_rate)
             })

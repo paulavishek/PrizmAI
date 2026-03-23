@@ -42,9 +42,23 @@
 
 {% block content %}
 <div class="ep-dashboard">
-  <div class="ep-header">
-    <h1>🏥 Exit Protocol</h1>
-    <p class="board-name">{{ board.name }}</p>
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item active">Exit Protocol</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex justify-content-between align-items-start mb-4 pb-3 border-bottom">
+    <div>
+      <h1 class="h2 mb-1"><i class="fas fa-door-open text-warning me-2"></i>Exit Protocol</h1>
+      <p class="text-muted mb-0">{{ board.name }} — Manage project wind-down, knowledge preservation, and archival</p>
+    </div>
+    <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i> Back to Board
+    </a>
   </div>
 
   {% if messages %}
@@ -59,10 +73,13 @@
   <!-- Risk Gauge -->
   <div class="risk-gauge">
     {% with score=current_risk_score %}
-    <div class="gauge-value {% if score >= 0.75 %}gauge-high{% elif score >= 0.4 %}gauge-moderate{% else %}gauge-low{% endif %}">
+    <div class="gauge-value {% if score >= 0.75 %}gauge-high{% elif score >= 0.4 %}gauge-moderate{% else %}{% if hospice_session %}gauge-moderate{% else %}gauge-low{% endif %}{% endif %}">
       {% widthratio score 1 100 %}%
     </div>
     <div class="gauge-label">Hospice Risk Score</div>
+    {% if hospice_session and score < 0.4 %}
+    <div style="font-size: 0.75rem; color: #888; margin-top: 4px;">Low risk — project is safe to wind down</div>
+    {% endif %}
     {% endwith %}
   </div>
 
@@ -130,7 +147,7 @@
       </p>
       <p style="font-size: 0.85rem; color: #888;">
         Initiated {{ hospice_session.initiated_at|timesince }} ago
-        by {% if hospice_session.initiated_by %}{{ hospice_session.initiated_by.get_full_name|default:hospice_session.initiated_by.username }}{% else %}Unknown user{% endif %}
+        {% if hospice_session.initiated_by %}by {{ hospice_session.initiated_by.get_full_name|default:hospice_session.initiated_by.username }}{% endif %}
       </p>
 
       {% if hospice_session.ai_assessment %}
@@ -149,6 +166,7 @@
       <div class="mt-3">
         <h5 style="font-size: 1rem;">📋 Knowledge Extraction Checklist</h5>
         {% for category, items in hospice_session.knowledge_checklist.items %}
+        {% if items %}
         <div class="mb-2">
           <strong style="font-size: 0.85rem;">{{ category|humanize_key }}</strong>
           {% for item in items %}
@@ -163,6 +181,7 @@
           </div>
           {% endfor %}
         </div>
+        {% endif %}
         {% endfor %}
       </div>
       {% endif %}
@@ -173,7 +192,7 @@
 
         {% if hospice_session.status != 'buried' %}
         <button type="button" class="btn-bury" data-bs-toggle="modal" data-bs-target="#buryModal">
-          ⚰️ Proceed to Burial
+          <i class="bi bi-archive"></i> Archive This Project
         </button>
         {% endif %}
       </div>
@@ -208,7 +227,7 @@
         <h5 class="modal-title">⚰️ Archive Project</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="post" action="{% url 'exit_protocol:bury' board.id %}">
+      <form method="post" action="{% url 'exit_protocol:bury' board.id %}" id="buryForm">
         {% csrf_token %}
         <div class="modal-body">
           <p>This will permanently archive <strong>"{{ board.name }}"</strong>.</p>
@@ -216,13 +235,14 @@
           <div class="mb-3">
             <label class="form-label">Type the following to confirm:</label>
             <p class="text-muted" style="font-size: 0.85rem;"><em>I confirm I want to archive this project</em></p>
-            <input type="text" class="form-control" name="confirmation" required autocomplete="off"
+            <input type="text" class="form-control" name="confirmation" id="buryConfirmationInput" required autocomplete="off"
               placeholder="Type confirmation text here...">
+            <div class="invalid-feedback">Please type the exact confirmation phrase above.</div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-danger">Archive Project</button>
+          <button type="submit" class="btn btn-danger" id="burySubmitBtn" disabled>Archive Project</button>
         </div>
       </form>
     </div>
@@ -238,7 +258,7 @@
 (function() {
   const signals = [
     {% for s in signals reversed %}
-    { date: "{{ s.recorded_at|date:'M d' }}", score: {{ s.hospice_risk_score|floatformat:2 }} },
+    { date: "{{ s.recorded_at|date:'M d, H:i' }}", score: {{ s.hospice_risk_score|floatformat:2 }} },
     {% endfor %}
   ];
 
@@ -287,6 +307,31 @@ document.querySelectorAll('.checklist-item').forEach(cb => {
     .catch(err => console.error(err));
   });
 });
+
+// Burial confirmation validation — prevent raw Django error (EXP-01)
+const buryInput = document.getElementById('buryConfirmationInput');
+const buryBtn = document.getElementById('burySubmitBtn');
+const buryForm = document.getElementById('buryForm');
+if (buryInput && buryBtn) {
+  const REQUIRED_PHRASE = 'I confirm I want to archive this project';
+  buryInput.addEventListener('input', function() {
+    const matches = this.value.trim() === REQUIRED_PHRASE;
+    buryBtn.disabled = !matches;
+    if (this.value.length > 0 && !matches) {
+      this.classList.add('is-invalid');
+    } else {
+      this.classList.remove('is-invalid');
+    }
+  });
+  if (buryForm) {
+    buryForm.addEventListener('submit', function(e) {
+      if (buryInput.value.trim() !== REQUIRED_PHRASE) {
+        e.preventDefault();
+        buryInput.classList.add('is-invalid');
+      }
+    });
+  }
+}
 
 // Recalculate Now button
 const recalcBtn = document.getElementById('recalculate-btn');

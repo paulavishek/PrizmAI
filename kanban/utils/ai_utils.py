@@ -854,7 +854,7 @@ def _transform_analytics_response(parsed: Dict) -> Dict:
                 'recommendation': r.get('recommendation', ''),
                 'expected_impact': r.get('impact', ''),
                 'priority': r.get('priority', 1),
-                'implementation_effort': 'medium',
+                'implementation_effort': r.get('implementation_effort', r.get('effort', 'medium')),
             }
             for r in parsed.get('recommendations', [])
         ]
@@ -4499,7 +4499,7 @@ Write a concise, professional stakeholder update for the project "{board_name}" 
 Return your response as a JSON object with these keys:
 
 {{
-    "report": "The full status report as a markdown string with 4 sections: **Overall Status** (RAG 🟢/🟡/🔴 + headline), **Progress This Week** (2-3 bullets), **Key Risks & Blockers** (2-3 bullets), **Next Steps** (2-3 action items)",
+    "report": "The full status report as a markdown string with 4 sections: **Overall Status** (RAG 🟢/🟡/🔴 + headline), **Progress To Date** (2-3 bullets summarising cumulative progress), **Key Risks & Blockers** (2-3 bullets), **Next Steps** (2-3 action items)",
     "rag_status": "green" or "amber" or "red",
     "rag_reasoning": "1-2 sentences explaining WHY you chose this RAG status based on the specific metrics above",
     "confidence_score": 0.0 to 1.0 (how confident you are in this assessment given available data),

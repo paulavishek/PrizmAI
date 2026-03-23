@@ -393,14 +393,20 @@ def generate_knowledge_checklist(session_id):
 
         nodes = MemoryNode.objects.filter(board=board).order_by('-importance_score')
 
-        # Track seen scope-change percentages to deduplicate repeat alerts at the same level
+        # Track seen scope-change percentages and titles to deduplicate
         seen_scope_pcts = set()
+        seen_titles = set()
 
         for node in nodes:
             category = type_to_category.get(node.node_type)
             if category:
-                # Deduplicate scope_change nodes that have the same percentage
-                # (can accumulate when alerts are dismissed and re-fired at the same level)
+                # Deduplicate by title across all node types
+                title_key = (node.title or '').strip().lower()
+                if title_key in seen_titles:
+                    continue
+                seen_titles.add(title_key)
+
+                # Also deduplicate scope_change nodes by percentage
                 if node.node_type == 'scope_change' and node.context_data:
                     pct = node.context_data.get('scope_increase_pct')
                     if pct is not None:
@@ -420,6 +426,9 @@ def generate_knowledge_checklist(session_id):
                 })
     except Exception as e:
         logger.error(f"[ExitProtocol] Knowledge checklist failed for session {session_id}: {e}")
+
+    # Strip empty categories so template doesn't show blank headings (EXP-05)
+    checklist = {k: v for k, v in checklist.items() if v}
 
     session.knowledge_checklist = checklist
     session.save(update_fields=['knowledge_checklist'])

@@ -828,6 +828,9 @@ function formatStructuredAISummary(summary) {
     // This function handles structured JSON summaries with explainability
     let html = '<div class="structured-ai-summary">';
     
+    // Generation timestamp
+    html += '<div class="text-muted small mb-3"><i class="fas fa-clock me-1"></i>Generated at ' + new Date().toLocaleString() + '</div>';
+    
     // Executive Summary
     if (summary.executive_summary) {
         html += '<div class="mb-4">';
@@ -946,18 +949,25 @@ function formatStructuredAISummary(summary) {
         html += '</div>';
     }
     
-    // Lean Analysis
+    // Lean Analysis — merge into Areas of Concern if minimal data
     if (summary.lean_analysis) {
         const lean = summary.lean_analysis;
+        const hasWaste = lean.waste_identification && Array.isArray(lean.waste_identification) && lean.waste_identification.length > 0;
         html += '<div class="mb-4">';
-        html += '<h6 class="text-warning"><i class="fas fa-cogs me-2"></i>Lean Six Sigma Analysis</h6>';
+        html += '<h6 class="text-warning"><i class="fas fa-cogs me-2"></i>Process Efficiency (Lean Analysis)</h6>';
         if (lean.value_stream_efficiency) {
-            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-info">' + String(lean.value_stream_efficiency).toUpperCase() + '</span></p>';
+            const effLevel = String(lean.value_stream_efficiency).toLowerCase();
+            const effColor = effLevel === 'high' ? 'success' : effLevel === 'medium' ? 'warning' : 'danger';
+            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-' + effColor + '">' + String(lean.value_stream_efficiency).toUpperCase() + '</span>';
+            if (!hasWaste) {
+                html += ' <span class="text-muted small ms-2">— Measures how much of your workflow adds direct value vs. waiting/rework time</span>';
+            }
+            html += '</p>';
         }
-        if (lean.waste_identification && Array.isArray(lean.waste_identification) && lean.waste_identification.length > 0) {
+        if (hasWaste) {
             html += '<p class="mb-1"><strong>Waste Identified:</strong></p><ul class="small">';
             lean.waste_identification.forEach(waste => {
-                if (!waste) return; // Skip null/undefined items
+                if (!waste) return;
                 html += '<li>' + escapeHtml(waste.waste_type || 'Waste') + ' (' + (waste.tasks_affected || 0) + ' tasks)</li>';
             });
             html += '</ul>';

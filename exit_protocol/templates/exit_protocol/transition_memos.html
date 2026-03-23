@@ -4,7 +4,15 @@
 
 {% block content %}
 <div style="max-width: 800px; margin: 0 auto;">
-  <a href="{% url 'exit_protocol:dashboard' board.id %}" class="text-muted text-decoration-none d-block mb-3">← Back to Exit Protocol</a>
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'exit_protocol:dashboard' board.id %}">Exit Protocol</a></li>
+      <li class="breadcrumb-item active">Transition Memos</li>
+    </ol>
+  </nav>
 
   <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">📝 Team Transition Memos</h1>
   <p class="text-muted" style="font-size: 0.9rem;">{{ board.name }}</p>
@@ -45,4 +53,13 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Convert markdown bold (**text**) to <strong> in memo content
+document.querySelectorAll('.memo-content').forEach(function(el) {
+    el.innerHTML = el.innerHTML.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+});
+</script>
 {% endblock %}

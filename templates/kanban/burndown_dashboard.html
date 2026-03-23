@@ -12,18 +12,22 @@
     }
 
     .burndown-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
+        padding-bottom: 20px;
         margin-bottom: 30px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        border-bottom: 2px solid #e5e7eb;
     }
 
     .burndown-title {
-        font-size: 32px;
+        font-size: 2rem;
         font-weight: 700;
-        margin-bottom: 10px;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .burndown-subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin-top: 5px;
     }
 
     .prediction-card {
@@ -323,20 +327,29 @@
 
 {% block content %}
 <div class="burndown-container">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Burndown Prediction</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="burndown-header">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <div class="burndown-title">
-                    <i class="fas fa-chart-line"></i> Burndown Prediction
-                </div>
-                <p class="mb-0" style="opacity: 0.9;">{{ board.name }}</p>
+                <h1 class="burndown-title">
+                    <i class="fas fa-chart-line text-primary me-2"></i>Burndown Prediction
+                </h1>
+                <p class="burndown-subtitle mb-0">{{ board.name }} — AI-powered completion forecast</p>
             </div>
             <div>
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-light me-2">
+                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
                     <i class="fas fa-arrow-left me-2"></i>Back to Board
                 </a>
-                <button class="btn btn-generate" onclick="generatePrediction()">
+                <button class="btn btn-primary" onclick="generatePrediction()">
                     <i class="fas fa-sync-alt"></i> Generate New Prediction
                 </button>
             </div>
@@ -344,6 +357,11 @@
     </div>
 
     {% if prediction %}
+    <!-- Prediction timestamp -->
+    <div class="text-muted small mb-3">
+        <i class="fas fa-clock me-1"></i> Prediction generated: {{ prediction.prediction_date|date:"M d, Y g:i A" }}
+    </div>
+
     <!-- Key Metrics -->
     <div class="prediction-card">
         <h4 class="mb-4"><i class="fas fa-tachometer-alt text-primary"></i> Completion Forecast</h4>
@@ -401,7 +419,7 @@
             <div class="metric-card">
                 <div class="metric-label">Current Velocity</div>
                 <div class="metric-value">{{ prediction.current_velocity }}</div>
-                <div class="metric-subtext">tasks/week</div>
+                <div class="metric-subtext">task{{ prediction.current_velocity|pluralize }}/week</div>
             </div>
 
             <div class="metric-card">
@@ -450,6 +468,7 @@
     {% if alerts %}
     <div class="prediction-card">
         <h4 class="mb-3"><i class="fas fa-exclamation-triangle text-warning"></i> Active Alerts ({{ alerts.count }})
+            <small class="text-muted fw-normal ms-2">Generated {{ alerts.first.created_at|timesince }} ago</small>
         </h4>
         {% for alert in alerts %}
         <div class="alert-box {{ alert.severity }}">
@@ -466,9 +485,6 @@
                         {{ alert.title }}
                     </strong>
                     <p class="mb-2 mt-2">{{ alert.message }}</p>
-                    <small class="text-muted">
-                        <i class="fas fa-clock"></i> {{ alert.created_at|timesince }} ago
-                    </small>
                 </div>
                 <div>
                     {% if alert.status == 'active' %}
@@ -533,7 +549,7 @@
                 <div class="col-sm-6 col-lg-3">
                     <div class="p-2 bg-light rounded text-center">
                         <small class="text-muted d-block">Data Points</small>
-                        <strong>{{ explain.confidence_breakdown.data_points }} / {{ explain.confidence_breakdown.min_required }} min</strong>
+                        <strong>{{ explain.confidence_breakdown.data_points }} recorded / {{ explain.confidence_breakdown.min_required }} minimum required</strong>
                     </div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
@@ -854,13 +870,22 @@
     function renderVelocityChart(data) {
         const ctx = document.getElementById('velocityChart').getContext('2d');
 
+        // Filter out zero-velocity periods to avoid sparse bars with long empty gaps
+        const filtered = data.labels.reduce((acc, label, i) => {
+            if (data.velocities[i] > 0) {
+                acc.labels.push(label);
+                acc.velocities.push(data.velocities[i]);
+            }
+            return acc;
+        }, { labels: [], velocities: [] });
+
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: data.labels.map(d => new Date(d).toLocaleDateString()),
+                labels: filtered.labels.map(d => new Date(d).toLocaleDateString()),
                 datasets: [{
                     label: 'Tasks Completed',
-                    data: data.velocities,
+                    data: filtered.velocities,
                     backgroundColor: 'rgba(102, 126, 234, 0.8)',
                     borderColor: '#667eea',
                     borderWidth: 1

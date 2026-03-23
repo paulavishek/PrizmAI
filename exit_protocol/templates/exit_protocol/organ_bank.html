@@ -4,15 +4,35 @@
 
 {% block content %}
 <div style="max-width: 900px; margin: 0 auto;">
-  <a href="{% url 'exit_protocol:dashboard' board.id %}" class="text-muted text-decoration-none d-block mb-3">← Back to Exit Protocol</a>
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'exit_protocol:dashboard' board.id %}">Exit Protocol</a></li>
+      <li class="breadcrumb-item active">Organ Bank</li>
+    </ol>
+  </nav>
 
   <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">🫀 Organ Bank</h1>
   <p class="text-muted" style="font-size: 0.9rem;">Reusable components from {{ board.name }}</p>
 
   {% if organs %}
-  <div class="row g-3 mt-2">
+  <!-- Filter tabs -->
+  <div class="mb-3">
+    <div class="btn-group btn-group-sm" role="group">
+      <button class="btn btn-outline-secondary active organ-filter" data-filter="all">All</button>
+      <button class="btn btn-outline-secondary organ-filter" data-filter="task_template">Task Templates</button>
+      <button class="btn btn-outline-secondary organ-filter" data-filter="knowledge_entry">Knowledge</button>
+      <button class="btn btn-outline-secondary organ-filter" data-filter="role_definition">Roles</button>
+      <button class="btn btn-outline-secondary organ-filter" data-filter="goal_framework">Goals</button>
+    </div>
+    <input type="text" class="form-control form-control-sm d-inline-block ms-2" id="organ-search" placeholder="Search organs…" style="width: 200px; vertical-align: middle;">
+  </div>
+
+  <div class="row g-3 mt-2" id="organ-grid">
     {% for organ in organs %}
-    <div class="col-md-6">
+    <div class="col-md-6 organ-card" data-type="{{ organ.organ_type }}">
       <div class="card h-100">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-start mb-2">
@@ -32,7 +52,10 @@
           </div>
 
           {% if organ.ai_rationale %}
-          <p style="font-size: 0.75rem; color: #999; font-style: italic;">{{ organ.ai_rationale|truncatewords:20 }}</p>
+          <details style="font-size: 0.75rem; color: #999;">
+            <summary style="cursor: pointer; font-style: italic;">Why reusable?</summary>
+            <p class="mt-1 mb-0">{{ organ.ai_rationale|truncatewords:30 }}</p>
+          </details>
           {% endif %}
 
           <div class="d-flex gap-2 mt-2">
@@ -50,4 +73,33 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var filterBtns = document.querySelectorAll('.organ-filter');
+    var searchInput = document.getElementById('organ-search');
+    var cards = document.querySelectorAll('.organ-card');
+    var activeFilter = 'all';
+
+    function applyFilters() {
+        var query = (searchInput ? searchInput.value.toLowerCase() : '');
+        cards.forEach(function(card) {
+            var matchType = (activeFilter === 'all' || card.dataset.type === activeFilter);
+            var matchSearch = (!query || card.textContent.toLowerCase().indexOf(query) !== -1);
+            card.style.display = (matchType && matchSearch) ? '' : 'none';
+        });
+    }
+
+    filterBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            filterBtns.forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            activeFilter = btn.dataset.filter;
+            applyFilters();
+        });
+    });
+
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+});
+</script>
 {% endblock %}

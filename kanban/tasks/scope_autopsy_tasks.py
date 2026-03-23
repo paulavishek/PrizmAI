@@ -124,9 +124,13 @@ def generate_scope_autopsy(self, report_id):
         report.save()
 
         # 9. Create ScopeTimelineEvent records
+        # Clamp cumulative to actual task count to avoid contradictions
+        actual_task_count = report.final_task_count
         cumulative = baseline['task_count']
         for e in events:
             cumulative += e['net_task_change']
+            if cumulative > actual_task_count:
+                cumulative = actual_task_count
             ScopeTimelineEvent.objects.create(
                 report=report,
                 event_date=e['date'],

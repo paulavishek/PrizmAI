@@ -86,6 +86,13 @@ function renderSparklines() {
             .then(data => {
                 if (data.scores && data.scores.length > 0) {
                     drawSparkline(canvas, data.scores);
+                } else {
+                    const ctx = canvas.getContext('2d');
+                    canvas.style.height = '30px';
+                    ctx.font = '11px sans-serif';
+                    ctx.fillStyle = '#999';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('No trend data yet', canvas.width / 2, 20);
                 }
             })
             .catch(e => console.warn('Could not load sparkline:', e));

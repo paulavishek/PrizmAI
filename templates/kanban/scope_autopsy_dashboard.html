@@ -5,11 +5,20 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Scope Autopsy</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-microscope text-warning"></i> Scope Autopsy — {{ board.name }}</h2>
-            <p class="text-muted">Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>
+            <h2><i class="fas fa-microscope text-warning"></i> Scope Autopsy</h2>
+            <p class="text-muted">{{ board.name }} — Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>
         </div>
         <div class="col-md-4 text-end">
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
@@ -61,7 +70,7 @@
             </p>
 
             {% if has_quota %}
-            <button id="btn-run-autopsy" class="btn btn-warning btn-lg text-white" onclick="runAutopsy()">
+            <button id="btn-run-autopsy" class="btn btn-primary btn-lg text-white" onclick="runAutopsy()">
                 <i class="fas fa-microscope me-2"></i> Run Scope Autopsy
             </button>
             <p class="text-muted mt-2"><small>Estimated analysis time: 15–20 seconds</small></p>
@@ -115,7 +124,7 @@
                 {{ latest_report.ai_summary|default:"The analysis could not be completed. Please try again." }}
             </p>
             {% if has_quota %}
-            <button id="btn-run-autopsy" class="btn btn-warning btn-lg text-white" onclick="runAutopsy()">
+            <button id="btn-run-autopsy" class="btn btn-primary btn-lg text-white" onclick="runAutopsy()">
                 <i class="fas fa-redo me-2"></i> Retry Scope Autopsy
             </button>
             {% endif %}
@@ -208,7 +217,10 @@
     {# ── AI Summary ──────────────────────────────────────────────── #}
     {% if latest_report.ai_summary %}
     <div class="card mb-4">
-        <div class="card-header"><i class="fas fa-wand-magic-sparkles me-2"></i> AI Summary</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-wand-magic-sparkles me-2"></i> AI Summary</span>
+        <small class="text-muted">Generated {{ latest_report.created_at|timesince }} ago</small>
+    </div>
         <div class="card-body">
             <p>{{ latest_report.ai_summary }}</p>
         </div>
@@ -241,7 +253,8 @@
 
                     {% for event in enriched_events %}
                     <div class="timeline-node text-center me-2" style="min-width:160px;cursor:pointer;"
-                         onclick="toggleEventDetail({{ forloop.counter0 }})">
+                         onclick="toggleEventDetail({{ forloop.counter0 }})"
+                         id="timeline-node-{{ forloop.counter0 }}">
                         {# Dot #}
                         <div class="mx-auto rounded-circle d-flex align-items-center justify-content-center"
                              style="width:42px;height:42px;
@@ -249,7 +262,7 @@
                                     color:#fff;font-size:13px;">
                             +{{ event.net_task_change }}
                         </div>
-                        <div class="mt-2 small"><strong>{{ event.title|truncatewords:5 }}</strong></div>
+                        <div class="mt-2 small" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ event.title }}"><strong>{{ event.title|truncatewords:5 }}</strong></div>
                         <div class="small text-muted">{{ event.date|date:"M d, Y" }}</div>
                         <div class="small">
                             {% if event.is_major_event %}
@@ -310,8 +323,8 @@
 
     {# ── Pattern Analysis ────────────────────────────────────────── #}
     {% if latest_report.pattern_analysis %}
-    <div class="card mb-4">
-        <div class="card-header"><i class="fas fa-sync-alt me-2"></i> Pattern Analysis</div>
+    <div class="card mb-4 border-start border-info border-3">
+        <div class="card-header bg-info bg-opacity-10"><i class="fas fa-sync-alt me-2 text-info"></i> Pattern Analysis</div>
         <div class="card-body">
             {{ latest_report.pattern_analysis|linebreaksbr }}
         </div>
@@ -337,7 +350,7 @@
                                 {% elif rec.applies_to == 'stakeholder_management' %}bg-info
                                 {% elif rec.applies_to == 'technical' %}bg-secondary
                                 {% else %}bg-light text-dark{% endif %}">
-                                {{ rec.applies_to|default:"general" }}
+                                {{ rec.applies_to|default:"General"|title }}
                             </span>
                             {% else %}
                             <p class="card-text">{{ rec }}</p>
@@ -374,15 +387,36 @@ const BOARD_ID = {{ board.id }};
 const CSRF_TOKEN = '{{ csrf_token }}';
 let REPORT_ID = {% if latest_report %}{{ latest_report.id }}{% else %}null{% endif %};
 
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { boundary: 'window' });
+    });
+});
+
 // ── Toggle event detail card ────────────────────────────────────────
 function toggleEventDetail(idx) {
     const el = document.getElementById('event-detail-' + idx);
     if (!el) return;
-    // Close all others
+    // Close all others and remove highlight
     document.querySelectorAll('[id^="event-detail-"]').forEach(function(d) {
         if (d.id !== 'event-detail-' + idx) d.style.display = 'none';
     });
-    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+    document.querySelectorAll('.timeline-node').forEach(function(n) {
+        n.style.outline = 'none';
+        n.style.borderRadius = '';
+        n.style.background = '';
+    });
+    var isShowing = el.style.display === 'none';
+    el.style.display = isShowing ? 'block' : 'none';
+    // Highlight active node
+    if (isShowing) {
+        var node = document.getElementById('timeline-node-' + idx);
+        if (node) {
+            node.style.outline = '2px solid #0d6efd';
+            node.style.borderRadius = '8px';
+            node.style.background = 'rgba(13,110,253,0.05)';
+        }
+    }
 }
 
 // ── Run Scope Autopsy ───────────────────────────────────────────────
