@@ -65,7 +65,10 @@
       <div class="card border-0 shadow-sm text-center py-3">
         <div class="fs-2 fw-bold text-info">{% if market.consensus %}{{ market.consensus|floatformat:0 }}%{% else %}—{% endif %}</div>
         <div class="text-muted small">Market Consensus</div>
-        {% if not market.show_market %}<div class="text-muted" style="font-size:.7rem;">Need 3+ bets</div>{% endif %}
+        {% if not market.show_market %}
+        <div class="text-muted mt-1" style="font-size:.75rem;">No market yet · Place a bet to open the market</div>
+        <a href="#place-bet" class="btn btn-sm btn-outline-info mt-1" data-bs-toggle="collapse" data-bs-target="#betForm"><i class="fas fa-gavel me-1"></i>Place Bet</a>
+        {% endif %}
       </div>
     </div>
     <div class="col-md-3">

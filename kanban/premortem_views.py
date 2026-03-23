@@ -8,7 +8,7 @@ AI plays devil's advocate and simulates 5 ways the project could fail.
 import json
 import time
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
@@ -250,6 +250,10 @@ def premortem_dashboard(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     readiness = board_premortem_ready(board)
     latest = board.pre_mortems.first()  # ordered by -created_at
+
+    # Flag stale analyses (older than 7 days)
+    if latest:
+        latest.is_stale = (timezone.now() - latest.created_at) > timedelta(days=7)
 
     # Gather acknowledgments and enrich scenario data for the template
     enriched_scenarios = []

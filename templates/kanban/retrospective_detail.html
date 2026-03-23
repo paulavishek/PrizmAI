@@ -6,9 +6,22 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'retrospective_dashboard' board.id %}">Retrospectives</a></li>
+            <li class="breadcrumb-item active">{{ retrospective.title|truncatewords:5 }}</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
+            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-outline-secondary btn-sm mb-2">
+                <i class="fas fa-arrow-left me-1"></i> Back to List
+            </a>
             <h2>{{ retrospective.title }}
                 {% include 'partials/favorite_toggle.html' with favorite_type='retrospective' object_id=retrospective.id is_favorited=is_favorited %}
             </h2>
@@ -29,9 +42,6 @@
             <a href="{% url 'retrospective_export' board.id retrospective.id %}" class="btn btn-info">
                 <i class="fas fa-file-pdf"></i> Export PDF
             </a>
-            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to List
-            </a>
         </div>
     </div>
 
@@ -40,7 +50,7 @@
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
-                    <h4>{{ retrospective.metrics_snapshot.total_tasks|default:0 }}</h4>
+                    <h4>{{ stats.total_tasks|default:0 }}</h4>
                     <p class="text-muted mb-0">Total Tasks</p>
                 </div>
             </div>
@@ -48,7 +58,7 @@
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
-                    <h4>{{ retrospective.metrics_snapshot.completion_rate|floatformat:1|default:0 }}%</h4>
+                    <h4>{{ stats.completion_rate|floatformat:1|default:0 }}%</h4>
                     <p class="text-muted mb-0">Completion Rate</p>
                 </div>
             </div>
@@ -118,7 +128,7 @@
                         <tr>
                             <td>
                                 <strong>{{ lesson.title }}</strong>
-                                <br><small class="text-muted">{{ lesson.description|truncatewords:20 }}</small>
+                                {% if lesson.description %}<br><small class="text-muted">{{ lesson.description|truncatewords:20 }}</small>{% endif %}
                             </td>
                             <td><span class="badge bg-info">{{ lesson.get_category_display }}</span></td>
                             <td><span class="badge bg-{% if lesson.priority == 'critical' %}danger{% elif lesson.priority == 'high' %}warning{% else %}secondary{% endif %}">
@@ -179,7 +189,7 @@
                             <td><span class="badge bg-{% if action.priority == 'critical' %}danger{% elif action.priority == 'high' %}warning{% else %}info{% endif %}">
                                 {{ action.get_priority_display }}
                             </span></td>
-                            <td>{{ action.assigned_to|default:"Unassigned" }}</td>
+                            <td>{% if action.assigned_to %}{{ action.assigned_to.get_full_name|default:action.assigned_to.username }}{% else %}Unassigned{% endif %}</td>
                             <td>
                                 {% if action.target_completion_date %}
                                     {{ action.target_completion_date|date:"M d, Y" }}
@@ -276,11 +286,11 @@
                 </div>
                 <div class="col-md-3">
                     <strong>Sentiment Score:</strong><br>
-                    {{ retrospective.overall_sentiment_score|floatformat:2 }} ({{ retrospective.team_morale_indicator }})
+                    {% if retrospective.overall_sentiment_score is not None %}{{ retrospective.overall_sentiment_score|floatformat:2 }} ({{ retrospective.team_morale_indicator|default:"—" }}){% else %}<span class="text-muted">Not calculated</span>{% endif %}
                 </div>
                 <div class="col-md-3">
                     <strong>Generated:</strong><br>
-                    {{ retrospective.ai_generated_at|date:"M d, Y H:i" }}
+                    {% if retrospective.ai_generated_at %}{{ retrospective.ai_generated_at|date:"M d, Y H:i" }}{% else %}{{ retrospective.created_at|date:"M d, Y H:i" }}{% endif %}
                 </div>
             </div>
         </div>

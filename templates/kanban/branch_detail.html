@@ -5,6 +5,17 @@
 
 {% block extra_css %}
 <style>
+    .ai-recommendation-body p {
+        margin-bottom: 0.5rem;
+    }
+    .ai-recommendation-body p strong:only-child {
+        display: block;
+        font-size: 0.9rem;
+        margin-top: 0.75rem;
+        padding-bottom: 0.25rem;
+        border-bottom: 1px solid #dee2e6;
+        color: #495057;
+    }
     .snapshot-timeline {
         position: relative;
         padding-left: 40px;
@@ -159,9 +170,9 @@
                 <div class="card-header bg-light">
                     <h6 class="mb-0"><i class="fas fa-wand-magic-sparkles me-2"></i>AI Recommendation
                 </div>
-                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div class="card-body ai-recommendation-body" style="max-height: 300px; overflow-y: auto;">
                     {% if latest_snapshot.gemini_recommendation %}
-                        <p class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</p>
+                        <div class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</div>
                     {% else %}
                         <p class="text-muted mb-0"><em>No AI recommendation available for this snapshot.</em></p>
                     {% endif %}
@@ -223,7 +234,7 @@
     {% if divergence_logs|length > 0 %}
     <div class="card">
         <div class="card-header bg-light">
-            <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Divergence Events (> 5 point changes)</h6>
+            <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Significant Score Changes</h6>
         </div>
         <div class="card-body">
             {% for log in divergence_logs %}

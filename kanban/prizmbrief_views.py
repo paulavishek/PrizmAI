@@ -38,7 +38,7 @@ PURPOSE_CHOICES = [
 # ── Mode options ──────────────────────────────────────────────────────────────
 MODE_CHOICES = [
     ("executive_summary", "Executive Summary",
-     "5–6 slides, key numbers only, no deep detail. Good for busy stakeholders."),
+     "5–7 slides, key numbers only, no deep detail. Good for busy stakeholders."),
     ("full_briefing",     "Full Briefing",
      "8–10 slides, complete data, context, and recommended actions. Good for team reviews."),
 ]
@@ -107,7 +107,7 @@ def _gather_board_data(board):
     from django.db.models import Count
     workload_qs = (
         all_tasks.filter(assigned_to__isnull=False, progress__lt=100)
-        .values('assigned_to__username')
+        .values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name')
         .annotate(open_tasks=Count('id'))
         .order_by('-open_tasks')
     )
@@ -115,8 +115,9 @@ def _gather_board_data(board):
     workload = []
     for row in workload_qs[:8]:
         capacity_pct = round((row['open_tasks'] / total_tasks * 100), 1) if total_tasks else 0
+        full_name = f"{row['assigned_to__first_name']} {row['assigned_to__last_name']}".strip()
         workload.append({
-            'name':       row['assigned_to__username'],
+            'name':       full_name or row['assigned_to__username'],
             'open_tasks': row['open_tasks'],
             'capacity':   capacity_pct,
         })
@@ -311,7 +312,7 @@ def prizmbrief_setup(request, board_id):
         'purpose':       purpose,
         'purpose_label': _label(PURPOSE_CHOICES, purpose),
         'mode':          mode,
-        'user_name':     request.user.get_full_name() or request.user.username,
+        'user_name':     request.user.get_full_name() or request.user.username.replace('_', ' ').title(),
     }
 
     raw_text = generate_prizmbrief(brief_data)

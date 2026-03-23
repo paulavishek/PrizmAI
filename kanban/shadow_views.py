@@ -28,6 +28,23 @@ from kanban.audit_models import SystemAuditLog
 
 logger = logging.getLogger(__name__)
 
+
+def _compute_initial_feasibility(board, params):
+    """Compute feasibility score synchronously so branches don't start at 0%."""
+    try:
+        from kanban.utils.whatif_engine import WhatIfEngine
+        from kanban.tasks.shadow_branch_tasks import scale_feasibility
+        engine = WhatIfEngine(board)
+        results = engine.simulate({
+            'tasks_added': int(params.get('tasks_added', 0)),
+            'team_size_delta': int(params.get('team_size_delta', 0)),
+            'deadline_shift_days': int(params.get('deadline_shift_days', 0)),
+        })
+        return scale_feasibility(results.get('feasibility_score', 0))
+    except Exception:
+        logger.warning("Could not compute initial feasibility, defaulting to 50", exc_info=True)
+        return 50
+
 # Define predefined color palette for branches
 BRANCH_COLOR_PALETTE = [
     '#0d6efd',  # Blue (default)
@@ -183,7 +200,7 @@ class CreateBranchView(CreateView):
                 scope_delta=int(params.get('tasks_added', 0)),
                 team_delta=int(params.get('team_size_delta', 0)),
                 deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,
+                feasibility_score=_compute_initial_feasibility(board, params),
             )
 
         # Trigger initial branch recalculation
@@ -232,7 +249,7 @@ class CreateBranchView(CreateView):
                                 scope_delta=int(params.get('tasks_added', 0)),
                                 team_delta=int(params.get('team_size_delta', 0)),
                                 deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                                feasibility_score=0,
+                                feasibility_score=_compute_initial_feasibility(board, params),
                             )
                     except WhatIfScenario.DoesNotExist:
                         pass
@@ -566,7 +583,7 @@ def promote_scenario_to_branch(request, board_id):
                 scope_delta=int(params.get('tasks_added', 0)),
                 team_delta=int(params.get('team_size_delta', 0)),
                 deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,  # Will be updated by recalculation
+                feasibility_score=_compute_initial_feasibility(board, params),
             )
 
         # Trigger recalculation with scenario's parameters as seed

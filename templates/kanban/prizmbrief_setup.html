@@ -5,26 +5,23 @@
 
 {% block extra_css %}
 <style>
-  /* ── Page container ────────────────────────────────────────── */
-  .pb-hero {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 16px;
-    padding: 36px 40px 28px;
-    color: #fff;
-    margin-bottom: 32px;
-    position: relative;
-    overflow: hidden;
+  /* ── Page header ──────────────────────────────────────────────────────── */
+  .pb-page-header {
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid #e5e7eb;
   }
-  .pb-hero::before {
-    content: "✨";
-    position: absolute;
-    right: 32px; top: 20px;
-    font-size: 72px;
-    opacity: 0.15;
-    line-height: 1;
+  .pb-page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0;
   }
-  .pb-hero h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }
-  .pb-hero .sub { opacity: 0.85; font-size: 0.95rem; }
+  .pb-page-header .sub {
+    color: #6b7280;
+    font-size: 0.95rem;
+    margin-top: 5px;
+  }
 
   /* ── Form card ─────────────────────────────────────────────── */
   .pb-card {
@@ -105,18 +102,20 @@
 {% block content %}
 <div class="container-fluid py-4" style="max-width: 760px; margin: 0 auto;">
 
-  <!-- Back link -->
-  <div class="mb-3 pb-back">
-    <a href="{% url 'board_detail' board.id %}" class="text-decoration-none text-muted">
-      ← Back to {{ board.name }}
-    </a>
-  </div>
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item active">PrizmBrief</li>
+    </ol>
+  </nav>
 
-  <!-- Hero banner -->
-  <div class="pb-hero">
-    <h1>✨ PrizmBrief</h1>
+  <!-- Page header -->
+  <div class="pb-page-header">
+    <h1><i class="fas fa-presentation text-primary me-2"></i>✨ PrizmBrief</h1>
     <div class="sub">AI Presentation Content Generator &nbsp;·&nbsp; <strong>{{ board.name }}</strong></div>
-    <div class="sub mt-1" style="opacity:0.7; font-size:0.85rem;">
+    <div class="sub mt-1" style="font-size:0.85rem;">
       Answer 3 quick questions and PrizmBrief will pull live board data to generate
       structured slide content you can paste straight into Gamma or PowerPoint.
     </div>

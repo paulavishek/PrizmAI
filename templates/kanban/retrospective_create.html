@@ -6,7 +6,17 @@
 {% block content %}
 <div class="container mt-4">
     <div class="row">
-        <div class="col-md-8 offset-md-2">
+        <div class="col-md-10 offset-md-1">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-2">
+                <ol class="breadcrumb small">
+                    <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'retrospective_dashboard' board.id %}">Retrospectives</a></li>
+                    <li class="breadcrumb-item active">Generate</li>
+                </ol>
+            </nav>
+
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h2><i class="fas fa-magic"></i> Generate AI Retrospective</h2>
@@ -46,10 +56,11 @@
                         </div>
 
                         <!-- Optional Manual Input Section -->
-                        <div class="card mb-3 bg-light">
-                            <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#manualInputSection">
-                                <i class="fas fa-pen"></i> <strong>Optional: Add Manual Insights</strong>
-                                <small class="text-muted">(Click to expand)</small>
+                        <div class="card mb-3 border-primary">
+                            <div class="card-header bg-primary bg-opacity-10" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#manualInputSection">
+                                <i class="fas fa-pen text-primary me-1"></i> <strong>Add Manual Insights</strong>
+                                <small class="text-muted ms-2">Your observations improve AI accuracy</small>
+                                <i class="fas fa-chevron-down float-end mt-1" style="font-size:0.75rem;"></i>
                             </div>
                             <div id="manualInputSection" class="collapse">
                                 <div class="card-body">
@@ -113,6 +124,23 @@
                             This may take 10-30 seconds to complete.
                         </div>
 
+                        <!-- Tips Section (above submit) -->
+                        <div class="alert alert-light border mb-3">
+                            <a class="text-decoration-none" data-bs-toggle="collapse" href="#tipsSection" role="button" aria-expanded="false">
+                                <i class="fas fa-lightbulb text-warning me-1"></i> <strong>Tips for Best Results</strong>
+                                <i class="fas fa-chevron-down ms-1" style="font-size:0.7rem;"></i>
+                            </a>
+                            <div class="collapse mt-2" id="tipsSection">
+                                <ul class="mb-0 small">
+                                    <li><strong>Choose meaningful periods:</strong> Select date ranges that align with your sprint or project milestones</li>
+                                    <li><strong>Regular cadence:</strong> Generate retrospectives consistently (e.g., every 2 weeks) to track improvements</li>
+                                    <li><strong>Review and finalize:</strong> After generation, review the AI insights and add team notes before finalizing</li>
+                                    <li><strong>Act on lessons:</strong> Assign action items to team members and track their completion</li>
+                                    <li><strong>Compare trends:</strong> Use the dashboard to see how metrics improve over time</li>
+                                </ul>
+                            </div>
+                        </div>
+
                         <div class="d-flex justify-content-between">
                             <button onclick="goBack()" type="button" class="btn btn-secondary">
                                 <i class="fas fa-arrow-left"></i> Cancel
@@ -122,22 +150,6 @@
                             </button>
                         </div>
                     </form>
-                </div>
-            </div>
-
-            <!-- Tips Section -->
-            <div class="card mt-4">
-                <div class="card-header">
-                    <h5><i class="fas fa-lightbulb"></i> Tips for Best Results</h5>
-                </div>
-                <div class="card-body">
-                    <ul>
-                        <li><strong>Choose meaningful periods:</strong> Select date ranges that align with your sprint or project milestones</li>
-                        <li><strong>Regular cadence:</strong> Generate retrospectives consistently (e.g., every 2 weeks) to track improvements</li>
-                        <li><strong>Review and finalize:</strong> After generation, review the AI insights and add team notes before finalizing</li>
-                        <li><strong>Act on lessons:</strong> Assign action items to team members and track their completion</li>
-                        <li><strong>Compare trends:</strong> Use the dashboard to see how metrics improve over time</li>
-                    </ul>
                 </div>
             </div>
         </div>

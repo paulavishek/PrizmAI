@@ -15,7 +15,7 @@ from django.db.models import Q, Count, Avg, Sum
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
 
-from kanban.models import Board
+from kanban.models import Board, Task
 from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.retrospective_models import (
     ProjectRetrospective, LessonLearned, ImprovementMetric,
@@ -133,6 +133,18 @@ def retrospective_detail(request, board_id, retro_id):
     metrics = retrospective.metrics.all().order_by('metric_type')
     
     # Calculate statistics
+    snapshot = retrospective.metrics_snapshot or {}
+    total_tasks = snapshot.get('total_tasks', 0)
+    completion_rate = snapshot.get('completion_rate', 0)
+    
+    # Recalculate from live board data if snapshot has zero tasks
+    if total_tasks == 0:
+        live_tasks = Task.objects.filter(column__board=board)
+        total_tasks = live_tasks.count()
+        if total_tasks > 0:
+            done_count = live_tasks.filter(progress=100).count()
+            completion_rate = round(done_count / total_tasks * 100, 1)
+    
     stats = {
         'lessons_count': lessons.count(),
         'lessons_implemented': lessons.filter(status__in=['implemented', 'validated']).count(),
@@ -142,6 +154,8 @@ def retrospective_detail(request, board_id, retro_id):
             target_completion_date__lt=timezone.now().date(),
             status__in=['pending', 'in_progress']
         ).count(),
+        'total_tasks': total_tasks,
+        'completion_rate': completion_rate,
     }
     
     context = {

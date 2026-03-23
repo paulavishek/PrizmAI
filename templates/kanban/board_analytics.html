@@ -66,12 +66,7 @@
             <i class="fas fa-arrow-left me-1"></i> Back to Board
         </a>
         {% endif %}
-        <a href="{% url 'skill_gap_dashboard' board.id %}" class="btn btn-outline-warning">
-            <i class="fas fa-wand-magic-sparkles me-1"></i> Skill Gaps
-        </a>
-        <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info">
-            <i class="fas fa-chart-gantt me-1"></i> Gantt Chart
-        </a>
+
     </div>
 </div>
 
@@ -101,7 +96,7 @@
                     </div>
                 </div>
                 <div id="ai-summary-placeholder" class="text-center py-4">
-                    <i class="fas fa-robot fa-3x text-muted mb-3"></i>
+                    <i class="fas fa-wand-magic-sparkles fa-3x text-info mb-3"></i>
                     <p class="text-muted mb-0">Click "Generate AI Summary" to get intelligent insights about your board analytics</p>
                     <small class="text-muted">AI will analyze task distribution, productivity trends, and provide actionable recommendations</small>
                 </div>
@@ -165,11 +160,11 @@
 
 <!-- ═══════ ZONE 2: All Analytics (collapsible) ═══════ -->
 <div class="mb-3">
-    <a class="text-decoration-none text-muted fw-bold" data-bs-toggle="collapse" href="#zone2Analytics" role="button" aria-expanded="true" aria-controls="zone2Analytics">
-        <i class="fas fa-chevron-down me-1" id="zone2Toggle"></i>All Analytics
+    <a class="text-decoration-none text-muted fw-bold" data-bs-toggle="collapse" href="#zone2Analytics" role="button" aria-expanded="false" aria-controls="zone2Analytics">
+        <i class="fas fa-chevron-right me-1" id="zone2Toggle"></i>All Analytics
     </a>
 </div>
-<div class="collapse show" id="zone2Analytics">
+<div class="collapse" id="zone2Analytics">
 {% endif %}
 
 <!-- Basic Analytics Overview Cards -->
