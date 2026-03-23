@@ -5259,3 +5259,194 @@ def get_fallback_workspace(goal_text: str) -> Dict:
             },
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# WORKSPACE VALIDATION — HITL coherence check
+# ---------------------------------------------------------------------------
+
+def validate_workspace_coherence(workspace_data: Dict) -> Dict:
+    """
+    Send the edited workspace JSON to Gemini for a lightweight coherence check.
+
+    Returns a dict with:
+    {
+      "status": "clear" | "suggestions" | "structural_issue",
+      "flags": [
+        {
+          "level": "goal" | "mission" | "strategy" | "board",
+          "item_title": "string",
+          "message": "plain English description",
+          "suggested_fix": "plain English suggestion"
+        }
+      ]
+    }
+    """
+    # Build a compact representation for the prompt
+    goal_name = workspace_data.get('goal', {}).get('name', '')
+    missions_summary = []
+    for m in workspace_data.get('missions', []):
+        strategies = []
+        for s in m.get('strategies', []):
+            boards = [b.get('name', '') for b in s.get('boards', [])]
+            strategies.append({'name': s.get('name', ''), 'boards': boards})
+        missions_summary.append({
+            'name': m.get('name', ''),
+            'strategies': strategies
+        })
+
+    workspace_summary = json.dumps({
+        'goal': goal_name,
+        'missions': missions_summary
+    }, indent=2)
+
+    prompt = f"""You are reviewing an AI-generated project management workspace for coherence.
+The user may have edited titles or deleted items. Check for issues.
+
+Workspace structure:
+{workspace_summary}
+
+Check these things:
+1. Do all Mission titles logically serve the Goal?
+2. Do all Strategy titles logically serve their parent Mission?
+3. Are there structural gaps (e.g. a Mission with no Strategies, a Strategy with no Boards)?
+4. Are any titles too generic, duplicated, or nonsensical?
+
+Rules:
+- Return a MAXIMUM of 3 flags. Only flag genuine issues.
+- If everything looks fine, return status "clear" with an empty flags array.
+- If there are structural problems (orphaned items, empty parents), return status "structural_issue".
+- If there are naming/coherence suggestions, return status "suggestions".
+- Return ONLY the JSON object below — no surrounding text, no markdown fences.
+
+{{
+  "status": "clear" | "suggestions" | "structural_issue",
+  "flags": [
+    {{
+      "level": "goal | mission | strategy | board",
+      "item_title": "the title of the item in question",
+      "message": "plain English description of the issue",
+      "suggested_fix": "plain English suggestion for how to fix it"
+    }}
+  ]
+}}"""
+
+    try:
+        response_text = generate_ai_content(
+            prompt,
+            task_type='simple',
+            use_cache=False,
+        )
+        if not response_text:
+            logger.error("Empty response from Gemini for workspace validation")
+            return {'status': 'clear', 'flags': []}
+
+        # Strip code-block fences if present
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].strip()
+
+        response_text = response_text.strip()
+        if not response_text.startswith('{'):
+            start_idx = response_text.find('{')
+            end_idx = response_text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                response_text = response_text[start_idx:end_idx + 1]
+
+        result = json.loads(response_text)
+
+        # Validate structure
+        if 'status' not in result:
+            result['status'] = 'clear'
+        if 'flags' not in result or not isinstance(result['flags'], list):
+            result['flags'] = []
+
+        # Cap at 3 flags
+        result['flags'] = result['flags'][:3]
+
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error in workspace validation: {e}")
+        return {'status': 'clear', 'flags': []}
+    except Exception as e:
+        logger.error(f"Error in validate_workspace_coherence: {e}")
+        return {'status': 'clear', 'flags': []}
+
+
+def regenerate_child_titles(parent_title: str, parent_level: str, current_children: list) -> Optional[list]:
+    """
+    Given a renamed parent and its current child titles, generate updated
+    child titles that are coherent with the new parent name.
+
+    Args:
+        parent_title: The new title of the renamed parent
+        parent_level: 'mission' or 'strategy'
+        current_children: List of current child title strings
+
+    Returns:
+        A list of new title strings in the same order, or None on failure.
+    """
+    child_type = 'Strategies' if parent_level == 'mission' else 'Boards'
+
+    prompt = f"""You are an expert project management consultant.
+A user renamed a {parent_level.title()} in their workspace to: "{parent_title}"
+
+The current {child_type} under this {parent_level.title()} are:
+{json.dumps(current_children)}
+
+Generate updated titles for these {child_type} that are coherent with the new
+{parent_level.title()} name. Keep the same number of items. Make titles specific
+and actionable — avoid generic corporate buzzwords.
+
+Return ONLY a JSON array of new titles in the same order — no surrounding text,
+no markdown fences.
+
+Example: ["New Title 1", "New Title 2"]"""
+
+    try:
+        response_text = generate_ai_content(
+            prompt,
+            task_type='simple',
+            use_cache=False,
+        )
+        if not response_text:
+            logger.error("Empty response from Gemini for child title regeneration")
+            return None
+
+        # Strip code-block fences if present
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].strip()
+
+        response_text = response_text.strip()
+        if not response_text.startswith('['):
+            start_idx = response_text.find('[')
+            end_idx = response_text.rfind(']')
+            if start_idx != -1 and end_idx != -1:
+                response_text = response_text[start_idx:end_idx + 1]
+
+        titles = json.loads(response_text)
+
+        if not isinstance(titles, list):
+            logger.error("Child title regeneration did not return a list")
+            return None
+
+        # Ensure same count
+        if len(titles) != len(current_children):
+            logger.warning(f"Regeneration returned {len(titles)} titles but expected {len(current_children)}")
+            # Pad or truncate to match
+            while len(titles) < len(current_children):
+                titles.append(current_children[len(titles)])
+            titles = titles[:len(current_children)]
+
+        return titles
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error in child title regeneration: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error in regenerate_child_titles: {e}")
+        return None
