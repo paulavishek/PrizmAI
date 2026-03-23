@@ -422,8 +422,8 @@ body {
     background-color: var(--card-bg);
     border-radius: 5px;
     padding: 15px;
-    margin-bottom: 10px;
-    box-shadow: 0 1px 3px var(--shadow-color);
+    margin-bottom: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     cursor: grab;
     position: relative;
     transition: transform 0.2s ease, box-shadow 0.2s ease;

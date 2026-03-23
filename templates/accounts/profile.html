@@ -100,58 +100,45 @@
     </button>
 </div>
 <div class="row">
-    <div class="col-md-4">
-        <div class="card shadow mb-4">
-            <div class="profile-section-header card-header">
-                <h5>Profile Information</h5>
-            </div>
-            <div class="card-body text-center">
-                {% if profile.profile_picture %}
-                    <img src="{{ profile.profile_picture.url }}" alt="Profile Picture" class="img-fluid rounded-circle mb-3" style="max-width: 150px;">
-                {% else %}
-                    <div class="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 150px; height: 150px;">
-                        <i class="fas fa-user fa-5x text-secondary"></i>
+    <div class="col-12 mb-3">
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-4">
+                    <div class="flex-shrink-0">
+                        {% if profile.profile_picture %}
+                            <img src="{{ profile.profile_picture.url }}" alt="Profile Picture" class="rounded-circle" style="width:80px;height:80px;object-fit:cover;">
+                        {% else %}
+                            <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width:80px;height:80px;">
+                                <i class="fas fa-user fa-2x text-secondary"></i>
+                            </div>
+                        {% endif %}
                     </div>
-                {% endif %}
-                
-                <h4>{{ user.username }}</h4>
-                <p class="text-muted">{{ user.email }}</p>
-                
-                <div class="d-flex justify-content-center mb-2">
-                    {% if profile.is_admin %}
-                        <span class="badge bg-danger me-2">Admin</span>
-                    {% else %}
-                        <span class="badge bg-secondary me-2">Member</span>
-                    {% endif %}
-                    
-                    {% if profile.organization %}
-                        <span class="badge bg-info">{{ profile.organization.name }}</span>
-                    {% endif %}
-                </div>
-                
-                <hr>
-                
-                <div class="text-start">
-                    <h6 class="text-muted mb-2"><i class="fas fa-briefcase"></i> Capacity</h6>
-                    <p class="mb-2"><strong>{{ profile.weekly_capacity_hours }}</strong> hours/week</p>
-                    <p class="mb-2"><strong>{{ profile.utilization_percentage|floatformat:0 }}%</strong> utilized</p>
-                    
-                    {% if profile.skills %}
-                        <h6 class="text-muted mb-2 mt-3"><i class="fas fa-code"></i> Skills</h6>
-                        <div class="d-flex flex-wrap gap-1">
-                            {% for skill in profile.skills %}
-                                {% if skill.name %}
-                                    <span class="badge bg-success">{{ skill.name }}</span>
-                                {% endif %}
-                            {% endfor %}
+                    <div class="flex-grow-1">
+                        <h5 class="mb-1">{{ user.username }}</h5>
+                        <p class="text-muted mb-2" style="font-size:0.875rem;">{{ user.email }}</p>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            {% if profile.is_admin %}
+                                <span class="badge bg-danger">Admin</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Member</span>
+                            {% endif %}
+                            {% if profile.organization %}
+                                <span class="badge bg-info">{{ profile.organization.name }}</span>
+                            {% endif %}
+                            <span class="text-muted" style="font-size:0.8rem;"><i class="fas fa-briefcase me-1"></i>{{ profile.weekly_capacity_hours }}h/wk &bull; {{ profile.utilization_percentage|floatformat:0 }}% utilized</span>
+                            {% if profile.skills %}
+                                {% for skill in profile.skills %}
+                                    {% if skill.name %}<span class="badge bg-success">{{ skill.name }}</span>{% endif %}
+                                {% endfor %}
+                            {% endif %}
                         </div>
-                    {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <div class="col-md-8">
+    <div class="col-12">
         <div class="card shadow">
             <div class="profile-section-header card-header">
                 <h5>Edit Profile</h5>
@@ -278,17 +265,7 @@
                     </a>
                 </div>
                 
-                <hr>
-                
-                <div class="alert alert-info mb-0">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>Security Tips:</strong>
-                    <ul class="mb-0 mt-2">
-                        <li>Use a strong, unique password for your account</li>
-                        <li>Change your password regularly</li>
-                        <li>Never share your password with anyone</li>
-                    </ul>
-                </div>
+
             </div>
         </div>
     </div>

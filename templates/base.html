@@ -44,17 +44,10 @@
             filter: brightness(0) saturate(100%);
         }
         .share-nav-btn {
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            animation: sharePulse 2.5s ease-in-out infinite;
+            transition: background-color 0.15s ease;
         }
         .share-nav-btn:hover {
-            transform: scale(1.07);
-            box-shadow: 0 4px 14px rgba(239,68,68,0.6) !important;
-            color: #fff !important;
-        }
-        @keyframes sharePulse {
-            0%, 100% { box-shadow: 0 2px 8px rgba(239,68,68,0.45); }
-            50%       { box-shadow: 0 2px 16px rgba(239,68,68,0.75); }
+            background-color: #F9FAFB !important;
         }
         /* ════ Quick-View Drawer (shared) ════ */
         .task-drawer {
@@ -180,7 +173,7 @@
                 {% endif %}
                 {% if user.is_authenticated and not is_demo_account %}
                 <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
-                        style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border-radius:8px;">
+                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;">
                     <i class="fas fa-share-alt"></i>
                 </button>
                 {% endif %}
