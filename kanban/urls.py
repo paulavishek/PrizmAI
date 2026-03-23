@@ -371,4 +371,15 @@ urlpatterns = [
     path('api/favorites/toggle/', favorite_views.toggle_favorite, name='toggle_favorite'),
     path('api/favorites/reorder/', favorite_views.reorder_favorites, name='reorder_favorites'),
     path('api/favorites/list/', favorite_views.favorites_list_api, name='favorites_list_api'),
+
+    # -----------------------------------------------------------------------
+    # Goal-Aware Analytics API Endpoints
+    # -----------------------------------------------------------------------
+    path('api/boards/<int:board_id>/classify/', api_views.classify_board_api, name='classify_board_api'),
+    path('api/boards/<int:board_id>/confirm-type/', api_views.confirm_board_type_api, name='confirm_board_type_api'),
+    path('api/boards/<int:board_id>/generate-narrative/', api_views.generate_board_narrative_api, name='generate_board_narrative_api'),
+    path('api/strategic/<str:record_type>/<int:record_id>/portfolio-analytics/', api_views.portfolio_analytics_api, name='portfolio_analytics_api'),
+    path('api/strategic/<str:record_type>/<int:record_id>/generate-portfolio-narrative/', api_views.generate_portfolio_narrative_api, name='generate_portfolio_narrative_api'),
+    path('api/goals/<int:goal_id>/generate-proxy-metrics/', api_views.generate_proxy_metrics_api, name='generate_proxy_metrics_api'),
+    path('api/goals/<int:goal_id>/proxy-metrics/<int:metric_id>/update-value/', api_views.update_proxy_metric_value_api, name='update_proxy_metric_value_api'),
 ]

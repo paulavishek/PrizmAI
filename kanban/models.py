@@ -121,6 +121,20 @@ class OrganizationGoal(models.Model):
         help_text="When the AI summary was last generated.",
     )
 
+    # Portfolio Narrative (Goal-Aware Analytics — data storytelling)
+    portfolio_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated narrative summarising health of all linked boards in Goal context."
+    )
+    portfolio_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the portfolio narrative was last generated."
+    )
+    portfolio_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric snapshot at time of portfolio narrative generation."
+    )
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Organization Goal'
@@ -203,6 +217,20 @@ class Mission(models.Model):
         help_text="When the AI summary was last generated."
     )
 
+    # Portfolio Narrative (Goal-Aware Analytics — data storytelling)
+    portfolio_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated narrative summarising health of all linked boards in Mission context."
+    )
+    portfolio_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the portfolio narrative was last generated."
+    )
+    portfolio_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric snapshot at time of portfolio narrative generation."
+    )
+
     # Workspace FK stub — reserved for future Workspace layer (currently unused)
     # workspace = models.ForeignKey('Workspace', null=True, blank=True, ...)
 
@@ -277,6 +305,20 @@ class Strategy(models.Model):
         blank=True,
         null=True,
         help_text="When the AI summary was last generated."
+    )
+
+    # Portfolio Narrative (Goal-Aware Analytics — data storytelling)
+    portfolio_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated narrative summarising health of all linked boards in Strategy context."
+    )
+    portfolio_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the portfolio narrative was last generated."
+    )
+    portfolio_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric snapshot at time of portfolio narrative generation."
     )
 
     class Meta:
@@ -383,6 +425,33 @@ class StrategyVersion(models.Model):
 
     def __str__(self):
         return f"{self.strategy.name} v{self.version_number}"
+
+
+# ---------------------------------------------------------------------------
+# GOAL PROXY METRICS — outcome indicators suggested by Spectra
+# Proxy Metrics measure real-world outcomes (not task outputs) to track
+# whether a Goal is actually being achieved.
+# ---------------------------------------------------------------------------
+class GoalProxyMetric(models.Model):
+    goal = models.ForeignKey(
+        OrganizationGoal,
+        on_delete=models.CASCADE,
+        related_name='proxy_metrics',
+    )
+    name = models.CharField(max_length=200)
+    why_it_matters = models.TextField()
+    how_to_measure = models.TextField()
+    current_value = models.CharField(max_length=200, null=True, blank=True)
+    previous_value = models.CharField(max_length=200, null=True, blank=True)
+    last_updated = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    display_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order']
+
+    def __str__(self):
+        return f"{self.name} — {self.goal.name}"
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +730,43 @@ class Board(models.Model):
         blank=True,
         default='',
         help_text="Short prefix for task IDs in Gantt chart (e.g. 'PRZ'). Auto-derived from board name if left blank."
+    )
+
+    # --------------- Goal-Aware Analytics (project type classification) ---------------
+    PROJECT_TYPE_CHOICES = [
+        ('product_tech', 'Product / Tech'),
+        ('marketing_campaign', 'Marketing / Campaign'),
+        ('operations', 'Operations'),
+    ]
+    project_type = models.CharField(
+        max_length=30,
+        choices=PROJECT_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Gemini-classified project type. Controls which analytics are promoted."
+    )
+    project_type_confirmed = models.BooleanField(
+        default=False,
+        help_text="True once user has confirmed or manually set the project type."
+    )
+    project_type_confidence = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Gemini confidence score at time of classification (0.0 to 1.0)."
+    )
+
+    # AI Narrative Summary (Goal-Aware Analytics — data storytelling)
+    analytics_narrative = models.TextField(
+        null=True, blank=True,
+        help_text="Gemini-generated 2-sentence narrative explaining what board metrics mean for the linked Goal."
+    )
+    analytics_narrative_generated_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the analytics narrative was last generated."
+    )
+    analytics_narrative_metric_snapshot = models.JSONField(
+        null=True, blank=True,
+        help_text="Metric values at time of narrative generation — used for staleness detection."
     )
 
     def __str__(self):

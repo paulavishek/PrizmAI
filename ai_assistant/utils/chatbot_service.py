@@ -3904,7 +3904,12 @@ class TaskFlowChatbotService:
         user_name = self.user.get_full_name() or self.user.username if self.user else 'Unknown User'
         user_username = self.user.username if self.user else 'unknown'
         board_name = self.board.name if self.board else 'All boards'
-        
+
+        # Goal-Aware Analytics: project type context
+        board_project_type = ''
+        if self.board and getattr(self.board, 'project_type', None):
+            board_project_type = f"\n- Board Project Type: {self.board.get_project_type_display()}"
+
         # Workspace environment context
         if self.is_demo_mode:
             workspace_env = 'Demo Workspace (viewing demo/sample boards — read-only demo data)'
@@ -3917,7 +3922,7 @@ class TaskFlowChatbotService:
 - Today's Date: {current_date}
 - Current Time: {current_time}
 - Current User: {user_name} (username: {user_username})
-- Active Board: {board_name}
+- Active Board: {board_name}{board_project_type}
 - Workspace: {workspace_env}
 
 Your role is to help project managers and team members with:

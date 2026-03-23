@@ -287,6 +287,12 @@ def goal_detail(request, goal_id):
         days_remaining = delta.days
         days_remaining_abs = abs(days_remaining)
 
+    # ── Goal-Aware Analytics: portfolio + proxy metrics ──
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+    from kanban.models import GoalProxyMetric
+    portfolio = get_portfolio_analytics(goal, 'goal')
+    proxy_metrics = GoalProxyMetric.objects.filter(goal=goal).order_by('display_order')
+
     return render(request, 'kanban/goal_detail.html', {
         # Shared skeleton context
         'record': goal,
@@ -311,6 +317,10 @@ def goal_detail(request, goal_id):
         'all_missions': all_missions,
         'favorite_type': 'goal',
         'is_favorited': _is_fav(request.user, 'goal', goal.pk),
+        # Goal-Aware Analytics
+        'portfolio': portfolio,
+        'proxy_metrics': proxy_metrics,
+        'portfolio_narrative': goal.portfolio_narrative,
     })
 
 
@@ -347,6 +357,14 @@ def create_goal(request):
             organization=organization,
             created_by=request.user,
         )
+
+        # Auto-generate proxy metrics in background
+        try:
+            from kanban.tasks.ai_summary_tasks import generate_proxy_metrics_on_goal_creation
+            generate_proxy_metrics_on_goal_creation.delay(goal.id)
+        except Exception:
+            pass  # Celery/Redis may be unavailable in dev
+
         messages.success(request, f'Organization Goal "{goal.name}" created successfully!')
         return redirect('goal_detail', goal_id=goal.id)
 
@@ -559,6 +577,10 @@ def mission_detail(request, mission_id):
         premortem_boards.append({'board': b, 'risk_level': None, 'created_at': None})
     high_risk_count = sum(1 for b in premortem_boards if b['risk_level'] == 'high')
 
+    # ── Goal-Aware Analytics: portfolio analytics ──
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+    portfolio = get_portfolio_analytics(mission, 'mission')
+
     return render(request, 'kanban/mission_detail.html', {
         # Shared skeleton context
         'record': mission,
@@ -589,6 +611,9 @@ def mission_detail(request, mission_id):
         'premortem_total_boards': len(premortem_boards),
         'favorite_type': 'mission',
         'is_favorited': _is_fav(request.user, 'mission', mission.pk),
+        # Goal-Aware Analytics
+        'portfolio': portfolio,
+        'portfolio_narrative': mission.portfolio_narrative,
     })
 
 
@@ -783,6 +808,10 @@ def strategy_detail(request, mission_id, strategy_id):
         days_remaining = delta.days
         days_remaining_abs = abs(days_remaining)
 
+    # ── Goal-Aware Analytics: portfolio analytics ──
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+    portfolio = get_portfolio_analytics(strategy, 'strategy')
+
     return render(request, 'kanban/strategy_detail.html', {
         # Shared skeleton context
         'record': strategy,
@@ -811,6 +840,9 @@ def strategy_detail(request, mission_id, strategy_id):
         'milestones_missed': milestones_missed,
         'milestones_complete': milestones_complete,
         'milestones_pending': milestones_pending,
+        # Goal-Aware Analytics
+        'portfolio': portfolio,
+        'portfolio_narrative': strategy.portfolio_narrative,
     })
 
 

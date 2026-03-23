@@ -1,0 +1,79 @@
+{% comment %}
+Portfolio Analytics partial — included in goal_detail, mission_detail, strategy_detail.
+Expects: portfolio (dict with groups, unclassified_count), portfolio_narrative (str|None),
+         level_name ('goal'|'mission'|'strategy'), record (the goal/mission/strategy object).
+{% endcomment %}
+
+{% if portfolio and portfolio.groups %}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-chart-pie text-primary"></i>
+            <span class="fw-semibold small">Portfolio Analytics</span>
+        </div>
+        {% if portfolio.unclassified_count > 0 %}
+        <span class="badge bg-warning text-dark" style="font-size:0.65rem;">
+            {{ portfolio.unclassified_count }} board{{ portfolio.unclassified_count|pluralize }} unclassified
+        </span>
+        {% endif %}
+    </div>
+    <div class="card-body py-2">
+        {% for group in portfolio.groups %}
+        <div class="mb-3">
+            <h6 class="text-uppercase text-muted small mb-2">
+                {% if group.project_type == 'product_tech' %}
+                    <i class="fas fa-code me-1"></i>Product / Tech
+                {% elif group.project_type == 'marketing_campaign' %}
+                    <i class="fas fa-bullhorn me-1"></i>Marketing / Campaign
+                {% elif group.project_type == 'operations' %}
+                    <i class="fas fa-cogs me-1"></i>Operations
+                {% endif %}
+                <span class="text-muted">({{ group.board_count }} board{{ group.board_count|pluralize }})</span>
+            </h6>
+            <div class="row gx-2">
+                {% for metric in group.metrics %}
+                <div class="col-md-4 col-6 mb-2">
+                    <div class="border rounded p-2 text-center bg-light">
+                        <div class="text-xs text-uppercase text-muted">{{ metric.label }}</div>
+                        <div class="fw-bold">{{ metric.value }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if portfolio_narrative %}
+        <div class="border-top pt-2 mt-2 d-flex align-items-start gap-2">
+            <i class="fas fa-lightbulb text-info mt-1"></i>
+            <span class="small">{{ portfolio_narrative }}</span>
+            <button class="btn btn-sm btn-outline-info ms-auto flex-shrink-0"
+                    onclick="refreshPortfolioNarrative('{{ level_name }}', {{ record.id }})" title="Refresh">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+        {% else %}
+        <div class="border-top pt-2 mt-2 d-flex align-items-center gap-2">
+            <i class="fas fa-lightbulb text-muted"></i>
+            <span class="text-muted small">Generate an AI narrative for this portfolio.</span>
+            <button class="btn btn-sm btn-outline-info ms-auto"
+                    onclick="refreshPortfolioNarrative('{{ level_name }}', {{ record.id }})">
+                <i class="fas fa-magic me-1"></i>Generate
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function refreshPortfolioNarrative(recordType, recordId) {
+    fetch('/kanban/api/strategic/' + recordType + '/' + recordId + '/generate-portfolio-narrative/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'}
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') { location.reload(); }
+        else { alert(data.error || 'Failed to generate narrative.'); }
+    }).catch(() => alert('Network error.'));
+}
+</script>
+{% endif %}

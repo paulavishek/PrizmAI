@@ -110,6 +110,68 @@
     </div>
 </div>
 
+{% if promoted_metrics %}
+<!-- ═══════ ZONE 1: Promoted Metrics (Goal-Aware) ═══════ -->
+<div class="row mb-3">
+    <div class="col-12">
+        <h6 class="text-uppercase text-muted fw-bold mb-0">
+            <i class="fas fa-bullseye me-1"></i>Key Metrics for {{ board.get_project_type_display }}
+        </h6>
+    </div>
+</div>
+
+<div class="row mb-4">
+    {% for metric in promoted_metrics %}
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card shadow h-100 py-2 border-start border-primary border-4">
+            <div class="card-body">
+                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">{{ metric.label }}</div>
+                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ metric.value }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if analytics_narrative %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-start border-info border-4">
+            <div class="card-body py-2 d-flex align-items-start gap-2">
+                <i class="fas fa-lightbulb text-info mt-1"></i>
+                <span style="font-size:.9rem;">{{ analytics_narrative }}</span>
+                <button class="btn btn-sm btn-outline-info ms-auto flex-shrink-0" onclick="refreshBoardNarrative()" title="Refresh narrative">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-start border-info border-4">
+            <div class="card-body py-2 d-flex align-items-center gap-2">
+                <i class="fas fa-lightbulb text-muted"></i>
+                <span class="text-muted" style="font-size:.9rem;">Generate an AI narrative summary for this board.</span>
+                <button class="btn btn-sm btn-outline-info ms-auto" onclick="refreshBoardNarrative()">
+                    <i class="fas fa-magic me-1"></i>Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══════ ZONE 2: All Analytics (collapsible) ═══════ -->
+<div class="mb-3">
+    <a class="text-decoration-none text-muted fw-bold" data-bs-toggle="collapse" href="#zone2Analytics" role="button" aria-expanded="true" aria-controls="zone2Analytics">
+        <i class="fas fa-chevron-down me-1" id="zone2Toggle"></i>All Analytics
+    </a>
+</div>
+<div class="collapse show" id="zone2Analytics">
+{% endif %}
+
 <!-- Basic Analytics Overview Cards -->
 <div class="row mb-4">
     <!-- Total Tasks Card -->
@@ -562,6 +624,10 @@
     </div>
 </div>
 
+{% if promoted_metrics %}
+</div><!-- end #zone2Analytics collapse -->
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -587,6 +653,29 @@ console.log('Tasks by user data:', {{ tasks_by_user|safe }});
 <!-- Initialize CSRF Token -->
 <script>
 window.CSRF_TOKEN = '{{ csrf_token }}';
+
+// ── Goal-Aware Analytics: narrative refresh + zone 2 toggle ──
+function refreshBoardNarrative() {
+    fetch("{% url 'generate_board_narrative_api' board.id %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}'}
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') { location.reload(); }
+        else { alert(data.error || 'Narrative generation failed.'); }
+    }).catch(() => alert('Network error.'));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var zone2El = document.getElementById('zone2Analytics');
+    if (zone2El) {
+        zone2El.addEventListener('hide.bs.collapse', function () {
+            document.getElementById('zone2Toggle').classList.replace('fa-chevron-down', 'fa-chevron-right');
+        });
+        zone2El.addEventListener('show.bs.collapse', function () {
+            document.getElementById('zone2Toggle').classList.replace('fa-chevron-right', 'fa-chevron-down');
+        });
+    }
+});
 
 // Handle back navigation to previous page
 function goBack() {

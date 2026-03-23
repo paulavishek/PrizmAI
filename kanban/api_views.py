@@ -43,8 +43,12 @@ from kanban.utils.ai_utils import (
     generate_and_save_strategy_summary,
     generate_and_save_mission_summary,
     suggest_optimal_assignee,
+    classify_board_project_type,
+    generate_board_analytics_narrative,
+    generate_portfolio_analytics_narrative,
+    generate_proxy_metrics,
 )
-from api.ai_usage_utils import track_ai_request, check_ai_quota
+from api.ai_usage_utils import track_ai_request, check_ai_quota, require_ai_quota
 from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit, increment_ai_generation_count
 from django.core.cache import caches as _dj_caches
 from django.conf import settings as _dj_settings
@@ -5030,3 +5034,261 @@ def suggest_assignee_api(request):
         except Exception:
             pass
         return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# GOAL-AWARE ANALYTICS API VIEWS
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('board_classification', 'classify')
+def classify_board_api(request, board_id):
+    """Classify a board's project type using Gemini. Does NOT auto-confirm."""
+    board = get_object_or_404(Board, id=board_id)
+
+    result = classify_board_project_type(board)
+    if result is None:
+        return JsonResponse({'success': False, 'error': 'Classification failed. Please try again.'}, status=500)
+
+    board.project_type = result['project_type']
+    board.project_type_confidence = result['confidence']
+    board.project_type_confirmed = False
+    board.save(update_fields=['project_type', 'project_type_confidence', 'project_type_confirmed'])
+
+    return JsonResponse({
+        'success': True,
+        'project_type': result['project_type'],
+        'project_type_label': dict(Board.PROJECT_TYPE_CHOICES).get(result['project_type'], result['project_type']),
+        'confidence': result['confidence'],
+        'reason': result['reason'],
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def confirm_board_type_api(request, board_id):
+    """Confirm or manually set a board's project type."""
+    board = get_object_or_404(Board, id=board_id)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    project_type = data.get('project_type', '')
+    valid_types = [c[0] for c in Board.PROJECT_TYPE_CHOICES]
+    if project_type not in valid_types:
+        return JsonResponse({
+            'success': False,
+            'error': f'Invalid project type. Must be one of: {", ".join(valid_types)}'
+        }, status=400)
+
+    board.project_type = project_type
+    board.project_type_confirmed = True
+    board.save(update_fields=['project_type', 'project_type_confirmed'])
+
+    from kanban.audit_utils import log_audit
+    log_audit(
+        'board.type_confirmed',
+        user=request.user,
+        request=request,
+        object_type='board',
+        object_id=board.id,
+        object_repr=board.name,
+        board_id=board.id,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'project_type': project_type,
+        'project_type_label': dict(Board.PROJECT_TYPE_CHOICES).get(project_type, project_type),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def portfolio_analytics_api(request, record_type, record_id):
+    """Return aggregated analytics grouped by project type for a Goal/Mission/Strategy."""
+    from kanban.models import OrganizationGoal, Mission, Strategy
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+
+    model_map = {
+        'goal': OrganizationGoal,
+        'mission': Mission,
+        'strategy': Strategy,
+    }
+    model_cls = model_map.get(record_type)
+    if not model_cls:
+        return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
+
+    record = get_object_or_404(model_cls, id=record_id)
+    result = get_portfolio_analytics(record, record_type)
+
+    # Serialise for JSON (convert any non-serialisable values)
+    for group in result['groups']:
+        serialised_metrics = {}
+        for k, v in group['metrics'].items():
+            if isinstance(v, dict):
+                serialised_metrics[k] = v
+            else:
+                serialised_metrics[k] = v
+        group['metrics'] = serialised_metrics
+
+    return JsonResponse({'success': True, **result})
+
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('analytics_narrative', 'generate')
+def generate_board_narrative_api(request, board_id):
+    """Generate a 2-sentence analytics narrative for a board."""
+    from kanban.utils.analytics_helpers import get_promoted_metrics
+
+    board = get_object_or_404(Board, id=board_id)
+
+    metrics = get_promoted_metrics(board)
+    narrative = generate_board_analytics_narrative(board, metrics)
+    if narrative is None:
+        return JsonResponse({'success': False, 'error': 'Narrative generation failed.'}, status=500)
+
+    board.analytics_narrative = narrative
+    board.analytics_narrative_generated_at = timezone.now()
+    board.analytics_narrative_metric_snapshot = {
+        k: v for k, v in metrics.items() if isinstance(v, (str, int, float))
+    }
+    board.save(update_fields=[
+        'analytics_narrative', 'analytics_narrative_generated_at',
+        'analytics_narrative_metric_snapshot',
+    ])
+
+    return JsonResponse({
+        'success': True,
+        'narrative': narrative,
+        'generated_at': board.analytics_narrative_generated_at.isoformat(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('portfolio_narrative', 'generate')
+def generate_portfolio_narrative_api(request, record_type, record_id):
+    """Generate a portfolio-level narrative for a Goal/Mission/Strategy."""
+    from kanban.models import OrganizationGoal, Mission, Strategy
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+
+    model_map = {
+        'goal': OrganizationGoal,
+        'mission': Mission,
+        'strategy': Strategy,
+    }
+    model_cls = model_map.get(record_type)
+    if not model_cls:
+        return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
+
+    record = get_object_or_404(model_cls, id=record_id)
+    portfolio = get_portfolio_analytics(record, record_type)
+
+    narrative = generate_portfolio_analytics_narrative(record, record_type, portfolio['groups'])
+    if narrative is None:
+        return JsonResponse({'success': False, 'error': 'Narrative generation failed.'}, status=500)
+
+    record.portfolio_narrative = narrative
+    record.portfolio_narrative_generated_at = timezone.now()
+    record.portfolio_narrative_metric_snapshot = {
+        'groups_count': len(portfolio['groups']),
+        'unclassified': portfolio['unclassified_count'],
+    }
+    record.save(update_fields=[
+        'portfolio_narrative', 'portfolio_narrative_generated_at',
+        'portfolio_narrative_metric_snapshot',
+    ])
+
+    return JsonResponse({
+        'success': True,
+        'narrative': narrative,
+        'generated_at': record.portfolio_narrative_generated_at.isoformat(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('proxy_metrics', 'generate')
+def generate_proxy_metrics_api(request, goal_id):
+    """Generate 3 proxy metrics for a Goal. Replaces existing ones."""
+    from kanban.models import OrganizationGoal, GoalProxyMetric
+
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+    metrics = generate_proxy_metrics(goal)
+    if metrics is None:
+        return JsonResponse({'success': False, 'error': 'Proxy metric generation failed.'}, status=500)
+
+    # Delete existing and create new
+    GoalProxyMetric.objects.filter(goal=goal).delete()
+    created = []
+    for i, m in enumerate(metrics):
+        pm = GoalProxyMetric.objects.create(
+            goal=goal,
+            name=m['name'],
+            why_it_matters=m['why_it_matters'],
+            how_to_measure=m['how_to_measure'],
+            display_order=i,
+        )
+        created.append({
+            'id': pm.id,
+            'name': pm.name,
+            'why_it_matters': pm.why_it_matters,
+            'how_to_measure': pm.how_to_measure,
+            'current_value': pm.current_value,
+            'previous_value': pm.previous_value,
+            'display_order': pm.display_order,
+        })
+
+    return JsonResponse({'success': True, 'metrics': created})
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_proxy_metric_value_api(request, goal_id, metric_id):
+    """Update the current value of a proxy metric."""
+    from kanban.models import GoalProxyMetric
+
+    metric = get_object_or_404(GoalProxyMetric, id=metric_id, goal_id=goal_id)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    new_value = data.get('value', '').strip()
+    if not new_value:
+        return JsonResponse({'success': False, 'error': 'Value is required'}, status=400)
+
+    # Rotate current → previous
+    metric.previous_value = metric.current_value
+    metric.current_value = new_value
+    metric.last_updated = timezone.now()
+    metric.save(update_fields=['current_value', 'previous_value', 'last_updated'])
+
+    # Determine trend
+    trend = '—'
+    if metric.previous_value and metric.current_value:
+        try:
+            prev = float(metric.previous_value.replace('%', '').replace(',', '').strip())
+            curr = float(metric.current_value.replace('%', '').replace(',', '').strip())
+            if curr > prev:
+                trend = '↑'
+            elif curr < prev:
+                trend = '↓'
+            else:
+                trend = '→'
+        except (ValueError, AttributeError):
+            trend = '→'  # Can't compare non-numeric values
+
+    return JsonResponse({
+        'success': True,
+        'current_value': metric.current_value,
+        'previous_value': metric.previous_value,
+        'trend': trend,
+        'last_updated': metric.last_updated.isoformat(),
+    })
