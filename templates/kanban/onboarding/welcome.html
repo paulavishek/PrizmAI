@@ -43,8 +43,14 @@
 {% endblock %}
 
 {% block body %}
-<div class="text-center" style="max-width: 400px;">
+<div class="text-center" style="max-width: 400px; position: relative;">
     {% load static %}
+    <!-- Back to dashboard -->
+    <div class="mb-3 text-start">
+        <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
+            <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+        </a>
+    </div>
     <!-- Logo -->
     <div class="mb-3">
         <a href="/" style="font-size: 1.8rem; font-weight: 800; color: #4338ca; letter-spacing: -0.5px; text-decoration: none;">
