@@ -324,45 +324,40 @@
     .critical-path-toggle {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-        border: 1px solid #fecaca;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        user-select: none;
-    }
-
-    .critical-path-toggle:hover {
-        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-        border-color: #f87171;
+        gap: 0;
     }
 
     .critical-path-toggle input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: #dc2626;
-        cursor: pointer;
+        display: none;
     }
 
     .critical-path-toggle label {
         font-size: 0.875rem;
         font-weight: 500;
-        color: #991b1b;
+        color: #374151;
         cursor: pointer;
         display: flex;
         align-items: center;
         gap: 6px;
+        padding: 4px 12px;
+        background: #fff;
+        border: 1px solid #D1D5DB;
+        border-radius: 6px;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
 
-    .critical-path-toggle .cp-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        background: #dc2626;
-        border-radius: 3px;
-        border: 1px solid #991b1b;
+    .critical-path-toggle input:checked + label {
+        background: #5046e5;
+        color: #fff;
+        border-color: #5046e5;
+    }
+
+    .critical-path-toggle label:hover {
+        background: #F9FAFB;
+    }
+
+    .critical-path-toggle input:checked + label:hover {
+        background: #4338ca;
     }
 
     /* Show in-bar progress fill — complements the split-view table Progress column */
@@ -1670,7 +1665,7 @@
 <div class="container-fluid">
     <div class="row mb-2">
         <div class="col">
-            <h1>
+            <h1 style="font-size:20px;font-weight:500;margin-bottom:0;">
                 <i class="fas fa-project-diagram me-2"></i>{{ board.name }}
             </h1>
         </div>
@@ -1746,11 +1741,6 @@
                     </select>
                 </div>
                 
-                <!-- Search Button -->
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-filter me-1"></i> Apply
-                </button>
-                
                 <!-- Clear Filters -->
                 {% if search_query or status_filter or priority_filter or assignee_filter %}
                 <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary">
@@ -1771,6 +1761,21 @@
                 </small>
             </div>
             {% endif %}
+
+            <script>
+            // P3-01: Debounced auto-submit for Gantt search input
+            (function() {
+                var ganttSearchInput = document.getElementById('gantt-search-input');
+                if (!ganttSearchInput) return;
+                var t = null;
+                ganttSearchInput.addEventListener('input', function() {
+                    clearTimeout(t);
+                    t = setTimeout(function() {
+                        document.getElementById('gantt-filter-form').submit();
+                    }, 300);
+                });
+            })();
+            </script>
         </div>
 
         {% if has_phases %}
@@ -1790,16 +1795,16 @@
             <!-- Critical Path Toggle, Flowchart Button, and Add Milestone -->
             <div class="d-flex justify-content-end mb-3 gap-2 align-items-center flex-wrap">
                 <button class="btn btn-sm" id="add-milestone-btn" title="Add a milestone marker to the Gantt chart"
-                        style="background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); border: none; color: white; font-weight: 500;">
+                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;font-weight:500;" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='#fff'">
                     <i class="fas fa-diamond me-1"></i> Add Milestone
                 </button>
-                <button class="btn btn-outline-primary btn-sm" id="show-critical-path-flowchart" title="View Critical Path Network Diagram">
+                <button class="btn btn-sm" id="show-critical-path-flowchart" title="View Critical Path Network Diagram"
+                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='#fff'">
                     <i class="fas fa-sitemap me-1"></i> View Network Diagram
                 </button>
                 <div class="critical-path-toggle">
                     <input type="checkbox" id="critical-path-toggle">
                     <label for="critical-path-toggle">
-                        <span class="cp-indicator"></span>
                         Show Critical Path
                     </label>
                 </div>
@@ -5372,7 +5377,7 @@
         const horizontalGap = 80;
         const verticalGap = 40;
         const phaseGap = 100;
-        const padding = 50;
+        const padding = 160;
 
         // Calculate positions using layered approach per phase
         const nodePositions = new Map();
@@ -5574,6 +5579,10 @@
             title.setAttribute('class', 'fc-task-title');
             const displayName = task.name.length > 22 ? task.name.substring(0, 20) + '...' : task.name;
             title.textContent = displayName;
+            // Tooltip: full untruncated task name on hover
+            const svgTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            svgTitle.textContent = task.name;
+            g.insertBefore(svgTitle, g.firstChild);
             g.appendChild(title);
 
             // Slack value
