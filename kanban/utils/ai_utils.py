@@ -5185,6 +5185,22 @@ Return ONLY the JSON object below — no surrounding text, no ```json fences.
             logger.error("Workspace generation returned no missions")
             return None
 
+        # Deep hierarchy validation — reject truncated responses
+        for mi, mission in enumerate(data['missions']):
+            if not isinstance(mission.get('strategies'), list) or len(mission['strategies']) == 0:
+                logger.error(f"Workspace generation truncated: Mission {mi} has no strategies")
+                return None
+            for si, strategy in enumerate(mission['strategies']):
+                if not isinstance(strategy.get('boards'), list) or len(strategy['boards']) == 0:
+                    logger.error(f"Workspace generation truncated: Strategy {si} in Mission {mi} has no boards")
+                    return None
+                for bi, board in enumerate(strategy['boards']):
+                    if not isinstance(board.get('tasks'), list) or len(board['tasks']) == 0:
+                        logger.error(f"Workspace generation truncated: Board {bi} in Strategy {si}/Mission {mi} has no tasks")
+                        return None
+                    if not isinstance(board.get('columns'), list) or len(board['columns']) == 0:
+                        board['columns'] = ['To Do', 'In Progress', 'Review', 'Done']
+
         return data
 
     except json.JSONDecodeError as e:

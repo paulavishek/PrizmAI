@@ -165,6 +165,15 @@
     </div>
 
     <!-- AI Explainability Panel -->
+    {% if is_stale %}
+    <div class="alert mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#fffbeb; border:1px solid #fde68a; border-radius:0.75rem; color:#92400e; font-size:0.875rem;">
+        <span><i class="bi bi-clock-history me-1"></i>This workspace was generated <strong>{{ preview_age_hours }} hour{{ preview_age_hours|pluralize }} ago</strong> and hasn't been saved yet. Any edits you made previously are not preserved.</span>
+        <form method="post" action="{% url 'onboarding_start_over' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-warning" style="font-weight:600;">Start fresh with a new goal</button>
+        </form>
+    </div>
+    {% endif %}
     <div id="aiExplainabilityPanel" class="mb-4" style="display:none;">
         <div class="card border-0 shadow-sm" style="border-radius: 0.75rem; overflow: hidden;">
             <div class="card-header d-flex align-items-center gap-2 bg-white border-bottom py-2 px-3 collapse-toggle" data-bs-toggle="collapse" data-bs-target="#explainabilityBody" style="cursor:pointer;">
@@ -333,9 +342,18 @@
         if (!_initialRenderDone) return; // skip on first render
         const panel = document.getElementById('validationPanel');
         const postCreate = document.getElementById('postValidationCreate');
+        const actionBar = document.getElementById('actionButtons');
         if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
         if (postCreate) postCreate.style.display = 'none';
+        if (actionBar) actionBar.style.display = '';
         unresolvedFlags = 0;
+    }
+
+    function showPostValidationCreate() {
+        const postCreate = document.getElementById('postValidationCreate');
+        const actionBar = document.getElementById('actionButtons');
+        if (postCreate) postCreate.style.display = '';
+        if (actionBar) actionBar.style.display = 'none';
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -1030,13 +1048,24 @@
                     '<i class="bi bi-exclamation-triangle me-1"></i>' +
                     'Could not reach the validation service. You can still create your workspace without validation.' +
                 '</div>';
-            postValidationCreate.style.display = '';
+            showPostValidationCreate();
         });
     });
 
     function renderValidationResult(result) {
         validationPanel.innerHTML = '';
         unresolvedFlags = 0;
+
+        // Service error — AI could not be reached
+        if (result.status === 'service_error') {
+            validationPanel.innerHTML =
+                '<div class="validation-card amber">' +
+                    '<i class="bi bi-exclamation-triangle me-1"></i>' +
+                    '<strong>Validation service unavailable.</strong> The AI could not complete the coherence check. ' +
+                    'You can still create your workspace using "Create without validating" below.' +
+                '</div>';
+            return;
+        }
 
         if (result.status === 'clear' || (!result.flags || result.flags.length === 0)) {
             // Green — all clear
@@ -1045,7 +1074,7 @@
                     '<i class="bi bi-check-circle me-1"></i>' +
                     '<strong>Everything looks coherent.</strong> Your workspace is ready to create.' +
                 '</div>';
-            postValidationCreate.style.display = '';
+            showPostValidationCreate();
             return;
         }
 
@@ -1068,7 +1097,7 @@
                     card.querySelector('.mt-2').remove();
                     card.querySelector('strong').textContent = 'Overridden';
                     unresolvedFlags--;
-                    if (unresolvedFlags <= 0) postValidationCreate.style.display = '';
+                    if (unresolvedFlags <= 0) showPostValidationCreate();
                 });
                 validationPanel.appendChild(card);
             });
@@ -1097,7 +1126,7 @@
                     card.classList.add('green');
                     card.querySelector('.mt-2').innerHTML = '<span class="text-success" style="font-size:0.8rem;"><i class="bi bi-check me-1"></i>Applied</span>';
                     unresolvedFlags--;
-                    if (unresolvedFlags <= 0) postValidationCreate.style.display = '';
+                    if (unresolvedFlags <= 0) showPostValidationCreate();
                 });
             }
 
@@ -1106,7 +1135,7 @@
                 card.classList.add('green');
                 card.querySelector('.mt-2').innerHTML = '<span class="text-success" style="font-size:0.8rem;"><i class="bi bi-check me-1"></i>Kept your version</span>';
                 unresolvedFlags--;
-                if (unresolvedFlags <= 0) postValidationCreate.style.display = '';
+                if (unresolvedFlags <= 0) showPostValidationCreate();
             });
 
             validationPanel.appendChild(card);
