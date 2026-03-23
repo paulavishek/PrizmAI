@@ -293,6 +293,9 @@
     // Track deletion counts for banner
     let deletionCounts = { missions: 0, strategies: 0, boards: 0, tasks: 0 };
 
+    // Track unresolved validation flags
+    let unresolvedFlags = 0;
+
     // ── CSRF helper ──
     function getCookie(name) {
         let cookieValue = null;
@@ -321,10 +324,26 @@
     function uid(prefix) { return prefix + '-' + (++_uid); }
 
     // ══════════════════════════════════════════════════════════════════════
+    //  INVALIDATE VALIDATION (hide Create button after edits)
+    // ══════════════════════════════════════════════════════════════════════
+
+    let _initialRenderDone = false;
+
+    function invalidateValidation() {
+        if (!_initialRenderDone) return; // skip on first render
+        const panel = document.getElementById('validationPanel');
+        const postCreate = document.getElementById('postValidationCreate');
+        if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+        if (postCreate) postCreate.style.display = 'none';
+        unresolvedFlags = 0;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     //  RENDER TREE
     // ══════════════════════════════════════════════════════════════════════
 
     function renderTree(data) {
+        invalidateValidation();
         const root = document.getElementById('hierarchyTree');
         root.innerHTML = '';
         if (!data || !data.goal) return;
@@ -971,9 +990,6 @@
     const validationPanel = document.getElementById('validationPanel');
     const postValidationCreate = document.getElementById('postValidationCreate');
 
-    // Track unresolved flags
-    let unresolvedFlags = 0;
-
     validateBtn.addEventListener('click', function() {
         // Check there is at least 1 mission
         if (!workspaceData.missions || workspaceData.missions.length === 0) {
@@ -1156,6 +1172,7 @@
 
     // ── Initial render ──
     renderTree(workspaceData);
+    _initialRenderDone = true;
 
 })();
 </script>
