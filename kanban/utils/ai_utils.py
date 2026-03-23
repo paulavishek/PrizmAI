@@ -51,6 +51,7 @@ COMPLEX_TASKS = [
     'column_recommendations',
     'workspace_generation',
     'assignee_suggestion',
+    'proxy_metrics',            # Goal-Aware Analytics: deeper reasoning for outcome indicators
 ]
 
 SIMPLE_TASKS = [
@@ -58,7 +59,10 @@ SIMPLE_TASKS = [
     'comment_summary',
     'lean_classification',
     'task_enhancement',
-    'mitigation_suggestions'
+    'mitigation_suggestions',
+    'board_classification',      # Goal-Aware Analytics: short JSON classification
+    'analytics_narrative',       # Goal-Aware Analytics: 2-sentence board narrative
+    'portfolio_narrative',       # Goal-Aware Analytics: portfolio-level narrative
 ]
 
 # Temperature settings for different AI task types
@@ -98,6 +102,12 @@ TASK_TEMPERATURE_MAP = {
     'lean_classification': 0.5,          # Classification with explanation
     'task_enhancement': 0.6,             # Enhancement suggestions
     'mitigation_suggestions': 0.5,       # Mitigation advice
+    
+    # Goal-Aware Analytics
+    'board_classification': 0.2,         # Deterministic project-type classification
+    'analytics_narrative': 0.4,          # Data-driven 2-sentence narrative
+    'portfolio_narrative': 0.4,          # Portfolio-level data storytelling
+    'proxy_metrics': 0.5,               # Balanced reasoning for outcome indicators
     
     # Defaults
     'simple': 0.6,                       # Default for simple tasks
@@ -146,6 +156,12 @@ TASK_TOKEN_LIMITS = {
     'status_report': 4096,               # Status report with RAG reasoning + explainability metadata
     'board_summary': 4096,               # Board summary with confidence + data completeness
     'prizmbrief': 6144,                  # PrizmBrief slides (8-10 slides) + data sources slide
+    
+    # Goal-Aware Analytics
+    'board_classification': 512,          # Short JSON: {project_type, confidence, reason}
+    'analytics_narrative': 256,           # 2 sentences plain text
+    'portfolio_narrative': 512,           # Portfolio-level narrative (slightly longer)
+    'proxy_metrics': 1024,               # JSON array of 3 proxy metric objects
     
     # Default
     'default': 4096,                     # Default for unspecified tasks - generous to prevent truncation
@@ -5472,4 +5488,429 @@ Example: ["New Title 1", "New Title 2"]"""
         return None
     except Exception as e:
         logger.error(f"Error in regenerate_child_titles: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# GOAL-AWARE ANALYTICS — Board classification, narratives, proxy metrics
+# ---------------------------------------------------------------------------
+
+def classify_board_project_type(board):
+    """
+    Classify a board into one of 3 project type profiles using Gemini.
+
+    Traverses the hierarchy (board → strategy → mission → goal) to gather
+    context, then asks Gemini to classify:
+      - product_tech
+      - marketing_campaign
+      - operations
+
+    Returns a dict: {project_type, confidence, reason} or None on failure.
+    """
+    import time
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+
+    # --- Gather context ---
+    board_name = board.name
+    board_description = board.description or ''
+    column_names = list(board.columns.values_list('name', flat=True))
+
+    goal_text = ''
+    try:
+        if board.strategy and board.strategy.mission:
+            mission = board.strategy.mission
+            if mission.organization_goal:
+                goal = mission.organization_goal
+                goal_text = goal.name
+                if goal.description:
+                    goal_text += f' — {goal.description}'
+    except Exception:
+        pass  # hierarchy may be incomplete
+
+    # --- Build prompt ---
+    prompt = (
+        "You are a project classification engine. Classify the following project board "
+        "into exactly one of three types: product_tech, marketing_campaign, or operations.\n\n"
+        f"Board name: {board_name}\n"
+        f"Board description: {board_description}\n"
+        f"Column names: {', '.join(column_names) if column_names else 'None'}\n"
+        f"Linked Goal: {goal_text if goal_text else 'None'}\n\n"
+        "Respond with ONLY valid JSON — no preamble, no markdown, no explanation outside the JSON:\n"
+        '{\n'
+        '  "project_type": "product_tech" | "marketing_campaign" | "operations",\n'
+        '  "confidence": 0.0 to 1.0,\n'
+        '  "reason": "one sentence explaining the classification"\n'
+        '}'
+    )
+
+    start_ms = time.time()
+    result = generate_ai_content(prompt, task_type='board_classification', use_cache=False)
+    elapsed_ms = int((time.time() - start_ms) * 1000)
+
+    if not result:
+        logger.error(f"Board classification returned None for board {board.id}")
+        return None
+
+    try:
+        # Strip markdown fences if present
+        cleaned = result.strip()
+        if cleaned.startswith('```'):
+            cleaned = '\n'.join(cleaned.split('\n')[1:])
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:cleaned.rfind('```')]
+        data = json.loads(cleaned.strip())
+
+        project_type = data.get('project_type', 'operations')
+        confidence = float(data.get('confidence', 0.0))
+        reason = data.get('reason', '')
+
+        valid_types = ['product_tech', 'marketing_campaign', 'operations']
+        if project_type not in valid_types:
+            project_type = 'operations'
+            confidence = 0.0
+
+        # Default to operations if low confidence
+        if confidence < 0.6:
+            project_type = 'operations'
+
+        classification = {
+            'project_type': project_type,
+            'confidence': confidence,
+            'reason': reason,
+        }
+
+        # Track AI usage
+        try:
+            track_ai_request(
+                user=board.created_by,
+                feature='board_classification',
+                request_type='classify',
+                board_id=board.id,
+                ai_model='gemini',
+                success=True,
+                tokens_used=0,
+                response_time_ms=elapsed_ms,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track AI request for board classification: {e}")
+
+        # Audit log
+        try:
+            log_audit(
+                'board.classified',
+                user=board.created_by,
+                object_type='board',
+                object_id=board.id,
+                object_repr=board.name,
+                board_id=board.id,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log audit for board classification: {e}")
+
+        return classification
+
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
+        logger.error(f"Error parsing board classification response for board {board.id}: {e}")
+        return None
+
+
+def generate_board_analytics_narrative(board, metrics_dict):
+    """
+    Generate a 2-sentence narrative explaining what current board metrics
+    mean for the linked Goal.
+
+    Args:
+        board: Board model instance
+        metrics_dict: dict of current promoted metric values
+
+    Returns:
+        plain text string (2 sentences) or None on failure
+    """
+    import time
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+
+    # Get goal context
+    goal_text = ''
+    target_date = ''
+    try:
+        if board.strategy and board.strategy.mission and board.strategy.mission.organization_goal:
+            goal = board.strategy.mission.organization_goal
+            goal_text = goal.name
+            if goal.description:
+                goal_text += f' — {goal.description}'
+            if goal.target_date:
+                target_date = goal.target_date.strftime('%Y-%m-%d')
+    except Exception:
+        pass
+
+    project_type_label = dict(board.PROJECT_TYPE_CHOICES).get(board.project_type, board.project_type or 'Unknown')
+
+    metrics_lines = '\n'.join(f'  {k}: {v}' for k, v in metrics_dict.items())
+
+    prompt = (
+        "You are a data analyst writing a 2-sentence executive summary for a project board.\n\n"
+        f"Board: {board.name}\n"
+        f"Project type: {project_type_label}\n"
+        f"Goal: {goal_text or 'Not linked to a goal'}\n"
+        f"Goal target date: {target_date or 'Not set'}\n"
+        f"Today's date: {datetime.now().strftime('%Y-%m-%d')}\n"
+        f"Current metrics:\n{metrics_lines}\n\n"
+        "Write exactly 2 sentences:\n"
+        "Sentence 1: describe what the metrics currently show (factual, specific to the numbers).\n"
+        "Sentence 2: connect it to the Goal — what does this mean for achieving the stated objective?\n\n"
+        "Rules:\n"
+        "- Return plain text only. No JSON, no markdown, no bullet points.\n"
+        "- Be specific to the actual metric values. Avoid generic PM jargon.\n"
+        "- If no goal is linked, sentence 2 should discuss overall board health instead.\n"
+    )
+
+    start_ms = time.time()
+    result = generate_ai_content(prompt, task_type='analytics_narrative', use_cache=False)
+    elapsed_ms = int((time.time() - start_ms) * 1000)
+
+    if not result:
+        return None
+
+    try:
+        track_ai_request(
+            user=board.created_by,
+            feature='analytics_narrative',
+            request_type='generate',
+            board_id=board.id,
+            ai_model='gemini',
+            success=True,
+            tokens_used=0,
+            response_time_ms=elapsed_ms,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track AI request for analytics narrative: {e}")
+
+    try:
+        log_audit(
+            'board.narrative_generated',
+            user=board.created_by,
+            object_type='board',
+            object_id=board.id,
+            object_repr=board.name,
+            board_id=board.id,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log audit for analytics narrative: {e}")
+
+    return result.strip()
+
+
+def generate_portfolio_analytics_narrative(record, record_type, groups_data):
+    """
+    Generate a 2-sentence narrative summarising the health of all linked
+    boards for a Goal, Mission, or Strategy.
+
+    Args:
+        record: OrganizationGoal, Mission, or Strategy instance
+        record_type: 'goal', 'mission', or 'strategy'
+        groups_data: list of dicts, each with {type, label, board_count, metrics}
+
+    Returns:
+        plain text string or None on failure
+    """
+    import time
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+
+    goal_text = ''
+    target_date = ''
+    try:
+        if record_type == 'goal':
+            goal_text = record.name
+            if record.description:
+                goal_text += f' — {record.description}'
+            if record.target_date:
+                target_date = record.target_date.strftime('%Y-%m-%d')
+        elif record_type == 'mission' and record.organization_goal:
+            goal = record.organization_goal
+            goal_text = goal.name
+            if goal.target_date:
+                target_date = goal.target_date.strftime('%Y-%m-%d')
+        elif record_type == 'strategy' and record.mission and record.mission.organization_goal:
+            goal = record.mission.organization_goal
+            goal_text = goal.name
+            if goal.target_date:
+                target_date = goal.target_date.strftime('%Y-%m-%d')
+    except Exception:
+        pass
+
+    groups_summary = ''
+    for g in groups_data:
+        metrics_str = ', '.join(f'{k}: {v}' for k, v in g.get('metrics', {}).items())
+        groups_summary += f"  {g['label']} ({g['board_count']} boards): {metrics_str}\n"
+
+    prompt = (
+        f"You are a data analyst writing a 2-sentence portfolio summary for a {record_type}.\n\n"
+        f"{record_type.title()}: {record.name}\n"
+        f"Goal context: {goal_text or 'Not available'}\n"
+        f"Goal target date: {target_date or 'Not set'}\n"
+        f"Today's date: {datetime.now().strftime('%Y-%m-%d')}\n\n"
+        f"Board groups:\n{groups_summary}\n"
+        "Write exactly 2 sentences:\n"
+        "Sentence 1: summarise the current state across all board groups (factual).\n"
+        "Sentence 2: assess the primary risk or opportunity for achieving the Goal.\n\n"
+        "Rules: plain text only, no JSON, no markdown, be specific to the numbers.\n"
+    )
+
+    start_ms = time.time()
+    result = generate_ai_content(prompt, task_type='portfolio_narrative', use_cache=False)
+    elapsed_ms = int((time.time() - start_ms) * 1000)
+
+    if not result:
+        return None
+
+    try:
+        track_ai_request(
+            user=record.created_by,
+            feature='portfolio_narrative',
+            request_type='generate',
+            board_id=None,
+            ai_model='gemini',
+            success=True,
+            tokens_used=0,
+            response_time_ms=elapsed_ms,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track AI request for portfolio narrative: {e}")
+
+    try:
+        log_audit(
+            f'{record_type}.portfolio_narrative_generated',
+            user=record.created_by,
+            object_type=record_type,
+            object_id=record.id,
+            object_repr=record.name,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log audit for portfolio narrative: {e}")
+
+    return result.strip()
+
+
+def generate_proxy_metrics(goal):
+    """
+    Generate 3 proxy metrics (outcome indicators) for an OrganizationGoal.
+
+    Uses the full Gemini model for deeper reasoning. Returns a list of dicts:
+    [{ name, why_it_matters, how_to_measure }, ...]  or None on failure.
+    """
+    import time
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+
+    goal_text = goal.name
+    if goal.description:
+        goal_text += f' — {goal.description}'
+    target_date = goal.target_date.strftime('%Y-%m-%d') if goal.target_date else 'Not set'
+
+    # Collect project types from linked boards
+    board_types = set()
+    try:
+        for mission in goal.missions.all():
+            for strategy in mission.strategies.all():
+                for board in strategy.boards.filter(project_type__isnull=False):
+                    label = dict(board.PROJECT_TYPE_CHOICES).get(board.project_type, board.project_type)
+                    board_types.add(label)
+    except Exception:
+        pass
+
+    # Collect existing proxy metric values for context
+    existing_metrics = ''
+    try:
+        for pm in goal.proxy_metrics.all():
+            if pm.current_value:
+                existing_metrics += f'  {pm.name}: {pm.current_value}\n'
+    except Exception:
+        pass
+
+    prompt = (
+        "You are a strategic advisor. Suggest exactly 3 Proxy Metrics (outcome indicators) "
+        "for the following organizational goal. These must be:\n"
+        "- Specific to the goal's domain (not generic)\n"
+        "- Measurable in the real world (not inside a project management tool)\n"
+        "- Outcome indicators (not task outputs like 'tasks completed')\n\n"
+        f"Goal: {goal_text}\n"
+        f"Target date: {target_date}\n"
+        f"Linked board types: {', '.join(board_types) if board_types else 'None classified yet'}\n"
+        f"Previously tracked metrics:\n{existing_metrics if existing_metrics else '  None yet'}\n\n"
+        "Respond with ONLY a JSON array — no preamble, no markdown:\n"
+        '[\n'
+        '  {\n'
+        '    "name": "string",\n'
+        '    "why_it_matters": "one sentence",\n'
+        '    "how_to_measure": "one sentence"\n'
+        '  }\n'
+        ']\n'
+    )
+
+    start_ms = time.time()
+    result = generate_ai_content(prompt, task_type='proxy_metrics', use_cache=False)
+    elapsed_ms = int((time.time() - start_ms) * 1000)
+
+    if not result:
+        logger.error(f"Proxy metric generation returned None for goal {goal.id}")
+        return None
+
+    try:
+        cleaned = result.strip()
+        if cleaned.startswith('```'):
+            cleaned = '\n'.join(cleaned.split('\n')[1:])
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:cleaned.rfind('```')]
+        metrics = json.loads(cleaned.strip())
+
+        if not isinstance(metrics, list):
+            logger.error("Proxy metric generation did not return an array")
+            return None
+
+        # Validate each metric has required fields
+        validated = []
+        for m in metrics[:3]:
+            if all(k in m for k in ('name', 'why_it_matters', 'how_to_measure')):
+                validated.append({
+                    'name': str(m['name'])[:200],
+                    'why_it_matters': str(m['why_it_matters']),
+                    'how_to_measure': str(m['how_to_measure']),
+                })
+
+        if not validated:
+            logger.error("No valid proxy metrics in Gemini response")
+            return None
+
+        try:
+            track_ai_request(
+                user=goal.created_by,
+                feature='proxy_metrics',
+                request_type='generate',
+                board_id=None,
+                ai_model='gemini',
+                success=True,
+                tokens_used=0,
+                response_time_ms=elapsed_ms,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track AI request for proxy metrics: {e}")
+
+        try:
+            log_audit(
+                'goal.proxy_metrics_generated',
+                user=goal.created_by,
+                object_type='organizationgoal',
+                object_id=goal.id,
+                object_repr=goal.name,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log audit for proxy metrics: {e}")
+
+        return validated
+
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"Error parsing proxy metrics response for goal {goal.id}: {e}")
         return None

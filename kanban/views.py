@@ -1264,6 +1264,13 @@ def create_board(request):
                     Column.objects.create(name=name, board=board, position=i)
                 messages.success(request, f'Board "{board.name}" created successfully!')
 
+            # Auto-classify board project type in background
+            try:
+                from kanban.tasks.ai_summary_tasks import classify_board_on_creation
+                classify_board_on_creation.delay(board.id)
+            except Exception:
+                pass  # Celery/Redis may be unavailable in dev
+
             # Redirect back to strategy if we came from one
             if selected_strategy:
                 return redirect('strategy_detail',
@@ -2230,7 +2237,14 @@ def board_analytics(request, board_id):
     
     # Calculate remaining tasks
     remaining_tasks = total_tasks - completed_count
-    
+
+    # ── Goal-Aware Analytics: promoted metrics for Zone 1 ──
+    promoted_metrics = None
+    analytics_narrative = board.analytics_narrative if board.analytics_narrative else None
+    if board.project_type:
+        from kanban.utils.analytics_helpers import get_promoted_metrics
+        promoted_metrics = get_promoted_metrics(board)
+
     response = render(request, 'kanban/board_analytics.html', {
         'board': board,
         'columns': columns,
@@ -2242,7 +2256,7 @@ def board_analytics(request, board_id):
         'tasks_by_lean_category': tasks_by_lean_category, # Raw data for JSON encoding in template
         'productivity': round(productivity, 1),
         'upcoming_tasks': upcoming_tasks,
-        'overdue_tasks': overdue_tasks,  # Add overdue tasks
+        'overdue_tasks': overdue_tasks,  # Add overdue count
         'overdue_count': overdue_count,  # Add overdue count
         'total_tasks': total_tasks,
         'completed_count': completed_count,
@@ -2253,6 +2267,9 @@ def board_analytics(request, board_id):
         'total_categorized': total_categorized,
         'is_demo_mode': is_demo_mode,
         'is_demo_board': is_demo_board,
+        # Goal-Aware Analytics
+        'promoted_metrics': promoted_metrics,
+        'analytics_narrative': analytics_narrative,
     })
     
     # Prevent caching of analytics data

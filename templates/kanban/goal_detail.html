@@ -150,6 +150,104 @@
 {% endblock %}
 
 {# ================================================================ #}
+{# AI INSIGHTS TAB (extends base with portfolio + proxy metrics)    #}
+{# ================================================================ #}
+{% block tab_ai %}
+{{ block.super }}
+
+{# ── Outcome Indicators (Proxy Metrics) ── #}
+{% if proxy_metrics %}
+<div class="card border-0 shadow-sm mb-3 mt-3">
+    <div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-tachometer-alt text-success"></i>
+            <span class="fw-semibold small">Outcome Indicators</span>
+        </div>
+        <button class="btn btn-sm btn-outline-success" onclick="regenerateProxyMetrics()" title="Re-generate metrics">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+    <div class="card-body py-2">
+        <div class="row gx-2">
+            {% for pm in proxy_metrics %}
+            <div class="col-md-4 mb-2">
+                <div class="border rounded p-2 bg-light">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <span class="fw-bold small">{{ pm.name }}</span>
+                        {% if pm.current_value is not None %}
+                        <span class="badge bg-success">{{ pm.current_value }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary">—</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-muted mb-1" style="font-size:0.75rem;">{{ pm.why_it_matters }}</p>
+                    <p class="mb-1" style="font-size:0.7rem;"><strong>How to measure:</strong> {{ pm.how_to_measure }}</p>
+                    {% if pm.current_value is None %}
+                    <div class="input-group input-group-sm mt-1">
+                        <input type="text" class="form-control" placeholder="Enter value" id="pm-val-{{ pm.id }}">
+                        <button class="btn btn-outline-success btn-sm" onclick="updateProxyMetric({{ pm.id }})">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                    {% else %}
+                    <div class="input-group input-group-sm mt-1">
+                        <input type="text" class="form-control" placeholder="New value" id="pm-val-{{ pm.id }}">
+                        <button class="btn btn-outline-primary btn-sm" onclick="updateProxyMetric({{ pm.id }})" title="Update value">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                    </div>
+                    {% if pm.previous_value is not None %}
+                    <small class="text-muted" style="font-size:0.65rem;">Previous: {{ pm.previous_value }}</small>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% elif not proxy_metrics.exists %}
+<div class="card border-0 shadow-sm mb-3 mt-3">
+    <div class="card-body py-2 d-flex align-items-center gap-2">
+        <i class="fas fa-tachometer-alt text-muted"></i>
+        <span class="text-muted small">No outcome indicators yet.</span>
+        <button class="btn btn-sm btn-outline-success ms-auto" onclick="regenerateProxyMetrics()">
+            <i class="fas fa-magic me-1"></i>Generate
+        </button>
+    </div>
+</div>
+{% endif %}
+
+{# ── Portfolio Analytics ── #}
+{% include 'kanban/partials/portfolio_analytics.html' %}
+
+<script>
+function regenerateProxyMetrics() {
+    fetch("{% url 'generate_proxy_metrics_api' goal.id %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'}
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') { location.reload(); }
+        else { alert(data.error || 'Failed.'); }
+    }).catch(() => alert('Network error.'));
+}
+function updateProxyMetric(metricId) {
+    var val = document.getElementById('pm-val-' + metricId).value.trim();
+    if (!val) return;
+    fetch('/kanban/api/goals/{{ goal.id }}/proxy-metrics/' + metricId + '/update-value/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}',
+                  'Content-Type': 'application/json'},
+        body: JSON.stringify({value: val})
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') { location.reload(); }
+        else { alert(data.error || 'Failed.'); }
+    }).catch(() => alert('Network error.'));
+}
+</script>
+{% endblock %}
+
+{# ================================================================ #}
 {# VERSION HISTORY TAB                                               #}
 {# ================================================================ #}
 {% block tab_versions %}
