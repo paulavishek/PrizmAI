@@ -344,6 +344,8 @@ urlpatterns = [
     path('onboarding/start-over/', onboarding_views.onboarding_start_over, name='onboarding_start_over'),
     path('onboarding/skip/', onboarding_views.onboarding_skip, name='onboarding_skip'),
     path('onboarding/demo/', onboarding_views.onboarding_explore_demo, name='onboarding_explore_demo'),
+    path('onboarding/validate/', onboarding_views.onboarding_validate, name='onboarding_validate'),
+    path('onboarding/regenerate-children/', onboarding_views.onboarding_regenerate_children, name='onboarding_regenerate_children'),
 
     # Demo mode toggle (v2)
     path('toggle-demo-mode/', views.toggle_demo_mode, name='toggle_demo_mode'),

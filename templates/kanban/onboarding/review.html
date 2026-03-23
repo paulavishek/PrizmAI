@@ -23,6 +23,7 @@
         margin-bottom: 0.5rem;
         border-radius: 0 0.5rem 0.5rem 0;
         background: #fff;
+        position: relative;
     }
     .hierarchy-card.goal-card   { border-color: #667eea; background: #f5f3ff; }
     .hierarchy-card.mission-card { border-color: #22c55e; }
@@ -30,17 +31,34 @@
     .hierarchy-card.board-card  { border-color: #3b82f6; }
     .hierarchy-card.task-card   { border-color: #94a3b8; background: #f8fafc; }
 
-    .editable-name {
-        border: 1px solid transparent;
-        border-radius: 0.25rem;
-        padding: 0.15rem 0.35rem;
-        transition: border-color .15s;
+    .item-title {
         font-weight: 600;
-        background: transparent;
-        width: 100%;
+        font-size: 0.95rem;
+        color: #1e293b;
+        word-break: break-word;
     }
-    .editable-name:hover { border-color: #cbd5e1; }
-    .editable-name:focus { border-color: var(--prizm-primary); outline: none; background: #fff; }
+
+    .editable-name {
+        border: 1px solid #cbd5e1;
+        border-radius: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        font-weight: 600;
+        background: #fff;
+        width: 100%;
+        font-size: 0.95rem;
+    }
+    .editable-name:focus { border-color: var(--prizm-primary); outline: none; }
+
+    .editable-desc {
+        border: 1px solid #cbd5e1;
+        border-radius: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        width: 100%;
+        font-size: 0.825rem;
+        resize: vertical;
+        min-height: 2.5rem;
+    }
+    .editable-desc:focus { border-color: var(--prizm-primary); outline: none; }
 
     .indent-1 { margin-left: 1.5rem; }
     .indent-2 { margin-left: 3rem; }
@@ -59,6 +77,70 @@
     .collapse-toggle .bi-chevron-down { transition: transform 0.2s; }
     .collapse-toggle.collapsed .bi-chevron-down { transform: rotate(-90deg); }
 
+    .hitl-action-btn {
+        background: none;
+        border: none;
+        padding: 0.2rem 0.35rem;
+        cursor: pointer;
+        color: #94a3b8;
+        font-size: 0.85rem;
+        border-radius: 0.25rem;
+        transition: color 0.15s, background 0.15s;
+    }
+    .hitl-action-btn:hover { color: #475569; background: #f1f5f9; }
+    .hitl-action-btn.btn-delete:hover { color: #dc2626; background: #fef2f2; }
+
+    .cascade-warning { opacity: 0.5; }
+    .cascade-warning .hierarchy-card { background: #fef2f2 !important; }
+    .cascade-badge { font-size: 0.7rem; }
+
+    .rename-notice {
+        font-size: 0.8rem;
+        color: #92400e;
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 0.375rem;
+        padding: 0.4rem 0.65rem;
+        margin-top: 0.35rem;
+    }
+    .rename-notice a.disabled-link {
+        color: #9ca3af;
+        text-decoration: none;
+        cursor: not-allowed;
+    }
+
+    .deletion-banner {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 0.5rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+        color: #991b1b;
+        display: none;
+    }
+    .deletion-banner .undo-btn {
+        background: none;
+        border: 1px solid #991b1b;
+        color: #991b1b;
+        border-radius: 0.25rem;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+    }
+    .deletion-banner .undo-btn:hover { background: #991b1b; color: #fff; }
+
+    /* Validation panel */
+    .validation-panel { margin-top: 1rem; }
+    .validation-card {
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+    }
+    .validation-card.green { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .validation-card.amber { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .validation-card.red   { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
     @media (max-width: 576px) {
         .indent-1, .indent-2, .indent-3, .indent-4 {
             margin-left: 0.5rem;
@@ -72,7 +154,7 @@
     <div class="text-center mb-4">
         <h2 style="font-weight: 700; font-size: 1.5rem;">Here's your AI-generated workspace</h2>
         <p class="text-muted" style="font-size: 0.925rem;">
-            Edit any name by clicking on it. You can always change details later inside your workspace.
+            Click the <i class="bi bi-pencil"></i> icon to edit any name, or <i class="bi bi-trash"></i> to remove items. You can always change details later.
         </p>
         {% if preview.error_message %}
         <div class="alert alert-info alert-dismissible fade show py-2" style="font-size: 0.85rem;">
@@ -93,7 +175,6 @@
             </div>
             <div class="collapse show" id="explainabilityBody">
                 <div class="card-body py-3 px-3" style="font-size: 0.875rem;">
-                    <!-- Confidence meter -->
                     <div class="mb-3">
                         <div class="d-flex justify-content-between mb-1">
                             <span class="text-muted" style="font-size: 0.8rem;">Confidence</span>
@@ -103,17 +184,14 @@
                             <div id="explainConfBar" class="progress-bar" role="progressbar" style="width: 0%;"></div>
                         </div>
                     </div>
-                    <!-- Reasoning -->
                     <div id="explainReasoning" class="mb-2" style="display:none;">
                         <strong style="font-size: 0.8rem;"><i class="bi bi-lightbulb me-1 text-warning"></i>Reasoning</strong>
                         <p id="explainReasoningText" class="text-muted mt-1 mb-0" style="font-size: 0.825rem;"></p>
                     </div>
-                    <!-- Assumptions -->
                     <div id="explainAssumptions" class="mb-2" style="display:none;">
                         <strong style="font-size: 0.8rem;"><i class="bi bi-exclamation-triangle me-1 text-info"></i>Assumptions</strong>
                         <ul id="explainAssumptionsList" class="mt-1 mb-0 ps-3" style="font-size: 0.825rem; color: #64748b;"></ul>
                     </div>
-                    <!-- Customization Hints -->
                     <div id="explainHints" style="display:none;">
                         <strong style="font-size: 0.8rem;"><i class="bi bi-pencil-square me-1 text-success"></i>Customization Hints</strong>
                         <ul id="explainHintsList" class="mt-1 mb-0 ps-3" style="font-size: 0.825rem; color: #64748b;"></ul>
@@ -123,103 +201,36 @@
         </div>
     </div>
 
-    <!-- Hierarchy tree -->
-    <div id="hierarchyTree">
-        <!-- Goal -->
-        <div class="hierarchy-card goal-card">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-bullseye text-primary"></i>
-                <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Goal</span>
-            </div>
-            <input class="editable-name" data-path="goal.name" value="{{ data.goal.name }}" aria-label="Goal name">
-            <small class="text-muted d-block mt-1">{{ data.goal.description }}</small>
+    <!-- Deletion summary banner (Phase 2) -->
+    <div id="deletionBanner" class="deletion-banner mb-3">
+        <div class="d-flex align-items-center justify-content-between">
+            <span id="deletionSummaryText"></span>
+            <button type="button" class="undo-btn" id="undoDeleteBtn" title="Undo last deletion">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Undo last deletion
+            </button>
         </div>
-
-        {% for mission in data.missions %}
-        <!-- Mission {{ forloop.counter }} -->
-        <div class="indent-1">
-            <div class="hierarchy-card mission-card">
-                <div class="d-flex align-items-center gap-2 collapse-toggle" data-bs-toggle="collapse" data-bs-target="#mission-{{ forloop.counter0 }}">
-                    <i class="bi bi-flag text-success"></i>
-                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">Mission {{ forloop.counter }}</span>
-                    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
-                </div>
-                <input class="editable-name" data-path="missions.{{ forloop.counter0 }}.name" value="{{ mission.name }}" aria-label="Mission name">
-                {% if mission.why %}
-                <small class="d-block mt-1" style="font-size: 0.78rem; color: #64748b;">
-                    <i class="bi bi-info-circle me-1 text-success"></i><em>{{ mission.why }}</em>
-                </small>
-                {% endif %}
-            </div>
-
-            <div class="collapse show" id="mission-{{ forloop.counter0 }}">
-                {% for strategy in mission.strategies %}
-                <!-- Strategy -->
-                <div class="indent-2">
-                    <div class="hierarchy-card strategy-card">
-                        <div class="d-flex align-items-center gap-2 collapse-toggle" data-bs-toggle="collapse" data-bs-target="#strategy-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
-                            <i class="bi bi-diagram-3 text-warning"></i>
-                            <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">Strategy</span>
-                            <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
-                        </div>
-                        <input class="editable-name" data-path="missions.{{ forloop.parentloop.counter0 }}.strategies.{{ forloop.counter0 }}.name" value="{{ strategy.name }}" aria-label="Strategy name">
-                    </div>
-
-                    <div class="collapse show" id="strategy-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
-                        {% for board in strategy.boards %}
-                        <!-- Board -->
-                        <div class="indent-3">
-                            <div class="hierarchy-card board-card">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="bi bi-kanban text-primary"></i>
-                                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">Board</span>
-                                </div>
-                                <input class="editable-name" data-path="missions.{{ forloop.parentloop.parentloop.counter0 }}.strategies.{{ forloop.parentloop.counter0 }}.boards.{{ forloop.counter0 }}.name" value="{{ board.name }}" aria-label="Board name">
-                                <div class="mt-1">
-                                    {% for col in board.columns %}
-                                    <span class="badge bg-light text-dark border badge-col me-1">{{ col }}</span>
-                                    {% endfor %}
-                                </div>
-
-                                <!-- Tasks (collapsible) -->
-                                <div class="mt-1">
-                                    <span class="collapse-toggle text-muted" style="font-size: 0.8rem; cursor: pointer;"
-                                          data-bs-toggle="collapse" data-bs-target="#tasks-{{ forloop.parentloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
-                                        <i class="bi bi-chevron-down"></i> {{ board.tasks|length }} starter task{{ board.tasks|length|pluralize }}
-                                    </span>
-                                    <div class="collapse show" id="tasks-{{ forloop.parentloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
-                                        <ul class="task-list mt-1">
-                                            {% for task in board.tasks %}
-                                            <li>
-                                                {{ task.title }}
-                                                {% if task.priority %}
-                                                <span class="badge {% if task.priority == 'Critical' or task.priority == 'High' %}bg-danger{% elif task.priority == 'Medium' %}bg-warning{% else %}bg-secondary{% endif %} bg-opacity-10 {% if task.priority == 'Critical' or task.priority == 'High' %}text-danger{% elif task.priority == 'Medium' %}text-warning{% else %}text-secondary{% endif %}" style="font-size:0.7rem;">{{ task.priority }}</span>
-                                                {% endif %}
-                                            </li>
-                                            {% endfor %}
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endfor %}
     </div>
 
+    <!-- Hierarchy tree (JS-rendered) -->
+    <div id="hierarchyTree"></div>
+
+    <!-- Validation result panel (Phase 3) -->
+    <div id="validationPanel" class="validation-panel" style="display:none;"></div>
+
     <!-- Actions -->
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-4">
-        <form method="post" action="{% url 'onboarding_commit' %}" id="commitForm">
-            {% csrf_token %}
-            <input type="hidden" name="edited_data" id="editedDataField" value="">
-            <button type="submit" class="btn btn-prizm btn-lg" id="commitBtn">
-                <i class="bi bi-check-circle me-1"></i>Looks good — create my workspace
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-4" id="actionButtons">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <button type="button" class="btn btn-prizm btn-lg" id="validateBtn">
+                <i class="bi bi-shield-check me-1"></i>Confirm &amp; Validate
             </button>
-        </form>
+            <form method="post" action="{% url 'onboarding_commit' %}" id="commitForm" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="edited_data" id="editedDataField" value="">
+                <button type="submit" class="link-subtle" style="background:none; border:none; cursor:pointer; font-size:0.85rem;" id="commitNoValidateBtn">
+                    Create without validating
+                </button>
+            </form>
+        </div>
 
         <div class="d-flex gap-3 align-items-center">
             <form method="post" action="{% url 'onboarding_start_over' %}">
@@ -236,54 +247,860 @@
             </form>
         </div>
     </div>
+
+    <!-- Post-validation create button (hidden until validation passes) -->
+    <div id="postValidationCreate" class="text-center mt-3" style="display:none;">
+        <form method="post" action="{% url 'onboarding_commit' %}" id="commitFormValidated">
+            {% csrf_token %}
+            <input type="hidden" name="edited_data" id="editedDataFieldValidated" value="">
+            <button type="submit" class="btn btn-prizm btn-lg">
+                <i class="bi bi-check-circle me-1"></i>Create my workspace
+            </button>
+        </form>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    // Collect edits from inline inputs and submit as JSON
-    const commitForm = document.getElementById('commitForm');
-    const editedDataField = document.getElementById('editedDataField');
+(function() {
+    'use strict';
 
-    // Deep-clone the original data from Django context
+    // ── Data ──
     const originalData = JSON.parse('{{ data_json|escapejs }}');
+    let workspaceData = JSON.parse(JSON.stringify(originalData));
 
-    commitForm.addEventListener('submit', function(e) {
-        // Walk all editable inputs and apply changes to data copy
-        const edited = JSON.parse(JSON.stringify(originalData));
-        document.querySelectorAll('.editable-name').forEach(input => {
-            const path = input.dataset.path;
-            const val = input.value.trim();
-            if (path && val) {
-                setNestedValue(edited, path, val);
-            }
-        });
-        editedDataField.value = JSON.stringify(edited);
-    });
-
-    function setNestedValue(obj, path, value) {
-        const keys = path.split('.');
-        let curr = obj;
-        for (let i = 0; i < keys.length - 1; i++) {
-            const key = isNaN(keys[i]) ? keys[i] : parseInt(keys[i]);
-            curr = curr[key];
-            if (!curr) return;
+    // Track original names for rename detection
+    const originalNames = {};
+    function captureOriginalNames(data) {
+        originalNames['goal'] = data.goal ? data.goal.name : '';
+        if (data.missions) {
+            data.missions.forEach(function(m, mi) {
+                originalNames['mission-' + mi] = m.name;
+                if (m.strategies) {
+                    m.strategies.forEach(function(s, si) {
+                        originalNames['strategy-' + mi + '-' + si] = s.name;
+                    });
+                }
+            });
         }
-        const lastKey = isNaN(keys[keys.length - 1]) ? keys[keys.length - 1] : parseInt(keys[keys.length - 1]);
-        curr[lastKey] = value;
+    }
+    captureOriginalNames(originalData);
+
+    // Deletion history for undo (Phase 2)
+    const deletionHistory = [];
+
+    // Track deletion counts for banner
+    let deletionCounts = { missions: 0, strategies: 0, boards: 0, tasks: 0 };
+
+    // ── CSRF helper ──
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
     }
 
-    // Toggle chevron direction on collapse
-    document.querySelectorAll('.collapse-toggle').forEach(toggle => {
-        const target = toggle.getAttribute('data-bs-target');
-        if (!target) return;
-        const el = document.querySelector(target);
-        if (!el) return;
-        el.addEventListener('hidden.bs.collapse', () => toggle.classList.add('collapsed'));
-        el.addEventListener('shown.bs.collapse', () => toggle.classList.remove('collapsed'));
+    // ── Escape HTML ──
+    function esc(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    // ── Unique ID generator ──
+    let _uid = 0;
+    function uid(prefix) { return prefix + '-' + (++_uid); }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  RENDER TREE
+    // ══════════════════════════════════════════════════════════════════════
+
+    function renderTree(data) {
+        const root = document.getElementById('hierarchyTree');
+        root.innerHTML = '';
+        if (!data || !data.goal) return;
+
+        // ── Goal card ──
+        root.appendChild(renderGoal(data.goal));
+
+        // ── Missions ──
+        if (data.missions) {
+            data.missions.forEach(function(mission, mi) {
+                root.appendChild(renderMission(mission, mi));
+            });
+        }
+
+        // Rebind Bootstrap collapse listeners
+        rebindCollapseListeners();
+    }
+
+    function renderGoal(goal) {
+        const card = document.createElement('div');
+        card.className = 'hierarchy-card goal-card';
+        card.innerHTML =
+            '<div class="d-flex align-items-center gap-2">' +
+                '<i class="bi bi-bullseye text-primary"></i>' +
+                '<span class="text-muted" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Goal</span>' +
+                '<div class="ms-auto">' +
+                    '<button class="hitl-action-btn" data-action="edit" data-level="goal" title="Edit goal"><i class="bi bi-pencil"></i></button>' +
+                '</div>' +
+            '</div>' +
+            '<span class="item-title" data-level="goal">' + esc(goal.name) + '</span>' +
+            (goal.description ? '<small class="text-muted d-block mt-1">' + esc(goal.description) + '</small>' : '');
+        return card;
+    }
+
+    function renderMission(mission, mi) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'indent-1';
+        const collapseId = uid('mission');
+
+        const card = document.createElement('div');
+        card.className = 'hierarchy-card mission-card';
+        card.innerHTML =
+            '<div class="d-flex align-items-center gap-2">' +
+                '<span class="collapse-toggle" data-bs-toggle="collapse" data-bs-target="#' + collapseId + '">' +
+                    '<i class="bi bi-flag text-success"></i>' +
+                    '<span class="text-muted" style="font-size:0.75rem; text-transform:uppercase; margin-left:0.25rem;">Mission ' + (mi + 1) + '</span>' +
+                    ' <i class="bi bi-chevron-down" style="font-size:0.75rem;"></i>' +
+                '</span>' +
+                '<div class="ms-auto d-flex gap-1">' +
+                    '<button class="hitl-action-btn" data-action="edit" data-level="mission" data-mi="' + mi + '" title="Edit mission"><i class="bi bi-pencil"></i></button>' +
+                    '<button class="hitl-action-btn btn-delete" data-action="delete" data-level="mission" data-mi="' + mi + '" title="Delete mission"><i class="bi bi-trash"></i></button>' +
+                '</div>' +
+            '</div>' +
+            '<span class="item-title" data-level="mission" data-mi="' + mi + '">' + esc(mission.name) + '</span>' +
+            (mission.why ? '<small class="d-block mt-1" style="font-size:0.78rem;color:#64748b;"><i class="bi bi-info-circle me-1 text-success"></i><em>' + esc(mission.why) + '</em></small>' : '');
+
+        wrapper.appendChild(card);
+
+        // Children collapse container
+        const childrenDiv = document.createElement('div');
+        childrenDiv.className = 'collapse show';
+        childrenDiv.id = collapseId;
+
+        if (mission.strategies) {
+            mission.strategies.forEach(function(strategy, si) {
+                childrenDiv.appendChild(renderStrategy(strategy, mi, si));
+            });
+        }
+
+        wrapper.appendChild(childrenDiv);
+        return wrapper;
+    }
+
+    function renderStrategy(strategy, mi, si) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'indent-2';
+        const collapseId = uid('strategy');
+
+        const card = document.createElement('div');
+        card.className = 'hierarchy-card strategy-card';
+        card.innerHTML =
+            '<div class="d-flex align-items-center gap-2">' +
+                '<span class="collapse-toggle" data-bs-toggle="collapse" data-bs-target="#' + collapseId + '">' +
+                    '<i class="bi bi-diagram-3 text-warning"></i>' +
+                    '<span class="text-muted" style="font-size:0.75rem; text-transform:uppercase; margin-left:0.25rem;">Strategy</span>' +
+                    ' <i class="bi bi-chevron-down" style="font-size:0.75rem;"></i>' +
+                '</span>' +
+                '<div class="ms-auto d-flex gap-1">' +
+                    '<button class="hitl-action-btn" data-action="edit" data-level="strategy" data-mi="' + mi + '" data-si="' + si + '" title="Edit strategy"><i class="bi bi-pencil"></i></button>' +
+                    '<button class="hitl-action-btn btn-delete" data-action="delete" data-level="strategy" data-mi="' + mi + '" data-si="' + si + '" title="Delete strategy"><i class="bi bi-trash"></i></button>' +
+                '</div>' +
+            '</div>' +
+            '<span class="item-title" data-level="strategy" data-mi="' + mi + '" data-si="' + si + '">' + esc(strategy.name) + '</span>';
+
+        wrapper.appendChild(card);
+
+        const childrenDiv = document.createElement('div');
+        childrenDiv.className = 'collapse show';
+        childrenDiv.id = collapseId;
+
+        if (strategy.boards) {
+            strategy.boards.forEach(function(board, bi) {
+                childrenDiv.appendChild(renderBoard(board, mi, si, bi));
+            });
+        }
+
+        wrapper.appendChild(childrenDiv);
+        return wrapper;
+    }
+
+    function renderBoard(board, mi, si, bi) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'indent-3';
+        const taskCollapseId = uid('tasks');
+
+        let colBadges = '';
+        if (board.columns) {
+            board.columns.forEach(function(col) {
+                colBadges += '<span class="badge bg-light text-dark border badge-col me-1">' + esc(col) + '</span>';
+            });
+        }
+
+        let taskCount = board.tasks ? board.tasks.length : 0;
+        let taskItems = '';
+        if (board.tasks) {
+            board.tasks.forEach(function(task, ti) {
+                let priClass = 'bg-secondary bg-opacity-10 text-secondary';
+                if (task.priority === 'Critical' || task.priority === 'High') priClass = 'bg-danger bg-opacity-10 text-danger';
+                else if (task.priority === 'Medium') priClass = 'bg-warning bg-opacity-10 text-warning';
+
+                taskItems +=
+                    '<li class="d-flex align-items-center gap-1">' +
+                        '<span>' + esc(task.title) + '</span>' +
+                        (task.priority ? '<span class="badge ' + priClass + '" style="font-size:0.7rem;">' + esc(task.priority) + '</span>' : '') +
+                        '<button class="hitl-action-btn btn-delete ms-auto" data-action="delete" data-level="task" data-mi="' + mi + '" data-si="' + si + '" data-bi="' + bi + '" data-ti="' + ti + '" title="Remove task" style="font-size:0.75rem;padding:0 0.2rem;"><i class="bi bi-x-lg"></i></button>' +
+                    '</li>';
+            });
+        }
+
+        const card = document.createElement('div');
+        card.className = 'hierarchy-card board-card';
+        card.innerHTML =
+            '<div class="d-flex align-items-center gap-2">' +
+                '<i class="bi bi-kanban text-primary"></i>' +
+                '<span class="text-muted" style="font-size:0.75rem; text-transform:uppercase;">Board</span>' +
+                '<div class="ms-auto d-flex gap-1">' +
+                    '<button class="hitl-action-btn" data-action="edit" data-level="board" data-mi="' + mi + '" data-si="' + si + '" data-bi="' + bi + '" title="Edit board"><i class="bi bi-pencil"></i></button>' +
+                    '<button class="hitl-action-btn btn-delete" data-action="delete" data-level="board" data-mi="' + mi + '" data-si="' + si + '" data-bi="' + bi + '" title="Delete board"><i class="bi bi-trash"></i></button>' +
+                '</div>' +
+            '</div>' +
+            '<span class="item-title" data-level="board" data-mi="' + mi + '" data-si="' + si + '" data-bi="' + bi + '">' + esc(board.name) + '</span>' +
+            '<div class="mt-1">' + colBadges + '</div>' +
+            '<div class="mt-1">' +
+                '<span class="collapse-toggle text-muted" style="font-size:0.8rem;cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#' + taskCollapseId + '">' +
+                    '<i class="bi bi-chevron-down"></i> ' + taskCount + ' starter task' + (taskCount !== 1 ? 's' : '') +
+                '</span>' +
+                '<div class="collapse show" id="' + taskCollapseId + '">' +
+                    '<ul class="task-list mt-1">' + taskItems + '</ul>' +
+                '</div>' +
+            '</div>';
+
+        wrapper.appendChild(card);
+        return wrapper;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  INLINE EDIT
+    // ══════════════════════════════════════════════════════════════════════
+
+    function getItemData(level, mi, si, bi) {
+        if (level === 'goal') return workspaceData.goal;
+        if (level === 'mission') return workspaceData.missions[mi];
+        if (level === 'strategy') return workspaceData.missions[mi].strategies[si];
+        if (level === 'board') return workspaceData.missions[mi].strategies[si].boards[bi];
+        return null;
+    }
+
+    function startEdit(btn) {
+        const level = btn.dataset.level;
+        const mi = parseInt(btn.dataset.mi);
+        const si = parseInt(btn.dataset.si);
+        const bi = parseInt(btn.dataset.bi);
+        const item = getItemData(level, mi, si, bi);
+        if (!item) return;
+
+        // Find the title span in the same card
+        const card = btn.closest('.hierarchy-card');
+        const titleSpan = card.querySelector('.item-title');
+        if (!titleSpan || titleSpan.style.display === 'none') return; // already editing
+
+        const currentName = item.name;
+        const currentDesc = item.description || '';
+
+        titleSpan.style.display = 'none';
+
+        // Build edit form
+        const editDiv = document.createElement('div');
+        editDiv.className = 'hitl-edit-form mt-1';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'editable-name';
+        nameInput.value = currentName;
+        nameInput.setAttribute('aria-label', level + ' name');
+
+        const descToggle = document.createElement('a');
+        descToggle.href = '#';
+        descToggle.className = 'text-muted d-block mt-1';
+        descToggle.style.fontSize = '0.8rem';
+        descToggle.textContent = '+ Edit description';
+
+        const descArea = document.createElement('textarea');
+        descArea.className = 'editable-desc mt-1';
+        descArea.style.display = 'none';
+        descArea.value = currentDesc;
+        descArea.placeholder = 'Add a description...';
+
+        descToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            descArea.style.display = descArea.style.display === 'none' ? '' : 'none';
+            descToggle.textContent = descArea.style.display === 'none' ? '+ Edit description' : '− Hide description';
+        });
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'd-flex gap-2 mt-2';
+        btnRow.innerHTML =
+            '<button type="button" class="btn btn-sm btn-prizm hitl-save-btn">Save</button>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary hitl-cancel-btn">Cancel</button>';
+
+        editDiv.appendChild(nameInput);
+        editDiv.appendChild(descToggle);
+        editDiv.appendChild(descArea);
+        editDiv.appendChild(btnRow);
+        titleSpan.parentNode.insertBefore(editDiv, titleSpan.nextSibling);
+
+        nameInput.focus();
+        nameInput.select();
+
+        // Save handler
+        editDiv.querySelector('.hitl-save-btn').addEventListener('click', function() {
+            const newName = nameInput.value.trim();
+            if (!newName) { nameInput.focus(); return; }
+            item.name = newName;
+            if (descArea.value.trim()) item.description = descArea.value.trim();
+
+            // Check if parent was renamed (mission or strategy) → show notice
+            const origKey = level === 'mission' ? ('mission-' + mi) :
+                            level === 'strategy' ? ('strategy-' + mi + '-' + si) : null;
+            const wasRenamed = origKey && originalNames[origKey] && originalNames[origKey] !== newName;
+
+            editDiv.remove();
+            titleSpan.style.display = '';
+            renderTree(workspaceData);
+
+            // Show rename notice after re-render if applicable
+            if (wasRenamed && (level === 'mission' || level === 'strategy')) {
+                showRenameNotice(level, mi, si);
+            }
+        });
+
+        // Cancel handler
+        editDiv.querySelector('.hitl-cancel-btn').addEventListener('click', function() {
+            editDiv.remove();
+            titleSpan.style.display = '';
+        });
+
+        // Enter to save, Escape to cancel
+        nameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); editDiv.querySelector('.hitl-save-btn').click(); }
+            if (e.key === 'Escape') { editDiv.querySelector('.hitl-cancel-btn').click(); }
+        });
+    }
+
+    function showRenameNotice(level, mi, si) {
+        // Find the card that was just re-rendered
+        const titleSpans = document.querySelectorAll('.item-title[data-level="' + level + '"]');
+        let targetCard = null;
+        titleSpans.forEach(function(span) {
+            const matches = level === 'mission'
+                ? parseInt(span.dataset.mi) === mi
+                : parseInt(span.dataset.mi) === mi && parseInt(span.dataset.si) === si;
+            if (matches) targetCard = span.closest('.hierarchy-card');
+        });
+        if (!targetCard) return;
+
+        // Remove any existing notice on this card
+        const existing = targetCard.querySelector('.rename-notice');
+        if (existing) existing.remove();
+
+        const levelLabel = level === 'mission' ? 'Mission' : 'Strategy';
+        const notice = document.createElement('div');
+        notice.className = 'rename-notice';
+        notice.innerHTML =
+            '<i class="bi bi-pencil-square me-1"></i>' +
+            "You've renamed this " + levelLabel + ". Its children were generated for the original name. " +
+            '<a href="#" class="hitl-regenerate-link text-primary" data-level="' + level + '" data-mi="' + mi + '"' +
+            (si !== undefined ? ' data-si="' + si + '"' : '') +
+            ' style="text-decoration:underline;cursor:pointer;">AI Regenerate children</a> or keep as-is.';
+        targetCard.appendChild(notice);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  AI REGENERATE CHILDREN (Phase 4)
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Store pre-regeneration titles for undo
+    let regenUndoState = null;
+
+    document.getElementById('hierarchyTree').addEventListener('click', function(e) {
+        const link = e.target.closest('.hitl-regenerate-link');
+        if (!link) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const level = link.dataset.level;
+        const mi = parseInt(link.dataset.mi);
+        const si = link.dataset.si !== undefined ? parseInt(link.dataset.si) : undefined;
+
+        let parentTitle, currentChildren, childLevel;
+        if (level === 'mission') {
+            const mission = workspaceData.missions[mi];
+            if (!mission || !mission.strategies || mission.strategies.length === 0) return;
+            parentTitle = mission.name;
+            currentChildren = mission.strategies.map(function(s) { return s.name; });
+            childLevel = 'strategies';
+        } else if (level === 'strategy') {
+            const strategy = workspaceData.missions[mi].strategies[si];
+            if (!strategy || !strategy.boards || strategy.boards.length === 0) return;
+            parentTitle = strategy.name;
+            currentChildren = strategy.boards.map(function(b) { return b.name; });
+            childLevel = 'boards';
+        } else {
+            return;
+        }
+
+        // Save undo state
+        regenUndoState = {
+            level: level,
+            mi: mi,
+            si: si,
+            childLevel: childLevel,
+            oldTitles: currentChildren.slice()
+        };
+
+        // Show loading state on the link
+        const originalLinkText = link.textContent;
+        link.textContent = 'Regenerating…';
+        link.style.pointerEvents = 'none';
+
+        fetch('{% url "onboarding_regenerate_children" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                parent_title: parentTitle,
+                parent_level: level,
+                current_children: currentChildren,
+            }),
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(result) {
+            if (result.success && result.titles) {
+                // Apply new titles
+                if (level === 'mission') {
+                    result.titles.forEach(function(title, idx) {
+                        if (workspaceData.missions[mi].strategies[idx]) {
+                            workspaceData.missions[mi].strategies[idx].name = title;
+                        }
+                    });
+                } else if (level === 'strategy') {
+                    result.titles.forEach(function(title, idx) {
+                        if (workspaceData.missions[mi].strategies[si].boards[idx]) {
+                            workspaceData.missions[mi].strategies[si].boards[idx].name = title;
+                        }
+                    });
+                }
+                renderTree(workspaceData);
+
+                // Show undo option
+                showRegenUndoNotice(level, mi, si);
+            } else {
+                link.textContent = originalLinkText;
+                link.style.pointerEvents = '';
+                alert(result.error || 'Could not regenerate titles. Please try again.');
+            }
+        })
+        .catch(function() {
+            link.textContent = originalLinkText;
+            link.style.pointerEvents = '';
+            alert('Could not reach the AI service. Please try again.');
+        });
     });
 
-    // ---------- AI Explainability Panel ----------
+    function showRegenUndoNotice(level, mi, si) {
+        const titleSpans = document.querySelectorAll('.item-title[data-level="' + level + '"]');
+        let targetCard = null;
+        titleSpans.forEach(function(span) {
+            const matches = level === 'mission'
+                ? parseInt(span.dataset.mi) === mi
+                : parseInt(span.dataset.mi) === mi && parseInt(span.dataset.si) === si;
+            if (matches) targetCard = span.closest('.hierarchy-card');
+        });
+        if (!targetCard) return;
+
+        const existing = targetCard.querySelector('.rename-notice');
+        if (existing) existing.remove();
+
+        const notice = document.createElement('div');
+        notice.className = 'rename-notice';
+        notice.style.background = '#f0fdf4';
+        notice.style.borderColor = '#bbf7d0';
+        notice.style.color = '#166534';
+        notice.innerHTML =
+            '<i class="bi bi-check-circle me-1"></i>' +
+            'Child titles have been regenerated. ' +
+            '<a href="#" class="hitl-undo-regen text-primary" style="text-decoration:underline;cursor:pointer;">Undo regeneration</a>';
+
+        notice.querySelector('.hitl-undo-regen').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!regenUndoState) return;
+            // Restore old titles
+            if (regenUndoState.level === 'mission') {
+                regenUndoState.oldTitles.forEach(function(title, idx) {
+                    if (workspaceData.missions[regenUndoState.mi].strategies[idx]) {
+                        workspaceData.missions[regenUndoState.mi].strategies[idx].name = title;
+                    }
+                });
+            } else if (regenUndoState.level === 'strategy') {
+                regenUndoState.oldTitles.forEach(function(title, idx) {
+                    if (workspaceData.missions[regenUndoState.mi].strategies[regenUndoState.si].boards[idx]) {
+                        workspaceData.missions[regenUndoState.mi].strategies[regenUndoState.si].boards[idx].name = title;
+                    }
+                });
+            }
+            regenUndoState = null;
+            renderTree(workspaceData);
+        });
+
+        targetCard.appendChild(notice);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  CASCADE DELETE
+    // ══════════════════════════════════════════════════════════════════════
+
+    function countDescendants(level, mi, si, bi) {
+        const counts = { missions: 0, strategies: 0, boards: 0, tasks: 0 };
+        if (level === 'mission') {
+            counts.missions = 1;
+            const m = workspaceData.missions[mi];
+            if (m && m.strategies) {
+                counts.strategies = m.strategies.length;
+                m.strategies.forEach(function(s) {
+                    if (s.boards) {
+                        counts.boards += s.boards.length;
+                        s.boards.forEach(function(b) {
+                            if (b.tasks) counts.tasks += b.tasks.length;
+                        });
+                    }
+                });
+            }
+        } else if (level === 'strategy') {
+            counts.strategies = 1;
+            const s = workspaceData.missions[mi].strategies[si];
+            if (s && s.boards) {
+                counts.boards = s.boards.length;
+                s.boards.forEach(function(b) {
+                    if (b.tasks) counts.tasks += b.tasks.length;
+                });
+            }
+        } else if (level === 'board') {
+            counts.boards = 1;
+            const b = workspaceData.missions[mi].strategies[si].boards[bi];
+            if (b && b.tasks) counts.tasks = b.tasks.length;
+        }
+        return counts;
+    }
+
+    function startDelete(btn) {
+        const level = btn.dataset.level;
+        const mi = parseInt(btn.dataset.mi);
+        const si = parseInt(btn.dataset.si);
+        const bi = parseInt(btn.dataset.bi);
+        const ti = parseInt(btn.dataset.ti);
+
+        // Tasks: immediate removal, no confirmation
+        if (level === 'task') {
+            const snapshot = JSON.parse(JSON.stringify(workspaceData));
+            workspaceData.missions[mi].strategies[si].boards[bi].tasks.splice(ti, 1);
+            deletionHistory.push({ snapshot: snapshot, counts: { tasks: 1 } });
+            deletionCounts.tasks += 1;
+            updateDeletionBanner();
+            renderTree(workspaceData);
+            return;
+        }
+
+        // For missions, strategies, boards: show cascade warning
+        const card = btn.closest('.hierarchy-card');
+        const wrapper = (level === 'mission') ? card.parentElement : card.parentElement; // indent wrapper
+
+        // Already showing a warning? Cancel first.
+        const existingWarning = wrapper.querySelector('.cascade-confirm');
+        if (existingWarning) { existingWarning.remove(); return; }
+
+        // Grey out the affected subtree
+        const childContainer = level === 'board' ? null : wrapper.querySelector('.collapse');
+        if (childContainer) childContainer.classList.add('cascade-warning');
+        card.classList.add('cascade-warning');
+
+        // Build cascade summary
+        const desc = countDescendants(level, mi, si, bi);
+        let summary = 'This will delete';
+        const parts = [];
+        if (desc.missions) parts.push(desc.missions + ' Mission' + (desc.missions > 1 ? 's' : ''));
+        if (desc.strategies) parts.push(desc.strategies + ' Strateg' + (desc.strategies > 1 ? 'ies' : 'y'));
+        if (desc.boards) parts.push(desc.boards + ' Board' + (desc.boards > 1 ? 's' : ''));
+        if (desc.tasks) parts.push(desc.tasks + ' Task' + (desc.tasks > 1 ? 's' : ''));
+        summary += ': ' + parts.join(', ') + '.';
+
+        const confirmDiv = document.createElement('div');
+        confirmDiv.className = 'cascade-confirm mt-2 mb-1';
+        confirmDiv.innerHTML =
+            '<div class="d-flex align-items-center gap-2 flex-wrap">' +
+                '<span style="font-size:0.8rem;color:#991b1b;"><i class="bi bi-exclamation-triangle me-1"></i>' + summary + '</span>' +
+            '</div>' +
+            '<div class="d-flex gap-2 mt-1">' +
+                '<button type="button" class="btn btn-sm btn-danger cascade-confirm-btn">Confirm deletion</button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary cascade-cancel-btn">Cancel</button>' +
+            '</div>';
+
+        card.appendChild(confirmDiv);
+
+        // Confirm
+        confirmDiv.querySelector('.cascade-confirm-btn').addEventListener('click', function() {
+            const snapshot = JSON.parse(JSON.stringify(workspaceData));
+            if (level === 'mission') {
+                workspaceData.missions.splice(mi, 1);
+            } else if (level === 'strategy') {
+                workspaceData.missions[mi].strategies.splice(si, 1);
+            } else if (level === 'board') {
+                workspaceData.missions[mi].strategies[si].boards.splice(bi, 1);
+            }
+            deletionHistory.push({ snapshot: snapshot, counts: desc });
+            deletionCounts.missions += desc.missions || 0;
+            deletionCounts.strategies += desc.strategies || 0;
+            deletionCounts.boards += desc.boards || 0;
+            deletionCounts.tasks += desc.tasks || 0;
+            updateDeletionBanner();
+            renderTree(workspaceData);
+        });
+
+        // Cancel
+        confirmDiv.querySelector('.cascade-cancel-btn').addEventListener('click', function() {
+            confirmDiv.remove();
+            card.classList.remove('cascade-warning');
+            if (childContainer) childContainer.classList.remove('cascade-warning');
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  DELETION BANNER & UNDO (Phase 2)
+    // ══════════════════════════════════════════════════════════════════════
+
+    function updateDeletionBanner() {
+        const banner = document.getElementById('deletionBanner');
+        const total = deletionCounts.missions + deletionCounts.strategies + deletionCounts.boards + deletionCounts.tasks;
+        if (total === 0) {
+            banner.style.display = 'none';
+            return;
+        }
+        banner.style.display = '';
+        const parts = [];
+        if (deletionCounts.missions) parts.push(deletionCounts.missions + ' Mission' + (deletionCounts.missions > 1 ? 's' : ''));
+        if (deletionCounts.strategies) parts.push(deletionCounts.strategies + ' Strateg' + (deletionCounts.strategies > 1 ? 'ies' : 'y'));
+        if (deletionCounts.boards) parts.push(deletionCounts.boards + ' Board' + (deletionCounts.boards > 1 ? 's' : ''));
+        if (deletionCounts.tasks) parts.push(deletionCounts.tasks + ' Task' + (deletionCounts.tasks > 1 ? 's' : ''));
+        document.getElementById('deletionSummaryText').innerHTML =
+            '<i class="bi bi-exclamation-circle me-1"></i>You have removed ' + total + ' item' + (total > 1 ? 's' : '') + ': ' + parts.join(', ') + '.';
+    }
+
+    document.getElementById('undoDeleteBtn').addEventListener('click', function() {
+        if (deletionHistory.length === 0) return;
+        const last = deletionHistory.pop();
+        workspaceData = last.snapshot;
+        // Subtract counts
+        deletionCounts.missions -= last.counts.missions || 0;
+        deletionCounts.strategies -= last.counts.strategies || 0;
+        deletionCounts.boards -= last.counts.boards || 0;
+        deletionCounts.tasks -= last.counts.tasks || 0;
+        updateDeletionBanner();
+        renderTree(workspaceData);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  EVENT DELEGATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    document.getElementById('hierarchyTree').addEventListener('click', function(e) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        e.stopPropagation();
+        if (btn.dataset.action === 'edit') startEdit(btn);
+        if (btn.dataset.action === 'delete') startDelete(btn);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  COLLAPSE REBIND
+    // ══════════════════════════════════════════════════════════════════════
+
+    function rebindCollapseListeners() {
+        document.querySelectorAll('#hierarchyTree .collapse-toggle').forEach(function(toggle) {
+            const target = toggle.getAttribute('data-bs-target');
+            if (!target) return;
+            const el = document.querySelector(target);
+            if (!el) return;
+            el.addEventListener('hidden.bs.collapse', function() { toggle.classList.add('collapsed'); });
+            el.addEventListener('shown.bs.collapse', function() { toggle.classList.remove('collapsed'); });
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  FORM SUBMISSION — "Create without validating"
+    // ══════════════════════════════════════════════════════════════════════
+
+    document.getElementById('commitForm').addEventListener('submit', function() {
+        document.getElementById('editedDataField').value = JSON.stringify(workspaceData);
+    });
+
+    // Also wire the post-validation commit form
+    var commitFormV = document.getElementById('commitFormValidated');
+    if (commitFormV) {
+        commitFormV.addEventListener('submit', function() {
+            document.getElementById('editedDataFieldValidated').value = JSON.stringify(workspaceData);
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  AI VALIDATION (Phase 3) — Confirm & Validate button
+    // ══════════════════════════════════════════════════════════════════════
+
+    const validateBtn = document.getElementById('validateBtn');
+    const validationPanel = document.getElementById('validationPanel');
+    const postValidationCreate = document.getElementById('postValidationCreate');
+
+    // Track unresolved flags
+    let unresolvedFlags = 0;
+
+    validateBtn.addEventListener('click', function() {
+        // Check there is at least 1 mission
+        if (!workspaceData.missions || workspaceData.missions.length === 0) {
+            validationPanel.style.display = '';
+            validationPanel.innerHTML =
+                '<div class="validation-card red">' +
+                    '<i class="bi bi-exclamation-triangle me-1"></i>' +
+                    'Your workspace has no Missions. Add at least one Mission or start over with a different goal.' +
+                '</div>';
+            return;
+        }
+
+        validateBtn.disabled = true;
+        validateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Validating…';
+        validationPanel.style.display = '';
+        validationPanel.innerHTML = '<div class="text-muted text-center py-3"><span class="spinner-border spinner-border-sm me-1"></span>AI is reviewing your workspace for coherence…</div>';
+        postValidationCreate.style.display = 'none';
+
+        fetch('{% url "onboarding_validate" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify(workspaceData),
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(result) {
+            validateBtn.disabled = false;
+            validateBtn.innerHTML = '<i class="bi bi-shield-check me-1"></i>Confirm &amp; Validate';
+            renderValidationResult(result);
+        })
+        .catch(function(err) {
+            validateBtn.disabled = false;
+            validateBtn.innerHTML = '<i class="bi bi-shield-check me-1"></i>Confirm &amp; Validate';
+            validationPanel.innerHTML =
+                '<div class="validation-card amber">' +
+                    '<i class="bi bi-exclamation-triangle me-1"></i>' +
+                    'Could not reach the validation service. You can still create your workspace without validation.' +
+                '</div>';
+            postValidationCreate.style.display = '';
+        });
+    });
+
+    function renderValidationResult(result) {
+        validationPanel.innerHTML = '';
+        unresolvedFlags = 0;
+
+        if (result.status === 'clear' || (!result.flags || result.flags.length === 0)) {
+            // Green — all clear
+            validationPanel.innerHTML =
+                '<div class="validation-card green">' +
+                    '<i class="bi bi-check-circle me-1"></i>' +
+                    '<strong>Everything looks coherent.</strong> Your workspace is ready to create.' +
+                '</div>';
+            postValidationCreate.style.display = '';
+            return;
+        }
+
+        if (result.status === 'structural_issue') {
+            // Red — structural issues
+            result.flags.forEach(function(flag) {
+                const card = document.createElement('div');
+                card.className = 'validation-card red mb-2';
+                card.innerHTML =
+                    '<div><i class="bi bi-exclamation-octagon me-1"></i><strong>Structural issue</strong> — ' + esc(flag.item_title || '') + '</div>' +
+                    '<div class="mt-1">' + esc(flag.message) + '</div>' +
+                    (flag.suggested_fix ? '<div class="mt-1 text-muted" style="font-size:0.825rem;"><strong>Suggestion:</strong> ' + esc(flag.suggested_fix) + '</div>' : '') +
+                    '<div class="mt-2 d-flex gap-2">' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger flag-override-btn">Override and proceed anyway</button>' +
+                    '</div>';
+                unresolvedFlags++;
+                card.querySelector('.flag-override-btn').addEventListener('click', function() {
+                    card.classList.remove('red');
+                    card.classList.add('green');
+                    card.querySelector('.mt-2').remove();
+                    card.querySelector('strong').textContent = 'Overridden';
+                    unresolvedFlags--;
+                    if (unresolvedFlags <= 0) postValidationCreate.style.display = '';
+                });
+                validationPanel.appendChild(card);
+            });
+            return;
+        }
+
+        // Amber — suggestions
+        result.flags.forEach(function(flag) {
+            const card = document.createElement('div');
+            card.className = 'validation-card amber mb-2';
+            card.innerHTML =
+                '<div><i class="bi bi-lightbulb me-1"></i><strong>Suggestion</strong> — ' + esc(flag.item_title || '') + ' <span class="badge bg-warning bg-opacity-10 text-warning" style="font-size:0.7rem;">' + esc(flag.level || '') + '</span></div>' +
+                '<div class="mt-1">' + esc(flag.message) + '</div>' +
+                (flag.suggested_fix ? '<div class="mt-1 text-muted" style="font-size:0.825rem;"><strong>Suggested fix:</strong> ' + esc(flag.suggested_fix) + '</div>' : '') +
+                '<div class="mt-2 d-flex gap-2">' +
+                    (flag.suggested_fix ? '<button type="button" class="btn btn-sm btn-prizm flag-apply-btn">Apply suggestion</button>' : '') +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary flag-keep-btn">Keep my version</button>' +
+                '</div>';
+            unresolvedFlags++;
+
+            const applyBtn = card.querySelector('.flag-apply-btn');
+            if (applyBtn) {
+                applyBtn.addEventListener('click', function() {
+                    // Apply is advisory — user sees the suggestion text. We mark it as resolved.
+                    card.classList.remove('amber');
+                    card.classList.add('green');
+                    card.querySelector('.mt-2').innerHTML = '<span class="text-success" style="font-size:0.8rem;"><i class="bi bi-check me-1"></i>Applied</span>';
+                    unresolvedFlags--;
+                    if (unresolvedFlags <= 0) postValidationCreate.style.display = '';
+                });
+            }
+
+            card.querySelector('.flag-keep-btn').addEventListener('click', function() {
+                card.classList.remove('amber');
+                card.classList.add('green');
+                card.querySelector('.mt-2').innerHTML = '<span class="text-success" style="font-size:0.8rem;"><i class="bi bi-check me-1"></i>Kept your version</span>';
+                unresolvedFlags--;
+                if (unresolvedFlags <= 0) postValidationCreate.style.display = '';
+            });
+
+            validationPanel.appendChild(card);
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  AI EXPLAINABILITY PANEL (preserved from original)
+    // ══════════════════════════════════════════════════════════════════════
+
     (function() {
         const explain = originalData.explainability;
         if (!explain) return;
@@ -291,7 +1108,6 @@
         const panel = document.getElementById('aiExplainabilityPanel');
         panel.style.display = '';
 
-        // Confidence
         const conf = parseFloat(explain.confidence_score) || 0;
         const pct = Math.round(conf * 100);
         const confBar = document.getElementById('explainConfBar');
@@ -314,33 +1130,33 @@
             confBadge.textContent = pct + '% confidence';
         }
 
-        // Reasoning
         if (explain.reasoning) {
             document.getElementById('explainReasoning').style.display = '';
             document.getElementById('explainReasoningText').textContent = explain.reasoning;
         }
-
-        // Assumptions
         if (explain.assumptions && explain.assumptions.length) {
             document.getElementById('explainAssumptions').style.display = '';
             const ul = document.getElementById('explainAssumptionsList');
-            explain.assumptions.forEach(a => {
+            explain.assumptions.forEach(function(a) {
                 const li = document.createElement('li');
                 li.textContent = a;
                 ul.appendChild(li);
             });
         }
-
-        // Customization hints
         if (explain.customization_hints && explain.customization_hints.length) {
             document.getElementById('explainHints').style.display = '';
             const ul = document.getElementById('explainHintsList');
-            explain.customization_hints.forEach(h => {
+            explain.customization_hints.forEach(function(h) {
                 const li = document.createElement('li');
                 li.textContent = h;
                 ul.appendChild(li);
             });
         }
     })();
+
+    // ── Initial render ──
+    renderTree(workspaceData);
+
+})();
 </script>
 {% endblock %}
