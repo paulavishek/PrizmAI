@@ -5283,7 +5283,9 @@ def validate_workspace_coherence(workspace_data: Dict) -> Dict:
     }
     """
     # Build a compact representation for the prompt
-    goal_name = workspace_data.get('goal', {}).get('name', '')
+    goal_obj = workspace_data.get('goal', {})
+    goal_name = goal_obj.get('name', '')
+    goal_description = goal_obj.get('description', '')
     missions_summary = []
     for m in workspace_data.get('missions', []):
         strategies = []
@@ -5297,26 +5299,31 @@ def validate_workspace_coherence(workspace_data: Dict) -> Dict:
 
     workspace_summary = json.dumps({
         'goal': goal_name,
+        'goal_description': goal_description,
         'missions': missions_summary
     }, indent=2)
 
-    prompt = f"""You are reviewing an AI-generated project management workspace for coherence.
-The user may have edited titles or deleted items. Check for issues.
+    prompt = f"""You are a strict reviewer of an AI-generated project management workspace.
+The user may have edited titles or deleted items. Your job is to catch semantic mismatches and structural problems.
 
 Workspace structure:
 {workspace_summary}
 
-Check these things:
-1. Do all Mission titles logically serve the Goal?
-2. Do all Strategy titles logically serve their parent Mission?
-3. Are there structural gaps (e.g. a Mission with no Strategies, a Strategy with no Boards)?
-4. Are any titles too generic, duplicated, or nonsensical?
+CRITICAL — Semantic coherence checks (do these FIRST):
+1. For each Mission, evaluate whether its title could plausibly be a strategic pillar for achieving the stated Goal. Consider the Goal's domain, industry, and objectives. If a Mission title is generic, nonsensical, or completely unrelated to the Goal domain, you MUST flag it as a suggestion. Example: a Mission called "Random Xyz Operations" under a restaurant inventory SaaS goal is clearly incoherent and must be flagged.
+2. For each Strategy, evaluate whether its title makes logical sense as an approach to achieve its parent Mission. If a Strategy title is unrelated to its Mission, flag it.
+3. For each Board, check that its name relates to its parent Strategy.
+
+Structural checks:
+4. Are there structural gaps (e.g. a Mission with no Strategies, a Strategy with no Boards)?
+5. Are any titles duplicated across the same level?
 
 Rules:
-- Return a MAXIMUM of 3 flags. Only flag genuine issues.
-- If everything looks fine, return status "clear" with an empty flags array.
+- Return a MAXIMUM of 3 flags. Prioritise semantic mismatches over structural gaps.
+- If everything looks fine AND every Mission logically relates to the Goal, return status "clear" with an empty flags array.
 - If there are structural problems (orphaned items, empty parents), return status "structural_issue".
 - If there are naming/coherence suggestions, return status "suggestions".
+- When in doubt about whether a Mission fits the Goal, FLAG IT — err on the side of flagging rather than passing.
 - Return ONLY the JSON object below — no surrounding text, no markdown fences.
 
 {{
