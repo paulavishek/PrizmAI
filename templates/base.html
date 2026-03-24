@@ -234,7 +234,7 @@
                         </li>
                         <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
                         <li id="ar-notif-entry" style="display:none;">
-                            <a class="dropdown-item py-2" href="{% url 'kanban:pending_access_requests' %}">
+                            <a class="dropdown-item py-2" href="{% url 'pending_access_requests' %}">
                                 <i class="fas fa-user-lock text-info me-2"></i>
                                 <strong>Access Requests</strong>
                                 <br><small class="text-muted" id="ar-notif-text"></small>
@@ -481,7 +481,7 @@
                 .catch(error => console.error('Error fetching notification count:', error));
 
             // Poll pending access request count for board owners
-            fetch('{% url "kanban:get_pending_access_request_count" %}')
+            fetch('{% url "get_pending_access_request_count" %}')
                 .then(response => response.json())
                 .then(data => {
                     const arEntry = document.getElementById('ar-notif-entry');
