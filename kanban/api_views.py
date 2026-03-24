@@ -594,6 +594,12 @@ def summarize_board_analytics_api(request, board_id):
                 'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
                 'quota_exceeded': True
             }, status=429)
+
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import summarize_board_analytics_task
+            result = summarize_board_analytics_task.delay(board_id, request.user.id)
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
         
         # Gather analytics data (same as in board_analytics view)
         from django.db.models import Count, Q
@@ -1406,6 +1412,24 @@ def predict_deadline_api(request):
         # Access restriction removed - all authenticated users can access
 
         pass  # Original: board membership check removed
+
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import predict_deadline_task
+            # Pass serializable data; the task will rebuild team_context internally
+            task_data_for_celery = {
+                'title': title, 'description': description, 'priority': priority,
+                'assigned_to': assigned_to, 'start_date': start_date,
+                'complexity_score': complexity_score, 'workload_impact': workload_impact,
+                'skill_match_score': skill_match_score,
+                'collaboration_required': collaboration_required,
+                'dependencies_count': dependencies_count,
+                'risk_score': risk_score, 'risk_level': risk_level,
+            }
+            result = predict_deadline_task.delay(
+                task_data_for_celery, {}, board.id, request.user.id
+            )
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
         
         # Gather team context for deadline prediction
         from django.db.models import Avg
@@ -1850,6 +1874,12 @@ def analyze_workflow_optimization_api(request):
         # Access restriction removed - all authenticated users can access
 
         pass  # Original: board membership check removed
+
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import analyze_workflow_task
+            result = analyze_workflow_task.delay(board_id, request.user.id)
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
         
         # Gather comprehensive board analytics (similar to existing analytics)
         from django.db.models import Count, Avg

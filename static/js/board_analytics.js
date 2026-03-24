@@ -503,7 +503,58 @@ function generateAISummary(boardId) {
     // Show loading state
     btn.disabled = true;
     spinner.classList.remove('d-none');
-    
+
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        placeholder.classList.add('d-none');
+        container.classList.remove('d-none');
+        textElement.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:120px"></div>' +
+            '<div class="ai-progress-bar mt-2"><div id="ai-summary-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
+            '<p id="ai-summary-status" class="ai-status-text">Preparing…</p>';
+
+        triggerAITask('/api/summarize-board-analytics/' + boardId + '/', {
+            method: 'GET',
+            containerSelector: '#ai-summary-text',
+            statusSelector: '#ai-summary-status',
+            progressSelector: '#ai-summary-progress',
+            onStatus: function(msg) {
+                var el = document.getElementById('ai-summary-status');
+                if (el) el.textContent = msg;
+            },
+            onResult: function(data) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                if (data.summary) {
+                    var summaryData = data.summary;
+                    if (typeof summaryData === 'string') {
+                        var trimmed = summaryData.trim();
+                        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                            try { summaryData = JSON.parse(summaryData); } catch(e) {}
+                        }
+                    }
+                    var formatted;
+                    if (typeof summaryData === 'string') {
+                        formatted = formatAISummary(summaryData);
+                    } else if (summaryData && typeof summaryData === 'object') {
+                        formatted = formatStructuredAISummary(summaryData);
+                    } else {
+                        formatted = '<div class="alert alert-warning">Invalid summary format.</div>';
+                    }
+                    textElement.innerHTML = formatted;
+                    var downloadBtn = document.getElementById('download-pdf-summary');
+                    if (downloadBtn) downloadBtn.classList.remove('d-none');
+                }
+            },
+            onError: function(msg) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                textElement.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>' + msg + '</div>';
+            },
+        });
+        return;
+    }
+
+    // Fallback: synchronous fetch (original behavior)
     fetch(`/api/summarize-board-analytics/${boardId}/`, {
         method: 'GET',
         headers: {
@@ -664,7 +715,36 @@ function analyzeWorkflow(boardId) {
     // Show loading state
     btn.disabled = true;
     spinner.classList.remove('d-none');
-    
+
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        placeholder.classList.add('d-none');
+        container.classList.remove('d-none');
+        contentElement.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:120px"></div>' +
+            '<div class="ai-progress-bar mt-2"><div id="workflow-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
+            '<p id="workflow-status" class="ai-status-text">Preparing…</p>';
+
+        triggerAITask('/api/analyze-workflow-optimization/', {
+            method: 'POST',
+            body: { board_id: boardId },
+            containerSelector: '#workflow-optimization-content',
+            statusSelector: '#workflow-status',
+            progressSelector: '#workflow-progress',
+            onResult: function(data) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                contentElement.innerHTML = formatWorkflowOptimization(data);
+            },
+            onError: function(msg) {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                contentElement.innerHTML = '<div class="alert alert-danger">' + msg + '</div>';
+            },
+        });
+        return;
+    }
+
+    // Fallback: synchronous fetch (original behavior)
     fetch('/api/analyze-workflow-optimization/', {
         method: 'POST',
         headers: {

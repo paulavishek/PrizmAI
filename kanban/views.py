@@ -4846,6 +4846,20 @@ def column_update_wip(request, column_id):
 
 @login_required
 @require_http_methods(["POST"])
+def column_update_color(request, column_id):
+    """Set the color badge on a column header."""
+    column = get_object_or_404(Column, id=column_id)
+    color = request.POST.get('color', '').strip()
+    valid_colors = [c[0] for c in Column.COLOR_CHOICES]
+    if color not in valid_colors:
+        return JsonResponse({'error': 'Invalid color'}, status=400)
+    column.color = color
+    column.save(update_fields=['color'])
+    return JsonResponse({'success': True, 'color': column.color})
+
+
+@login_required
+@require_http_methods(["POST"])
 def task_update_fields(request, task_id):
     """Update priority, due_date, and/or progress from the quick-view drawer."""
     from datetime import datetime as _dt

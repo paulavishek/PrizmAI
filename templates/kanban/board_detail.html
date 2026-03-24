@@ -616,7 +616,7 @@
 <div id="classifyBanner" class="alert alert-light border mb-2 py-2" role="alert" style="font-size:.9rem;">
     <i class="fas fa-chart-bar me-1 text-primary"></i>
     Spectra hasn't analysed this board's analytics profile yet.
-    <button class="btn btn-sm btn-primary ms-2" onclick="classifyBoard()">
+    <button class="btn btn-sm btn-prizm-primary ms-2" onclick="classifyBoard()">
         <i class="fas fa-magic me-1"></i>Analyse now
     </button>
 </div>
@@ -653,7 +653,7 @@
         <!-- Primary: Add Task (uses first To-Do column) -->
         {% for col in columns %}{% if col.name|lower == 'to do' or col.name|lower == 'todo' or col.name|lower == 'backlog' or forloop.first %}
         {% if forloop.first or col.name|lower == 'to do' or col.name|lower == 'todo' %}
-        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-primary">
+        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-prizm-primary">
             <i class="fas fa-plus me-1"></i><span class="d-none d-md-inline">Add Task</span>
         </a>
         {% endif %}
@@ -862,7 +862,7 @@
     {% with col_meta=column_meta|get_item:column.id %}
     <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
         {# -- Column Header (redesigned) -- #}
-        <div class="kanban-column-header {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
+        <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
             <div class="d-flex justify-content-between align-items-center w-100">
                 <div class="d-flex align-items-center gap-2">
                     <span class="column-name-text fw-bold">{{ column.name }}</span>
@@ -906,6 +906,23 @@
                                 <a class="dropdown-item" href="{% url 'create_task_in_column' board.id column.id %}">
                                     <i class="fas fa-plus me-2 text-success"></i>Add Task
                                 </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <div class="dropdown-item pe-none" style="cursor:default;">
+                                    <i class="fas fa-palette me-2 text-muted"></i>Color
+                                    <div class="d-flex gap-1 mt-1">
+                                        {% for color_val, color_label in column.COLOR_CHOICES %}
+                                        <button type="button"
+                                                class="btn btn-sm p-0 border{% if column.color == color_val %} border-dark border-2{% endif %} column-color-btn"
+                                                data-column-id="{{ column.id }}" data-color="{{ color_val }}"
+                                                title="{{ color_label }}"
+                                                style="width:20px;height:20px;border-radius:50%;cursor:pointer;
+                                                {% if color_val == 'green' %}background:#c3e6cb;{% elif color_val == 'blue' %}background:#b8daff;{% elif color_val == 'purple' %}background:#d5c5f0;{% elif color_val == 'orange' %}background:#ffd8b2;{% elif color_val == 'red' %}background:#f5c6cb;{% elif color_val == 'yellow' %}background:#fff3cd;{% elif color_val == 'teal' %}background:#b2dfdb;{% elif color_val == 'gray' %}background:#e2e3e5;{% endif %}">
+                                        </button>
+                                        {% endfor %}
+                                    </div>
+                                </div>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
@@ -1767,6 +1784,42 @@
                 this.innerHTML = isCollapsed
                     ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
                     : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+            });
+        });
+
+        // -- Column Color Picker handler --
+        document.querySelectorAll('.column-color-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const colId = this.dataset.columnId;
+                const color = this.dataset.color;
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                const formData = new FormData();
+                formData.append('color', color);
+                fetch(`/columns/${colId}/update-color/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const header = document.querySelector(`#column-${colId} .kanban-column-header`);
+                        if (header) {
+                            header.className = header.className.replace(/kanban-column-header--\w+/g, '');
+                            header.classList.add('kanban-column-header--' + color);
+                        }
+                        // Update selected indicator
+                        const parent = this.closest('.d-flex.gap-1');
+                        if (parent) {
+                            parent.querySelectorAll('.column-color-btn').forEach(b => {
+                                b.classList.remove('border-dark', 'border-2');
+                            });
+                            this.classList.add('border-dark', 'border-2');
+                        }
+                    }
+                });
             });
         });
         

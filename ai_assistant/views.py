@@ -368,6 +368,17 @@ def send_message(request):
             })
         # ── End Conversational Spectra ───────────────────────────────
         
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import send_ai_message_task
+            result = send_ai_message_task.delay(
+                message_text, session.id, request.user.id,
+                board_id=board.id if board else None,
+                refresh_data=refresh_data,
+                file_context=file_context,
+            )
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
+
         # Get response from chatbot service
         # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(

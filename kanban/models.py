@@ -921,9 +921,21 @@ class Board(models.Model):
         return (False, None, status['scope_change_percentage'])
 
 class Column(models.Model):
+    COLOR_CHOICES = [
+        ('green', 'Green'),
+        ('blue', 'Blue'),
+        ('purple', 'Purple'),
+        ('orange', 'Orange'),
+        ('red', 'Red'),
+        ('yellow', 'Yellow'),
+        ('teal', 'Teal'),
+        ('gray', 'Gray'),
+    ]
+
     name = models.CharField(max_length=100)
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='columns')
     position = models.IntegerField(default=0)
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='blue')
     wip_limit = models.PositiveIntegerField(null=True, blank=True, default=None,
                                             help_text="Maximum number of tasks allowed in this column. Leave blank for no limit.")
     

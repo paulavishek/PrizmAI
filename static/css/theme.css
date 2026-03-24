@@ -50,6 +50,41 @@ body.dark-mode,
     --footer-bg: #1a1a1a;
 }
 
+/* ── Dark Mode: Signature Primary Button ─────────────────────────── */
+body.dark-mode .btn-prizm-primary,
+[data-bs-theme="dark"] .btn-prizm-primary {
+    background: linear-gradient(135deg, #7b93f5 0%, #8d5fc7 100%);
+    box-shadow: 0 2px 10px rgba(123, 147, 245, 0.35);
+}
+
+body.dark-mode .btn-prizm-primary:hover,
+[data-bs-theme="dark"] .btn-prizm-primary:hover {
+    background: linear-gradient(135deg, #6e86e8 0%, #7f52b8 100%);
+    box-shadow: 0 4px 16px rgba(123, 147, 245, 0.5);
+}
+/* ── End Dark Mode: Signature Primary Button ─────────────────────── */
+
+/* ── Dark Mode: AI Skeleton ──────────────────────────────────────── */
+body.dark-mode .ai-skeleton,
+[data-bs-theme="dark"] .ai-skeleton {
+    background: var(--card-bg, #2d2d2d);
+}
+body.dark-mode .ai-skeleton--shimmer,
+[data-bs-theme="dark"] .ai-skeleton--shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--card-bg, #2d2d2d) 25%,
+        rgba(255,255,255,0.08) 37%,
+        var(--card-bg, #2d2d2d) 63%
+    );
+    background-size: 800px 100%;
+}
+body.dark-mode .ai-progress-bar,
+[data-bs-theme="dark"] .ai-progress-bar {
+    background: var(--border-color, #444);
+}
+/* ── End Dark Mode: AI Skeleton ──────────────────────────────────── */
+
 /* General Theme Application */
 body {
     background-color: var(--bg-primary);
@@ -236,6 +271,42 @@ textarea::placeholder {
 .kanban-column-header:hover {
     background-color: var(--btn-hover-bg);
 }
+
+/* ── Dark Mode Column Color System ────────────────────────────────── */
+body.dark-mode .kanban-column-header--green,
+[data-bs-theme="dark"] .kanban-column-header--green  { background-color: rgba(40, 167, 69, 0.20); border-left-color: #28a745; color: #7dcea0; }
+body.dark-mode .kanban-column-header--blue,
+[data-bs-theme="dark"] .kanban-column-header--blue   { background-color: rgba(0, 123, 255, 0.20); border-left-color: #4da3ff; color: #8ec5ff; }
+body.dark-mode .kanban-column-header--purple,
+[data-bs-theme="dark"] .kanban-column-header--purple { background-color: rgba(111, 66, 193, 0.20); border-left-color: #8b5fcf; color: #c4b0e8; }
+body.dark-mode .kanban-column-header--orange,
+[data-bs-theme="dark"] .kanban-column-header--orange { background-color: rgba(253, 126, 20, 0.20); border-left-color: #fd9a4e; color: #ffc999; }
+body.dark-mode .kanban-column-header--red,
+[data-bs-theme="dark"] .kanban-column-header--red    { background-color: rgba(220, 53, 69, 0.20); border-left-color: #e76a78; color: #f0adb4; }
+body.dark-mode .kanban-column-header--yellow,
+[data-bs-theme="dark"] .kanban-column-header--yellow { background-color: rgba(255, 193, 7, 0.20); border-left-color: #ffc107; color: #ffe9a0; }
+body.dark-mode .kanban-column-header--teal,
+[data-bs-theme="dark"] .kanban-column-header--teal   { background-color: rgba(32, 201, 151, 0.20); border-left-color: #20c997; color: #9dd5d0; }
+body.dark-mode .kanban-column-header--gray,
+[data-bs-theme="dark"] .kanban-column-header--gray   { background-color: rgba(108, 117, 125, 0.20); border-left-color: #8d959c; color: #b0b5ba; }
+
+body.dark-mode .kanban-column-header--green:hover,
+[data-bs-theme="dark"] .kanban-column-header--green:hover  { background-color: rgba(40, 167, 69, 0.30); }
+body.dark-mode .kanban-column-header--blue:hover,
+[data-bs-theme="dark"] .kanban-column-header--blue:hover   { background-color: rgba(0, 123, 255, 0.30); }
+body.dark-mode .kanban-column-header--purple:hover,
+[data-bs-theme="dark"] .kanban-column-header--purple:hover { background-color: rgba(111, 66, 193, 0.30); }
+body.dark-mode .kanban-column-header--orange:hover,
+[data-bs-theme="dark"] .kanban-column-header--orange:hover { background-color: rgba(253, 126, 20, 0.30); }
+body.dark-mode .kanban-column-header--red:hover,
+[data-bs-theme="dark"] .kanban-column-header--red:hover    { background-color: rgba(220, 53, 69, 0.30); }
+body.dark-mode .kanban-column-header--yellow:hover,
+[data-bs-theme="dark"] .kanban-column-header--yellow:hover { background-color: rgba(255, 193, 7, 0.30); }
+body.dark-mode .kanban-column-header--teal:hover,
+[data-bs-theme="dark"] .kanban-column-header--teal:hover   { background-color: rgba(32, 201, 151, 0.30); }
+body.dark-mode .kanban-column-header--gray:hover,
+[data-bs-theme="dark"] .kanban-column-header--gray:hover   { background-color: rgba(108, 117, 125, 0.30); }
+/* ── End Dark Mode Column Color System ────────────────────────────── */
 
 /* Task Card Theme */
 .task-card,
