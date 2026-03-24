@@ -67,10 +67,13 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### Enterprise & Collaboration
 
-- **Role-Based Access Control (RBAC)** — Four board roles — Owner, Admin, Member, and Viewer — control exactly what each person can see and do. Access is invitation-based: you only see boards you have been explicitly added to. Budget data and strategic goals are restricted to Owners and Organisation Admins.
+- **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy, but never upward without an explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins.
+- **Decision Center** — A unified morning review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
+- **Favorites Sidebar** — Star and reorder boards, goals, tasks, wiki pages, and other items for quick access from the sidebar
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
 - **Real-Time Messaging** — WebSocket-powered team chat with @mentions, notifications, and **AI Message Composer** — type a rough draft and let AI rewrite it as a polished, professional team update in one click
 - **Board Member Invitations** — Invite collaborators via email with tokenized invitation links
+- **Task Search** — Press `/` to instantly search tasks by keyword across all boards, or switch to AI semantic search for meaning-based results with relevance scoring
 - **Knowledge Base & Wiki** — Markdown documentation with AI-assisted meeting analysis
 - **Meeting Transcript Import** — Import from Fireflies, Otter, Zoom, Teams, and Meet with AI extraction
 - **File Attachments with AI Analysis** — Attach files to tasks and let AI extract structured tasks from documents
@@ -441,22 +444,22 @@ Every board in PrizmAI has four possible roles. Think of it like a set of keys t
 
 | Role | What they can do | The analogy |
 |---|---|---|
-| **Owner** | Everything — full control, including deleting the board, managing budgets, editing strategic goals, and inviting anyone | Landlord with a master key |
-| **Admin** | Most things — invite and remove members, manage tasks, columns, and automations. Cannot delete the board; cannot access budget or strategic goals | Property manager |
-| **Member** | Day-to-day work — create and edit tasks, log time, comment, and upload files | Tenant with a room key |
-| **Viewer** | Read-only — see everything on the board but cannot create, edit, or delete anything | Guest with a visitor pass |
+| **Org Admin** | Everything system-wide — create Goals, manage all users, override any permission. Only one user holds this role | Building owner with every key |
+| **Owner** | Full control of records they own — edit, delete, invite others. Access flows down automatically to all children in the hierarchy | Landlord with a master key |
+| **Member** | Day-to-day work — create and edit tasks, post updates, log time, comment, and upload files. Cannot delete boards or touch parent levels unless separately invited | Tenant with a room key |
+| **Viewer** | Read-only — see everything they are invited to but cannot create, edit, or delete anything | Guest with a visitor pass |
 
 ### How access works
 
-- **Board access is invitation-based.** You only see boards you have been explicitly added to by an Owner or Admin. There is no "everyone can see everything" mode.
-- **Roles apply per board.** You might be an Owner on one board and a Member on another, even within the same organisation.
-- **Strategic goals have their own protection.** Missions, Strategies, and Goals sit above boards in the hierarchy. Only Organisation Admins and Owners of connected boards can create, edit, or delete them.
-- **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Organisation Admins, keeping financial data private from the wider team.
-- **Upward visibility rule.** If a task is assigned directly to you, you can see the board it lives on — even if you have not been formally invited as a member. You won't see the full board navigation, just enough to work on your task.
+- **Board access is invitation-based.** You only see boards you have been explicitly added to by an Owner or Org Admin. There is no "everyone can see everything" mode.
+- **Roles apply per board.** You might be an Owner on one board and a Member on another, even within the same organisation. The only system-wide elevated role is Org Admin.
+- **Access flows down, never up.** Owning a Strategy gives automatic Owner access to all Boards beneath it. Owning a Mission gives access to all Strategies and Boards below. But being a Member of a Board does **not** grant any access to the Strategy above — you must be separately invited at that level.
+- **Strategic goals have their own protection.** Only Org Admin can create new Goals. Missions and Strategies can be created or edited by Org Admin and by Owners at those levels.
+- **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Org Admins, keeping financial data private from the wider team.
 
 ### Inviting people to a board
 
-From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Admins can also remove members or change their role at any time.
+From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Org Admins can also remove members or change their role at any time.
 
 ---
 
@@ -612,6 +615,7 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 - django-csp (Content Security Policy)
 - django-axes (brute-force protection)
 - django-allauth with OAuth 2.0 (Google login)
+- django-rules (predicate-based RBAC permissions)
 - PyJWT, cryptography
 
 ---
