@@ -67,7 +67,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### Enterprise & Collaboration
 
-- **Open Access Model** — Any authenticated user can access all boards and features; access control is intentionally kept flat to reduce friction
+- **Role-Based Access Control (RBAC)** — Four board roles — Owner, Admin, Member, and Viewer — control exactly what each person can see and do. Access is invitation-based: you only see boards you have been explicitly added to. Budget data and strategic goals are restricted to Owners and Organisation Admins.
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
 - **Real-Time Messaging** — WebSocket-powered team chat with @mentions, notifications, and **AI Message Composer** — type a rough draft and let AI rewrite it as a polished, professional team update in one click
 - **Board Member Invitations** — Invite collaborators via email with tokenized invitation links
@@ -431,6 +431,61 @@ The **Commitments dashboard** shows all protocols for a board at a glance — po
 
 ---
 
+## Role-Based Access Control (RBAC)
+
+> **In plain English:** Not everyone on a project should be able to do everything. A new contractor shouldn't be able to delete the entire board, and a client observer shouldn't be able to edit the budget. RBAC gives each person exactly the level of access they need — no more, no less.
+
+### The four roles
+
+Every board in PrizmAI has four possible roles. Think of it like a set of keys to a building:
+
+| Role | What they can do | The analogy |
+|---|---|---|
+| **Owner** | Everything — full control, including deleting the board, managing budgets, editing strategic goals, and inviting anyone | Landlord with a master key |
+| **Admin** | Most things — invite and remove members, manage tasks, columns, and automations. Cannot delete the board; cannot access budget or strategic goals | Property manager |
+| **Member** | Day-to-day work — create and edit tasks, log time, comment, and upload files | Tenant with a room key |
+| **Viewer** | Read-only — see everything on the board but cannot create, edit, or delete anything | Guest with a visitor pass |
+
+### How access works
+
+- **Board access is invitation-based.** You only see boards you have been explicitly added to by an Owner or Admin. There is no "everyone can see everything" mode.
+- **Roles apply per board.** You might be an Owner on one board and a Member on another, even within the same organisation.
+- **Strategic goals have their own protection.** Missions, Strategies, and Goals sit above boards in the hierarchy. Only Organisation Admins and Owners of connected boards can create, edit, or delete them.
+- **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Organisation Admins, keeping financial data private from the wider team.
+- **Upward visibility rule.** If a task is assigned directly to you, you can see the board it lives on — even if you have not been formally invited as a member. You won't see the full board navigation, just enough to work on your task.
+
+### Inviting people to a board
+
+From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Admins can also remove members or change their role at any time.
+
+---
+
+## Ephemeral Demo Sandbox
+
+> **In plain English:** Want to try out PrizmAI without worrying about breaking anything? The Sandbox gives you a personal, private copy of a demo board. You can create tasks, delete entire columns, test automations — anything you like. Nobody else can see your sandbox. After 24 hours it automatically tidies itself up and disappears. If you find something worth keeping, you can save one board to your real account before it goes.
+
+### How it works
+
+1. **Create your sandbox** — From any demo board, click **Try in My Sandbox**. PrizmAI creates a complete private copy of that board — all columns, tasks, labels, and settings — just for you.
+2. **Experiment freely** — Your sandbox is completely isolated. Changes you make here have no effect on the shared demo boards or anyone else's work.
+3. **One sandbox at a time** — If you already have an active sandbox and ask for a new one, PrizmAI shows a confirmation dialog before replacing it.
+4. **It expires automatically** — Sandboxes last 24 hours from the moment you create them. A background task runs every hour to clean up any that have expired.
+5. **Two-hour warning** — When your sandbox is within 2 hours of expiry, a yellow banner appears at the top of every page as a reminder.
+6. **Save one board before it goes** — Click **Save a board** in the warning banner to promote your sandbox board into your regular workspace. It becomes a permanent board that you own — completely separate from the demo environment.
+7. **Delete on demand** — If you are done early, click **Delete now** in the banner to wipe the sandbox immediately.
+
+### The warning banner
+
+When your sandbox is 2 hours or less from expiry, a sticky yellow bar appears at the top of every page. It updates every 60 seconds so the countdown stays accurate. It has three buttons:
+
+| Button | What it does |
+|---|---|
+| **Save a board** | Keeps one board from your sandbox as a permanent board in your account |
+| **Delete now** | Wipes the sandbox immediately — cannot be undone |
+| **Dismiss** | Hides the banner for your current browser session (the sandbox still expires on schedule) |
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -493,9 +548,11 @@ To explore without creating an account:
 | `sam_rivera_demo` | `demo123` |
 | `jordan_taylor_demo` | `demo123` |
 
-All users have equal access — PrizmAI uses an open access model where every authenticated user can access all boards and features.
+Demo accounts can explore all demo boards and use every read feature freely, but cannot make permanent changes — create, edit, and delete actions are blocked to keep the shared demo environment clean for everyone.
 
 > Demo accounts have rate-limited AI features (5 calls per 10 minutes). Create your own account for unrestricted AI access.
+
+> **Want to experiment freely?** Use the **Ephemeral Demo Sandbox** — it gives you a private, temporary copy of any demo board that you can break, rebuild, and test without affecting anything else. See the [Ephemeral Demo Sandbox](#ephemeral-demo-sandbox) section below for details.
 
 ### Keeping Demo Data Fresh
 
