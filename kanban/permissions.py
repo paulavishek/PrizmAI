@@ -131,6 +131,32 @@ def has_strategic_membership(user, obj):
 
 
 @rules.predicate
+def is_descendant_board_member(user, obj):
+    """True if user is a board member of ANY board that descends from this
+    Goal/Mission/Strategy.  Provides read-only upward visibility."""
+    from kanban.models import (
+        Board, BoardMembership, Strategy, Mission, OrganizationGoal,
+    )
+
+    if isinstance(obj, Strategy):
+        return BoardMembership.objects.filter(
+            user=user, board__strategy=obj
+        ).exists()
+
+    if isinstance(obj, Mission):
+        return BoardMembership.objects.filter(
+            user=user, board__strategy__mission=obj
+        ).exists()
+
+    if isinstance(obj, OrganizationGoal):
+        return BoardMembership.objects.filter(
+            user=user, board__strategy__mission__organization_goal=obj
+        ).exists()
+
+    return False
+
+
+@rules.predicate
 def is_demo_board(user, board):
     """True if the board is an official demo board — universally accessible."""
     return getattr(board, 'is_official_demo_board', False)
@@ -169,10 +195,10 @@ rules.add_perm('prizmai.edit_goal',
 # Only Org Admin can be Goal Owner — effectively Org Admin only.
 
 rules.add_perm('prizmai.view_strategy',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership)
+               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member)
 
 rules.add_perm('prizmai.view_mission',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership)
+               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member)
 
 rules.add_perm('prizmai.view_goal',
-               is_org_admin | is_record_owner | has_strategic_membership)
+               is_org_admin | is_record_owner | has_strategic_membership | is_descendant_board_member)

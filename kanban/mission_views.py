@@ -1,11 +1,14 @@
 """
 Mission & Strategy views.
 
-Hierarchy:   Mission (problem) → Strategy (solution) → Board → Task
+Hierarchy:   Goal → Mission (problem) → Strategy (solution) → Board → Task
 
-Access policy: NO restrictions beyond simple login_required.
-All authenticated users can view, create, edit and delete any mission or strategy.
-This matches the same open-access model used for Boards in the rest of the app.
+Access policy (RBAC Phase 3 — Upward Visibility Rule):
+  - View access: view_goal / view_mission / view_strategy predicates.
+  - Edit/Delete: edit_goal / edit_mission / edit_strategy predicates.
+  - Goal creation: OrgAdmin only.
+  - Board Members can SEE parent Strategy/Mission/Goal names (read-only)
+    but CANNOT edit strategic-level records.
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -14,6 +17,7 @@ from django.contrib import messages
 from django.db.models import Count, Q
 from django.utils import timezone
 from django.conf import settings as django_settings
+from django.http import Http404
 from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
@@ -235,6 +239,9 @@ def goal_list(request):
 def goal_detail(request, goal_id):
     """Show a single Organization Goal with 4-tab layout, health score, versions, updates, followers."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.view_goal', goal):
+        raise Http404
     linked_missions = goal.missions.all().annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
@@ -322,12 +329,19 @@ def goal_detail(request, goal_id):
         'portfolio': portfolio,
         'proxy_metrics': proxy_metrics,
         'portfolio_narrative': goal.portfolio_narrative,
+        # RBAC context
+        'can_edit': request.user.has_perm('prizmai.edit_goal', goal),
+        'can_delete': request.user.has_perm('prizmai.edit_goal', goal),
     })
 
 
 @login_required
 def create_goal(request):
     """Create a new Organization Goal."""
+    if not request.user.groups.filter(name='OrgAdmin').exists():
+        messages.error(request, 'Only organization administrators can create goals.')
+        return redirect('goal_list')
+
     organizations = Organization.objects.all().order_by('name')
 
     if request.method == 'POST':
@@ -378,6 +392,11 @@ def create_goal(request):
 def edit_goal(request, goal_id):
     """Edit an existing Organization Goal with version history."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to edit this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
+
     organizations = Organization.objects.all().order_by('name')
 
     if request.method == 'POST':
@@ -427,6 +446,10 @@ def delete_goal(request, goal_id):
     """Delete an Organization Goal. Linked Missions become unlinked (SET_NULL)."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
 
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to delete this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
+
     if request.method == 'POST':
         name = goal.name
         goal.delete()
@@ -440,6 +463,10 @@ def delete_goal(request, goal_id):
 def link_mission_to_goal(request, goal_id):
     """Link an existing Mission to this Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to modify this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
 
     if request.method == 'POST':
         mission_id = request.POST.get('mission_id')
@@ -456,6 +483,10 @@ def unlink_mission_from_goal(request, goal_id, mission_id):
     """Remove the link between a Mission and an Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
     mission = get_object_or_404(Mission, id=mission_id, organization_goal=goal)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to modify this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
 
     if request.method == 'POST':
         mission.organization_goal = None
@@ -486,6 +517,10 @@ def mission_list(request):
 def mission_detail(request, mission_id):
     """Show a single mission with 4-tab layout, health score, versions, updates, followers."""
     mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
+
+    if not request.user.has_perm('prizmai.view_mission', mission):
+        raise Http404
+
     strategies = mission.strategies.all().annotate(
         board_count=Count('boards', distinct=True)
     ).order_by('-created_at')
@@ -615,6 +650,9 @@ def mission_detail(request, mission_id):
         # Goal-Aware Analytics
         'portfolio': portfolio,
         'portfolio_narrative': mission.portfolio_narrative,
+        # RBAC context
+        'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
+        'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
     })
 
 
@@ -648,6 +686,10 @@ def create_mission(request):
 def edit_mission(request, mission_id):
     """Edit an existing mission with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
+
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to edit this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
 
     if request.method == 'POST':
         form = MissionEditForm(request.POST, instance=mission)
@@ -691,6 +733,10 @@ def delete_mission(request, mission_id):
     """Delete a mission (and cascade-delete its strategies; boards become unlinked)."""
     mission = get_object_or_404(Mission, id=mission_id)
 
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to delete this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
+
     if request.method == 'POST':
         name = mission.name
         # Boards FKed to strategies will have strategy set to NULL (SET_NULL) on cascade
@@ -716,6 +762,10 @@ def strategy_detail_shortcut(request, strategy_id):
 def create_strategy(request, mission_id):
     """Create a strategy under a mission."""
     mission = get_object_or_404(Mission, id=mission_id)
+
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to create strategies under this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -747,6 +797,9 @@ def strategy_detail(request, mission_id, strategy_id):
     """Show a strategy with 4-tab layout, health score, milestones, versions, updates, followers."""
     mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
+
+    if not request.user.has_perm('prizmai.view_strategy', strategy):
+        raise Http404
 
     linked_boards = strategy.boards.all().order_by('-created_at')
 
@@ -844,6 +897,9 @@ def strategy_detail(request, mission_id, strategy_id):
         # Goal-Aware Analytics
         'portfolio': portfolio,
         'portfolio_narrative': strategy.portfolio_narrative,
+        # RBAC context
+        'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy),
+        'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy),
     })
 
 
@@ -852,6 +908,10 @@ def edit_strategy(request, mission_id, strategy_id):
     """Edit an existing strategy with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
+
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to edit this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
         form = StrategyEditForm(request.POST, instance=strategy)
@@ -897,6 +957,10 @@ def delete_strategy(request, mission_id, strategy_id):
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to delete this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
+
     if request.method == 'POST':
         name = strategy.name
         strategy.delete()
@@ -915,6 +979,10 @@ def link_board_to_strategy(request, mission_id, strategy_id):
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to modify this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
+
     if request.method == 'POST':
         board_id = request.POST.get('board_id')
         board = get_object_or_404(Board, id=board_id)
@@ -931,6 +999,10 @@ def unlink_board_from_strategy(request, mission_id, strategy_id, board_id):
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
     board = get_object_or_404(Board, id=board_id, strategy=strategy)
+
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to modify this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
         board.strategy = None
@@ -950,6 +1022,12 @@ _LEVEL_MODELS = {
     'strategy': Strategy,
 }
 
+_LEVEL_EDIT_PERM = {
+    'goal': 'prizmai.edit_goal',
+    'mission': 'prizmai.edit_mission',
+    'strategy': 'prizmai.edit_strategy',
+}
+
 
 @login_required
 def post_strategic_update(request, level, pk):
@@ -962,6 +1040,10 @@ def post_strategic_update(request, level, pk):
         return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
 
     record = get_object_or_404(model_cls, pk=pk)
+
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
@@ -1030,6 +1112,11 @@ def regenerate_summary(request, level, pk):
         return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
 
     get_object_or_404(model_cls, pk=pk)  # existence check
+
+    record = model_cls.objects.get(pk=pk)
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
