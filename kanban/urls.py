@@ -124,6 +124,7 @@ urlpatterns = [
     path('boards/<int:board_id>/add-member/', views.add_board_member, name='add_board_member'),
     path('boards/<int:board_id>/members/<int:user_id>/remove/', views.remove_board_member, name='remove_board_member'),
     # Board invitations
+    path('boards/<int:board_id>/members/', invitation_views.manage_board_members, name='manage_board_members'),
     path('boards/<int:board_id>/invite/', invitation_views.invite_to_board, name='invite_to_board'),
     path('invite/<uuid:token>/', invitation_views.accept_invitation, name='accept_board_invitation'),
     path('invitations/<int:invitation_id>/revoke/', invitation_views.revoke_invitation, name='revoke_board_invitation'),

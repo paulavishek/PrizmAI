@@ -69,6 +69,26 @@ def _send_invitation_email(request, invitation):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
+def manage_board_members(request, board_id):
+    """Display the board member management page (members + pending invitations)."""
+    board = get_object_or_404(Board, id=board_id)
+
+    can_manage = _can_manage_invites(request.user, board)
+
+    memberships = board.memberships.select_related('user', 'added_by').order_by('user__username')
+    pending_invitations = board.invitations.filter(
+        status=BoardInvitation.STATUS_PENDING
+    ).order_by('-created_at')
+
+    return render(request, 'kanban/manage_board_members.html', {
+        'board': board,
+        'memberships': memberships,
+        'pending_invitations': pending_invitations,
+        'can_manage': can_manage,
+    })
+
+
+@login_required
 @require_POST
 def invite_to_board(request, board_id):
     """Send email invitations to one or more addresses (comma/newline separated)."""
