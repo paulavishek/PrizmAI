@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages as django_messages
-from django.http import JsonResponse, FileResponse, HttpResponse
+from django.http import JsonResponse, FileResponse, HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.contrib.auth.models import User
@@ -33,11 +33,15 @@ def messaging_hub(request):
     
     # MVP Mode: Get all boards the user has access to
     # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards_query = Board.objects.filter(
-        Q(created_by=request.user) | Q(memberships__user=request.user)
-    )
-    user_boards = (demo_boards | user_boards_query).distinct()
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    if _is_org_admin:
+        user_boards = Board.objects.all()
+    else:
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        user_boards_query = Board.objects.filter(
+            Q(created_by=request.user) | Q(memberships__user=request.user)
+        )
+        user_boards = (demo_boards | user_boards_query).distinct()
     
     # Calculate unread messages per board
     boards_with_unread = []
@@ -67,8 +71,9 @@ def messaging_hub(request):
 def chat_room_list(request, board_id):
     """List all chat rooms for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Access restriction removed - all authenticated users can access
+
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     chat_rooms = board.chat_rooms.all()
     
@@ -96,9 +101,10 @@ def chat_room_list(request, board_id):
 def chat_room_detail(request, room_id):
     """Display a specific chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
-    
-    # Access restriction removed - all authenticated users can access chat rooms
-    
+
+    if not request.user.has_perm('prizmai.view_board', chat_room.board):
+        raise Http404
+
     # Mark all notifications related to this chat room as read
     Notification.objects.filter(
         recipient=request.user,
@@ -142,9 +148,11 @@ def chat_room_detail(request, room_id):
 def create_chat_room(request, board_id):
     """Create a new chat room for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Access restriction removed - all authenticated users can create chat rooms
-    
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        django_messages.error(request, 'You do not have permission to create chat rooms on this board.')
+        return redirect('chat_room_list', board_id=board_id)
+
     if request.method == 'POST':
         form = ChatRoomForm(request.POST, board=board)
         if form.is_valid():
@@ -176,9 +184,12 @@ def create_chat_room(request, board_id):
 def send_chat_message(request, room_id):
     """Send a message to a chat room (for non-WebSocket clients)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
-    
-    # Access restriction removed - all authenticated users can send messages
-    
+
+    if not request.user.has_perm('prizmai.edit_board', chat_room.board):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        raise Http404
+
     form = ChatMessageForm(request.POST)
     if form.is_valid():
         message = form.save(commit=False)

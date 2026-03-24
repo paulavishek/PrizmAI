@@ -130,15 +130,22 @@ def has_strategic_membership(user, obj):
     ).exists()
 
 
+@rules.predicate
+def is_demo_board(user, board):
+    """True if the board is an official demo board — universally accessible."""
+    return getattr(board, 'is_official_demo_board', False)
+
+
 # ── Permission rules ─────────────────────────────────────────────────────────
 
 # Board permissions.
 # is_ancestor_owner: owning a Strategy/Mission/Goal gives automatic board access.
+# is_demo_board: official demo boards are accessible to all authenticated users.
 rules.add_perm('prizmai.view_board',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_board_membership)
+               is_org_admin | is_record_owner | is_ancestor_owner | has_board_membership | is_demo_board)
 
 rules.add_perm('prizmai.edit_board',
-               is_org_admin | is_record_owner | is_ancestor_owner | is_board_member_role | is_board_owner_role)
+               is_org_admin | is_record_owner | is_ancestor_owner | is_board_member_role | is_board_owner_role | is_demo_board)
 
 rules.add_perm('prizmai.delete_board',
                is_org_admin | is_record_owner | is_ancestor_owner)
