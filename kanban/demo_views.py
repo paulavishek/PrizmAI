@@ -170,9 +170,6 @@ def _setup_user_time_tracking_demo(user, demo_boards):
     
     except Exception as e:
         logger.error(f"Error setting up time tracking demo for {user.username}: {e}")
-        
-    except Exception as e:
-        logger.error(f"Error auto-granting demo access: {e}")
 
 
 def demo_mode_selection(request):
