@@ -130,7 +130,7 @@ def cancel_access_request(request, request_id):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': True})
 
-    return redirect('kanban:my_access_requests')
+    return redirect('my_access_requests')
 
 
 # ============================================================================
@@ -171,7 +171,7 @@ def review_access_request(request, request_id):
             return JsonResponse({
                 'error': f'This request has already been {access_request.status}.',
             }, status=400)
-        return redirect('kanban:review_access_request', request_id=request_id)
+        return redirect('review_access_request', request_id=request_id)
 
     if action == 'approve':
         role = request.POST.get('role', access_request.requested_role)
@@ -193,7 +193,7 @@ def review_access_request(request, request_id):
             'status': access_request.status,
         })
 
-    return redirect('kanban:pending_access_requests')
+    return redirect('pending_access_requests')
 
 
 @login_required

@@ -849,7 +849,7 @@
     
     // Spectra: send access request from chat
     function spectraSendAccessRequest(boardId, trigger) {
-        fetch('{% url "kanban:submit_access_request" %}', {
+        fetch('{% url "submit_access_request" %}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

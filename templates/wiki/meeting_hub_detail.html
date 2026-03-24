@@ -157,7 +157,7 @@
                         {% if notes.related_board %}
                             <dt class="col-sm-5 text-muted small">Board:</dt>
                             <dd class="col-sm-7 small">
-                                <a href="{% url 'kanban:board_detail' notes.related_board.id %}">
+                                <a href="{% url 'board_detail' notes.related_board.id %}">
                                     {{ notes.related_board.name }}
                                 </a>
                             </dd>
