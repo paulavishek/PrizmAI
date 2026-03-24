@@ -18,6 +18,7 @@ from datetime import timedelta
 import json
 
 from kanban.models import Board, Task
+from kanban.decorators import demo_write_guard
 from kanban.budget_models import (
     ProjectBudget, TaskCost, TimeEntry, ProjectROI, 
     BudgetRecommendation, CostPattern
@@ -33,12 +34,24 @@ from api.ai_usage_utils import track_ai_request, check_ai_quota
 logger = logging.getLogger(__name__)
 
 
+def _require_budget_access(request, board):
+    """Return HttpResponseForbidden if user lacks Owner/OrgAdmin access to this board's budget.
+    Per spec: 'View budget fields' and 'Edit budget fields' are restricted to OrgAdmin + Owner only."""
+    if not request.user.has_perm('prizmai.delete_board', board):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'You do not have permission to access budget information for this board.'}, status=403)
+        return HttpResponseForbidden('You do not have permission to access budget information for this board.')
+    return None
+
+
 @login_required
 def budget_dashboard(request, board_id):
     """
     Main budget dashboard showing overview, metrics, and AI insights
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Get or create budget
     try:
@@ -85,11 +98,14 @@ def budget_dashboard(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def budget_create_or_edit(request, board_id):
     """
     Create or edit project budget
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -201,6 +217,8 @@ def budget_analytics(request, board_id):
     Detailed budget analytics and reports
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -289,6 +307,8 @@ def roi_dashboard(request, board_id):
     ROI tracking and analysis dashboard
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Check if budget exists
     try:
@@ -321,6 +341,8 @@ def roi_snapshot_create(request, board_id):
     Create new ROI snapshot
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     if request.method == 'POST':
         form = ProjectROIForm(request.POST)
@@ -349,6 +371,7 @@ def roi_snapshot_create(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def ai_analyze_budget(request, board_id):
     """
@@ -356,6 +379,8 @@ def ai_analyze_budget(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -425,6 +450,7 @@ def ai_analyze_budget(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def ai_generate_recommendations(request, board_id):
     """
@@ -432,6 +458,8 @@ def ai_generate_recommendations(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -499,6 +527,8 @@ def recommendations_list(request, board_id):
     View all budget recommendations
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Filter by status
     status_filter = request.GET.get('status', 'all')
@@ -519,6 +549,7 @@ def recommendations_list(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def recommendation_action(request, recommendation_id):
     """
@@ -529,6 +560,8 @@ def recommendation_action(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Get action from POST data (form submission)
@@ -603,6 +636,8 @@ def recommendation_preview(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         redistributor = BudgetRedistributor(recommendation, request.user)
@@ -637,6 +672,8 @@ def recommendation_implementation_details(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     logs = BudgetImplementationLog.objects.filter(
         recommendation=recommendation
@@ -677,6 +714,8 @@ def ai_predict_overrun(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -748,6 +787,8 @@ def ai_learn_patterns(request, board_id):
     Trigger AI pattern learning
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Check AI quota
     has_quota, quota, remaining = check_ai_quota(request.user)
@@ -787,6 +828,8 @@ def budget_api_metrics(request, board_id):
     API endpoint for budget metrics (for AJAX updates)
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         metrics = BudgetAnalyzer.calculate_project_metrics(board)
@@ -1138,6 +1181,8 @@ def team_timesheet(request, board_id):
     from django.db.models import Sum
     
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Get week parameter
     week_offset = int(request.GET.get('week', 0))

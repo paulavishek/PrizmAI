@@ -14,12 +14,16 @@
 {% endblock %}
 
 {% block header_actions %}
+{% if can_edit %}
 <a href="{% url 'edit_goal' goal.id %}" class="btn btn-sm btn-outline-warning">
     <i class="fas fa-edit me-1"></i>Edit
 </a>
+{% endif %}
+{% if can_delete %}
 <a href="{% url 'delete_goal' goal.id %}" class="btn btn-sm btn-outline-danger">
     <i class="fas fa-trash me-1"></i>Delete
 </a>
+{% endif %}
 {% endblock %}
 
 {% block header_meta %}
