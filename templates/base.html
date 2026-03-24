@@ -233,6 +233,14 @@
                             </a>
                         </li>
                         <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
+                        <li id="ar-notif-entry" style="display:none;">
+                            <a class="dropdown-item py-2" href="{% url 'kanban:pending_access_requests' %}">
+                                <i class="fas fa-user-lock text-info me-2"></i>
+                                <strong>Access Requests</strong>
+                                <br><small class="text-muted" id="ar-notif-text"></small>
+                            </a>
+                        </li>
+                        <li id="ar-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
                                 <i class="fas fa-list me-2"></i> View all notifications
@@ -471,6 +479,26 @@
                     }
                 })
                 .catch(error => console.error('Error fetching notification count:', error));
+
+            // Poll pending access request count for board owners
+            fetch('{% url "kanban:get_pending_access_request_count" %}')
+                .then(response => response.json())
+                .then(data => {
+                    const arEntry = document.getElementById('ar-notif-entry');
+                    const arDivider = document.getElementById('ar-notif-divider');
+                    const arText = document.getElementById('ar-notif-text');
+                    if (arEntry && arText) {
+                        if (data.count > 0) {
+                            arEntry.style.display = '';
+                            if (arDivider) arDivider.style.display = '';
+                            arText.textContent = data.count + ' pending request' + (data.count !== 1 ? 's' : '');
+                        } else {
+                            arEntry.style.display = 'none';
+                            if (arDivider) arDivider.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => console.error('Error fetching access request count:', error));
             {% endif %}
         }
 

@@ -847,6 +847,35 @@
         return actions.slice(0, 3); // Max 3 suggestions
     }
     
+    // Spectra: send access request from chat
+    function spectraSendAccessRequest(boardId, trigger) {
+        fetch('{% url "kanban:submit_access_request" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                board_id: boardId,
+                trigger: trigger,
+                requested_role: 'member',
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const msg = data.spectra_message.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                addMessageToUI('assistant', msg);
+            } else {
+                addMessageToUI('assistant', data.error || 'Could not send the request.');
+            }
+        })
+        .catch(() => {
+            addMessageToUI('assistant', 'Network error — please try again.');
+        });
+    }
+
     // Add message to UI
     function addMessageToUI(role, content, model = null) {
         const container = document.getElementById('chat-messages');
@@ -1024,10 +1053,35 @@
             },
             body: JSON.stringify(payload)
         })
-        .then(r => r.json())
+        .then(r => {
+            if (r.status === 403) {
+                return r.json().then(errData => {
+                    if (errData.spectra) {
+                        // Spectra access denial — show contextual message with request option
+                        errData._spectra_denied = true;
+                        return errData;
+                    }
+                    throw new Error(errData.error || 'Access denied');
+                });
+            }
+            return r.json();
+        })
         .then(data => {
             typing.remove();
             
+            if (data._spectra_denied) {
+                // Render Spectra denial bubble with access request button
+                let html = data.spectra_message.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                if (data.can_request) {
+                    html += `<div style="margin-top:12px;">` +
+                        `<button class="btn btn-sm" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:6px;padding:6px 16px;font-weight:600;" ` +
+                        `onclick="spectraSendAccessRequest(${data.board_id},'${data.trigger}')">` +
+                        `<i class="fas fa-paper-plane me-1"></i> Send Access Request</button></div>`;
+                }
+                addMessageToUI('assistant', html);
+                return;
+            }
+
             if (data.response) {
                 addMessageToUI('assistant', data.response, data.source);
                 // Note: No longer maintaining chatHistory to prevent session persistence

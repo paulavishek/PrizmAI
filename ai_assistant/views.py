@@ -260,16 +260,21 @@ def send_message(request):
         board = None
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            # Verify user has access to this board
+            # Verify user has access to this board — Spectra intercepts denial
             if not (
                 board.is_official_demo_board
                 or board.created_by_id == request.user.id
                 or board.memberships.filter(user=request.user).exists()
             ):
-                return JsonResponse(
-                    {'error': 'You do not have access to this board.'},
-                    status=403,
+                from kanban.simple_access import get_spectra_denial_context
+                ctx = get_spectra_denial_context(
+                    request.user, board, trigger='spectra_chat',
                 )
+                return JsonResponse({
+                    'error': 'access_denied',
+                    'spectra': True,
+                    **ctx,
+                }, status=403)
             session.board = board
             session.save()
         elif session.board_id:

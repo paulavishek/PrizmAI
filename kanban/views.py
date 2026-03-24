@@ -1314,7 +1314,9 @@ def board_detail(request, board_id):
     
     # RBAC: check view permission (demo boards pass via is_demo_board predicate)
     if not request.user.has_perm('prizmai.view_board', board):
-        raise Http404
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='board_view')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
     
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
