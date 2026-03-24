@@ -346,6 +346,20 @@
     <main class="container my-4">
     {% endif %}
 
+    {# ── Ephemeral Sandbox Expiry Warning Banner (Phase 7) ── #}
+    {% if user.is_authenticated %}
+    <div id="sandbox-expiry-banner" class="alert alert-warning alert-dismissible d-none" role="alert" style="position: sticky; top: 0; z-index: 1050;">
+        <strong>⏰ Your demo sandbox expires soon!</strong>
+        Your private demo environment will be deleted in <span id="sandbox-hours-left"></span>.
+        Save one board to your real workspace before it's gone.
+        <div class="mt-2">
+            <button class="btn btn-sm btn-primary me-2" onclick="showSaveBoardModal()">Save a board</button>
+            <button class="btn btn-sm btn-danger me-2" onclick="deleteSandboxNow()">Delete now</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('sandbox-expiry-banner').classList.add('d-none')">Dismiss</button>
+        </div>
+    </div>
+    {% endif %}
+
     {% block content %}{% endblock %}
 
     {% if user.is_authenticated and not force_auth_layout %}
@@ -619,6 +633,75 @@
     <div id="task-drawer-body"></div>
 </div>
     {% block extra_js %}{% endblock %}
+{% if user.is_authenticated %}
+<script>
+(function() {
+    var _sandboxBannerDismissed = false;
+
+    function getCsrfToken() {
+        var match = document.cookie.split(';').map(function(c) { return c.trim().split('='); }).find(function(p) { return p[0] === 'csrftoken'; });
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function pollSandboxStatus() {
+        if (_sandboxBannerDismissed) return;
+        fetch('/sandbox/status/', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var banner = document.getElementById('sandbox-expiry-banner');
+                if (!banner) return;
+                if (data.has_sandbox && data.show_warning_banner) {
+                    var hoursEl = document.getElementById('sandbox-hours-left');
+                    if (hoursEl) {
+                        var h = parseInt(data.hours_remaining, 10);
+                        hoursEl.textContent = h <= 1 ? 'less than 1 hour' : h + ' hours';
+                    }
+                    banner.classList.remove('d-none');
+                } else {
+                    banner.classList.add('d-none');
+                }
+            })
+            .catch(function() {});
+    }
+
+    window.showSaveBoardModal = function() {
+        // Redirect to sandbox management page; a modal overlay could be added later
+        window.location.href = '/sandbox/status/';
+    };
+
+    window.deleteSandboxNow = function() {
+        if (!confirm('Delete your sandbox now? This action cannot be undone.')) return;
+        fetch('/sandbox/delete/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'deleted') {
+                var banner = document.getElementById('sandbox-expiry-banner');
+                if (banner) banner.classList.add('d-none');
+                alert('Your sandbox has been deleted.');
+            }
+        })
+        .catch(function() {});
+    };
+
+    // Wire up dismiss button to set flag so polling doesn't re-show it this session
+    document.addEventListener('DOMContentLoaded', function() {
+        var dismissBtns = document.querySelectorAll('#sandbox-expiry-banner [data-bs-dismiss="alert"]');
+        dismissBtns.forEach(function(btn) {
+            btn.addEventListener('click', function() { _sandboxBannerDismissed = true; });
+        });
+    });
+
+    pollSandboxStatus();
+    setInterval(pollSandboxStatus, 60000);
+})();
+</script>
+{% endif %}
 {% if is_demo_account %}
 <script>
 function demoResetFromNav(e) {

@@ -53,6 +53,10 @@ from kanban.tasks.shadow_branch_tasks import (
     recalculate_branches_for_board,
 )
 
+from kanban.tasks.sandbox_tasks import (
+    cleanup_expired_sandboxes,
+)
+
 from kanban.tasks.commitment_tasks import (
     run_commitment_decay_all,
     reset_weekly_tokens,

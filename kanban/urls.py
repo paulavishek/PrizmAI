@@ -20,6 +20,7 @@ from . import whatif_views
 from . import shadow_views
 from . import commitment_views
 from . import favorite_views
+from . import sandbox_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -38,6 +39,12 @@ urlpatterns = [
     path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
     path('demo/exit/', demo_views.exit_demo, name='exit_demo'),
     path('demo/fingerprint/', demo_views.receive_client_fingerprint, name='receive_client_fingerprint'),
+
+    # Ephemeral Sandbox (Phase 7)
+    path('sandbox/create/', sandbox_views.create_sandbox, name='create_sandbox'),
+    path('sandbox/save/', sandbox_views.save_sandbox_board, name='save_sandbox_board'),
+    path('sandbox/delete/', sandbox_views.delete_sandbox, name='delete_sandbox'),
+    path('sandbox/status/', sandbox_views.sandbox_status, name='sandbox_status'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
     path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),
     path('demo/track-nudge/', demo_views.track_nudge, name='track_nudge'),
