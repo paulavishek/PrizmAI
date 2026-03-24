@@ -47,6 +47,11 @@ class BoardViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return boards accessible to the authenticated user"""
         user = self.request.user
+        # OrgAdmins can see all boards
+        if user.groups.filter(name='OrgAdmin').exists():
+            return Board.objects.all().select_related(
+                'organization', 'created_by'
+            ).prefetch_related('columns')
         # Return boards where user is member or creator
         return Board.objects.filter(
             Q(memberships__user=user) | Q(created_by=user)
@@ -101,12 +106,18 @@ class TaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return tasks accessible to the authenticated user"""
         user = self.request.user
-        # Return tasks from boards where user is member or creator
-        queryset = Task.objects.filter(
-            Q(column__board__memberships__user=user) | Q(column__board__created_by=user)
-        ).distinct().select_related(
-            'column', 'column__board', 'assigned_to', 'created_by'
-        ).prefetch_related('labels')
+        # OrgAdmins see all tasks
+        if user.groups.filter(name='OrgAdmin').exists():
+            queryset = Task.objects.all().select_related(
+                'column', 'column__board', 'assigned_to', 'created_by'
+            ).prefetch_related('labels')
+        else:
+            # Return tasks from boards where user is member or creator
+            queryset = Task.objects.filter(
+                Q(column__board__memberships__user=user) | Q(column__board__created_by=user)
+            ).distinct().select_related(
+                'column', 'column__board', 'assigned_to', 'created_by'
+            ).prefetch_related('labels')
         
         # Filter by board_id if provided
         board_id = self.request.query_params.get('board_id')

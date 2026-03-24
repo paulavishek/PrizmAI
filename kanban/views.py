@@ -2,7 +2,7 @@ import logging
 import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse, Http404
 from django.contrib import messages
 from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
 from django.utils import timezone
@@ -74,12 +74,22 @@ def dashboard(request):
     # v2 demo mode: separate demo boards from real boards via toggle
     demo_mode = getattr(profile, 'is_viewing_demo', False)
     
+    # Org Admins see all boards regardless of membership
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    
     if demo_mode:
         # Demo mode: show official demo boards + boards the user created
         # via Spectra while exploring demo mode.
         boards = Board.objects.filter(
             Q(is_official_demo_board=True)
             | Q(created_by_session=f'spectra_demo_{request.user.id}')
+        ).distinct()
+    elif _is_org_admin:
+        # Org Admin: see all non-demo boards
+        boards = Board.objects.filter(
+            is_official_demo_board=False
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
     elif profile.onboarding_version >= 2:
         # v2 real mode: only the user's own boards (no demo boards,
@@ -1039,11 +1049,19 @@ def board_list(request):
     # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
     demo_mode = getattr(profile, 'is_viewing_demo', False)
 
+    # Org Admins see all boards regardless of membership
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+
     if demo_mode:
         # Demo mode: show official demo boards + boards created via Spectra
         boards = Board.objects.filter(
             Q(is_official_demo_board=True)
             | Q(created_by_session=f'spectra_demo_{request.user.id}')
+        ).distinct()
+    elif _is_org_admin:
+        # Org Admin: see all non-demo boards
+        boards = Board.objects.filter(
+            is_official_demo_board=False
         ).distinct()
     elif profile.onboarding_version >= 2:
         # v2 onboarding (AI-generated or scratch) — never show demo boards
@@ -1292,6 +1310,10 @@ def board_detail(request, board_id):
             defaults={'role': 'member', 'added_by': request.user}
         )
     
+    # RBAC: check view permission (demo boards pass via is_demo_board predicate)
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+    
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
               object_type='board', object_id=board.id, object_repr=board.name,
@@ -1404,9 +1426,11 @@ def board_detail(request, board_id):
             column_permissions[column.id] = perms
     
     # All restrictions removed - all authenticated users have full access
-    can_manage_members = True
-    can_edit_board = True
-    can_create_tasks = True
+    # RBAC: derive template permissions from django-rules
+    can_manage_members = request.user.has_perm('prizmai.invite_board_member', board)
+    can_edit_board = request.user.has_perm('prizmai.edit_board', board)
+    can_create_tasks = can_edit_board
+    can_delete_board = request.user.has_perm('prizmai.delete_board', board)
 
     # Invitation permission: board creator or site admin
     can_manage_invites = (
@@ -1486,6 +1510,7 @@ def board_detail(request, board_id):
         'can_manage_members': can_manage_members,  # Permission flags for UI
         'can_edit_board': can_edit_board,
         'can_create_tasks': can_create_tasks,
+        'can_delete_board': can_delete_board,
         'can_manage_invites': can_manage_invites,  # For invite button visibility
         'column_meta': column_meta,  # Per-column WIP/count metadata
         'board_members_list': board_members_list,  # For inline assignee picker
@@ -1791,6 +1816,11 @@ def create_task(request, board_id, column_id=None):
 
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to create tasks on this board.")
+        return redirect('board_detail', board_id=board.id)
+
     # Demo mode flags — always False for authenticated users on this view
     is_demo_mode = False
     is_demo_board = getattr(board, 'is_demo', False)
@@ -1924,7 +1954,10 @@ def delete_task(request, task_id):
         from django.contrib.auth.views import redirect_to_login
         return redirect_to_login(request.get_full_path())
     
-    # All restrictions removed - all authenticated users can delete tasks
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to delete tasks on this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         board_id = task.column.board.id
@@ -1953,6 +1986,11 @@ def create_column(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can create columns
+    
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         form = ColumnForm(request.POST)
@@ -1990,6 +2028,11 @@ def update_column(request, column_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can edit columns
+    
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         new_name = request.POST.get('name', '').strip()
@@ -2068,6 +2111,9 @@ def board_analytics(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view analytics
+    # RBAC: check view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     # Demo mode removed - always False
     is_demo_mode = False
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
@@ -2280,6 +2326,9 @@ def gantt_chart(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view Gantt chart
+    # RBAC: check view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     # Demo mode removed - always False
     is_demo_mode = False
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
@@ -2775,7 +2824,9 @@ def move_task(request):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
         
-        # All restrictions removed - all authenticated users can move tasks
+        # RBAC: check edit permission on the board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'You do not have permission to edit this board'}, status=403)
         
         old_column = task.column
         task.column = new_column
@@ -2830,7 +2881,10 @@ def move_task(request):
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # All restrictions removed - all authenticated users can add members
+    # RBAC: only Owner / board-level owner / ancestor owner / Org Admin can invite
+    if not request.user.has_perm('prizmai.invite_board_member', board):
+        messages.error(request, "You don't have permission to add members to this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         user_id = request.POST.get('user_id')
@@ -2893,14 +2947,8 @@ def remove_board_member(request, board_id, user_id):
     board = get_object_or_404(Board, id=board_id)
     user_to_remove = get_object_or_404(User, id=user_id)
     
-    # Check if user has permission to remove members
-    # Only board creator, org admins, and org creator can remove members
-    user_profile = getattr(request.user, 'profile', None)
-    has_permission = (
-        board.created_by == request.user or  # Board creator
-        (user_profile and user_profile.is_admin) or  # Organization admin
-        (user_profile and board.organization and request.user == board.organization.created_by)  # Organization creator
-    )
+    # RBAC: reuse invite_board_member — same actors who can add can also remove
+    has_permission = request.user.has_perm('prizmai.invite_board_member', board)
     
     # Get the redirect destination (manage_board_members if came from there, else board_detail)
     referer = request.META.get('HTTP_REFERER', '')
@@ -2939,6 +2987,11 @@ def remove_board_member(request, board_id, user_id):
 @login_required
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+    
+    # RBAC: only Owner / ancestor owner / Org Admin can delete
+    if not request.user.has_perm('prizmai.delete_board', board):
+        messages.error(request, "You don't have permission to delete this board.")
+        return redirect('board_detail', board_id=board_id)
     
     # Delete the board
     if request.method == 'POST':
@@ -3163,10 +3216,10 @@ def delete_column(request, column_id):
     column = get_object_or_404(Column, id=column_id)
     board = column.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
     
     # Prevent deletion of "To Do" column as it's required for task creation
     if column.name.lower() in ['to do', 'todo']:

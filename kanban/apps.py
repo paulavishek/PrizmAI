@@ -6,5 +6,6 @@ class KanbanConfig(AppConfig):
     name = 'kanban'
     
     def ready(self):
-        """Import signal handlers when the app is ready"""
+        """Import signal handlers and register RBAC rules when the app is ready"""
         import kanban.signals  # noqa
+        import kanban.permissions  # noqa — registers django-rules predicates & perms

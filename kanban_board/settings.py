@@ -817,6 +817,7 @@ AUTHENTICATION_BACKENDS = (
     'axes.backends.AxesStandaloneBackend',  # AxesStandaloneBackend should be first
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',  # django-rules object-level permissions
 )
 
 # Axes Configuration
