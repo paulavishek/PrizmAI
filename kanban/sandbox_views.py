@@ -136,6 +136,34 @@ def _duplicate_board(template_board, user):
                 content=comment.content,
             )
 
+    # --- Task-to-Task Relationships (parent_task, dependencies, related, milestones) ---
+    for old_pk, new_task in task_map.items():
+        old_task = Task.objects.get(pk=old_pk)
+        updated = False
+
+        # Parent-child relationships (subtasks)
+        if old_task.parent_task_id and old_task.parent_task_id in task_map:
+            new_task.parent_task = task_map[old_task.parent_task_id]
+            updated = True
+
+        # Milestone positioning (position_after_task)
+        if old_task.position_after_task_id and old_task.position_after_task_id in task_map:
+            new_task.position_after_task = task_map[old_task.position_after_task_id]
+            updated = True
+
+        if updated:
+            new_task.save(update_fields=['parent_task', 'position_after_task'])
+
+        # Gantt chart dependencies (M2M)
+        for dep in old_task.dependencies.all():
+            if dep.pk in task_map:
+                new_task.dependencies.add(task_map[dep.pk])
+
+        # Related tasks (M2M)
+        for related in old_task.related_tasks.all():
+            if related.pk in task_map:
+                new_task.related_tasks.add(task_map[related.pk])
+
     return new_board
 
 
@@ -296,3 +324,50 @@ def sandbox_status(request):
         })
     except DemoSandbox.DoesNotExist:
         return JsonResponse({'has_sandbox': False})
+
+
+MAX_SANDBOX_EXTENSIONS = 3
+EXTENSION_HOURS = 1
+
+
+@login_required
+@require_http_methods(["POST"])
+def extend_demo_session(request):
+    """
+    Extend the user's sandbox expiry by EXTENSION_HOURS.
+    Limited to MAX_SANDBOX_EXTENSIONS extensions total.
+    """
+    from kanban.models import DemoSandbox
+
+    user = request.user
+    try:
+        sandbox = user.demo_sandbox
+    except DemoSandbox.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'No active sandbox found.'}, status=404)
+
+    # Track extensions via a simple counter stored on the sandbox
+    extensions_used = getattr(sandbox, '_extensions_used', None)
+    if extensions_used is None:
+        # Calculate extensions used from the difference between current expiry and original 24h window
+        original_expiry = sandbox.created_at + timedelta(hours=24)
+        extra_hours = (sandbox.expires_at - original_expiry).total_seconds() / 3600
+        extensions_used = max(0, int(round(extra_hours / EXTENSION_HOURS)))
+
+    if extensions_used >= MAX_SANDBOX_EXTENSIONS:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Maximum extensions ({MAX_SANDBOX_EXTENSIONS}) reached.',
+            'extensions_remaining': 0,
+        })
+
+    sandbox.expires_at += timedelta(hours=EXTENSION_HOURS)
+    sandbox.warning_sent = False  # Reset warning so banner updates
+    sandbox.save(update_fields=['expires_at', 'warning_sent'])
+
+    extensions_remaining = MAX_SANDBOX_EXTENSIONS - (extensions_used + 1)
+
+    return JsonResponse({
+        'status': 'success',
+        'new_expiry_time': sandbox.expires_at.isoformat(),
+        'extensions_remaining': extensions_remaining,
+    })

@@ -45,6 +45,7 @@ urlpatterns = [
     path('sandbox/save/', sandbox_views.save_sandbox_board, name='save_sandbox_board'),
     path('sandbox/delete/', sandbox_views.delete_sandbox, name='delete_sandbox'),
     path('sandbox/status/', sandbox_views.sandbox_status, name='sandbox_status'),
+    path('sandbox/extend/', sandbox_views.extend_demo_session, name='extend_demo_session'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
     path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),
     path('demo/track-nudge/', demo_views.track_nudge, name='track_nudge'),

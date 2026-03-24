@@ -283,7 +283,7 @@
                     <div class="board-card">
                         <div class="board-name">{{ item.board.name }}</div>
                         <div class="board-members">
-                            <i class="fas fa-users me-1"></i> {{ item.board.members.count }} members
+                            <i class="fas fa-users me-1"></i> {{ item.board.memberships.count }} members
                         </div>
                         <div class="board-actions">
                             <a href="{% url 'messaging:chat_room_list' board_id=item.board.id %}" class="btn btn-sm btn-primary w-100">
