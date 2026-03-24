@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Access Requests{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ar-container { max-width: 700px; margin: 40px auto 0; }
+    .ar-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        padding: 1.25rem; margin-bottom: 1rem;
+        display: flex; align-items: center; gap: 1rem;
+        transition: box-shadow .2s;
+    }
+    .ar-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .ar-avatar {
+        width: 40px; height: 40px; border-radius: 50%;
+        background: #667eea; color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; flex-shrink: 0;
+    }
+    .ar-info { flex: 1; }
+    .ar-name { font-weight: 600; }
+    .ar-meta { font-size: .82rem; color: #888; }
+    .ar-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-approved { background: #d1fae5; color: #065f46; }
+    .badge-denied { background: #fee2e2; color: #991b1b; }
+    .badge-cancelled { background: #f3f4f6; color: #6b7280; }
+    .badge-expired { background: #f3f4f6; color: #6b7280; }
+    .section-title { font-size: 1rem; font-weight: 600; color: #667eea; margin: 1.5rem 0 .75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ar-container">
+    <h2 class="mb-1"><i class="fas fa-user-lock me-2"></i>Access Requests</h2>
+    <p class="text-muted mb-3">Manage requests from team members who need board access.</p>
+
+    {% if pending_requests %}
+    <div class="section-title"><i class="fas fa-clock me-1"></i> Pending ({{ pending_requests|length }})</div>
+    {% for req in pending_requests %}
+    <div class="ar-card" id="ar-{{ req.id }}">
+        <div class="ar-avatar">{{ req.requester.first_name|default:req.requester.username|first|upper }}</div>
+        <div class="ar-info">
+            <div class="ar-name">{{ req.requester.get_full_name|default:req.requester.username }}</div>
+            <div class="ar-meta">
+                Wants <strong>{{ req.get_requested_role_display|lower }}</strong> access to
+                <strong>{{ req.board.name }}</strong> &middot; {{ req.created_at|timesince }} ago
+            </div>
+            {% if req.message %}
+            <div class="ar-meta mt-1"><i class="fas fa-quote-left me-1"></i> {{ req.message }}</div>
+            {% endif %}
+        </div>
+        <div class="ar-actions">
+            <a href="{% url 'kanban:review_access_request' request_id=req.id %}"
+               class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-eye me-1"></i> Review
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="text-center text-muted py-4">
+        <i class="fas fa-check-circle fa-2x mb-2 d-block" style="color:#10b981;"></i>
+        No pending access requests.
+    </div>
+    {% endif %}
+
+    {% if resolved_requests %}
+    <div class="section-title"><i class="fas fa-history me-1"></i> Recent History</div>
+    {% for req in resolved_requests %}
+    <div class="ar-card" style="opacity:.8;">
+        <div class="ar-avatar" style="background:#ccc;">{{ req.requester.first_name|default:req.requester.username|first|upper }}</div>
+        <div class="ar-info">
+            <div class="ar-name">{{ req.requester.get_full_name|default:req.requester.username }}</div>
+            <div class="ar-meta">
+                {{ req.board.name }} &middot;
+                <span class="badge badge-{{ req.status }}">{{ req.get_status_display }}</span>
+                {% if req.resolved_at %} &middot; {{ req.resolved_at|timesince }} ago{% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

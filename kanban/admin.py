@@ -29,6 +29,7 @@ from .premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from .stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
 from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 from .whatif_models import WhatIfScenario
+from .access_request_models import AccessRequest
 
 # Import resource leveling admin
 from .resource_leveling_admin import (
@@ -1073,6 +1074,18 @@ class PreMortemAnalysisAdmin(admin.ModelAdmin):
     search_fields = ('board__name', 'created_by__username')
     readonly_fields = ('created_at',)
     inlines = [PreMortemScenarioAcknowledgmentInline]
+
+
+# -----------------------------------------------------------------------
+# Spectra Access Requests
+# -----------------------------------------------------------------------
+@admin.register(AccessRequest)
+class AccessRequestAdmin(admin.ModelAdmin):
+    list_display = ('requester', 'board', 'owner', 'status', 'trigger', 'requested_role', 'created_at', 'resolved_at')
+    list_filter = ('status', 'trigger', 'requested_role', 'created_at')
+    search_fields = ('requester__username', 'board__name', 'owner__username', 'message')
+    readonly_fields = ('created_at', 'resolved_at')
+    raw_id_fields = ('requester', 'board', 'owner', 'resolved_by')
 
 
 @admin.register(PreMortemScenarioAcknowledgment)

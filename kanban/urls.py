@@ -21,6 +21,7 @@ from . import shadow_views
 from . import commitment_views
 from . import favorite_views
 from . import sandbox_views
+from . import access_request_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -366,6 +367,18 @@ urlpatterns = [
     # Commitment API endpoints (JSON, used by JS auto-refresh and Chart.js)
     path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
     path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
+
+    # -----------------------------------------------------------------------
+    # Spectra Smart Access Request System
+    # -----------------------------------------------------------------------
+    path('access-requests/submit/', access_request_views.submit_access_request, name='submit_access_request'),
+    path('access-requests/mine/', access_request_views.my_access_requests, name='my_access_requests'),
+    path('access-requests/<int:request_id>/review/', access_request_views.review_access_request, name='review_access_request'),
+    path('access-requests/<int:request_id>/cancel/', access_request_views.cancel_access_request, name='cancel_access_request'),
+    path('access-requests/pending/', access_request_views.pending_access_requests, name='pending_access_requests'),
+    path('api/access-requests/<int:request_id>/approve/', access_request_views.api_approve_access_request, name='api_approve_access_request'),
+    path('api/access-requests/<int:request_id>/deny/', access_request_views.api_deny_access_request, name='api_deny_access_request'),
+    path('api/access-requests/pending-count/', access_request_views.get_pending_access_request_count, name='get_pending_access_request_count'),
     path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
 
     # -----------------------------------------------------------------------

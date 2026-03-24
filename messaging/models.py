@@ -140,6 +140,8 @@ class Notification(models.Model):
         ('ACTIVITY', 'Activity Update'),
         ('TASK_ASSIGNED_CAL', 'Task Assigned via Calendar'),
         ('EVENT_INVITED', 'Calendar Event Invitation'),
+        ('ACCESS_REQUEST', 'Access Request'),
+        ('ACCESS_RESPONSE', 'Access Request Response'),
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
