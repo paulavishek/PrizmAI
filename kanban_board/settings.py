@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     'axes',  # django-axes for brute force protection
     'csp',  # django-csp for Content Security Policy
     'django_celery_beat',  # Database-backed periodic task scheduler
+    'rules',  # django-rules for predicate-based RBAC permissions
     
     # Django Allauth
     'allauth',
@@ -276,6 +277,7 @@ SITE_ID = 1
 AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',  # django-rules object-level permissions
 )
 
 # Allauth settings (updated for django-allauth 65.9.0+)

@@ -213,7 +213,8 @@ def _execute_scheduled_notification(sa, tasks):
     # Determine recipients
     recipients = set()
     if sa.notify_target == 'board_members':
-        recipients = set(sa.board.members.all())
+        from django.contrib.auth.models import User
+        recipients = set(User.objects.filter(board_memberships__board=sa.board))
         if sa.board.created_by:
             recipients.add(sa.board.created_by)
     elif sa.notify_target == 'assignee':

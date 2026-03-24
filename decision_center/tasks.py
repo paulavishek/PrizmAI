@@ -43,11 +43,11 @@ def _user_boards(user):
     if is_demo_user or is_viewing_demo:
         # Include demo boards
         return Board.objects.filter(
-            Q(created_by=user) | Q(members=user) | Q(is_official_demo_board=True),
+            Q(created_by=user) | Q(memberships__user=user) | Q(is_official_demo_board=True),
         ).distinct()
 
     return Board.objects.filter(
-        Q(created_by=user) | Q(members=user),
+        Q(created_by=user) | Q(memberships__user=user),
         is_official_demo_board=False,
     ).distinct()
 

@@ -51,7 +51,7 @@ class ChatRoomForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if board:
             # Only show members that are part of the board
-            self.fields['members'].queryset = board.members.all() if hasattr(board, 'members') else User.objects.all()
+            self.fields['members'].queryset = User.objects.filter(board_memberships__board=board)
 
 
 class ChatMessageForm(forms.ModelForm):

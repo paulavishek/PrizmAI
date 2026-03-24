@@ -240,7 +240,7 @@ class PriorityDecision(models.Model):
         
         # Get team capacity
         board = task.column.board
-        team_size = board.members.count()
+        team_size = board.memberships.count()
         total_open_tasks = Task.objects.filter(
             column__board=board,
             progress__lt=100

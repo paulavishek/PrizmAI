@@ -59,7 +59,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
             # MVP Mode: Get all accessible boards (demo boards + user's boards)
             demo_boards = Board.objects.filter(is_official_demo_board=True)
             user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
+                Q(created_by=request.user) | Q(memberships__user=request.user)
             )
             available_boards = (demo_boards | user_boards).distinct()
             
@@ -198,7 +198,7 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
             # MVP Mode: Get all accessible boards (demo boards + user's boards)
             demo_boards = Board.objects.filter(is_official_demo_board=True)
             user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
+                Q(created_by=request.user) | Q(memberships__user=request.user)
             )
             available_boards = (demo_boards | user_boards).distinct()
             
@@ -376,7 +376,7 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     if assignee_name:
                         try:
                             # Restrict lookup to board members (creator + members)
-                            board_member_ids = list(board.members.values_list('id', flat=True))
+                            board_member_ids = list(board.memberships.values_list('user_id', flat=True))
                             board_member_ids.append(board.created_by_id)
                             board_qs = User.objects.filter(id__in=board_member_ids)
 
@@ -557,7 +557,7 @@ def get_boards_for_organization(request):
         # MVP Mode: Get all accessible boards (demo boards + user's boards)
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
+            Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
         
@@ -574,7 +574,7 @@ def get_boards_for_organization(request):
             # Collect board members (creator + members, deduplicated)
             seen_ids = set()
             members_data = []
-            for member in [board.created_by] + list(board.members.all()):
+            for member in [board.created_by] + list(User.objects.filter(board_memberships__board=board)):
                 if member.id not in seen_ids:
                     seen_ids.add(member.id)
                     members_data.append({
@@ -683,7 +683,7 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
                     # MVP Mode: Get all accessible boards
                     demo_boards = Board.objects.filter(is_official_demo_board=True)
                     user_boards = Board.objects.filter(
-                        Q(created_by=request.user) | Q(members=request.user)
+                        Q(created_by=request.user) | Q(memberships__user=request.user)
                     )
                     available_boards = (demo_boards | user_boards).distinct()[:10]
                     

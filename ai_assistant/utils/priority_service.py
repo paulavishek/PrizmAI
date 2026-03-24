@@ -222,7 +222,7 @@ class PrioritySuggestionService:
             board = task._board
         
         if board:
-            team_size = board.members.count()
+            team_size = board.memberships.count()
             if team_size > 0:
                 total_open_tasks = Task.objects.filter(
                     column__board=board,

@@ -168,7 +168,7 @@ class WhatIfEngine:
                 velocity = float(latest_vel.tasks_completed or 0)
 
         # Team
-        team_size = board.members.count() or 1
+        team_size = board.memberships.count() or 1
 
         # Resource utilization estimate
         active_per_member = remaining / team_size if team_size else remaining

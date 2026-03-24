@@ -5,7 +5,7 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
-from kanban.models import Board, Column, Task
+from kanban.models import Board, Column, Task, BoardMembership
 from kanban.priority_models import PriorityDecision, PriorityModel
 from ai_assistant.utils.priority_service import PrioritySuggestionService, PriorityModelTrainer
 from accounts.models import Organization, UserProfile
@@ -26,7 +26,7 @@ class PrioritySuggestionServiceTest(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         
         # Create column
         self.column = Column.objects.create(
@@ -179,7 +179,7 @@ class PriorityAPITest(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         
         # Create column
         self.column = Column.objects.create(

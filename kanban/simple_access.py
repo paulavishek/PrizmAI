@@ -243,10 +243,11 @@ def get_accessible_boards(user, organization=None):
     if user.is_superuser:
         queryset = Board.objects.all()
     else:
-        # Boards created by user OR where user is member OR in user's org
+        # Boards created by user OR where user is a BoardMembership member OR in user's org
         queryset = Board.objects.filter(
             Q(created_by=user) |
-            Q(members=user) |
+            Q(owner=user) |
+            Q(memberships__user=user) |
             Q(organization=user.profile.organization if hasattr(user, 'profile') else None)
         ).distinct()
     
@@ -383,9 +384,13 @@ def assign_default_role_to_user(user, board):
     """
     Backwards compatible: Add user as board member.
     
-    In simplified model, just add to Board.members.
+    Uses the new BoardMembership model.
     """
-    board.members.add(user)
+    from kanban.models import BoardMembership
+    BoardMembership.objects.get_or_create(
+        board=board, user=user,
+        defaults={'role': 'member'}
+    )
     return get_user_board_membership(user, board)
 
 
@@ -422,10 +427,8 @@ def get_permission_display_name(permission):
 
 
 def get_available_roles_for_organization(organization):
-    """Backwards compatible: Return empty since we don't use roles."""
-    # Return empty queryset to avoid breaking code that expects this
-    from kanban.permission_models import Role
-    return Role.objects.none()
+    """Backwards compatible: Return available roles."""
+    return ['owner', 'member', 'viewer']
 
 
 # Decorator aliases for backwards compatibility

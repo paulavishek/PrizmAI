@@ -81,7 +81,7 @@ class ShadowBoardListView(ListView):
         board = get_object_or_404(Board, id=board_id)
         
         # Check user is board member
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             self.permission_denied()
         
         # Return active, committed, and recently archived branches (last 7 days)
@@ -174,7 +174,7 @@ class CreateBranchView(CreateView):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = form.save(commit=False)
@@ -296,7 +296,7 @@ class BranchDetailView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             self.permission_denied()
 
         return ShadowBranch.objects.filter(board=board).select_related(
@@ -353,7 +353,7 @@ class CommitBranchView(DetailView):
         branch = self.get_object()
 
         # Check user is board member or admin
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Check for confirmation (supports both JSON body and form POST)
@@ -414,7 +414,7 @@ class CommitBranchView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             self.permission_denied()
 
         return get_object_or_404(
@@ -450,7 +450,7 @@ def merge_conflict_check(request, board_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a_id = request.GET.get('branch_a')
@@ -542,7 +542,7 @@ def promote_scenario_to_branch(request, board_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Handle both form-encoded and JSON data
@@ -618,7 +618,7 @@ def get_branch_snapshots(request, board_id, branch_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -658,7 +658,7 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a = get_object_or_404(ShadowBranch, id=branch_a_id, board=board)
@@ -722,7 +722,7 @@ def delete_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -756,7 +756,7 @@ def link_scenario_to_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -803,7 +803,7 @@ def restore_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -830,7 +830,7 @@ def toggle_star_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)

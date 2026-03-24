@@ -49,7 +49,7 @@ class BoardViewSet(viewsets.ModelViewSet):
         user = self.request.user
         # Return boards where user is member or creator
         return Board.objects.filter(
-            Q(members=user) | Q(created_by=user)
+            Q(memberships__user=user) | Q(created_by=user)
         ).distinct().select_related('organization', 'created_by').prefetch_related('columns')
     
     def get_serializer_class(self):
@@ -103,7 +103,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         # Return tasks from boards where user is member or creator
         queryset = Task.objects.filter(
-            Q(column__board__members=user) | Q(column__board__created_by=user)
+            Q(column__board__memberships__user=user) | Q(column__board__created_by=user)
         ).distinct().select_related(
             'column', 'column__board', 'assigned_to', 'created_by'
         ).prefetch_related('labels')
@@ -189,7 +189,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             )
         
         # Verify user has access to board
-        if not task.column.board.members.filter(id=user_id).exists():
+        if not task.column.board.memberships.filter(user_id=user_id).exists():
             return Response(
                 {'error': 'User is not a member of this board'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -218,7 +218,7 @@ class CommentViewSet(viewsets.ModelViewSet):
         """Return comments for tasks accessible to the authenticated user"""
         user = self.request.user
         queryset = Comment.objects.filter(
-            Q(task__column__board__members=user) | Q(task__column__board__created_by=user)
+            Q(task__column__board__memberships__user=user) | Q(task__column__board__created_by=user)
         ).distinct().select_related('task', 'user')
         
         # Filter by task_id if provided

@@ -63,28 +63,28 @@ DISPLAY_NAME_FIELDS = {
 def _user_can_access(user, favorite_type, obj):
     """Check that user has legitimate access to the object."""
     if favorite_type == 'board':
-        return obj.created_by == user or obj.members.filter(pk=user.pk).exists() or obj.is_official_demo_board
+        return obj.created_by == user or obj.memberships.filter(user=user).exists() or obj.is_official_demo_board
     elif favorite_type in ('goal', 'mission'):
         return True  # Goals/Missions are visible to all authenticated users
     elif favorite_type == 'wiki_page':
         return True  # Wiki pages are shared within workspace
     elif favorite_type == 'task':
         board = obj.column.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return board.created_by == user or board.memberships.filter(user=user).exists() or board.is_official_demo_board
     elif favorite_type == 'retrospective':
         board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return board.created_by == user or board.memberships.filter(user=user).exists() or board.is_official_demo_board
     elif favorite_type == 'chat_room':
         return obj.members.filter(pk=user.pk).exists()
     elif favorite_type == 'conflict':
         board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return board.created_by == user or board.memberships.filter(user=user).exists() or board.is_official_demo_board
     elif favorite_type == 'shadow_branch':
         board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return board.created_by == user or board.memberships.filter(user=user).exists() or board.is_official_demo_board
     elif favorite_type == 'automation':
         board = obj.board
-        return board.created_by == user or board.members.filter(pk=user.pk).exists() or board.is_official_demo_board
+        return board.created_by == user or board.memberships.filter(user=user).exists() or board.is_official_demo_board
     return False
 
 

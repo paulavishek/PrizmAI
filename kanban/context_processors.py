@@ -197,7 +197,7 @@ def conflict_count(request):
             ).distinct()
         else:
             boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user),
+                Q(created_by=request.user) | Q(memberships__user=request.user),
                 is_official_demo_board=False,
             ).exclude(
                 created_by_session__startswith='spectra_demo_'

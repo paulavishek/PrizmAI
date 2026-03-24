@@ -31,7 +31,7 @@ def conflict_dashboard(request):
     try:
         # Get boards user has access to
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         # Check if filtering by specific board
@@ -114,7 +114,7 @@ def conflict_detail(request, conflict_id):
     try:
         # Get boards user has access to
         accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         conflict = get_object_or_404(
@@ -179,7 +179,7 @@ def apply_resolution(request, conflict_id, resolution_id):
     try:
         # Get boards user has access to
         accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         conflict = get_object_or_404(
@@ -239,7 +239,7 @@ def ignore_conflict(request, conflict_id):
     try:
         # Get boards user has access to
         accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         conflict = get_object_or_404(
@@ -305,7 +305,7 @@ def conflict_feedback(request, conflict_id):
     try:
         # Get boards user has access to
         accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         conflict = get_object_or_404(
@@ -360,7 +360,7 @@ def trigger_detection_all(request):
     try:
         # Get all accessible boards
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         # Trigger detection for each board
@@ -413,7 +413,7 @@ def trigger_detection(request, board_id):
     try:
         # Get boards user has access to
         accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         board = get_object_or_404(
@@ -458,7 +458,7 @@ def conflict_analytics(request):
     try:
         # Get boards user has access to
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
         ).distinct()
         
         # Get resolution patterns

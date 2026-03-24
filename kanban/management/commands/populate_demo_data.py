@@ -13,9 +13,8 @@ from datetime import timedelta, date
 from decimal import Decimal
 from kanban.models import (
     Board, Column, Task, TaskLabel, Organization, Comment, TaskActivity, TaskFile,
-    TeamSkillProfile, SkillGap, ScopeChangeSnapshot, ScopeCreepAlert
+    TeamSkillProfile, SkillGap, ScopeChangeSnapshot, ScopeCreepAlert, BoardMembership
 )
-from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction, SprintMilestone
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
@@ -619,9 +618,8 @@ class Command(BaseCommand):
                     except Exception:
                         pass
                     try:
-                        from kanban.permission_models import BoardMembership, PermissionAuditLog
+                        from kanban.models import BoardMembership
                         BoardMembership.objects.filter(board=board).delete()
-                        PermissionAuditLog.objects.filter(board=board).delete()
                     except Exception:
                         pass
                     # Delete columns then board (FK-safe)

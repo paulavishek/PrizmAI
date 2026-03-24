@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 def _user_boards(user):
     """Return all boards the user owns or is a member of (excluding official demo boards)."""
     return Board.objects.filter(
-        Q(created_by=user) | Q(members=user)
+        Q(created_by=user) | Q(memberships__user=user)
     ).distinct().order_by('name')
 
 
@@ -107,7 +107,7 @@ def unified_calendar(request):
 
     # Gather all board members across user's boards for participant typeahead
     participant_qs = User.objects.filter(
-        Q(member_boards__in=boards) | Q(created_boards__in=boards)
+        Q(board_memberships__board__in=boards) | Q(created_boards__in=boards)
     ).exclude(id=request.user.id).distinct().order_by('username')
     participants_data = [
         {'id': u.id, 'username': u.username,
@@ -205,7 +205,7 @@ def unified_calendar_events_api(request):
     # Collect board member IDs (not including self) for teammate-status event query
     board_member_ids = list(
         User.objects.filter(
-            Q(member_boards__in=boards) | Q(created_boards__in=boards)
+            Q(board_memberships__board__in=boards) | Q(created_boards__in=boards)
         ).exclude(id=request.user.id).values_list('id', flat=True)
     )
 
@@ -661,7 +661,7 @@ def calendar_get_board_columns(request, board_id):
     # Also return board members for the assignee dropdown
     members = list(
         User.objects.filter(
-            Q(member_boards=board) | Q(created_boards=board)
+            Q(board_memberships__board=board) | Q(created_boards=board)
         ).distinct().values('id', 'username')
     )
     for m in members:
@@ -690,7 +690,7 @@ def calendar_event_detail(request, event_id):
     if not can_view and event.visibility == 'team':
         # Board members may view team-shared OOO/busy/team events
         shared_boards = _user_boards(request.user).filter(
-            Q(created_by=event.created_by) | Q(members=event.created_by)
+            Q(created_by=event.created_by) | Q(memberships__user=event.created_by)
         )
         can_view = shared_boards.exists()
     if not can_view:

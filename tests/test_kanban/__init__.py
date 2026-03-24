@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
-from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskFile
+from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskFile, BoardMembership
 from accounts.models import Organization, UserProfile
 
 
@@ -65,9 +65,9 @@ class BoardModelTests(TestCase):
             email='user2@example.com',
             password='testpass123'
         )
-        board.members.add(user2)
-        self.assertEqual(board.members.count(), 1)
-        self.assertIn(user2, board.members.all())
+        BoardMembership.objects.get_or_create(board=board, user=user2, defaults={'role': 'member'})
+        self.assertEqual(board.memberships.count(), 1)
+        self.assertTrue(board.memberships.filter(user=user2).exists())
     
     def test_board_string_representation(self):
         """Test board __str__ method"""

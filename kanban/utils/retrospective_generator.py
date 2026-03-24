@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from django.db.models import Avg, Count, Sum, Q, F, Max, Min
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from ai_assistant.utils.ai_clients import GeminiClient
 
@@ -183,7 +184,8 @@ class RetrospectiveGenerator:
         """Return a list of board members with their current open-task count."""
         from kanban.models import Task
         members = []
-        board_users = list(self.board.members.all())
+        User = get_user_model()
+        board_users = list(User.objects.filter(board_memberships__board=self.board))
         # Always include the board creator
         creator = self.board.created_by
         if not any(u.id == creator.id for u in board_users):

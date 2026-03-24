@@ -328,7 +328,7 @@ Generate a response following this exact structure. Be specific, actionable, and
 
             logger.info(f"[AICoach] Board '{board.name}' (id={board.id}) velocity injected into prompt: {velocity_text}")
 
-            team_size = board.members.count()
+            team_size = board.memberships.count()
             
             # Build context prompt
             prompt = f"""You are an experienced project management coach helping a PM with their project.
@@ -475,7 +475,7 @@ Provide fully explainable insights so the PM understands your assessment methodo
 
 ### Project Context:
 - Board: {board.name}
-- Team Size: {board.members.count()}
+- Team Size: {board.memberships.count()}
 
 ## Task:
 Provide a comprehensive coaching analysis WITH FULL EXPLAINABILITY:

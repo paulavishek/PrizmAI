@@ -143,7 +143,7 @@ class ResourceLevelingService:
             if not board:
                 return {'error': 'Task must be in a column on a board'}
             # Show ALL board members as potential assignees
-            potential_assignees = list(board.members.all())
+            potential_assignees = list(User.objects.filter(board_memberships__board=board))
         
         if not potential_assignees:
             return {'error': 'No potential assignees available'}
@@ -478,7 +478,7 @@ class ResourceLevelingService:
         if board:
             exclude_user_ids = [task.assigned_to.id] if task.assigned_to else []
             has_peer_history = UserPerformanceProfile.objects.filter(
-                user__in=board.members.all(),
+                user__in=User.objects.filter(board_memberships__board=board),
                 total_tasks_completed__gt=0,
             ).exclude(user_id__in=exclude_user_ids).exists()
             if not has_peer_history:
@@ -873,7 +873,7 @@ class ResourceLevelingService:
         """
         # Show ALL board members - this is the expected UX behavior
         # All members of a board should see all other members in the workload report
-        members = board.members.all()
+        members = User.objects.filter(board_memberships__board=board)
         
         report = {
             'board': board.name,
@@ -940,7 +940,7 @@ class ResourceLevelingService:
         Update performance profiles for all board members
         Useful for batch updates or scheduled tasks
         """
-        members = board.members.all()
+        members = User.objects.filter(board_memberships__board=board)
         updated = 0
         
         for member in members:
@@ -981,7 +981,7 @@ class WorkloadBalancer:
         from kanban.models import Task
         
         # Get all profiles
-        members = board.members.all()
+        members = User.objects.filter(board_memberships__board=board)
         profiles = {m.id: self.service.get_or_create_profile(m) for m in members}
         
         # Identify overloaded and underutilized members

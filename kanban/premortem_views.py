@@ -79,7 +79,7 @@ def _collect_board_snapshot(board):
     no_deadline_count = task_count - no_deadline_count  # tasks WITHOUT a due date
 
     # Team size – union of board members and distinct assignees
-    member_ids = set(board.members.values_list('id', flat=True))
+    member_ids = set(board.memberships.values_list('user_id', flat=True))
     assignee_ids = set(
         tasks.filter(assigned_to__isnull=False)
         .values_list('assigned_to_id', flat=True)

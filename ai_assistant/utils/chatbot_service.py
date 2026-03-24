@@ -2,6 +2,7 @@
 import logging
 import re
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db.models import Q, Count, Avg, Max
 from kanban.models import Task, Board
 from ai_assistant.models import ProjectKnowledgeBase
@@ -410,7 +411,7 @@ class TaskFlowChatbotService:
                         context += f"  ... and {tasks.count() - 50} more tasks\n"
                 
                 # Get team members with skills
-                members = self.board.members.select_related('profile').all()
+                members = get_user_model().objects.filter(board_memberships__board=self.board).select_related('profile')
                 if members.exists():
                     context += f"\n**Team Members ({members.count()}):**\n"
                     for m in members[:10]:
@@ -439,7 +440,7 @@ class TaskFlowChatbotService:
                 # Get all user's active (non-archived) boards
                 boards = Board.objects.filter(
                     Q(is_archived=False) & (
-                        Q(created_by=self.user) | Q(members=self.user)
+                        Q(created_by=self.user) | Q(memberships__user=self.user)
                     )
                 ).distinct()[:10]
                 
@@ -779,11 +780,11 @@ class TaskFlowChatbotService:
             if organization:
                 user_boards = Board.objects.filter(
                     Q(organization=organization) & 
-                    (Q(created_by=self.user) | Q(members=self.user))
+                    (Q(created_by=self.user) | Q(memberships__user=self.user))
                 ).distinct()
             else:
                 user_boards = Board.objects.filter(
-                    Q(created_by=self.user) | Q(members=self.user)
+                    Q(created_by=self.user) | Q(memberships__user=self.user)
                 ).distinct()
             
             if not user_boards.exists():
@@ -805,7 +806,7 @@ class TaskFlowChatbotService:
                 if board.created_by_id:
                     user_ids.add(board.created_by_id)
                 # Add board members
-                for member in board.members.all():
+                for member in User.objects.filter(board_memberships__board=board):
                     user_ids.add(member.id)
             
             # Get all users by their IDs
@@ -991,7 +992,7 @@ class TaskFlowChatbotService:
             for board in user_boards:
                 if board.created_by_id:
                     user_ids.add(board.created_by_id)
-                for member in board.members.all():
+                for member in User.objects.filter(board_memberships__board=board):
                     user_ids.add(member.id)
             
             all_users = list(User.objects.filter(id__in=user_ids).select_related('profile'))
@@ -1442,7 +1443,7 @@ class TaskFlowChatbotService:
                 ).count()
                 
                 # Count members
-                member_count = board.members.count()
+                member_count = board.memberships.count()
                 
                 # Get last update
                 last_task_update = tasks.order_by('-updated_at').first()
@@ -1827,7 +1828,7 @@ class TaskFlowChatbotService:
             return Board.objects.filter(
                 base_filter &
                 Q(organization=organization) & 
-                (Q(created_by=self.user) | Q(members=self.user))
+                (Q(created_by=self.user) | Q(memberships__user=self.user))
             ).exclude(
                 created_by_session__startswith='spectra_demo_'
             ).distinct()
@@ -1835,7 +1836,7 @@ class TaskFlowChatbotService:
             return Board.objects.filter(
                 base_filter & (
                     Q(created_by=self.user) | 
-                    Q(members=self.user)
+                    Q(memberships__user=self.user)
                 )
             ).exclude(
                 created_by_session__startswith='spectra_demo_'
@@ -1904,7 +1905,7 @@ class TaskFlowChatbotService:
                 user_boards_in_org = Board.objects.filter(
                     organization=org
                 ).filter(
-                    Q(created_by=self.user) | Q(members=self.user)
+                    Q(created_by=self.user) | Q(memberships__user=self.user)
                 ).distinct()
                 
                 context += f"**{org.name}**\n"
@@ -3475,7 +3476,7 @@ class TaskFlowChatbotService:
                             boards = s.boards.filter(is_archived=False)
                             for b in boards[:5]:
                                 task_count = Task.objects.filter(column__board=b).count()
-                                context += f"         📋 Board: {b.name} ({task_count} tasks, {b.members.count()} members)\n"
+                                context += f"         📋 Board: {b.name} ({task_count} tasks, {b.memberships.count()} members)\n"
                 else:
                     context += "   No missions linked yet.\n"
 

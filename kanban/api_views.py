@@ -1591,7 +1591,7 @@ def recommend_columns_api(request):
             existing_columns = [col.name for col in board.columns.all()]
             board_name = board.name
             board_description = board.description
-            team_size = board.members.count() + 1  # +1 for creator
+            team_size = board.memberships.count() + 1  # +1 for creator
         else:
             # New board recommendations
             board_name = data.get('name', '')
@@ -2831,7 +2831,7 @@ def reschedule_task_api(request, task_id):
         board = task.column.board
 
         # Permission check: only board creator or members can reschedule
-        if request.user != board.created_by and not board.members.filter(id=request.user.id).exists():
+        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         data = json.loads(request.body)
@@ -2933,7 +2933,7 @@ def update_task_fields_api(request, task_id):
         board = task.column.board
 
         # Verify the requesting user is a board member or creator
-        if request.user != board.created_by and not board.members.filter(id=request.user.id).exists():
+        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         data = json.loads(request.body)
@@ -3900,7 +3900,7 @@ def match_team_to_task_api(request, task_id):
         from kanban.utils.skill_analysis import match_team_member_to_task
         
         # Get board members
-        board_members = board.members.select_related('profile').all()
+        board_members = User.objects.filter(board_memberships__board=board).select_related('profile')
         
         # Find matches
         matches = match_team_member_to_task(task, board_members)
@@ -4358,7 +4358,7 @@ def search_tasks_semantic_api(request):
         else:
             # Get all accessible tasks
             owned_boards = Board.objects.filter(created_by=request.user)
-            member_boards = Board.objects.filter(members=request.user)
+            member_boards = Board.objects.filter(memberships__user=request.user)
             accessible_boards = owned_boards | member_boards
             
             tasks = Task.objects.filter(
@@ -4881,11 +4881,11 @@ def suggest_assignee_api(request):
         board = get_object_or_404(Board, id=board_id)
         
         # Verify user has access to this board
-        if request.user != board.created_by and request.user not in board.members.all():
+        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
             return JsonResponse({'error': 'You do not have access to this board.'}, status=403)
         
         # Check board has members
-        members = list(board.members.all())
+        members = list(User.objects.filter(board_memberships__board=board))
         if not members:
             return JsonResponse({
                 'error': 'No board members available for assignment suggestion. Add members to the board first.',

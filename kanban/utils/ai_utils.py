@@ -3269,7 +3269,7 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict, board)
     """
     try:
         # Get board context
-        board_members = [member.username for member in board.members.all()]
+        board_members = list(board.memberships.values_list('user__username', flat=True))
         board_members.append(board.created_by.username)
         
         existing_columns = [col.name for col in board.columns.all()]

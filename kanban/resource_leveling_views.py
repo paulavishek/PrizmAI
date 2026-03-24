@@ -224,7 +224,7 @@ def get_board_suggestions(request, board_id):
         # Check if there are enough qualified candidates on this board
         # to produce meaningful suggestions
         qualified_count = 0
-        for member in board.members.all():
+        for member in User.objects.filter(board_memberships__board=board):
             profile = service.get_or_create_profile(member)
             if service._is_qualified_candidate(profile):
                 qualified_count += 1

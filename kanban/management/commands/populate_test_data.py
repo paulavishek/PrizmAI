@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from accounts.models import Organization, UserProfile
 from kanban.models import (
-    Board, Column, TaskLabel, Task, Comment, TaskActivity,
+    Board, BoardMembership, Column, TaskLabel, Task, Comment, TaskActivity,
     ResourceDemandForecast, TeamCapacityAlert, WorkloadDistributionRecommendation
 )
 from kanban.priority_models import PriorityDecision
@@ -310,14 +310,15 @@ class Command(BaseCommand):
             self.stdout.write(f'Created board: {board.name}')
             
             # Add all dev team members including admin
-            board.members.add(
+            for u in [
                 self.users['admin'],
                 self.users['john_doe'],
                 self.users['jane_smith'],
                 self.users['robert_johnson'],
                 self.users['alice_williams'],
                 self.users['bob_martinez']
-            )
+            ]:
+                BoardMembership.objects.get_or_create(board=board, user=u, defaults={'role': 'member'})
             
             # Create columns
             columns = [
@@ -531,12 +532,13 @@ class Command(BaseCommand):
             self.stdout.write(f'Created board: {board.name}')
             
             # Add members
-            board.members.add(
+            for u in [
                 self.users['admin'],
                 self.users['john_doe'],
                 self.users['jane_smith'],
                 self.users['alice_williams']
-            )
+            ]:
+                BoardMembership.objects.get_or_create(board=board, user=u, defaults={'role': 'member'})
             
             # Create columns
             columns = [
@@ -711,11 +713,12 @@ class Command(BaseCommand):
             self.stdout.write(f'Created board: {board.name}')
             
             # Add members (marketing team + admin for oversight)
-            board.members.add(
+            for u in [
                 self.users['admin'],
                 self.users['carol_anderson'],
                 self.users['david_taylor']
-            )
+            ]:
+                BoardMembership.objects.get_or_create(board=board, user=u, defaults={'role': 'member'})
             
             # Create columns
             columns = [
@@ -1548,7 +1551,7 @@ class Command(BaseCommand):
                     self.stdout.write(f'  Created chat room: {chat_room.name} in {board.name}')
                     
                     # Add board members to the chat room
-                    for member in board.members.all():
+                    for member in User.objects.filter(board_memberships__board=board):
                         chat_room.members.add(member)
                     
                     # Add admin to all rooms
@@ -2339,7 +2342,7 @@ Carol: Sounds good. Great work this week!
                 self.stdout.write(f'    Created Done column for {board.name}')
             
             # Get board members for assignment
-            members = list(board.members.all())
+            members = list(User.objects.filter(board_memberships__board=board))
             if not members:
                 members = [self.users['admin']]
             
@@ -2496,7 +2499,7 @@ Carol: Sounds good. Great work this week!
             self.stdout.write(f'  Processing board: {board.name}')
             
             # Get all board members
-            board_members = board.members.all()
+            board_members = User.objects.filter(board_memberships__board=board)
             
             if not board_members.exists():
                 self.stdout.write(f'    ⚠️  No members found for {board.name}')
@@ -2924,7 +2927,7 @@ Carol: Sounds good. Great work this week!
             self.stdout.write(f'  Creating priority decisions for board: {board.name}')
             
             # Get board members for realistic decision-making
-            members = list(board.members.all())
+            members = list(User.objects.filter(board_memberships__board=board))
             if not members:
                 members = [self.users['admin']]
             
@@ -3681,7 +3684,7 @@ Carol: Sounds good. Great work this week!
             self.stdout.write(f'\n  Creating retrospectives for {board.name}...')
             
             # Get board members for assignments
-            board_members = list(board.members.all())
+            board_members = list(User.objects.filter(board_memberships__board=board))
             if not board_members:
                 board_members = [self.users.get('admin', User.objects.first())]
             

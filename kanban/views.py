@@ -85,7 +85,7 @@ def dashboard(request):
         # v2 real mode: only the user's own boards (no demo boards,
         # no boards created during demo exploration via Spectra).
         boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
+            Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
@@ -94,7 +94,7 @@ def dashboard(request):
         # v1 legacy: demo + user boards mixed
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
+            Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
     
@@ -1048,14 +1048,14 @@ def board_list(request):
     elif profile.onboarding_version >= 2:
         # v2 onboarding (AI-generated or scratch) — never show demo boards
         boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
+            Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False
         ).distinct()
     else:
         # v1 legacy — demo + user boards mixed
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
+            Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
 
@@ -1199,26 +1199,15 @@ def create_board(request):
                 board.strategy = selected_strategy
 
             board.save()
-            board.members.add(request.user)
-            
-            # Assign creator as Admin in RBAC system (if organization exists)
-            if organization:
-                try:
-                    from kanban.permission_models import Role, BoardMembership
-                    admin_role = Role.objects.filter(
-                        organization=organization,
-                        name='Admin'
-                    ).first()
-                    if admin_role:
-                        BoardMembership.objects.create(
-                            board=board,
-                            user=request.user,
-                            role=admin_role,
-                            added_by=request.user
-                        )
-                except Exception as e:
-                    # Continue even if RBAC setup fails
-                    pass
+            board.owner = request.user
+            board.save(update_fields=['owner'])
+
+            # Create RBAC membership for the creator as Owner
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'owner', 'added_by': request.user}
+            )
             
             # Log board creation
             log_model_change('board.created', board, request.user, request)
@@ -1296,8 +1285,12 @@ def board_detail(request, board_id):
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Auto-add user to demo boards - ensures they appear in AI Resource Optimization
-    if is_demo_board and request.user not in board.members.all():
-        board.members.add(request.user)
+    if is_demo_board:
+        from kanban.models import BoardMembership
+        BoardMembership.objects.get_or_create(
+            board=board, user=request.user,
+            defaults={'role': 'member', 'added_by': request.user}
+        )
     
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
@@ -1367,7 +1360,7 @@ def board_detail(request, board_id):
     labels = TaskLabel.objects.filter(board=board)
     
     # Get board members - all members of this board
-    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_ids = board.memberships.values_list('user_id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all non-demo users who aren't on the board yet
@@ -1448,14 +1441,10 @@ def board_detail(request, board_id):
         }
 
     # Board members list for inline assignee picker.
-    # Combine legacy board.members M2M with the RBAC BoardMembership model so
-    # all users – regardless of which path they were added through – appear.
-    from kanban.permission_models import BoardMembership as BM
-    rbac_member_ids = BM.objects.filter(board=board).values_list('user_id', flat=True)
-    all_member_ids = set(board_member_ids) | set(rbac_member_ids)
+    from kanban.models import BoardMembership
     board_members_list = (
         User.objects
-        .filter(id__in=all_member_ids)
+        .filter(board_memberships__board=board)
         .select_related('profile')
         .order_by('first_name', 'username')
     )
@@ -2403,7 +2392,7 @@ def gantt_chart(request, board_id):
     # Data for triage drawer: board columns (for status dropdown) and members (for assignee dropdown)
     board_columns = board.columns.order_by('position').values_list('id', 'name')
     board_members = User.objects.filter(
-        Q(member_boards=board) | Q(created_boards=board)
+        Q(board_memberships__board=board) | Q(created_boards=board)
     ).distinct().order_by('username')
 
     context = {
@@ -2444,10 +2433,10 @@ def board_calendar(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
     # Membership guard — only board owner/members may view this calendar
-    from django.db.models import Q as _CalQ
-    from django.contrib.auth.models import User as _CalUser
+    from kanban.models import BoardMembership
     if not (board.created_by == request.user or
-            board.members.filter(id=request.user.id).exists()):
+            board.owner == request.user or
+            BoardMembership.objects.filter(board=board, user=request.user).exists()):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You are not a member of this board.")
 
@@ -2494,7 +2483,7 @@ def board_calendar(request, board_id):
 
     # Collect all board members and map user_id → color (for the legend)
     _mem_qs = _CalUser.objects.filter(
-        _CalQ(member_boards=board) | _CalQ(created_boards=board)
+        _CalQ(board_memberships__board=board) | _CalQ(created_boards=board)
     ).distinct().order_by('username')
 
     _mem_data = []
@@ -2862,11 +2851,15 @@ def add_board_member(request, board_id):
                     if is_demo_board:
                         # For demo boards: add user to ALL boards in this demo organization
                         # This maintains organization-level access consistency
+                        from kanban.models import BoardMembership
                         demo_boards = Board.objects.filter(organization=board.organization)
                         added_count = 0
                         for demo_board in demo_boards:
-                            if user not in demo_board.members.all():
-                                demo_board.members.add(user)
+                            _, created = BoardMembership.objects.get_or_create(
+                                board=demo_board, user=user,
+                                defaults={'role': 'member', 'added_by': request.user}
+                            )
+                            if created:
                                 added_count += 1
                         
                         if added_count > 0:
@@ -2875,8 +2868,12 @@ def add_board_member(request, board_id):
                             messages.info(request, f'{user.username} is already a member of all demo boards.')
                     else:
                         # For regular boards: add user to this board only
-                        if user not in board.members.all():
-                            board.members.add(user)
+                        from kanban.models import BoardMembership
+                        _, created = BoardMembership.objects.get_or_create(
+                            board=board, user=user,
+                            defaults={'role': 'member', 'added_by': request.user}
+                        )
+                        if created:
                             messages.success(request, f'{user.username} added to the board successfully!')
                         else:
                             messages.info(request, f'{user.username} is already a member of this board.')
@@ -2923,14 +2920,16 @@ def remove_board_member(request, board_id, user_id):
         return redirect('board_detail', board_id=board.id)
     
     # Check if user is actually a member of the board
-    if user_to_remove not in board.members.all():
+    from kanban.models import BoardMembership
+    membership = BoardMembership.objects.filter(board=board, user=user_to_remove).first()
+    if not membership:
         messages.error(request, "This user is not a member of the board.")
         if redirect_to_manage:
             return redirect('manage_board_members', board_id=board.id)
         return redirect('board_detail', board_id=board.id)
     
     # Remove the member
-    board.members.remove(user_to_remove)
+    membership.delete()
     messages.success(request, f'{user_to_remove.username} has been removed from the board.')
     
     if redirect_to_manage:
@@ -2968,7 +2967,7 @@ def organization_boards(request):
         # Determine which boards the user is a member of
         user_boards = Board.objects.filter(
             Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(members=request.user))
+            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user))
         ).exclude(
             organization__name__in=demo_org_names
         ).distinct()
@@ -2993,11 +2992,15 @@ def join_board(request, board_id):
     # Access restriction removed - no organization check needed
     
     # Check if user is already a member
-    if request.user in board.members.all() or board.created_by == request.user:
+    from kanban.models import BoardMembership
+    if BoardMembership.objects.filter(board=board, user=request.user).exists() or board.created_by == request.user:
         messages.info(request, f"You are already a member of the board '{board.name}'.")
     else:
         # Add user to board members
-        board.members.add(request.user)
+        BoardMembership.objects.get_or_create(
+            board=board, user=request.user,
+            defaults={'role': 'member'}
+        )
         messages.success(request, f"You've successfully joined the board '{board.name}'!")
     
     return redirect('board_detail', board_id=board.id)
@@ -3478,7 +3481,13 @@ def _create_board_from_import_result(result, user, organization, session):
         created_by=user,
         num_phases=board_data.get('num_phases', 0)
     )
-    new_board.members.add(user)
+    new_board.owner = user
+    new_board.save(update_fields=['owner'])
+    from kanban.models import BoardMembership
+    BoardMembership.objects.get_or_create(
+        board=new_board, user=user,
+        defaults={'role': 'owner', 'added_by': user}
+    )
     
     # Create labels first (so we can reference them from tasks)
     labels_map = {}  # label_name -> TaskLabel instance
@@ -3640,9 +3649,11 @@ def link_board_to_strategy_dashboard(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
     # Access check: user must be the board creator or a member
+    from kanban.models import BoardMembership
     if not (board.created_by == request.user or
+            board.owner == request.user or
             board.is_official_demo_board or
-            board.members.filter(id=request.user.id).exists()):
+            BoardMembership.objects.filter(board=board, user=request.user).exists()):
         return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     strategy_id = request.POST.get('strategy_id', '').strip()
@@ -3760,9 +3771,14 @@ def wizard_create_board(request):
                 name=board_name,
                 description=board_description,
                 organization=organization,
-                created_by=request.user
+                created_by=request.user,
+                owner=request.user
             )
-            board.members.add(request.user)
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'owner', 'added_by': request.user}
+            )
             
             # If AI columns are requested, get AI recommendations
             if use_ai_columns:
@@ -4402,7 +4418,8 @@ def load_demo_data(request):
                 return redirect('board_list')
             
             # Check if user is already a member of any demo boards
-            already_member_boards = demo_boards.filter(members=request.user)
+            from kanban.models import BoardMembership
+            already_member_boards = demo_boards.filter(memberships__user=request.user)
             
             if already_member_boards.count() >= demo_boards.count():
                 # Mark wizard as completed even if they already have access
@@ -4414,38 +4431,18 @@ def load_demo_data(request):
                 return redirect('dashboard')
             
             # Add user as member to all demo boards with proper roles
-            # NOTE: This grants organization-level access - once added to one board in a demo org,
-            # user can access all boards in that organization
-            from kanban.permission_models import BoardMembership, Role
             from messaging.models import ChatRoom
             
             added_count = 0
             for demo_board in demo_boards:
-                # Add to members list if not already
-                # This gives them the "key" to access all boards in this demo organization
-                if request.user not in demo_board.members.all():
-                    demo_board.members.add(request.user)
-                    added_count += 1
-                
-                # Create BoardMembership with Editor role (allows full access)
-                membership_exists = BoardMembership.objects.filter(
+                # Create BoardMembership with member role
+                _, created = BoardMembership.objects.get_or_create(
                     board=demo_board,
-                    user=request.user
-                ).exists()
-                
-                if not membership_exists:
-                    # Get the Editor role for the board's organization
-                    editor_role = Role.objects.filter(
-                        organization=demo_board.organization,
-                        name='Editor'
-                    ).first()
-                    
-                    if editor_role:
-                        BoardMembership.objects.create(
-                            board=demo_board,
-                            user=request.user,
-                            role=editor_role
-                        )
+                    user=request.user,
+                    defaults={'role': 'member'}
+                )
+                if created:
+                    added_count += 1
                 
                 # Add user to all chat rooms for this board
                 chat_rooms = ChatRoom.objects.filter(board=demo_board)
@@ -4665,7 +4662,7 @@ def task_quick_view(request, task_id):
     # Board columns (for status dropdown) and members (for assignee picker)
     columns = Column.objects.filter(board=board).order_by('position')
     board_members = User.objects.filter(
-        id__in=board.members.values_list('id', flat=True)
+        board_memberships__board=board
     ).select_related('profile')
 
     return render(request, 'kanban/task_quick_view.html', {

@@ -10,7 +10,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kanban_board.settings')
 django.setup()
 
 from django.contrib.auth.models import User
-from kanban.models import Board
+from kanban.models import Board, BoardMembership
 
 def fix_oauth_user_boards(username=None):
     """Add users to all official demo boards."""
@@ -50,8 +50,8 @@ def fix_oauth_user_boards(username=None):
         boards_already_member = 0
         
         for board in demo_boards:
-            if user not in board.members.all():
-                board.members.add(user)
+            if not board.memberships.filter(user=user).exists():
+                BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'member'})
                 boards_added += 1
                 print(f"  ✓ Added {user.username} to '{board.name}'")
             else:

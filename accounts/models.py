@@ -177,6 +177,10 @@ class UserProfile(models.Model):
         default=False,
         help_text="Whether user is currently viewing the demo workspace"
     )
+    is_demo_account = models.BooleanField(
+        default=False,
+        help_text="Permanent flag for demo login accounts (Alex, Sam, Jordan). Read-only, zero AI access."
+    )
     
     def __str__(self):
         return f"{self.user.username}'s Profile"
