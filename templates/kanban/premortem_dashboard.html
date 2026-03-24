@@ -266,6 +266,37 @@ function runPreMortem() {
     if (resultsEl) resultsEl.style.display = 'none';
     if (runBtn) runBtn.disabled = true;
 
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        if (loadingEl) {
+            loadingEl.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:140px"></div>' +
+                '<div class="ai-progress-bar mt-2"><div id="premortem-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
+                '<p id="premortem-status" class="ai-status-text">Preparing…</p>';
+        }
+
+        triggerAITask(`{% url 'run_premortem' board.id %}`, {
+            method: 'POST',
+            statusSelector: '#premortem-status',
+            progressSelector: '#premortem-progress',
+            onResult: function(data) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Analysis failed. Please try again.');
+                    if (runBtn) runBtn.disabled = false;
+                }
+            },
+            onError: function(msg) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                alert(msg || 'Analysis failed. Please try again.');
+                if (runBtn) runBtn.disabled = false;
+            },
+        });
+        return;
+    }
+
+    // Fallback: synchronous fetch (original behavior)
     fetch(`{% url 'run_premortem' board.id %}`, {
         method: 'POST',
         headers: {

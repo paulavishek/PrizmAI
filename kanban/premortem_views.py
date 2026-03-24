@@ -314,6 +314,12 @@ def run_premortem(request, board_id):
             'error': 'Board does not meet the Pre-Mortem unlock conditions.',
         }, status=400)
 
+    # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+    if request.headers.get('X-Request-Async'):
+        from kanban.tasks.ai_streaming_tasks import run_premortem_task
+        result = run_premortem_task.delay(board_id, request.user.id)
+        return JsonResponse({'task_id': result.id, 'status': 'queued'})
+
     start_time = time.time()
     snapshot = _collect_board_snapshot(board)
     system_prompt, user_prompt = _build_gemini_prompt(snapshot)

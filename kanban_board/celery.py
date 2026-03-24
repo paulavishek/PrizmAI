@@ -144,6 +144,7 @@ app.conf.beat_schedule = {
 # compete with user-facing operations (auth, data saves, conflict detection).
 app.conf.task_routes = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
+    'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
 }
 
 

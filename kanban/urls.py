@@ -150,6 +150,7 @@ urlpatterns = [
     path('columns/reorder-multiple/', views.reorder_multiple_columns, name='reorder_multiple_columns'),
     path('columns/<int:column_id>/update/', views.update_column, name='update_column'),
     path('columns/<int:column_id>/update-wip/', views.column_update_wip, name='column_update_wip'),
+    path('columns/<int:column_id>/update-color/', views.column_update_color, name='column_update_color'),
     path('columns/<int:column_id>/delete/', views.delete_column, name='delete_column'),    path('boards/<int:board_id>/add-lean-labels/', views.add_lean_labels, name='add_lean_labels'),
     
     # Test page for AI features

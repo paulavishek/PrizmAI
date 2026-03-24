@@ -657,6 +657,7 @@ CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
 # Start the worker with: celery -A kanban_board worker -Q celery,summaries
 CELERY_TASK_ROUTES = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
+    'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
 }
 
 # ---------------------------------------------------------------------------

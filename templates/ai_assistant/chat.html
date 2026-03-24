@@ -1045,6 +1045,42 @@
         }
 
         // Send to server
+        // Use progressive disclosure if the library is loaded
+        if (typeof triggerAITask === 'function') {
+            // Add a status text below the typing indicator
+            const statusLine = document.createElement('p');
+            statusLine.className = 'ai-status-text';
+            statusLine.id = 'chat-ai-status';
+            statusLine.textContent = 'Processing…';
+            typing.appendChild(statusLine);
+
+            triggerAITask('{% url "ai_assistant:send_message" %}', {
+                method: 'POST',
+                body: payload,
+                statusSelector: '#chat-ai-status',
+                onResult: function(data) {
+                    typing.remove();
+                    if (data.response) {
+                        addMessageToUI('assistant', data.response, data.source);
+                        if (data.used_web_search) {
+                            const badge = document.createElement('div');
+                            badge.className = 'search-badge';
+                            badge.innerHTML = '<i class="fas fa-globe"></i> Web search used';
+                            document.querySelector('.chat-messages > :last-child').appendChild(badge);
+                        }
+                    } else if (data.error) {
+                        addMessageToUI('assistant', 'Error: ' + data.error);
+                    }
+                },
+                onError: function(msg) {
+                    typing.remove();
+                    addMessageToUI('assistant', 'Error: ' + msg);
+                },
+            });
+            return;
+        }
+
+        // Fallback: synchronous fetch (original behavior)
         fetch('{% url "ai_assistant:send_message" %}', {
             method: 'POST',
             headers: {
