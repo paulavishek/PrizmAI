@@ -18,6 +18,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 from kanban.models import Task, Comment, Board, Column, TaskActivity
+from kanban.decorators import demo_write_guard
 from accounts.models import UserProfile
 from django.contrib.auth.models import User
 from kanban.utils.ai_utils import (
@@ -4683,16 +4684,20 @@ def generate_board_summary_api(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def generate_strategy_summary_api(request, strategy_id):
     """Enqueue an async Celery task to regenerate the strategy AI summary."""
     try:
+        from kanban.models import Strategy
+        strategy = get_object_or_404(Strategy, id=strategy_id)
+
+        if not request.user.has_perm('prizmai.edit_strategy', strategy):
+            return JsonResponse({'error': 'You do not have permission to regenerate the summary for this strategy.'}, status=403)
+
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
-
-        from kanban.models import Strategy
-        strategy = get_object_or_404(Strategy, id=strategy_id)
         lock_key = f'strategy_ai_lock_{strategy_id}'
         debounce = getattr(_dj_settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
         ai_cache = _get_ai_cache()
@@ -4723,16 +4728,20 @@ def generate_strategy_summary_api(request, strategy_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def generate_mission_summary_api(request, mission_id):
     """Enqueue an async Celery task to regenerate the mission AI summary."""
     try:
+        from kanban.models import Mission
+        mission = get_object_or_404(Mission, id=mission_id)
+
+        if not request.user.has_perm('prizmai.edit_mission', mission):
+            return JsonResponse({'error': 'You do not have permission to regenerate the summary for this mission.'}, status=403)
+
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
-
-        from kanban.models import Mission
-        mission = get_object_or_404(Mission, id=mission_id)
         lock_key = f'mission_ai_lock_{mission_id}'
         debounce = getattr(_dj_settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
         ai_cache = _get_ai_cache()

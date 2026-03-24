@@ -19,15 +19,19 @@
 {% endblock %}
 
 {% block header_actions %}
+{% if can_edit %}
 <a href="{% url 'edit_strategy' mission.id strategy.id %}" class="btn btn-sm btn-outline-secondary">
     <i class="fas fa-edit me-1"></i>Edit
 </a>
 <a href="{% url 'create_board' %}?strategy_id={{ strategy.id }}" class="btn btn-sm btn-primary">
     <i class="fas fa-plus me-1"></i>New Board
 </a>
+{% endif %}
+{% if can_delete %}
 <a href="{% url 'delete_strategy' mission.id strategy.id %}" class="btn btn-sm btn-outline-danger">
     <i class="fas fa-trash me-1"></i>Delete
 </a>
+{% endif %}
 {% endblock %}
 
 {% block header_meta %}

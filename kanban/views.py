@@ -2,6 +2,7 @@ import logging
 import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from kanban.decorators import demo_write_guard
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse, Http404
 from django.contrib import messages
 from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
@@ -1176,6 +1177,7 @@ def board_list(request):
     })
 
 @login_required
+@demo_write_guard
 def create_board(request):
     from kanban.audit_utils import log_model_change
     from kanban.permission_utils import assign_default_role_to_user
@@ -1811,6 +1813,7 @@ def task_detail(request, task_id):
     })
 
 @login_required
+@demo_write_guard
 def create_task(request, board_id, column_id=None):
     from kanban.audit_utils import log_model_change
 
@@ -2878,6 +2881,7 @@ def move_task(request):
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
 @login_required
+@demo_write_guard
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
@@ -2943,6 +2947,7 @@ def add_board_member(request, board_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def remove_board_member(request, board_id, user_id):
     board = get_object_or_404(Board, id=board_id)
     user_to_remove = get_object_or_404(User, id=user_id)
@@ -2985,6 +2990,7 @@ def remove_board_member(request, board_id, user_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     

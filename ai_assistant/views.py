@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth.decorators import login_required
+from kanban.decorators import demo_write_guard
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Count, Sum, Q, Avg
@@ -133,6 +134,7 @@ def chat_interface(request, session_id=None):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def create_session(request):
     """Create a new AI Assistant session"""
@@ -174,6 +176,7 @@ def create_session(request):
 
 
 @login_required
+@demo_write_guard
 @require_POST
 def send_message(request):
     """Send message to AI Assistant and get response"""

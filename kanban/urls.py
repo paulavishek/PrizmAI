@@ -82,6 +82,9 @@ urlpatterns = [
     path('api/strategic/<str:level>/<int:pk>/update/', mission_views.post_strategic_update, name='post_strategic_update'),
     path('api/strategic/<str:level>/<int:pk>/follow/', mission_views.toggle_follow, name='toggle_follow'),
     path('api/strategic/<str:level>/<int:pk>/regenerate/', mission_views.regenerate_summary, name='regenerate_summary'),
+    path('api/strategic/<str:level>/<int:pk>/members/', mission_views.list_strategic_members, name='list_strategic_members'),
+    path('api/strategic/<str:level>/<int:pk>/members/invite/', mission_views.invite_strategic_member, name='invite_strategic_member'),
+    path('api/strategic/<str:level>/<int:pk>/members/<int:user_id>/remove/', mission_views.remove_strategic_member, name='remove_strategic_member'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/', views.board_detail, name='board_detail'),
     path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),

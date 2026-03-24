@@ -13,6 +13,7 @@ Access policy (RBAC Phase 3 — Upward Visibility Rule):
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from kanban.decorators import demo_write_guard
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -232,6 +233,7 @@ def goal_list(request):
 
     return render(request, 'kanban/goal_list.html', {
         'goals': goals,
+        'can_create_goal': request.user.groups.filter(name='OrgAdmin').exists(),
     })
 
 
@@ -336,6 +338,7 @@ def goal_detail(request, goal_id):
 
 
 @login_required
+@demo_write_guard
 def create_goal(request):
     """Create a new Organization Goal."""
     if not request.user.groups.filter(name='OrgAdmin').exists():
@@ -389,6 +392,7 @@ def create_goal(request):
 
 
 @login_required
+@demo_write_guard
 def edit_goal(request, goal_id):
     """Edit an existing Organization Goal with version history."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
@@ -442,6 +446,7 @@ def edit_goal(request, goal_id):
 
 
 @login_required
+@demo_write_guard
 def delete_goal(request, goal_id):
     """Delete an Organization Goal. Linked Missions become unlinked (SET_NULL)."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
@@ -657,6 +662,7 @@ def mission_detail(request, mission_id):
 
 
 @login_required
+@demo_write_guard
 def create_mission(request):
     """Create a new mission."""
     if request.method == 'POST':
@@ -683,6 +689,7 @@ def create_mission(request):
 
 
 @login_required
+@demo_write_guard
 def edit_mission(request, mission_id):
     """Edit an existing mission with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -729,6 +736,7 @@ def edit_mission(request, mission_id):
 
 
 @login_required
+@demo_write_guard
 def delete_mission(request, mission_id):
     """Delete a mission (and cascade-delete its strategies; boards become unlinked)."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -759,6 +767,7 @@ def strategy_detail_shortcut(request, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def create_strategy(request, mission_id):
     """Create a strategy under a mission."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -904,6 +913,7 @@ def strategy_detail(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def edit_strategy(request, mission_id, strategy_id):
     """Edit an existing strategy with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -952,6 +962,7 @@ def edit_strategy(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def delete_strategy(request, mission_id, strategy_id):
     """Delete a strategy; boards linked to it become unlinked (SET_NULL)."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -1136,3 +1147,113 @@ def regenerate_summary(request, level, pk):
         return JsonResponse({'success': False, 'error': 'Failed to enqueue task.'}, status=500)
 
     return JsonResponse({'success': True})
+
+
+# ---------------------------------------------------------------------------
+# Strategic Membership Invite Views  (Phase 4)
+# ---------------------------------------------------------------------------
+
+@login_required
+def invite_strategic_member(request, level, pk):
+    """AJAX POST — invite a user to a Goal/Mission/Strategy with a given role."""
+    from django.http import JsonResponse
+    from kanban.models import StrategicMembership
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    # Only the record owner / OrgAdmin can invite
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    user_id = request.POST.get('user_id')
+    role = request.POST.get('role', 'member')
+
+    if role not in ('owner', 'member', 'viewer'):
+        return JsonResponse({'success': False, 'error': 'Invalid role.'}, status=400)
+
+    try:
+        target_user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'User not found.'}, status=404)
+
+    ct = ContentType.objects.get_for_model(record)
+    _, created = StrategicMembership.objects.get_or_create(
+        content_type=ct, object_id=record.pk, user=target_user,
+        defaults={'role': role},
+    )
+    if not created:
+        # Update existing membership role
+        StrategicMembership.objects.filter(
+            content_type=ct, object_id=record.pk, user=target_user,
+        ).update(role=role)
+
+    return JsonResponse({
+        'success': True,
+        'created': created,
+        'username': target_user.username,
+        'role': role,
+    })
+
+
+@login_required
+def remove_strategic_member(request, level, pk, user_id):
+    """AJAX POST — remove a user's StrategicMembership."""
+    from django.http import JsonResponse
+    from kanban.models import StrategicMembership
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    ct = ContentType.objects.get_for_model(record)
+    deleted, _ = StrategicMembership.objects.filter(
+        content_type=ct, object_id=record.pk, user_id=user_id,
+    ).delete()
+
+    return JsonResponse({'success': True, 'deleted': deleted > 0})
+
+
+@login_required
+def list_strategic_members(request, level, pk):
+    """AJAX GET — list StrategicMembership entries for a record."""
+    from django.http import JsonResponse
+    from kanban.models import StrategicMembership
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    ct = ContentType.objects.get_for_model(record)
+    members = StrategicMembership.objects.filter(
+        content_type=ct, object_id=record.pk,
+    ).select_related('user').order_by('role', 'user__username')
+
+    data = [
+        {
+            'user_id': m.user_id,
+            'username': m.user.username,
+            'role': m.role,
+        }
+        for m in members
+    ]
+
+    return JsonResponse({'success': True, 'members': data})

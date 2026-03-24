@@ -18,15 +18,19 @@
 {% endblock %}
 
 {% block header_actions %}
+{% if can_edit %}
 <a href="{% url 'edit_mission' mission.id %}" class="btn btn-sm btn-outline-secondary">
     <i class="fas fa-edit me-1"></i>Edit
 </a>
 <a href="{% url 'create_strategy' mission.id %}" class="btn btn-sm btn-success">
     <i class="fas fa-plus me-1"></i>New Strategy
 </a>
+{% endif %}
+{% if can_delete %}
 <a href="{% url 'delete_mission' mission.id %}" class="btn btn-sm btn-outline-danger">
     <i class="fas fa-trash me-1"></i>Delete
 </a>
+{% endif %}
 {% endblock %}
 
 {% block header_meta %}
