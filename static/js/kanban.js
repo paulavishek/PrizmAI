@@ -319,10 +319,15 @@ function initColumnOrdering() {
         });
         
         // Always start collapsed by default
-        columnOrderingContent.classList.add('d-none');
-        toggleIcon.classList.remove('fa-chevron-up');
-        toggleIcon.classList.add('fa-chevron-down');
-        document.getElementById('column-ordering-panel').classList.add('collapsed');
+        if (columnOrderingContent) {
+            columnOrderingContent.classList.add('d-none');
+        }
+        if (toggleIcon) {
+            toggleIcon.classList.remove('fa-chevron-up');
+            toggleIcon.classList.add('fa-chevron-down');
+        }
+        const colPanel = document.getElementById('column-ordering-panel');
+        if (colPanel) colPanel.classList.add('collapsed');
     }
     
     // Keyboard shortcut: Alt+R to focus first input
@@ -330,7 +335,7 @@ function initColumnOrdering() {
         if (e.altKey && e.key.toLowerCase() === 'r') {
             e.preventDefault();
             // Expand panel if collapsed
-            if (columnOrderingContent.classList.contains('d-none')) {
+            if (columnOrderingContent && columnOrderingContent.classList.contains('d-none')) {
                 togglePanelButton.click();
             }
             // Focus first input

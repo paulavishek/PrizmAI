@@ -3744,11 +3744,12 @@ def link_board_to_strategy_dashboard(request, board_id):
 
 @login_required
 def edit_board(request, board_id):
-      # Check if user is the board creator or a member
-    # Access restriction removed - all authenticated users can access
+    board = get_object_or_404(Board, id=board_id)
 
-    pass  # Original: board membership check removed
-    
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to edit this board.")
+        return redirect('board_detail', board_id=board.id)
+
     if request.method == 'POST':
         form = BoardForm(request.POST, instance=board)
         if form.is_valid():
