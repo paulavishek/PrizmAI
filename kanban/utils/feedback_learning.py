@@ -238,7 +238,7 @@ class FeedbackLearningSystem:
         
         # Extract context features
         context_features = {
-            'board_size': board.members.count(),
+            'board_size': board.memberships.count(),
             'severity': suggestion.severity,
             'confidence': float(suggestion.confidence_score),
             'generation_method': suggestion.generation_method,
@@ -351,7 +351,7 @@ class FeedbackLearningSystem:
                 )
         
         # --- Board size category tracking ---
-        board_size = board.members.count()
+        board_size = board.memberships.count()
         if board_size <= 3:
             size_category = 'small'
         elif board_size <= 8:

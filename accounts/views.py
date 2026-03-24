@@ -7,7 +7,6 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from .forms import LoginForm, RegistrationForm, UserProfileForm
 from .models import Organization, UserProfile, COMMON_TIMEZONES
-from kanban.permission_audit import log_permission_change
 import json
 import logging
 

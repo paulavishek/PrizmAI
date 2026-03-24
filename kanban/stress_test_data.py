@@ -32,7 +32,7 @@ def build_board_stress_test_data(board, user):
     high_priority_tasks = tasks.filter(priority__in=['high', 'urgent']).count()
 
     # Team members
-    member_ids = set(board.members.values_list('id', flat=True))
+    member_ids = set(board.memberships.values_list('user_id', flat=True))
     assignee_ids = set(
         tasks.filter(assigned_to__isnull=False)
         .values_list('assigned_to_id', flat=True)

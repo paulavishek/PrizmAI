@@ -28,7 +28,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column, Task
+from kanban.models import Board, Column, Task, BoardMembership
 
 
 # ---------------------------------------------------------------------------
@@ -891,7 +891,7 @@ class AIInsightsAPIBaseTestCase(TestCase):
             name='Sprint Board', created_by=self.user, organization=self.org,
             description='Test sprint board'
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         self.column = Column.objects.create(name='To Do', board=self.board, position=0)
         self.done_column = Column.objects.create(name='Done', board=self.board, position=2)
         self.task = Task.objects.create(
@@ -1159,7 +1159,7 @@ class DeadlinePredictionAPITests(AIInsightsAPIBaseTestCase):
         self.assignee = User.objects.create_user(
             username='devuser', email='dev@example.com', password='testpass123'
         )
-        self.board.members.add(self.assignee)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.assignee, defaults={'role': 'member'})
         self.task.assigned_to = self.assignee
         self.task.save()
 
@@ -1258,7 +1258,7 @@ class AssigneeSuggestionAPITests(AIInsightsAPIBaseTestCase):
         self.member = User.objects.create_user(
             username='devuser', email='dev@example.com', password='testpass123'
         )
-        self.board.members.add(self.member)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.member, defaults={'role': 'member'})
         UserProfile.objects.get_or_create(
             user=self.member,
             defaults={'organization': self.org, 'skills': [{'name': 'Python', 'level': 'Expert'}]}

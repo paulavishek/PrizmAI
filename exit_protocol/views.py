@@ -17,7 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from kanban.models import Board
+from kanban.models import Board, BoardMembership
 from kanban.simple_access import check_access_or_403, check_management_or_403
 from kanban.audit_utils import log_audit
 
@@ -236,10 +236,10 @@ def bury_project(request, board_id):
         _total = KanbanTask.objects.filter(column__board=board).count()
         _done = KanbanTask.objects.filter(column__board=board, completed_at__isnull=False).count()
         try:
-            from kanban.permission_models import BoardMembership
-            _team = BoardMembership.objects.filter(board=board, is_active=True).count()
+            from kanban.models import BoardMembership
+            _team = BoardMembership.objects.filter(board=board).count()
         except Exception:
-            _team = board.members.count()
+            _team = 0
         CemeteryEntry.objects.create(
             board=board,
             hospice_session=session,
@@ -425,12 +425,9 @@ def transplant_organ(request, organ_id):
             created_id = node.id
 
         elif organ.organ_type == 'role_definition':
-            from kanban.permission_models import Role
-            role = Role.objects.create(
-                name=organ.payload.get('role_name', organ.name),
-                description=(organ.payload.get('description', '') + provenance_note)[:500],
-            )
-            created_id = role.id
+            # Role definitions no longer stored as separate model objects
+            # Just track the organ as transplanted
+            created_id = None
 
         else:
             # goal_framework, checklist, etc. → create as knowledge entry
@@ -621,7 +618,7 @@ def resurrect_project(request, entry_id):
         created_by=request.user,
     )
     # Add creator as member
-    new_board.members.add(request.user)
+    BoardMembership.objects.get_or_create(board=new_board, user=request.user, defaults={'role': 'member'})
 
     # 2. Import surviving knowledge nodes
     try:

@@ -75,8 +75,7 @@ def _setup_demo_admin_profile(demo_admin):
         demo_admin: The demo admin User instance
     """
     from accounts.models import Organization, UserProfile
-    from kanban.models import Board
-    from kanban.permission_models import BoardMembership, Role
+    from kanban.models import Board, BoardMembership
     
     try:
         # Get or create demo organization
@@ -119,60 +118,18 @@ def _add_demo_admin_to_boards(demo_admin, demo_org):
         demo_admin: The demo admin User instance
         demo_org: The demo Organization instance
     """
-    from kanban.models import Board
-    from kanban.permission_models import BoardMembership, Role
+    from kanban.models import Board, BoardMembership
     
     try:
-        # Get admin role for this organization
-        admin_role = Role.objects.filter(
-            name='Admin',
-            organization=demo_org
-        ).first()
-        
-        if not admin_role:
-            # Try to find any Admin role in the demo org or create one
-            admin_role, _ = Role.objects.get_or_create(
-                name='Admin',
-                organization=demo_org,
-                defaults={
-                    'description': 'Full access to all features',
-                    'is_system_role': True,
-                    'permissions': [
-                        # Board permissions
-                        'board.view', 'board.create', 'board.edit', 'board.delete',
-                        'board.manage_members', 'board.export',
-                        # Column permissions
-                        'column.create', 'column.edit', 'column.delete', 'column.reorder',
-                        # Task permissions
-                        'task.view', 'task.create', 'task.edit', 'task.delete',
-                        'task.assign', 'task.move',
-                        # Comment permissions
-                        'comment.view', 'comment.create', 'comment.edit', 'comment.delete',
-                        # Label permissions
-                        'label.view', 'label.create', 'label.edit', 'label.delete', 'label.assign',
-                        # File permissions
-                        'file.view', 'file.upload', 'file.download', 'file.delete',
-                        # Sprint permissions
-                        'sprint.view', 'sprint.create', 'sprint.edit', 'sprint.delete', 'sprint.manage_tasks',
-                        # Analytics
-                        'analytics.view', 'analytics.export',
-                    ]
-                }
-            )
-        
         # Get all demo boards
         demo_boards = Board.objects.filter(organization=demo_org)
         
         for board in demo_boards:
-            # Add as board member
-            if demo_admin not in board.members.all():
-                board.members.add(demo_admin)
-            
-            # Create BoardMembership with Admin role
+            # Create BoardMembership with owner role
             BoardMembership.objects.get_or_create(
                 user=demo_admin,
                 board=board,
-                defaults={'role': admin_role}
+                defaults={'role': 'owner'}
             )
         
         # Add demo admin to chat rooms for demo boards

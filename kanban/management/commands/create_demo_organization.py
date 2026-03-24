@@ -13,8 +13,7 @@ Usage:
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column
-from kanban.permission_models import Role, BoardMembership
+from kanban.models import Board, Column, BoardMembership
 from django.utils import timezone
 from django.db import transaction
 
@@ -302,43 +301,39 @@ class Command(BaseCommand):
         
         # Role mapping based on persona
         role_map = {
-            'alex_chen_demo': 'Admin',      # Alex Chen - Project Manager
-            'sam_rivera_demo': 'Editor',    # Sam Rivera - Lead Developer
-            'jordan_taylor_demo': 'Editor', # Jordan Taylor - Architect/QA
+            'alex_chen_demo': 'owner',       # Alex Chen - Project Manager
+            'sam_rivera_demo': 'member',     # Sam Rivera - Lead Developer
+            'jordan_taylor_demo': 'member',  # Jordan Taylor - Architect/QA
         }
         
         total_assigned = 0
         
         for board in boards:
             # Get existing members (real users - not demo users)
-            existing_real_users = board.members.exclude(username__icontains='demo')
+            existing_real_user_ids = BoardMembership.objects.filter(
+                board=board
+            ).exclude(user__username__icontains='demo').values_list('user_id', flat=True)
             
             for persona in personas:
-                # Add persona to board members
-                if persona not in board.members.all():
-                    board.members.add(persona)
+                # Create BoardMembership for persona
+                role_name = role_map.get(persona.username, 'member')
+                _, created = BoardMembership.objects.get_or_create(
+                    board=board,
+                    user=persona,
+                    defaults={'role': role_name}
+                )
+                if created:
                     total_assigned += 1
-                
-                # Get or create role for this persona
-                role_name = role_map.get(persona.username, 'Editor')
-                role = Role.objects.filter(
-                    organization=board.organization,
-                    name=role_name
-                ).first()
-                
-                if role:
-                    # Create BoardMembership with role
-                    BoardMembership.objects.get_or_create(
-                        board=board,
-                        user=persona,
-                        defaults={'role': role}
-                    )
             
             # Ensure all existing real users remain members
-            for real_user in existing_real_users:
-                if real_user not in board.members.all():
-                    board.members.add(real_user)
-                    self.stdout.write(f'    ✓ Preserved real user: {real_user.username} on {board.name}')
+            from django.contrib.auth.models import User
+            for real_user_id in existing_real_user_ids:
+                real_user = User.objects.get(id=real_user_id)
+                BoardMembership.objects.get_or_create(
+                    board=board,
+                    user=real_user,
+                    defaults={'role': 'member'}
+                )
         
         self.stdout.write(self.style.SUCCESS(f'  ✓ Assigned {len(personas)} demo personas to {len(boards)} boards'))
         self.stdout.write(f'    Total board memberships: {total_assigned}')

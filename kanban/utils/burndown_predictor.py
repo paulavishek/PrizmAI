@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple
 import statistics
 import math
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from django.db.models import Count, Sum, Avg, Q, F
 
 
@@ -216,7 +217,8 @@ class BurndownPredictor:
         )
         
         # Get active team members
-        team_members = list(board.members.all())
+        User = get_user_model()
+        team_members = list(User.objects.filter(board_memberships__board=board))
         active_count = len(team_members)
         
         # Update or create snapshot for current period

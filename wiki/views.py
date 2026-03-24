@@ -592,7 +592,7 @@ def quick_link_wiki(request, content_type, object_id):
     # MVP Mode: Get all accessible boards (demo boards + user boards)
     demo_boards = Board.objects.filter(is_official_demo_board=True)
     user_boards = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
+        Q(created_by=request.user) | Q(memberships__user=request.user)
     )
     accessible_boards = (demo_boards | user_boards).distinct()
     

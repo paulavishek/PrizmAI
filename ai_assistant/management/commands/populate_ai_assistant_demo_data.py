@@ -263,7 +263,7 @@ Key Objectives:
 - Continuous improvement through retrospectives
 
 Current Status: Active
-Team Size: {board.members.count()} members
+Team Size: {board.memberships.count()} members
 Total Tasks: {Task.objects.filter(column__board=board).count()}
 """,
                 'summary': f'Overview of the {board.name} project including objectives, methodology, and current status.',
@@ -277,7 +277,7 @@ Total Tasks: {Task.objects.filter(column__board=board).count()}
                 'content': f"""Resource Plan for {board.name}
 
 Team Members:
-{chr(10).join([f"- {m.get_full_name() or m.username}" for m in board.members.all()])}
+{chr(10).join([f"- {m.get_full_name() or m.username}" for m in User.objects.filter(board_memberships__board=board)])}
 
 Capacity: 40 hours/week per team member
 Current Sprint Allocation: Balanced workload distribution

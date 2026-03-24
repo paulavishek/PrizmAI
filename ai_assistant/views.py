@@ -109,7 +109,7 @@ def chat_interface(request, session_id=None):
             user_boards = Board.objects.filter(
                 organization=user_org,
             ).filter(
-                Q(created_by=request.user) | Q(members=request.user)
+                Q(created_by=request.user) | Q(memberships__user=request.user)
             ).exclude(
                 created_by_session__startswith='spectra_demo_'
             ).distinct()
@@ -261,7 +261,7 @@ def send_message(request):
             if not (
                 board.is_official_demo_board
                 or board.created_by_id == request.user.id
-                or board.members.filter(id=request.user.id).exists()
+                or board.memberships.filter(user=request.user).exists()
             ):
                 return JsonResponse(
                     {'error': 'You do not have access to this board.'},
@@ -1070,7 +1070,7 @@ def view_recommendations(request):
     
     # Get recommendations
     recs_qs = AITaskRecommendation.objects.filter(
-        board__in=Board.objects.filter(Q(created_by=request.user) | Q(members=request.user)).distinct()
+        board__in=Board.objects.filter(Q(created_by=request.user) | Q(memberships__user=request.user)).distinct()
     )
     
     if board_id:

@@ -136,7 +136,7 @@ class BoardSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'created_by']
     
     def get_member_count(self, obj):
-        return obj.members.count()
+        return obj.memberships.count()
     
     def get_task_count(self, obj):
         return Task.objects.filter(column__board=obj).count()

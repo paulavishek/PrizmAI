@@ -610,7 +610,7 @@ class TaskCommentConsumer(AsyncWebsocketConsumer):
             return (
                 task.assigned_to == self.user or 
                 task.created_by == self.user or 
-                board.members.filter(id=self.user.id).exists()
+                board.memberships.filter(user_id=self.user.id).exists()
             )
         except Task.DoesNotExist:
             return False

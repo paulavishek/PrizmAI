@@ -6,6 +6,7 @@ Every database write is wrapped in try / except and returns a structured dict.
 """
 import logging
 import re
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
 from django.urls import reverse
@@ -34,7 +35,7 @@ class SpectraActionService:
         """Return True if *user* is a member of (or creator of) *board*."""
         if board.created_by_id == user.id:
             return True
-        return board.members.filter(id=user.id).exists()
+        return board.memberships.filter(user_id=user.id).exists()
 
     @staticmethod
     def _resolve_column(board):
@@ -60,7 +61,7 @@ class SpectraActionService:
         name_lower = name.lower().strip()
         if not name_lower:
             return None, []
-        candidates = list(board.members.all())
+        candidates = list(get_user_model().objects.filter(board_memberships__board=board))
         if board.created_by and board.created_by not in candidates:
             candidates.append(board.created_by)
 
@@ -203,25 +204,15 @@ class SpectraActionService:
                 if is_demo_mode:
                     board.created_by_session = f'spectra_demo_{user.id}'
                 board.save()
-                board.members.add(user)
+                board.owner = user
+                board.save(update_fields=['owner'])
 
-                # Assign Admin role via RBAC if organization exists
-                if organization:
-                    try:
-                        from kanban.permission_models import Role, BoardMembership
-                        admin_role = Role.objects.filter(
-                            organization=organization,
-                            name='Admin',
-                        ).first()
-                        if admin_role:
-                            BoardMembership.objects.create(
-                                board=board,
-                                user=user,
-                                role=admin_role,
-                                added_by=user,
-                            )
-                    except Exception as rbac_err:
-                        logger.warning('Spectra RBAC setup failed for board %s: %s', board.id, rbac_err)
+                # Create RBAC membership for the creator as Owner
+                from kanban.models import BoardMembership
+                BoardMembership.objects.get_or_create(
+                    board=board, user=user,
+                    defaults={'role': 'owner', 'added_by': user}
+                )
 
                 # Create 3 default columns (matching existing board creation behaviour)
                 default_columns = ['To Do', 'In Progress', 'Done']

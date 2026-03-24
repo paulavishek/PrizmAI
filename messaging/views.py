@@ -35,7 +35,7 @@ def messaging_hub(request):
     # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
     demo_boards = Board.objects.filter(is_official_demo_board=True)
     user_boards_query = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
+        Q(created_by=request.user) | Q(memberships__user=request.user)
     )
     user_boards = (demo_boards | user_boards_query).distinct()
     
@@ -401,7 +401,7 @@ def get_unread_message_count(request):
         ).distinct()
     else:
         accessible_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
+            Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'

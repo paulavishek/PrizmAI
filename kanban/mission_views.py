@@ -26,6 +26,7 @@ from .models import (
 )
 from .forms.strategic_forms import GoalEditForm, MissionEditForm, StrategyEditForm
 from accounts.models import Organization
+from django.contrib.auth.models import User
 
 import logging
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def _handle_edit_cascade(request, record, change_reason, level):
         boards = Board.objects.filter(strategy=record)
 
     for board in boards.select_related():
-        board_members.update(board.members.all())
+        board_members.update(User.objects.filter(board_memberships__board=board))
 
     # Send in-app notifications to board members AND followers
     try:
@@ -766,7 +767,7 @@ def strategy_detail(request, mission_id, strategy_id):
             column__board=b, due_date__lt=timezone.now(),
             completed_at__isnull=True, item_type='task',
         ).count()
-        member_count = b.members.count()
+        member_count = b.memberships.count()
         board_items.append({
             'board': b, 'total_tasks': b_total, 'done_tasks': b_done,
             'completion_pct': b_pct, 'health_score': b_health,

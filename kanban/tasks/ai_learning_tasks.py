@@ -21,6 +21,7 @@ def refresh_pm_metrics_task():
     Refresh PMMetrics for all active boards/PM combinations.
     Runs daily to keep PM performance profiles current for coaching.
     """
+    from django.contrib.auth.models import User
     from kanban.models import Board
     from kanban.utils.feedback_learning import FeedbackLearningSystem
     
@@ -36,7 +37,7 @@ def refresh_pm_metrics_task():
             if board.created_by:
                 pm_users.add(board.created_by)
             # Also include members (they may receive coaching suggestions)
-            for member in board.members.all():
+            for member in User.objects.filter(board_memberships__board=board):
                 pm_users.add(member)
             
             for pm_user in pm_users:

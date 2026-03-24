@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Avg
 
+from django.contrib.auth.models import User
 from kanban.models import Board, Task
 from kanban.commitment_models import (
     CommitmentProtocol,
@@ -115,7 +116,7 @@ def commitment_create(request, board_id):
             baseline_snapshot = {
                 'task_count': all_tasks.count(),
                 'completed_tasks': completed,
-                'team_members': board.members.count(),
+                'team_members': board.memberships.count(),
                 'velocity_last_2_weeks': recent_done,
                 'snapshot_date': str(date.today()),
             }
@@ -173,7 +174,7 @@ def commitment_create(request, board_id):
 
     # GET: collect context for the form
     tasks = Task.objects.filter(column__board=board, item_type='task').order_by('title')
-    members = board.members.all()
+    members = User.objects.filter(board_memberships__board=board)
 
     context = {
         'board': board,

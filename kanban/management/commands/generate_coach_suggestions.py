@@ -101,7 +101,7 @@ class Command(BaseCommand):
                 from kanban.models import Task
                 context = {
                     'board_name': board.name,
-                    'team_size': board.members.count(),
+                    'team_size': board.memberships.count(),
                     'active_tasks': Task.objects.filter(
                         column__board=board,
                         progress__lt=100

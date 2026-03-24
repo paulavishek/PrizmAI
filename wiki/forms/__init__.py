@@ -146,7 +146,7 @@ class WikiLinkForm(forms.ModelForm):
         
         if user:
             user_boards = Board.objects.filter(
-                Q(created_by=user) | Q(members=user)
+                Q(created_by=user) | Q(memberships__user=user)
             )
             accessible_boards = (demo_boards | user_boards).distinct()
         elif organization:

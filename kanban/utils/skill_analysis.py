@@ -17,6 +17,7 @@ import re
 import google.generativeai as genai
 from django.conf import settings
 from django.db.models import Q, Count, Avg, Sum
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.contrib.auth.models import User
 
@@ -169,7 +170,8 @@ def build_team_skill_profile(board) -> Dict:
         from accounts.models import UserProfile
         
         # Get all team members
-        members = board.members.select_related('profile').all()
+        User = get_user_model()
+        members = User.objects.filter(board_memberships__board=board).select_related('profile')
         
         # Aggregate skills across team
         skill_inventory = {}

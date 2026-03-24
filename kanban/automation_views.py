@@ -78,7 +78,7 @@ def automations_page(request, board_id):
     scheduled_automations = ScheduledAutomation.objects.filter(board=board).order_by('-created_at')
     labels = TaskLabel.objects.filter(board=board).order_by('name')
     columns = Column.objects.filter(board=board).order_by('position')
-    members = list(board.members.all().order_by('username'))
+    members = list(User.objects.filter(board_memberships__board=board).order_by('username'))
     if board.created_by and board.created_by not in members:
         members.insert(0, board.created_by)
 
@@ -439,9 +439,8 @@ def rule_create_form(request, board_id):
     if action_type == 'move_to_column' and not action_value:
         errors.append('Column fragment is required for "move to column" action.')
     if action_type == 'assign_to_user':
-        from django.contrib.auth.models import User
         member_usernames = set(
-            board.members.values_list('username', flat=True)
+            User.objects.filter(board_memberships__board=board).values_list('username', flat=True)
         ) | {board.created_by.username}
         if action_value not in member_usernames:
             errors.append(f'User "{action_value}" is not a member of this board.')

@@ -500,7 +500,7 @@ class ConflictResolutionSuggester:
         if task1 and task2:
             # Find users with lower workload
             board = self.conflict.board
-            board_members = board.members.all()
+            board_members = User.objects.filter(board_memberships__board=board)
             
             for member in board_members:
                 if member.id != user_id:

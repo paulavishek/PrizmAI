@@ -114,7 +114,7 @@ class Command(BaseCommand):
 
     def get_board_members(self, board):
         """Get all members of a board"""
-        return list(board.members.all())
+        return list(User.objects.filter(board_memberships__board=board))
 
     def get_chat_room_configs(self):
         """Return chat room configurations for each board"""
@@ -284,7 +284,7 @@ class Command(BaseCommand):
         for su in User.objects.filter(is_superuser=True):
             recipients.add(su)
         for board in self.demo_boards:
-            for member in board.members.all():
+            for member in User.objects.filter(board_memberships__board=board):
                 recipients.add(member)
 
         # ── Look up real objects so notification text and links are always accurate ──

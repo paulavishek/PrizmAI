@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def _get_user_boards(user):
     """Return board IDs the user has access to."""
     return Board.objects.filter(
-        Q(created_by=user) | Q(members=user)
+        Q(created_by=user) | Q(memberships__user=user)
     ).values_list('id', flat=True).distinct()
 
 

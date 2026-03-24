@@ -20,7 +20,7 @@ from django.contrib.auth import get_user
 from django.core import mail
 
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column, Task
+from kanban.models import Board, Column, Task, BoardMembership
 
 
 class LoginLogoutTests(TestCase):
@@ -350,7 +350,8 @@ class BoardMemberPermissionTests(TestCase):
             organization=self.org,
             created_by=self.owner
         )
-        self.board.members.add(self.owner, self.member)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.owner, defaults={'role': 'member'})
+        BoardMembership.objects.get_or_create(board=self.board, user=self.member, defaults={'role': 'member'})
     
     def test_board_member_can_view_board(self):
         """Test board members can view the board"""

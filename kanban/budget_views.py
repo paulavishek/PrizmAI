@@ -856,16 +856,16 @@ def my_timesheet(request, board_id=None):
             if demo_org:
                 boards = Board.objects.filter(
                     models.Q(created_by=request.user) | 
-                    models.Q(members=request.user) |
+                    models.Q(memberships__user=request.user) |
                     models.Q(organization=demo_org)
                 ).distinct()
             else:
                 boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(members=request.user)
+                    models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
                 ).distinct()
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
             ).distinct()
         tasks = Task.objects.filter(
             column__board__in=boards,
@@ -994,16 +994,16 @@ def time_tracking_dashboard(request, board_id=None):
             if demo_org:
                 boards = Board.objects.filter(
                     models.Q(created_by=request.user) | 
-                    models.Q(members=request.user) |
+                    models.Q(memberships__user=request.user) |
                     models.Q(organization=demo_org)
                 ).distinct()
             else:
                 boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(members=request.user)
+                    models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
                 ).distinct()
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
             ).distinct()
         board = None
     
@@ -1494,7 +1494,7 @@ def search_tasks_for_time_entry(request):
     
     # Get boards user has access to
     boards = Board.objects.filter(
-        models.Q(created_by=request.user) | models.Q(members=request.user)
+        models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
     ).distinct()
     
     if board_id:

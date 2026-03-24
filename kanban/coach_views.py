@@ -135,7 +135,7 @@ def generate_suggestions(request, board_id):
         # Create board context for AI enhancement
         context = {
             'board_name': board.name,
-            'team_size': board.members.count(),
+            'team_size': board.memberships.count(),
             'active_tasks': Task.objects.filter(column__board=board, progress__isnull=False, progress__lt=100).count(),
             'project_phase': 'active',  # Could be enhanced
         }

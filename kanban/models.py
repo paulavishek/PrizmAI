@@ -645,7 +645,14 @@ class Board(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_boards')
-    members = models.ManyToManyField(User, related_name='member_boards', blank=True)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='owned_boards',
+        help_text="Board owner — full edit, delete, invite rights. Access flows down to all children."
+    )
     
     # Scope baseline tracking
     baseline_task_count = models.IntegerField(null=True, blank=True, 
@@ -2182,7 +2189,112 @@ from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 
 # Import security and permission models to register them with Django
 from .audit_models import SystemAuditLog, SecurityEvent, DataAccessLog
-from .permission_models import Role, BoardMembership, PermissionOverride, ColumnPermission
+
+# Legacy permission_models.py deleted in RBAC Phase 1.
+# PermissionAuditLog and ColumnPermission deferred to Phase 3.
+
+
+class BoardMembership(models.Model):
+    """
+    RBAC board membership — replaces the legacy Board.members M2M and the
+    deleted legacy Role-FK-based BoardMembership from permission_models.py.
+    Role is a simple CharField (owner / member / viewer).
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('member', 'Member'),
+        ('viewer', 'Viewer'),
+    ]
+
+    board = models.ForeignKey(
+        Board, on_delete=models.CASCADE, related_name='memberships'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='board_memberships'
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default='member',
+        help_text="Owner: full control. Member: create/edit tasks. Viewer: read-only."
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    added_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='added_board_members'
+    )
+
+    class Meta:
+        unique_together = ('board', 'user')
+        ordering = ['board', '-added_at']
+        indexes = [
+            models.Index(fields=['board', 'user']),
+            models.Index(fields=['user', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.board.name} ({self.get_role_display()})"
+
+
+class StrategicMembership(models.Model):
+    """
+    Generic-FK membership for Goal / Mission / Strategy level access.
+    One model covers all three strategic levels.
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('member', 'Member'),
+        ('viewer', 'Viewer'),
+    ]
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='strategic_memberships'
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default='member',
+        help_text="Owner: full control + invite. Member: contribute. Viewer: read-only."
+    )
+
+    class Meta:
+        unique_together = ('content_type', 'object_id', 'user')
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['user', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.content_type.model} #{self.object_id} ({self.get_role_display()})"
+
+
+class DemoSandbox(models.Model):
+    """
+    Ephemeral sandbox — private, temporary copy of the demo for a real user.
+    OneToOneField enforces one sandbox per user at the DB level.
+    """
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='demo_sandbox'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        help_text="Always created_at + 24 hours."
+    )
+    warning_sent = models.BooleanField(
+        default=False,
+        help_text="True once the 2-hour expiry warning has been sent."
+    )
+    saved_board = models.ForeignKey(
+        Board, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Board the user chose to save before sandbox deletion."
+    )
+
+    def __str__(self):
+        return f"Sandbox for {self.user.username} (expires {self.expires_at})"
 
 
 class BoardInvitation(models.Model):

@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Organization
-from kanban.models import Board, Column, Task
+from kanban.models import Board, Column, Task, BoardMembership
 from kanban.budget_models import TimeEntry
 from kanban.budget_forms import TimeEntryForm
 from kanban.time_tracking_ai import TimeTrackingAIService
@@ -340,7 +340,7 @@ class QuickTimeEntryViewTests(TestCase):
             organization=self.org,
             created_by=self.user
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
         self.column = Column.objects.create(
             name='To Do',
             board=self.board,

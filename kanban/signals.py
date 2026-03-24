@@ -490,7 +490,7 @@ def _send_automation_notification(task, rule, config=None):
         elif recipient_key == 'creator' and task.created_by:
             recipients = [task.created_by]
         elif recipient_key == 'board_members':
-            recipients = list(board.members.all())
+            recipients = list(User.objects.filter(board_memberships__board=board))
             if board.created_by and board.created_by not in recipients:
                 recipients.append(board.created_by)
 

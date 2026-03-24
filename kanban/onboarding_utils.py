@@ -56,6 +56,7 @@ def commit_onboarding_workspace(user, preview):
         Mission,
         Strategy,
         Board,
+        BoardMembership,
         Column,
         Task,
     )
@@ -121,7 +122,7 @@ def commit_onboarding_workspace(user, preview):
                         organization=org,
                         created_by=user,
                     )
-                    board.members.add(user)
+                    BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'member'})
                     # Auto-set task_prefix for readable task IDs
                     board.task_prefix = board.get_default_prefix()
                     board.save(update_fields=['task_prefix'])

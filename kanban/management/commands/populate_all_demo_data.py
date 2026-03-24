@@ -28,8 +28,7 @@ import json
 
 # Import all required models
 from accounts.models import Organization
-from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, OrganizationGoal
-from kanban.permission_models import Role
+from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, OrganizationGoal, BoardMembership
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
@@ -376,9 +375,8 @@ class Command(BaseCommand):
             except Exception:
                 pass
             try:
-                from kanban.permission_models import BoardMembership, PermissionAuditLog
+                from kanban.models import BoardMembership
                 BoardMembership.objects.filter(board=board).delete()
-                PermissionAuditLog.objects.filter(board=board).delete()
             except Exception:
                 pass
 
@@ -856,7 +854,9 @@ POST /api/auth/token/
             if board_name not in chat_configs:
                 continue
             
-            board_members = list(board.members.all())
+            board_members = list(
+                User.objects.filter(board_memberships__board=board)
+            )
             creator = board_members[0] if board_members else self.alex
             
             for room_config in chat_configs[board_name]:

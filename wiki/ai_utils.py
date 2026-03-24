@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from typing import Optional, Dict
+from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime, timedelta
 
@@ -125,7 +126,7 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict,
         # Build board context if provided
         board_context = ""
         if related_board:
-            board_members = [member.username for member in related_board.members.all()]
+            board_members = list(User.objects.filter(board_memberships__board=related_board).values_list('username', flat=True))
             board_members.append(related_board.created_by.username)
             existing_columns = [col.name for col in related_board.columns.all()]
             

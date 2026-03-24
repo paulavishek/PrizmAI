@@ -18,6 +18,8 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 
+from django.contrib.auth import get_user_model
+
 from ai_assistant.models import SpectraConversationState
 from ai_assistant.utils.action_service import SpectraActionService
 from ai_assistant.utils.chatbot_service import detect_action_intent, classify_intent_with_ai
@@ -51,7 +53,7 @@ def build_fc_context(user, board):
         parts.append(f"Active board: {board.name} (ID {board.id}).")
 
         # Board members for resolving names like "Alex" → user object
-        members = list(board.members.all().select_related())
+        members = list(get_user_model().objects.filter(board_memberships__board=board).select_related())
         if board.created_by and board.created_by not in members:
             members.append(board.created_by)
         if members:
@@ -396,7 +398,7 @@ def _user_board_names(user):
     """Return a list of board names the user can access."""
     from kanban.models import Board
     boards = Board.objects.filter(
-        Q(created_by=user) | Q(members=user)
+        Q(created_by=user) | Q(memberships__user=user)
     ).distinct().values_list('name', flat=True)[:20]
     return list(boards)
 
@@ -411,7 +413,7 @@ def _user_board_names_for_env(user, is_demo_mode):
         ).distinct().values_list('name', flat=True)[:20]
     else:
         boards = Board.objects.filter(
-            Q(created_by=user) | Q(members=user),
+            Q(created_by=user) | Q(memberships__user=user),
             is_official_demo_board=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
@@ -474,7 +476,7 @@ class ConversationFlowManager:
                 if board.is_official_demo_board or \
                         (board.created_by_session or '').startswith('spectra_demo_'):
                     return None
-                if not (board.created_by_id == user.id or board.members.filter(id=user.id).exists()):
+                if not (board.created_by_id == user.id or board.memberships.filter(user_id=user.id).exists()):
                     return None
             return board
         except Board.DoesNotExist:
@@ -622,7 +624,7 @@ class ConversationFlowManager:
             else:
                 user_boards = list(
                     Board.objects.filter(
-                        Q(created_by=user) | Q(members=user),
+                        Q(created_by=user) | Q(memberships__user=user),
                         is_archived=False,
                     ).exclude(
                         created_by_session__startswith='spectra_demo_'
@@ -769,7 +771,7 @@ class ConversationFlowManager:
             from kanban.models import Board
             user_boards = list(
                 Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
+                    Q(created_by=user) | Q(memberships__user=user),
                     is_archived=False,
                 ).distinct()
             )
@@ -1117,7 +1119,7 @@ class ConversationFlowManager:
             from kanban.models import Board
             user_boards = list(
                 Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
+                    Q(created_by=user) | Q(memberships__user=user),
                     is_archived=False,
                 ).distinct()[:2]
             )
@@ -1180,7 +1182,7 @@ class ConversationFlowManager:
             from kanban.models import Board
             user_boards = list(
                 Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
+                    Q(created_by=user) | Q(memberships__user=user),
                     is_archived=False,
                 ).distinct()
             )
@@ -1613,7 +1615,7 @@ class ConversationFlowManager:
         from kanban.models import Board
         boards = list(
             Board.objects.filter(
-                Q(created_by=user) | Q(members=user),
+                Q(created_by=user) | Q(memberships__user=user),
                 is_archived=False,
             ).distinct()[:2]
         )
@@ -1625,7 +1627,7 @@ class ConversationFlowManager:
         from kanban.models import Board
         user_boards = list(
             Board.objects.filter(
-                Q(created_by=user) | Q(members=user),
+                Q(created_by=user) | Q(memberships__user=user),
                 is_archived=False,
             ).distinct()
         )

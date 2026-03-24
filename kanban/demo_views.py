@@ -61,10 +61,12 @@ def _auto_grant_demo_access(request):
             return
         
         for board in demo_boards:
-            # Add user to board members (simple M2M relationship)
-            if request.user not in board.members.all():
-                board.members.add(request.user)
-                logger.info(f"Auto-granted {request.user.username} access to demo board: {board.name}")
+            # Add user to board as member via new BoardMembership
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'member'}
+            )
             
             # Add user to chat rooms for this board
             chat_rooms = ChatRoom.objects.filter(board=board)
@@ -560,28 +562,14 @@ def _ensure_user_in_demo_boards(user, demo_boards):
         user: User object
         demo_boards: QuerySet or list of Board objects
     """
-    from kanban.permission_models import BoardMembership, Role
+    from kanban.models import BoardMembership
     
     for board in demo_boards:
-        # Skip if user is already a member
-        if user in board.members.all():
-            continue
-        
-        # Add user to board members
-        board.members.add(user)
-        
-        # Create BoardMembership with Editor role for proper RBAC
-        editor_role = Role.objects.filter(
-            organization=board.organization,
-            name='Editor'
-        ).first()
-        
-        if editor_role:
-            BoardMembership.objects.get_or_create(
-                board=board,
-                user=user,
-                defaults={'role': editor_role}
-            )
+        # Create BoardMembership for the user
+        BoardMembership.objects.get_or_create(
+            board=board, user=user,
+            defaults={'role': 'member'}
+        )
         
         # Add user to all chat rooms for this board
         chat_rooms = ChatRoom.objects.filter(board=board)
@@ -664,29 +652,19 @@ def demo_dashboard(request):
         # Check if user is already a member of any demo boards
         user_demo_orgs = Organization.objects.filter(
             name__in=DEMO_ORG_NAMES,
-            boards__members=request.user
+            boards__memberships__user=request.user
         ).distinct()
         
         if not user_demo_orgs.exists():
             # User doesn't have access yet - grant it automatically
-            from kanban.permission_models import BoardMembership, Role
+            from kanban.models import BoardMembership
             
             for demo_board in demo_boards:
-                # Add user to board members
-                demo_board.members.add(request.user)
-                
-                # Create BoardMembership with Editor role
-                editor_role = Role.objects.filter(
-                    organization=demo_board.organization,
-                    name='Editor'
-                ).first()
-                
-                if editor_role:
-                    BoardMembership.objects.get_or_create(
-                        board=demo_board,
-                        user=request.user,
-                        defaults={'role': editor_role}
-                    )
+                # Create BoardMembership for the user
+                BoardMembership.objects.get_or_create(
+                    board=demo_board, user=request.user,
+                    defaults={'role': 'member'}
+                )
                 
                 # Add user to all chat rooms for this board
                 chat_rooms = ChatRoom.objects.filter(board=demo_board)
@@ -872,28 +850,18 @@ def demo_board_detail(request, board_id):
         # Organization-level access check: user must have access to at least one board in this org
         user_has_org_access = Board.objects.filter(
             organization=board.organization,
-            members=request.user
+            memberships__user=request.user
         ).exists()
         
         if not user_has_org_access:
             # Auto-grant access when user clicks on a demo board
-            from kanban.permission_models import BoardMembership, Role
+            from kanban.models import BoardMembership
             
-            # Add user to this board
-            board.members.add(request.user)
-            
-            # Create BoardMembership with Editor role
-            editor_role = Role.objects.filter(
-                organization=board.organization,
-                name='Editor'
-            ).first()
-            
-            if editor_role:
-                BoardMembership.objects.get_or_create(
-                    board=board,
-                    user=request.user,
-                    defaults={'role': editor_role}
-                )
+            # Create BoardMembership for the user
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'member'}
+            )
             
             # Add user to all chat rooms for this board
             chat_rooms = ChatRoom.objects.filter(board=board)
@@ -963,7 +931,7 @@ def demo_board_detail(request, board_id):
     
     # Get board members - show all board members
     from accounts.models import UserProfile
-    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_ids = board.memberships.values_list('user_id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all users who aren't on the board yet
@@ -1253,9 +1221,8 @@ def _delete_user_board_safely(board):
         pass
 
     try:
-        from kanban.permission_models import BoardMembership, PermissionAuditLog
+        from kanban.models import BoardMembership
         BoardMembership.objects.filter(board=board).delete()
-        PermissionAuditLog.objects.filter(board=board).delete()
     except Exception:
         pass
 

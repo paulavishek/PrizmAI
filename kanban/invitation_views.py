@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Board, BoardInvitation
+from .models import Board, BoardInvitation, BoardMembership
 from accounts.models import UserProfile
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ def invite_to_board(request, board_id):
             continue
 
         # Already a board member?
-        if board.members.filter(email__iexact=email).exists():
+        if board.memberships.filter(user__email__iexact=email).exists():
             skipped_list.append(f"{email} (already a member)")
             continue
 
@@ -184,13 +184,13 @@ def accept_invitation(request, token):
 
     board = invitation.board
 
-    if user in board.members.all():
+    if board.memberships.filter(user=user).exists():
         messages.info(request, f"You are already a member of '{board.name}'.")
         invitation.mark_accepted(user)
         return redirect('board_detail', board_id=board.id)
 
     # Add member and finalise invite
-    board.members.add(user)
+    BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'member'})
     invitation.mark_accepted(user)
 
     # Clear session key if it was set
