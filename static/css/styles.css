@@ -4,8 +4,8 @@
     --bg-secondary: #ffffff;
     --bg-tertiary: #e9ecef;
     --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --text-muted: #999999;
+    --text-secondary: #495057;
+    --text-muted: #6b7280;
     --border-color: #dee2e6;
     --border-light: #e9ecef;
     --shadow-color: rgba(0, 0, 0, 0.1);
@@ -20,6 +20,15 @@
     --btn-hover-bg: #dde2e6;
     --card-bg: #ffffff;
     --footer-bg: #f8f9fa;
+
+    /* ── Typography Scale ──────────────────────────────────────────── */
+    --font-size-xs:  0.75rem;   /* 12px — decorative / disabled only  */
+    --font-size-sm:  0.8125rem; /* 13px — small labels                */
+    --font-size-base: 0.875rem; /* 14px — standard component text     */
+    --font-size-md:  0.9375rem; /* 15px                               */
+    --font-size-lg:  1.0625rem; /* 17px — section headers             */
+    --font-size-xl:  1.25rem;   /* 20px — page titles                 */
+    --font-size-2xl: 1.5rem;    /* 24px — major headings              */
 }
 
 /* General Styles */
@@ -330,7 +339,7 @@ body {
 
 .column-task-count {
     font-size: 0.9rem;
-    color: #6c757d;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
@@ -650,7 +659,7 @@ body {
 }
 
 .task-description {
-    font-size: 0.9rem;
+    font-size: 0.925rem;
     color: var(--text-secondary);
     margin-bottom: 10px;
 }
@@ -659,7 +668,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
 }
 
 .task-labels {
@@ -669,8 +678,8 @@ body {
 }
 
 .task-label {
-    font-size: 0.7rem;
-    padding: 2px 8px;
+    font-size: 0.78rem;
+    padding: 3px 10px;
     border-radius: 10px;
     margin-right: 5px;
     margin-bottom: 5px;
@@ -687,15 +696,15 @@ body {
 
 .task-label.lean-label i {
     margin-right: 4px;
-    font-size: 0.65rem;
+    font-size: 0.72rem;
 }
 
 /* ── Required-Skills Chip UI ─────────────────────────────────────────── */
 .skill-chip {
     background-color: #0d6efd;
     color: #fff;
-    font-size: 0.72rem;
-    padding: 3px 9px 3px 10px;
+    font-size: 0.8rem;
+    padding: 4px 10px 4px 11px;
     border-radius: 20px;
     line-height: 1.4;
     gap: 4px;
@@ -703,7 +712,7 @@ body {
 
 .skill-chip .skill-chip-sep {
     opacity: 0.65;
-    font-size: 0.65rem;
+    font-size: 0.72rem;
 }
 
 .skill-chip-remove {
@@ -734,9 +743,9 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 20px;
     letter-spacing: 0.3px;
     white-space: nowrap;
@@ -768,8 +777,8 @@ body {
 }
 
 .task-priority {
-    font-size: 0.8rem;
-    padding: 3px 10px;
+    font-size: 0.85rem;
+    padding: 4px 12px;
     border-radius: 10px;
     margin-bottom: 5px;
 }

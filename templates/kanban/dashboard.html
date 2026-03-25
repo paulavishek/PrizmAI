@@ -64,8 +64,8 @@
         background: #f0f9ff;
         border: 1px solid #bae6fd;
         border-radius: 20px;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.78rem;
+        padding: 0.3rem 0.85rem;
+        font-size: 0.85rem;
         color: #0369a1;
         transition: background-color 0.2s ease;
     }
@@ -79,18 +79,18 @@
         align-items: center;
         gap: 0.35rem;
         margin: 0;
-        font-size: 0.78rem;
+        font-size: 0.85rem;
         font-weight: 600;
         color: #0369a1;
     }
 
     .demo-banner-icon {
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         color: #0369a1;
     }
 
     .demo-toggle-icon {
-        font-size: 0.7rem;
+        font-size: 0.78rem;
         color: #0369a1;
         transition: transform 0.3s ease;
     }
@@ -157,7 +157,7 @@
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
         color: white;
         flex-shrink: 0;
     }
@@ -182,7 +182,7 @@
     }
 
     .demo-user-role {
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         color: #0288d1;
         margin: 0;
     }
@@ -195,11 +195,11 @@
         background: #f8f9fa;
         border-radius: 6px;
         margin-bottom: 0.4rem;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
     }
 
     .demo-cred-label {
-        color: #6c757d;
+        color: var(--text-secondary);
         font-weight: 600;
     }
 
@@ -224,9 +224,9 @@
         display: inline-block;
         background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
         color: #01579b;
-        padding: 0.25rem 0.6rem;
+        padding: 0.3rem 0.7rem;
         border-radius: 4px;
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         font-weight: 600;
         margin-right: 0.3rem;
         margin-bottom: 0.3rem;
@@ -245,7 +245,7 @@
         border-radius: 6px;
         text-decoration: none;
         font-weight: 600;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         transition: all 0.3s ease;
         border: none;
     }
@@ -332,15 +332,15 @@
 
     .demo-board-name {
         font-weight: 700;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
         color: #01579b;
         margin-bottom: 0.4rem;
     }
 
     .demo-board-desc {
-        font-size: 0.75rem;
-        color: #6c757d;
-        line-height: 1.3;
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        line-height: 1.4;
     }
 
     /* Adjust max-height for expanded content with new sections */
@@ -432,7 +432,7 @@
     .mission-card:hover { box-shadow: 0 4px 16px rgba(78,115,223,0.18) !important; }
 
     /* Status badges */
-    .ms-status-badge { font-size: 0.68rem; padding: 0.25em 0.6em; }
+    .ms-status-badge { font-size: 0.75rem; padding: 0.3em 0.7em; }
     .ms-status-badge.status-active    { background-color: #1cc88a; color: #fff; }
     .ms-status-badge.status-completed { background-color: #36b9cc; color: #fff; }
     .ms-status-badge.status-on_hold   { background-color: #f6c23e; color: #333; }
@@ -465,7 +465,7 @@
     .board-tile-row:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 
     /* AI summary block */
-    .ai-summary-block { font-size: 0.82rem; }
+    .ai-summary-block { font-size: 0.875rem; }
 
     /* Bullet list rendering for AI summaries */
     .ai-bullet-list {
@@ -496,12 +496,12 @@
     }
     /* Hide toggle link when only 1-2 bullets */
     .ai-summary-text .summary-read-more { cursor: pointer; }
-    .summary-ts { font-size: 0.7rem; display: block; margin-top: 2px; }
+    .summary-ts { font-size: 0.75rem; display: block; margin-top: 2px; }
 
     /* Extra-small button variant */
     .btn-xs {
-        font-size: 0.7rem;
-        padding: 0.15rem 0.4rem;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.45rem;
         line-height: 1.4;
         border-radius: 4px;
     }
@@ -540,11 +540,11 @@
     .metrics-panel::-webkit-scrollbar-thumb { background: #dee2e6; border-radius: 3px; }
 
     .panel-section-header {
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #6c757d;
+        color: var(--text-secondary);
         border-bottom: 2px solid #e3e6f0;
         padding-bottom: 6px;
         margin-bottom: 10px;
@@ -570,8 +570,8 @@
         line-height: 1.1;
     }
     .panel-kpi-box .kpi-label {
-        font-size: 0.62rem;
-        color: #6c757d;
+        font-size: 0.7rem;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
@@ -582,7 +582,7 @@
         margin-bottom: 6px;
     }
     .panel-board-name {
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         width: 110px;
         min-width: 110px;
         white-space: nowrap;
@@ -603,8 +603,8 @@
         transition: width 0.4s ease;
     }
     .panel-board-pct {
-        font-size: 0.7rem;
-        color: #6c757d;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
         width: 32px;
         text-align: right;
         flex-shrink: 0;
@@ -612,8 +612,8 @@
     .panel-chart-wrap { position: relative; height: 180px; }
     .panel-risk-badge {
         display: inline-block;
-        font-size: 0.65rem;
-        padding: 1px 5px;
+        font-size: 0.75rem;
+        padding: 2px 7px;
         border-radius: 3px;
         background: #fff3cd;
         color: #856404;
@@ -655,7 +655,7 @@
         line-height: 1.0;
     }
     .kpi-big-label {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
         color: #495057;
         text-transform: uppercase;
@@ -663,8 +663,8 @@
         margin-top: 2px;
     }
     .kpi-sub {
-        font-size: 0.7rem;
-        color: #6c757d;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
         margin-top: 1px;
     }
 
@@ -723,9 +723,9 @@
     }
     .briefing-tag {
         display: inline-block;
-        font-size: 0.7rem;
+        font-size: 0.78rem;
         font-weight: 700;
-        padding: 0.2rem 0.55rem;
+        padding: 0.25rem 0.65rem;
         border-radius: 20px;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -749,7 +749,7 @@
         align-items: center;
         justify-content: flex-end;
         margin-top: 0.5rem;
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         font-weight: 600;
         color: #1e40af;
         opacity: 0.75;
@@ -771,9 +771,9 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 26px; height: 26px;
+        width: 28px; height: 28px;
         border-radius: 50%;
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         font-weight: 800;
         flex-shrink: 0;
         margin-right: 0.6rem;
@@ -782,7 +782,7 @@
     .step-high     .action-step-number { background:#fef3c7; color:#92400e; }
     .step-overdue  .action-step-number { background:#fee2e2; color:#b91c1c; }
     .action-why-text {
-        font-size: 0.81rem;
+        font-size: 0.875rem;
         color: #4b5563;
         line-height: 1.5;
         margin-bottom: 0.55rem;
@@ -795,7 +795,7 @@
         border: 1px solid #bbf7d0;
         border-radius: 6px;
         padding: 0.45rem 0.65rem;
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
         color: #065f46;
     }
@@ -820,7 +820,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        font-size: 0.7rem;
+        font-size: 0.78rem;
         font-weight: 700;
         color: white;
         cursor: default;
@@ -847,7 +847,7 @@
         text-align: center;
     }
     .gauge-value { font-size: 1.6rem; font-weight: 800; }
-    .gauge-sub   { font-size: 0.68rem; color: #6c757d; text-transform: uppercase; }
+    .gauge-sub   { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; }
 
     /* ================================================================
        HEALTH / TRAFFIC-LIGHT PILLS on mission cards
@@ -856,9 +856,9 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.65rem;
+        font-size: 0.75rem;
         font-weight: 700;
-        padding: 0.2em 0.55em;
+        padding: 0.3em 0.7em;
         border-radius: 20px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -882,9 +882,9 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.68rem;
+        font-size: 0.75rem;
         font-weight: 700;
-        padding: 0.2em 0.65em;
+        padding: 0.3em 0.75em;
         border-radius: 12px;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -936,8 +936,8 @@
     #hn-tab-strategies.active { color: #047857; border-bottom-color: #10b981; }
     #hn-tab-boards.active   { color: #6d28d9; border-bottom-color: #8b5cf6; }
     .hn-count {
-        font-size: 0.62rem;
-        padding: 0.15em 0.5em;
+        font-size: 0.75rem;
+        padding: 0.2em 0.55em;
         margin-left: 4px;
         background: #e2e8f0;
         color: #475569;
@@ -1057,7 +1057,7 @@
 
     /* Metadata timestamps and secondary text */
     .summary-ts, .board-tile-row .text-muted.small {
-        font-size: 0.70rem !important;
+        font-size: 0.75rem !important;
         opacity: 0.75;
     }
 
@@ -1286,29 +1286,29 @@
                             </div>
                             <div class="d-flex align-items-center gap-1 flex-shrink-0 ms-2">
                                 {% if step.task.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.68rem;">Critical</span>
+                                    <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.68rem;">High Risk</span>
+                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">High Risk</span>
                                 {% endif %}
                                 {% if step.task.due_date %}
-                                <span class="text-muted" style="font-size:0.71rem;">
+                                <span class="text-muted" style="font-size:0.78rem;">
                                     <i class="fas fa-calendar-alt me-1"></i>{{ step.task.due_date|date:"M d" }}
                                 </span>
                                 {% endif %}
                                 {% if step.task.assigned_to %}
-                                <span class="text-muted" style="font-size:0.71rem;">
+                                <span class="text-muted" style="font-size:0.78rem;">
                                     <i class="fas fa-user me-1"></i>{{ step.task.assigned_to.username }}
                                 </span>
                                 {% else %}
-                                <span style="font-size:0.71rem; color:#dc2626;">
+                                <span style="font-size:0.78rem; color:#dc2626;">
                                     <i class="fas fa-user-slash me-1"></i>Unassigned
                                 </span>
                                 {% endif %}
-                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.68rem;">{{ step.task.priority|title }}</span>
-                                <span style="font-size:0.71rem; color:#6b7280;">{{ step.task.progress }}%</span>
+                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.75rem;">{{ step.task.priority|title }}</span>
+                                <span style="font-size:0.78rem; color:#6b7280;">{{ step.task.progress }}%</span>
                                 <a href="{% url 'task_detail' step.task.id %}"
                                    class="btn btn-xs btn-outline-primary ms-1"
-                                   style="font-size:0.72rem; padding:0.15rem 0.5rem;">
+                                   style="font-size:0.78rem; padding:0.2rem 0.55rem;">
                                     Open
                                 </a>
                             </div>
@@ -1339,7 +1339,7 @@
 
             </div>
             <div class="modal-footer d-flex justify-content-between align-items-center">
-                <small class="text-muted" style="font-size:0.72rem;">
+                <small class="text-muted" style="font-size:0.78rem;">
                     {% if daily_briefing.ai_powered %}
                         <i class="fas fa-robot me-1" style="color:#3b82f6;"></i>
                         <span style="color:#1e40af; font-weight:600;">Spectra AI</span>
@@ -1613,14 +1613,14 @@
                             <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
                             <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
                         </div>
-                        <div class="text-muted" style="font-size:0.72rem;">
+                        <div class="text-muted" style="font-size:0.78rem;">
                             <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
                             <span class="text-muted ms-1">/ {{ task.column.name }}</span>
                         </div>
                         {% if task.due_date %}
-                        <div style="font-size:0.72rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                        <div style="font-size:0.78rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
                             <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.6rem;">Overdue</span>{% endif %}
+                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.68rem;">Overdue</span>{% endif %}
                         </div>
                         {% endif %}
                         <div class="d-flex align-items-center gap-2 mt-1">
@@ -1628,7 +1628,7 @@
                                 <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                                      role="progressbar" style="width:{{ task.progress }}%"></div>
                             </div>
-                            <span style="font-size:0.68rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
+                            <span style="font-size:0.75rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
                             <a href="{% url 'task_detail' task.id %}" class="btn btn-xs btn-primary flex-shrink-0">View</a>
                         </div>
                     </li>
@@ -1702,15 +1702,15 @@
                             </a>
                             <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
                                 {% if daily_briefing.top_risk.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
+                                    <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
+                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">High Risk</span>
                                 {% endif %}
-                                <small class="text-muted" style="font-size:0.72rem;">
+                                <small class="text-muted" style="font-size:0.78rem;">
                                     <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
                                 </small>
                                 {% if daily_briefing.top_risk.board_name %}
-                                <small class="text-muted" style="font-size:0.72rem;">
+                                <small class="text-muted" style="font-size:0.78rem;">
                                     <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
                                 </small>
                                 {% endif %}
@@ -1832,7 +1832,7 @@
                                     <div class="progress-bar {% if ge.completion_pct < 30 %}bg-danger{% elif ge.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
                                          role="progressbar" style="width:{{ ge.completion_pct }}%;"></div>
                                 </div>
-                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ ge.completion_pct }}%</small>
+                                <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.78rem;">{{ ge.completion_pct }}%</small>
                             </div>
                             {% endif %}
                             <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -2496,13 +2496,13 @@
                     <div class="col-12">
                         <div class="d-flex justify-content-between text-center mb-1">
                             <div style="width:28px;"></div>
-                            <div class="flex-fill text-muted" style="font-size:0.62rem; font-weight:700;">LOW<br>IMPACT</div>
-                            <div class="flex-fill text-muted" style="font-size:0.62rem; font-weight:700;">MED<br>IMPACT</div>
-                            <div class="flex-fill text-muted" style="font-size:0.62rem; font-weight:700;">HIGH<br>IMPACT</div>
+                            <div class="flex-fill text-muted" style="font-size:0.7rem; font-weight:700;">LOW<br>IMPACT</div>
+                            <div class="flex-fill text-muted" style="font-size:0.7rem; font-weight:700;">MED<br>IMPACT</div>
+                            <div class="flex-fill text-muted" style="font-size:0.7rem; font-weight:700;">HIGH<br>IMPACT</div>
                         </div>
                         <!-- Row: High Likelihood -->
                         <div class="d-flex align-items-center mb-1 gap-1">
-                            <div style="width:28px; font-size:0.6rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">HIGH<br>LIKE</div>
+                            <div style="width:28px; font-size:0.68rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">HIGH<br>LIKE</div>
                             <div class="flex-fill risk-heatmap-cell rhc-3-1" title="High Likelihood × Low Impact: {{ risk_heatmap_data.matrix.2.0 }} tasks">
                                 <span class="cell-count">{{ risk_heatmap_data.matrix.2.0 }}</span>
                             </div>
@@ -2515,7 +2515,7 @@
                         </div>
                         <!-- Row: Medium Likelihood -->
                         <div class="d-flex align-items-center mb-1 gap-1">
-                            <div style="width:28px; font-size:0.6rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">MED<br>LIKE</div>
+                            <div style="width:28px; font-size:0.68rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">MED<br>LIKE</div>
                             <div class="flex-fill risk-heatmap-cell rhc-2-1" title="Med Likelihood × Low Impact: {{ risk_heatmap_data.matrix.1.0 }} tasks">
                                 <span class="cell-count">{{ risk_heatmap_data.matrix.1.0 }}</span>
                             </div>
@@ -2528,7 +2528,7 @@
                         </div>
                         <!-- Row: Low Likelihood -->
                         <div class="d-flex align-items-center gap-1">
-                            <div style="width:28px; font-size:0.6rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">LOW<br>LIKE</div>
+                            <div style="width:28px; font-size:0.68rem; font-weight:700; color:#6c757d; text-align:right; padding-right:4px; line-height:1.1;">LOW<br>LIKE</div>
                             <div class="flex-fill risk-heatmap-cell rhc-1-1" title="Low Likelihood × Low Impact: {{ risk_heatmap_data.matrix.0.0 }} tasks">
                                 <span class="cell-count">{{ risk_heatmap_data.matrix.0.0 }}</span>
                             </div>
