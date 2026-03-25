@@ -165,6 +165,40 @@
                     <span class="topbar-demo-badge"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
                 {% endif %}
             </div>
+            <!-- Workspace Switcher — inline buttons, always visible in topbar -->
+            {% if user.is_authenticated %}
+            <div class="topbar-workspace-switcher">
+                <span class="tws-label">You are in:</span>
+                {% if is_viewing_demo %}
+                <span class="tws-btn tws-btn-active" title="Currently active">
+                    <i class="fas fa-eye me-1"></i>Demo Workspace
+                </span>
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="tws-btn">
+                        <i class="fas fa-briefcase me-1"></i>My Workspace
+                    </button>
+                </form>
+                <a href="{% url 'onboarding_welcome' %}?from=dashboard" class="tws-btn tws-btn-setup">
+                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                </a>
+                {% else %}
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="tws-btn">
+                        <i class="fas fa-eye me-1"></i>Demo Workspace
+                    </button>
+                </form>
+                <span class="tws-btn tws-btn-active" title="Currently active">
+                    <i class="fas fa-briefcase me-1"></i>My Workspace
+                </span>
+                <a href="{% url 'onboarding_goal' %}" class="tws-btn tws-btn-setup">
+                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <div class="topbar-right">
                 {% if is_demo_account and request.session.real_user_username %}
                 <a href="{% url 'return_to_real_account' %}" class="btn btn-sm btn-warning fw-semibold topbar-return-btn" title="Switch back to your real account">
