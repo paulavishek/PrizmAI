@@ -181,6 +181,11 @@ class UserProfile(models.Model):
         default=False,
         help_text="Permanent flag for demo login accounts (Alex, Sam, Jordan). Read-only, zero AI access."
     )
+    demo_task_originals = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Maps task_id→original_assignee_id for demo tasks temporarily assigned to this real user"
+    )
     
     def __str__(self):
         return f"{self.user.username}'s Profile"

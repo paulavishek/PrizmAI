@@ -1611,29 +1611,32 @@
                 {% if my_tasks %}
                 <ul class="list-group list-group-flush">
                     {% for task in my_tasks %}
-                    <li class="list-group-item px-3 py-2" style="list-style:none;">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
-                            <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
-                        </div>
-                        <div class="text-muted" style="font-size:0.78rem;">
-                            <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
-                            <span class="text-muted ms-1">/ {{ task.column.name }}</span>
-                        </div>
-                        {% if task.due_date %}
-                        <div style="font-size:0.78rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
-                            <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.68rem;">Overdue</span>{% endif %}
-                        </div>
-                        {% endif %}
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <div class="progress flex-grow-1" style="height:5px;">
-                                <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                     role="progressbar" style="width:{{ task.progress }}%"></div>
+                    <li class="list-group-item px-0 py-0" style="list-style:none;">
+                        <a href="{% url 'task_detail' task.id %}" class="d-block px-3 py-2 text-decoration-none text-reset"
+                           style="transition: background 0.15s;" onmouseover="this.style.background='var(--bs-light, #f8f9fa)'" onmouseout="this.style.background=''">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
+                                <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
                             </div>
-                            <span style="font-size:0.75rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
-                            <a href="{% url 'task_detail' task.id %}" class="btn btn-xs btn-primary flex-shrink-0">View</a>
-                        </div>
+                            <div class="text-muted" style="font-size:0.78rem;">
+                                <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
+                                <span class="text-muted ms-1">/ {{ task.column.name }}</span>
+                            </div>
+                            {% if task.due_date %}
+                            <div style="font-size:0.78rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                                <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                                {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.68rem;">Overdue</span>{% endif %}
+                            </div>
+                            {% endif %}
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <div class="progress flex-grow-1" style="height:5px;">
+                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar" style="width:{{ task.progress }}%"></div>
+                                </div>
+                                <span style="font-size:0.75rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
+                                <span class="text-primary flex-shrink-0" style="font-size:0.75rem;"><i class="fas fa-arrow-right"></i></span>
+                            </div>
+                        </a>
                     </li>
                     {% endfor %}
                 </ul>
