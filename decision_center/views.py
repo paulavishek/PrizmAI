@@ -78,8 +78,8 @@ def decision_center_view(request):
         pending = pending.distinct()
 
     action_required = list(pending.filter(priority_level='action_required'))
-    awareness = list(pending.filter(priority_level='awareness'))
-    quick_wins = list(pending.filter(priority_level='quick_win'))
+    awareness = list(pending.filter(priority_level='awareness')) if settings_obj.show_awareness_items else []
+    quick_wins = list(pending.filter(priority_level='quick_win')) if settings_obj.show_quick_wins else []
 
     today = timezone.localdate()
     briefing = (
@@ -150,16 +150,20 @@ def decision_center_widget_data(request):
                 created_for=user, status='pending', board__isnull=True
             )
         ).distinct()
+
+    settings_obj = _get_settings(user)
     counts = {
         'action_required_count': pending.filter(
             priority_level='action_required',
         ).count(),
-        'awareness_count': pending.filter(
-            priority_level='awareness',
-        ).count(),
-        'quick_win_count': pending.filter(
-            priority_level='quick_win',
-        ).count(),
+        'awareness_count': (
+            pending.filter(priority_level='awareness').count()
+            if settings_obj.show_awareness_items else 0
+        ),
+        'quick_win_count': (
+            pending.filter(priority_level='quick_win').count()
+            if settings_obj.show_quick_wins else 0
+        ),
     }
 
     today = timezone.localdate()
