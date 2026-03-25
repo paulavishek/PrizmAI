@@ -158,10 +158,10 @@ TASK_TOKEN_LIMITS = {
     'prizmbrief': 6144,                  # PrizmBrief slides (8-10 slides) + data sources slide
     
     # Goal-Aware Analytics
-    'board_classification': 512,          # Short JSON: {project_type, confidence, reason}
-    'analytics_narrative': 256,           # 2 sentences plain text
-    'portfolio_narrative': 512,           # Portfolio-level narrative (slightly longer)
-    'proxy_metrics': 1024,               # JSON array of 3 proxy metric objects
+    'board_classification': 2048,         # Short JSON: {project_type, confidence, reason} — generous limit to prevent truncation with thinking models
+    'analytics_narrative': 1024,          # 2 sentences plain text — buffer for thinking overhead
+    'portfolio_narrative': 1024,          # Portfolio-level narrative (slightly longer)
+    'proxy_metrics': 2048,               # JSON array of 3 proxy metric objects
     
     # Default
     'default': 4096,                     # Default for unspecified tasks - generous to prevent truncation
@@ -5536,12 +5536,13 @@ def classify_board_project_type(board):
         f"Board description: {board_description}\n"
         f"Column names: {', '.join(column_names) if column_names else 'None'}\n"
         f"Linked Goal: {goal_text if goal_text else 'None'}\n\n"
-        "Respond with ONLY valid JSON — no preamble, no markdown, no explanation outside the JSON:\n"
-        '{\n'
-        '  "project_type": "product_tech" | "marketing_campaign" | "operations",\n'
-        '  "confidence": 0.0 to 1.0,\n'
-        '  "reason": "one sentence explaining the classification"\n'
-        '}'
+        "Respond with ONLY a valid JSON object. No markdown, no code fences, no explanation — raw JSON only.\n"
+        "The JSON must have exactly these three fields:\n"
+        '  "project_type": one of the strings "product_tech", "marketing_campaign", or "operations"\n'
+        '  "confidence": a decimal number between 0.0 and 1.0\n'
+        '  "reason": a single sentence string explaining the classification\n\n'
+        "Example output (replace with actual values):\n"
+        '{"project_type": "product_tech", "confidence": 0.9, "reason": "The board contains software engineering tasks such as authentication and API development."}'
     )
 
     start_ms = time.time()
@@ -5553,13 +5554,25 @@ def classify_board_project_type(board):
         return None
 
     try:
-        # Strip markdown fences if present
+        # Robustly extract JSON from the response, handling markdown fences,
+        # preamble text, and any extra content the model may emit.
         cleaned = result.strip()
-        if cleaned.startswith('```'):
-            cleaned = '\n'.join(cleaned.split('\n')[1:])
-        if cleaned.endswith('```'):
-            cleaned = cleaned[:cleaned.rfind('```')]
-        data = json.loads(cleaned.strip())
+
+        # Remove all markdown code-fence lines (``` or ```json etc.)
+        if '```' in cleaned:
+            cleaned = '\n'.join(
+                line for line in cleaned.split('\n')
+                if not line.strip().startswith('```')
+            )
+
+        # Find the outermost JSON object boundaries
+        start = cleaned.find('{')
+        end = cleaned.rfind('}')
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError(f"No JSON object found in response: {cleaned[:300]}")
+        cleaned = cleaned[start:end + 1]
+
+        data = json.loads(cleaned)
 
         project_type = data.get('project_type', 'operations')
         confidence = float(data.get('confidence', 0.0))

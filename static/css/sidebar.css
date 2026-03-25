@@ -423,7 +423,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    z-index: 1030;
+    z-index: 1051;
     transition: left var(--sidebar-transition);
 }
 
