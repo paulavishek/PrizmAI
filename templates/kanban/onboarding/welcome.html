@@ -357,11 +357,13 @@
     <!-- ════════ LEFT PANEL: Content ════════ -->
     <div class="welcome-left">
         <!-- Back link -->
+        {% if from_dashboard %}
         <div class="mb-3">
             <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
                 <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
             </a>
         </div>
+        {% endif %}
 
         <!-- Logo -->
         <div class="mb-2">
@@ -403,6 +405,7 @@
             </a>
         </div>
 
+        {% if not from_dashboard %}
         <!-- Secondary CTA -->
         <div class="mb-3">
             <form method="post" action="{% url 'onboarding_explore_demo' %}">
@@ -422,6 +425,7 @@
                 </button>
             </form>
         </div>
+        {% endif %}
     </div>
 
     <!-- ════════ RIGHT PANEL: Hierarchy Node Graph ════════ -->
