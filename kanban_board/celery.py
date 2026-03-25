@@ -115,6 +115,11 @@ app.conf.beat_schedule = {
         'task': 'decision_center.generate_decision_briefing',
         'schedule': crontab(hour=7, minute=30),  # Daily 7:30 AM
     },
+    # Send digest emails every 30 min (honours per-user preferred time)
+    'dc-send-digest-emails': {
+        'task': 'decision_center.send_daily_digest_emails',
+        'schedule': crontab(minute='0,30'),  # Every 30 minutes
+    },
     # --- Exit Protocol Tasks ---
     # Monitor board health daily at 2:15 AM
     'monitor-board-health-daily': {

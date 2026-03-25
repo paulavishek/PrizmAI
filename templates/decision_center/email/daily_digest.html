@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decision Center Daily Digest – PrizmAI</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);padding:36px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;">
+                Pri<span style="font-style:italic;">z</span>mAI
+              </h1>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">
+                Decision Center &middot; Daily Digest
+              </p>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:32px 40px 12px;">
+              <p style="margin:0;color:#374151;font-size:16px;line-height:1.6;">
+                Good morning{{ user_name|default:"" }}{% if user_name %}, {{ user_name }}{% endif %}!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Briefing -->
+          {% if briefing_headline %}
+          <tr>
+            <td style="padding:8px 40px 20px;">
+              <div style="background:linear-gradient(135deg,#f8f9ff,#eef1ff);border:1px solid #d4d9ff;border-radius:10px;padding:20px;">
+                <p style="margin:0 0 6px;color:#6366f1;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
+                  ✨ AI Briefing
+                </p>
+                <p style="margin:0 0 8px;color:#1e293b;font-size:17px;font-weight:600;">
+                  {{ briefing_headline }}
+                </p>
+                {% if briefing_text %}
+                <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;">
+                  {{ briefing_text }}
+                </p>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Summary bar -->
+          <tr>
+            <td style="padding:8px 40px 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="text-align:center;padding:14px;background:#fef2f2;border-radius:8px 0 0 8px;">
+                    <p style="margin:0;font-size:24px;font-weight:700;color:#dc2626;">{{ action_count }}</p>
+                    <p style="margin:4px 0 0;font-size:11px;color:#991b1b;text-transform:uppercase;letter-spacing:0.5px;">Action Required</p>
+                  </td>
+                  {% if show_awareness %}
+                  <td style="text-align:center;padding:14px;background:#ecfeff;">
+                    <p style="margin:0;font-size:24px;font-weight:700;color:#0891b2;">{{ awareness_count }}</p>
+                    <p style="margin:4px 0 0;font-size:11px;color:#155e75;text-transform:uppercase;letter-spacing:0.5px;">Awareness</p>
+                  </td>
+                  {% endif %}
+                  {% if show_quick_wins %}
+                  <td style="text-align:center;padding:14px;background:#f0fdf4;border-radius:0 8px 8px 0;">
+                    <p style="margin:0;font-size:24px;font-weight:700;color:#16a34a;">{{ quick_win_count }}</p>
+                    <p style="margin:4px 0 0;font-size:11px;color:#166534;text-transform:uppercase;letter-spacing:0.5px;">Quick Wins</p>
+                  </td>
+                  {% endif %}
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Estimated time -->
+          <tr>
+            <td style="padding:0 40px 20px;">
+              <p style="margin:0;color:#6b7280;font-size:14px;">
+                ⏱ Estimated review time: <strong>{{ estimated_minutes }} minute{{ estimated_minutes|pluralize }}</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Action Required items -->
+          {% if action_items %}
+          <tr>
+            <td style="padding:0 40px 16px;">
+              <p style="margin:0 0 10px;color:#dc2626;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+                🔴 Action Required
+              </p>
+              {% for item in action_items %}
+              <div style="background:#fff;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;padding:12px 16px;margin-bottom:8px;">
+                <p style="margin:0 0 4px;color:#1e293b;font-size:14px;font-weight:600;">{{ item.title }}</p>
+                {% if item.description %}
+                <p style="margin:0 0 4px;color:#6b7280;font-size:13px;">{{ item.description }}</p>
+                {% endif %}
+                {% if item.suggested_action %}
+                <p style="margin:0;color:#3b82f6;font-size:12px;">💡 {{ item.suggested_action }}</p>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Awareness items -->
+          {% if show_awareness and awareness_items %}
+          <tr>
+            <td style="padding:0 40px 16px;">
+              <p style="margin:0 0 10px;color:#0891b2;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+                🔵 Awareness
+              </p>
+              {% for item in awareness_items %}
+              <div style="background:#fff;border:1px solid #cffafe;border-left:4px solid #0891b2;border-radius:6px;padding:12px 16px;margin-bottom:8px;">
+                <p style="margin:0;color:#1e293b;font-size:14px;">{{ item.title }}</p>
+              </div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Quick Win items -->
+          {% if show_quick_wins and quick_win_items %}
+          <tr>
+            <td style="padding:0 40px 16px;">
+              <p style="margin:0 0 10px;color:#16a34a;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+                ⚡ Quick Wins
+              </p>
+              {% for item in quick_win_items %}
+              <div style="background:#fff;border:1px solid #bbf7d0;border-left:4px solid #16a34a;border-radius:6px;padding:12px 16px;margin-bottom:8px;">
+                <p style="margin:0;color:#1e293b;font-size:14px;">{{ item.title }}</p>
+              </div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding:8px 40px 28px;text-align:center;">
+              <a href="{{ decision_center_url }}"
+                 style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#ffffff;text-decoration:none;padding:14px 40px;border-radius:8px;font-size:16px;font-weight:600;letter-spacing:0.3px;">
+                Open Decision Center
+              </a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding:0 40px;">
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin:0;">
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px 36px;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">
+                You're receiving this because you have daily digest emails enabled in your
+                Decision Center settings. You can change this any time from the Decision Center Settings page.
+              </p>
+              <p style="margin:12px 0 0;color:#d1d5db;font-size:11px;">
+                &copy; 2026 PrizmAI. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

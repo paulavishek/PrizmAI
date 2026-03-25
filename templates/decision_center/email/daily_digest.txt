@@ -1,0 +1,27 @@
+PrizmAI — Decision Center Daily Digest
+=======================================
+
+Good morning{% if user_name %}, {{ user_name }}{% endif %}!
+
+{% if briefing_headline %}AI Briefing: {{ briefing_headline }}
+{% if briefing_text %}{{ briefing_text }}{% endif %}
+
+{% endif %}Summary: {{ action_count }} action required{% if show_awareness %} · {{ awareness_count }} awareness{% endif %}{% if show_quick_wins %} · {{ quick_win_count }} quick wins{% endif %}
+Estimated review time: {{ estimated_minutes }} minute{{ estimated_minutes|pluralize }}
+
+{% if action_items %}--- ACTION REQUIRED ---
+{% for item in action_items %}• {{ item.title }}{% if item.description %}
+  {{ item.description }}{% endif %}{% if item.suggested_action %}
+  💡 {{ item.suggested_action }}{% endif %}
+{% endfor %}
+{% endif %}{% if show_awareness and awareness_items %}--- AWARENESS ---
+{% for item in awareness_items %}• {{ item.title }}
+{% endfor %}
+{% endif %}{% if show_quick_wins and quick_win_items %}--- QUICK WINS ---
+{% for item in quick_win_items %}• {{ item.title }}
+{% endfor %}
+{% endif %}Open your Decision Center: {{ decision_center_url }}
+
+---
+You're receiving this because daily digest emails are enabled in your Decision Center settings.
+© 2026 PrizmAI

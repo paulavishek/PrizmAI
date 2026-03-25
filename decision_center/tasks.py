@@ -2,6 +2,7 @@
 Celery tasks for the Decision Center.
 - collect_decision_items: morning scan that creates DecisionItem records
 - generate_decision_briefing: AI summary of the day's decision queue
+- send_daily_digest_emails: send digest emails at each user's preferred time
 """
 import json
 import logging
@@ -538,3 +539,161 @@ def _fallback_briefing(action_items, awareness_items, quick_items, total_est):
         parts.append(f"{len(quick_items)} quick win{'s' if len(quick_items) != 1 else ''}")
     briefing = ". ".join(parts) + f". Estimated review time: {total_est} minutes."
     return headline, briefing, ''
+
+
+# ── Task 3: Send Daily Digest Emails ────────────────────────────────────────
+
+@shared_task(name='decision_center.send_daily_digest_emails')
+def send_daily_digest_emails():
+    """
+    Send a daily digest email to every user who has opted in and whose
+    preferred digest_time has arrived.  Runs every 30 minutes so we can
+    honour per-user time preferences with ±30 min accuracy.
+    """
+    from datetime import time as dt_time
+
+    from django.core.mail import send_mail
+    from django.template.loader import render_to_string
+
+    from decision_center.models import (
+        DecisionCenterBriefing,
+        DecisionCenterSettings,
+        DecisionItem,
+    )
+
+    now = timezone.localtime()  # server-local time (Asia/Kolkata per settings)
+    current_time = now.time()
+    today = now.date()
+
+    # Build a 30-minute window: users whose digest_time falls within
+    # [current - 15 min, current + 15 min) will be emailed now.
+    window_start = _add_minutes_to_time(current_time, -15)
+    window_end = _add_minutes_to_time(current_time, 15)
+
+    settings_qs = DecisionCenterSettings.objects.filter(
+        daily_digest_enabled=True,
+    ).select_related('user')
+
+    # Filter by time window (handles midnight wraparound)
+    if window_start <= window_end:
+        settings_qs = settings_qs.filter(
+            digest_time__gte=window_start,
+            digest_time__lt=window_end,
+        )
+    else:
+        # Window wraps around midnight, e.g. 23:50 → 00:10
+        settings_qs = settings_qs.filter(
+            Q(digest_time__gte=window_start) | Q(digest_time__lt=window_end),
+        )
+
+    sent = 0
+    for dc_settings in settings_qs.iterator():
+        user = dc_settings.user
+        if not user.is_active or not user.email:
+            continue
+
+        # Skip if we already emailed this user today (idempotency guard)
+        cache_key = f'dc_digest_sent_{user.id}_{today.isoformat()}'
+        from django.core.cache import cache
+        if cache.get(cache_key):
+            continue
+
+        # Gather pending items
+        pending = DecisionItem.objects.filter(
+            created_for=user, status='pending',
+        )
+        action_items = list(
+            pending.filter(priority_level='action_required')
+            .only('title', 'description', 'suggested_action')[:15]
+        )
+        awareness_items = (
+            list(pending.filter(priority_level='awareness').only('title')[:10])
+            if dc_settings.show_awareness_items else []
+        )
+        quick_win_items = (
+            list(pending.filter(priority_level='quick_win').only('title')[:10])
+            if dc_settings.show_quick_wins else []
+        )
+
+        total_items = len(action_items) + len(awareness_items) + len(quick_win_items)
+        if total_items == 0:
+            continue  # Nothing to report
+
+        est_minutes = sum(
+            pending.values_list('estimated_minutes', flat=True)
+        )
+
+        # Today's AI briefing (if generated)
+        briefing = (
+            DecisionCenterBriefing.objects
+            .filter(user=user, generated_at__date=today)
+            .first()
+        )
+
+        context = {
+            'user_name': user.get_full_name() or user.username,
+            'briefing_headline': briefing.headline if briefing else '',
+            'briefing_text': briefing.briefing if briefing else '',
+            'action_count': len(action_items),
+            'awareness_count': len(awareness_items),
+            'quick_win_count': len(quick_win_items),
+            'estimated_minutes': est_minutes,
+            'action_items': action_items,
+            'awareness_items': awareness_items,
+            'quick_win_items': quick_win_items,
+            'show_awareness': dc_settings.show_awareness_items,
+            'show_quick_wins': dc_settings.show_quick_wins,
+            'decision_center_url': _build_decision_center_url(),
+        }
+
+        subject = (
+            f'PrizmAI Decision Center: {len(action_items)} action'
+            f'{"s" if len(action_items) != 1 else ""} required'
+        )
+        body_text = render_to_string(
+            'decision_center/email/daily_digest.txt', context,
+        )
+        body_html = render_to_string(
+            'decision_center/email/daily_digest.html', context,
+        )
+
+        try:
+            send_mail(
+                subject=subject,
+                message=body_text,
+                from_email=None,  # uses DEFAULT_FROM_EMAIL
+                recipient_list=[user.email],
+                html_message=body_html,
+                fail_silently=False,
+            )
+            cache.set(cache_key, True, 60 * 60 * 20)  # expires in 20 h
+            sent += 1
+            logger.info(
+                'Decision Center digest sent to %s (%s)',
+                user.email, user.pk,
+            )
+        except Exception:
+            logger.exception(
+                'Failed to send Decision Center digest to %s (%s)',
+                user.email, user.pk,
+            )
+
+    logger.info('send_daily_digest_emails: %d emails sent', sent)
+    return {'sent': sent}
+
+
+def _add_minutes_to_time(t, minutes):
+    """Return a datetime.time offset by *minutes* (may wrap around midnight)."""
+    from datetime import datetime as dt, timedelta as td
+    combined = dt.combine(dt.today(), t) + td(minutes=minutes)
+    return combined.time()
+
+
+def _build_decision_center_url():
+    """Best-effort absolute URL to the Decision Center page."""
+    try:
+        from django.conf import settings as django_settings
+        base = getattr(django_settings, 'SITE_URL', '') or 'http://127.0.0.1:8000'
+        return f'{base.rstrip("/")}/decision-center/'
+    except Exception:
+        return 'http://127.0.0.1:8000/decision-center/'

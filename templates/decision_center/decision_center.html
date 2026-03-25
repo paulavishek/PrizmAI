@@ -131,6 +131,7 @@
     </div>
 
     <!-- ── Section 2: Awareness ──────────────────────────────── -->
+    {% if settings_obj.show_awareness_items %}
     <div class="dc-section dc-section-awareness p-3 mb-4">
         <div class="dc-collapse-toggle collapsed d-flex align-items-center justify-content-between"
              data-bs-toggle="collapse" data-bs-target="#dc-awareness-body" aria-expanded="false">
@@ -171,8 +172,10 @@
             {% endfor %}
         </div>
     </div>
+    {% endif %}
 
     <!-- ── Section 3: Quick Wins ─────────────────────────────── -->
+    {% if settings_obj.show_quick_wins %}
     <div class="dc-section dc-section-quickwin p-3 mb-4">
         <div class="dc-collapse-toggle collapsed d-flex align-items-center justify-content-between"
              data-bs-toggle="collapse" data-bs-target="#dc-quickwin-body" aria-expanded="false">
@@ -229,6 +232,7 @@
             {% endfor %}
         </div>
     </div>
+    {% endif %}
 
     {% if not action_required and not awareness and not quick_wins %}
     <div class="text-center py-5">
@@ -391,6 +395,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 var modal = bootstrap.Modal.getInstance(document.getElementById('dcSettingsModal'));
                 if (modal) modal.hide();
+                // Reload page so visibility changes take effect immediately
+                window.location.reload();
             }
         });
     });
