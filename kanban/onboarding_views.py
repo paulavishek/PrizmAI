@@ -65,7 +65,8 @@ def onboarding_welcome(request):
     if profile.onboarding_status == 'workspace_generated':
         return redirect('onboarding_review')
 
-    return render(request, 'kanban/onboarding/welcome.html')
+    from_dashboard = request.GET.get('from') == 'dashboard'
+    return render(request, 'kanban/onboarding/welcome.html', {'from_dashboard': from_dashboard})
 
 
 # ---------------------------------------------------------------------------
