@@ -9,7 +9,7 @@
 .strategic-header.strategy-header{ border-left: 4px solid #378ADD; }
 
 /* Status badges */
-.status-badge { font-size: 0.72rem; font-weight: 600; padding: 0.25em 0.7em; border-radius: 10px; text-transform: capitalize; }
+.status-badge { font-size: 0.8rem; font-weight: 600; padding: 0.3em 0.8em; border-radius: 10px; text-transform: capitalize; }
 .status-badge.active    { background: #d1fae5; color: #065f46; }
 .status-badge.pending   { background: #e0e7ff; color: #3730a3; }
 .status-badge.paused    { background: #fef3c7; color: #92400e; }
@@ -17,7 +17,7 @@
 .status-badge.archived  { background: #e5e7eb; color: #374151; }
 
 /* Version label */
-.version-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-tertiary); padding: 0.15em 0.55em; border-radius: 8px; }
+.version-label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-tertiary); padding: 0.2em 0.65em; border-radius: 8px; }
 
 /* Health score ring */
 .health-ring {
@@ -42,8 +42,8 @@
 
 /* ---- Tab navigation ---- */
 .strategic-tabs .nav-link {
-    color: var(--text-secondary); font-weight: 500; font-size: 0.85rem;
-    border: none; padding: 0.55rem 1rem; border-radius: 8px 8px 0 0;
+    color: var(--text-secondary); font-weight: 500; font-size: 0.9rem;
+    border: none; padding: 0.65rem 1.15rem; border-radius: 8px 8px 0 0;
     transition: background .15s, color .15s;
 }
 .strategic-tabs .nav-link:hover { background: var(--bg-tertiary); color: var(--text-primary); }
@@ -52,20 +52,20 @@
 /* ---- Right sidebar ---- */
 .strategic-sidebar { min-width: 210px; max-width: 250px; }
 .strategic-sidebar .sidebar-section { margin-bottom: 1.25rem; }
-.strategic-sidebar .sidebar-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.04em; margin-bottom: 0.35rem; }
-.strategic-sidebar .sidebar-value { font-size: 0.85rem; }
+.strategic-sidebar .sidebar-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+.strategic-sidebar .sidebar-value { font-size: 0.9rem; }
 
 /* ---- Stale AI banner ---- */
 .stale-banner {
     background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px;
-    padding: 0.55rem 0.85rem; display: flex; align-items: center; gap: 0.5rem;
-    font-size: 0.82rem; color: #92400e;
+    padding: 0.65rem 0.95rem; display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.875rem; color: #92400e;
 }
-.stale-banner .btn { font-size: 0.75rem; }
+.stale-banner .btn { font-size: 0.8rem; }
 
 /* ---- Updates feed ---- */
-.update-entry { border-left: 3px solid var(--border-color); padding: 0.6rem 0.85rem; margin-bottom: 0.65rem; border-radius: 0 6px 6px 0; background: var(--bg-secondary); }
-.update-entry .update-status { font-size: 0.68rem; font-weight: 700; padding: 0.15em 0.55em; border-radius: 8px; text-transform: uppercase; }
+.update-entry { border-left: 3px solid var(--border-color); padding: 0.7rem 0.95rem; margin-bottom: 0.65rem; border-radius: 0 6px 6px 0; background: var(--bg-secondary); }
+.update-entry .update-status { font-size: 0.75rem; font-weight: 700; padding: 0.2em 0.6em; border-radius: 8px; text-transform: uppercase; }
 .update-entry .update-status.on_track  { background: #d1fae5; color: #065f46; }
 .update-entry .update-status.at_risk   { background: #fef3c7; color: #92400e; }
 .update-entry .update-status.off_track { background: #fee2e2; color: #991b1b; }
@@ -75,13 +75,13 @@
 .version-entry { position: relative; padding-left: 1.5rem; padding-bottom: 1rem; border-left: 2px solid var(--border-light); }
 .version-entry::before { content: ''; position: absolute; left: -5px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); }
 .version-entry:last-child { border-left-color: transparent; }
-.version-entry .version-reason { font-size: 0.7rem; font-weight: 600; padding: 0.12em 0.5em; border-radius: 6px; }
+.version-entry .version-reason { font-size: 0.78rem; font-weight: 600; padding: 0.15em 0.55em; border-radius: 6px; }
 .version-entry .version-reason.minor_tweak    { background: #e0e7ff; color: #3730a3; }
 .version-entry .version-reason.scope_change   { background: #fef3c7; color: #92400e; }
 .version-entry .version-reason.strategic_pivot { background: #fee2e2; color: #991b1b; }
 
 /* ---- Follower chips ---- */
-.follower-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.76rem; background: var(--bg-tertiary); padding: 0.2em 0.6em; border-radius: 12px; }
+.follower-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.82rem; background: var(--bg-tertiary); padding: 0.25em 0.7em; border-radius: 12px; }
 
 /* ---- Progress bars ---- */
 .progress-sm { height: 6px; border-radius: 3px; }
@@ -89,11 +89,11 @@
 /* ---- Schedule / Risk pills  (re-used from existing goal page, now shared) ---- */
 .status-pill, .risk-pill {
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 0.68rem; font-weight: 700; padding: 0.2em 0.65em;
+    font-size: 0.75rem; font-weight: 700; padding: 0.3em 0.75em;
     border-radius: 12px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
 }
 .status-pill .pill-dot, .risk-pill .pill-dot {
-    width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
 }
 .status-pill.on_track, .status-pill.on-track  { background: #d1fae5; color: #065f46; }
 .status-pill.on_track .pill-dot, .status-pill.on-track .pill-dot { background: #10b981; }

@@ -6,8 +6,8 @@
     --bg-secondary: #ffffff;
     --bg-tertiary: #e9ecef;
     --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --text-muted: #999999;
+    --text-secondary: #495057;
+    --text-muted: #6b7280;
     --border-color: #dee2e6;
     --border-light: #e9ecef;
     --shadow-color: rgba(0, 0, 0, 0.1);
@@ -33,7 +33,7 @@ body.dark-mode,
     --bg-tertiary: #3a3a3a;
     --text-primary: #e8e8e8;
     --text-secondary: #b0b0b0;
-    --text-muted: #808080;
+    --text-muted: #9ca3af;
     --border-color: #444444;
     --border-light: #3a3a3a;
     --shadow-color: rgba(0, 0, 0, 0.3);
@@ -325,11 +325,21 @@ body.dark-mode .kanban-column-header--gray:hover,
 /* Table Theme */
 table {
     color: var(--text-primary);
+    font-size: 0.875rem;
 }
 
 thead {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
+}
+
+thead th {
+    padding: 0.85rem 0.75rem;
+    font-weight: 600;
+}
+
+tbody td {
+    padding: 0.75rem 0.75rem;
 }
 
 tbody tr {

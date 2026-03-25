@@ -63,7 +63,7 @@
     font-size: 0.85rem;
     line-height: 1.4;
     margin-top: 0.25rem;
-    color: #6c757d !important;
+    color: var(--text-secondary, #495057) !important;
     font-weight: 500;
 }
 
@@ -243,12 +243,14 @@
     font-weight: 600;
     color: #495057;
     border-bottom: 2px solid #dee2e6;
-    padding: 0.75rem 0.5rem;
+    padding: 0.85rem 0.75rem;
+    font-size: 0.875rem;
 }
 
 .skill-comparison tbody td {
-    padding: 0.6rem 0.5rem;
+    padding: 0.75rem 0.75rem;
     vertical-align: middle;
+    font-size: 0.875rem;
 }
 
 .skill-comparison .bi-check-circle {
@@ -504,7 +506,7 @@
 /* Small text should be muted gray for readability */
 .modal-body .text-muted,
 .modal-body .small {
-    color: #6c757d !important;
+    color: var(--text-secondary, #495057) !important;
 }
 
 /* Badge contrast improvements */
@@ -518,7 +520,7 @@
 /* Ensure text-muted is actually muted gray, not white */
 .modal-body .text-dark,
 .modal-body .text-secondary {
-    color: #6c757d !important;
+    color: var(--text-secondary, #495057) !important;
 }
 
 /* Specific fix for factor items in modal - DARK text */
@@ -703,7 +705,7 @@
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
 }
 
 .reasoning-factor-table tr:hover td {
@@ -770,7 +772,7 @@
 
 .action-item-rationale {
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
 }
 
 /* ==================== NEW: Alternatives Comparison ==================== */
@@ -824,7 +826,7 @@
 
 .alternative-description {
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     margin-bottom: 0.25rem;
 }
 
@@ -913,7 +915,7 @@
 
 .scenario-probability {
     font-size: 0.8rem;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
 }
 
 /* ==================== NEW: Health Assessment ==================== */
@@ -965,7 +967,7 @@
 
 .health-score {
     font-size: 0.9rem;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
 }
 
 .health-factors-table {
@@ -986,7 +988,7 @@
     font-weight: 600;
     font-size: 0.85rem;
     text-transform: uppercase;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
 }
 
 .health-trend {
@@ -1082,7 +1084,7 @@
     font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     margin-bottom: 0.75rem;
     display: flex;
     align-items: center;
@@ -1123,7 +1125,7 @@
 }
 
 .explainability-modal .nav-link {
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 600;
     border: none;
     padding: 0.75rem 1rem;
@@ -1190,7 +1192,7 @@
 
 .explainability-tooltip-factors li {
     padding: 0.25rem 0;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-size: 0.8rem;
 }
 
