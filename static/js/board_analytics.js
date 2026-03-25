@@ -54,15 +54,157 @@ function initializeCharts() {
     Chart.defaults.font.family = 'Nunito';
     Chart.defaults.color = '#858796';
     
-    // Initialize all charts
-    console.log('Starting chart initialization...');
+    // Check for Spectra dynamic chart configs
+    const configEl = document.getElementById('promoted-chart-configs');
+    if (configEl) {
+        try {
+            const chartConfigs = JSON.parse(configEl.textContent);
+            console.log('Spectra dynamic charts detected:', chartConfigs.length);
+            initializeDynamicCharts(chartConfigs);
+        } catch (e) {
+            console.error('Failed to parse promoted chart configs:', e);
+            initializeFallbackCharts();
+        }
+    } else {
+        initializeFallbackCharts();
+    }
+    
+    chartsInitialized = true;
+    console.log('All charts initialized successfully');
+}
+
+/**
+ * Initialize charts dynamically from Spectra config.
+ * Each config object has: id, title, type, data_key, label_field, value_field,
+ * color, border_color, index_axis, fill, use_priority_colors, use_item_colors
+ */
+function initializeDynamicCharts(configs) {
+    const DATA_MAP = {
+        'tasks_by_column': 'tasks-by-column-data',
+        'tasks_by_priority': 'tasks-by-priority-data',
+        'tasks_by_user': 'tasks-by-user-data',
+        'tasks_by_lean_category': 'tasks-by-lean-data',
+        'completed_tasks': 'completed-tasks-data',
+    };
+
+    const PRIORITY_COLORS = window.PrizmAccessibility ?
+        window.PrizmAccessibility.getPriorityColors() : {
+            'Urgent': 'rgba(220, 53, 69, 0.8)',
+            'High': 'rgba(255, 193, 7, 0.8)',
+            'Medium': 'rgba(54, 162, 235, 0.8)',
+            'Low': 'rgba(108, 117, 125, 0.8)'
+        };
+
+    configs.forEach(function(cfg) {
+        const canvas = document.getElementById(cfg.id);
+        if (!canvas) {
+            console.warn('Canvas not found for dynamic chart:', cfg.id);
+            return;
+        }
+
+        const dataElId = DATA_MAP[cfg.data_key];
+        if (!dataElId) {
+            console.warn('Unknown data_key:', cfg.data_key);
+            return;
+        }
+
+        const dataEl = document.getElementById(dataElId);
+        if (!dataEl) {
+            console.warn('Data element not found:', dataElId);
+            return;
+        }
+
+        let rawData;
+        try {
+            rawData = JSON.parse(dataEl.textContent);
+        } catch (e) {
+            console.error('Failed to parse data for', cfg.id, e);
+            return;
+        }
+
+        if (!rawData || rawData.length === 0) {
+            const container = canvas.parentElement;
+            container.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted">No data available</p></div>';
+            return;
+        }
+
+        const labels = rawData.map(function(item) { return item[cfg.label_field] || 'Unknown'; });
+        const values = rawData.map(function(item) { return item[cfg.value_field] || 0; });
+
+        // Determine colors
+        let bgColors, borderColors;
+        if (cfg.use_priority_colors) {
+            bgColors = rawData.map(function(item) {
+                return PRIORITY_COLORS[item[cfg.label_field]] || 'rgba(108, 117, 125, 0.8)';
+            });
+            borderColors = '#ffffff';
+        } else if (cfg.use_item_colors) {
+            bgColors = rawData.map(function(item) { return item.color || cfg.color || 'rgba(54, 162, 235, 0.8)'; });
+            borderColors = '#ffffff';
+        } else {
+            bgColors = cfg.color || 'rgba(54, 162, 235, 0.8)';
+            borderColors = cfg.border_color || 'rgba(54, 162, 235, 1)';
+        }
+
+        var chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: (cfg.type === 'doughnut' || cfg.type === 'pie'),
+                    position: 'bottom'
+                }
+            }
+        };
+
+        if (cfg.type === 'bar' || cfg.type === 'line') {
+            if (cfg.index_axis === 'y') {
+                chartOptions.indexAxis = 'y';
+                chartOptions.scales = { x: { beginAtZero: true, ticks: { stepSize: 1 } } };
+            } else {
+                chartOptions.scales = { y: { beginAtZero: true, ticks: { stepSize: 1 } } };
+            }
+        }
+
+        if (cfg.type === 'doughnut') {
+            chartOptions.cutout = '65%';
+        }
+
+        var dataset = {
+            label: cfg.title || 'Tasks',
+            data: values,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: (cfg.type === 'doughnut') ? 2 : 1,
+        };
+
+        if (cfg.type === 'line') {
+            dataset.fill = !!cfg.fill;
+            dataset.tension = 0.3;
+            dataset.pointRadius = 3;
+        }
+
+        var instance = new Chart(canvas, {
+            type: cfg.type,
+            data: { labels: labels, datasets: [dataset] },
+            options: chartOptions
+        });
+
+        // Store priority chart for accessibility updates
+        if (cfg.id === 'priorityChart') {
+            priorityChartInstance = instance;
+        }
+
+        console.log('Dynamic chart initialized:', cfg.id, cfg.type);
+    });
+}
+
+function initializeFallbackCharts() {
+    console.log('Using fallback chart initialization...');
     initializeColumnChart();
     initializePriorityChart();
     initializeUserChart();
     initializeLeanChart();
-    
-    chartsInitialized = true;
-    console.log('All charts initialized successfully');
 }
 
 function initializeColumnChart() {

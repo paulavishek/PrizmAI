@@ -104,14 +104,60 @@
 </div>
 
 {% if promoted_metrics %}
-<!-- ═══════ Spectra Promoted Metrics (Goal-Aware) ═══════ -->
+<!-- ═══════ Spectra: Board type confirmed ═══════ -->
 <div class="row mb-3">
-    <div class="col-12">
+    <div class="col-12 d-flex align-items-center gap-2">
         <h6 class="text-uppercase text-muted fw-bold mb-0">
             <i class="fas fa-bullseye me-1"></i>Key Metrics for {{ board.get_project_type_display }}
         </h6>
+        {% if board.project_type_confirmed %}
+        <span class="badge bg-success bg-opacity-75 small"><i class="fas fa-check-circle me-1"></i>Confirmed</span>
+        {% endif %}
+        <button class="btn btn-sm btn-outline-secondary ms-auto" data-bs-toggle="collapse" data-bs-target="#changeTypeCollapse" aria-expanded="false">
+            <i class="fas fa-exchange-alt me-1"></i>Change Type
+        </button>
+    </div>
+    <div class="col-12">
+        <div class="collapse mt-2" id="changeTypeCollapse">
+            <div class="card card-body py-2 d-flex flex-row align-items-center gap-2 flex-wrap">
+                <span class="text-muted small me-2">Set board type:</span>
+                <button class="btn btn-sm btn-outline-primary" onclick="confirmBoardType('product_tech')">Product / Tech</button>
+                <button class="btn btn-sm btn-outline-primary" onclick="confirmBoardType('marketing_campaign')">Marketing / Campaign</button>
+                <button class="btn btn-sm btn-outline-primary" onclick="confirmBoardType('operations')">Operations</button>
+            </div>
+        </div>
     </div>
 </div>
+
+{% else %}
+<!-- ═══════ Spectra: Classification banner (board not yet analysed) ═══════ -->
+<div class="row mb-4" id="spectraClassifyBanner">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #f8f9ff 0%, #eef1ff 100%);">
+            <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
+                <div class="flex-grow-1">
+                    <h6 class="mb-1 fw-bold text-primary"><i class="fas fa-wand-magic-sparkles me-2"></i>Unlock Smarter Analytics with Spectra</h6>
+                    <p class="text-muted mb-0 small">Let Spectra analyse your board to surface the metrics and charts that matter most for your project type.</p>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <button class="btn btn-sm btn-prizm-primary" onclick="classifyBoard(this)">
+                        <i class="fas fa-magic me-1"></i>Analyse Now
+                    </button>
+                    <span class="text-muted small">or set manually:</span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="confirmBoardType('product_tech')">Product / Tech</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="confirmBoardType('marketing_campaign')">Marketing</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="confirmBoardType('operations')">Operations</button>
+                    <button class="btn btn-sm btn-link text-muted" onclick="skipClassification()" title="Dismiss">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if promoted_metrics %}
 
 <div class="row mb-4">
     {% for metric in promoted_metrics %}
@@ -213,90 +259,82 @@
 {% endif %}
 
 <!-- Charts Section -->
+{% if promoted_chart_configs %}
+<!-- ═══════ Spectra Dynamic Charts ═══════ -->
 <div class="row mb-4">
-    <!-- Column Distribution Chart -->
+    {% for chart in promoted_chart_configs %}
     <div class="col-xl-6 col-lg-6">
         <div class="card shadow mb-4">
             <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">Tasks by Column</h6>
+                <h6 class="m-0 font-weight-bold text-primary">{{ chart.title }}</h6>
             </div>
             <div class="card-body">
                 <div class="chart-container" style="position: relative; height: 300px;">
-                    <canvas id="columnChart"></canvas>
+                    <canvas id="{{ chart.id }}"></canvas>
                 </div>
+                {% if chart.id == 'leanChart' and total_categorized > 0 %}
+                <div class="mt-3 pt-2 border-top">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Value-Added Rate</span>
+                        <span class="fw-bold {% if value_added_percentage >= 60 %}text-success{% elif value_added_percentage >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ value_added_percentage }}%
+                        </span>
+                    </div>
+                    <div class="progress mt-1" style="height: 6px; position: relative;">
+                        <div class="progress-bar {% if value_added_percentage >= 60 %}bg-success{% elif value_added_percentage >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             role="progressbar" style="width: {{ value_added_percentage }}%;"
+                             aria-valuenow="{{ value_added_percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        <div style="position: absolute; left: 60%; top: 0; bottom: 0; width: 2px; background: #6c757d; opacity: 0.6;" title="Lean target: 60%"></div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
+    {% endfor %}
+</div>
 
-    <!-- Priority Distribution Chart -->
+{% else %}
+<!-- ═══════ Fallback: Classic 4 Charts ═══════ -->
+<div class="row mb-4">
     <div class="col-xl-6 col-lg-6">
         <div class="card shadow mb-4">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">Tasks by Priority</h6>
-            </div>
-            <div class="card-body">
-                <div class="chart-container" style="position: relative; height: 300px;">
-                    <canvas id="priorityChart"></canvas>
-                </div>
-            </div>
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Tasks by Column</h6></div>
+            <div class="card-body"><div class="chart-container" style="position: relative; height: 300px;"><canvas id="columnChart"></canvas></div></div>
+        </div>
+    </div>
+    <div class="col-xl-6 col-lg-6">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Tasks by Priority</h6></div>
+            <div class="card-body"><div class="chart-container" style="position: relative; height: 300px;"><canvas id="priorityChart"></canvas></div></div>
         </div>
     </div>
 </div>
-
-<!-- User Workload and Lean Six Sigma Charts -->
 <div class="row mb-4">
-    <!-- User Workload Chart -->
     <div class="col-xl-6 col-lg-6">
         <div class="card shadow mb-4">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">User Workload</h6>
-            </div>
-            <div class="card-body">
-                <div class="chart-container" style="position: relative; height: 300px;">
-                    <canvas id="userChart"></canvas>
-                </div>
-            </div>
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">User Workload</h6></div>
+            <div class="card-body"><div class="chart-container" style="position: relative; height: 300px;"><canvas id="userChart"></canvas></div></div>
         </div>
     </div>
-
-    <!-- Lean Six Sigma Chart -->
     <div class="col-xl-6 col-lg-6">
         <div class="card shadow mb-4">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">Lean Six Sigma Analysis</h6>
-            </div>
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Lean Six Sigma Analysis</h6></div>
             <div class="card-body">
-                <div class="chart-container" style="position: relative; height: 300px;">
-                    <canvas id="leanChart"></canvas>
-                </div>
+                <div class="chart-container" style="position: relative; height: 300px;"><canvas id="leanChart"></canvas></div>
                 {% if total_categorized > 0 %}
                 <div class="mt-3 pt-2 border-top">
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="text-muted small">Value-Added Rate</span>
                         <span class="fw-bold {% if value_added_percentage >= 60 %}text-success{% elif value_added_percentage >= 40 %}text-warning{% else %}text-danger{% endif %}">
                             {{ value_added_percentage }}%
-                            {% if value_added_percentage >= 60 %}
-                                <i class="fas fa-check-circle ms-1" title="At or above Lean benchmark"></i>
-                            {% else %}
-                                <i class="fas fa-arrow-up ms-1" title="Below Lean benchmark"></i>
-                            {% endif %}
                         </span>
                     </div>
                     <div class="progress mt-1" style="height: 6px; position: relative;">
                         <div class="progress-bar {% if value_added_percentage >= 60 %}bg-success{% elif value_added_percentage >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                             role="progressbar"
-                             style="width: {{ value_added_percentage }}%;"
-                             aria-valuenow="{{ value_added_percentage }}" aria-valuemin="0" aria-valuemax="100">
-                        </div>
-                        <!-- Benchmark marker at 60% -->
+                             role="progressbar" style="width: {{ value_added_percentage }}%;"
+                             aria-valuenow="{{ value_added_percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
                         <div style="position: absolute; left: 60%; top: 0; bottom: 0; width: 2px; background: #6c757d; opacity: 0.6;" title="Lean target: 60%"></div>
-                    </div>
-                    <div class="d-flex justify-content-between mt-1">
-                        <small class="text-muted">0%</small>
-                        <small class="text-muted" style="position: relative; left: -10%;">
-                            <span style="color: #6c757d;">▲ Lean target: 60%</span>
-                        </small>
-                        <small class="text-muted">100%</small>
                     </div>
                 </div>
                 {% endif %}
@@ -304,6 +342,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <!-- Metric Detail Modals -->
 <!-- Total Tasks Modal -->
@@ -653,24 +692,83 @@
 {{ tasks_by_priority|json_script:"tasks-by-priority-data" }}
 {{ tasks_by_user|json_script:"tasks-by-user-data" }}
 {{ tasks_by_lean_category|json_script:"tasks-by-lean-data" }}
+{{ completed_tasks|json_script:"completed-tasks-data" }}
 
-<!-- Debug: Log data for troubleshooting -->
-<script>
-console.log('Analytics Data Loaded at:', new Date().toISOString());
-console.log('Tasks by user data:', {{ tasks_by_user|safe }});
-</script>
+{% if promoted_chart_configs %}
+<!-- Spectra chart configuration -->
+{{ promoted_chart_configs|json_script:"promoted-chart-configs" }}
+{% endif %}
 
 <!-- Custom JavaScript Files with cache busting -->
-<script src="{% static 'js/board_analytics.js' %}?v=2026011701"></script>
+<script src="{% static 'js/board_analytics.js' %}?v=2026011702"></script>
 <script src="{% static 'js/ai_timeline.js' %}"></script>
 
-<!-- Initialize CSRF Token -->
+<!-- Spectra Classify / Confirm Handlers -->
 <script>
 window.CSRF_TOKEN = '{{ csrf_token }}';
 
-document.addEventListener('DOMContentLoaded', function() {
-});
+function classifyBoard(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Analysing...';
+    fetch("{% url 'classify_board_api' board.id %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}'}
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            showToast(data.error || 'Classification failed.', 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-magic me-1"></i>Analyse Now';
+        }
+    }).catch(() => {
+        showToast('Network error.', 'danger');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-magic me-1"></i>Analyse Now';
+    });
+}
 
+function confirmBoardType(projectType) {
+    fetch("{% url 'confirm_board_type_api' board.id %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+        body: JSON.stringify({project_type: projectType})
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            showToast(data.error || 'Failed to confirm type.', 'danger');
+        }
+    }).catch(() => showToast('Network error.', 'danger'));
+}
+
+function skipClassification() {
+    const banner = document.getElementById('spectraClassifyBanner');
+    if (banner) banner.remove();
+    sessionStorage.setItem('skipClassify_{{ board.id }}', '1');
+}
+
+function showToast(msg, type) {
+    const toast = document.createElement('div');
+    toast.className = 'alert alert-' + type + ' position-fixed shadow';
+    toast.style.cssText = 'top:20px;right:20px;z-index:9999;min-width:250px;transition:opacity .4s;';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3500);
+}
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Hide classify banner if user previously skipped
+    if (sessionStorage.getItem('skipClassify_{{ board.id }}') === '1') {
+        const b = document.getElementById('spectraClassifyBanner');
+        if (b) b.remove();
+    }
+});
+</script>
+
+<script>
 // Handle back navigation to previous page
 function goBack() {
     // Check if there's a previous page in history

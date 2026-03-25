@@ -311,6 +311,154 @@ def get_promoted_metrics(board):
     return result
 
 
+# ---------------------------------------------------------------------------
+# Chart configurations by project type
+# ---------------------------------------------------------------------------
+
+PROMOTED_CHARTS = {
+    'product_tech': [
+        {
+            'id': 'columnChart',
+            'title': 'Tasks by Column',
+            'type': 'bar',
+            'data_key': 'tasks_by_column',
+            'label_field': 'name',
+            'value_field': 'count',
+            'color': 'rgba(54, 162, 235, 0.8)',
+            'border_color': 'rgba(54, 162, 235, 1)',
+        },
+        {
+            'id': 'priorityChart',
+            'title': 'Tasks by Priority',
+            'type': 'doughnut',
+            'data_key': 'tasks_by_priority',
+            'label_field': 'priority',
+            'value_field': 'count',
+            'use_priority_colors': True,
+        },
+        {
+            'id': 'userChart',
+            'title': 'Workload Distribution',
+            'type': 'bar',
+            'data_key': 'tasks_by_user',
+            'label_field': 'username',
+            'value_field': 'count',
+            'color': 'rgba(75, 192, 192, 0.8)',
+            'border_color': 'rgba(75, 192, 192, 1)',
+            'index_axis': 'y',
+        },
+        {
+            'id': 'velocityChart',
+            'title': 'Completion Velocity (Last 30 Days)',
+            'type': 'line',
+            'data_key': 'completed_tasks',
+            'label_field': 'date',
+            'value_field': 'count',
+            'color': 'rgba(40, 167, 69, 0.8)',
+            'border_color': 'rgba(40, 167, 69, 1)',
+            'fill': True,
+        },
+    ],
+    'marketing_campaign': [
+        {
+            'id': 'phaseChart',
+            'title': 'Tasks by Phase',
+            'type': 'bar',
+            'data_key': 'tasks_by_column',
+            'label_field': 'name',
+            'value_field': 'count',
+            'color': 'rgba(153, 102, 255, 0.8)',
+            'border_color': 'rgba(153, 102, 255, 1)',
+        },
+        {
+            'id': 'priorityChart',
+            'title': 'Content Priority Mix',
+            'type': 'doughnut',
+            'data_key': 'tasks_by_priority',
+            'label_field': 'priority',
+            'value_field': 'count',
+            'use_priority_colors': True,
+        },
+        {
+            'id': 'userChart',
+            'title': 'Team Output Distribution',
+            'type': 'bar',
+            'data_key': 'tasks_by_user',
+            'label_field': 'username',
+            'value_field': 'count',
+            'color': 'rgba(255, 159, 64, 0.8)',
+            'border_color': 'rgba(255, 159, 64, 1)',
+            'index_axis': 'y',
+        },
+        {
+            'id': 'deadlineChart',
+            'title': 'Deadline Adherence Trend',
+            'type': 'line',
+            'data_key': 'completed_tasks',
+            'label_field': 'date',
+            'value_field': 'count',
+            'color': 'rgba(40, 167, 69, 0.8)',
+            'border_color': 'rgba(40, 167, 69, 1)',
+            'fill': True,
+        },
+    ],
+    'operations': [
+        {
+            'id': 'columnChart',
+            'title': 'Process Stages',
+            'type': 'bar',
+            'data_key': 'tasks_by_column',
+            'label_field': 'name',
+            'value_field': 'count',
+            'color': 'rgba(54, 162, 235, 0.8)',
+            'border_color': 'rgba(54, 162, 235, 1)',
+        },
+        {
+            'id': 'userChart',
+            'title': 'Workload Distribution',
+            'type': 'bar',
+            'data_key': 'tasks_by_user',
+            'label_field': 'username',
+            'value_field': 'count',
+            'color': 'rgba(75, 192, 192, 0.8)',
+            'border_color': 'rgba(75, 192, 192, 1)',
+            'index_axis': 'y',
+        },
+        {
+            'id': 'leanChart',
+            'title': 'Lean Six Sigma Analysis',
+            'type': 'doughnut',
+            'data_key': 'tasks_by_lean_category',
+            'label_field': 'name',
+            'value_field': 'count',
+            'use_item_colors': True,
+        },
+        {
+            'id': 'cycleChart',
+            'title': 'Completion Trend',
+            'type': 'line',
+            'data_key': 'completed_tasks',
+            'label_field': 'date',
+            'value_field': 'count',
+            'color': 'rgba(40, 167, 69, 0.8)',
+            'border_color': 'rgba(40, 167, 69, 1)',
+            'fill': True,
+        },
+    ],
+}
+
+
+def get_promoted_charts(board):
+    """
+    Return the chart configuration list for the board's project type.
+    Returns None if the board has no confirmed project type.
+    """
+    project_type = board.project_type
+    if not project_type or project_type not in PROMOTED_CHARTS:
+        return None
+    return PROMOTED_CHARTS[project_type]
+
+
 def get_boards_for_record(record, record_type):
     """
     Return a queryset of all Board objects linked to a Goal, Mission, or Strategy
