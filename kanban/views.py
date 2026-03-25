@@ -1031,6 +1031,20 @@ def toggle_demo_mode(request):
     profile = request.user.profile
     profile.is_viewing_demo = not profile.is_viewing_demo
     profile.save(update_fields=['is_viewing_demo'])
+
+    from kanban.demo_views import (
+        _assign_demo_tasks_to_real_user,
+        _restore_demo_task_assignments,
+    )
+
+    if profile.is_viewing_demo:
+        # Entering demo — assign some demo tasks to the real user
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        _assign_demo_tasks_to_real_user(request.user, demo_boards)
+    else:
+        # Leaving demo — restore original demo-user assignees
+        _restore_demo_task_assignments(request.user)
+
     return redirect('dashboard')
 
 

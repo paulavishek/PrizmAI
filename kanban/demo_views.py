@@ -77,6 +77,9 @@ def _auto_grant_demo_access(request):
         # Also set up time tracking demo data for this user
         _setup_user_time_tracking_demo(request.user, demo_boards)
         
+        # Assign 2-3 demo tasks to the real user so My Tasks card is populated
+        _assign_demo_tasks_to_real_user(request.user, demo_boards)
+        
     except Exception as e:
         logger.error(f"Error auto-granting demo access: {e}")
 
@@ -170,6 +173,123 @@ def _setup_user_time_tracking_demo(user, demo_boards):
     
     except Exception as e:
         logger.error(f"Error setting up time tracking demo for {user.username}: {e}")
+
+
+def _assign_demo_tasks_to_real_user(user, demo_boards):
+    """
+    Assign 2-3 demo tasks to a real user so 'My Tasks' and 'My Boards'
+    cards on the dashboard are populated when viewing the demo.
+
+    Picks incomplete tasks (in-progress preferred, then to-do) and
+    reassigns them from their demo-user assignee to the real user.
+    The original assignee is stored in the user's session-scoped
+    profile field (demo_task_originals) so we can restore on exit.
+
+    Only runs once per user (skips if user already owns demo tasks).
+    """
+    # Skip demo users — they already own tasks
+    if '_demo' in user.username:
+        return
+
+    # Skip if this user already has demo tasks assigned to them
+    already_assigned = Task.objects.filter(
+        column__board__in=demo_boards,
+        assigned_to=user,
+        is_seed_demo_data=True,
+    ).exists()
+    if already_assigned:
+        return
+
+    try:
+        for board in demo_boards:
+            # Prefer in-progress tasks (more visible), then to-do
+            candidates = list(
+                Task.objects.filter(
+                    column__board=board,
+                    is_seed_demo_data=True,
+                    item_type='task',
+                    progress__gt=0,
+                    progress__lt=100,
+                ).exclude(
+                    assigned_to=user,
+                ).order_by('?')[:2]
+            )
+
+            # If we got fewer than 2 from in-progress, grab a to-do task
+            if len(candidates) < 2:
+                extra = list(
+                    Task.objects.filter(
+                        column__board=board,
+                        is_seed_demo_data=True,
+                        item_type='task',
+                        progress=0,
+                    ).exclude(
+                        assigned_to=user,
+                    ).exclude(
+                        id__in=[c.id for c in candidates],
+                    ).order_by('?')[:3 - len(candidates)]
+                )
+                candidates.extend(extra)
+
+            # Cap at 3
+            candidates = candidates[:3]
+
+            # Store original assignees on the profile for later restoration
+            originals = {}
+            for task in candidates:
+                originals[str(task.id)] = task.assigned_to_id
+                task.assigned_to = user
+                task.save(update_fields=['assigned_to'])
+
+            # Persist the mapping so we can restore on demo exit
+            if originals:
+                from accounts.models import UserProfile
+                profile = UserProfile.objects.get(user=user)
+                # Merge with any existing originals (in case of multiple boards)
+                existing = profile.demo_task_originals or {}
+                existing.update(originals)
+                profile.demo_task_originals = existing
+                profile.save(update_fields=['demo_task_originals'])
+                logger.info(
+                    f"Assigned {len(originals)} demo tasks to real user "
+                    f"{user.username}: task ids {list(originals.keys())}"
+                )
+
+    except Exception as e:
+        logger.error(f"Error assigning demo tasks to {user.username}: {e}")
+
+
+def _restore_demo_task_assignments(user):
+    """
+    Restore demo tasks back to their original demo-user assignees
+    when a real user exits demo mode.
+    """
+    try:
+        from accounts.models import UserProfile
+        profile = UserProfile.objects.get(user=user)
+        originals = profile.demo_task_originals
+        if not originals:
+            return
+
+        restored = 0
+        for task_id_str, original_user_id in originals.items():
+            try:
+                task = Task.objects.get(id=int(task_id_str), is_seed_demo_data=True)
+                task.assigned_to_id = original_user_id
+                task.save(update_fields=['assigned_to'])
+                restored += 1
+            except Task.DoesNotExist:
+                pass
+
+        # Clear the stored originals
+        profile.demo_task_originals = {}
+        profile.save(update_fields=['demo_task_originals'])
+
+        if restored:
+            logger.info(f"Restored {restored} demo tasks from user {user.username}")
+
+    except Exception as e:
+        logger.error(f"Error restoring demo tasks for {user.username}: {e}")
 
 
 def demo_mode_selection(request):
