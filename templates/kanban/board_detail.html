@@ -236,6 +236,10 @@
         0%, 100% { box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4); }
         50% { box-shadow: 0 8px 24px rgba(13, 110, 253, 0.6); }
     }
+    @keyframes sparkle-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: .5; transform: scale(1.3); }
+    }
     
     /* Live filter - hide non-matching tasks */
     .kanban-task-v2.filtered-out,
@@ -575,53 +579,6 @@
 
 <!-- Exit Protocol: Hospice Banner -->
 {% include 'exit_protocol/partials/hospice_banner.html' %}
-
-<!-- ------- GOAL-AWARE ANALYTICS: CLASSIFICATION BANNER ------- -->
-{% if board.project_type and not board.project_type_confirmed %}
-{# Board has been classified by Gemini but user hasn't confirmed yet #}
-<div id="classificationBanner" class="alert alert-info alert-dismissible fade show mb-2 py-2" role="alert" style="font-size:.9rem;">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <i class="fas fa-bullseye me-1"></i>
-            <strong>Spectra</strong> thinks this is a
-            <strong>{{ board.get_project_type_display }}</strong> board
-            {% if board.strategy and board.strategy.mission and board.strategy.mission.organization_goal %}
-                � based on your goal "{{ board.strategy.mission.organization_goal.name }}"
-            {% endif %}.
-            <span class="text-muted">This affects which analytics are highlighted.</span>
-        </div>
-        <div class="d-flex gap-2 align-items-center">
-            <button class="btn btn-sm btn-success" onclick="confirmBoardType('{{ board.project_type }}')">
-                <i class="fas fa-check me-1"></i>Confirm
-            </button>
-            <div class="dropdown d-inline-block">
-                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    <i class="fas fa-exchange-alt me-1"></i>Change type
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item {% if board.project_type == 'product_tech' %}active{% endif %}" href="#" onclick="confirmBoardType('product_tech'); return false;">Product / Tech</a></li>
-                    <li><a class="dropdown-item {% if board.project_type == 'marketing_campaign' %}active{% endif %}" href="#" onclick="confirmBoardType('marketing_campaign'); return false;">Marketing / Campaign</a></li>
-                    <li><a class="dropdown-item {% if board.project_type == 'operations' %}active{% endif %}" href="#" onclick="confirmBoardType('operations'); return false;">Operations</a></li>
-                </ul>
-            </div>
-            <button class="btn btn-sm btn-outline-secondary" onclick="skipClassification()" title="Skip for now">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    </div>
-</div>
-{% elif not board.project_type %}
-{# Board hasn't been classified yet #}
-{% if not classification_banner_skipped %}
-<div id="classifyBanner" class="alert alert-light border mb-2 py-2" role="alert" style="font-size:.9rem;">
-    <i class="fas fa-chart-bar me-1 text-primary"></i>
-    Spectra hasn't analysed this board's analytics profile yet.
-    <button class="btn btn-sm btn-prizm-primary ms-2" onclick="classifyBoard()">
-        <i class="fas fa-magic me-1"></i>Analyse now
-    </button>
-</div>
-{% endif %}
-{% endif %}
 
 <!-- ------- BOARD HEADER ------- -->
 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1312,59 +1269,6 @@
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3500);
     }
 
-    // -- Goal-Aware Analytics: Classification banner helpers --
-    function confirmBoardType(projectType) {
-        fetch("{% url 'confirm_board_type_api' board.id %}", {
-            method: 'POST',
-            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
-            body: JSON.stringify({project_type: projectType})
-        }).then(r => r.json()).then(data => {
-            if (data.success) {
-                const banner = document.getElementById('classificationBanner');
-                if (banner) banner.remove();
-                showToast('Board type confirmed as ' + (data.project_type_label || data.project_type) + '.', 'success');
-            } else {
-                showToast(data.error || 'Failed to confirm type.', 'danger');
-            }
-        }).catch(() => showToast('Network error.', 'danger'));
-    }
-
-    function skipClassification() {
-        const banner = document.getElementById('classificationBanner') || document.getElementById('classifyBanner');
-        if (banner) banner.remove();
-        sessionStorage.setItem('skipClassify_{{ board.id }}', '1');
-    }
-
-    function classifyBoard() {
-        const btn = event.currentTarget;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Analysing�';
-        fetch("{% url 'classify_board_api' board.id %}", {
-            method: 'POST',
-            headers: {'X-CSRFToken': '{{ csrf_token }}'}
-        }).then(r => r.json()).then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                showToast(data.error || 'Classification failed.', 'danger');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-magic me-1"></i>Analyse now';
-            }
-        }).catch(() => {
-            showToast('Network error.', 'danger');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-magic me-1"></i>Analyse now';
-        });
-    }
-
-    // Hide banner if user previously skipped
-    document.addEventListener('DOMContentLoaded', function() {
-        if (sessionStorage.getItem('skipClassify_{{ board.id }}') === '1') {
-            const b = document.getElementById('classificationBanner') || document.getElementById('classifyBanner');
-            if (b) b.remove();
-        }
-    });
-
     document.addEventListener('DOMContentLoaded', function() {
         // Apply label colors
         document.querySelectorAll('.task-label').forEach(label => {
@@ -1973,9 +1877,12 @@
         <div class="ai-panel-section">
             <div class="ai-panel-section-header">?? Analyze</div>
             <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}" title="View board analytics, charts, and AI insights">
+                <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}" title="View board analytics, charts, and AI insights" style="position:relative;">
                     <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-pie"></i></span>
                     <span class="tile-label">Analytics</span>
+                    {% if not board.project_type_confirmed %}
+                    <span style="position:absolute;top:2px;right:4px;font-size:.65rem;animation:sparkle-pulse 2s ease-in-out infinite;" title="Let Spectra analyse your board for smarter insights">&#10024;</span>
+                    {% endif %}
                 </a>
                 <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}" title="AI-powered burndown prediction and completion forecast">
                     <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-line"></i></span>

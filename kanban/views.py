@@ -2278,12 +2278,13 @@ def board_analytics(request, board_id):
     # Calculate remaining tasks
     remaining_tasks = total_tasks - completed_count
 
-    # ── Goal-Aware Analytics: promoted metrics for Zone 1 ──
+    # ── Goal-Aware Analytics: promoted metrics & charts ──
     promoted_metrics = None
-    analytics_narrative = board.analytics_narrative if board.analytics_narrative else None
+    promoted_chart_configs = None
     if board.project_type:
-        from kanban.utils.analytics_helpers import get_promoted_metrics
+        from kanban.utils.analytics_helpers import get_promoted_metrics, get_promoted_charts
         promoted_metrics = get_promoted_metrics(board)
+        promoted_chart_configs = get_promoted_charts(board)
 
     response = render(request, 'kanban/board_analytics.html', {
         'board': board,
@@ -2309,7 +2310,7 @@ def board_analytics(request, board_id):
         'is_demo_board': is_demo_board,
         # Goal-Aware Analytics
         'promoted_metrics': promoted_metrics,
-        'analytics_narrative': analytics_narrative,
+        'promoted_chart_configs': promoted_chart_configs,
     })
     
     # Prevent caching of analytics data
