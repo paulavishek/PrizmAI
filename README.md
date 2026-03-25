@@ -20,6 +20,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Visual Kanban Boards** — Drag-and-drop task management with AI-suggested column structures
 - **Gantt Charts** — Interactive timelines with milestone tracking and task dependency visualization
 - **Burndown Charts & Sprint Forecasting** — Real-time sprint progress with AI-powered completion predictions and confidence intervals
+- **Goal-Aware Analytics & Dynamic Charts** — Spectra classifies each board's project type (Product / Tech, Marketing / Campaign, Operations) and automatically promotes the metrics and charts most relevant to that type. Product boards surface cycle time, deployment rate, and bug density; marketing boards highlight campaign ROI and conversion metrics; operations boards foreground SLA adherence and throughput. Boards without a classification fall back to the standard four charts (column distribution, priority, user workload, Lean Six Sigma) and show a Spectra banner with one-click AI analysis or manual type selection. A subtle sparkle hint on the Analytics tile signals when a board has not yet been classified.
 - **Time Tracking & Timesheets** — Log hours, track team utilization, and manage labor costs
 - **Budget & ROI Tracking** — Multi-currency support, cost forecasting, and ROI analytics
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
