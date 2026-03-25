@@ -17,6 +17,110 @@ logger = logging.getLogger(__name__)
 # Metric definitions by project type
 # ---------------------------------------------------------------------------
 
+METRIC_CONFIG = {
+    'task_velocity': {
+        'label': 'Task Velocity',
+        'icon': 'fas fa-tachometer-alt',
+        'color': 'info',
+        'description': 'Number of tasks completed in the last 7 days.',
+    },
+    'overdue_count': {
+        'label': 'Overdue Tasks',
+        'icon': 'fas fa-exclamation-triangle',
+        'color': 'danger',
+        'modal_target': '#overdueModal',
+        'description': 'Tasks that are past their due date and not yet completed.',
+    },
+    'blocked_count': {
+        'label': 'Blocked / At-Risk',
+        'icon': 'fas fa-ban',
+        'color': 'warning',
+        'description': 'High-priority or urgent tasks with no progress that may need attention.',
+    },
+    'completion_rate_by_column': {
+        'label': 'Column Completion',
+        'icon': 'fas fa-columns',
+        'color': 'primary',
+        'description': 'Task completion rate across each board column.',
+    },
+    'workload_distribution': {
+        'label': 'Active Contributors',
+        'icon': 'fas fa-users',
+        'color': 'success',
+        'description': 'Distribution of active tasks among team members.',
+    },
+    'tasks_by_phase': {
+        'label': 'Tasks by Phase',
+        'icon': 'fas fa-layer-group',
+        'color': 'primary',
+        'description': 'How tasks are distributed across project phases.',
+    },
+    'deadline_adherence_rate': {
+        'label': 'Deadline Adherence',
+        'icon': 'fas fa-calendar-check',
+        'color': 'success',
+        'description': 'Percentage of tasks completed on or before their deadline.',
+    },
+    'content_output_rate': {
+        'label': 'Content Output',
+        'icon': 'fas fa-file-alt',
+        'color': 'info',
+        'description': 'Number of tasks completed this week.',
+    },
+    'tasks_in_review': {
+        'label': 'In Review',
+        'icon': 'fas fa-search',
+        'color': 'warning',
+        'description': 'Tasks currently in review columns awaiting approval.',
+    },
+    'milestone_completion_pct': {
+        'label': 'Milestone Completion',
+        'icon': 'fas fa-flag-checkered',
+        'color': 'success',
+        'description': 'Overall percentage of completed milestones.',
+    },
+    'process_completion_rate': {
+        'label': 'Process Completion',
+        'icon': 'fas fa-cogs',
+        'color': 'info',
+        'description': 'Rate of task completion in the last 30 days.',
+    },
+    'avg_cycle_time_days': {
+        'label': 'Avg Cycle Time',
+        'icon': 'fas fa-clock',
+        'color': 'warning',
+        'description': 'Average number of days from task creation to completion.',
+    },
+    'on_time_rate': {
+        'label': 'On-Time Rate',
+        'icon': 'fas fa-check-double',
+        'color': 'success',
+        'description': 'Percentage of tasks completed before their deadline.',
+    },
+}
+
+
+def _format_metric_value(key, value):
+    """Convert complex dict metric values to simple display strings."""
+    if not isinstance(value, dict):
+        return value
+    if key == 'completion_rate_by_column':
+        if not value:
+            return 'N/A'
+        done = sum(1 for v in value.values() if v == '100%')
+        return f"{done}/{len(value)} cols done"
+    if key == 'workload_distribution':
+        if not value:
+            return '0 active'
+        return f"{len(value)} contributors"
+    if key == 'tasks_by_phase':
+        if not value:
+            return '0 phases'
+        total = sum(value.values())
+        return f"{total} across {len(value)} phases"
+    return str(len(value))
+
+
 PROMOTED_METRICS = {
     'product_tech': [
         'task_velocity',
@@ -183,7 +287,28 @@ def get_promoted_metrics(board):
             f"{int(on_time / total_done_with_due * 100)}%" if total_done_with_due > 0 else "N/A"
         )
 
-    return metrics
+    # Convert raw metrics dict to a list of rich dicts for the template
+    metric_keys = PROMOTED_METRICS.get(project_type, list(metrics.keys()))
+    result = []
+    for key in metric_keys:
+        if key in metrics:
+            raw_value = metrics[key]
+            config = METRIC_CONFIG.get(key, {})
+            entry = {
+                'key': key,
+                'label': config.get('label', key.replace('_', ' ').title()),
+                'value': _format_metric_value(key, raw_value),
+                'icon': config.get('icon', 'fas fa-chart-bar'),
+                'color': config.get('color', 'primary'),
+                'description': config.get('description', ''),
+                'modal_target': config.get('modal_target', ''),
+            }
+            if isinstance(raw_value, dict):
+                entry['detail_items'] = [
+                    {'name': k, 'value': v} for k, v in raw_value.items()
+                ]
+            result.append(entry)
+    return result
 
 
 def get_boards_for_record(record, record_type):
