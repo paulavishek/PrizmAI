@@ -923,7 +923,7 @@
         border-bottom: 3px solid transparent;
         border-radius: 0;
         color: #64748b;
-        font-size: 0.82rem;
+        font-size: 0.9rem;
         font-weight: 600;
         padding: 0.6rem 1rem;
         transition: color 0.15s, border-color 0.15s, background 0.15s;
@@ -936,7 +936,7 @@
     #hn-tab-strategies.active { color: #047857; border-bottom-color: #10b981; }
     #hn-tab-boards.active   { color: #6d28d9; border-bottom-color: #8b5cf6; }
     .hn-count {
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         padding: 0.2em 0.55em;
         margin-left: 4px;
         background: #e2e8f0;
@@ -947,7 +947,7 @@
 
     /* Level badge chips */
     .hn-level-badge {
-        font-size: 0.55rem; letter-spacing: 0.07em; text-transform: uppercase;
+        font-size: 0.65rem; letter-spacing: 0.07em; text-transform: uppercase;
         padding: 2px 7px; border-radius: 4px; font-weight: 700;
     }
     .hn-level-badge--goal     { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
@@ -1092,6 +1092,15 @@
         border-left: 1px solid rgba(0,0,0,0.07);
         padding-left: 1rem;
     }
+
+    /* ── Hierarchy Navigator: enhanced card text sizes ── */
+    #hierarchy-navigator .hn-item .card-body h6 { font-size: 1.05rem !important; line-height: 1.3; }
+    #hierarchy-navigator .hn-item .card-body small { font-size: 0.82rem !important; }
+    #hierarchy-navigator .hn-item .card-body .badge.bg-light { font-size: 0.73rem !important; }
+    #hierarchy-navigator .hn-item .card-body .text-danger { font-size: 0.78rem !important; }
+    #hierarchy-navigator .hn-preview-slot .fw-semibold.small { font-size: 0.85rem !important; }
+    #hierarchy-navigator .hn-preview-slot p.text-muted { font-size: 0.82rem !important; }
+    #hierarchy-navigator .hn-preview-slot .d-flex span { font-size: 0.8rem !important; }
 </style>
 {% endblock %}
 
