@@ -105,17 +105,6 @@
             {% endif %}
         </div>
 
-        <!-- Conflicts — promoted to main nav when there are active conflicts -->
-        {% if active_conflict_count > 0 %}
-        <div class="sidebar-promoted-item">
-            <a href="{% url 'conflict_dashboard' %}" class="sidebar-nav-link {% if 'conflict' in request.path %}active{% endif %}" title="Conflicts">
-                <i class="fas fa-exclamation-triangle sidebar-nav-icon" style="color:#ef4444;"></i>
-                <span class="sidebar-label">Conflicts</span>
-                <span class="sidebar-badge sidebar-badge-danger">{{ active_conflict_count }}</span>
-            </a>
-        </div>
-        {% endif %}
-
         <!-- Tools section (collapsible) -->
         <div class="sidebar-more-section">
             <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="Tools" aria-expanded="false">
