@@ -385,6 +385,7 @@ def decision_center_settings_view(request):
 
     if changed:
         settings_obj.save()
+        _invalidate_widget_cache(request.user.id)
         try:
             from kanban.audit_utils import log_audit
             log_audit(

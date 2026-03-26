@@ -765,27 +765,55 @@
     gap: 6px;
     padding: 12px 24px;
     background: #fff;
-    border: 1px solid var(--border-color);
+    border: 2px solid #d1d5db;
     border-radius: 12px;
     font-size: 0.95rem;
     cursor: pointer;
     transition: box-shadow 0.15s, border-color 0.15s;
     white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 .kpi-pill:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    border-color: #adb5bd;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+    border-color: #9ca3af;
 }
 .kpi-pill-lg {
     min-width: 140px;
 }
+/* Tasks pill — blue accent */
+#kpi-strip .kpi-pill:first-child {
+    border-color: #93c5fd;
+    background: #f0f7ff;
+}
+#kpi-strip .kpi-pill:first-child:hover {
+    border-color: #3b82f6;
+}
+/* Done pill — green accent */
+#kpi-strip .kpi-pill:nth-child(2) {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+#kpi-strip .kpi-pill:nth-child(2):hover {
+    border-color: #22c55e;
+}
 .kpi-pill-alert {
-    border-color: #f8d7da;
+    border-color: #fca5a5 !important;
     background: #fff5f5;
 }
+.kpi-pill-alert:hover {
+    border-color: #ef4444 !important;
+}
+/* Overdue with no issues — default neutral */
+.kpi-pill:nth-child(3):not(.kpi-pill-alert) {
+    border-color: #d1d5db;
+    background: #fff;
+}
 .kpi-pill-warn {
-    border-color: #fff3cd;
+    border-color: #fcd34d !important;
     background: #fffbeb;
+}
+.kpi-pill-warn:hover {
+    border-color: #f59e0b !important;
 }
 .kpi-pill-sub {
     font-size: 0.78rem;
