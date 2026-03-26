@@ -1149,13 +1149,27 @@
                     <h6 class="mb-0 fw-bold flex-shrink-0">
                         <i class="fas fa-bolt text-warning me-1"></i> Decision Center
                     </h6>
-                    <!-- Loading skeleton -->
-                    <div id="dc-widget-loading" class="dc-loading-skeleton">
-                        <span class="placeholder placeholder-glow">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                        <span class="placeholder placeholder-glow">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                        <span class="placeholder placeholder-glow">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                    <!-- Badges rendered server-side to prevent flash -->
+                    {% if dc_total_count > 0 %}
+                    <div id="dc-widget-content" class="dc-widget-badges" style="display:flex;">
+                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
+                            <i class="fas fa-circle-exclamation me-1"></i>
+                            <span id="dc-action-count">{{ dc_action_count }}</span>&nbsp;Action Required
+                        </span>
+                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <span id="dc-awareness-count">{{ dc_awareness_count }}</span>&nbsp;Awareness
+                        </span>
+                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
+                            <i class="fas fa-bolt me-1"></i>
+                            <span id="dc-quickwin-count">{{ dc_quickwin_count }}</span>&nbsp;Quick Wins
+                        </span>
+                        <span id="dc-widget-headline" style="display:none;"></span>
                     </div>
-                    <!-- Content (hidden until loaded) -->
+                    <div id="dc-widget-empty" class="flex-fill" style="display:none;">
+                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
+                    </div>
+                    {% else %}
                     <div id="dc-widget-content" class="dc-widget-badges" style="display:none;">
                         <span class="dc-badge dc-badge-danger" id="dc-action-badge">
                             <i class="fas fa-circle-exclamation me-1"></i>
@@ -1171,10 +1185,12 @@
                         </span>
                         <span id="dc-widget-headline" style="display:none;"></span>
                     </div>
-                    <!-- All-clear state -->
-                    <div id="dc-widget-empty" class="flex-fill" style="display:none;">
+                    <div id="dc-widget-empty" class="flex-fill">
                         <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
                     </div>
+                    {% endif %}
+                    <!-- Hidden loading skeleton (only shown if JS refresh needed) -->
+                    <div id="dc-widget-loading" class="dc-loading-skeleton" style="display:none;"></div>
                     <!-- Open Full View -->
                     <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary ms-auto flex-shrink-0">
                         Open Full View <i class="fas fa-arrow-right ms-1"></i>
@@ -3252,15 +3268,17 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // ── Decision Center widget loader ─────────────────────────
+        // ── Decision Center widget refresh (updates server-rendered counts) ──
         (function loadDCWidget() {
             fetch("{% url 'decision_center:decision_center_widget' %}")
                 .then(r => r.json())
                 .then(data => {
                     document.getElementById('dc-widget-loading').style.display = 'none';
                     if (data.total_count === 0) {
+                        document.getElementById('dc-widget-content').style.display = 'none';
                         document.getElementById('dc-widget-empty').style.display = '';
                     } else {
+                        document.getElementById('dc-widget-empty').style.display = 'none';
                         document.getElementById('dc-widget-content').style.display = 'flex';
                         document.getElementById('dc-action-count').textContent = data.action_required_count;
                         document.getElementById('dc-awareness-count').textContent = data.awareness_count;
@@ -3268,12 +3286,10 @@
                         if (data.headline) {
                             document.getElementById('dc-widget-headline').textContent = '"' + data.headline + '"';
                         }
-                        // meta removed — no longer displayed in compact DC widget
                     }
                 })
                 .catch(function() {
-                    document.getElementById('dc-widget-loading').style.display = 'none';
-                    document.getElementById('dc-widget-empty').style.display = '';
+                    // On error, keep server-rendered state as-is
                 });
         })();
 
