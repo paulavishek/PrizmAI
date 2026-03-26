@@ -259,11 +259,26 @@ def get_board_suggestions(request, board_id):
         # If no suggestions and insufficient qualified members, tell the UI why
         insufficient_data = (len(suggestion_list) == 0 and qualified_count < 2)
         
+        # Check if any team members are overloaded (>90% utilization)
+        # so the UI doesn't claim "well balanced" when people are clearly overworked
+        overloaded_members = []
+        try:
+            report = service.get_team_workload_report(board, requesting_user=request.user)
+            for member in report.get('members', []):
+                if member.get('utilization', 0) > 90:
+                    overloaded_members.append({
+                        'name': member['name'],
+                        'utilization': round(member['utilization']),
+                    })
+        except Exception:
+            pass  # Don't fail suggestions if workload report errors
+        
         return JsonResponse({
             'suggestions': suggestion_list,
             'total_suggestions': len(suggestion_list),
             'total_potential_savings_hours': round(total_savings, 1),
-            'insufficient_team_data': insufficient_data
+            'insufficient_team_data': insufficient_data,
+            'overloaded_members': overloaded_members,
         })
         
     except Board.DoesNotExist:

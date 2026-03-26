@@ -170,7 +170,7 @@ class UserPerformanceProfile(models.Model):
         from collections import Counter
         
         if not self.skill_keywords:
-            return 50.0  # Neutral score if no skill data
+            return 0.0  # No skill data — cannot assess match
         
         # Extract words from task text
         words = re.findall(r'\b[a-z]{3,}\b', task_text.lower())
@@ -187,10 +187,13 @@ class UserPerformanceProfile(models.Model):
                 total_score += min(skill_freq, 10)  # Cap at 10 to avoid over-weighting
             max_possible += 10
         
-        if max_possible == 0 or total_score == 0:
-            # No keywords to match, or no overlap found
-            # Return neutral score (50) instead of 0 to avoid penalizing unrelated tasks
-            return 50.0
+        if max_possible == 0:
+            # No keywords to match — return low score
+            return 10.0
+        
+        if total_score == 0:
+            # User has skills but none match this task
+            return 10.0
         
         # Convert to 0-100 scale
         match_percentage = (total_score / max_possible) * 100

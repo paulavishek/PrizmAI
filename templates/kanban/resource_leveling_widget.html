@@ -1,21 +1,33 @@
 {% load static %}
-<!-- Resource Leveling Widget for Board/Task Pages -->
-<div class="resource-leveling-widget card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center" 
-         style="cursor:pointer;background:#fff;border-left:4px solid #5046e5;border-radius:6px 6px 0 0;padding:12px 16px;" 
-         onclick="toggleAIOptimization()"
-         id="ai-optimization-header">
-        <h5 class="mb-0" style="color:#1e293b;">
-            <i class="fas fa-users-cog" style="color:#5046e5;"></i> AI Resource Optimization
-            <small class="ms-2" style="font-size: 0.75rem; color:#64748b;">(Click to expand)</small>
-            <i class="fas fa-chevron-up ms-2 toggle-icon" id="ai-optimization-toggle" style="color:#5046e5;"></i>
-        </h5>
-        <button class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation(); refreshSuggestions()">
+<!-- Resource Leveling Widget (shown inside modal from AI Tools) -->
+<div class="resource-leveling-widget">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <a href="#" class="small text-muted" onclick="event.preventDefault(); var el=document.getElementById('ai-scoring-info'); el.classList.toggle('d-none');">
+            <i class="fas fa-info-circle"></i> How does AI decide?
+        </a>
+        <button class="btn btn-sm btn-outline-secondary" onclick="refreshSuggestions()">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>
     </div>
     
-    <div class="card-body" id="ai-optimization-content" style="display: none;">
+    <!-- Scoring methodology info banner -->
+    <div id="ai-scoring-info" class="alert alert-light border small d-none mb-3" style="font-size:0.82rem;">
+        <strong><i class="fas fa-brain"></i> AI Scoring Methodology</strong>
+        <p class="mb-2 mt-1">Each team member is scored on 5 factors for every task. The member with the highest overall score is recommended.</p>
+        <table class="table table-sm table-borderless mb-2" style="font-size:0.8rem;">
+            <thead><tr><th>Factor</th><th>Weight</th><th>What it measures</th></tr></thead>
+            <tbody>
+                <tr><td><i class="fas fa-cogs text-primary"></i> Skill Match</td><td>30%</td><td>Overlap between member's skills and task keywords</td></tr>
+                <tr><td><i class="fas fa-battery-half text-success"></i> Availability</td><td>25%</td><td>Remaining capacity (100% minus current utilization)</td></tr>
+                <tr><td><i class="fas fa-tachometer-alt text-info"></i> Velocity</td><td>20%</td><td>Historical task completion speed</td></tr>
+                <tr><td><i class="fas fa-clock text-warning"></i> Reliability</td><td>15%</td><td>On-time completion rate from past tasks</td></tr>
+                <tr><td><i class="fas fa-star text-secondary"></i> Quality</td><td>10%</td><td>Quality rating of completed work</td></tr>
+            </tbody>
+        </table>
+        <p class="mb-0 text-muted"><i class="fas fa-lightbulb"></i> Members without task history receive a confidence discount. Add skills to team profiles and complete tasks to improve AI accuracy.</p>
+    </div>
+    
+    <div id="ai-optimization-content">
         <!-- Workload Summary -->
         <div id="workload-summary" class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -27,6 +39,9 @@
         </div>
         
         <!-- Suggestions List with Scrollable Container -->
+        <div id="suggestions-header" class="d-none mb-2">
+            <small class="text-muted"><i class="fas fa-lightbulb"></i> <span id="suggestions-count"></span></small>
+        </div>
         <div id="suggestions-container" class="suggestions-scrollable">
             <!-- Suggestions will be loaded here -->
         </div>
@@ -49,6 +64,7 @@
                         <a href="#" class="task-link text-dark"></a>
                     </h6>
                     <p class="reassign-line text-muted small mb-1"></p>
+                    <p class="clean-reason small mb-1" style="color:#334155;"></p>
                     <div class="reasoning-collapse">
                         <a href="#" class="see-reasoning-link small text-info" onclick="toggleReasoning(this); return false;">
                             <i class="fas fa-chevron-right reasoning-chevron" style="font-size:0.7em;"></i> See reasoning
@@ -103,29 +119,8 @@
     border-radius: 8px;
 }
 
-.resource-leveling-widget .card-header {
-    transition: opacity 0.2s ease;
-}
-
-.resource-leveling-widget .card-header:hover {
-    opacity: 0.95;
-}
-
-.resource-leveling-widget .toggle-icon {
-    transition: transform 0.3s ease;
-    font-size: 0.9rem;
-}
-
-.resource-leveling-widget .toggle-icon.expanded {
-    transform: rotate(180deg);
-}
-
-#ai-optimization-content {
-    transition: all 0.3s ease;
-}
-
 .suggestions-scrollable {
-    max-height: 320px;
+    max-height: 480px;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 5px;
@@ -206,47 +201,20 @@
 <script>
 let currentBoardId = {{ board.id|default:"null" }};
 let aiOptimizationLoaded = false;
-const AI_OPT_STORAGE_KEY = 'aiOptimizationExpanded_board_' + currentBoardId;
 
-// Toggle AI Optimization section
-function toggleAIOptimization() {
-    const content = document.getElementById('ai-optimization-content');
-    const toggleIcon = document.getElementById('ai-optimization-toggle');
-    
-    if (content.style.display === 'none') {
-        content.style.display = 'block';
-        toggleIcon.classList.add('expanded');
-        // Update header text
-        const headerSmall = document.querySelector('#ai-optimization-header small');
-        if (headerSmall) headerSmall.textContent = '(Click to collapse)';
-        localStorage.setItem(AI_OPT_STORAGE_KEY, 'expanded');
-        
-        // Load data only on first expand
-        if (!aiOptimizationLoaded) {
-            console.log('Resource Leveling Widget: Initializing with board ID:', currentBoardId);
-            if (currentBoardId && currentBoardId !== null) {
-                loadWorkloadReport();
-                loadSuggestions();
-                aiOptimizationLoaded = true;
-            } else {
-                console.error('Resource Leveling Widget: No board ID available');
-                showError('Board ID not found');
-            }
-        }
+// Load resource optimization data (called when modal opens)
+function loadResourceOptimization() {
+    if (aiOptimizationLoaded) return;
+    console.log('Resource Leveling Widget: Initializing with board ID:', currentBoardId);
+    if (currentBoardId && currentBoardId !== null) {
+        loadWorkloadReport();
+        loadSuggestions();
+        aiOptimizationLoaded = true;
     } else {
-        content.style.display = 'none';
-        toggleIcon.classList.remove('expanded');
-        // Update header text
-        const headerSmall = document.querySelector('#ai-optimization-header small');
-        if (headerSmall) headerSmall.textContent = '(Click to expand)';
-        localStorage.setItem(AI_OPT_STORAGE_KEY, 'collapsed');
+        console.error('Resource Leveling Widget: No board ID available');
+        showError('Board ID not found');
     }
 }
-
-// Always start collapsed on page load
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Resource Leveling Widget: Ready (state: collapsed)');
-});
 
 function showError(message) {
     const container = document.getElementById('workload-summary');
@@ -366,7 +334,7 @@ function loadSuggestions() {
         })
         .then(data => {
             console.log('Suggestions data:', data);
-            displaySuggestions(data.suggestions, data.insufficient_team_data);
+            displaySuggestions(data.suggestions, data.insufficient_team_data, data.overloaded_members);
         })
         .catch(error => {
             console.error('Error loading suggestions:', error);
@@ -377,7 +345,7 @@ function loadSuggestions() {
         });
 }
 
-function displaySuggestions(suggestions, insufficientData) {
+function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     const container = document.getElementById('suggestions-container');
     const noSuggestions = document.getElementById('no-suggestions');
     const template = document.getElementById('suggestion-card-template');
@@ -391,6 +359,11 @@ function displaySuggestions(suggestions, insufficientData) {
         if (insufficientData) {
             icon.className = 'fas fa-info-circle fa-3x text-muted mb-3';
             text.innerHTML = 'No reallocation suggestions &mdash; insufficient team data for other members.<br><small>Team members need at least 1 completed task, 1 skill tag, or 1 hour logged to be considered for reassignment.</small>';
+        } else if (overloadedMembers && overloadedMembers.length > 0) {
+            // Members ARE overloaded but no actionable suggestions could be generated
+            const names = overloadedMembers.map(m => `<strong>${m.name}</strong> (${m.utilization}%)`).join(', ');
+            icon.className = 'fas fa-exclamation-triangle fa-3x text-warning mb-3';
+            text.innerHTML = `${overloadedMembers.length} team member(s) overloaded: ${names}.<br><small>To generate reassignment suggestions, ensure tasks have due dates or time logs, and that at least one other team member has completed tasks on this board.</small>`;
         } else {
             icon.className = 'fas fa-check-circle fa-3x text-success mb-3';
             text.innerHTML = 'No optimization suggestions at this time.<br>Your team workload is well balanced!';
@@ -399,6 +372,12 @@ function displaySuggestions(suggestions, insufficientData) {
     }
     
     noSuggestions.classList.add('d-none');
+    
+    // Show suggestion count
+    const suggestionsHeader = document.getElementById('suggestions-header');
+    const suggestionsCount = document.getElementById('suggestions-count');
+    suggestionsHeader.classList.remove('d-none');
+    suggestionsCount.textContent = `${suggestions.length} optimization suggestion${suggestions.length !== 1 ? 's' : ''} found`;
     
     suggestions.forEach(suggestion => {
         const clone = template.content.cloneNode(true);
