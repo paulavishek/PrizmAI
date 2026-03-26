@@ -466,6 +466,31 @@ def delete_goal(request, goal_id):
 
 
 @login_required
+@demo_write_guard
+def set_mission_goal(request, mission_id):
+    """POST: Set (or clear) the parent Goal for a Mission — from the Mission's own detail page."""
+    mission = get_object_or_404(Mission, id=mission_id)
+
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to modify this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
+
+    if request.method == 'POST':
+        goal_id = request.POST.get('goal_id', '').strip()
+        if goal_id:
+            goal = get_object_or_404(OrganizationGoal, id=goal_id)
+            mission.organization_goal = goal
+            mission.save(update_fields=['organization_goal'])
+            messages.success(request, f'Mission linked to goal "{goal.name}".')
+        else:
+            mission.organization_goal = None
+            mission.save(update_fields=['organization_goal'])
+            messages.success(request, 'Mission unlinked from its goal.')
+
+    return redirect('mission_detail', mission_id=mission.id)
+
+
+@login_required
 def link_mission_to_goal(request, goal_id):
     """Link an existing Mission to this Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
@@ -660,6 +685,8 @@ def mission_detail(request, mission_id):
         'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
         'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
         'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
+        # All goals for the "Link to Goal" sidebar widget
+        'all_goals': OrganizationGoal.objects.order_by('name'),
     })
 
 
@@ -667,27 +694,39 @@ def mission_detail(request, mission_id):
 @demo_write_guard
 def create_mission(request):
     """Create a new mission."""
+    all_goals = OrganizationGoal.objects.order_by('name')
+
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         description = request.POST.get('description', '').strip()
         status = request.POST.get('status', 'active')
+        goal_id = request.POST.get('organization_goal_id', '').strip()
 
         if not name:
             messages.error(request, 'Mission name is required.')
             return render(request, 'kanban/create_mission.html', {
                 'post': request.POST,
+                'all_goals': all_goals,
             })
+
+        organization_goal = None
+        if goal_id:
+            try:
+                organization_goal = OrganizationGoal.objects.get(id=int(goal_id))
+            except (OrganizationGoal.DoesNotExist, ValueError):
+                pass
 
         mission = Mission.objects.create(
             name=name,
             description=description or None,
             status=status,
+            organization_goal=organization_goal,
             created_by=request.user,
         )
         messages.success(request, f'Mission "{mission.name}" created successfully!')
         return redirect('mission_detail', mission_id=mission.id)
 
-    return render(request, 'kanban/create_mission.html', {})
+    return render(request, 'kanban/create_mission.html', {'all_goals': all_goals})
 
 
 @login_required

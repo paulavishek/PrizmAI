@@ -44,6 +44,18 @@
                             <option value="completed" {% if post.status == 'completed' %}selected{% endif %}>Completed</option>
                         </select>
                     </div>
+                    {% if all_goals %}
+                    <div class="mb-4">
+                        <label for="organization_goal_id" class="form-label fw-semibold">Link to Goal <span class="text-muted small fw-normal">(optional)</span></label>
+                        <select class="form-select" id="organization_goal_id" name="organization_goal_id">
+                            <option value="">— No goal yet —</option>
+                            {% for goal in all_goals %}
+                            <option value="{{ goal.id }}" {% if post.organization_goal_id == goal.id|stringformat:"s" %}selected{% endif %}>{{ goal.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Attach this mission to an existing organizational goal.</div>
+                    </div>
+                    {% endif %}
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-check me-1"></i>Create Mission

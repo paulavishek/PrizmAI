@@ -1339,9 +1339,19 @@ def create_board(request):
     else:
         form = BoardForm()
     
+    # All strategies for the optional "Link to Strategy" dropdown (only when no strategy pre-selected)
+    all_strategies = []
+    if not selected_strategy:
+        from kanban.models import Strategy as _Strategy
+        all_strategies = list(
+            _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+            .values('id', 'name', 'mission__name', 'mission_id')
+        )
+
     return render(request, 'kanban/create_board.html', {
         'form': form,
         'selected_strategy': selected_strategy,
+        'all_strategies': all_strategies,
     })
 
 @login_required
@@ -3807,14 +3817,39 @@ def edit_board(request, board_id):
         form = BoardForm(request.POST, instance=board)
         if form.is_valid():
             form.save()
-            messages.success(request, f'Board "{board.name}" updated successfully!')
+
+            # Handle strategy linking/unlinking
+            strategy_id = request.POST.get('strategy_id', '').strip()
+            if strategy_id:
+                try:
+                    new_strategy = Strategy.objects.get(id=int(strategy_id))
+                    board.strategy = new_strategy
+                    board.save(update_fields=['strategy'])
+                    messages.success(request, f'Board "{board.name}" updated and linked to strategy "{new_strategy.name}"!')
+                except (Strategy.DoesNotExist, ValueError):
+                    messages.success(request, f'Board "{board.name}" updated successfully!')
+            elif 'strategy_id' in request.POST:
+                # Empty value submitted = unlink
+                board.strategy = None
+                board.save(update_fields=['strategy'])
+                messages.success(request, f'Board "{board.name}" updated and unlinked from strategy.')
+            else:
+                messages.success(request, f'Board "{board.name}" updated successfully!')
+
             return redirect('board_detail', board_id=board.id)
     else:
         form = BoardForm(instance=board)
-    
+
+    from kanban.models import Strategy as _Strategy
+    all_strategies = list(
+        _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+        .values('id', 'name', 'mission__name', 'mission_id')
+    )
+
     return render(request, 'kanban/edit_board.html', {
         'form': form,
-        'board': board
+        'board': board,
+        'all_strategies': all_strategies,
     })
 
 @login_required
