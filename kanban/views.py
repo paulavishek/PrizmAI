@@ -26,6 +26,7 @@ from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 from .favorite_views import is_user_favorite as _is_fav
 from .ai_briefing import build_action_plan as _build_action_plan
+from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
 @login_required
 def dashboard(request):
@@ -976,6 +977,37 @@ def dashboard(request):
     # One-time onboarding banner (tasks are unassigned after AI workspace generation)
     show_assign_banner = request.session.pop('show_onboarding_assign_banner', False)
 
+    # ── Decision Center badge counts (server-side to avoid flash) ───
+    _dc_effective_demo = demo_mode or '_demo' in request.user.username
+    _dc_cache_key = f"dc_widget_{request.user.id}_{'demo' if _dc_effective_demo else 'real'}"
+    _dc_cached = cache.get(_dc_cache_key)
+    if _dc_cached:
+        dc_action_count = _dc_cached.get('action_required_count', 0)
+        dc_awareness_count = _dc_cached.get('awareness_count', 0)
+        dc_quickwin_count = _dc_cached.get('quick_win_count', 0)
+    else:
+        _dc_pending = DecisionItem.objects.filter(created_for=request.user, status='pending')
+        if _dc_effective_demo:
+            _dc_pending = _dc_pending.filter(board__is_official_demo_board=True)
+        else:
+            _dc_pending = (
+                _dc_pending.filter(board__is_official_demo_board=False)
+                | DecisionItem.objects.filter(
+                    created_for=request.user, status='pending', board__isnull=True
+                )
+            ).distinct()
+        _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
+        dc_action_count = _dc_pending.filter(priority_level='action_required').count()
+        dc_awareness_count = (
+            _dc_pending.filter(priority_level='awareness').count()
+            if _dc_settings.show_awareness_items else 0
+        )
+        dc_quickwin_count = (
+            _dc_pending.filter(priority_level='quick_win').count()
+            if _dc_settings.show_quick_wins else 0
+        )
+    dc_total_count = dc_action_count + dc_awareness_count + dc_quickwin_count
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -1020,6 +1052,10 @@ def dashboard(request):
         'daily_briefing':    daily_briefing,
         'premortem_risk_map': premortem_risk_map,
         'show_assign_banner': show_assign_banner,
+        'dc_action_count': dc_action_count,
+        'dc_awareness_count': dc_awareness_count,
+        'dc_quickwin_count': dc_quickwin_count,
+        'dc_total_count': dc_total_count,
         })
 
 
