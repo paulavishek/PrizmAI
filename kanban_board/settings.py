@@ -125,6 +125,8 @@ MIDDLEWARE = [
     # Demo session management - Must be after SessionMiddleware
     'kanban.middleware.demo_session.DemoSessionMiddleware',
     'kanban.middleware.demo_session.DemoAnalyticsMiddleware',
+    # Demo data immutability — blocks save/delete on seed demo objects
+    'kanban.middleware.demo_protection.DemoProtectionMiddleware',
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',

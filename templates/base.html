@@ -410,6 +410,27 @@
     </div>
     {% endif %}
 
+    {# ── Demo Data Read-Only Notice (global — all pages in demo mode) ── #}
+    {% if is_viewing_demo %}
+    <div class="demo-readonly-banner" role="status">
+        <div class="demo-readonly-inner">
+            <div class="demo-readonly-icon">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <div class="demo-readonly-text">
+                <strong>Demo data is read-only</strong>
+                <span class="demo-readonly-detail">
+                    &mdash; You can explore everything, but demo boards, tasks, and other demo artifacts cannot be edited or deleted.
+                    You <em>can</em> create your own boards, tasks, and other items &mdash; they're fully yours to edit and delete.
+                </span>
+            </div>
+            <button type="button" class="demo-readonly-dismiss" onclick="this.closest('.demo-readonly-banner').classList.add('d-none')" aria-label="Dismiss notice">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
     {% block content %}{% endblock %}
 
     {% if user.is_authenticated and not force_auth_layout %}
