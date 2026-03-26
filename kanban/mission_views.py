@@ -41,48 +41,63 @@ def _handle_edit_cascade(request, record, change_reason, level):
     """
     Post-edit cascade logic based on change_reason.
 
-    minor_tweak   → save silently (stale flag handled by timestamp comparison)
-    scope_change  → notify board members + trigger AI regeneration (this level + one above)
+    minor_tweak     → notify followers only (soft message, no AI regen)
+    scope_change    → notify board members + followers + trigger AI regeneration
     strategic_pivot → same as scope_change + Spectra warning about linked boards
     """
-    if change_reason == 'minor_tweak':
-        return  # Nothing extra — stale indicator derives from timestamps
+    level_display = level.capitalize()
 
-    # Collect board members to notify
-    board_members = set()
-    if level == 'goal':
-        boards = Board.objects.filter(strategy__mission__organization_goal=record)
-    elif level == 'mission':
-        boards = Board.objects.filter(strategy__mission=record)
-    else:  # strategy
-        boards = Board.objects.filter(strategy=record)
-
-    for board in boards.select_related():
-        board_members.update(User.objects.filter(board_memberships__board=board))
-
-    # Send in-app notifications to board members AND followers
+    # --- Always notify followers (even for minor tweaks) ---
     try:
         from messaging.models import Notification
         from django.contrib.contenttypes.models import ContentType
-        level_display = level.capitalize()
         ct = ContentType.objects.get_for_model(record)
         followers_qs = StrategicFollower.objects.filter(
             content_type=ct, object_id=record.pk,
         ).select_related('user')
         follower_users = {f.user for f in followers_qs}
 
-        # Union of board members and followers, excluding the editor
-        recipients = (board_members | follower_users) - {request.user}
+        if change_reason == 'minor_tweak':
+            notification_text = f'{level_display} "{record.name}" was updated (minor edit).'
+            recipients = follower_users - {request.user}
+        else:
+            # scope_change / strategic_pivot — also notify board members
+            board_members = set()
+            if level == 'goal':
+                boards = Board.objects.filter(strategy__mission__organization_goal=record)
+            elif level == 'mission':
+                boards = Board.objects.filter(strategy__mission=record)
+            else:  # strategy
+                boards = Board.objects.filter(strategy=record)
+
+            for board in boards.select_related():
+                board_members.update(User.objects.filter(board_memberships__board=board))
+
+            notification_text = f'{level_display} "{record.name}" was updated — review impact.'
+            recipients = (board_members | follower_users) - {request.user}
+
         for recipient in recipients:
             Notification.objects.create(
                 recipient=recipient,
                 sender=request.user,
                 notification_type='ACTIVITY',
-                text=f'{level_display} "{record.name}" was updated — review impact.',
+                text=notification_text,
                 action_url=record.get_absolute_url(),
             )
     except Exception as e:
         logger.warning("Failed to send edit notifications: %s", e)
+
+    # Minor tweaks don't need AI regeneration — stop here
+    if change_reason == 'minor_tweak':
+        return
+
+    # Collect boards reference for strategic_pivot logging below
+    if level == 'goal':
+        boards = Board.objects.filter(strategy__mission__organization_goal=record)
+    elif level == 'mission':
+        boards = Board.objects.filter(strategy__mission=record)
+    else:
+        boards = Board.objects.filter(strategy=record)
 
     # Trigger AI summary regeneration at this level + one level above
     try:
