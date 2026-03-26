@@ -27,6 +27,7 @@ from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
 from kanban.utils.demo_permissions import DemoPermissions
 from kanban.utils.demo_admin import login_as_demo_admin, logout_demo_admin, is_demo_admin_user
+from kanban.utils.demo_protection import allow_demo_writes
 import logging
 
 logger = logging.getLogger(__name__)
@@ -201,59 +202,60 @@ def _assign_demo_tasks_to_real_user(user, demo_boards):
         return
 
     try:
-        for board in demo_boards:
-            # Prefer in-progress tasks (more visible), then to-do
-            candidates = list(
-                Task.objects.filter(
-                    column__board=board,
-                    is_seed_demo_data=True,
-                    item_type='task',
-                    progress__gt=0,
-                    progress__lt=100,
-                ).exclude(
-                    assigned_to=user,
-                ).order_by('?')[:2]
-            )
-
-            # If we got fewer than 2 from in-progress, grab a to-do task
-            if len(candidates) < 2:
-                extra = list(
+        with allow_demo_writes():
+            for board in demo_boards:
+                # Prefer in-progress tasks (more visible), then to-do
+                candidates = list(
                     Task.objects.filter(
                         column__board=board,
                         is_seed_demo_data=True,
                         item_type='task',
-                        progress=0,
+                        progress__gt=0,
+                        progress__lt=100,
                     ).exclude(
                         assigned_to=user,
-                    ).exclude(
-                        id__in=[c.id for c in candidates],
-                    ).order_by('?')[:3 - len(candidates)]
+                    ).order_by('?')[:2]
                 )
-                candidates.extend(extra)
 
-            # Cap at 3
-            candidates = candidates[:3]
+                # If we got fewer than 2 from in-progress, grab a to-do task
+                if len(candidates) < 2:
+                    extra = list(
+                        Task.objects.filter(
+                            column__board=board,
+                            is_seed_demo_data=True,
+                            item_type='task',
+                            progress=0,
+                        ).exclude(
+                            assigned_to=user,
+                        ).exclude(
+                            id__in=[c.id for c in candidates],
+                        ).order_by('?')[:3 - len(candidates)]
+                    )
+                    candidates.extend(extra)
 
-            # Store original assignees on the profile for later restoration
-            originals = {}
-            for task in candidates:
-                originals[str(task.id)] = task.assigned_to_id
-                task.assigned_to = user
-                task.save(update_fields=['assigned_to'])
+                # Cap at 3
+                candidates = candidates[:3]
 
-            # Persist the mapping so we can restore on demo exit
-            if originals:
-                from accounts.models import UserProfile
-                profile = UserProfile.objects.get(user=user)
-                # Merge with any existing originals (in case of multiple boards)
-                existing = profile.demo_task_originals or {}
-                existing.update(originals)
-                profile.demo_task_originals = existing
-                profile.save(update_fields=['demo_task_originals'])
-                logger.info(
-                    f"Assigned {len(originals)} demo tasks to real user "
-                    f"{user.username}: task ids {list(originals.keys())}"
-                )
+                # Store original assignees on the profile for later restoration
+                originals = {}
+                for task in candidates:
+                    originals[str(task.id)] = task.assigned_to_id
+                    task.assigned_to = user
+                    task.save(update_fields=['assigned_to'])
+
+                # Persist the mapping so we can restore on demo exit
+                if originals:
+                    from accounts.models import UserProfile
+                    profile = UserProfile.objects.get(user=user)
+                    # Merge with any existing originals (in case of multiple boards)
+                    existing = profile.demo_task_originals or {}
+                    existing.update(originals)
+                    profile.demo_task_originals = existing
+                    profile.save(update_fields=['demo_task_originals'])
+                    logger.info(
+                        f"Assigned {len(originals)} demo tasks to real user "
+                        f"{user.username}: task ids {list(originals.keys())}"
+                    )
 
     except Exception as e:
         logger.error(f"Error assigning demo tasks to {user.username}: {e}")
@@ -265,28 +267,29 @@ def _restore_demo_task_assignments(user):
     when a real user exits demo mode.
     """
     try:
-        from accounts.models import UserProfile
-        profile = UserProfile.objects.get(user=user)
-        originals = profile.demo_task_originals
-        if not originals:
-            return
+        with allow_demo_writes():
+            from accounts.models import UserProfile
+            profile = UserProfile.objects.get(user=user)
+            originals = profile.demo_task_originals
+            if not originals:
+                return
 
-        restored = 0
-        for task_id_str, original_user_id in originals.items():
-            try:
-                task = Task.objects.get(id=int(task_id_str), is_seed_demo_data=True)
-                task.assigned_to_id = original_user_id
-                task.save(update_fields=['assigned_to'])
-                restored += 1
-            except Task.DoesNotExist:
-                pass
+            restored = 0
+            for task_id_str, original_user_id in originals.items():
+                try:
+                    task = Task.objects.get(id=int(task_id_str), is_seed_demo_data=True)
+                    task.assigned_to_id = original_user_id
+                    task.save(update_fields=['assigned_to'])
+                    restored += 1
+                except Task.DoesNotExist:
+                    pass
 
-        # Clear the stored originals
-        profile.demo_task_originals = {}
-        profile.save(update_fields=['demo_task_originals'])
+            # Clear the stored originals
+            profile.demo_task_originals = {}
+            profile.save(update_fields=['demo_task_originals'])
 
-        if restored:
-            logger.info(f"Restored {restored} demo tasks from user {user.username}")
+            if restored:
+                logger.info(f"Restored {restored} demo tasks from user {user.username}")
 
     except Exception as e:
         logger.error(f"Error restoring demo tasks for {user.username}: {e}")
@@ -1403,6 +1406,7 @@ def reset_demo_data(request):
 
     if request.method == 'POST':
         try:
+          with allow_demo_writes():
             from django.core.management import call_command
             from django.db import connection
             from io import StringIO

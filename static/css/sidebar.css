@@ -581,6 +581,99 @@
     font-weight: 700;
 }
 
+/* ============================================= */
+/* DEMO READ-ONLY BANNER                         */
+/* ============================================= */
+.demo-readonly-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1049;
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #e0f2fe 100%);
+    border-bottom: 2px solid #0284c7;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    color: #0c4a6e;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.12);
+}
+.demo-readonly-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+.demo-readonly-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #0284c7;
+    color: #fff;
+    font-size: 0.82rem;
+}
+.demo-readonly-text {
+    flex: 1;
+    line-height: 1.35;
+}
+.demo-readonly-text strong {
+    color: #0369a1;
+}
+.demo-readonly-text em {
+    font-style: italic;
+    font-weight: 600;
+    color: #0369a1;
+}
+.demo-readonly-detail {
+    color: #0c4a6e;
+}
+.demo-readonly-dismiss {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: #0369a1;
+    font-size: 0.95rem;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.demo-readonly-dismiss:hover {
+    opacity: 1;
+    background: rgba(2, 132, 199, 0.1);
+}
+@media (max-width: 768px) {
+    .demo-readonly-detail { display: none; }
+    .demo-readonly-banner { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
+}
+
+/* Dark mode support */
+[data-bs-theme="dark"] .demo-readonly-banner {
+    background: linear-gradient(135deg, #172554 0%, #1e3a5f 50%, #172554 100%);
+    border-bottom-color: #38bdf8;
+    color: #bae6fd;
+}
+[data-bs-theme="dark"] .demo-readonly-icon {
+    background: #38bdf8;
+    color: #0c4a6e;
+}
+[data-bs-theme="dark"] .demo-readonly-text strong,
+[data-bs-theme="dark"] .demo-readonly-text em {
+    color: #7dd3fc;
+}
+[data-bs-theme="dark"] .demo-readonly-detail {
+    color: #bae6fd;
+}
+[data-bs-theme="dark"] .demo-readonly-dismiss {
+    color: #7dd3fc;
+}
+[data-bs-theme="dark"] .demo-readonly-dismiss:hover {
+    background: rgba(56, 189, 248, 0.15);
+}
+
 /* Return to real account in topbar */
 .topbar-return-btn {
     font-size: 0.78rem;
