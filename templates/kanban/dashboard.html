@@ -727,6 +727,10 @@
         transform: translateY(-2px);
         border-color: #93c5fd !important;
     }
+    .briefing-item-risk.briefing-item-clickable:hover {
+        box-shadow: 0 4px 14px rgba(146, 64, 14, 0.18);
+        border-color: #fcd34d !important;
+    }
     .briefing-item-clickable .briefing-action-footer {
         display: flex;
         align-items: center;
@@ -1639,16 +1643,16 @@
                 {% endif %}
                 {% if daily_briefing.risk %}
                 <div class="col-md-4">
-                    <div class="briefing-item">
+                    {% if daily_briefing.top_risk %}
+                    <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
+                       class="briefing-item briefing-item-clickable briefing-item-risk d-block text-decoration-none"
+                       title="View task: {{ daily_briefing.top_risk.task.title }}">
                         <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
-                        {% if daily_briefing.top_risk %}
                         <div class="mt-2">
-                            <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
-                               class="fw-semibold text-decoration-none"
-                               style="font-size:0.82rem; color:#1e3a8a;"
-                               title="{{ daily_briefing.top_risk.task.title }}">
+                            <span class="fw-semibold d-block"
+                               style="font-size:0.82rem; color:#1e3a8a;">
                                 {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
-                            </a>
+                            </span>
                             <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
                                 {% if daily_briefing.top_risk.risk_level == 'critical' %}
                                     <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
@@ -1665,8 +1669,15 @@
                                 {% endif %}
                             </div>
                         </div>
-                        {% endif %}
+                        <div class="briefing-action-footer" style="color:#92400e;">
+                            View task <i class="fas fa-arrow-right ms-1"></i>
+                        </div>
+                    </a>
+                    {% else %}
+                    <div class="briefing-item">
+                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
                     </div>
+                    {% endif %}
                 </div>
                 {% endif %}
                 {% if daily_briefing.action %}
