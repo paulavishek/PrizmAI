@@ -672,6 +672,16 @@ AI_SUMMARY_DEBOUNCE_SECONDS = 600          # 10 minutes
 # dashboard UI and in the /api/summary-status/ polling endpoint.
 AI_SUMMARY_STALE_THRESHOLD_MINUTES = 120   # 2 hours
 
+# Map Django message levels to Bootstrap CSS classes
+from django.contrib.messages import constants as message_constants
+MESSAGE_TAGS = {
+    message_constants.DEBUG:   'debug',
+    message_constants.INFO:    'info',
+    message_constants.SUCCESS: 'success',
+    message_constants.WARNING: 'warning',
+    message_constants.ERROR:   'danger',
+}
+
 # ============================================
 # REST FRAMEWORK CONFIGURATION
 # ============================================

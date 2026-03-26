@@ -334,6 +334,7 @@ def goal_detail(request, goal_id):
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_goal', goal),
         'can_delete': request.user.has_perm('prizmai.edit_goal', goal),
+        'can_create_child': request.user.has_perm('prizmai.edit_goal', goal) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
     })
 
 
@@ -658,6 +659,7 @@ def mission_detail(request, mission_id):
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
         'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
+        'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
     })
 
 
@@ -772,7 +774,8 @@ def create_strategy(request, mission_id):
     """Create a strategy under a mission."""
     mission = get_object_or_404(Mission, id=mission_id)
 
-    if not request.user.has_perm('prizmai.edit_mission', mission):
+    is_demo_viewer = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if not is_demo_viewer and not request.user.has_perm('prizmai.edit_mission', mission):
         messages.error(request, 'You do not have permission to create strategies under this mission.')
         return redirect('mission_detail', mission_id=mission.id)
 
@@ -909,6 +912,7 @@ def strategy_detail(request, mission_id, strategy_id):
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy),
         'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy),
+        'can_create_child': request.user.has_perm('prizmai.edit_strategy', strategy) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
     })
 
 
