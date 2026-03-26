@@ -24,14 +24,6 @@
                 </a>
             </li>
             <li class="sidebar-nav-item">
-                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}" 
-                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
-                   title="Boards">
-                    <i class="fas fa-columns sidebar-nav-icon"></i>
-                    <span class="sidebar-label">Boards</span>
-                </a>
-            </li>
-            <li class="sidebar-nav-item">
                 <a href="{% url 'goal_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'goal_list' %}active{% endif %}"
                    title="Goals">
@@ -45,6 +37,14 @@
                    title="Missions">
                     <i class="fas fa-bullseye sidebar-nav-icon"></i>
                     <span class="sidebar-label">Missions</span>
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
+                   title="Boards">
+                    <i class="fas fa-columns sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Boards</span>
                 </a>
             </li>
             {% if not request.session.is_demo_mode %}
