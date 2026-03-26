@@ -915,12 +915,20 @@
         padding: 0.6rem 1rem;
         transition: color 0.15s, border-color 0.15s, background 0.15s;
     }
-    .hn-tabs .nav-link:hover { color: #334155; background: #f1f5f9; }
+    .hn-tabs .nav-link:hover { background: #f1f5f9; }
     .hn-tabs .nav-link.active { background: transparent; }
-    /* Per-level accent colours on the active underline */
+    /* Per-level accent colours — inactive (muted) and active (full) */
+    #hn-tab-goals           { color: #d97706; }
+    #hn-tab-goals:hover     { color: #b45309; }
     #hn-tab-goals.active    { color: #b45309; border-bottom-color: #f59e0b; }
+    #hn-tab-missions        { color: #3b82f6; }
+    #hn-tab-missions:hover  { color: #1d4ed8; }
     #hn-tab-missions.active { color: #1d4ed8; border-bottom-color: #3b82f6; }
+    #hn-tab-strategies        { color: #10b981; }
+    #hn-tab-strategies:hover  { color: #047857; }
     #hn-tab-strategies.active { color: #047857; border-bottom-color: #10b981; }
+    #hn-tab-boards          { color: #8b5cf6; }
+    #hn-tab-boards:hover    { color: #6d28d9; }
     #hn-tab-boards.active   { color: #6d28d9; border-bottom-color: #8b5cf6; }
     .hn-count {
         font-size: 0.82rem;

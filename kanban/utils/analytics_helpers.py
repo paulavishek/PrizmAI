@@ -146,7 +146,7 @@ PROMOTED_METRICS = {
 }
 
 
-def get_promoted_metrics(board):
+def get_promoted_metrics(board, raw=False):
     """
     Calculate the promoted metrics for a board based on its project_type.
 
@@ -286,6 +286,9 @@ def get_promoted_metrics(board):
         metrics['on_time_rate'] = (
             f"{int(on_time / total_done_with_due * 100)}%" if total_done_with_due > 0 else "N/A"
         )
+
+    if raw:
+        return metrics
 
     # Convert raw metrics dict to a list of rich dicts for the template
     metric_keys = PROMOTED_METRICS.get(project_type, list(metrics.keys()))
@@ -513,7 +516,7 @@ def get_portfolio_analytics(record, record_type):
         # Aggregate metrics across boards of this type
         aggregated = {}
         for b in group_boards:
-            board_metrics = get_promoted_metrics(b)
+            board_metrics = get_promoted_metrics(b, raw=True)
             for k, v in board_metrics.items():
                 if isinstance(v, (int, float)):
                     aggregated[k] = aggregated.get(k, 0) + v
