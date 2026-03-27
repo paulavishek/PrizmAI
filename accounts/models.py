@@ -175,16 +175,11 @@ class UserProfile(models.Model):
     )
     is_viewing_demo = models.BooleanField(
         default=False,
-        help_text="Whether user is currently viewing the demo workspace"
+        help_text="Whether user is currently viewing their personal demo sandbox"
     )
     is_demo_account = models.BooleanField(
         default=False,
         help_text="Permanent flag for demo login accounts (Alex, Sam, Jordan). Read-only, zero AI access."
-    )
-    demo_task_originals = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Maps task_id→original_assignee_id for demo tasks temporarily assigned to this real user"
     )
     
     def __str__(self):

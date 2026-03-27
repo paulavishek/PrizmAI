@@ -9,5 +9,3 @@ class KanbanConfig(AppConfig):
         """Import signal handlers and register RBAC rules when the app is ready"""
         import kanban.signals  # noqa
         import kanban.permissions  # noqa — registers django-rules predicates & perms
-        from kanban.utils.demo_protection import connect_demo_protection_signals
-        connect_demo_protection_signals()

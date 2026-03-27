@@ -28,13 +28,16 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
     """Base view for wiki operations - MVP mode without organization requirement"""
     
     def dispatch(self, request, *args, **kwargs):
-        """Block write operations for users in Tier-1 read-only demo mode."""
+        """Block write operations for users in browse-only sandbox mode."""
         if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
             try:
-                if getattr(request.user, 'profile', None) and getattr(request.user.profile, 'is_viewing_demo', False) and not request.session.get('in_sandbox', False):
-                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
-                        return JsonResponse({'error': 'Demo data is read-only. Launch your private Sandbox to create or edit content.', 'demo_readonly': True, 'show_sandbox_cta': True}, status=403)
-                    return HttpResponseForbidden('Demo data is read-only. Launch your private Sandbox to create or edit content.')
+                profile = getattr(request.user, 'profile', None)
+                if profile and getattr(profile, 'is_viewing_demo', False):
+                    sandbox = getattr(request.user, 'demo_sandbox', None)
+                    if sandbox and getattr(sandbox, 'is_browsing', False):
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                            return JsonResponse({'error': 'Click "Start Experimenting" to unlock editing.', 'demo_readonly': True}, status=403)
+                        return HttpResponseForbidden('Click "Start Experimenting" to unlock editing.')
             except Exception:
                 pass
         return super().dispatch(request, *args, **kwargs)

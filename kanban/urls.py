@@ -34,18 +34,18 @@ urlpatterns = [
     path('api/wizard/create-board/', views.wizard_create_board, name='wizard_create_board'),
     path('api/wizard/create-task/', views.wizard_create_task, name='wizard_create_task'),
     
-    # Demo Mode (New System)
+    # Demo Mode — legacy routes kept as redirects, new single-tier sandbox
     path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
     path('demo/start/', demo_views.demo_mode_selection, name='demo_mode_selection'),
     path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
     path('demo/exit/', demo_views.exit_demo, name='exit_demo'),
     path('demo/fingerprint/', demo_views.receive_client_fingerprint, name='receive_client_fingerprint'),
 
-    # Ephemeral Sandbox (Phase 7)
-    path('sandbox/create/', sandbox_views.create_sandbox, name='create_sandbox'),
+    # Single-tier personal sandbox
+    path('demo/start-experimenting/', sandbox_views.toggle_browsing, name='toggle_browsing'),
+    path('demo/reset-mine/', sandbox_views.reset_my_demo, name='reset_my_demo'),
     path('sandbox/save/', sandbox_views.save_sandbox_board, name='save_sandbox_board'),
     path('sandbox/delete/', sandbox_views.delete_sandbox, name='delete_sandbox'),
-    path('sandbox/exit-mode/', sandbox_views.exit_sandbox_mode, name='exit_sandbox_mode'),
     path('sandbox/status/', sandbox_views.sandbox_status, name='sandbox_status'),
     path('sandbox/extend/', sandbox_views.extend_demo_session, name='extend_demo_session'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),

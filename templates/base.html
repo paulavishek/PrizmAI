@@ -109,7 +109,7 @@
     })();
     </script>
 </head>
-<body data-demo-mode="{% if request.session.is_demo_mode %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
+<body data-demo-mode="{% if is_viewing_demo %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -161,8 +161,8 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <h1 class="topbar-page-title">{% block page_title %}Dashboard{% endblock %}</h1>
-                {% if request.session.is_demo_mode %}
-                    <span class="topbar-demo-badge"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
+                {% if is_viewing_demo %}
+                    <span class="topbar-demo-badge"><i class="fas fa-flask me-1"></i>SANDBOX</span>
                 {% endif %}
             </div>
             <!-- Workspace Switcher — inline buttons, always visible in topbar -->
@@ -301,8 +301,8 @@
         </div>
         {% endif %}
 
-        <!-- Demo Limitation Modal (available globally for demo mode) -->
-        {% if request.session.is_demo_mode %}
+        <!-- Demo Limitation Modal (legacy — kept for demo accounts) -->
+        {% if is_demo_account %}
             {% include 'demo/partials/limitation_modal.html' %}
         {% endif %}
 
@@ -410,46 +410,40 @@
     </div>
     {% endif %}
 
-    {# ── Sandbox Active Banner (Tier 2 — full write access) ── #}
-    {% if in_sandbox %}
+    {# ── Personal Sandbox Banner (single-tier) ── #}
+    {% if is_viewing_demo %}
     <div class="sandbox-active-banner" role="status">
         <div class="sandbox-active-inner">
             <div class="sandbox-active-icon">
                 <i class="fas fa-flask"></i>
             </div>
             <div class="sandbox-active-text">
-                <strong>You're in your private sandbox</strong>
+                {% if is_browsing %}
+                <strong>You're browsing your sandbox</strong>
                 <span class="sandbox-active-detail">
-                    &mdash; You have full edit access. Changes here won't affect the demo data.
+                    &mdash; This is your private copy of the demo data. Click "Start Experimenting" to unlock edits.
                     <span id="sandbox-time-remaining"></span>
                 </span>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline-light ms-auto me-2" onclick="exitSandbox()">
-                <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
-            </button>
-            <button type="button" class="sandbox-active-dismiss" onclick="this.closest('.sandbox-active-banner').classList.add('d-none')" aria-label="Dismiss notice">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    </div>
-
-    {# ── Demo Data Read-Only Notice (Tier 1 — read-only demo, hidden when sandbox active) ── #}
-    {% elif is_viewing_demo %}
-    <div class="demo-readonly-banner" role="status">
-        <div class="demo-readonly-inner">
-            <div class="demo-readonly-icon">
-                <i class="fas fa-shield-alt"></i>
-            </div>
-            <div class="demo-readonly-text">
-                <strong>Demo data is read-only</strong>
-                <span class="demo-readonly-detail">
-                    &mdash; You can explore everything, but demo boards, tasks, and other demo artifacts cannot be edited or deleted.
+                {% else %}
+                <strong>You're in your private sandbox</strong>
+                <span class="sandbox-active-detail">
+                    &mdash; You have full edit access. Changes here won't affect anyone else's data.
+                    <span id="sandbox-time-remaining"></span>
                 </span>
+                {% endif %}
             </div>
-            <button type="button" class="btn btn-sm btn-sandbox-cta ms-auto me-2" onclick="createSandbox()">
-                <i class="fas fa-flask me-1"></i>Try in My Sandbox
+            {% if is_browsing %}
+            <button type="button" class="btn btn-sm btn-sandbox-cta ms-auto me-2" onclick="startExperimenting()">
+                <i class="fas fa-pen me-1"></i>Start Experimenting
             </button>
-            <button type="button" class="demo-readonly-dismiss" onclick="this.closest('.demo-readonly-banner').classList.add('d-none')" aria-label="Dismiss notice">
+            {% endif %}
+            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline ms-auto me-2">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-light">
+                    <i class="fas fa-sign-out-alt me-1"></i>Exit Demo
+                </button>
+            </form>
+            <button type="button" class="sandbox-active-dismiss" onclick="this.closest('.sandbox-active-banner').classList.add('d-none')" aria-label="Dismiss notice">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -712,7 +706,7 @@
     {% endif %}
     
     <!-- Demo Mode GA4 Analytics -->
-    {% if request.session.is_demo_mode %}
+    {% if is_viewing_demo %}
     <script src="{% static 'js/demo_ga4_analytics.js' %}"></script>
     {% endif %}
     
@@ -770,7 +764,7 @@
                 // Update expiry warning banner
                 var expiryBanner = document.getElementById('sandbox-expiry-banner');
                 if (expiryBanner) {
-                    if (data.in_sandbox && data.show_warning_banner) {
+                    if (data.is_viewing_demo && data.show_warning_banner) {
                         var hoursEl = document.getElementById('sandbox-hours-left');
                         if (hoursEl) {
                             var h = parseInt(data.hours_remaining, 10);
@@ -803,35 +797,10 @@
         window.location.href = '/sandbox/status/';
     };
 
-    window.createSandbox = function() {
+    window.startExperimenting = function() {
         var btn = document.querySelector('.btn-sandbox-cta');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Entering\u2026'; }
-        fetch('/sandbox/create/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCsrfToken(),
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(function(r) { return r.json().then(function(d) { return {status: r.status, body: d}; }); })
-        .then(function(res) {
-            if (res.body.status === 'created' || res.body.status === 'entered') {
-                // Both create and enter redirect to sandbox board
-                window.location.href = res.body.redirect_url || '/dashboard/';
-            } else {
-                alert(res.body.error || 'Could not enter sandbox.');
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Try in My Sandbox'; }
-            }
-        })
-        .catch(function() {
-            alert('Network error — please try again.');
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Try in My Sandbox'; }
-        });
-    };
-
-    window.exitSandbox = function() {
-        // Exit sandbox mode (return to Tier 1 read-only demo) without deleting sandbox
-        fetch('/sandbox/exit-mode/', {
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Unlocking\u2026'; }
+        fetch('/demo/start-experimenting/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': getCsrfToken(),
@@ -840,12 +809,36 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            window.location.href = '/dashboard/';
+            if (data.status === 'ok') {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Could not unlock editing.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen me-1"></i>Start Experimenting'; }
+            }
         })
         .catch(function() {
-            // Fallback: just reload to dashboard
-            window.location.href = '/dashboard/';
+            alert('Network error — please try again.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen me-1"></i>Start Experimenting'; }
         });
+    };
+
+    window.resetMyDemo = function() {
+        if (!confirm('Reset your sandbox? This re-copies the demo data from scratch. All your current edits will be lost.')) return;
+        fetch('/demo/reset-mine/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'provisioning') {
+                // Re-provisioning via Celery — redirect to dashboard (will show progress)
+                window.location.href = '/dashboard/';
+            }
+        })
+        .catch(function() {});
     };
 
     window.deleteSandboxNow = function() {
@@ -879,22 +872,19 @@
 })();
 </script>
 {% endif %}
-{% if is_viewing_demo and not in_sandbox %}
+{% if is_browsing %}
 <script>
 (function() {
-    // Global fetch interceptor: show sandbox upsell when demo guard blocks a request
+    // Global fetch interceptor: show "Start Experimenting" upsell
+    // when user tries a write action in browse-only mode
     var _origFetch = window.fetch;
     window.fetch = function() {
         return _origFetch.apply(this, arguments).then(function(response) {
             if (response.status === 403) {
-                // Clone so the caller can still read the body
                 var clone = response.clone();
                 clone.json().then(function(data) {
                     if (data.demo_readonly || data.ai_blocked) {
-                        var msg = data.ai_blocked
-                            ? 'AI features are available in the Sandbox.'
-                            : 'Demo data is read-only.';
-                        showDemoBlockedToast(msg);
+                        showBrowseBlockedToast('Click "Start Experimenting" to unlock full editing.');
                     }
                 }).catch(function() {});
             }
@@ -902,21 +892,19 @@
         });
     };
 
-    function showDemoBlockedToast(msg) {
-        // Remove existing toast if any
+    function showBrowseBlockedToast(msg) {
         var old = document.getElementById('demo-blocked-toast');
         if (old) old.remove();
         var t = document.createElement('div');
         t.id = 'demo-blocked-toast';
         t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:#0c4a6e;color:#fff;padding:14px 20px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.25);font-size:14px;display:flex;align-items:center;gap:12px;max-width:420px;animation:slideUp .3s ease';
-        t.innerHTML = '<i class="fas fa-shield-alt" style="font-size:18px;flex-shrink:0"></i>'
-            + '<span>' + msg + ' <a href="#" onclick="createSandbox();return false" style="color:#7dd3fc;font-weight:600;text-decoration:underline">Launch Sandbox</a></span>'
+        t.innerHTML = '<i class="fas fa-lock" style="font-size:18px;flex-shrink:0"></i>'
+            + '<span>' + msg + ' <a href="#" onclick="startExperimenting();return false" style="color:#7dd3fc;font-weight:600;text-decoration:underline">Start Experimenting</a></span>'
             + '<button onclick="this.parentElement.remove()" style="border:none;background:none;color:#94a3b8;font-size:16px;padding:0 0 0 8px;cursor:pointer">&times;</button>';
         document.body.appendChild(t);
         setTimeout(function() { if (t.parentElement) t.remove(); }, 6000);
     }
 
-    // Also add a CSS keyframe for the slide-up animation
     var style = document.createElement('style');
     style.textContent = '@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}';
     document.head.appendChild(style);

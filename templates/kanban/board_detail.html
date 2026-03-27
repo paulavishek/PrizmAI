@@ -555,26 +555,7 @@
 </nav>
 {% endif %}
 
-<!-- Demo Mode Banner - only show in legacy (non-simplified) mode -->
-{% if is_demo_board and not simplified_mode %}
-<div class="alert alert-info border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <strong><i class="fas fa-hands-helping me-2"></i>Interactive Demo</strong> �
-            <span class="small">This board is read-only.
-                <a href="{% url 'demo_dashboard' %}" class="text-white text-decoration-underline">Demo Dashboard</a> |
-                <a href="{% url 'dashboard' %}" class="text-white text-decoration-underline">Exit</a>
-            </span>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-light fw-bold" onclick="createSandbox()" title="Get your own editable copy of this demo board">
-                <i class="fas fa-flask me-1"></i>Try in My Sandbox
-            </button>
-            <span class="badge bg-light text-primary"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
-        </div>
-    </div>
-</div>
-{% endif %}
+<!-- Demo Mode Banner removed — single-tier personal sandbox uses the unified banner in base.html -->
 
 <!-- D�j� Vu Banner (Knowledge Graph) � compact -->
 <div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-2 py-2" role="alert" style="display:none; font-size:.9rem;">
@@ -1261,7 +1242,7 @@
 </div>
 
 {% block extra_js %}
-<script>window.isDemoBoardReadOnly = {{ is_demo_board|yesno:'true,false' }};</script>
+<script>window.isDemoBrowsing = {% if is_browsing %}true{% else %}false{% endif %};</script>
 <script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
 <script>
     // Lightweight toast helper (showToast not provided globally by kanban.js)

@@ -2285,8 +2285,12 @@ class StrategicMembership(models.Model):
 
 class DemoSandbox(models.Model):
     """
-    Ephemeral sandbox — private, temporary copy of the demo for a real user.
+    Personal demo sandbox — private copy of all demo template boards for a user.
     OneToOneField enforces one sandbox per user at the DB level.
+
+    Single-tier system: every user who enters demo mode gets their own
+    private copy of the demo data.  The ``is_browsing`` flag controls
+    whether the UI presents a browse-only view or full-edit mode.
     """
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name='demo_sandbox'
@@ -2294,6 +2298,14 @@ class DemoSandbox(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(
         help_text="Always created_at + 24 hours."
+    )
+    is_browsing = models.BooleanField(
+        default=True,
+        help_text=(
+            "True = user is in browse-only mode (drag-drop disabled, edit "
+            "buttons hidden).  Flipped to False when user clicks "
+            "'Start experimenting'."
+        ),
     )
     warning_sent = models.BooleanField(
         default=False,

@@ -42,7 +42,7 @@
     }
 
     /* ============================================
-       DEPENDENCY LINES — CUSTOM ELBOW CONNECTORS
+       DEPENDENCY LINES â€” CUSTOM ELBOW CONNECTORS
        ============================================ */
 
     /* Hide ALL frappe-gantt native arrow polygons */
@@ -58,7 +58,7 @@
         transform: scale(0) !important;
     }
 
-    /* Hide ALL frappe-gantt native arrow paths — we draw our own */
+    /* Hide ALL frappe-gantt native arrow paths â€” we draw our own */
     .gantt g.arrow,
     .gantt g.arrow path,
     .gantt path.arrow,
@@ -119,7 +119,7 @@
         opacity: 0.12 !important;
     }
 
-    /* Mid-line directional chevron — force visible against any hide rules */
+    /* Mid-line directional chevron â€” force visible against any hide rules */
     .dep-chevron {
         pointer-events: none;
         display: block !important;
@@ -360,7 +360,7 @@
         background: #4338ca;
     }
 
-    /* Show in-bar progress fill — complements the split-view table Progress column */
+    /* Show in-bar progress fill â€” complements the split-view table Progress column */
     .gantt .bar-wrapper .bar-progress {
         fill: rgba(255, 255, 255, 0.25) !important;
         rx: 6;
@@ -1209,7 +1209,7 @@
         background: #fff;
     }
 
-    /* ── Left: Task Table Panel ── */
+    /* â”€â”€ Left: Task Table Panel â”€â”€ */
     #gantt-table-panel {
         flex-shrink: 0;
         overflow-y: hidden;
@@ -1255,7 +1255,7 @@
         flex: 1;
     }
 
-    /* ── Table rows ── */
+    /* â”€â”€ Table rows â”€â”€ */
     .gantt-table-row {
         display: flex;
         align-items: center;
@@ -1410,7 +1410,7 @@
         text-align: right;
     }
 
-    /* ── Resizable divider between panels ── */
+    /* â”€â”€ Resizable divider between panels â”€â”€ */
     .gantt-split-divider {
         width: 5px;
         cursor: col-resize;
@@ -1441,7 +1441,7 @@
         background: white;
     }
 
-    /* ── Right: Timeline Panel ── */
+    /* â”€â”€ Right: Timeline Panel â”€â”€ */
     #gantt-timeline-panel {
         flex: 1;
         overflow-x: auto;
@@ -1449,7 +1449,7 @@
         min-width: 0;
     }
 
-    /* ── Responsive: collapse table columns ── */
+    /* â”€â”€ Responsive: collapse table columns â”€â”€ */
     @media (max-width: 768px) {
         #gantt-table-panel .th-responsible,
         #gantt-table-panel .th-progress,
@@ -1485,7 +1485,7 @@
         background: #fee2e2;
     }
 
-    /* ── Task ID Prefix ── */
+    /* â”€â”€ Task ID Prefix â”€â”€ */
     .task-id-prefix {
         color: #8b95a5;
         font-size: 10px;
@@ -1496,11 +1496,11 @@
         letter-spacing: 0.02em;
     }
 
-    /* ── Status Column ── */
+    /* â”€â”€ Status Column â”€â”€ */
     #gantt-table-panel .th-status { width: 90px; justify-content: center; }
     .gantt-table-row .td-status { width: 90px; justify-content: center; }
 
-    /* ── Status Lozenges ── */
+    /* â”€â”€ Status Lozenges â”€â”€ */
     .status-lozenge {
         display: inline-block;
         padding: 2px 8px;
@@ -1516,7 +1516,7 @@
     .status-lozenge.status-in-progress { background: rgba(0,101,255,0.14); color: #0065ff; }
     .status-lozenge.status-done        { background: rgba(0,135,90,0.14); color: #00875a; }
 
-    /* ── Triage Drawer ── */
+    /* â”€â”€ Triage Drawer â”€â”€ */
     .triage-overlay {
         position: fixed;
         inset: 0;
@@ -1673,7 +1673,7 @@
 
     <!-- View Mode Tabs (consistent with board kanban/calendar views) -->
     <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
-        <li class="nav-item"><a class="nav-link" href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
         <li class="nav-item"><a class="nav-link active" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
@@ -1681,7 +1681,7 @@
 
     <div class="gantt-container" style="position: relative;">
         <div class="gantt-header">
-            <h2>📊 Project Timeline</h2>
+            <h2>ðŸ“Š Project Timeline</h2>
             <div class="d-flex align-items-center gap-3">
                 <div class="view-buttons">
                     <button class="view-btn" data-mode="Day">Day</button>
@@ -1711,10 +1711,10 @@
                 <div class="filter-group">
                     <select name="status" class="form-select" id="gantt-status-filter" onchange="this.form.submit()">
                         <option value="">All Status</option>
-                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟢 Active Only</option>
-                        <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>📋 To Do</option>
-                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>🔄 In Progress</option>
-                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✅ Done</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>ðŸŸ¢ Active Only</option>
+                        <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>ðŸ“‹ To Do</option>
+                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>ðŸ”„ In Progress</option>
+                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>âœ… Done</option>
                     </select>
                 </div>
                 
@@ -1942,7 +1942,7 @@
                 <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary me-2">
                     <i class="fas fa-times me-1"></i> Clear Filters
                 </a>
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-primary">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-primary">
                     <i class="fas fa-arrow-left me-1"></i> Go to Board
                 </a>
             </div>
@@ -1951,7 +1951,7 @@
                 <i class="fas fa-calendar-times"></i>
                 <h3>No Tasks with Dates</h3>
                 <p>Add start dates and due dates to your tasks to see them on the Gantt chart.</p>
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-primary">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-primary">
                     <i class="fas fa-arrow-left me-1"></i> Go to Board
                 </a>
             </div>
@@ -1987,7 +1987,7 @@
                 <div class="mb-3">
                     <label for="milestone-phase" class="form-label fw-semibold">Phase</label>
                     <select class="form-select" id="milestone-phase">
-                        <option value="">— No specific phase —</option>
+                        <option value="">â€” No specific phase â€”</option>
                         {% for i in num_phases|make_range %}
                         <option value="Phase {{ forloop.counter }}">Phase {{ forloop.counter }}</option>
                         {% endfor %}
@@ -1999,7 +1999,7 @@
                 <div class="mb-3">
                     <label for="milestone-position-after" class="form-label fw-semibold">Follows task <small class="text-muted fw-normal">(row position in Gantt)</small></label>
                     <select class="form-select" id="milestone-position-after">
-                        <option value="">— At end of phase —</option>
+                        <option value="">â€” At end of phase â€”</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -2119,7 +2119,7 @@
     const hasPhases = {{ has_phases|yesno:"true,false" }};
     const numPhases = {{ num_phases|default:0 }};
 
-    // ── Task ID prefix & triage drawer reference data ──
+    // â”€â”€ Task ID prefix & triage drawer reference data â”€â”€
     const TASK_PREFIX = '{{ task_prefix|escapejs }}';
     const BOARD_ID = {{ board.id }};
     const BOARD_COLUMNS = [{% for col in board_columns %}{id:{{ col.0 }}, name:'{{ col.1|escapejs }}'}{% if not forloop.last %},{% endif %}{% endfor %}];
@@ -2254,9 +2254,9 @@
         return d.toISOString().split('T')[0];
     }
 
-    // Fix milestone dates (start == end → extend end by 1 day for visible bar width)
-    // IMPORTANT: use UTC arithmetic only — setDate()+toISOString() shifts the date in
-    // positive-offset timezones (e.g. IST +5:30 turns Mar 21 → Mar 22).
+    // Fix milestone dates (start == end â†’ extend end by 1 day for visible bar width)
+    // IMPORTANT: use UTC arithmetic only â€” setDate()+toISOString() shifts the date in
+    // positive-offset timezones (e.g. IST +5:30 turns Mar 21 â†’ Mar 22).
     ganttMilestones.forEach(m => {
         const startDate = new Date(m.start);
         const endDate = new Date(m.end);
@@ -2275,7 +2275,7 @@
     console.log('Gantt milestones:', ganttMilestones);
 
     // When a search or filter is active, hide milestones so only matching tasks
-    // are shown — milestones are not searchable items and would confuse results.
+    // are shown â€” milestones are not searchable items and would confuse results.
     const visibleMilestones = anyFiltersActive ? [] : ganttMilestones;
 
     /**
@@ -2302,7 +2302,7 @@
      * Topological sort: order tasks so predecessors always appear before successors.
      * Produces clean top-to-bottom dependency lines (Monday.com style).
      * Tasks with no dependencies are sorted by start date as a tiebreaker.
-     * O(V + E) — scales to 100+ tasks without issue.
+     * O(V + E) â€” scales to 100+ tasks without issue.
      */
     function topologicalSortTasks(taskList) {
         if (!taskList || taskList.length <= 1) return taskList;
@@ -2604,7 +2604,7 @@
                 task.slack = Math.round((task.LS - task.ES) / (1000 * 60 * 60 * 24));
                 
                 // Log detailed info for each task
-                console.log(`  Task ${taskId} "${task.name.substring(0, 20)}...": ES=${task.ES.toDateString()}, LS=${task.LS.toDateString()}, Slack=${task.slack} days ${task.slack <= 1 ? '🔴 CRITICAL' : '⚪ Non-critical'}`);
+                console.log(`  Task ${taskId} "${task.name.substring(0, 20)}...": ES=${task.ES.toDateString()}, LS=${task.LS.toDateString()}, Slack=${task.slack} days ${task.slack <= 1 ? 'ðŸ”´ CRITICAL' : 'âšª Non-critical'}`);
                 
                 // Tasks with zero or near-zero slack are on the critical path
                 // Use <= 1 to account for rounding errors
@@ -2659,10 +2659,10 @@
                 if (bar) {
                     bar.setAttribute('data-critical-path', 'true');
                     appliedCount++;
-                    console.log(`  ✅ Applied to task ${taskId}`);
+                    console.log(`  âœ… Applied to task ${taskId}`);
                 }
             } else {
-                console.log(`  ❌ Bar wrapper not found for task ${taskId}`);
+                console.log(`  âŒ Bar wrapper not found for task ${taskId}`);
             }
         });
         console.log(`Applied critical path styling to ${appliedCount} tasks`);
@@ -2788,14 +2788,14 @@
                     // Build payload
                     const payload = {};
                     if (startChanged && endChanged) {
-                        // Bar body was dragged — send both dates
+                        // Bar body was dragged â€” send both dates
                         payload.start_date = newStart;
                         payload.due_date = newEnd;
                     } else if (startChanged) {
-                        // Left-edge resize — only start_date
+                        // Left-edge resize â€” only start_date
                         payload.start_date = newStart;
                     } else {
-                        // Right-edge resize — only due_date
+                        // Right-edge resize â€” only due_date
                         payload.due_date = newEnd;
                     }
 
@@ -2858,7 +2858,7 @@
             }
         });
 
-        // PASS 1 – mark data attributes only (needed by CSS to hide the native rect/progress).
+        // PASS 1 â€“ mark data attributes only (needed by CSS to hide the native rect/progress).
         // Diamond drawing deliberately happens in PASS 2, after cloneNode replaces wrappers.
         ganttMilestones.forEach(milestone => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
@@ -2917,7 +2917,7 @@
             });
         });
 
-        // PASS 2 – draw diamond markers on the final barWrapper nodes.
+        // PASS 2 â€“ draw diamond markers on the final barWrapper nodes.
         // Always remove any stale diamond first so re-renders stay clean.
         ganttMilestones.forEach(milestone => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
@@ -2940,7 +2940,7 @@
             const isCompleted = milestone.milestoneStatus === 'completed';
             const cx = bx;              // left edge of bar = due-date column
             const cy = by + bh / 2;    // vertical centre of the row
-            const halfSide = 10;       // 10 px gives a prominent 20×20 diamond
+            const halfSide = 10;       // 10 px gives a prominent 20Ã—20 diamond
 
             const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             diamond.setAttribute('points',
@@ -2972,7 +2972,7 @@
         // Phase 1: Enhance bars with priority dots and enforce min widths (no labels yet)
         enhanceBarsWithPriorityDots();
 
-        // Phase 2: Draw dependency lines — obstacle list only has bars + diamonds,
+        // Phase 2: Draw dependency lines â€” obstacle list only has bars + diamonds,
         // NOT labels (they don't exist yet), so lines route cleanly between bars.
         drawCustomDependencyLines();
 
@@ -3083,7 +3083,7 @@
                             tooltip.style.display = 'block';
                             tooltip.style.left = (me.clientX + 14) + 'px';
                             tooltip.style.top = (me.clientY - 32) + 'px';
-                            tooltip.textContent = formatDate(startDate) + '  →  ' + formatDate(endDate);
+                            tooltip.textContent = formatDate(startDate) + '  â†’  ' + formatDate(endDate);
                         }
                     }
                 };
@@ -3160,13 +3160,13 @@
     }
 
     // ============================================
-    // CUSTOM DEPENDENCY LINES — ELBOW CONNECTORS WITH MID-LINE CHEVRONS
+    // CUSTOM DEPENDENCY LINES â€” ELBOW CONNECTORS WITH MID-LINE CHEVRONS
     // ============================================
     function drawCustomDependencyLines() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // ── Cleanup ──
+        // â”€â”€ Cleanup â”€â”€
         ganttSvg.querySelectorAll('.custom-dep-group').forEach(el => el.remove());
         ganttSvg.querySelectorAll('g.arrow, path.arrow').forEach(el => {
             el.style.display = 'none';
@@ -3184,8 +3184,8 @@
             try { rect.remove(); } catch (e) { rect.style.display = 'none'; }
         });
 
-        // ── Build bar geometry for dependency line endpoints ──
-        const barGeo = {};      // keyed by task id — endpoint geometry
+        // â”€â”€ Build bar geometry for dependency line endpoints â”€â”€
+        const barGeo = {};      // keyed by task id â€” endpoint geometry
         const allItems = [...tasks, ...ganttMilestones];
 
         ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
@@ -3232,9 +3232,9 @@
             });
         });
 
-        // ── Monday.com-style dependency routing ──
+        // â”€â”€ Monday.com-style dependency routing â”€â”€
         // With topological sort ensuring predecessors are above successors,
-        // we use simple L-shape / S-shape connectors — no collision avoidance needed.
+        // we use simple L-shape / S-shape connectors â€” no collision avoidance needed.
         // Each line is O(1) to compute, scaling cleanly to 100+ tasks.
 
         const depTooltip = document.getElementById('dep-tooltip');
@@ -3245,7 +3245,7 @@
         const firstBarEl = ganttSvg.querySelector('.bar-wrapper');
         const insertParent = firstBarEl ? firstBarEl.parentNode : ganttSvg;
 
-        // ── Draw each dependency ──
+        // â”€â”€ Draw each dependency â”€â”€
         depPairs.forEach(dep => {
             const pred = barGeo[dep.from];
             const succ = barGeo[dep.to];
@@ -3266,12 +3266,12 @@
             const succIsRight = entryX > exitX + GAP;
 
             if (sameRow && succIsRight) {
-                // ── Case 1: Straight horizontal (same row, successor to the right) ──
+                // â”€â”€ Case 1: Straight horizontal (same row, successor to the right) â”€â”€
                 pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
                 segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
 
             } else if (succIsRight) {
-                // ── Case 2: L-shape (successor to the right, different row) ──
+                // â”€â”€ Case 2: L-shape (successor to the right, different row) â”€â”€
                 // Monday.com style: horizontal to midpoint, vertical drop, horizontal to entry
                 const goingDown = entryY > exitY;
                 let midX = (exitX + entryX) / 2;
@@ -3287,8 +3287,8 @@
                 ];
 
             } else {
-                // ── Case 3: S-shape (successor to the left or overlapping — rare after topo sort) ──
-                // Route: right stub → vertical past both bars → horizontal left → vertical to entry row → short entry
+                // â”€â”€ Case 3: S-shape (successor to the left or overlapping â€” rare after topo sort) â”€â”€
+                // Route: right stub â†’ vertical past both bars â†’ horizontal left â†’ vertical to entry row â†’ short entry
                 const goingDown = entryY >= exitY;
                 const stubX = exitX + GAP;
                 // Go below or above both bars
@@ -3318,7 +3318,7 @@
             pathEl.setAttribute('data-to', dep.to);
             group.appendChild(pathEl);
 
-            // ── Chevron near the successor entry (right-pointing, on last horizontal segment) ──
+            // â”€â”€ Chevron near the successor entry (right-pointing, on last horizontal segment) â”€â”€
             const lastSeg = segments[segments.length - 1];
             if (lastSeg && lastSeg.dir === 'right' && lastSeg.len >= 8) {
                 // Place chevron CHEVRON_OFFSET px before entry, or midway if segment is short
@@ -3525,10 +3525,10 @@
                 // Build enhanced tooltip content
                 let tooltipContent;
                 if (isMilestone) {
-                    const statusLabel = milestoneStatus === 'completed' ? '✅ Completed' : '🔷 Upcoming';
-                    // Use data-due-date (the original due date) — data-end is bumped +1 for bar width
+                    const statusLabel = milestoneStatus === 'completed' ? 'âœ… Completed' : 'ðŸ”· Upcoming';
+                    // Use data-due-date (the original due date) â€” data-end is bumped +1 for bar width
                     const displayDate = milestoneDueDate || startDate;
-                    tooltipContent = `<strong>◆ ${fullName}</strong>`;
+                    tooltipContent = `<strong>â—† ${fullName}</strong>`;
                     tooltipContent += `<div class="tooltip-row"><i class="fas fa-diamond" style="color:#7c3aed;"></i> Milestone</div>`;
                     tooltipContent += `<div class="tooltip-row"><i class="fas fa-circle-check"></i> ${statusLabel}</div>`;
                     tooltipContent += `<div class="tooltip-row"><i class="fas fa-calendar"></i> ${formatDateDisplay(displayDate)}</div>`;
@@ -3660,7 +3660,7 @@
         }
     }
 
-    // Phase 1: Add priority dots and enforce min bar widths (NO labels — those come after dep lines)
+    // Phase 1: Add priority dots and enforce min bar widths (NO labels â€” those come after dep lines)
     function enhanceBarsWithPriorityDots() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
@@ -3670,7 +3670,7 @@
 
         const MIN_BAR_WIDTH_MONTH = 80;
 
-        // Process regular tasks only — milestone labels are handled separately in PASS 2
+        // Process regular tasks only â€” milestone labels are handled separately in PASS 2
         const allItems = [...tasks];
         allItems.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
@@ -3709,7 +3709,7 @@
             dotGroup.appendChild(dot);
             barWrapper.appendChild(dotGroup);
 
-            // Hide the default label for now — it will be repositioned in positionBarLabels()
+            // Hide the default label for now â€” it will be repositioned in positionBarLabels()
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (existingLabel) {
                 existingLabel.textContent = '';
@@ -3732,7 +3732,7 @@
         const tablePanel = document.getElementById('gantt-table-panel');
         const tableVisible = tablePanel && tablePanel.offsetParent !== null && window.innerWidth > 576;
         if (tableVisible) {
-            // Hide all task labels — the fixed table replaces them
+            // Hide all task labels â€” the fixed table replaces them
             [...tasks].forEach(task => {
                 const bw = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
                 if (!bw) return;
@@ -3748,7 +3748,7 @@
             return;
         }
 
-        // ── Fallback: position labels inline (small screens or no table) ──
+        // â”€â”€ Fallback: position labels inline (small screens or no table) â”€â”€
         const vSegs = window._depVerticalSegments || [];
         const hSegs = window._depHorizontalSegments || [];
         const BUFFER = 12;
@@ -3952,7 +3952,7 @@
 
     function _saveDrawerField(taskId, payload) {
         const saveStatus = document.getElementById('drawer-save-status');
-        saveStatus.textContent = 'Saving…';
+        saveStatus.textContent = 'Savingâ€¦';
         saveStatus.style.color = '#94a3b8';
 
         fetch('/api/tasks/' + taskId + '/update-fields/', {
@@ -3984,7 +3984,7 @@
                 // Refresh left table to show updated lozenge/assignee
                 buildTaskTable();
 
-                saveStatus.textContent = 'Saved ✓';
+                saveStatus.textContent = 'Saved âœ“';
                 saveStatus.style.color = '#22c55e';
             } else {
                 saveStatus.textContent = 'Error: ' + (data.error || 'Save failed');
@@ -4031,7 +4031,7 @@
             if (isMilestone) rowClass += ' milestone-row';
             if (isCritical) rowClass += ' critical-row';
 
-            // ── Activity cell ──
+            // â”€â”€ Activity cell â”€â”€
             let activityHTML = '';
             if (isPhase) {
                 const isExpanded = expandedPhases.has(item.phaseName);
@@ -4047,7 +4047,7 @@
                 activityHTML += `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 40))}</span>`;
             }
 
-            // ── Status cell ──
+            // â”€â”€ Status cell â”€â”€
             let statusHTML = '';
             if (!isPhase && !isMilestone && item.status) {
                 const statusClass = 'status-' + (item.status || 'todo').replace('_', '-');
@@ -4055,7 +4055,7 @@
                 statusHTML = `<span class="status-lozenge ${escapeHTML(statusClass)}">${escapeHTML(statusLabel)}</span>`;
             }
 
-            // ── Responsible cell ──
+            // â”€â”€ Responsible cell â”€â”€
             let responsibleHTML = '';
             if (!isPhase) {
                 const fname = item.assignee_first_name || '';
@@ -4068,16 +4068,16 @@
                         : assignedTo.substring(0, 2).toUpperCase();
                     responsibleHTML = `<span class="table-assignee-avatar has-assignee" title="${escapeHTML(displayName)}">${escapeHTML(initials)}</span>`;
                 } else {
-                    responsibleHTML = `<span class="table-assignee-avatar unassigned" title="Unassigned">—</span>`;
+                    responsibleHTML = `<span class="table-assignee-avatar unassigned" title="Unassigned">â€”</span>`;
                 }
             }
 
-            // ── Progress cell ──
+            // â”€â”€ Progress cell â”€â”€
             let progressHTML = '';
             if (isPhase) {
                 progressHTML = '';
             } else if (isMilestone) {
-                const statusLabel = item.milestoneStatus === 'completed' ? '✅' : '◇';
+                const statusLabel = item.milestoneStatus === 'completed' ? 'âœ…' : 'â—‡';
                 progressHTML = `<span style="font-size:13px;" title="${escapeHTML(item.milestoneStatus || 'upcoming')}">${statusLabel}</span>`;
             } else {
                 const pct = parseInt(item.progress) || 0;
@@ -4087,7 +4087,7 @@
                 progressHTML = `<div class="mini-progress-bar"><div class="mini-progress-track"><div class="mini-progress-fill ${fillClass}" style="width:${pct}%"></div></div><span class="mini-progress-text">${pct}%</span></div>`;
             }
 
-            // ── Build row ──
+            // â”€â”€ Build row â”€â”€
             const isClickable = !isPhase && !isMilestone;
             const clickAttr = isPhase
                 ? ` onclick="togglePhase('${escapeHTML((item.phaseName || '').replace(/'/g, "\\'"))}', event)"`
@@ -4117,7 +4117,7 @@
     /** Truncate a string */
     function truncate(str, max) {
         if (!str) return '';
-        return str.length > max ? str.substring(0, max - 1) + '…' : str;
+        return str.length > max ? str.substring(0, max - 1) + 'â€¦' : str;
     }
 
     /**
@@ -4132,7 +4132,7 @@
         const tableRows = tableBody.querySelectorAll('.gantt-table-row');
         if (tableRows.length === 0) return;
 
-        // ── PASS 1: READ all SVG Y-positions into an array (no DOM writes) ──
+        // â”€â”€ PASS 1: READ all SVG Y-positions into an array (no DOM writes) â”€â”€
         const yPositions = [];
 
         ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
@@ -4184,7 +4184,7 @@
         const barPadding = currentViewMode === 'Month' ? 24 : 20;
         headerHeight = Math.max(0, headerHeight - barPadding / 2);
 
-        // Build a map: data-id → computed row height
+        // Build a map: data-id â†’ computed row height
         const heightMap = {};
         for (let i = 0; i < yPositions.length; i++) {
             const item = yPositions[i];
@@ -4197,7 +4197,7 @@
             heightMap[item.id] = Math.max(rowH, 28);
         }
 
-        // ── PASS 1.5: REORDER table rows to match SVG bar order ──
+        // â”€â”€ PASS 1.5: REORDER table rows to match SVG bar order â”€â”€
         // Frappe Gantt internally sorts bars by start date, which may differ
         // from the topological order used to build the table. Reorder the DOM
         // children so each table row lines up with its corresponding SVG bar.
@@ -4218,7 +4218,7 @@
         // Append any remaining rows that had no SVG match (unmapped)
         Object.values(rowsByTid).forEach(row => tableBody.appendChild(row));
 
-        // ── PASS 2: WRITE heights to table rows (no DOM reads) ──
+        // â”€â”€ PASS 2: WRITE heights to table rows (no DOM reads) â”€â”€
         const tableHeaderEl = document.querySelector('#gantt-table-panel .table-header');
         if (tableHeaderEl) {
             tableHeaderEl.style.height = headerHeight + 'px';
@@ -4470,7 +4470,7 @@
         }
     }
 
-    // Update task dates (legacy — kept for backward compatibility)
+    // Update task dates (legacy â€” kept for backward compatibility)
     function updateTaskDates(taskId, start, end) {
         rescheduleTask(taskId, {
             start_date: formatDate(start),
@@ -4482,7 +4482,7 @@
      * Recalculate and update a phase bar's SVG position/width after a child
      * task has been rescheduled.  Works by scanning the local `tasks` array
      * for the task's phase, deriving min-start / max-end, and patching the
-     * bar rect + label directly in the DOM — no full chart rebuild needed.
+     * bar rect + label directly in the DOM â€” no full chart rebuild needed.
      */
     function updatePhaseBarForTask(taskId) {
         if (!ganttChart || currentView !== 'phases') return;
@@ -4505,7 +4505,7 @@
         const minStart = new Date(Math.min(...starts));
         const maxEnd   = new Date(Math.max(...ends));
 
-        // Convert dates → SVG x using the same math as svgXToDate (inverse)
+        // Convert dates â†’ SVG x using the same math as svgXToDate (inverse)
         const opts = ganttChart.options || ganttChart.config;
         const colW = opts ? opts.column_width : 30;
         const step = opts ? (opts.step || 24) : 24;
@@ -4547,8 +4547,8 @@
     /**
      * Reschedule a task via the new PATCH endpoint.
      * @param {string|number} taskId
-     * @param {Object} payload  — { start_date?, due_date? } in YYYY-MM-DD format
-     * @param {Object} [origTask] — local task object for snap-back & drawer sync
+     * @param {Object} payload  â€” { start_date?, due_date? } in YYYY-MM-DD format
+     * @param {Object} [origTask] â€” local task object for snap-back & drawer sync
      */
     function rescheduleTask(taskId, payload, origTask) {
         fetch(`/api/tasks/${taskId}/reschedule/`, {
@@ -4904,7 +4904,7 @@
             
             const phaseBar = {
                 id: phaseId,
-                name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks)`,
+                name: `${phaseName} ${isExpanded ? 'â–¼' : 'â–¶'} (${data.task_count} tasks)`,
                 fullName: phaseName,
                 start: phaseStart,
                 end: phaseEnd,
@@ -4934,7 +4934,7 @@
                     return true;
                 });
 
-                // Topological sort: predecessors above successors → clean downward lines
+                // Topological sort: predecessors above successors â†’ clean downward lines
                 const regularTasks = topologicalSortTasks(expandedPhaseTasks);
                 
                 // Add all tasks + milestones in position-aware order for this phase
@@ -5157,7 +5157,7 @@
                 // Start with phase view (no filters active)
                 renderGanttWithPhases();
             } else {
-                // Filters are active — show all tasks directly so matched bars are visible
+                // Filters are active â€” show all tasks directly so matched bars are visible
                 updateViewButtons();
                 initGantt(currentViewMode);
             }
@@ -5171,11 +5171,7 @@
             window.history.back();
         } else {
             // Fallback to board detail if no history (demo-aware)
-            {% if is_demo_mode %}
-            window.location.href = '{% url "demo_board_detail" board.id %}';
-            {% else %}
             window.location.href = '{% url "board_detail" board.id %}';
-            {% endif %}
         }
     }
 
@@ -5591,7 +5587,7 @@
             slackText.setAttribute('y', 40);
             slackText.setAttribute('text-anchor', 'middle');
             slackText.setAttribute('class', 'fc-task-slack');
-            slackText.textContent = task.isCritical ? '🔥 Slack: 0 days' : `⏱ Slack: ${task.slack} days`;
+            slackText.textContent = task.isCritical ? 'ðŸ”¥ Slack: 0 days' : `â± Slack: ${task.slack} days`;
             g.appendChild(slackText);
 
             // Duration

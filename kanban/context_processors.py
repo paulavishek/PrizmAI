@@ -45,29 +45,34 @@ def demo_context(request):
         context['show_demo_limitations'] = False  # No limitations for authenticated users
         context['is_authenticated_exploring_demo'] = False
 
-        # V2 onboarding demo toggle (profile-based, not session-based)
+        # Single-tier personal sandbox (profile-based, not session-based)
         if request.user.is_authenticated:
             try:
-                context['is_viewing_demo'] = getattr(request.user.profile, 'is_viewing_demo', False)
+                profile = request.user.profile
+                context['is_viewing_demo'] = getattr(profile, 'is_viewing_demo', False)
             except Exception:
                 context['is_viewing_demo'] = False
 
-            # Sandbox state: session-based, validated against DB record
-            in_sandbox = request.session.get('in_sandbox', False)
-            if in_sandbox:
+            # Sandbox state: read from DB model, not session
+            is_browsing = False
+            sandbox_expires_at = None
+            if context['is_viewing_demo']:
                 try:
                     sandbox = request.user.demo_sandbox
-                    if sandbox.expires_at <= timezone.now():
-                        # Expired — clear
-                        request.session.pop('in_sandbox', None)
-                        in_sandbox = False
+                    if sandbox.expires_at > timezone.now():
+                        is_browsing = getattr(sandbox, 'is_browsing', False)
+                        sandbox_expires_at = sandbox.expires_at
+                    else:
+                        # Expired — auto-exit demo mode
+                        context['is_viewing_demo'] = False
                 except Exception:
-                    request.session.pop('in_sandbox', None)
-                    in_sandbox = False
-            context['in_sandbox'] = in_sandbox
+                    pass
+            context['is_browsing'] = is_browsing
+            context['sandbox_expires_at'] = sandbox_expires_at
         else:
             context['is_viewing_demo'] = False
-            context['in_sandbox'] = False
+            context['is_browsing'] = False
+            context['sandbox_expires_at'] = None
         
         # User gets their standard quotas (not demo quotas)
         if request.user.is_authenticated:

@@ -1689,7 +1689,7 @@ function aiConfirmCreateTasks() {
             {% if user == chat_room.created_by or user.is_staff %}
             <div class="chat-header-actions">
                 <div>
-                    {% if is_demo_mode %}
+                    {% if is_demo_account %}
                     <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-outline-success" onclick="showDemoBanner()" style="display: none; margin-right: 0.5rem;">
                         <i class="fas fa-info-circle me-1"></i> Show Multi-User Test Instructions
                     </button>
@@ -1699,7 +1699,7 @@ function aiConfirmCreateTasks() {
                     <i class="fas fa-trash me-1"></i> Clear All Messages
                 </button>
             </div>
-            {% elif is_demo_mode %}
+            {% elif is_demo_account %}
             <div class="chat-header-actions">
                 <div></div>
                 <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-success" onclick="showDemoBanner()" style="display: none;">
@@ -1709,7 +1709,7 @@ function aiConfirmCreateTasks() {
             {% endif %}
 
             <!-- Demo Mode Info Banner (Dismissible) -->
-            {% if is_demo_mode %}
+            {% if is_demo_account %}
             <div id="demoMultiUserBanner" class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); position: relative;">
                 <button type="button" class="btn-close" onclick="dismissDemoBanner()" style="position: absolute; top: 10px; right: 10px; font-size: 0.8rem;" aria-label="Close"></button>
                 <div class="d-flex align-items-start">

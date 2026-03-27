@@ -103,7 +103,7 @@
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="breadcrumb small">
             <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
             <li class="breadcrumb-item active">Skill Gap Analysis</li>
         </ol>
     </nav>
@@ -118,7 +118,7 @@
             <p class="text-muted mb-0">{{ board.name }}</p>
         </div>
         <div class="btn-group">
-            <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
             </a>
             <button class="btn btn-primary" onclick="runSkillAnalysis()">
@@ -136,14 +136,14 @@
             <div class="stat-card warning">
                 <h3>{{ skill_gaps.count }}</h3>
                 <p class="mb-0"><i class="fas fa-exclamation-triangle me-1"></i> Active Skill Gaps</p>
-                <small>{{ critical_gaps }} Critical • {{ high_gaps }} High</small>
+                <small>{{ critical_gaps }} Critical â€¢ {{ high_gaps }} High</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card info">
                 <h3>{{ development_plans.count }}</h3>
                 <p class="mb-0"><i class="fas fa-graduation-cap me-1"></i> Development Plans</p>
-                <small>{{ active_plans }} Active • {{ proposed_plans }} Proposed</small>
+                <small>{{ active_plans }} Active â€¢ {{ proposed_plans }} Proposed</small>
             </div>
         </div>
         <div class="col-md-3">
@@ -189,7 +189,7 @@
                                         <span class="badge bg-secondary ms-2">{{ gap.proficiency_level }}</span>
                                     </h6>
                                     <small class="text-muted">
-                                        Need {{ gap.gap_count }} more • {{ gap.affected_tasks.count }} tasks affected
+                                        Need {{ gap.gap_count }} more â€¢ {{ gap.affected_tasks.count }} tasks affected
                                     </small>
                                 </div>
                                 <div class="text-end">
@@ -317,7 +317,7 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">
                                     {% if plan.target_users.count == 0 %}No team members assigned{% else %}{{ plan.target_users.count }} team member{{ plan.target_users.count|pluralize }}{% endif %}
-                                    {% if plan.estimated_hours %} • {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
+                                    {% if plan.estimated_hours %} â€¢ {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
                                 </small>
                                 <div>
                                     <button class="btn btn-sm btn-outline-primary" onclick="viewPlanDetails({{ plan.id }})">
@@ -809,9 +809,9 @@
                     
                     <div class="mb-3">
                         <small class="text-muted">
-                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} • 
+                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} â€¢ 
                             <i class="fas fa-calendar ms-2 me-1"></i>${new Date(plan.created_at).toLocaleDateString()}
-                            ${plan.ai_suggested ? ' • <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
+                            ${plan.ai_suggested ? ' â€¢ <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
                         </small>
                     </div>
                 </div>
@@ -924,10 +924,10 @@
                 console.log('Updated summary card count to:', remainingPlans);
             }
             
-            // Update the subtitle in the summary card (Active • Proposed)
+            // Update the subtitle in the summary card (Active â€¢ Proposed)
             const summarySubtitle = document.querySelector('.stat-card.info small');
             if (summarySubtitle) {
-                summarySubtitle.textContent = `${activeCount} Active • ${proposedCount} Proposed`;
+                summarySubtitle.textContent = `${activeCount} Active â€¢ ${proposedCount} Proposed`;
                 console.log('Updated summary card subtitle');
             }
             
@@ -1406,16 +1406,12 @@
             window.history.back();
         } else {
             // Fallback to board detail if no history (demo-aware)
-            {% if is_demo_mode %}
-            window.location.href = '{% url "demo_board_detail" board.id %}';
-            {% else %}
             window.location.href = '{% url "board_detail" board.id %}';
-            {% endif %}
         }
     }
     
-    // Track skill gap analysis page view as a feature (for demo nudges)
-    {% if is_demo_mode %}
+    // Track skill gap analysis page view as a feature (for demo analytics)
+    {% if is_viewing_demo %}
     setTimeout(function() {
         fetch('/demo/track-event/', {
             method: 'POST',
@@ -1433,7 +1429,7 @@
             })
         })
         .then(response => response.json())
-        .then(data => console.log('📊 Feature tracked: skill_gap_analysis'))
+        .then(data => console.log('ðŸ“Š Feature tracked: skill_gap_analysis'))
         .catch(error => console.error('Error tracking feature:', error));
     }, 3000); // Track after 3 seconds of viewing
     {% endif %}
