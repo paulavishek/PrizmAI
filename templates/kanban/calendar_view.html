@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const calendarEl = document.getElementById('calendar');
     const userTz = document.body.getAttribute('data-user-timezone') || 'Asia/Kolkata';
-    const calendar = new FullCalendar.Calendar(calendarEl, {
+    var calendar = new FullCalendar.Calendar(calendarEl, {
         timeZone: userTz,
         initialView: 'dayGridMonth',
         headerToolbar: {
@@ -400,7 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
             // P1-08: In list view, collapse multi-day spans to a single entry on due date
-            if (calendar.view && calendar.view.type.startsWith('list')) {
+            if (calendar && calendar.view && calendar.view.type.startsWith('list')) {
                 filtered = filtered.map(function(e) {
                     var due = e.extendedProps && e.extendedProps.due_date_str;
                     if (due && e.start !== due) {

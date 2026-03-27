@@ -2632,6 +2632,8 @@ def board_calendar(request, board_id):
     import json as _json
 
     # Collect all board members and map user_id → color (for the legend)
+    from django.db.models import Q as _CalQ
+    _CalUser = User
     _mem_qs = _CalUser.objects.filter(
         _CalQ(board_memberships__board=board) | _CalQ(created_boards=board)
     ).distinct().order_by('username')
