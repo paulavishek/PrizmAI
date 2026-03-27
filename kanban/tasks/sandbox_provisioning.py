@@ -77,7 +77,10 @@ def provision_sandbox_task(self, user_id):
     """
     from django.contrib.auth import get_user_model
     from kanban.models import Board, DemoSandbox
-    from kanban.sandbox_views import _duplicate_board, _purge_existing_sandbox
+    from kanban.sandbox_views import (
+        _duplicate_board, _purge_existing_sandbox,
+        _join_demo_org, _reassign_demo_tasks_to_user,
+    )
     from kanban.utils.demo_protection import allow_demo_writes
 
     User = get_user_model()
@@ -147,6 +150,10 @@ def provision_sandbox_task(self, user_id):
             expires_at=timezone.now() + timedelta(hours=24),
             is_browsing=True,
         )
+
+        # Join demo org and reassign a few tasks to the real user
+        _join_demo_org(user)
+        _reassign_demo_tasks_to_user(sandbox, user)
 
     # Set the profile flag
     try:
