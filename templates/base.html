@@ -410,8 +410,31 @@
     </div>
     {% endif %}
 
-    {# ── Demo Data Read-Only Notice (global — all pages in demo mode) ── #}
-    {% if is_viewing_demo %}
+    {# ── Sandbox Active Banner (Tier 2 — full write access) ── #}
+    {% if in_sandbox %}
+    <div class="sandbox-active-banner" role="status">
+        <div class="sandbox-active-inner">
+            <div class="sandbox-active-icon">
+                <i class="fas fa-flask"></i>
+            </div>
+            <div class="sandbox-active-text">
+                <strong>You're in your private sandbox</strong>
+                <span class="sandbox-active-detail">
+                    &mdash; You have full edit access. Changes here won't affect the demo data.
+                    <span id="sandbox-time-remaining"></span>
+                </span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-light ms-auto me-2" onclick="exitSandbox()">
+                <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
+            </button>
+            <button type="button" class="sandbox-active-dismiss" onclick="this.closest('.sandbox-active-banner').classList.add('d-none')" aria-label="Dismiss notice">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    {# ── Demo Data Read-Only Notice (Tier 1 — read-only demo, hidden when sandbox active) ── #}
+    {% elif is_viewing_demo %}
     <div class="demo-readonly-banner" role="status">
         <div class="demo-readonly-inner">
             <div class="demo-readonly-icon">
@@ -744,30 +767,45 @@
         fetch('/sandbox/status/', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var banner = document.getElementById('sandbox-expiry-banner');
-                if (!banner) return;
-                if (data.has_sandbox && data.show_warning_banner) {
-                    var hoursEl = document.getElementById('sandbox-hours-left');
-                    if (hoursEl) {
-                        var h = parseInt(data.hours_remaining, 10);
-                        hoursEl.textContent = h <= 1 ? 'less than 1 hour' : h + ' hours';
+                // Update expiry warning banner
+                var expiryBanner = document.getElementById('sandbox-expiry-banner');
+                if (expiryBanner) {
+                    if (data.in_sandbox && data.show_warning_banner) {
+                        var hoursEl = document.getElementById('sandbox-hours-left');
+                        if (hoursEl) {
+                            var h = parseInt(data.hours_remaining, 10);
+                            hoursEl.textContent = h <= 1 ? 'less than 1 hour' : h + ' hours';
+                        }
+                        expiryBanner.classList.remove('d-none');
+                    } else {
+                        expiryBanner.classList.add('d-none');
                     }
-                    banner.classList.remove('d-none');
-                } else {
-                    banner.classList.add('d-none');
+                }
+                // Update time remaining in sandbox active banner
+                var timeEl = document.getElementById('sandbox-time-remaining');
+                if (timeEl && data.has_sandbox) {
+                    var hrs = parseFloat(data.hours_remaining);
+                    if (hrs > 1) {
+                        timeEl.textContent = '(' + Math.round(hrs) + 'h remaining)';
+                    } else if (hrs > 0) {
+                        timeEl.textContent = '(less than 1h remaining)';
+                    }
+                }
+                // If sandbox expired while page is open, reload to return to Tier 1
+                if (data.has_sandbox && data.hours_remaining <= 0) {
+                    window.location.reload();
                 }
             })
             .catch(function() {});
     }
 
     window.showSaveBoardModal = function() {
-        // Redirect to sandbox management page; a modal overlay could be added later
         window.location.href = '/sandbox/status/';
     };
 
     window.createSandbox = function() {
         var btn = document.querySelector('.btn-sandbox-cta');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating\u2026'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Entering\u2026'; }
         fetch('/sandbox/create/', {
             method: 'POST',
             headers: {
@@ -777,37 +815,36 @@
         })
         .then(function(r) { return r.json().then(function(d) { return {status: r.status, body: d}; }); })
         .then(function(res) {
-            if (res.body.status === 'created') {
+            if (res.body.status === 'created' || res.body.status === 'entered') {
+                // Both create and enter redirect to sandbox board
                 window.location.href = res.body.redirect_url || '/dashboard/';
-            } else if (res.body.status === 'confirm_needed') {
-                if (confirm(res.body.message)) {
-                    // Re-send with confirm=1
-                    var fd = new FormData(); fd.append('confirm', '1');
-                    fetch('/sandbox/create/', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': getCsrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
-                        body: fd
-                    })
-                    .then(function(r2) { return r2.json(); })
-                    .then(function(d2) {
-                        if (d2.status === 'created') {
-                            window.location.href = d2.redirect_url || '/dashboard/';
-                        } else {
-                            alert(d2.error || 'Could not create sandbox.');
-                            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Try in My Sandbox'; }
-                        }
-                    });
-                } else {
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Try in My Sandbox'; }
-                }
             } else {
-                alert(res.body.error || 'Could not create sandbox.');
+                alert(res.body.error || 'Could not enter sandbox.');
                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Try in My Sandbox'; }
             }
         })
         .catch(function() {
             alert('Network error — please try again.');
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Try in My Sandbox'; }
+        });
+    };
+
+    window.exitSandbox = function() {
+        // Exit sandbox mode (return to Tier 1 read-only demo) without deleting sandbox
+        fetch('/sandbox/exit-mode/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            window.location.href = '/dashboard/';
+        })
+        .catch(function() {
+            // Fallback: just reload to dashboard
+            window.location.href = '/dashboard/';
         });
     };
 
@@ -823,9 +860,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.status === 'deleted') {
-                var banner = document.getElementById('sandbox-expiry-banner');
-                if (banner) banner.classList.add('d-none');
-                alert('Your sandbox has been deleted.');
+                window.location.href = '/dashboard/';
             }
         })
         .catch(function() {});

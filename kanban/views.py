@@ -76,10 +76,34 @@ def dashboard(request):
     # v2 demo mode: separate demo boards from real boards via toggle
     demo_mode = getattr(profile, 'is_viewing_demo', False)
     
+    # Sandbox mode: session-based, overrides demo_mode board selection
+    in_sandbox = request.session.get('in_sandbox', False)
+    sandbox_obj = None
+    if in_sandbox:
+        from kanban.models import DemoSandbox
+        try:
+            sandbox_obj = request.user.demo_sandbox
+            if sandbox_obj.expires_at <= timezone.now():
+                # Expired
+                request.session.pop('in_sandbox', None)
+                in_sandbox = False
+                sandbox_obj = None
+        except DemoSandbox.DoesNotExist:
+            request.session.pop('in_sandbox', None)
+            in_sandbox = False
+    
     # Org Admins see all boards regardless of membership
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
     
-    if demo_mode:
+    if in_sandbox and sandbox_obj:
+        # Sandbox mode: show only the sandbox-duplicated boards
+        boards = Board.objects.filter(
+            owner=request.user,
+            is_official_demo_board=False,
+            is_seed_demo_data=False,
+            created_at__gte=sandbox_obj.created_at,
+        ).exclude(pk=sandbox_obj.saved_board_id).distinct()
+    elif demo_mode:
         # Demo mode: show official demo boards + boards the user created
         # via Spectra while exploring demo mode.
         boards = Board.objects.filter(
@@ -280,7 +304,16 @@ def dashboard(request):
     user_board_ids = list(boards.values_list('id', flat=True))
 
     # Missions the user has direct ownership of or demo missions
-    if demo_mode:
+    if in_sandbox and sandbox_obj:
+        # Sandbox mode: only user-created missions (no demo missions)
+        missions_qs = Mission.objects.filter(
+            Q(created_by=request.user) |
+            Q(strategies__boards__id__in=user_board_ids)
+        ).filter(is_demo=False, is_seed_demo_data=False
+        ).distinct().select_related('organization_goal').prefetch_related(
+            'strategies__boards'
+        ).order_by('-created_at')
+    elif demo_mode:
         missions_qs = Mission.objects.filter(
             Q(is_demo=True) | Q(is_seed_demo_data=True) |
             Q(strategies__boards__id__in=user_board_ids)
@@ -1026,6 +1059,7 @@ def dashboard(request):
             'now': timezone.now(),  # For comparing dates in the template
         # Demo mode / onboarding v2
         'demo_mode': demo_mode,
+        'in_sandbox': in_sandbox,
         'onboarding_profile': profile,
         # Mission tree  
         'mission_tree': mission_tree,
@@ -1078,8 +1112,9 @@ def toggle_demo_mode(request):
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         _assign_demo_tasks_to_real_user(request.user, demo_boards)
     else:
-        # Leaving demo — restore original demo-user assignees
+        # Leaving demo — restore original demo-user assignees and exit sandbox
         _restore_demo_task_assignments(request.user)
+        request.session.pop('in_sandbox', None)
 
     return redirect('dashboard')
 

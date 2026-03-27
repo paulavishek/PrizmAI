@@ -737,6 +737,7 @@ def create_mission(request):
             status=status,
             organization_goal=organization_goal,
             created_by=request.user,
+            owner=request.user,
         )
         messages.success(request, f'Mission "{mission.name}" created successfully!')
         return redirect('mission_detail', mission_id=mission.id)
@@ -799,7 +800,7 @@ def delete_mission(request, mission_id):
 
     if not request.user.has_perm('prizmai.edit_mission', mission):
         messages.error(request, 'You do not have permission to delete this mission.')
-        return redirect('mission_detail', mission_id=mission.id)
+        return redirect('mission_list')
 
     if request.method == 'POST':
         name = mission.name
