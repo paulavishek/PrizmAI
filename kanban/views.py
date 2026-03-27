@@ -97,11 +97,11 @@ def dashboard(request):
     
     if in_sandbox and sandbox_obj:
         # Sandbox mode: show only the sandbox-duplicated boards
+        # (owner=user + non-demo flags uniquely identify sandbox copies)
         boards = Board.objects.filter(
             owner=request.user,
             is_official_demo_board=False,
             is_seed_demo_data=False,
-            created_at__gte=sandbox_obj.created_at,
         ).exclude(pk=sandbox_obj.saved_board_id).distinct()
     elif demo_mode:
         # Demo mode: show official demo boards + boards the user created

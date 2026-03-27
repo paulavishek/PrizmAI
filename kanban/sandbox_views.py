@@ -178,7 +178,7 @@ def _purge_existing_sandbox(user):
         Board.objects.filter(
             owner=user,
             is_official_demo_board=False,
-            created_at__gte=sandbox.created_at,
+            is_seed_demo_data=False,
         ).exclude(
             pk=sandbox.saved_board_id
         ).delete()
@@ -227,7 +227,6 @@ def create_sandbox(request):
                     owner=user,
                     is_official_demo_board=False,
                     is_seed_demo_data=False,
-                    created_at__gte=existing.created_at,
                 ).exclude(pk=existing.saved_board_id).first()
                 redirect_url = f'/boards/{sandbox_board.id}/' if sandbox_board else '/dashboard/'
                 return JsonResponse({
