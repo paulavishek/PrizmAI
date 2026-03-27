@@ -73,42 +73,19 @@ def dashboard(request):
     from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     # MVP Mode: Get all boards the user has access to
-    # v2 demo mode: separate demo boards from real boards via toggle
+    # Single-tier demo: when is_viewing_demo, show user's personal sandbox copies
     demo_mode = getattr(profile, 'is_viewing_demo', False)
-    
-    # Sandbox mode: session-based, overrides demo_mode board selection
-    in_sandbox = request.session.get('in_sandbox', False)
-    sandbox_obj = None
-    if in_sandbox:
-        from kanban.models import DemoSandbox
-        try:
-            sandbox_obj = request.user.demo_sandbox
-            if sandbox_obj.expires_at <= timezone.now():
-                # Expired
-                request.session.pop('in_sandbox', None)
-                in_sandbox = False
-                sandbox_obj = None
-        except DemoSandbox.DoesNotExist:
-            request.session.pop('in_sandbox', None)
-            in_sandbox = False
     
     # Org Admins see all boards regardless of membership
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
     
-    if in_sandbox and sandbox_obj:
-        # Sandbox mode: show only the sandbox-duplicated boards
-        # (owner=user + non-demo flags uniquely identify sandbox copies)
+    if demo_mode:
+        # Single-tier demo: show only this user's personal sandbox copies
+        # (owner=user + not official demo template boards)
         boards = Board.objects.filter(
             owner=request.user,
             is_official_demo_board=False,
             is_seed_demo_data=False,
-        ).exclude(pk=sandbox_obj.saved_board_id).distinct()
-    elif demo_mode:
-        # Demo mode: show official demo boards + boards the user created
-        # via Spectra while exploring demo mode.
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
         ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards
@@ -304,19 +281,12 @@ def dashboard(request):
     user_board_ids = list(boards.values_list('id', flat=True))
 
     # Missions the user has direct ownership of or demo missions
-    if in_sandbox and sandbox_obj:
-        # Sandbox mode: only user-created missions (no demo missions)
+    if demo_mode:
+        # Single-tier demo: only user-created missions in sandbox (no shared demo missions)
         missions_qs = Mission.objects.filter(
             Q(created_by=request.user) |
             Q(strategies__boards__id__in=user_board_ids)
         ).filter(is_demo=False, is_seed_demo_data=False
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    elif demo_mode:
-        missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True) |
-            Q(strategies__boards__id__in=user_board_ids)
         ).distinct().select_related('organization_goal').prefetch_related(
             'strategies__boards'
         ).order_by('-created_at')
@@ -1059,7 +1029,6 @@ def dashboard(request):
             'now': timezone.now(),  # For comparing dates in the template
         # Demo mode / onboarding v2
         'demo_mode': demo_mode,
-        'in_sandbox': in_sandbox,
         'onboarding_profile': profile,
         # Mission tree  
         'mission_tree': mission_tree,
@@ -1095,28 +1064,62 @@ def dashboard(request):
 
 @login_required
 def toggle_demo_mode(request):
-    """POST /toggle-demo-mode/ — flip the demo viewing mode and redirect to dashboard."""
+    """POST /toggle-demo-mode/ — enter or leave demo mode.
+
+    Entering demo:
+      - If user already has a non-expired sandbox → just flip is_viewing_demo on
+      - Otherwise → kick off async provisioning via Celery and return JSON
+        with a task_id so the frontend can stream progress via WebSocket.
+    Leaving demo:
+      - Flip is_viewing_demo off.  Sandbox boards are NOT deleted — they
+        persist until expiry or manual reset so the user can re-enter.
+    """
     if request.method != 'POST':
         return redirect('dashboard')
+
     profile = request.user.profile
-    profile.is_viewing_demo = not profile.is_viewing_demo
-    profile.save(update_fields=['is_viewing_demo'])
+    from kanban.models import DemoSandbox
 
-    from kanban.demo_views import (
-        _assign_demo_tasks_to_real_user,
-        _restore_demo_task_assignments,
-    )
+    if not profile.is_viewing_demo:
+        # ── Entering demo ──────────────────────────────────────────
+        # Check for existing non-expired sandbox
+        try:
+            existing = request.user.demo_sandbox
+            if existing.expires_at > timezone.now():
+                # Re-enter existing sandbox instantly
+                profile.is_viewing_demo = True
+                profile.save(update_fields=['is_viewing_demo'])
+                return redirect('dashboard')
+            else:
+                # Expired — will be cleaned up by provisioning task
+                pass
+        except DemoSandbox.DoesNotExist:
+            pass
 
-    if profile.is_viewing_demo:
-        # Entering demo — assign some demo tasks to the real user
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        _assign_demo_tasks_to_real_user(request.user, demo_boards)
+        # No active sandbox — provision asynchronously
+        from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+        result = provision_sandbox_task.delay(request.user.id)
+
+        # If this is an AJAX request, return JSON for WebSocket streaming
+        is_ajax = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or request.content_type == 'application/json'
+        )
+        if is_ajax:
+            return JsonResponse({
+                'status': 'provisioning',
+                'task_id': result.id,
+            })
+
+        # Fallback for non-JS: redirect to dashboard (Celery will finish in background)
+        profile.is_viewing_demo = True
+        profile.save(update_fields=['is_viewing_demo'])
+        return redirect('dashboard')
     else:
-        # Leaving demo — restore original demo-user assignees and exit sandbox
-        _restore_demo_task_assignments(request.user)
-        request.session.pop('in_sandbox', None)
-
-    return redirect('dashboard')
+        # ── Leaving demo ───────────────────────────────────────────
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['is_viewing_demo'])
+        return redirect('dashboard')
 
 
 @login_required
@@ -1139,10 +1142,11 @@ def board_list(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
     if demo_mode:
-        # Demo mode: show official demo boards + boards created via Spectra
+        # Single-tier demo: show only user's personal sandbox copies
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+            owner=request.user,
+            is_official_demo_board=False,
+            is_seed_demo_data=False,
         ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards

@@ -168,19 +168,14 @@
                     <h2><i class="fas fa-chart-area me-2"></i>Scope Dashboard</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
-                            {% if is_demo_mode %}
-                            <li class="breadcrumb-item"><a href="{% url 'demo_dashboard' %}">Demo Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="{% url 'demo_board_detail' board.id %}">{{ board.name }}</a></li>
-                            {% else %}
                             <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
-                            {% endif %}
                             <li class="breadcrumb-item active">Scope</li>
                         </ol>
                     </nav>
                 </div>
                 <div>
-                    <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
+                    <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary me-2">
                         <i class="fas fa-arrow-left me-1"></i> Back
                     </a>
                     <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary me-2">
@@ -793,8 +788,8 @@
                                             {% if snap.is_baseline %}selected{% endif %}>
                                         {{ snap.snapshot_date|date:"M d, Y H:i" }}
                                         {% if snap.is_baseline %}(current baseline){% endif %}
-                                        — {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
-                                        {% if snap.notes %} — {{ snap.notes|truncatechars:40 }}{% endif %}
+                                        â€” {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
+                                        {% if snap.notes %} â€” {{ snap.notes|truncatechars:40 }}{% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -849,15 +844,15 @@
                                 <div class="row">
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Tasks</small>
-                                        <div class="fw-bold fs-5" id="previewTasks">—</div>
+                                        <div class="fw-bold fs-5" id="previewTasks">â€”</div>
                                     </div>
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Complexity</small>
-                                        <div class="fw-bold fs-5" id="previewComplexity">—</div>
+                                        <div class="fw-bold fs-5" id="previewComplexity">â€”</div>
                                     </div>
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Avg Complexity</small>
-                                        <div class="fw-bold fs-5" id="previewAvg">—</div>
+                                        <div class="fw-bold fs-5" id="previewAvg">â€”</div>
                                     </div>
                                 </div>
                             </div>
@@ -890,7 +885,7 @@ function updateManualPreview() {
         preview.style.display = 'block';
         document.getElementById('previewTasks').textContent = tasks;
         document.getElementById('previewComplexity').textContent = complexity + ' pts';
-        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : '—';
+        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : 'â€”';
     } else {
         preview.style.display = 'none';
     }

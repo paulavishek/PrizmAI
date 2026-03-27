@@ -1,14 +1,17 @@
 """
-Ephemeral Sandbox Views — Phase 7 of RBAC implementation.
+Sandbox Views — single-tier personal demo system.
 
 Each real user gets their own private 24-hour copy of the demo template boards.
 Master Demo Template boards (is_official_demo_board=True) are NEVER modified.
 
 Lifecycle:
-  POST /sandbox/create/   → duplicate all template boards for requesting user
-  POST /sandbox/save/     → designate one board to survive sandbox deletion
-  POST /sandbox/delete/   → delete sandbox immediately (user pressed "I'm done")
-  GET  /sandbox/status/   → JSON status for in-app banner polling
+  POST /toggle-demo-mode/           → provision sandbox (async via Celery) or re-enter existing
+  POST /demo/start-experimenting/   → flip is_browsing to False (enable editing)
+  POST /demo/reset-mine/            → wipe user's sandbox and re-provision
+  POST /sandbox/save/               → designate one board to survive sandbox deletion
+  POST /sandbox/delete/             → delete sandbox immediately
+  GET  /sandbox/status/             → JSON status for in-app banner polling
+  POST /sandbox/extend/             → extend sandbox expiry by 1 hour
 """
 import logging
 from datetime import timedelta
@@ -19,7 +22,6 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from kanban.decorators import demo_write_guard
 from kanban.utils.demo_protection import allow_demo_writes
 
 logger = logging.getLogger(__name__)
@@ -190,87 +192,34 @@ def _purge_existing_sandbox(user):
 # ── Views ─────────────────────────────────────────────────────────────────────
 
 @login_required
-@demo_write_guard
 @require_http_methods(["POST"])
-def create_sandbox(request):
-    """
-    Create or enter an ephemeral sandbox for the requesting user.
-
-    If the user already has an active (non-expired) sandbox, enter it by
-    setting the session flag and redirecting.  If the POST body contains
-    force_new=1, offer to replace the existing sandbox (confirm=1 to proceed).
-    """
-    from kanban.models import Board, DemoSandbox
-
-    user = request.user
-
-    # Check for existing sandbox
+def toggle_browsing(request):
+    """POST /demo/start-experimenting/ — flip is_browsing to False."""
+    from kanban.models import DemoSandbox
     try:
-        existing = user.demo_sandbox
-        # Check if expired
-        if existing.expires_at > timezone.now():
-            # Active sandbox exists
-            if request.POST.get('force_new') == '1':
-                # User wants to replace — ask for confirmation
-                if request.POST.get('confirm') != '1':
-                    return JsonResponse({
-                        'status': 'confirm_needed',
-                        'message': 'Starting a new sandbox deletes your current one. Continue?',
-                        'expires_at': existing.expires_at.isoformat(),
-                    }, status=409)
-                _purge_existing_sandbox(user)
-            else:
-                # Enter existing sandbox (default behavior)
-                request.session['in_sandbox'] = True
-                # Find the first sandbox board
-                sandbox_board = Board.objects.filter(
-                    owner=user,
-                    is_official_demo_board=False,
-                    is_seed_demo_data=False,
-                ).exclude(pk=existing.saved_board_id).first()
-                redirect_url = f'/boards/{sandbox_board.id}/' if sandbox_board else '/dashboard/'
-                return JsonResponse({
-                    'status': 'entered',
-                    'redirect_url': redirect_url,
-                    'expires_at': existing.expires_at.isoformat(),
-                })
-        else:
-            # Expired — purge silently
-            _purge_existing_sandbox(user)
+        sandbox = request.user.demo_sandbox
+        sandbox.is_browsing = False
+        sandbox.save(update_fields=['is_browsing'])
+        return JsonResponse({'status': 'ok', 'is_browsing': False})
     except DemoSandbox.DoesNotExist:
-        pass
+        return JsonResponse({'error': 'No active sandbox.'}, status=404)
 
-    template_boards = Board.objects.filter(is_official_demo_board=True).order_by('name')
-    if not template_boards.exists():
-        return JsonResponse({'error': 'No demo template boards found.'}, status=404)
 
-    # Bypass demo protection: we are creating NEW user-owned copies, not
-    # modifying the original demo data.
-    new_boards = []
-    with allow_demo_writes():
-        for template in template_boards:
-            try:
-                new_board = _duplicate_board(template, user)
-                new_boards.append(new_board)
-            except Exception as e:
-                logger.error(f"Error duplicating board '{template.name}' for {user.username}: {e}")
+@login_required
+@require_http_methods(["POST"])
+def reset_my_demo(request):
+    """POST /demo/reset-mine/ — wipe user's sandbox and re-provision via Celery."""
+    from kanban.models import DemoSandbox
 
-        if not new_boards:
-            return JsonResponse({'error': 'Sandbox creation failed — no boards duplicated.'}, status=500)
+    _purge_existing_sandbox(request.user)
 
-        sandbox = DemoSandbox.objects.create(
-            user=user,
-            expires_at=timezone.now() + timedelta(hours=24),
-        )
-
-    # Activate sandbox session
-    request.session['in_sandbox'] = True
+    # Re-provision asynchronously
+    from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+    result = provision_sandbox_task.delay(request.user.id)
 
     return JsonResponse({
-        'status': 'created',
-        'boards_created': len(new_boards),
-        'expires_at': sandbox.expires_at.isoformat(),
-        'redirect_url': f'/boards/{new_boards[0].id}/' if new_boards else '/dashboard/',
+        'status': 'resetting',
+        'task_id': result.id,
     })
 
 
@@ -313,7 +262,7 @@ def save_sandbox_board(request):
 @login_required
 @require_http_methods(["POST"])
 def delete_sandbox(request):
-    """Immediately delete the user's sandbox (user pressed 'I'm done')."""
+    """Immediately delete the user's sandbox and exit demo mode."""
     from kanban.models import DemoSandbox
 
     user = request.user
@@ -326,18 +275,15 @@ def delete_sandbox(request):
     _delete_sandbox(sandbox)
     sandbox.delete()
 
-    # Clear sandbox session flag
-    request.session.pop('in_sandbox', None)
+    # Exit demo mode
+    try:
+        profile = user.profile
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['is_viewing_demo'])
+    except Exception:
+        pass
 
     return JsonResponse({'status': 'deleted'})
-
-
-@login_required
-@require_http_methods(["POST"])
-def exit_sandbox_mode(request):
-    """Exit sandbox mode (return to Tier 1 read-only demo) without deleting sandbox data."""
-    request.session.pop('in_sandbox', None)
-    return JsonResponse({'status': 'exited'})
 
 
 @login_required
@@ -350,7 +296,7 @@ def sandbox_status(request):
     from kanban.models import DemoSandbox
 
     user = request.user
-    in_sandbox = request.session.get('in_sandbox', False)
+    is_viewing_demo = getattr(getattr(user, 'profile', None), 'is_viewing_demo', False)
     try:
         sandbox = user.demo_sandbox
         now = timezone.now()
@@ -358,24 +304,21 @@ def sandbox_status(request):
         hours_left = time_left.total_seconds() / 3600
 
         if hours_left <= 0:
-            # Sandbox expired — clear session flag
-            request.session.pop('in_sandbox', None)
-            in_sandbox = False
+            # Sandbox expired
+            is_viewing_demo = False
 
         return JsonResponse({
             'has_sandbox': True,
-            'in_sandbox': in_sandbox and hours_left > 0,
+            'is_viewing_demo': is_viewing_demo and hours_left > 0,
+            'is_browsing': sandbox.is_browsing,
             'expires_at': sandbox.expires_at.isoformat(),
             'hours_remaining': round(hours_left, 1),
             'warning_sent': sandbox.warning_sent,
             'saved_board_id': sandbox.saved_board_id,
-            'show_warning_banner': in_sandbox and (hours_left <= 2 or sandbox.warning_sent),
+            'show_warning_banner': is_viewing_demo and (hours_left <= 2 or sandbox.warning_sent),
         })
     except DemoSandbox.DoesNotExist:
-        # No sandbox record — clear stale session flag
-        if in_sandbox:
-            request.session.pop('in_sandbox', None)
-        return JsonResponse({'has_sandbox': False, 'in_sandbox': False})
+        return JsonResponse({'has_sandbox': False, 'is_viewing_demo': False})
 
 
 MAX_SANDBOX_EXTENSIONS = 3

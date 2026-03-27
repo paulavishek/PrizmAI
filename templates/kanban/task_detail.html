@@ -53,15 +53,9 @@
                 <button onclick="goBack()" class="btn btn-sm btn-outline-secondary" title="Back to board">
                     <i class="fas fa-arrow-left"></i>
                 </button>
-                {% if is_demo_mode %}
-                <a href="{% url 'demo_board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-secondary" title="View on board">
-                    <i class="fas fa-columns"></i>
-                </a>
-                {% else %}
                 <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-secondary" title="View on board">
                     <i class="fas fa-columns"></i>
                 </a>
-                {% endif %}
             </div>
             <!-- 3-dot menu (Delete, Export) -->
             <div class="dropdown">
@@ -2910,11 +2904,7 @@
             window.location.href = originalReferrer;
         } else {
             // Fallback to board detail if no referrer (demo-aware)
-            {% if is_demo_mode %}
-            window.location.href = '{% url "demo_board_detail" task.column.board.id %}';
-            {% else %}
             window.location.href = '{% url "board_detail" task.column.board.id %}';
-            {% endif %}
         }
     }
 

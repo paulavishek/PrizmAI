@@ -153,7 +153,7 @@
     }
 
     .actions-list li:before {
-        content: "→";
+        content: "â†’";
         position: absolute;
         left: 0;
         color: #667eea;
@@ -376,7 +376,7 @@
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="breadcrumb small">
             <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
             <li class="breadcrumb-item active">AI Coach</li>
         </ol>
     </nav>
@@ -388,10 +388,10 @@
                 <h1 class="coach-title">
                     <i class="fas fa-user-graduate text-primary me-2"></i>AI Coach
                 </h1>
-                <p class="coach-subtitle mb-0">{{ board.name }} — Proactive guidance to improve your project</p>
+                <p class="coach-subtitle mb-0">{{ board.name }} â€” Proactive guidance to improve your project</p>
             </div>
             <div class="text-end">
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-2"></i>Back to Board
                 </a>
                 <button onclick="generateSuggestions()" class="btn btn-primary ms-2">
@@ -482,7 +482,7 @@
     {% if not total_active %}
     <div class="empty-state">
         <i class="fas fa-check-circle"></i>
-        <h3>All Looking Good! 🎉</h3>
+        <h3>All Looking Good! ðŸŽ‰</h3>
         <p class="text-muted">No coaching suggestions right now. Your project is running smoothly.</p>
         <button onclick="generateSuggestions()" class="btn btn-generate mt-3">
             <i class="fas fa-sync-alt me-2"></i>Generate New Suggestions
@@ -619,21 +619,13 @@ function goBack() {
     // Don't use browser back if coming from suggestion detail (prevents loop)
     if (document.referrer && document.referrer.includes('/coach/suggestion/')) {
         // Coming from suggestion detail, go directly to board
-        {% if is_demo_mode %}
-        window.location.href = '{% url "demo_board_detail" board.id %}';
-        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
-        {% endif %}
     } else if (document.referrer && document.referrer !== window.location.href) {
         // Normal back navigation
         window.history.back();
     } else {
         // Fallback to board detail if no history (demo-aware)
-        {% if is_demo_mode %}
-        window.location.href = '{% url "demo_board_detail" board.id %}';
-        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
-        {% endif %}
     }
 }
 </script>

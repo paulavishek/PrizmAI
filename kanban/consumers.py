@@ -64,3 +64,40 @@ class AITaskConsumer(AsyncWebsocketConsumer):
             'type': 'ai_error',
             'message': event.get('message', 'An unexpected error occurred.'),
         }))
+
+
+class SandboxProvisionConsumer(AsyncWebsocketConsumer):
+    """Stream sandbox provisioning progress to the client via WebSocket."""
+
+    async def connect(self):
+        user = self.scope.get('user')
+        if not user or user.is_anonymous:
+            await self.close()
+            return
+
+        self.group_name = f'sandbox_provision_{user.id}'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def provision_status(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'provision_status',
+            'message': event.get('message', ''),
+            'progress': event.get('progress', 0),
+        }))
+
+    async def provision_result(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'provision_result',
+            'data': event.get('data', {}),
+        }))
+
+    async def provision_error(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'provision_error',
+            'message': event.get('message', 'Provisioning failed.'),
+        }))

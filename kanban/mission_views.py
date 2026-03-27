@@ -557,18 +557,12 @@ def mission_list(request):
     except UserProfile.DoesNotExist:
         profile = None
 
-    in_sandbox = request.session.get('in_sandbox', False)
     demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
 
-    if in_sandbox:
+    if demo_mode:
         # Sandbox: show only user-created non-demo missions
         missions = Mission.objects.filter(
             created_by=request.user, is_demo=False, is_seed_demo_data=False,
-        )
-    elif demo_mode:
-        # Demo read-only: show only demo missions
-        missions = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True)
         )
     else:
         # Real workspace: show user's own missions (no demo)
