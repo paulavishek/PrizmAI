@@ -408,13 +408,14 @@ def _user_board_names_for_env(user, is_demo_mode):
     from kanban.models import Board
     if is_demo_mode:
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{user.id}')
+            owner=user,
+            is_sandbox_copy=True,
         ).distinct().values_list('name', flat=True)[:20]
     else:
         boards = Board.objects.filter(
             Q(created_by=user) | Q(memberships__user=user),
             is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct().values_list('name', flat=True)[:20]

@@ -680,6 +680,10 @@ class Board(models.Model):
         default=False,
         help_text="True if this is original seed demo data (not user-created)."
     )
+    is_sandbox_copy = models.BooleanField(
+        default=False,
+        help_text="True if this board was created by sandbox provisioning (personal demo copy)."
+    )
 
     # Phase Configuration for Gantt Chart
     num_phases = models.PositiveIntegerField(

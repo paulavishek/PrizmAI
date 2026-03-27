@@ -560,9 +560,9 @@ def mission_list(request):
     demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
 
     if demo_mode:
-        # Sandbox: show only user-created non-demo missions
+        # Sandbox: show official demo missions (the template hierarchy)
         missions = Mission.objects.filter(
-            created_by=request.user, is_demo=False, is_seed_demo_data=False,
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
         )
     else:
         # Real workspace: show user's own missions (no demo)
