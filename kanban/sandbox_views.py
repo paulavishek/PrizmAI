@@ -186,6 +186,35 @@ def _duplicate_board(template_board, user):
             if related.pk in task_map:
                 new_task.related_tasks.add(task_map[related.pk])
 
+    # --- Budget + TaskCost (for CPI calculation) ---
+    try:
+        from kanban.budget_models import ProjectBudget, TaskCost
+        template_budget = ProjectBudget.objects.filter(board=template_board).first()
+        if template_budget:
+            ProjectBudget.objects.create(
+                board=new_board,
+                allocated_budget=template_budget.allocated_budget,
+                currency=template_budget.currency,
+                allocated_hours=template_budget.allocated_hours,
+                warning_threshold=template_budget.warning_threshold,
+                critical_threshold=template_budget.critical_threshold,
+                ai_optimization_enabled=template_budget.ai_optimization_enabled,
+                created_by=user,
+            )
+            for tc in TaskCost.objects.filter(task__column__board=template_board).select_related('task'):
+                new_task = task_map.get(tc.task_id)
+                if new_task:
+                    TaskCost.objects.create(
+                        task=new_task,
+                        estimated_cost=tc.estimated_cost,
+                        estimated_hours=tc.estimated_hours,
+                        actual_cost=tc.actual_cost,
+                        hourly_rate=tc.hourly_rate,
+                        resource_cost=tc.resource_cost,
+                    )
+    except Exception:
+        pass  # Budget copying is best-effort; don't block provisioning
+
     return new_board
 
 

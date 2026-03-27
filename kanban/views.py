@@ -954,7 +954,12 @@ def dashboard(request):
                 premortem_risk_map[bid] = level
 
     # Standalone boards: user-accessible boards not linked to any strategy
-    standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
+    # In demo mode, exclude sandbox copies — they appear via the mission tree
+    # through the template→sandbox mapping, not as standalone.
+    _standalone_qs = boards.filter(strategy__isnull=True)
+    if demo_mode:
+        _standalone_qs = _standalone_qs.exclude(cloned_from__isnull=False)
+    standalone_boards = _standalone_qs.order_by('name')
 
     # Flat list of accessible strategies for the "Link to Strategy" dropdown on standalone boards
     # Query directly using mission IDs already in mission_tree for reliability
