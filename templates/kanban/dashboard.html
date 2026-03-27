@@ -1113,7 +1113,28 @@
 
 {% block content %}
 
-{% if demo_mode %}
+{% if in_sandbox %}
+<!-- ============================================================ -->
+<!-- SANDBOX MODE BANNER — purple gradient, clearly distinct      -->
+<!-- ============================================================ -->
+<div id="sandbox-banner" class="alert mb-0 rounded-0 border-0 shadow-sm"
+     style="position:sticky;top:0;z-index:1050;background:linear-gradient(135deg,#f3e8ff 0%,#e9d5ff 100%);border-bottom:2px solid #7c3aed;">
+    <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-flask fa-lg" style="color:#7c3aed;"></i>
+            <span class="fw-bold" style="color:#4c1d95;">You're in your private sandbox</span>
+            <span class="d-none d-md-inline" style="color:#6b21a8;">
+                — Full edit access. Changes won't affect demo data.
+            </span>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0">
+            <button type="button" class="btn btn-sm btn-outline-dark" onclick="exitSandbox()">
+                <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
+            </button>
+        </div>
+    </div>
+</div>
+{% elif demo_mode %}
 <!-- ============================================================ -->
 <!-- DEMO MODE BANNER — full-width, unmissable                   -->
 <!-- ============================================================ -->

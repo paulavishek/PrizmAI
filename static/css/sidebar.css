@@ -702,6 +702,91 @@
     background: #a78bfa;
 }
 
+/* ============================================= */
+/* SANDBOX ACTIVE BANNER (Tier 2)                */
+/* ============================================= */
+.sandbox-active-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1049;
+    background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 50%, #f3e8ff 100%);
+    border-bottom: 2px solid #7c3aed;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    color: #4c1d95;
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15);
+}
+.sandbox-active-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+.sandbox-active-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 0.82rem;
+}
+.sandbox-active-text {
+    flex: 1;
+    line-height: 1.35;
+}
+.sandbox-active-text strong {
+    color: #6d28d9;
+}
+.sandbox-active-detail {
+    color: #4c1d95;
+}
+.sandbox-active-dismiss {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: #6d28d9;
+    font-size: 0.95rem;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.sandbox-active-dismiss:hover {
+    opacity: 1;
+    background: rgba(124, 58, 237, 0.1);
+}
+@media (max-width: 768px) {
+    .sandbox-active-detail { display: none; }
+    .sandbox-active-banner { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
+}
+[data-bs-theme="dark"] .sandbox-active-banner {
+    background: linear-gradient(135deg, #2e1065 0%, #3b0764 50%, #2e1065 100%);
+    border-bottom-color: #a78bfa;
+    color: #e9d5ff;
+}
+[data-bs-theme="dark"] .sandbox-active-icon {
+    background: #a78bfa;
+    color: #2e1065;
+}
+[data-bs-theme="dark"] .sandbox-active-text strong {
+    color: #c4b5fd;
+}
+[data-bs-theme="dark"] .sandbox-active-detail {
+    color: #e9d5ff;
+}
+[data-bs-theme="dark"] .sandbox-active-dismiss {
+    color: #c4b5fd;
+}
+[data-bs-theme="dark"] .sandbox-active-dismiss:hover {
+    background: rgba(167, 139, 250, 0.15);
+}
+
 /* Return to real account in topbar */
 .topbar-return-btn {
     font-size: 0.78rem;

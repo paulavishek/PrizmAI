@@ -45,7 +45,7 @@ def _duplicate_board(template_board, user):
     new_board = Board(
         name=template_board.name,
         description=template_board.description,
-        organization=template_board.organization,
+        organization=None,                      # ← sandbox boards are user-owned, not demo org
         owner=user,
         created_by=user,
         is_official_demo_board=False,          # ← critical: not a template
@@ -109,8 +109,9 @@ def _duplicate_board(template_board, user):
             item_type=task.item_type,
             milestone_status=task.milestone_status,
             created_by=user,
+            # Assign all sandbox tasks to the sandbox user
+            assigned_to=user,
             # Clear AI and personal operational data
-            assigned_to=None,
             ai_summary=None,
             ai_summary_generated_at=None,
             ai_risk_score=None,
@@ -193,11 +194,11 @@ def _purge_existing_sandbox(user):
 @require_http_methods(["POST"])
 def create_sandbox(request):
     """
-    Create or replace an ephemeral sandbox for the requesting user.
+    Create or enter an ephemeral sandbox for the requesting user.
 
-    If the user already has an active sandbox AND the POST body contains
-    confirm=1, the old sandbox is deleted first. Otherwise return a conflict
-    response so the UI can show a confirmation dialog.
+    If the user already has an active (non-expired) sandbox, enter it by
+    setting the session flag and redirecting.  If the POST body contains
+    force_new=1, offer to replace the existing sandbox (confirm=1 to proceed).
     """
     from kanban.models import Board, DemoSandbox
 
@@ -206,13 +207,37 @@ def create_sandbox(request):
     # Check for existing sandbox
     try:
         existing = user.demo_sandbox
-        if request.POST.get('confirm') != '1':
-            return JsonResponse({
-                'status': 'confirm_needed',
-                'message': 'Starting a new sandbox deletes your current one. Continue?',
-                'expires_at': existing.expires_at.isoformat(),
-            }, status=409)
-        _purge_existing_sandbox(user)
+        # Check if expired
+        if existing.expires_at > timezone.now():
+            # Active sandbox exists
+            if request.POST.get('force_new') == '1':
+                # User wants to replace — ask for confirmation
+                if request.POST.get('confirm') != '1':
+                    return JsonResponse({
+                        'status': 'confirm_needed',
+                        'message': 'Starting a new sandbox deletes your current one. Continue?',
+                        'expires_at': existing.expires_at.isoformat(),
+                    }, status=409)
+                _purge_existing_sandbox(user)
+            else:
+                # Enter existing sandbox (default behavior)
+                request.session['in_sandbox'] = True
+                # Find the first sandbox board
+                sandbox_board = Board.objects.filter(
+                    owner=user,
+                    is_official_demo_board=False,
+                    is_seed_demo_data=False,
+                    created_at__gte=existing.created_at,
+                ).exclude(pk=existing.saved_board_id).first()
+                redirect_url = f'/boards/{sandbox_board.id}/' if sandbox_board else '/dashboard/'
+                return JsonResponse({
+                    'status': 'entered',
+                    'redirect_url': redirect_url,
+                    'expires_at': existing.expires_at.isoformat(),
+                })
+        else:
+            # Expired — purge silently
+            _purge_existing_sandbox(user)
     except DemoSandbox.DoesNotExist:
         pass
 
@@ -221,8 +246,7 @@ def create_sandbox(request):
         return JsonResponse({'error': 'No demo template boards found.'}, status=404)
 
     # Bypass demo protection: we are creating NEW user-owned copies, not
-    # modifying the original demo data.  The copies inherit the demo org
-    # FK which would otherwise trip the pre_save signal.
+    # modifying the original demo data.
     new_boards = []
     with allow_demo_writes():
         for template in template_boards:
@@ -239,6 +263,9 @@ def create_sandbox(request):
             user=user,
             expires_at=timezone.now() + timedelta(hours=24),
         )
+
+    # Activate sandbox session
+    request.session['in_sandbox'] = True
 
     return JsonResponse({
         'status': 'created',
@@ -300,7 +327,18 @@ def delete_sandbox(request):
     _delete_sandbox(sandbox)
     sandbox.delete()
 
+    # Clear sandbox session flag
+    request.session.pop('in_sandbox', None)
+
     return JsonResponse({'status': 'deleted'})
+
+
+@login_required
+@require_http_methods(["POST"])
+def exit_sandbox_mode(request):
+    """Exit sandbox mode (return to Tier 1 read-only demo) without deleting sandbox data."""
+    request.session.pop('in_sandbox', None)
+    return JsonResponse({'status': 'exited'})
 
 
 @login_required
@@ -313,22 +351,32 @@ def sandbox_status(request):
     from kanban.models import DemoSandbox
 
     user = request.user
+    in_sandbox = request.session.get('in_sandbox', False)
     try:
         sandbox = user.demo_sandbox
         now = timezone.now()
         time_left = sandbox.expires_at - now
         hours_left = time_left.total_seconds() / 3600
 
+        if hours_left <= 0:
+            # Sandbox expired — clear session flag
+            request.session.pop('in_sandbox', None)
+            in_sandbox = False
+
         return JsonResponse({
             'has_sandbox': True,
+            'in_sandbox': in_sandbox and hours_left > 0,
             'expires_at': sandbox.expires_at.isoformat(),
             'hours_remaining': round(hours_left, 1),
             'warning_sent': sandbox.warning_sent,
             'saved_board_id': sandbox.saved_board_id,
-            'show_warning_banner': hours_left <= 2 or sandbox.warning_sent,
+            'show_warning_banner': in_sandbox and (hours_left <= 2 or sandbox.warning_sent),
         })
     except DemoSandbox.DoesNotExist:
-        return JsonResponse({'has_sandbox': False})
+        # No sandbox record — clear stale session flag
+        if in_sandbox:
+            request.session.pop('in_sandbox', None)
+        return JsonResponse({'has_sandbox': False, 'in_sandbox': False})
 
 
 MAX_SANDBOX_EXTENSIONS = 3
