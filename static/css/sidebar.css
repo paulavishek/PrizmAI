@@ -645,6 +645,28 @@
     opacity: 1;
     background: rgba(2, 132, 199, 0.1);
 }
+/* Sandbox CTA button in read-only banner */
+.btn-sandbox-cta {
+    flex-shrink: 0;
+    background: #7c3aed;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.35rem 0.85rem;
+    white-space: nowrap;
+    transition: background 0.15s, transform 0.1s;
+}
+.btn-sandbox-cta:hover {
+    background: #6d28d9;
+    color: #fff;
+    transform: translateY(-1px);
+}
+.btn-sandbox-cta:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
 @media (max-width: 768px) {
     .demo-readonly-detail { display: none; }
     .demo-readonly-banner { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
@@ -672,6 +694,12 @@
 }
 [data-bs-theme="dark"] .demo-readonly-dismiss:hover {
     background: rgba(56, 189, 248, 0.15);
+}
+[data-bs-theme="dark"] .btn-sandbox-cta {
+    background: #8b5cf6;
+}
+[data-bs-theme="dark"] .btn-sandbox-cta:hover {
+    background: #a78bfa;
 }
 
 /* Return to real account in topbar */

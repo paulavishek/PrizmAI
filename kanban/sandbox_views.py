@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import allow_demo_writes
 
 logger = logging.getLogger(__name__)
 
@@ -219,21 +220,25 @@ def create_sandbox(request):
     if not template_boards.exists():
         return JsonResponse({'error': 'No demo template boards found.'}, status=404)
 
+    # Bypass demo protection: we are creating NEW user-owned copies, not
+    # modifying the original demo data.  The copies inherit the demo org
+    # FK which would otherwise trip the pre_save signal.
     new_boards = []
-    for template in template_boards:
-        try:
-            new_board = _duplicate_board(template, user)
-            new_boards.append(new_board)
-        except Exception as e:
-            logger.error(f"Error duplicating board '{template.name}' for {user.username}: {e}")
+    with allow_demo_writes():
+        for template in template_boards:
+            try:
+                new_board = _duplicate_board(template, user)
+                new_boards.append(new_board)
+            except Exception as e:
+                logger.error(f"Error duplicating board '{template.name}' for {user.username}: {e}")
 
-    if not new_boards:
-        return JsonResponse({'error': 'Sandbox creation failed — no boards duplicated.'}, status=500)
+        if not new_boards:
+            return JsonResponse({'error': 'Sandbox creation failed — no boards duplicated.'}, status=500)
 
-    sandbox = DemoSandbox.objects.create(
-        user=user,
-        expires_at=timezone.now() + timedelta(hours=24),
-    )
+        sandbox = DemoSandbox.objects.create(
+            user=user,
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
 
     return JsonResponse({
         'status': 'created',
