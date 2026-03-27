@@ -52,6 +52,7 @@ def _duplicate_board(template_board, user):
         created_by=user,
         is_official_demo_board=False,          # ← critical: not a template
         is_seed_demo_data=False,
+        is_sandbox_copy=True,                    # ← tags this as a sandbox copy
         strategy=None,                          # Do not inherit strategic context
         num_phases=template_board.num_phases,
         task_prefix=template_board.task_prefix,
@@ -179,8 +180,7 @@ def _purge_existing_sandbox(user):
         # Delete sandbox boards (not the saved board)
         Board.objects.filter(
             owner=user,
-            is_official_demo_board=False,
-            is_seed_demo_data=False,
+            is_sandbox_copy=True,
         ).exclude(
             pk=sandbox.saved_board_id
         ).delete()

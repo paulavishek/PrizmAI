@@ -98,8 +98,7 @@ def provision_sandbox_task(self, user_id):
             # Active sandbox already exists — just return it
             first_board = Board.objects.filter(
                 owner=user,
-                is_official_demo_board=False,
-                is_seed_demo_data=False,
+                is_sandbox_copy=True,
             ).exclude(pk=existing.saved_board_id).first()
             redirect_url = f'/boards/{first_board.id}/' if first_board else '/dashboard/'
             _send_provision_result(user_id, {

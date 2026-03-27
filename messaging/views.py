@@ -38,14 +38,13 @@ def messaging_hub(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
     if demo_mode:
-        # Sandbox mode: show only user's personal sandbox copies
+        # Sandbox mode: show only user's sandbox copies
         user_boards = Board.objects.filter(
             owner=request.user,
-            is_official_demo_board=False,
-            is_seed_demo_data=False,
+            is_sandbox_copy=True,
         ).distinct()
     elif _is_org_admin:
-        user_boards = Board.objects.all()
+        user_boards = Board.objects.filter(is_sandbox_copy=False)
     else:
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         user_boards_query = Board.objects.filter(

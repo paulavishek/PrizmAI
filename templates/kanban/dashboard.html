@@ -1113,29 +1113,7 @@
 
 {% block content %}
 
-{% if demo_mode %}
-<!-- ============================================================ -->
-<!-- SANDBOX BANNER — shows sandbox context on dashboard          -->
-<!-- ============================================================ -->
-<div id="demo-banner" class="alert alert-info mb-0 rounded-0 border-0 shadow-sm"
-     style="position:sticky;top:0;z-index:1050;background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%);">
-    <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-flask fa-lg text-primary"></i>
-            <span class="fw-bold text-dark">Your personal sandbox</span>
-            <span class="text-muted d-none d-md-inline">
-                — This is your private copy of the demo data. Edit freely&nbsp;&bull;&nbsp;Changes don't affect anyone else.
-            </span>
-        </div>
-        <div class="d-flex gap-2 flex-shrink-0">
-            <button type="button" class="btn btn-sm btn-outline-danger" onclick="resetMyDemo()">
-                <i class="fas fa-redo me-1"></i>Reset Sandbox
-            </button>
-        </div>
-    </div>
-</div>
-{% endif %}
-
+{# Sandbox banner is handled globally by base.html — no duplicate here #}
 
 
 {% if show_assign_banner %}

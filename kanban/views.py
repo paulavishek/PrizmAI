@@ -80,26 +80,27 @@ def dashboard(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
     
     if demo_mode:
-        # Single-tier demo: show only this user's personal sandbox copies
-        # (owner=user + not official demo template boards)
+        # Single-tier demo: show only this user's sandbox copies
         boards = Board.objects.filter(
             owner=request.user,
-            is_official_demo_board=False,
-            is_seed_demo_data=False,
+            is_sandbox_copy=True,
         ).distinct()
     elif _is_org_admin:
-        # Org Admin: see all non-demo boards
+        # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
-            is_official_demo_board=False
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()
     elif profile.onboarding_version >= 2:
         # v2 real mode: only the user's own boards (no demo boards,
-        # no boards created during demo exploration via Spectra).
+        # no boards created during demo exploration via Spectra,
+        # no sandbox copies).
         boards = Board.objects.filter(
             Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()
@@ -282,11 +283,9 @@ def dashboard(request):
 
     # Missions the user has direct ownership of or demo missions
     if demo_mode:
-        # Single-tier demo: only user-created missions in sandbox (no shared demo missions)
+        # Single-tier demo: show official demo missions (the template hierarchy)
         missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).filter(is_demo=False, is_seed_demo_data=False
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
         ).distinct().select_related('organization_goal').prefetch_related(
             'strategies__boards'
         ).order_by('-created_at')
@@ -1142,22 +1141,23 @@ def board_list(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
     if demo_mode:
-        # Single-tier demo: show only user's personal sandbox copies
+        # Single-tier demo: show only user's sandbox copies
         boards = Board.objects.filter(
             owner=request.user,
-            is_official_demo_board=False,
-            is_seed_demo_data=False,
+            is_sandbox_copy=True,
         ).distinct()
     elif _is_org_admin:
-        # Org Admin: see all non-demo boards
+        # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
-            is_official_demo_board=False
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).distinct()
     elif profile.onboarding_version >= 2:
-        # v2 onboarding (AI-generated or scratch) — never show demo boards
+        # v2 onboarding (AI-generated or scratch) — never show demo or sandbox boards
         boards = Board.objects.filter(
             Q(created_by=request.user) | Q(memberships__user=request.user),
-            is_official_demo_board=False
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).distinct()
     else:
         # v1 legacy — demo + user boards mixed

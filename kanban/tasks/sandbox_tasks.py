@@ -31,8 +31,7 @@ def _delete_sandbox(sandbox):
     # We use a special marker: boards owned by the user created after sandbox.created_at.
     sandbox_boards = Board.objects.filter(
         owner=sandbox.user,
-        is_official_demo_board=False,
-        created_at__gte=sandbox.created_at,
+        is_sandbox_copy=True,
     )
 
     if sandbox.saved_board_id:

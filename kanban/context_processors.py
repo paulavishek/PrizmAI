@@ -212,8 +212,8 @@ def conflict_count(request):
 
         if demo_mode:
             boards = Board.objects.filter(
-                Q(is_official_demo_board=True)
-                | Q(created_by_session=f'spectra_demo_{request.user.id}')
+                owner=request.user,
+                is_sandbox_copy=True,
             ).distinct()
         else:
             boards = Board.objects.filter(
