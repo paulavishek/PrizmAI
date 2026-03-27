@@ -30,6 +30,13 @@ if (typeof draggedColumn === 'undefined') {
 function initColumnDragDrop() {
     console.log('[Column DnD] Initializing column drag-and-drop...');
     const columns = document.querySelectorAll('.kanban-column');
+
+    // Disable column drag-and-drop on read-only demo boards
+    if (window.isDemoBoardReadOnly) {
+        columns.forEach(col => col.setAttribute('draggable', 'false'));
+        console.log('[Column DnD] Skipped — demo board is read-only');
+        return;
+    }
     
     columns.forEach((column, index) => {
         // Store reference for later use
@@ -246,6 +253,14 @@ function initKanbanBoard() {
     
     // Initialize column scrolling based on task count
     initColumnScrolling();
+
+    // Disable drag-and-drop on read-only demo boards
+    if (window.isDemoBoardReadOnly) {
+        tasks.forEach(task => task.setAttribute('draggable', 'false'));
+        console.log('[Kanban] Task drag-and-drop disabled — demo board is read-only');
+        addScrollIndicators();
+        return;
+    }
     
     // Initialize drag for all tasks
     tasks.forEach(task => {
@@ -532,11 +547,14 @@ function saveColumnPositions(columnPositions, boardId) {
         } else {
             console.error('Error rearranging columns:', data.error);
             showNotification('Error rearranging columns', 'error');
+            // Revert by reloading — column DOM state is complex
+            location.reload();
         }
     })
     .catch(error => {
         console.error('Error rearranging columns:', error);
         showNotification('Error rearranging columns', 'error');
+        location.reload();
     });
 }
 
@@ -1139,6 +1157,11 @@ function handleAutoScrollOnDrag(e) {
 }
 
 function updateTaskPosition(taskId, columnId, position = 0) {
+    // Capture original state so we can revert on error
+    const taskEl = document.getElementById('task-' + taskId);
+    const originalParent = taskEl ? taskEl.parentElement : null;
+    const originalNextSibling = taskEl ? taskEl.nextElementSibling : null;
+
     // Send AJAX request to update task position
     fetch('/tasks/move/', {
         method: 'POST',
@@ -1170,11 +1193,27 @@ function updateTaskPosition(taskId, columnId, position = 0) {
         } else {
             console.error('Error moving task:', data.error);
             showNotification('Error moving task: ' + data.error, 'error');
+            // Revert DOM change on permission / validation error
+            if (taskEl && originalParent) {
+                if (originalNextSibling) {
+                    originalParent.insertBefore(taskEl, originalNextSibling);
+                } else {
+                    originalParent.appendChild(taskEl);
+                }
+            }
         }
     })
     .catch(error => {
         console.error('Error moving task:', error);
         showNotification('Error moving task', 'error');
+        // Revert DOM change on network / server error
+        if (taskEl && originalParent) {
+            if (originalNextSibling) {
+                originalParent.insertBefore(taskEl, originalNextSibling);
+            } else {
+                originalParent.appendChild(taskEl);
+            }
+        }
     });
 }
 

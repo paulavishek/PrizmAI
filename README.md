@@ -464,29 +464,55 @@ From any board, click **Members** in the board navigation → **Invite Member**,
 
 ---
 
-## Ephemeral Demo Sandbox
+## Demo Experience — Two-Tier System
 
-> **In plain English:** Want to try out PrizmAI without worrying about breaking anything? The Sandbox gives you a personal, private copy of a demo board. You can create tasks, delete entire columns, test automations — anything you like. Nobody else can see your sandbox. After 24 hours it automatically tidies itself up and disappears. If you find something worth keeping, you can save one board to your real account before it goes.
+PrizmAI's demo works in two tiers designed to let anyone explore safely and experiment freely without ever affecting data that other visitors rely on.
 
-### How it works
+### Tier 1 — Read-Only Demo Workspace
 
-1. **Create your sandbox** — From any demo board, click **Try in My Sandbox**. PrizmAI creates a complete private copy of that board — all columns, tasks, labels, and settings — just for you.
-2. **Experiment freely** — Your sandbox is completely isolated. Changes you make here have no effect on the shared demo boards or anyone else's work.
-3. **One sandbox at a time** — If you already have an active sandbox and ask for a new one, PrizmAI shows a confirmation dialog before replacing it.
-4. **It expires automatically** — Sandboxes last 24 hours from the moment you create them. A background task runs every hour to clean up any that have expired.
-5. **Two-hour warning** — When your sandbox is within 2 hours of expiry, a yellow banner appears at the top of every page as a reminder.
-6. **Save one board before it goes** — Click **Save a board** in the warning banner to promote your sandbox board into your regular workspace. It becomes a permanent board that you own — completely separate from the demo environment.
-7. **Delete on demand** — If you are done early, click **Delete now** in the banner to wipe the sandbox immediately.
+> **In plain English:** When you switch into demo mode you immediately see real, fully-populated demo boards. You can click everywhere, open tasks, read AI analysis, and navigate the whole product — but you cannot change the shared data. This gives every visitor a consistent, always-accurate view of what PrizmAI looks like in production.
 
-### The warning banner
+- A persistent blue banner at the top of every page reminds you that you are in read-only mode.
+- Drag-and-drop is disabled on demo boards at the client level — task cards and columns cannot be moved.
+- Any write attempt that reaches the server (via API or direct URL) is blocked at the model level by Django signal handlers (`pre_save` / `pre_delete`), so demo data is immutable regardless of which code path is used.
+- Demo dates are refreshed automatically each day so boards always appear current.
 
-When your sandbox is 2 hours or less from expiry, a sticky yellow bar appears at the top of every page. It updates every 60 seconds so the countdown stays accurate. It has three buttons:
+### Tier 2 — Ephemeral Sandbox (Full Write Access)
+
+> **In plain English:** When you want to *do* things — create tasks, delete columns, run automations, move cards around — click **Try in My Sandbox** in the read-only banner or on any demo board. PrizmAI instantly creates a private copy of all demo boards just for you. Nobody else can see it. After 24 hours it cleans itself up automatically. If you build something worth keeping, save one board to your real workspace before it expires.
+
+#### How it works
+
+1. **Create your sandbox** — Click **Try in My Sandbox** in the read-only banner or on any demo board. PrizmAI deep-copies all demo template boards — columns, tasks, labels, comments, dependencies, and task relationships — into a private set of boards owned by you alone.
+2. **Experiment freely** — Your sandbox has full write access. Create tasks, delete columns, trigger automations, drag and drop — anything you like. Changes here have no effect on the shared demo boards or any other user.
+3. **One sandbox at a time** — If you already have an active sandbox and request a new one, PrizmAI shows a confirmation dialog before replacing it.
+4. **It expires automatically** — Sandboxes last 24 hours from creation. A background task runs every hour to delete expired ones.
+5. **Two-hour warning** — When your sandbox is within 2 hours of expiry, a yellow banner appears at the top of every page.
+6. **Save one board before it goes** — Click **Save a board** in the warning banner to promote your chosen sandbox board into your regular workspace as a permanent board you own.
+7. **Delete on demand** — Click **Delete now** in the banner to wipe the sandbox immediately.
+
+#### The warning banner
+
+When your sandbox is 2 hours or less from expiry, a sticky yellow bar appears at the top of every page. It updates every 60 seconds. It has three buttons:
 
 | Button | What it does |
 |---|---|
 | **Save a board** | Keeps one board from your sandbox as a permanent board in your account |
 | **Delete now** | Wipes the sandbox immediately — cannot be undone |
-| **Dismiss** | Hides the banner for your current browser session (the sandbox still expires on schedule) |
+| **Dismiss** | Hides the banner for this browser session (sandbox still expires on schedule) |
+
+#### What is copied into the sandbox
+
+| Data | Copied? |
+|---|---|
+| Boards, columns, labels | Yes — full deep copy |
+| Tasks (titles, descriptions, priorities, dates) | Yes |
+| Task comments | Yes (attributed to you) |
+| Task dependencies & related-task links | Yes |
+| Parent-child task relationships | Yes |
+| Board memberships from the template | No — you are the sole Owner |
+| Strategic context (Mission / Strategy links) | No — sandbox boards are standalone |
+| File attachments | No |
 
 ---
 
@@ -556,7 +582,7 @@ Demo accounts can explore all demo boards and use every read feature freely, but
 
 > Demo accounts have rate-limited AI features (5 calls per 10 minutes). Create your own account for unrestricted AI access.
 
-> **Want to experiment freely?** Use the **Ephemeral Demo Sandbox** — it gives you a private, temporary copy of any demo board that you can break, rebuild, and test without affecting anything else. See the [Ephemeral Demo Sandbox](#ephemeral-demo-sandbox) section below for details.
+> **Want to experiment freely?** Click **Try in My Sandbox** in the blue read-only banner. PrizmAI creates a private, 24-hour copy of all demo boards with full write access — just for you. See the [Demo Experience — Two-Tier System](#demo-experience--two-tier-system) section for details.
 
 ### Keeping Demo Data Fresh
 
