@@ -19,6 +19,7 @@ import json
 import logging
 
 from .models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent
+from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ class CustomLogoutView(View):
 
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def submit_feedback_ajax(request):
     """
     Simple AJAX endpoint for feedback submission.
@@ -188,6 +190,7 @@ def submit_feedback_ajax(request):
 # ============================================================================
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def track_aha_moment_ajax(request):
     """
     Track an aha moment when user experiences product value.
@@ -277,6 +280,7 @@ def track_aha_moment_ajax(request):
 
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def aha_moment_interaction(request):
     """
     Track user interaction with aha moment celebration UI.
@@ -348,6 +352,7 @@ def aha_moment_stats_api(request):
 
 
 @require_http_methods(["POST"])
+@demo_write_guard
 def collect_demo_email(request):
     """
     Collect email from demo user for sending reminders.

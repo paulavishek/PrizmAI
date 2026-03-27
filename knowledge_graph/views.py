@@ -10,6 +10,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 
 from kanban.models import Board
+from kanban.decorators import demo_write_guard
 from knowledge_graph.models import MemoryNode, MemoryConnection, OrganizationalMemoryQuery
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ def board_knowledge(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def add_manual_memory(request, board_id):
     """Add a manual decision or lesson memory node to a board."""
     board = get_object_or_404(Board, id=board_id)
@@ -315,6 +317,7 @@ def organizational_memory_search(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def memory_feedback(request, query_id):
     """Submit feedback (thumbs up/down) on a memory search result."""
     query_record = get_object_or_404(OrganizationalMemoryQuery, pk=query_id)

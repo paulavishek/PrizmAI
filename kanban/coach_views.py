@@ -26,6 +26,7 @@ from kanban.coach_models import (
 from kanban.utils.coaching_rules import CoachingRuleEngine
 from kanban.utils.ai_coach_service import AICoachService
 from kanban.utils.feedback_learning import FeedbackLearningSystem
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ def suggestion_detail(request, suggestion_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def generate_suggestions(request, board_id):
     """
     Generate new coaching suggestions for a board
@@ -252,6 +254,7 @@ def generate_suggestions(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_suggestion(request, suggestion_id):
     """
     Mark a suggestion as acknowledged
@@ -276,6 +279,7 @@ def acknowledge_suggestion(request, suggestion_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_suggestion(request, suggestion_id):
     """
     Dismiss a suggestion
@@ -311,6 +315,7 @@ def dismiss_suggestion(request, suggestion_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def submit_feedback(request, suggestion_id):
     """
     Submit detailed feedback on a suggestion
@@ -375,6 +380,7 @@ def submit_feedback(request, suggestion_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_ai_guard
 def ask_coach(request, board_id):
     """
     Ask the AI coach a question

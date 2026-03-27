@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import DecisionCenterBriefing, DecisionCenterSettings, DecisionItem
+from kanban.decorators import demo_write_guard
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +206,7 @@ def decision_center_widget_data(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_decision_item(request, item_id):
     """Mark a single item as resolved."""
     item = _get_item_or_404(request.user, item_id)
@@ -238,6 +240,7 @@ def resolve_decision_item(request, item_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def snooze_decision_item(request, item_id):
     """Snooze an item for 24, 48, or 168 hours."""
     item = _get_item_or_404(request.user, item_id)
@@ -263,6 +266,7 @@ def snooze_decision_item(request, item_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_decision_item(request, item_id):
     """Dismiss a single item."""
     item = _get_item_or_404(request.user, item_id)
@@ -292,6 +296,7 @@ def dismiss_decision_item(request, item_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_all_quick_wins(request):
     """Bulk-resolve every pending quick-win item for the user."""
     now = timezone.now()
@@ -319,6 +324,7 @@ def resolve_all_quick_wins(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_write_guard
 def decision_center_settings_view(request):
     """GET: return current settings. POST: update them."""
     settings_obj = _get_settings(request.user)

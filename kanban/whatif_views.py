@@ -16,6 +16,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from kanban.models import Board
 from kanban.whatif_models import WhatIfScenario
 from kanban.utils.whatif_engine import WhatIfEngine
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ def whatif_dashboard(request, board_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def whatif_simulate(request, board_id):
     """Run a what-if simulation and return JSON results."""
     board = get_object_or_404(Board, id=board_id)
@@ -78,6 +80,7 @@ def whatif_simulate(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def whatif_save(request, board_id):
     """Persist a what-if scenario for later comparison."""
     board = get_object_or_404(Board, id=board_id)
@@ -153,6 +156,7 @@ def whatif_history(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def whatif_delete(request, board_id, scenario_id):
     """Delete a saved what-if scenario."""
     scenario = get_object_or_404(

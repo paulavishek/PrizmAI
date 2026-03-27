@@ -28,6 +28,7 @@ from kanban.stress_test_prompt import (
 )
 from kanban.stress_test_data import build_board_stress_test_data
 from kanban.audit_utils import log_audit
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,7 @@ def stress_test_dashboard(request, board_id):
 @login_required
 @require_POST
 @require_ai_quota('stress_test')
+@demo_ai_guard
 def run_stress_test(request, board_id):
     """Run a new Red Team AI stress test session."""
     board = get_object_or_404(Board, id=board_id)
@@ -382,6 +384,7 @@ def run_stress_test(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def apply_vaccine(request, board_id, vaccine_id):
     """Toggle a vaccine's is_applied state."""
     vaccine = get_object_or_404(Vaccine, pk=vaccine_id, board_id=board_id)
@@ -410,6 +413,7 @@ def apply_vaccine(request, board_id, vaccine_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def reset_stress_test_history(request, board_id):
     """Delete all stress test sessions (and cascaded data) for this board.
     Only the board creator may do this.
@@ -443,6 +447,7 @@ def reset_stress_test_history(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def mark_scenario_addressed(request, board_id, scenario_id):
     """Toggle a scenario's is_addressed state."""
     scenario = get_object_or_404(

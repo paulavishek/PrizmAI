@@ -21,6 +21,7 @@ from django.conf import settings
 from kanban.models import Board, Task
 from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from kanban.audit_utils import log_audit
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -300,6 +301,7 @@ def premortem_dashboard(request, board_id):
 @login_required
 @require_POST
 @require_ai_quota('premortem')
+@demo_ai_guard
 def run_premortem(request, board_id):
     """
     Run a new Pre-Mortem AI analysis for the board.
@@ -398,6 +400,7 @@ def run_premortem(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_scenario(request, premortem_id, scenario_index):
     """
     Mark a Pre-Mortem scenario as addressed / acknowledged.

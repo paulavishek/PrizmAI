@@ -3508,6 +3508,7 @@ def export_board(request, board_id):
         return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def import_board(request):
     """
     Import a board from external PM tools (Trello, Jira, Asana) or CSV/JSON files.

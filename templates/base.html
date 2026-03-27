@@ -879,6 +879,50 @@
 })();
 </script>
 {% endif %}
+{% if is_viewing_demo and not in_sandbox %}
+<script>
+(function() {
+    // Global fetch interceptor: show sandbox upsell when demo guard blocks a request
+    var _origFetch = window.fetch;
+    window.fetch = function() {
+        return _origFetch.apply(this, arguments).then(function(response) {
+            if (response.status === 403) {
+                // Clone so the caller can still read the body
+                var clone = response.clone();
+                clone.json().then(function(data) {
+                    if (data.demo_readonly || data.ai_blocked) {
+                        var msg = data.ai_blocked
+                            ? 'AI features are available in the Sandbox.'
+                            : 'Demo data is read-only.';
+                        showDemoBlockedToast(msg);
+                    }
+                }).catch(function() {});
+            }
+            return response;
+        });
+    };
+
+    function showDemoBlockedToast(msg) {
+        // Remove existing toast if any
+        var old = document.getElementById('demo-blocked-toast');
+        if (old) old.remove();
+        var t = document.createElement('div');
+        t.id = 'demo-blocked-toast';
+        t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:#0c4a6e;color:#fff;padding:14px 20px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.25);font-size:14px;display:flex;align-items:center;gap:12px;max-width:420px;animation:slideUp .3s ease';
+        t.innerHTML = '<i class="fas fa-shield-alt" style="font-size:18px;flex-shrink:0"></i>'
+            + '<span>' + msg + ' <a href="#" onclick="createSandbox();return false" style="color:#7dd3fc;font-weight:600;text-decoration:underline">Launch Sandbox</a></span>'
+            + '<button onclick="this.parentElement.remove()" style="border:none;background:none;color:#94a3b8;font-size:16px;padding:0 0 0 8px;cursor:pointer">&times;</button>';
+        document.body.appendChild(t);
+        setTimeout(function() { if (t.parentElement) t.remove(); }, 6000);
+    }
+
+    // Also add a CSS keyframe for the slide-up animation
+    var style = document.createElement('style');
+    style.textContent = '@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}';
+    document.head.appendChild(style);
+})();
+</script>
+{% endif %}
 {% if is_demo_account %}
 <script>
 function demoResetFromNav(e) {

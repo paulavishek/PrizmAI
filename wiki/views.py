@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.db.models import Q, Sum, Count
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
@@ -27,6 +27,18 @@ from accounts.models import Organization
 class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
     """Base view for wiki operations - MVP mode without organization requirement"""
     
+    def dispatch(self, request, *args, **kwargs):
+        """Block write operations for users in Tier-1 read-only demo mode."""
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            try:
+                if getattr(request.user, 'profile', None) and getattr(request.user.profile, 'is_viewing_demo', False) and not request.session.get('in_sandbox', False):
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                        return JsonResponse({'error': 'Demo data is read-only. Launch your private Sandbox to create or edit content.', 'demo_readonly': True, 'show_sandbox_cta': True}, status=403)
+                    return HttpResponseForbidden('Demo data is read-only. Launch your private Sandbox to create or edit content.')
+            except Exception:
+                pass
+        return super().dispatch(request, *args, **kwargs)
+
     def test_func(self):
         """MVP Mode: All authenticated users can access wiki"""
         # All authenticated users can access wiki content

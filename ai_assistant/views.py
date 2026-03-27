@@ -521,6 +521,7 @@ def send_message(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def upload_attachment(request):
     """
     POST /ai-assistant/api/upload-attachment/
@@ -595,6 +596,7 @@ def upload_attachment(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def remove_attachment(request, attachment_id):
     """
     POST /ai-assistant/api/attachment/<id>/remove/
@@ -691,6 +693,7 @@ def get_session_messages(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def rename_session(request, session_id):
     """Rename a chat session"""
     try:
@@ -721,6 +724,7 @@ def rename_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def delete_session(request, session_id):
     """Delete a chat session (only user's own sessions, not demo sessions)"""
     try:
@@ -741,6 +745,7 @@ def delete_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def clear_session(request, session_id):
     """Clear all messages in a chat session"""
     try:
@@ -865,6 +870,7 @@ def export_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def toggle_star_message(request, message_id):
     """Toggle star on a message"""
     try:
@@ -880,6 +886,7 @@ def toggle_star_message(request, message_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def submit_feedback(request, message_id):
     """Submit feedback on a message and update analytics for AI learning loop"""
     try:
@@ -1109,6 +1116,7 @@ def view_recommendations(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def accept_recommendation(request, recommendation_id):
     """Accept a task recommendation"""
     try:
@@ -1125,6 +1133,7 @@ def accept_recommendation(request, recommendation_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def reject_recommendation(request, recommendation_id):
     """Reject a task recommendation"""
     try:
@@ -1140,6 +1149,7 @@ def reject_recommendation(request, recommendation_id):
 
 
 @login_required
+@demo_write_guard
 def user_preferences(request):
     """Manage user preferences"""
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -1159,6 +1169,7 @@ def user_preferences(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def save_preferences(request):
     """Save user preferences via AJAX"""
     try:

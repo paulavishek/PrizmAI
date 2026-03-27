@@ -18,6 +18,7 @@ from django.db import models
 from django.db.models import Q
 
 from kanban.models import Board, Task, Column
+from kanban.decorators import demo_ai_guard
 from accounts.models import Organization
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_wiki_documentation_page(request, wiki_page_id):
     """
     API endpoint to analyze a general wiki documentation page using AI
@@ -140,6 +142,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_wiki_meeting_page(request, wiki_page_id):
     """
     API endpoint to analyze a wiki page as meeting notes using AI
@@ -293,6 +296,7 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_tasks_from_meeting_analysis(request, analysis_id):
     """
     API endpoint to create tasks from wiki meeting analysis
@@ -519,6 +523,7 @@ def get_meeting_analysis_details(request, analysis_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def mark_analysis_reviewed(request, analysis_id):
     """
     Mark an analysis as reviewed by user, optionally with notes
@@ -604,6 +609,7 @@ def get_boards_for_organization(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def import_transcript_to_wiki_page(request, wiki_page_id):
     """
     Import a meeting transcript into a wiki page
@@ -747,6 +753,7 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def extract_text_from_uploaded_file(request):
     """
     Extract text from uploaded Word (.docx, .doc) or PDF files
