@@ -22,7 +22,11 @@ def is_record_owner(user, obj):
     """Direct owner of this specific record (Board, Strategy, Mission, Goal)."""
     owner = getattr(obj, 'owner', None)
     if owner is None:
-        # Orphaned record (owner account deleted) — only Org Admin can act
+        # Fallback: check created_by (covers records created before owner field was populated)
+        created_by = getattr(obj, 'created_by', None)
+        if created_by is not None:
+            return created_by == user
+        # Truly orphaned record — only Org Admin can act
         return user.groups.filter(name='OrgAdmin').exists()
     return owner == user
 

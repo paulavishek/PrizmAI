@@ -548,8 +548,33 @@ def unlink_mission_from_goal(request, goal_id, mission_id):
 
 @login_required
 def mission_list(request):
-    """Show all missions — no filtering, everyone sees everything (same as board list)."""
-    missions = Mission.objects.select_related('organization_goal').all().annotate(
+    """Show missions filtered by current mode (sandbox/demo/real)."""
+    from accounts.models import UserProfile
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        profile = None
+
+    in_sandbox = request.session.get('in_sandbox', False)
+    demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
+
+    if in_sandbox:
+        # Sandbox: show only user-created non-demo missions
+        missions = Mission.objects.filter(
+            created_by=request.user, is_demo=False, is_seed_demo_data=False,
+        )
+    elif demo_mode:
+        # Demo read-only: show only demo missions
+        missions = Mission.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    else:
+        # Real workspace: show user's own missions (no demo)
+        missions = Mission.objects.filter(
+            created_by=request.user, is_demo=False, is_seed_demo_data=False,
+        )
+
+    missions = missions.select_related('organization_goal').annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')

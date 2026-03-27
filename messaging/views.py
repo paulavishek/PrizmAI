@@ -32,9 +32,22 @@ def messaging_hub(request):
         )
     
     # MVP Mode: Get all boards the user has access to
-    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
+    # Respect sandbox/demo mode boundaries
+    in_sandbox = request.session.get('in_sandbox', False)
+    demo_mode = getattr(profile, 'is_viewing_demo', False)
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
-    if _is_org_admin:
+
+    if in_sandbox:
+        # Sandbox mode: show only user's sandbox boards (non-demo, owned)
+        user_boards = Board.objects.filter(
+            owner=request.user,
+            is_official_demo_board=False,
+            is_seed_demo_data=False,
+        ).distinct()
+    elif demo_mode:
+        # Demo read-only mode: show only official demo boards
+        user_boards = Board.objects.filter(is_official_demo_board=True).distinct()
+    elif _is_org_admin:
         user_boards = Board.objects.all()
     else:
         demo_boards = Board.objects.filter(is_official_demo_board=True)
