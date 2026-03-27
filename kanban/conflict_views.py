@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 import json
 
 from kanban.models import Board
+from kanban.decorators import demo_write_guard
 from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern
@@ -172,6 +173,7 @@ def conflict_detail(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def apply_resolution(request, conflict_id, resolution_id):
     """
     Apply a specific resolution to resolve a conflict.
@@ -232,6 +234,7 @@ def apply_resolution(request, conflict_id, resolution_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def ignore_conflict(request, conflict_id):
     """
     Mark a conflict as ignored.
@@ -270,6 +273,7 @@ def ignore_conflict(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_notification(request, notification_id):
     """
     Acknowledge a conflict notification.
@@ -298,6 +302,7 @@ def acknowledge_notification(request, notification_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def conflict_feedback(request, conflict_id):
     """
     Add feedback and effectiveness rating to a resolved conflict.
@@ -353,6 +358,7 @@ def conflict_feedback(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def trigger_detection_all(request):
     """
     Manually trigger conflict detection for all accessible boards.
@@ -406,6 +412,7 @@ def trigger_detection_all(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def trigger_detection(request, board_id):
     """
     Manually trigger conflict detection for a specific board.

@@ -25,6 +25,7 @@ from kanban.models import Board, Task
 from kanban.whatif_models import WhatIfScenario
 from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
 from kanban.audit_models import SystemAuditLog
+from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
 
@@ -527,6 +528,7 @@ def merge_conflict_check(request, board_id):
 
 @login_required
 @require_http_methods(['POST'])
+@demo_write_guard
 def promote_scenario_to_branch(request, board_id):
     """
     API endpoint: Promote a What-If scenario to a Shadow Branch.
@@ -715,6 +717,7 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def delete_branch(request, board_id, branch_id):
     """
     API endpoint: Permanently delete a shadow branch and all its snapshots.
@@ -742,6 +745,7 @@ def delete_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def link_scenario_to_branch(request, board_id, branch_id):
     """
     API endpoint: Link (or unlink) a saved WhatIfScenario to an existing branch.
@@ -799,6 +803,7 @@ def link_scenario_to_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def restore_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
@@ -826,6 +831,7 @@ def restore_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def toggle_star_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)

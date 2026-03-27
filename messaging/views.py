@@ -10,6 +10,7 @@ from django.utils import timezone
 import os
 
 from kanban.models import Board, Task, Column
+from kanban.decorators import demo_write_guard
 from kanban.favorite_views import is_user_favorite as _is_fav
 from .models import ChatRoom, ChatMessage, TaskThreadComment, Notification, FileAttachment
 from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, MentionForm, ChatRoomFileForm
@@ -158,6 +159,7 @@ def chat_room_detail(request, room_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_write_guard
 def create_chat_room(request, board_id):
     """Create a new chat room for a board"""
     board = get_object_or_404(Board, id=board_id)
@@ -194,6 +196,7 @@ def create_chat_room(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def send_chat_message(request, room_id):
     """Send a message to a chat room (for non-WebSocket clients)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
@@ -228,6 +231,7 @@ def send_chat_message(request, room_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_write_guard
 def task_thread_comments(request, task_id):
     """View and manage real-time task thread comments"""
     task = get_object_or_404(Task, id=task_id)
@@ -543,6 +547,7 @@ def mark_room_messages_read(request, room_id):
 
 @login_required
 @require_http_methods(["DELETE"])
+@demo_write_guard
 def delete_chat_message(request, message_id):
     """Delete a specific chat message and broadcast to all connected users"""
     from channels.layers import get_channel_layer
@@ -585,6 +590,7 @@ def delete_chat_message(request, message_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def clear_chat_room_messages(request, room_id):
     """Delete all messages in a chat room and broadcast to all connected users"""
     from channels.layers import get_channel_layer
@@ -663,6 +669,7 @@ def go_to_first_unread_room(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def upload_chat_room_file(request, room_id):
     """Upload a file to a chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)

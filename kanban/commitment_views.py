@@ -16,6 +16,8 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Avg
 
+from kanban.decorators import demo_write_guard
+
 from django.contrib.auth.models import User
 from kanban.models import Board, Task
 from kanban.commitment_models import (
@@ -81,6 +83,7 @@ def commitment_dashboard(request, board_id):
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_write_guard
 def commitment_create(request, board_id):
     """
     GET: Show the new commitment form.
@@ -240,6 +243,7 @@ def commitment_detail(request, board_id, commitment_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def commitment_place_bet(request, board_id, commitment_id):
     """
     Place or update a single bet (upsert — one per user per commitment).
@@ -331,6 +335,7 @@ def commitment_place_bet(request, board_id, commitment_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def commitment_signal_manual(request, board_id, commitment_id):
     """
     Board members can manually log a positive or negative signal.
@@ -416,6 +421,7 @@ def negotiation_session_detail(request, board_id, negotiation_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def negotiation_resolve(request, board_id, negotiation_id):
     """
     Mark a NegotiationSession as resolved with the chosen option.

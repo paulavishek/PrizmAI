@@ -506,6 +506,7 @@ def set_mission_goal(request, mission_id):
 
 
 @login_required
+@demo_write_guard
 def link_mission_to_goal(request, goal_id):
     """Link an existing Mission to this Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
@@ -525,6 +526,7 @@ def link_mission_to_goal(request, goal_id):
 
 
 @login_required
+@demo_write_guard
 def unlink_mission_from_goal(request, goal_id, mission_id):
     """Remove the link between a Mission and an Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
@@ -1069,6 +1071,7 @@ def delete_strategy(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def link_board_to_strategy(request, mission_id, strategy_id):
     """Link an existing board to this strategy (AJAX-friendly POST)."""
     mission = get_object_or_404(Mission, id=mission_id)
@@ -1089,6 +1092,7 @@ def link_board_to_strategy(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def unlink_board_from_strategy(request, mission_id, strategy_id, board_id):
     """Remove the link between a board and a strategy."""
     mission = get_object_or_404(Mission, id=mission_id)

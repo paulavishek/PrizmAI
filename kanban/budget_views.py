@@ -18,7 +18,7 @@ from datetime import timedelta
 import json
 
 from kanban.models import Board, Task
-from kanban.decorators import demo_write_guard
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from kanban.budget_models import (
     ProjectBudget, TaskCost, TimeEntry, ProjectROI, 
     BudgetRecommendation, CostPattern
@@ -137,6 +137,7 @@ def budget_create_or_edit(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def task_cost_edit(request, task_id):
     """
     Edit task cost details
@@ -176,6 +177,7 @@ def task_cost_edit(request, task_id):
 
 
 @login_required
+@demo_write_guard
 def time_entry_create(request, task_id):
     """
     Create time entry for a task
@@ -336,6 +338,7 @@ def roi_dashboard(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def roi_snapshot_create(request, board_id):
     """
     Create new ROI snapshot
@@ -708,6 +711,7 @@ def recommendation_implementation_details(request, recommendation_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def ai_predict_overrun(request, board_id):
     """
     Get AI prediction for cost overruns
@@ -782,6 +786,7 @@ def ai_predict_overrun(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def ai_learn_patterns(request, board_id):
     """
     Trigger AI pattern learning
@@ -1272,6 +1277,7 @@ def team_timesheet(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def quick_time_entry(request, task_id):
     """
     Quick time entry API for inline logging
@@ -1333,6 +1339,7 @@ def quick_time_entry(request, task_id):
 
 @login_required
 @require_http_methods(["DELETE"])
+@demo_write_guard
 def delete_time_entry(request, entry_id):
     """
     Delete a time entry
@@ -1577,6 +1584,7 @@ def search_tasks_for_time_entry(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def validate_time_entry_api(request):
     """
     AI-powered validation of a proposed time entry.
@@ -1654,6 +1662,7 @@ def validate_time_entry_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def create_split_time_entries(request):
     """
     Create multiple time entries at once from AI split suggestions.

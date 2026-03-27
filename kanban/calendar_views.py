@@ -26,6 +26,7 @@ from django.views.decorators.http import require_POST, require_GET
 from django.db.models import Max
 
 from .models import Board, Column, Task, TaskActivity, CalendarEvent
+from .decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _user_boards(user):
-    """Return all boards the user owns or is a member of (excluding official demo boards)."""
+    """Return boards visible to the user, including demo boards when in demo mode."""
+    profile = getattr(user, 'userprofile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    if is_demo:
+        return Board.objects.filter(
+            Q(is_official_demo_board=True)
+            | Q(created_by_session=f'spectra_demo_{user.id}')
+        ).distinct().order_by('name')
     return Board.objects.filter(
         Q(created_by=user) | Q(memberships__user=user)
     ).distinct().order_by('name')
@@ -373,6 +381,7 @@ def unified_calendar_events_api(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def calendar_create_task(request):
     try:
         data = json.loads(request.body)
@@ -505,6 +514,7 @@ def calendar_create_task(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def calendar_create_event(request):
     try:
         data = json.loads(request.body)
@@ -703,6 +713,7 @@ def calendar_event_detail(request, event_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def calendar_event_delete(request, event_id):
     """Delete a CalendarEvent (creator only)."""
     event = get_object_or_404(CalendarEvent, id=event_id, created_by=request.user)

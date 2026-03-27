@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from kanban.onboarding_models import OnboardingWorkspacePreview
 from kanban.onboarding_utils import commit_onboarding_workspace
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ def onboarding_welcome(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_ai_guard
 def onboarding_goal_input(request):
     """
     GET  /onboarding/goal/ — render goal input form
@@ -327,6 +329,7 @@ def onboarding_review(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_commit(request):
     """
     POST /onboarding/commit/
@@ -372,6 +375,7 @@ def onboarding_commit(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_start_over(request):
     """
     POST /onboarding/start-over/
@@ -398,6 +402,7 @@ def onboarding_start_over(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_skip(request):
     """
     POST /onboarding/skip/
@@ -419,6 +424,7 @@ def onboarding_skip(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_explore_demo(request):
     """
     POST /onboarding/demo/
@@ -442,6 +448,7 @@ def onboarding_explore_demo(request):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def onboarding_validate(request):
     """
     POST /onboarding/validate/
@@ -514,6 +521,7 @@ def onboarding_validate(request):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def onboarding_regenerate_children(request):
     """
     POST /onboarding/regenerate-children/

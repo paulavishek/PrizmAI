@@ -18,7 +18,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 from kanban.models import Task, Comment, Board, Column, TaskActivity
-from kanban.decorators import demo_write_guard
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from accounts.models import UserProfile
 from django.contrib.auth.models import User
 from kanban.utils.ai_utils import (
@@ -65,6 +65,7 @@ def _get_ai_cache():
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_task_description_api(request):
     """
     API endpoint to generate a task description using AI.
@@ -148,6 +149,7 @@ def generate_task_description_api(request):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def summarize_comments_api(request, task_id):
     """
     API endpoint to summarize task comments using AI
@@ -220,6 +222,7 @@ def summarize_comments_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def download_comment_summary_pdf(request, task_id):
     """
     API endpoint to download comment summary as PDF
@@ -471,6 +474,7 @@ def download_comment_summary_pdf(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_lss_classification_api(request):
     """
     API endpoint to suggest Lean Six Sigma classification for a task
@@ -578,6 +582,7 @@ def suggest_lss_classification_api(request):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def summarize_board_analytics_api(request, board_id):
     """
     API endpoint to summarize board analytics using AI
@@ -776,6 +781,7 @@ def summarize_board_analytics_api(request, board_id):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def download_analytics_summary_pdf(request, board_id):
     """
     API endpoint to download board analytics summary as PDF
@@ -1171,6 +1177,7 @@ def download_analytics_summary_pdf(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def _suggest_task_priority_api_legacy(request):
     """
     LEGACY — Superseded by the PrioritySuggestionService-based version below.
@@ -1343,6 +1350,7 @@ def _suggest_task_priority_api_legacy(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def predict_deadline_api(request):
     """
     API endpoint to predict realistic deadline for a task using AI
@@ -1585,6 +1593,7 @@ def predict_deadline_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def recommend_columns_api(request):
     """
     API endpoint to recommend optimal column structure for a board using AI
@@ -1681,6 +1690,7 @@ def recommend_columns_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_board_setup_api(request):
     """
     API endpoint to generate AI-powered board setup recommendations.
@@ -1750,6 +1760,7 @@ def generate_board_setup_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_task_breakdown_api(request):
     """
     API endpoint to suggest automated breakdown of complex tasks using AI
@@ -1848,6 +1859,7 @@ def suggest_task_breakdown_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_workflow_optimization_api(request):
     """
     API endpoint to analyze workflow and suggest optimizations using AI
@@ -2005,6 +2017,7 @@ def analyze_workflow_optimization_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_subtasks_api(request):
     """
     API endpoint to create multiple tasks from AI-generated subtask breakdown
@@ -2116,6 +2129,7 @@ def create_subtasks_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def calculate_task_risk_api(request):
     """
     API endpoint to calculate AI-powered risk score for a task
@@ -2259,6 +2273,7 @@ def calculate_task_risk_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def get_mitigation_suggestions_api(request):
     """
     API endpoint to get AI-generated mitigation suggestions for a high-risk task
@@ -2378,6 +2393,7 @@ def get_mitigation_suggestions_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def assess_task_dependencies_api(request):
     """
     API endpoint to assess task dependencies and cascading risks
@@ -2685,6 +2701,7 @@ def add_related_task_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_task_dependencies_api(request, task_id):
     """
     Analyze a task and suggest dependencies
@@ -3053,6 +3070,7 @@ def update_task_fields_api(request, task_id):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def summarize_task_details_api(request, task_id):
     """
     API endpoint to generate a comprehensive AI-powered summary of a task's details.
@@ -3198,6 +3216,7 @@ def summarize_task_details_api(request, task_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_ai_guard
 def get_task_prediction_api(request, task_id):
     """
     API endpoint to get or update task completion prediction
@@ -3322,6 +3341,7 @@ def get_task_prediction_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def bulk_update_predictions_api(request, board_id):
     """
     API endpoint to update predictions for all tasks in a board
@@ -3352,6 +3372,7 @@ def bulk_update_predictions_api(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_task_priority_api(request):
     """
     API endpoint to get AI-powered priority suggestion for a task
@@ -3597,6 +3618,7 @@ def log_priority_decision_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def train_priority_model_api(request, board_id):
     """
     API endpoint to train/retrain priority model for a board
@@ -3678,6 +3700,7 @@ def get_priority_model_info_api(request, board_id):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def analyze_skill_gaps_api(request, board_id):
     """
     Analyze skill gaps for a board
@@ -3915,6 +3938,7 @@ def get_team_skill_profile_api(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def match_team_to_task_api(request, task_id):
     """
     Find best team members for a task based on skill matching
@@ -3966,6 +3990,7 @@ def match_team_to_task_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def extract_task_skills_api(request, task_id):
     """
     AI-extract required skills from a task description
@@ -4026,6 +4051,7 @@ def extract_task_skills_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_skill_development_plan_api(request):
     """
     Create a skill development plan to address a gap
@@ -4343,6 +4369,7 @@ def get_skill_gap_detail_api(request, gap_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def search_tasks_semantic_api(request):
     """
     AI-powered semantic search for tasks using Gemini
@@ -4636,6 +4663,7 @@ def add_phase(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_task_summary_api(request, task_id):
     """Generate and persist an AI summary for a single task."""
     start_time = time.time()
@@ -4670,6 +4698,7 @@ def generate_task_summary_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_board_summary_api(request, board_id):
     """
     Enqueue an async Celery task to regenerate the board AI summary.
@@ -4716,6 +4745,7 @@ def generate_board_summary_api(request, board_id):
 @login_required
 @demo_write_guard
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_strategy_summary_api(request, strategy_id):
     """Enqueue an async Celery task to regenerate the strategy AI summary."""
     try:
@@ -4760,6 +4790,7 @@ def generate_strategy_summary_api(request, strategy_id):
 @login_required
 @demo_write_guard
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_mission_summary_api(request, mission_id):
     """Enqueue an async Celery task to regenerate the mission AI summary."""
     try:
@@ -4849,6 +4880,7 @@ def summary_status_api(request, level, obj_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_assignee_api(request):
     """
     API endpoint to suggest the optimal assignee for a task using AI.
@@ -5086,6 +5118,7 @@ def suggest_assignee_api(request):
 @login_required
 @require_http_methods(["POST"])
 @require_ai_quota('board_classification', 'classify')
+@demo_ai_guard
 def classify_board_api(request, board_id):
     """Classify a board's project type using Gemini. Does NOT auto-confirm."""
     board = get_object_or_404(Board, id=board_id)
