@@ -70,7 +70,17 @@ def cleanup_expired_sandboxes():
     deleted = 0
     for sandbox in expired:
         try:
+            from kanban.sandbox_views import _restore_demo_task_assignments, _leave_demo_org
+            _restore_demo_task_assignments(sandbox)
             _delete_sandbox(sandbox)
+            _leave_demo_org(sandbox.user)
+            # Also exit demo mode on their profile
+            try:
+                profile = sandbox.user.profile
+                profile.is_viewing_demo = False
+                profile.save(update_fields=['is_viewing_demo'])
+            except Exception:
+                pass
             sandbox.delete()
             deleted += 1
         except Exception as e:

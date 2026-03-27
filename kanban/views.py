@@ -1066,18 +1066,24 @@ def toggle_demo_mode(request):
     """POST /toggle-demo-mode/ — enter or leave demo mode.
 
     Entering demo:
-      - If user already has a non-expired sandbox → just flip is_viewing_demo on
+      - If user already has a non-expired sandbox → re-enter: join demo org,
+        reassign tasks, flip is_viewing_demo on.
       - Otherwise → kick off async provisioning via Celery and return JSON
         with a task_id so the frontend can stream progress via WebSocket.
     Leaving demo:
-      - Flip is_viewing_demo off.  Sandbox boards are NOT deleted — they
-        persist until expiry or manual reset so the user can re-enter.
+      - Restore demo task assignments, leave demo org, flip is_viewing_demo off.
+        Sandbox boards are NOT deleted — they persist until expiry so the
+        user can re-enter.
     """
     if request.method != 'POST':
         return redirect('dashboard')
 
     profile = request.user.profile
     from kanban.models import DemoSandbox
+    from kanban.sandbox_views import (
+        _join_demo_org, _leave_demo_org,
+        _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+    )
 
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
@@ -1086,6 +1092,8 @@ def toggle_demo_mode(request):
             existing = request.user.demo_sandbox
             if existing.expires_at > timezone.now():
                 # Re-enter existing sandbox instantly
+                _join_demo_org(request.user)
+                _reassign_demo_tasks_to_user(existing, request.user)
                 profile.is_viewing_demo = True
                 profile.save(update_fields=['is_viewing_demo'])
                 return redirect('dashboard')
@@ -1095,9 +1103,16 @@ def toggle_demo_mode(request):
         except DemoSandbox.DoesNotExist:
             pass
 
-        # No active sandbox — provision asynchronously
+        # No active sandbox — provision asynchronously (or sync fallback)
         from kanban.tasks.sandbox_provisioning import provision_sandbox_task
-        result = provision_sandbox_task.delay(request.user.id)
+        try:
+            result = provision_sandbox_task.delay(request.user.id)
+        except Exception:
+            # Redis/Celery unavailable — provision synchronously
+            provision_sandbox_task(request.user.id)
+            profile.is_viewing_demo = True
+            profile.save(update_fields=['is_viewing_demo'])
+            return redirect('dashboard')
 
         # If this is an AJAX request, return JSON for WebSocket streaming
         is_ajax = (
@@ -1116,6 +1131,12 @@ def toggle_demo_mode(request):
         return redirect('dashboard')
     else:
         # ── Leaving demo ───────────────────────────────────────────
+        try:
+            sandbox = request.user.demo_sandbox
+            _restore_demo_task_assignments(sandbox)
+        except DemoSandbox.DoesNotExist:
+            pass
+        _leave_demo_org(request.user)
         profile.is_viewing_demo = False
         profile.save(update_fields=['is_viewing_demo'])
         return redirect('dashboard')

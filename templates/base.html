@@ -419,16 +419,20 @@
             </div>
             <div class="sandbox-active-text">
                 {% if is_browsing %}
-                <strong>You're browsing your sandbox</strong>
+                <strong>You're browsing the demo workspace</strong>
                 <span class="sandbox-active-detail">
                     &mdash; This is your private copy of the demo data. Click "Start Experimenting" to unlock edits.
-                    <span id="sandbox-time-remaining"></span>
+                    <span id="sandbox-time-remaining">
+                        {% if sandbox_expires_at %}({{ sandbox_expires_at|timeuntil }} remaining){% endif %}
+                    </span>
                 </span>
                 {% else %}
-                <strong>You're in your private sandbox</strong>
+                <strong>You're in the demo workspace</strong>
                 <span class="sandbox-active-detail">
                     &mdash; You have full edit access. Changes here won't affect anyone else's data.
-                    <span id="sandbox-time-remaining"></span>
+                    <span id="sandbox-time-remaining">
+                        {% if sandbox_expires_at %}({{ sandbox_expires_at|timeuntil }} remaining){% endif %}
+                    </span>
                 </span>
                 {% endif %}
             </div>

@@ -60,8 +60,16 @@ def _duplicate_board(template_board, user):
     )
     new_board.save()
 
-    # Fresh owner membership (no copying of template's memberships)
+    # Fresh owner membership for the real user
     BoardMembership.objects.create(board=new_board, user=user, role='owner')
+
+    # Copy demo persona memberships so assignees resolve correctly
+    for membership in template_board.memberships.select_related('user').all():
+        if membership.user != user:
+            BoardMembership.objects.get_or_create(
+                board=new_board, user=membership.user,
+                defaults={'role': 'member'},
+            )
 
     # --- TaskLabels (board FK) ---
     label_map = {}  # old label pk → new label instance
@@ -92,7 +100,7 @@ def _duplicate_board(template_board, user):
     for task in (
         Task.objects
         .filter(column__board=template_board)
-        .select_related('column')
+        .select_related('column', 'assigned_to')
         .order_by('column__position', 'position')
     ):
         new_col = column_map.get(task.column.pk)
@@ -112,8 +120,9 @@ def _duplicate_board(template_board, user):
             item_type=task.item_type,
             milestone_status=task.milestone_status,
             created_by=user,
-            # Assign all sandbox tasks to the sandbox user
-            assigned_to=user,
+            # Keep original demo persona assignment (alex/sam/jordan)
+            assigned_to=task.assigned_to,
+            risk_level=task.risk_level,
             # Clear AI and personal operational data
             ai_summary=None,
             ai_summary_generated_at=None,
@@ -172,11 +181,121 @@ def _duplicate_board(template_board, user):
     return new_board
 
 
+NUM_TASKS_TO_REASSIGN = 3  # How many demo tasks to reassign to the real user
+
+
+def _reassign_demo_tasks_to_user(sandbox, user):
+    """
+    Pick NUM_TASKS_TO_REASSIGN tasks on the user's sandbox copy and reassign
+    them from demo personas to the real user.  Store the mapping in
+    sandbox.reassigned_tasks so we can restore on leave.
+
+    Selection criteria: prefer variety — different priorities, with due dates,
+    from different demo personas.
+    """
+    from kanban.models import Board, Task
+
+    boards = Board.objects.filter(owner=user, is_sandbox_copy=True)
+    if not boards.exists():
+        return
+
+    # Find tasks on sandbox boards that are assigned to demo personas
+    candidates = (
+        Task.objects
+        .filter(
+            column__board__in=boards,
+            item_type='task',
+            assigned_to__isnull=False,
+            assigned_to__email__contains='@demo.prizmai.local',
+        )
+        .exclude(progress=100)
+        .select_related('assigned_to', 'column__board')
+        .order_by('priority', 'due_date')
+    )
+
+    # Pick up to NUM_TASKS_TO_REASSIGN from different assignees for variety
+    picked = []
+    seen_assignees = set()
+    # First pass: one per assignee
+    for t in candidates:
+        if t.assigned_to_id not in seen_assignees and len(picked) < NUM_TASKS_TO_REASSIGN:
+            picked.append(t)
+            seen_assignees.add(t.assigned_to_id)
+    # Second pass: fill remaining slots
+    if len(picked) < NUM_TASKS_TO_REASSIGN:
+        for t in candidates:
+            if t not in picked and len(picked) < NUM_TASKS_TO_REASSIGN:
+                picked.append(t)
+
+    mapping = {}
+    for task in picked:
+        mapping[str(task.id)] = task.assigned_to_id
+        task.assigned_to = user
+        task.save(update_fields=['assigned_to'])
+
+    sandbox.reassigned_tasks = mapping
+    sandbox.save(update_fields=['reassigned_tasks'])
+
+
+def _restore_demo_task_assignments(sandbox):
+    """
+    Reassign tasks back to their original demo persona owners using the
+    mapping stored in sandbox.reassigned_tasks.
+    """
+    from kanban.models import Task
+    from django.contrib.auth.models import User
+
+    mapping = sandbox.reassigned_tasks or {}
+    if not mapping:
+        return
+
+    for task_id_str, original_user_id in mapping.items():
+        try:
+            task = Task.objects.get(pk=int(task_id_str))
+            task.assigned_to_id = original_user_id
+            task.save(update_fields=['assigned_to'])
+        except Task.DoesNotExist:
+            pass  # Task was deleted (board purged)
+
+    sandbox.reassigned_tasks = {}
+    sandbox.save(update_fields=['reassigned_tasks'])
+
+
+def _join_demo_org(user):
+    """Add the user to the demo organization and as a member of the demo board."""
+    from accounts.models import Organization, UserProfile
+    from kanban.models import Board, BoardMembership
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+
+    # Store original org so we can restore on leave
+    profile = user.profile
+    if not profile.organization or not profile.organization.is_demo:
+        # Only update if not already in demo org
+        profile._original_org_id = getattr(profile, '_original_org_id', profile.organization_id)
+        profile.organization = demo_org
+        profile.save(update_fields=['organization'])
+
+
+def _leave_demo_org(user):
+    """Remove the user from the demo organization, restoring their original org."""
+    from accounts.models import UserProfile
+
+    profile = user.profile
+    if profile.organization and profile.organization.is_demo:
+        profile.organization = None
+        profile.save(update_fields=['organization'])
+
+
 def _purge_existing_sandbox(user):
     """Delete any existing sandbox for the user (boards + DemoSandbox record)."""
     from kanban.models import DemoSandbox, Board
     try:
         sandbox = user.demo_sandbox
+        # Restore assignments before deleting
+        _restore_demo_task_assignments(sandbox)
         # Delete sandbox boards (not the saved board)
         Board.objects.filter(
             owner=user,
@@ -272,10 +391,12 @@ def delete_sandbox(request):
         return JsonResponse({'error': 'No active sandbox found.'}, status=404)
 
     from kanban.tasks.sandbox_tasks import _delete_sandbox
+    _restore_demo_task_assignments(sandbox)
     _delete_sandbox(sandbox)
     sandbox.delete()
 
-    # Exit demo mode
+    # Exit demo mode and leave demo org
+    _leave_demo_org(user)
     try:
         profile = user.profile
         profile.is_viewing_demo = False

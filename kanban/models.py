@@ -2320,6 +2320,13 @@ class DemoSandbox(models.Model):
         related_name='+',
         help_text="Board the user chose to save before sandbox deletion."
     )
+    reassigned_tasks = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            "Maps task IDs (str) to original assignee user IDs. "
+            "Used to restore assignments when user leaves demo mode."
+        ),
+    )
 
     def __str__(self):
         return f"Sandbox for {self.user.username} (expires {self.expires_at})"
