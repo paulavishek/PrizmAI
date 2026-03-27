@@ -447,6 +447,16 @@ def dashboard(request):
         if 'medium' in levels: return 'medium'
         return 'low'
 
+    # ── Sandbox board mapping ────────────────────────────────────────
+    # In demo mode, the mission tree references template boards (via
+    # Strategy FK), but our stats are computed on the user's sandbox
+    # copies. Build a template_id → sandbox_id mapping so we can look
+    # up the correct stats when iterating template boards in the tree.
+    _template_to_sandbox = {}
+    if demo_mode:
+        for _sb in boards.filter(cloned_from__isnull=False):
+            _template_to_sandbox[_sb.cloned_from_id] = _sb.id
+
     mission_tree = []
     mission_item_map = {}  # id -> item dict, used for goal_tree grouping
     for mission in missions_qs:
@@ -454,7 +464,9 @@ def dashboard(request):
         for strategy in mission.strategies.all().order_by('-created_at'):
             board_list = []
             for board in strategy.boards.all().order_by('name'):
-                _bstats = _board_stats_map.get(board.id, {})
+                # In demo mode, look up stats via the sandbox copy ID
+                _stats_id = _template_to_sandbox.get(board.id, board.id)
+                _bstats = _board_stats_map.get(_stats_id, {})
                 total_t = _bstats.get('total_tasks', 0)
                 done_t = _bstats.get('done_tasks', 0)
                 high_risk_t = _bstats.get('high_risk_tasks', 0)

@@ -684,6 +684,11 @@ class Board(models.Model):
         default=False,
         help_text="True if this board was created by sandbox provisioning (personal demo copy)."
     )
+    cloned_from = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='sandbox_clones',
+        help_text="Template board this sandbox copy was cloned from."
+    )
 
     # Phase Configuration for Gantt Chart
     num_phases = models.PositiveIntegerField(

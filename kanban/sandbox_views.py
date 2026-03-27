@@ -53,10 +53,15 @@ def _duplicate_board(template_board, user):
         is_official_demo_board=False,          # ← critical: not a template
         is_seed_demo_data=False,
         is_sandbox_copy=True,                    # ← tags this as a sandbox copy
+        cloned_from=template_board,              # ← track which template it was cloned from
         strategy=None,                          # Do not inherit strategic context
         num_phases=template_board.num_phases,
         task_prefix=template_board.task_prefix,
         project_type=template_board.project_type,
+        # Copy baseline for Scope Creep Index
+        baseline_task_count=template_board.baseline_task_count,
+        baseline_complexity_total=template_board.baseline_complexity_total,
+        baseline_set_date=template_board.baseline_set_date,
     )
     new_board.save()
 
@@ -123,6 +128,9 @@ def _duplicate_board(template_board, user):
             # Keep original demo persona assignment (alex/sam/jordan)
             assigned_to=task.assigned_to,
             risk_level=task.risk_level,
+            risk_likelihood=task.risk_likelihood,
+            risk_impact=task.risk_impact,
+            complexity_score=task.complexity_score,
             # Clear AI and personal operational data
             ai_summary=None,
             ai_summary_generated_at=None,
