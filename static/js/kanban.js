@@ -31,13 +31,6 @@ function initColumnDragDrop() {
     console.log('[Column DnD] Initializing column drag-and-drop...');
     const columns = document.querySelectorAll('.kanban-column');
 
-    // Disable column drag-and-drop in browse-only sandbox mode
-    if (window.isDemoBrowsing) {
-        columns.forEach(col => col.setAttribute('draggable', 'false'));
-        console.log('[Column DnD] Skipped — sandbox is in browse mode');
-        return;
-    }
-    
     columns.forEach((column, index) => {
         // Store reference for later use
         column.dataset.columnIndex = index;
@@ -254,14 +247,6 @@ function initKanbanBoard() {
     // Initialize column scrolling based on task count
     initColumnScrolling();
 
-    // Disable drag-and-drop in browse-only sandbox mode
-    if (window.isDemoBrowsing) {
-        tasks.forEach(task => task.setAttribute('draggable', 'false'));
-        console.log('[Kanban] Task drag-and-drop disabled — sandbox is in browse mode');
-        addScrollIndicators();
-        return;
-    }
-    
     // Initialize drag for all tasks
     tasks.forEach(task => {
         task.setAttribute('draggable', 'true');

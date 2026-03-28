@@ -37,7 +37,6 @@ with allow_demo_writes():
     sandbox = DemoSandbox.objects.create(
         user=user,
         expires_at=timezone.now() + timedelta(hours=24),
-        is_browsing=True,
     )
     _join_demo_org(user)
     _reassign_demo_tasks_to_user(sandbox, user)
@@ -49,7 +48,7 @@ profile.save(update_fields=['is_viewing_demo'])
 
 print(f"\n=== AFTER PROVISIONING ===")
 print(f"testuser1 org: {user.profile.organization}")
-print(f"DemoSandbox: is_browsing={sandbox.is_browsing} expires={sandbox.expires_at}")
+print(f"DemoSandbox: expires={sandbox.expires_at}")
 print(f"Reassigned tasks mapping: {sandbox.reassigned_tasks}")
 
 # Show board memberships

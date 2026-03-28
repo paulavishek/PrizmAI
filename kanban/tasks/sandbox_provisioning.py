@@ -148,7 +148,6 @@ def provision_sandbox_task(self, user_id):
         sandbox = DemoSandbox.objects.create(
             user=user,
             expires_at=timezone.now() + timedelta(hours=24),
-            is_browsing=True,
         )
 
         # Join demo org and reassign a few tasks to the real user

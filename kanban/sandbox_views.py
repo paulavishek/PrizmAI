@@ -6,7 +6,6 @@ Master Demo Template boards (is_official_demo_board=True) are NEVER modified.
 
 Lifecycle:
   POST /toggle-demo-mode/           → provision sandbox (async via Celery) or re-enter existing
-  POST /demo/start-experimenting/   → flip is_browsing to False (enable editing)
   POST /demo/reset-mine/            → wipe user's sandbox and re-provision
   POST /sandbox/save/               → designate one board to survive sandbox deletion
   POST /sandbox/delete/             → delete sandbox immediately
@@ -351,23 +350,6 @@ def _purge_existing_sandbox(user):
 
 @login_required
 @require_http_methods(["POST"])
-def toggle_browsing(request):
-    """POST /demo/start-experimenting/ — flip is_browsing to False, or provision a new sandbox."""
-    from kanban.models import DemoSandbox
-    try:
-        sandbox = request.user.demo_sandbox
-        sandbox.is_browsing = False
-        sandbox.save(update_fields=['is_browsing'])
-        return JsonResponse({'status': 'ok', 'is_browsing': False})
-    except DemoSandbox.DoesNotExist:
-        # No sandbox exists — provision one (e.g. user exited and wants to start again)
-        from kanban.tasks.sandbox_provisioning import provision_sandbox_task
-        result = provision_sandbox_task.delay(request.user.id)
-        return JsonResponse({'status': 'provisioning', 'task_id': result.id})
-
-
-@login_required
-@require_http_methods(["POST"])
 def reset_my_demo(request):
     """POST /demo/reset-mine/ — wipe user's sandbox and re-provision via Celery."""
     from kanban.models import DemoSandbox
@@ -467,7 +449,6 @@ def sandbox_status(request):
         return JsonResponse({
             'has_sandbox': True,
             'is_viewing_demo': is_viewing_demo and hours_left > 0,
-            'is_browsing': sandbox.is_browsing,
             'expires_at': sandbox.expires_at.isoformat(),
             'hours_remaining': round(hours_left, 1),
             'warning_sent': sandbox.warning_sent,

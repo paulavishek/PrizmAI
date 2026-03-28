@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.db.models import Q, Sum, Count
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse
 from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
@@ -27,21 +27,6 @@ from accounts.models import Organization
 class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
     """Base view for wiki operations - MVP mode without organization requirement"""
     
-    def dispatch(self, request, *args, **kwargs):
-        """Block write operations for users in browse-only sandbox mode."""
-        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
-            try:
-                profile = getattr(request.user, 'profile', None)
-                if profile and getattr(profile, 'is_viewing_demo', False):
-                    sandbox = getattr(request.user, 'demo_sandbox', None)
-                    if sandbox and getattr(sandbox, 'is_browsing', False):
-                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
-                            return JsonResponse({'error': 'Click "Start Experimenting" to unlock editing.', 'demo_readonly': True}, status=403)
-                        return HttpResponseForbidden('Click "Start Experimenting" to unlock editing.')
-            except Exception:
-                pass
-        return super().dispatch(request, *args, **kwargs)
-
     def test_func(self):
         """MVP Mode: All authenticated users can access wiki"""
         # All authenticated users can access wiki content
