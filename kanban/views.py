@@ -1010,7 +1010,10 @@ def dashboard(request):
             _dc_pending = _dc_pending.filter(board__is_official_demo_board=True)
         else:
             _dc_pending = (
-                _dc_pending.filter(board__is_official_demo_board=False)
+                _dc_pending.filter(
+                    board__is_official_demo_board=False,
+                    board__is_sandbox_copy=False,
+                )
                 | DecisionItem.objects.filter(
                     created_for=request.user, status='pending', board__isnull=True
                 )

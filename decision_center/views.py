@@ -72,7 +72,8 @@ def decision_center_view(request):
         pending = pending.filter(board__is_official_demo_board=True)
     else:
         pending = pending.filter(
-            board__is_official_demo_board=False
+            board__is_official_demo_board=False,
+            board__is_sandbox_copy=False,
         ) | DecisionItem.objects.filter(
             created_for=user, status='pending', board__isnull=True
         )
@@ -146,7 +147,10 @@ def decision_center_widget_data(request):
         pending = pending.filter(board__is_official_demo_board=True)
     else:
         pending = (
-            pending.filter(board__is_official_demo_board=False)
+            pending.filter(
+                board__is_official_demo_board=False,
+                board__is_sandbox_copy=False,
+            )
             | DecisionItem.objects.filter(
                 created_for=user, status='pending', board__isnull=True
             )
