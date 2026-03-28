@@ -161,28 +161,23 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <h1 class="topbar-page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                {% if is_viewing_demo %}
+                <span class="tws-sandbox-badge" style="font-size:0.72rem;padding:3px 10px;margin-left:6px;">SANDBOX</span>
+                {% endif %}
             </div>
-            <!-- Workspace Switcher — inline buttons, always visible in topbar -->
+            <!-- Workspace Switcher — absolutely centered in topbar -->
             {% if user.is_authenticated %}
-            <div class="topbar-workspace-switcher">
-                <span class="tws-label">You are in:</span>
+            <div class="topbar-workspace-switcher" style="position:absolute;left:50%;transform:translateX(-50%);">
                 {% if is_viewing_demo %}
                 <span class="tws-btn tws-btn-active" title="Currently active">
                     <i class="fas fa-eye me-1"></i>Demo Workspace
                 </span>
-                <span class="tws-sandbox-badge"><i class="fas fa-flask me-1"></i>SANDBOX</span>
-                <button type="button" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state">
-                    <i class="fas fa-redo me-1"></i>Reset Demo
-                </button>
                 <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="tws-btn">
                         <i class="fas fa-briefcase me-1"></i>My Workspace
                     </button>
                 </form>
-                <a href="{% url 'onboarding_welcome' %}?from=dashboard" class="tws-btn tws-btn-setup">
-                    <i class="fas fa-rocket me-1"></i>Set up my workspace
-                </a>
                 {% else %}
                 <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
                     {% csrf_token %}
@@ -193,9 +188,6 @@
                 <span class="tws-btn tws-btn-active" title="Currently active">
                     <i class="fas fa-briefcase me-1"></i>My Workspace
                 </span>
-                <a href="{% url 'onboarding_goal' %}" class="tws-btn tws-btn-setup">
-                    <i class="fas fa-rocket me-1"></i>Set up my workspace
-                </a>
                 {% endif %}
             </div>
             {% endif %}
@@ -205,12 +197,6 @@
                 <a href="{% url 'return_to_real_account' %}" class="btn btn-sm btn-warning fw-semibold topbar-return-btn" title="Switch back to your real account">
                     <i class="fas fa-arrow-left me-1"></i>Back to {{ request.session.real_user_username }}
                 </a>
-                {% endif %}
-                {% if user.is_authenticated and not is_demo_account %}
-                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
-                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;">
-                    <i class="fas fa-share-alt"></i>
-                </button>
                 {% endif %}
                 <!-- Display Mode Dropdown -->
                 <div class="dropdown" id="display-mode-dropdown">
@@ -245,6 +231,29 @@
                         </li>
                     </ul>
                 </div>
+                {% if is_viewing_demo %}
+                <button type="button" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
+                        style="border:1.5px solid #d97706 !important;background:transparent !important;color:#d97706 !important;font-weight:600 !important;">
+                    <i class="fas fa-redo me-1"></i>Reset Demo
+                </button>
+                {% endif %}
+                {% if is_viewing_demo %}
+                <a href="{% url 'onboarding_welcome' %}?from=dashboard" class="tws-btn tws-btn-setup-muted"
+                   style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
+                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                </a>
+                {% else %}
+                <a href="{% url 'onboarding_goal' %}" class="tws-btn tws-btn-setup-muted"
+                   style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
+                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                </a>
+                {% endif %}
+                {% if user.is_authenticated and not is_demo_account %}
+                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
+                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+                {% endif %}
                 <!-- Timezone Selector -->
                 {% if user.is_authenticated %}
                 <div id="timezone-dropdown">
@@ -254,35 +263,6 @@
                     </button>
                 </div>
                 {% endif %}
-                <div class="dropdown">
-                    <button class="topbar-icon-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="topbarNotifBell" title="Notifications">
-                        <i class="fas fa-bell"></i>
-                        <span class="topbar-badge" id="topbar-notif-badge" style="display:none;"><span id="topbar-notif-count">0</span></span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050; min-width: 300px;">
-                        <li id="dc-notif-entry" style="display:none;">
-                            <a class="dropdown-item py-2" href="{% url 'decision_center:decision_center' %}">
-                                <i class="fas fa-bolt text-warning me-2"></i>
-                                <strong>Decision Center</strong>
-                                <br><small class="text-muted" id="dc-notif-text"></small>
-                            </a>
-                        </li>
-                        <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
-                        <li id="ar-notif-entry" style="display:none;">
-                            <a class="dropdown-item py-2" href="{% url 'pending_access_requests' %}">
-                                <i class="fas fa-user-lock text-info me-2"></i>
-                                <strong>Access Requests</strong>
-                                <br><small class="text-muted" id="ar-notif-text"></small>
-                            </a>
-                        </li>
-                        <li id="ar-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
-                                <i class="fas fa-list me-2"></i> View all notifications
-                            </a>
-                        </li>
-                    </ul>
-                </div>
             </div>
         </header>
 

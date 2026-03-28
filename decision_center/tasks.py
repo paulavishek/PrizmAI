@@ -417,6 +417,31 @@ def generate_decision_briefing():
         pending = DecisionItem.objects.filter(
             created_for_id=user_id, status='pending',
         )
+
+        # Scope to demo or real boards — matching the view/widget logic
+        try:
+            user_obj = User.objects.get(pk=user_id)
+            is_demo_mode = getattr(
+                getattr(user_obj, 'profile', None), 'is_viewing_demo', False
+            )
+            is_demo_account = '_demo' in user_obj.username
+        except User.DoesNotExist:
+            is_demo_mode = False
+            is_demo_account = False
+
+        if is_demo_mode or is_demo_account:
+            pending = pending.filter(board__is_official_demo_board=True)
+        else:
+            pending = (
+                pending.filter(
+                    board__is_official_demo_board=False,
+                    board__is_sandbox_copy=False,
+                )
+                | DecisionItem.objects.filter(
+                    created_for_id=user_id, status='pending', board__isnull=True
+                )
+            ).distinct()
+
         action_items = list(
             pending.filter(priority_level='action_required')
             .values_list('title', flat=True)
