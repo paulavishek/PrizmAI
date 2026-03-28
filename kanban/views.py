@@ -1030,6 +1030,13 @@ def dashboard(request):
         )
     dc_total_count = dc_action_count + dc_awareness_count + dc_quickwin_count
 
+    # Demo welcome panel: pass the user's primary sandbox board for links
+    demo_board = None
+    if demo_mode:
+        demo_board = Board.objects.filter(
+            owner=request.user, is_sandbox_copy=True
+        ).order_by('-created_at').first()
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -1048,6 +1055,7 @@ def dashboard(request):
             'now': timezone.now(),  # For comparing dates in the template
         # Demo mode / onboarding v2
         'demo_mode': demo_mode,
+        'demo_board': demo_board,
         'onboarding_profile': profile,
         # Mission tree  
         'mission_tree': mission_tree,

@@ -38,298 +38,293 @@
         color: white;
     }
 
-    /* Demo Credentials — expandable panel (triggered from KPI strip) */
-    .demo-credentials-banner {
-        background: transparent;
-        border: none;
-        border-radius: 0;
-        margin-bottom: 0;
-        overflow: visible;
-        box-shadow: none;
-        transition: none;
-    }
-
-    .demo-credentials-banner.expanded {
-        box-shadow: none;
-    }
-
-    .demo-banner-header {
-        display: none; /* header is now in KPI strip */
-    }
-
-    .demo-banner-title {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        margin: 0;
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #0369a1;
-    }
-
-    .demo-banner-icon {
-        font-size: 0.82rem;
-        color: #0369a1;
-    }
-
-    .demo-toggle-icon {
-        font-size: 0.78rem;
-        color: #0369a1;
-        transition: transform 0.3s ease;
-    }
-
-    .demo-credentials-banner.expanded .demo-toggle-icon {
-        transform: rotate(180deg);
-    }
-
-    .demo-banner-content {
-        max-height: 0;
+    /* ================================================================
+       DEMO WELCOME PANEL — collapsible onboarding guide
+       Uses Bootstrap card classes + PrizmAI CSS variables for theming.
+       ================================================================ */
+    .demo-welcome-panel {
+        border-radius: 0.75rem;
+        margin-bottom: 1rem;
         overflow: hidden;
-        transition: max-height 0.4s ease, padding 0.4s ease;
-        padding: 0;
-        text-align: left;
-        margin-top: 0.5rem;
-        background: white;
-        border: 1px solid #bae6fd;
-        border-radius: 10px;
+        transition: box-shadow 0.3s ease;
+        border: 0.5px solid var(--bs-border-color, #dee2e6);
+        background: var(--bs-body-bg, #fff);
     }
 
-    .demo-credentials-banner.expanded .demo-banner-content {
-        max-height: 500px;
-        padding: 1rem 1.25rem 1.25rem 1.25rem;
-    }
-
-    .demo-users-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
-        margin-top: 1rem;
-    }
-
-    @media (max-width: 992px) {
-        .demo-users-row {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .demo-user-box {
-        background: white;
-        border-radius: 10px;
-        padding: 1rem;
-        border: 1px solid #b3e5fc;
-        transition: all 0.3s ease;
-    }
-
-    .demo-user-box:hover {
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.2);
-        transform: translateY(-3px);
-    }
-
-    .demo-user-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .demo-user-init {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 0.95rem;
-        color: white;
-        flex-shrink: 0;
-    }
-
-    .demo-user-box.admin .demo-user-init {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-
-    .demo-user-box.developer .demo-user-init {
-        background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-    }
-
-    .demo-user-box.strategist .demo-user-init {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    }
-
-    .demo-user-info h6 {
-        margin: 0;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #01579b;
-    }
-
-    .demo-user-role {
-        font-size: 0.82rem;
-        color: #0288d1;
-        margin: 0;
-    }
-
-    .demo-cred-item {
+    .demo-welcome-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.5rem;
-        background: #f8f9fa;
-        border-radius: 6px;
-        margin-bottom: 0.4rem;
-        font-size: 0.9rem;
+        padding: 0.85rem 1.25rem;
+        cursor: pointer;
+        user-select: none;
+        gap: 0.75rem;
     }
 
-    .demo-cred-label {
-        color: var(--text-secondary);
-        font-weight: 600;
-    }
-
-    .demo-cred-value {
-        font-family: 'Courier New', monospace;
-        font-weight: 700;
-        color: #01579b;
-        background: white;
-        padding: 0.2rem 0.6rem;
-        border-radius: 4px;
-        border: 1px solid #b3e5fc;
-    }
-
-    /* Demo Skills List */
-    .demo-skills-list {
-        margin-top: 0.75rem;
-        padding-top: 0.75rem;
-        border-top: 1px solid #e3f2fd;
-    }
-
-    .demo-skill-tag {
-        display: inline-block;
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        color: #01579b;
-        padding: 0.3rem 0.7rem;
-        border-radius: 4px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        margin-right: 0.3rem;
-        margin-bottom: 0.3rem;
-        border: 1px solid #90caf9;
-    }
-
-    /* Demo Login Button */
-    .demo-login-btn {
-        display: block;
-        width: 100%;
-        padding: 0.6rem;
-        margin-top: 0.75rem;
-        background: linear-gradient(135deg, #0288d1 0%, #0277bd 100%);
-        color: white;
-        text-align: center;
-        border-radius: 6px;
-        text-decoration: none;
-        font-weight: 600;
-        font-size: 0.9rem;
-        transition: all 0.3s ease;
-        border: none;
-    }
-
-    .demo-login-btn:hover {
-        background: linear-gradient(135deg, #0277bd 0%, #01579b 100%);
-        color: white;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.3);
-    }
-
-    /* Demo mode banner pulse */
-    #demo-banner { animation: demoPulse 3s ease-in-out 1; }
-    @keyframes demoPulse {
-        0%,100% { box-shadow: 0 2px 8px rgba(255,193,7,.2); }
-        50%     { box-shadow: 0 4px 20px rgba(255,193,7,.5); }
-    }
-
-    /* Demo Boards Section */
-    .demo-boards-section {
-        padding-top: 1rem;
-        border-top: 2px solid #b3e5fc;
-    }
-
-    .demo-boards-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #01579b;
-        margin-bottom: 0.75rem;
+    .demo-welcome-header-left {
         display: flex;
         align-items: center;
+        gap: 0.6rem;
+        min-width: 0;
     }
 
-    .demo-boards-grid {
+    .demo-welcome-header-left .welcome-icon {
+        font-size: 1.15rem;
+        opacity: 0.85;
+        flex-shrink: 0;
+    }
+
+    .demo-welcome-header-left .welcome-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0;
+        line-height: 1.3;
+    }
+
+    .demo-welcome-header-left .welcome-subtitle {
+        font-size: 0.8rem;
+        opacity: 0.7;
+        margin: 0;
+        line-height: 1.3;
+    }
+
+    .demo-welcome-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .demo-welcome-toggle .chevron-icon {
+        transition: transform 0.3s ease;
+        font-size: 0.75rem;
+    }
+
+    .demo-welcome-panel.expanded .demo-welcome-toggle .chevron-icon {
+        transform: rotate(180deg);
+    }
+
+    .demo-welcome-body {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.45s ease, padding 0.45s ease;
+        padding: 0 1.25rem;
+    }
+
+    .demo-welcome-panel.expanded .demo-welcome-body {
+        max-height: 1200px;
+        padding: 0.25rem 1.25rem 1.25rem 1.25rem;
+    }
+
+    .demo-welcome-body .demo-section-label.mt-3 {
+        margin-top: 1.15rem !important;
+    }
+
+    .demo-welcome-body hr.my-3 {
+        margin-top: 1.15rem !important;
+        margin-bottom: 1.15rem !important;
+    }
+
+    /* Section labels */
+    .demo-section-label {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--bs-secondary-color, #6c757d);
+        margin-bottom: 0.6rem;
+    }
+
+    /* Credential cards — 3-col grid */
+    .demo-cred-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
+        gap: 0.85rem;
     }
 
     @media (max-width: 992px) {
-        .demo-boards-grid {
+        .demo-cred-grid {
             grid-template-columns: 1fr;
         }
     }
 
-    .demo-board-item {
-        background: white;
-        border-radius: 8px;
+    .demo-cred-card {
+        border-radius: 0.6rem;
         padding: 1rem;
-        border: 1px solid #e3f2fd;
-        text-align: center;
-        transition: all 0.3s ease;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        transition: box-shadow 0.2s ease;
     }
 
-    .demo-board-item:hover {
-        border-color: #0288d1;
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.15);
-        transform: translateY(-2px);
+    .demo-cred-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
-    .demo-board-icon {
-        width: 50px;
-        height: 50px;
-        margin: 0 auto 0.75rem;
+    .demo-cred-card .cred-header {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .demo-cred-card .cred-avatar {
+        width: 38px;
+        height: 38px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.5rem;
-        color: white;
-    }
-
-    .demo-board-item.software .demo-board-icon {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-
-    .demo-board-item.marketing .demo-board-icon {
-        background: linear-gradient(135deg, #f857a6 0%, #ff5858 100%);
-    }
-
-    .demo-board-item.bug .demo-board-icon {
-        background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%);
-    }
-
-    .demo-board-name {
         font-weight: 700;
-        font-size: 0.95rem;
-        color: #01579b;
-        margin-bottom: 0.4rem;
+        font-size: 0.85rem;
+        color: #fff;
+        flex-shrink: 0;
     }
 
-    .demo-board-desc {
+    .cred-avatar.avatar-ac { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .cred-avatar.avatar-sr { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); }
+    .cred-avatar.avatar-jt { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+
+    .demo-cred-card .cred-name {
+        font-weight: 700;
+        font-size: 0.92rem;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .demo-cred-card .cred-role {
+        font-size: 0.78rem;
+        opacity: 0.65;
+        margin: 0;
+    }
+
+    .demo-cred-card .cred-field {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.4rem 0.6rem;
+        border-radius: 0.35rem;
+        margin-bottom: 0.35rem;
+        font-size: 0.85rem;
+        background: var(--bs-tertiary-bg, #f8f9fa);
+    }
+
+    .demo-cred-card .cred-field-label {
+        font-weight: 600;
+        opacity: 0.7;
+        font-size: 0.8rem;
+    }
+
+    .demo-cred-card .cred-field-value {
+        font-family: var(--bs-font-monospace, 'SFMono-Regular', 'Menlo', 'Courier New', monospace);
+        font-weight: 600;
         font-size: 0.82rem;
-        color: var(--text-secondary);
-        line-height: 1.4;
+        padding: 0.15rem 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        background: var(--bs-body-bg, #fff);
     }
 
-    /* Adjust max-height for expanded content with new sections */
-    .demo-credentials-banner.expanded .demo-banner-content {
-        max-height: 850px;
-        padding: 1rem 1.25rem 1.25rem 1.25rem;
+    /* Demo board row */
+    .demo-board-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .demo-board-row .board-info {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        min-width: 0;
+    }
+
+    .demo-board-row .board-icon-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+
+    .demo-board-row .board-label {
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .demo-board-row .board-meta {
+        font-size: 0.78rem;
+        opacity: 0.65;
+        margin: 0;
+    }
+
+    /* "What you can try" grid */
+    .demo-tips-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.35rem 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .demo-tips-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .demo-tips-grid .tip-item {
+        display: flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        font-size: 0.85rem;
+        padding: 0.25rem 0;
+    }
+
+    .demo-tips-grid .tip-bullet {
+        flex-shrink: 0;
+        font-size: 0.7rem;
+    }
+
+    /* Sandbox info box */
+    .demo-sandbox-info {
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.84rem;
+        line-height: 1.55;
+        background: rgba(118, 75, 162, 0.08);
+        border-left: 3px solid #764ba2;
+    }
+
+    /* Action buttons row */
+    .demo-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+    }
+
+    .demo-actions-row .btn {
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    /* Rate limit footnote */
+    .demo-rate-note {
+        font-size: 0.78rem;
+        opacity: 0.55;
+        text-align: center;
+        margin-top: 0.75rem;
     }
     
     /* Welcome Modal Styles */
@@ -1330,123 +1325,164 @@
 </div>
 <!-- /AI Recommended Actions Modal -->
 
-<!-- Demo Credentials — expanded panel -->
+<!-- Demo Welcome Panel — collapsible onboarding guide -->
 {% if demo_mode %}
-<div class="demo-credentials-banner" id="demoCredentialsBanner">
-    <div class="demo-banner-content">
-        <div class="demo-users-row">
-            <!-- Alex Chen - Admin -->
-            <div class="demo-user-box admin">
-                <div class="demo-user-header">
-                    <div class="demo-user-init">AC</div>
-                    <div class="demo-user-info">
-                        <h6>Alex Chen</h6>
-                        <p class="demo-user-role">Admin</p>
-                    </div>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Username:</span>
-                    <span class="demo-cred-value">alex_chen_demo</span>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Password:</span>
-                    <span class="demo-cred-value">demo123</span>
-                </div>
-                <div class="demo-skills-list">
-                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
-                    <span class="demo-skill-tag">Project Management</span>
-                    <span class="demo-skill-tag">Agile/Scrum</span>
-                    <span class="demo-skill-tag">Leadership</span>
-                </div>
-                <a href="{% url 'quick_demo_login' 'alex_chen_demo' %}" class="demo-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Alex
-                </a>
-            </div>
-
-            <!-- Sam Rivera - Developer -->
-            <div class="demo-user-box developer">
-                <div class="demo-user-header">
-                    <div class="demo-user-init">SR</div>
-                    <div class="demo-user-info">
-                        <h6>Sam Rivera</h6>
-                        <p class="demo-user-role">Developer</p>
-                    </div>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Username:</span>
-                    <span class="demo-cred-value">sam_rivera_demo</span>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Password:</span>
-                    <span class="demo-cred-value">demo123</span>
-                </div>
-                <div class="demo-skills-list">
-                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
-                    <span class="demo-skill-tag">Python</span>
-                    <span class="demo-skill-tag">JavaScript</span>
-                    <span class="demo-skill-tag">Django</span>
-                    <span class="demo-skill-tag">React</span>
-                </div>
-                <a href="{% url 'quick_demo_login' 'sam_rivera_demo' %}" class="demo-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Sam
-                </a>
-            </div>
-
-            <!-- Jordan Taylor - Strategist -->
-            <div class="demo-user-box strategist">
-                <div class="demo-user-header">
-                    <div class="demo-user-init">JT</div>
-                    <div class="demo-user-info">
-                        <h6>Jordan Taylor</h6>
-                        <p class="demo-user-role">Strategist</p>
-                    </div>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Username:</span>
-                    <span class="demo-cred-value">jordan_taylor_demo</span>
-                </div>
-                <div class="demo-cred-item">
-                    <span class="demo-cred-label">Password:</span>
-                    <span class="demo-cred-value">demo123</span>
-                </div>
-                <div class="demo-skills-list">
-                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
-                    <span class="demo-skill-tag">Strategic Planning</span>
-                    <span class="demo-skill-tag">Business Analysis</span>
-                </div>
-                <a href="{% url 'quick_demo_login' 'jordan_taylor_demo' %}" class="demo-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Jordan
-                </a>
+<div class="card shadow-sm demo-welcome-panel" id="demoWelcomePanel">
+    <!-- Header (always visible, click to toggle) -->
+    <div class="demo-welcome-header card-header" onclick="toggleWelcomePanel()">
+        <div class="demo-welcome-header-left">
+            <i class="fas fa-compass welcome-icon text-primary"></i>
+            <div>
+                <p class="welcome-title mb-0">Welcome to PrizmAI &mdash; here&rsquo;s how to explore</p>
+                <p class="welcome-subtitle mb-0 text-muted">Demo credentials, what&rsquo;s included, and how your sandbox works</p>
             </div>
         </div>
+        <span class="demo-welcome-toggle text-muted">
+            <span class="toggle-label">Hide</span>
+            <i class="fas fa-chevron-up chevron-icon"></i>
+        </span>
+    </div>
 
-        <!-- Demo Boards Section -->
-        <div class="demo-boards-section mt-4">
-            <h5 class="demo-boards-title">
-                <i class="fas fa-folder-open me-2"></i>Pre-Populated Demo Board
-            </h5>
-            <div class="demo-boards-grid">
-                <!-- Software Development Board -->
-                <div class="demo-board-item software">
-                    <div class="demo-board-icon">
-                        <i class="fas fa-code"></i>
+    <!-- Collapsible body -->
+    <div class="demo-welcome-body">
+
+        <!-- Section 1: Demo user credentials -->
+        <p class="demo-section-label mt-3">SIGN IN AS ANY OF THESE DEMO USERS</p>
+        <div class="demo-cred-grid">
+            <!-- Alex Chen -->
+            <div class="demo-cred-card">
+                <div class="cred-header">
+                    <div class="cred-avatar avatar-ac">AC</div>
+                    <div>
+                        <p class="cred-name">Alex Chen</p>
+                        <p class="cred-role">Project Lead</p>
                     </div>
-                    <div class="demo-board-name">Software Development</div>
-                    <div class="demo-board-desc">30 tasks with sprints, dependencies, and Gantt charts</div>
+                </div>
+                <div class="cred-field">
+                    <span class="cred-field-label">Username</span>
+                    <span class="cred-field-value">alex_chen_demo</span>
+                </div>
+                <div class="cred-field">
+                    <span class="cred-field-label">Password</span>
+                    <span class="cred-field-value">demo123</span>
+                </div>
+            </div>
+            <!-- Sam Rivera -->
+            <div class="demo-cred-card">
+                <div class="cred-header">
+                    <div class="cred-avatar avatar-sr">SR</div>
+                    <div>
+                        <p class="cred-name">Sam Rivera</p>
+                        <p class="cred-role">Developer</p>
+                    </div>
+                </div>
+                <div class="cred-field">
+                    <span class="cred-field-label">Username</span>
+                    <span class="cred-field-value">sam_rivera_demo</span>
+                </div>
+                <div class="cred-field">
+                    <span class="cred-field-label">Password</span>
+                    <span class="cred-field-value">demo123</span>
+                </div>
+            </div>
+            <!-- Jordan Taylor -->
+            <div class="demo-cred-card">
+                <div class="cred-header">
+                    <div class="cred-avatar avatar-jt">JT</div>
+                    <div>
+                        <p class="cred-name">Jordan Taylor</p>
+                        <p class="cred-role">Designer</p>
+                    </div>
+                </div>
+                <div class="cred-field">
+                    <span class="cred-field-label">Username</span>
+                    <span class="cred-field-value">jordan_taylor_demo</span>
+                </div>
+                <div class="cred-field">
+                    <span class="cred-field-label">Password</span>
+                    <span class="cred-field-value">demo123</span>
                 </div>
             </div>
         </div>
 
-        <!-- AI Feature Notice -->
-        <div class="alert alert-info mt-4" style="border-left: 4px solid #17a2b8; background-color: #e7f6f8; border-radius: 8px;">
-            <div class="d-flex align-items-start">
-                <i class="fas fa-info-circle me-3" style="font-size: 1.2rem; color: #17a2b8; margin-top: 2px;"></i>
-                <div style="flex: 1;">
-                    <strong style="color: #0c5460;">Note about AI Features:</strong>
-                    <p style="margin-bottom: 0; margin-top: 0.5rem; color: #0c5460; font-size: 0.9rem;">
-                        AI-powered features are not available for these demo users. Logging in with any of these demo accounts will not allow you to access AI features.
-                    </p>
+        <!-- Section 2: Demo board included -->
+        <p class="demo-section-label mt-3">DEMO BOARD INCLUDED</p>
+        <div class="demo-board-row">
+            <div class="board-info">
+                <div class="board-icon-circle"><i class="fas fa-laptop-code"></i></div>
+                <div>
+                    <p class="board-label mb-0">Software Development</p>
+                    <p class="board-meta mb-0">{{ task_count|default:"30" }} tasks &middot; Kanban + Gantt + Calendar &middot; AI features enabled</p>
                 </div>
+            </div>
+            {% if demo_board %}
+            <a href="{% url 'board_detail' demo_board.id %}" class="btn btn-sm btn-outline-primary fw-semibold">
+                Open board <i class="fas fa-arrow-right ms-1"></i>
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Section 3: What you can try -->
+        <p class="demo-section-label mt-3">WHAT YOU CAN TRY</p>
+        <div class="demo-tips-grid">
+            <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Drag and drop tasks between columns</div>
+            <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Run AI features: Stress Test, Shadow Board, What-If</div>
+            <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Create new tasks, boards, and projects</div>
+            <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Ask Spectra questions about your project</div>
+            <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Switch between Kanban, Gantt, and Calendar views</div>
+            <div class="tip-item"><span class="tip-bullet text-success">&bull;</span> Explore Goals &rarr; Missions &rarr; Strategies hierarchy</div>
+        </div>
+
+        <!-- Sandbox info box -->
+        <hr class="my-3">
+        <div class="demo-sandbox-info">
+            <i class="fas fa-shield-alt me-1" style="color: #764ba2;"></i>
+            <strong>This is your personal sandbox.</strong> It was created just for you &mdash; no other visitor can see or affect it.
+            Your changes stay here. If you want to start fresh, use the Reset button below.
+            This sandbox expires in
+            <strong><span id="welcome-panel-time-remaining">{% if sandbox_expires_at %}{{ sandbox_expires_at|timeuntil }}{% else %}24 hours{% endif %}</span></strong>.
+        </div>
+
+        <!-- Action buttons -->
+        <div class="demo-actions-row mt-3">
+            {% if demo_board %}
+            <a href="{% url 'board_detail' demo_board.id %}" class="btn btn-primary btn-sm">
+                Open the demo board <i class="fas fa-arrow-right ms-1"></i>
+            </a>
+            {% endif %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
+                <i class="fas fa-redo me-1"></i>Reset my demo
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.href='{% url 'save_sandbox_board' %}'">
+                <i class="fas fa-save me-1"></i>Save a board before it expires
+            </button>
+        </div>
+
+        <!-- Rate limit note -->
+        <p class="demo-rate-note">
+            All demo accounts have AI features rate-limited to 5 calls per 10 min.
+            Create your own account for unrestricted access.
+        </p>
+    </div>
+</div>
+
+<!-- Reset Demo Confirmation Modal -->
+<div class="modal fade" id="resetDemoModal" tabindex="-1" aria-labelledby="resetDemoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resetDemoModalLabel"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Reset your demo?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This will delete all your current demo data and create a fresh copy. Any changes you have made in this sandbox will be lost.</p>
+                <p class="mb-0 fw-semibold">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmResetDemoBtn">
+                    <i class="fas fa-redo me-1"></i>Confirm Reset
+                </button>
             </div>
         </div>
     </div>
@@ -3411,60 +3447,22 @@
         }, 300);
     }
 
-    // Toggle Demo Credentials Banner
-    function toggleDemoBanner() {
-        const banner = document.getElementById('demoCredentialsBanner');
-        banner.classList.toggle('expanded');
+    // Toggle Demo Welcome Panel
+    function toggleWelcomePanel() {
+        const panel = document.getElementById('demoWelcomePanel');
+        if (!panel) return;
+        panel.classList.toggle('expanded');
 
-        // Rotate the chevron icon in the banner button
-        const kpiIcon = document.querySelector('.demo-toggle-icon-banner');
-        if (kpiIcon) {
-            kpiIcon.classList.toggle('rotated');
+        // Update label text
+        const label = panel.querySelector('.toggle-label');
+        if (label) {
+            label.textContent = panel.classList.contains('expanded') ? 'Hide' : 'Show';
         }
 
-        // Save state to localStorage
-        const isExpanded = banner.classList.contains('expanded');
-        localStorage.setItem('demoBannerExpanded', isExpanded);
+        // Persist state
+        localStorage.setItem('demoWelcomePanelExpanded', panel.classList.contains('expanded'));
     }
 
-    // Reset Demo Data Function
-    function resetDemoData() {
-        if (confirm('Reset Demo Environment?\n\nThis will:\n• Delete all boards, tasks, and data you created\n• Restore all original demo data to its initial state\n• Fix any demo data you modified\n\nThis cannot be undone.')) {
-            // Show loading indicator
-            const btn = event.target.closest('button');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
-            btn.disabled = true;
-            
-            // Make AJAX request to reset
-            fetch('/demo/reset/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': getCookie('csrftoken'),
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    alert('✅ Demo reset successfully!\n\nAll demo data has been restored to its original state.');
-                    location.reload();
-                } else {
-                    alert('Failed to reset demo: ' + (data.message || 'Unknown error'));
-                    btn.innerHTML = originalHtml;
-                    btn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Error resetting demo:', error);
-                alert('Failed to reset demo. Please try again.');
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-            });
-        }
-    }
-    
     // Helper function to get CSRF token
     function getCookie(name) {
         let cookieValue = null;
@@ -3481,16 +3479,57 @@
         return cookieValue;
     }
 
-    // Restore demo banner state on page load
+    // Reset demo via modal confirm button
     document.addEventListener('DOMContentLoaded', function () {
-        const banner = document.getElementById('demoCredentialsBanner');
-        if (banner) {
-            const wasExpanded = localStorage.getItem('demoBannerExpanded') === 'true';
-            if (wasExpanded) {
-                banner.classList.add('expanded');
+        // --- Welcome panel: expand on first visit, remember state after ---
+        const panel = document.getElementById('demoWelcomePanel');
+        if (panel) {
+            const saved = localStorage.getItem('demoWelcomePanelExpanded');
+            // null = first visit → expand; 'true' → expand; 'false' → collapsed
+            if (saved === null || saved === 'true') {
+                panel.classList.add('expanded');
+            }
+            // Sync toggle label
+            const label = panel.querySelector('.toggle-label');
+            if (label) {
+                label.textContent = panel.classList.contains('expanded') ? 'Hide' : 'Show';
             }
         }
-        
+
+        // --- Wire the reset confirmation modal ---
+        const confirmBtn = document.getElementById('confirmResetDemoBtn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function () {
+                const btn = this;
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Resetting…';
+                btn.disabled = true;
+
+                fetch('/demo/reset-mine/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.status === 'provisioning' || data.status === 'success') {
+                        window.location.href = '/dashboard/';
+                    } else {
+                        alert('Failed to reset demo: ' + (data.message || data.error || 'Unknown error'));
+                        btn.innerHTML = originalHtml;
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function () {
+                    alert('Network error — please try again.');
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                });
+            });
+        }
+
         // Handle pagination clicks within modals
         handleModalPagination();
     });
