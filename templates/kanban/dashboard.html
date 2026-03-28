@@ -1267,211 +1267,6 @@
 </div>
 {% endif %}
 
-<!-- ============================================================ -->
-<!-- DECISION CENTER WIDGET                                      -->
-<!-- ============================================================ -->
-<div class="row mb-2" id="decision-center-widget">
-    <div class="col-12">
-        <div class="card shadow-sm border-0" style="border-left: 4px solid #6366f1 !important;">
-            <div class="card-body py-2 px-3">
-                <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <!-- Title — always visible -->
-                    <h6 class="mb-0 fw-bold flex-shrink-0">
-                        <i class="fas fa-bolt text-warning me-1"></i> Decision Center
-                    </h6>
-                    <!-- Badges rendered server-side to prevent flash -->
-                    {% if dc_total_count > 0 %}
-                    <div id="dc-widget-content" class="dc-widget-badges" style="display:flex;">
-                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
-                            <i class="fas fa-circle-exclamation me-1"></i>
-                            <span id="dc-action-count">{{ dc_action_count }}</span>&nbsp;Action Required
-                        </span>
-                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <span id="dc-awareness-count">{{ dc_awareness_count }}</span>&nbsp;Awareness
-                        </span>
-                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
-                            <i class="fas fa-bolt me-1"></i>
-                            <span id="dc-quickwin-count">{{ dc_quickwin_count }}</span>&nbsp;Quick Wins
-                        </span>
-                        <span id="dc-widget-headline" style="display:none;"></span>
-                    </div>
-                    <div id="dc-widget-empty" class="flex-fill" style="display:none;">
-                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
-                    </div>
-                    {% else %}
-                    <div id="dc-widget-content" class="dc-widget-badges" style="display:none;">
-                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
-                            <i class="fas fa-circle-exclamation me-1"></i>
-                            <span id="dc-action-count">0</span>&nbsp;Action Required
-                        </span>
-                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <span id="dc-awareness-count">0</span>&nbsp;Awareness
-                        </span>
-                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
-                            <i class="fas fa-bolt me-1"></i>
-                            <span id="dc-quickwin-count">0</span>&nbsp;Quick Wins
-                        </span>
-                        <span id="dc-widget-headline" style="display:none;"></span>
-                    </div>
-                    <div id="dc-widget-empty" class="flex-fill">
-                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
-                    </div>
-                    {% endif %}
-                    <!-- Hidden loading skeleton (only shown if JS refresh needed) -->
-                    <div id="dc-widget-loading" class="dc-loading-skeleton" style="display:none;"></div>
-                    <!-- Open Full View -->
-                    <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary ms-auto flex-shrink-0">
-                        Open Full View <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ============================================================ -->
-<!-- ZONE 1: COMPACT KPI STRIP                                   -->
-<!-- ============================================================ -->
-<div class="d-flex flex-wrap gap-2 mb-3 align-items-stretch" id="kpi-strip">
-    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#totalTasksModal" aria-label="View all tasks">
-        <i class="fas fa-tasks text-primary me-2"></i>
-        <strong class="text-primary">{{ task_count }}</strong>&nbsp;<span class="text-muted">Tasks</span>
-    </div>
-    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#completedTasksModal" aria-label="View completed tasks">
-        <i class="fas fa-check-circle text-success me-2"></i>
-        <strong class="text-success">{{ completed_count }}</strong>&nbsp;<span class="text-muted">Done</span>
-        <span class="kpi-pill-sub ms-1">{{ completion_rate }}%</span>
-    </div>
-    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center {% if overdue_count > 0 %}kpi-pill-alert{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#overdueTasksModal" aria-label="View overdue tasks">
-        <i class="fas fa-exclamation-circle {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %} me-2"></i>
-        <strong class="{% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ overdue_count }}</strong>&nbsp;<span class="text-muted">Overdue</span>
-    </div>
-    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center {% if total_high_risk > 0 %}kpi-pill-warn{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#highRiskModal" aria-label="View high risk tasks">
-        <i class="fas fa-shield-alt {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %} me-2"></i>
-        <strong class="{% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</strong>&nbsp;<span class="text-muted">High Risk</span>
-    </div>
-
-</div>
-<!-- /KPI Strip -->
-
-<!-- AI Recommended Actions Modal -->
-<div class="modal fade" id="aiRecommendedActionsModal" tabindex="-1"
-     aria-labelledby="aiRecommendedActionsLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg,#1e40af,#3b82f6); color:#fff;">
-                <h5 class="modal-title" id="aiRecommendedActionsLabel">
-                    <i class="fas fa-robot me-2"></i>Spectra's Recommended Action Plan
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-3">
-
-                {# ── Situation summary ── #}
-                <div class="d-flex align-items-start gap-2 mb-3 p-3"
-                     style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
-                    <i class="fas fa-lightbulb mt-1 flex-shrink-0" style="color:#1e40af;"></i>
-                    <p class="mb-0" style="font-size:0.88rem; color:#1e3a8a; line-height:1.55;">
-                        {{ daily_briefing.action_summary }}
-                    </p>
-                </div>
-
-                {# ── Numbered PM steps ── #}
-                {% if daily_briefing.action_plan %}
-                <div class="d-flex flex-column gap-2">
-                {% for step in daily_briefing.action_plan %}
-                    <div class="action-step-card {% if step.task.risk_level == 'critical' %}step-critical{% elif step.task.risk_level == 'high' %}step-high{% else %}step-overdue{% endif %}">
-                        {# Title row #}
-                        <div class="d-flex align-items-center mb-2">
-                            <span class="action-step-number">{{ forloop.counter }}</span>
-                            <div class="flex-grow-1 min-w-0">
-                                <span class="fw-bold" style="font-size:0.92rem;">{{ step.task.title }}</span>
-                            </div>
-                            <div class="d-flex align-items-center gap-1 flex-shrink-0 ms-2">
-                                {% if step.task.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">High Risk</span>
-                                {% endif %}
-                                {% if step.task.due_date %}
-                                <span class="text-muted" style="font-size:0.78rem;">
-                                    <i class="fas fa-calendar-alt me-1"></i>{{ step.task.due_date|date:"M d" }}
-                                </span>
-                                {% endif %}
-                                {% if step.task.assigned_to %}
-                                <span class="text-muted" style="font-size:0.78rem;">
-                                    <i class="fas fa-user me-1"></i>{{ step.task.assigned_to.username }}
-                                </span>
-                                {% else %}
-                                <span style="font-size:0.78rem; color:#dc2626;">
-                                    <i class="fas fa-user-slash me-1"></i>Unassigned
-                                </span>
-                                {% endif %}
-                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.75rem;">{{ step.task.priority|title }}</span>
-                                <span style="font-size:0.78rem; color:#6b7280;">{{ step.task.progress }}%</span>
-                                <a href="{% url 'task_detail' step.task.id %}"
-                                   class="btn btn-xs btn-outline-primary ms-1"
-                                   style="font-size:0.78rem; padding:0.2rem 0.55rem;">
-                                    Open
-                                </a>
-                            </div>
-                        </div>
-                        {# Why #}
-                        <p class="action-why-text mb-2">{{ step.why }}</p>
-                        {# Next action #}
-                        <div class="action-next-box">
-                            <i class="fas fa-arrow-right"></i>
-                            {{ step.next_action }}
-                        </div>
-                    </div>
-                {% endfor %}
-                </div>
-
-                {% elif daily_briefing.action_type == 'progress' %}
-                <div class="text-center py-3">
-                    <i class="fas fa-rocket fa-3x text-success mb-2"></i>
-                    <p class="fw-semibold text-success mb-1">Great momentum!</p>
-                    <p class="text-muted small">Your team is at {{ completion_rate }}% completion. Review remaining open tasks and ensure they are all assigned before the sprint closes.</p>
-                </div>
-                {% else %}
-                <div class="text-center py-3">
-                    <i class="fas fa-tasks fa-3x text-primary mb-2"></i>
-                    <p class="text-muted small">Navigate to your boards to review and assign in-progress tasks to maintain delivery momentum.</p>
-                </div>
-                {% endif %}
-
-            </div>
-            <div class="modal-footer d-flex justify-content-between align-items-center">
-                <small class="text-muted" style="font-size:0.78rem;">
-                    {% if daily_briefing.ai_powered %}
-                        <i class="fas fa-robot me-1" style="color:#3b82f6;"></i>
-                        <span style="color:#1e40af; font-weight:600;">Spectra AI</span>
-                        &middot; AI-generated analysis &middot; Live project data
-                    {% else %}
-                        <i class="fas fa-sync-alt me-1"></i>Based on live project data
-                    {% endif %}
-                </small>
-                <div class="d-flex gap-2">
-                    {% if daily_briefing.action_type == 'high_risk' or daily_briefing.action_type == 'overdue' %}
-                    <button class="btn btn-outline-secondary btn-sm"
-                            data-bs-dismiss="modal"
-                            data-bs-toggle="modal" data-bs-target="#highRiskModal"
-                            style="font-size:0.78rem;">
-                        <i class="fas fa-table me-1"></i>See Full Risk List
-                    </button>
-                    {% endif %}
-                    <button type="button" class="btn btn-secondary btn-sm"
-                            data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-<!-- /AI Recommended Actions Modal -->
-
 <!-- Demo Welcome Panel — collapsible onboarding guide -->
 {% if demo_mode %}
 <div class="card shadow-sm demo-welcome-panel" id="demoWelcomePanel">
@@ -1678,12 +1473,6 @@
             <button type="button" class="btn btn-sm btn-primary" onclick="startExperimenting()">
                 <i class="fas fa-flask me-1"></i>Start Sandbox
             </button>
-            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-sign-out-alt me-1"></i>Back to My Workspace
-                </button>
-            </form>
         </div>
         {% endif %}
     </div>
@@ -1733,6 +1522,212 @@
     </div>
 </div>
 {% endif %}
+
+<!-- ============================================================ -->
+<!-- DECISION CENTER WIDGET                                      -->
+<!-- ============================================================ -->
+<div class="row mb-2" id="decision-center-widget">
+    <div class="col-12">
+        <div class="card shadow-sm border-0" style="border-left: 4px solid #6366f1 !important;">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <!-- Title — always visible -->
+                    <h6 class="mb-0 fw-bold flex-shrink-0">
+                        <i class="fas fa-bolt text-warning me-1"></i> Decision Center
+                    </h6>
+                    <!-- Badges rendered server-side to prevent flash -->
+                    {% if dc_total_count > 0 %}
+                    <div id="dc-widget-content" class="dc-widget-badges" style="display:flex;">
+                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
+                            <i class="fas fa-circle-exclamation me-1"></i>
+                            <span id="dc-action-count">{{ dc_action_count }}</span>&nbsp;Action Required
+                        </span>
+                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <span id="dc-awareness-count">{{ dc_awareness_count }}</span>&nbsp;Awareness
+                        </span>
+                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
+                            <i class="fas fa-bolt me-1"></i>
+                            <span id="dc-quickwin-count">{{ dc_quickwin_count }}</span>&nbsp;Quick Wins
+                        </span>
+                        <span id="dc-widget-headline" style="display:none;"></span>
+                    </div>
+                    <div id="dc-widget-empty" class="flex-fill" style="display:none;">
+                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
+                    </div>
+                    {% else %}
+                    <div id="dc-widget-content" class="dc-widget-badges" style="display:none;">
+                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
+                            <i class="fas fa-circle-exclamation me-1"></i>
+                            <span id="dc-action-count">0</span>&nbsp;Action Required
+                        </span>
+                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <span id="dc-awareness-count">0</span>&nbsp;Awareness
+                        </span>
+                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
+                            <i class="fas fa-bolt me-1"></i>
+                            <span id="dc-quickwin-count">0</span>&nbsp;Quick Wins
+                        </span>
+                        <span id="dc-widget-headline" style="display:none;"></span>
+                    </div>
+                    <div id="dc-widget-empty" class="flex-fill">
+                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
+                    </div>
+                    {% endif %}
+                    <!-- Hidden loading skeleton (only shown if JS refresh needed) -->
+                    <div id="dc-widget-loading" class="dc-loading-skeleton" style="display:none;"></div>
+                    <!-- Open Full View -->
+                    <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary ms-auto flex-shrink-0">
+                        Open Full View <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ZONE 1: COMPACT KPI STRIP                                   -->
+<!-- ============================================================ -->
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-stretch" id="kpi-strip">
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#totalTasksModal" aria-label="View all tasks">
+        <i class="fas fa-tasks text-primary me-2"></i>
+        <strong class="text-primary">{{ task_count }}</strong>&nbsp;<span class="text-muted">Tasks</span>
+    </div>
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#completedTasksModal" aria-label="View completed tasks">
+        <i class="fas fa-check-circle text-success me-2"></i>
+        <strong class="text-success">{{ completed_count }}</strong>&nbsp;<span class="text-muted">Done</span>
+        <span class="kpi-pill-sub ms-1">{{ completion_rate }}%</span>
+    </div>
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center {% if overdue_count > 0 %}kpi-pill-alert{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#overdueTasksModal" aria-label="View overdue tasks">
+        <i class="fas fa-exclamation-circle {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %} me-2"></i>
+        <strong class="{% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ overdue_count }}</strong>&nbsp;<span class="text-muted">Overdue</span>
+    </div>
+    <div class="kpi-pill kpi-pill-lg flex-fill justify-content-center {% if total_high_risk > 0 %}kpi-pill-warn{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#highRiskModal" aria-label="View high risk tasks">
+        <i class="fas fa-shield-alt {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %} me-2"></i>
+        <strong class="{% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</strong>&nbsp;<span class="text-muted">High Risk</span>
+    </div>
+
+</div>
+<!-- /KPI Strip -->
+
+<!-- AI Recommended Actions Modal -->
+<div class="modal fade" id="aiRecommendedActionsModal" tabindex="-1"
+     aria-labelledby="aiRecommendedActionsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg,#1e40af,#3b82f6); color:#fff;">
+                <h5 class="modal-title" id="aiRecommendedActionsLabel">
+                    <i class="fas fa-robot me-2"></i>Spectra's Recommended Action Plan
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+
+                {# ── Situation summary ── #}
+                <div class="d-flex align-items-start gap-2 mb-3 p-3"
+                     style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
+                    <i class="fas fa-lightbulb mt-1 flex-shrink-0" style="color:#1e40af;"></i>
+                    <p class="mb-0" style="font-size:0.88rem; color:#1e3a8a; line-height:1.55;">
+                        {{ daily_briefing.action_summary }}
+                    </p>
+                </div>
+
+                {# ── Numbered PM steps ── #}
+                {% if daily_briefing.action_plan %}
+                <div class="d-flex flex-column gap-2">
+                {% for step in daily_briefing.action_plan %}
+                    <div class="action-step-card {% if step.task.risk_level == 'critical' %}step-critical{% elif step.task.risk_level == 'high' %}step-high{% else %}step-overdue{% endif %}">
+                        {# Title row #}
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="action-step-number">{{ forloop.counter }}</span>
+                            <div class="flex-grow-1 min-w-0">
+                                <span class="fw-bold" style="font-size:0.92rem;">{{ step.task.title }}</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-1 flex-shrink-0 ms-2">
+                                {% if step.task.risk_level == 'critical' %}
+                                    <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">High Risk</span>
+                                {% endif %}
+                                {% if step.task.due_date %}
+                                <span class="text-muted" style="font-size:0.78rem;">
+                                    <i class="fas fa-calendar-alt me-1"></i>{{ step.task.due_date|date:"M d" }}
+                                </span>
+                                {% endif %}
+                                {% if step.task.assigned_to %}
+                                <span class="text-muted" style="font-size:0.78rem;">
+                                    <i class="fas fa-user me-1"></i>{{ step.task.assigned_to.username }}
+                                </span>
+                                {% else %}
+                                <span style="font-size:0.78rem; color:#dc2626;">
+                                    <i class="fas fa-user-slash me-1"></i>Unassigned
+                                </span>
+                                {% endif %}
+                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.75rem;">{{ step.task.priority|title }}</span>
+                                <span style="font-size:0.78rem; color:#6b7280;">{{ step.task.progress }}%</span>
+                                <a href="{% url 'task_detail' step.task.id %}"
+                                   class="btn btn-xs btn-outline-primary ms-1"
+                                   style="font-size:0.78rem; padding:0.2rem 0.55rem;">
+                                    Open
+                                </a>
+                            </div>
+                        </div>
+                        {# Why #}
+                        <p class="action-why-text mb-2">{{ step.why }}</p>
+                        {# Next action #}
+                        <div class="action-next-box">
+                            <i class="fas fa-arrow-right"></i>
+                            {{ step.next_action }}
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+
+                {% elif daily_briefing.action_type == 'progress' %}
+                <div class="text-center py-3">
+                    <i class="fas fa-rocket fa-3x text-success mb-2"></i>
+                    <p class="fw-semibold text-success mb-1">Great momentum!</p>
+                    <p class="text-muted small">Your team is at {{ completion_rate }}% completion. Review remaining open tasks and ensure they are all assigned before the sprint closes.</p>
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-tasks fa-3x text-primary mb-2"></i>
+                    <p class="text-muted small">Navigate to your boards to review and assign in-progress tasks to maintain delivery momentum.</p>
+                </div>
+                {% endif %}
+
+            </div>
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <small class="text-muted" style="font-size:0.78rem;">
+                    {% if daily_briefing.ai_powered %}
+                        <i class="fas fa-robot me-1" style="color:#3b82f6;"></i>
+                        <span style="color:#1e40af; font-weight:600;">Spectra AI</span>
+                        &middot; AI-generated analysis &middot; Live project data
+                    {% else %}
+                        <i class="fas fa-sync-alt me-1"></i>Based on live project data
+                    {% endif %}
+                </small>
+                <div class="d-flex gap-2">
+                    {% if daily_briefing.action_type == 'high_risk' or daily_briefing.action_type == 'overdue' %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                            data-bs-dismiss="modal"
+                            data-bs-toggle="modal" data-bs-target="#highRiskModal"
+                            style="font-size:0.78rem;">
+                        <i class="fas fa-table me-1"></i>See Full Risk List
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- /AI Recommended Actions Modal -->
+
 
 {{ chart_data|json_script:"dashboardChartData" }}
 

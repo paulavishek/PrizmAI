@@ -54,7 +54,7 @@ def _duplicate_board(template_board, user):
         is_seed_demo_data=False,
         is_sandbox_copy=True,                    # ← tags this as a sandbox copy
         cloned_from=template_board,              # ← track which template it was cloned from
-        strategy=None,                          # Do not inherit strategic context
+        strategy=None,                          # Do not inherit — mission tree uses _template_to_sandbox mapping
         num_phases=template_board.num_phases,
         task_prefix=template_board.task_prefix,
         project_type=template_board.project_type,
