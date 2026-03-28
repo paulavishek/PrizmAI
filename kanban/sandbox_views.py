@@ -405,7 +405,7 @@ def save_sandbox_board(request):
 @login_required
 @require_http_methods(["POST"])
 def delete_sandbox(request):
-    """Immediately delete the user's sandbox but keep them in demo view."""
+    """Immediately delete the user's sandbox and exit demo mode."""
     from kanban.models import DemoSandbox
 
     user = request.user
@@ -419,8 +419,14 @@ def delete_sandbox(request):
     _delete_sandbox(sandbox)
     sandbox.delete()
 
-    # Stay in demo view — user can start a new sandbox later
-    # Do NOT set is_viewing_demo=False or leave demo org
+    # Leave demo mode fully so the user returns to their real workspace
+    _leave_demo_org(user)
+    try:
+        profile = user.profile
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['is_viewing_demo'])
+    except Exception:
+        pass
 
     return JsonResponse({'status': 'deleted'})
 
