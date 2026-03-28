@@ -812,7 +812,8 @@
     };
 
     window.startExperimenting = function() {
-        var btn = document.querySelector('.btn-sandbox-cta');
+        var btn = event ? event.target.closest('button') : document.querySelector('.btn-sandbox-cta');
+        if (!btn) btn = document.querySelector('.btn-sandbox-cta');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Unlocking\u2026'; }
         fetch('/demo/start-experimenting/', {
             method: 'POST',
@@ -823,16 +824,17 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (data.status === 'ok') {
+            if (data.status === 'ok' || data.status === 'provisioning') {
+                // Either sandbox was unlocked or a new one is being provisioned
                 window.location.reload();
             } else {
                 alert(data.error || 'Could not unlock editing.');
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen me-1"></i>Start Experimenting'; }
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Start Sandbox'; }
             }
         })
         .catch(function() {
             alert('Network error — please try again.');
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen me-1"></i>Start Experimenting'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask me-1"></i>Start Sandbox'; }
         });
     };
 

@@ -1631,8 +1631,8 @@
 <!-- Sandbox Controls Bar — always visible below the collapsible panel -->
 <div class="demo-sandbox-controls" id="demoSandboxControls">
     <div class="sandbox-controls-inner">
-        {% if not is_browsing %}
-        <!-- Sandbox is active: show beaker + timer + exit -->
+        {% if sandbox_expires_at and not is_browsing %}
+        <!-- Sandbox is active (editing mode): show beaker + timer + exit -->
         <div class="sandbox-controls-left">
             <span class="sandbox-badge-inline">
                 <i class="fas fa-flask me-1"></i>SANDBOX
@@ -1640,7 +1640,7 @@
             <span class="sandbox-timer-inline">
                 <i class="fas fa-clock me-1"></i>
                 <span id="sandbox-controls-time-remaining">
-                    {% if sandbox_expires_at %}{{ sandbox_expires_at|timeuntil }} remaining{% else %}24 hours remaining{% endif %}
+                    {{ sandbox_expires_at|timeuntil }} remaining
                 </span>
             </span>
         </div>
@@ -1648,15 +1648,12 @@
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
                 <i class="fas fa-redo me-1"></i>Reset my demo
             </button>
-            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
-                </button>
-            </form>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#exitSandboxModal">
+                <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
+            </button>
         </div>
-        {% else %}
-        <!-- Browsing mode: show start sandbox button -->
+        {% elif sandbox_expires_at and is_browsing %}
+        <!-- Sandbox exists but in browsing mode -->
         <div class="sandbox-controls-left">
             <span class="sandbox-browse-label">
                 <i class="fas fa-eye me-1"></i>Read-only mode &mdash; start the sandbox to make changes
@@ -1669,6 +1666,24 @@
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
                 <i class="fas fa-redo me-1"></i>Reset my demo
             </button>
+        </div>
+        {% else %}
+        <!-- No sandbox — show option to start one -->
+        <div class="sandbox-controls-left">
+            <span class="sandbox-browse-label">
+                <i class="fas fa-eye me-1"></i>You&rsquo;re viewing the demo workspace &mdash; start a sandbox to experiment with changes
+            </span>
+        </div>
+        <div class="sandbox-controls-right">
+            <button type="button" class="btn btn-sm btn-primary" onclick="startExperimenting()">
+                <i class="fas fa-flask me-1"></i>Start Sandbox
+            </button>
+            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-sign-out-alt me-1"></i>Back to My Workspace
+                </button>
+            </form>
         </div>
         {% endif %}
     </div>
@@ -1690,6 +1705,28 @@
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger btn-sm" id="confirmResetDemoBtn">
                     <i class="fas fa-redo me-1"></i>Confirm Reset
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Exit Sandbox Confirmation Modal -->
+<div class="modal fade" id="exitSandboxModal" tabindex="-1" aria-labelledby="exitSandboxModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exitSandboxModalLabel"><i class="fas fa-sign-out-alt text-danger me-2"></i>Exit Sandbox?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This will <strong>terminate your sandbox</strong> and delete all demo data. Any boards or changes you made will be permanently removed.</p>
+                <p class="mb-0 fw-semibold">Are you sure you want to exit?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmExitSandboxBtn">
+                    <i class="fas fa-sign-out-alt me-1"></i>Exit &amp; Delete Sandbox
                 </button>
             </div>
         </div>
@@ -3733,6 +3770,40 @@
                         window.location.href = '/dashboard/';
                     } else {
                         alert('Failed to reset demo: ' + (data.message || data.error || 'Unknown error'));
+                        btn.innerHTML = originalHtml;
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function () {
+                    alert('Network error — please try again.');
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                });
+            });
+        }
+
+        // --- Wire the exit sandbox confirmation modal ---
+        const exitBtn = document.getElementById('confirmExitSandboxBtn');
+        if (exitBtn) {
+            exitBtn.addEventListener('click', function () {
+                const btn = this;
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Deleting sandbox…';
+                btn.disabled = true;
+
+                fetch('/sandbox/delete/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.status === 'deleted') {
+                        window.location.href = '/dashboard/';
+                    } else {
+                        alert('Failed to exit sandbox: ' + (data.message || data.error || 'Unknown error'));
                         btn.innerHTML = originalHtml;
                         btn.disabled = false;
                     }
