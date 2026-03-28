@@ -789,6 +789,16 @@
                         timeEl.textContent = '(less than 1h remaining)';
                     }
                 }
+                // Update time remaining in welcome panel (same pattern)
+                var wpTimeEl = document.getElementById('welcome-panel-time-remaining');
+                if (wpTimeEl && data.has_sandbox) {
+                    var wpHrs = parseFloat(data.hours_remaining);
+                    if (wpHrs > 1) {
+                        wpTimeEl.textContent = Math.round(wpHrs) + ' hours';
+                    } else if (wpHrs > 0) {
+                        wpTimeEl.textContent = 'less than 1 hour';
+                    }
+                }
                 // If sandbox expired while page is open, reload to return to Tier 1
                 if (data.has_sandbox && data.hours_remaining <= 0) {
                     window.location.reload();
