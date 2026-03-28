@@ -95,6 +95,11 @@ def invite_to_board(request, board_id):
     import re
     board = get_object_or_404(Board, id=board_id)
 
+    # Sandbox boards are private — no real-user invitations allowed
+    if board.is_sandbox_copy:
+        messages.error(request, "Sandbox boards are private and cannot have additional members.")
+        return redirect('board_detail', board_id=board.id)
+
     if not _can_manage_invites(request.user, board):
         messages.error(request, "You don't have permission to invite members to this board.")
         return redirect('manage_board_members', board_id=board.id)
@@ -203,6 +208,13 @@ def accept_invitation(request, token):
         UserProfile.objects.create(user=user, organization=None, is_admin=False, completed_wizard=True)
 
     board = invitation.board
+
+    # Sandbox boards are private — reject even if a token somehow exists
+    if board.is_sandbox_copy:
+        return render(request, 'kanban/invitation_invalid.html', {
+            'reason': 'This board is a private sandbox and cannot accept members.',
+            'board': board,
+        })
 
     if board.memberships.filter(user=user).exists():
         messages.info(request, f"You are already a member of '{board.name}'.")

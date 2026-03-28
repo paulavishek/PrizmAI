@@ -572,13 +572,52 @@
 }
 
 /* Demo badge in topbar */
-.topbar-demo-badge {
-    font-size: 0.78rem;
-    padding: 3px 8px;
-    border-radius: 4px;
+/* SANDBOX badge inside workspace switcher */
+.tws-sandbox-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 12px;
     background: #f59e0b;
     color: #1a1a2e;
-    font-weight: 700;
+    border: 2px solid #d97706;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+/* Reset button inside workspace switcher */
+.tws-btn-reset {
+    background: #fef2f2 !important;
+    border: 2px solid #ef4444 !important;
+    color: #dc2626 !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+.tws-btn-reset:hover {
+    background: #fee2e2 !important;
+    color: #b91c1c !important;
+    box-shadow: 0 1px 6px rgba(239, 68, 68, 0.3);
+}
+[data-bs-theme="dark"] .tws-sandbox-badge {
+    background: #f59e0b;
+    color: #1a1a2e;
+    border-color: #fbbf24;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+[data-bs-theme="dark"] .tws-btn-reset {
+    background: #7f1d1d !important;
+    border-color: #ef4444 !important;
+    color: #fecaca !important;
+}
+[data-bs-theme="dark"] .tws-btn-reset:hover {
+    background: #991b1b !important;
+    color: #fff !important;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
 }
 
 /* ============================================= */

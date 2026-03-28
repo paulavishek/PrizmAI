@@ -25,7 +25,7 @@
             {% endif %}
 
             <!-- ── Invite by Email ─────────────────────────────────────── -->
-            {% if can_manage_invites and not board.is_official_demo_board %}
+            {% if can_manage_invites and not board.is_official_demo_board and not board.is_sandbox_copy %}
             <div class="card shadow mb-4 border-0" style="border-left:4px solid #3b82f6 !important;">
                 <div class="card-header bg-white d-flex align-items-center gap-2">
                     <i class="fas fa-envelope text-primary"></i>

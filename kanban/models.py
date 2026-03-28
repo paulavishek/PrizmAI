@@ -644,7 +644,7 @@ class Board(models.Model):
         help_text="Organization (optional - MVP mode does not require organization)"
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_boards')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_boards')
     owner = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

@@ -628,10 +628,12 @@
                 <li><a class="dropdown-item" href="{% url 'create_column' board.id %}"><i class="fas fa-columns me-2"></i>Add Column</a></li>
                 <li><a class="dropdown-item" href="{% url 'create_label' board.id %}"><i class="fas fa-tags me-2"></i>Manage Labels</a></li>
                 <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
-                {% if can_manage_invites and not board.is_official_demo_board %}
+                {% if can_manage_invites and not board.is_official_demo_board and not board.is_sandbox_copy %}
                 <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-user-plus me-2 text-success"></i>Invite Members</a></li>
                 {% endif %}
+                {% if not board.is_sandbox_copy %}
                 <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users me-2 text-info"></i>Manage Members</a></li>
+                {% endif %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
                 {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
