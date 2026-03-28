@@ -1104,14 +1104,14 @@ def toggle_demo_mode(request):
     """POST /toggle-demo-mode/ — enter or leave demo mode.
 
     Entering demo:
-      - If user already has a non-expired sandbox → re-enter: join demo org,
+      - If user already has a sandbox → re-enter: join demo org,
         reassign tasks, flip is_viewing_demo on.
       - Otherwise → kick off async provisioning via Celery and return JSON
         with a task_id so the frontend can stream progress via WebSocket.
     Leaving demo:
       - Restore demo task assignments, leave demo org, flip is_viewing_demo off.
-        Sandbox boards are NOT deleted — they persist until expiry so the
-        user can re-enter.
+        Sandbox boards are NOT deleted — the sandbox persists so the
+        user can re-enter any time.
     """
     if request.method != 'POST':
         return redirect('dashboard')
@@ -1125,23 +1125,19 @@ def toggle_demo_mode(request):
 
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
-        # Check for existing non-expired sandbox
+        # Check for existing sandbox (persistent — no expiry check)
         try:
             existing = request.user.demo_sandbox
-            if existing.expires_at > timezone.now():
-                # Re-enter existing sandbox instantly
-                _join_demo_org(request.user)
-                _reassign_demo_tasks_to_user(existing, request.user)
-                profile.is_viewing_demo = True
-                profile.save(update_fields=['is_viewing_demo'])
-                return redirect('dashboard')
-            else:
-                # Expired — will be cleaned up by provisioning task
-                pass
+            # Re-enter existing sandbox instantly
+            _join_demo_org(request.user)
+            _reassign_demo_tasks_to_user(existing, request.user)
+            profile.is_viewing_demo = True
+            profile.save(update_fields=['is_viewing_demo'])
+            return redirect('dashboard')
         except DemoSandbox.DoesNotExist:
             pass
 
-        # No active sandbox — provision asynchronously (or sync fallback)
+        # No sandbox yet — provision asynchronously (or sync fallback)
         from kanban.tasks.sandbox_provisioning import provision_sandbox_task
         try:
             result = provision_sandbox_task.delay(request.user.id)

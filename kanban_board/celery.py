@@ -137,12 +137,6 @@ app.conf.beat_schedule = {
         'task': 'kanban.reset_weekly_tokens',
         'schedule': crontab(hour=0, minute=0, day_of_week='1'),  # Mon 00:00
     },
-    # --- Ephemeral Sandbox cleanup ---
-    # Runs every hour to send expiry warnings and delete expired sandboxes
-    'cleanup-expired-sandboxes': {
-        'task': 'kanban.cleanup_expired_sandboxes',
-        'schedule': crontab(minute=45),  # Every hour at :45
-    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

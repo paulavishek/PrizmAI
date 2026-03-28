@@ -46,7 +46,7 @@ if board:
 
 print("\n=== DEMO SANDBOX ===")
 for s in DemoSandbox.objects.all():
-    print(f"  user={s.user.username} expires={s.expires_at}")
+    print(f"  user={s.user.username} created={s.created_at} last_reset={s.last_reset_at}")
 
 print("\n=== MISSIONS (demo) ===")
 for m in Mission.objects.filter(is_demo=True):

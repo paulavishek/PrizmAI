@@ -54,7 +54,7 @@ from kanban.tasks.shadow_branch_tasks import (
 )
 
 from kanban.tasks.sandbox_tasks import (
-    cleanup_expired_sandboxes,
+    _delete_sandbox,
 )
 
 from kanban.tasks.commitment_tasks import (

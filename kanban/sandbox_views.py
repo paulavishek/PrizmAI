@@ -1,19 +1,16 @@
 """
-Sandbox Views — single-tier personal demo system.
+Sandbox Views - persistent personal demo system.
 
-Each real user gets their own private 24-hour copy of the demo template boards.
+Each real user gets their own private copy of the demo template boards.
+The sandbox persists as long as the user's account. No timer, no expiry.
 Master Demo Template boards (is_official_demo_board=True) are NEVER modified.
 
-Lifecycle:
-  POST /toggle-demo-mode/           → provision sandbox (async via Celery) or re-enter existing
-  POST /demo/reset-mine/            → wipe user's sandbox and re-provision
-  POST /sandbox/save/               → designate one board to survive sandbox deletion
-  POST /sandbox/delete/             → delete sandbox immediately
-  GET  /sandbox/status/             → JSON status for in-app banner polling
-  POST /sandbox/extend/             → extend sandbox expiry by 1 hour
+Endpoints:
+  POST /toggle-demo-mode/           - provision sandbox (async via Celery) or re-enter existing
+  POST /demo/reset-mine/            - wipe user's sandbox and re-provision
+  GET  /sandbox/status/             - JSON status for in-app banner
 """
 import logging
-from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -356,9 +353,9 @@ def reset_my_demo(request):
 
     _purge_existing_sandbox(request.user)
 
-    # Re-provision asynchronously
+    # Re-provision asynchronously (last_reset_at is set in the provisioning task)
     from kanban.tasks.sandbox_provisioning import provision_sandbox_task
-    result = provision_sandbox_task.delay(request.user.id)
+    result = provision_sandbox_task.delay(request.user.id, is_reset=True)
 
     return JsonResponse({
         'status': 'resetting',
@@ -367,146 +364,20 @@ def reset_my_demo(request):
 
 
 @login_required
-@require_http_methods(["POST"])
-def save_sandbox_board(request):
-    """
-    Designate one board to survive sandbox deletion.
-    The board moves to the user's real workspace (it already effectively is — we
-    just clear the created_at-range marker by updating the saved_board FK on
-    the sandbox, which the cleanup task respects).
-    """
-    from kanban.models import DemoSandbox, Board, BoardMembership
-
-    user = request.user
-    board_id = request.POST.get('board_id')
-    if not board_id:
-        return JsonResponse({'error': 'board_id is required.'}, status=400)
-
-    try:
-        sandbox = user.demo_sandbox
-    except DemoSandbox.DoesNotExist:
-        return JsonResponse({'error': 'No active sandbox found.'}, status=404)
-
-    try:
-        board = Board.objects.get(pk=board_id, owner=user)
-    except Board.DoesNotExist:
-        return JsonResponse({'error': 'Board not found or not owned by you.'}, status=404)
-
-    sandbox.saved_board = board
-    sandbox.save(update_fields=['saved_board'])
-
-    return JsonResponse({
-        'status': 'saved',
-        'board_id': board.id,
-        'board_name': board.name,
-    })
-
-
-@login_required
-@require_http_methods(["POST"])
-def delete_sandbox(request):
-    """Immediately delete the user's sandbox and exit demo mode."""
-    from kanban.models import DemoSandbox
-
-    user = request.user
-    try:
-        sandbox = user.demo_sandbox
-    except DemoSandbox.DoesNotExist:
-        return JsonResponse({'error': 'No active sandbox found.'}, status=404)
-
-    from kanban.tasks.sandbox_tasks import _delete_sandbox
-    _restore_demo_task_assignments(sandbox)
-    _delete_sandbox(sandbox)
-    sandbox.delete()
-
-    # Leave demo mode fully so the user returns to their real workspace
-    _leave_demo_org(user)
-    try:
-        profile = user.profile
-        profile.is_viewing_demo = False
-        profile.save(update_fields=['is_viewing_demo'])
-    except Exception:
-        pass
-
-    return JsonResponse({'status': 'deleted'})
-
-
-@login_required
 @require_http_methods(["GET"])
 def sandbox_status(request):
     """
-    JSON status endpoint for the in-app sandbox banner.
-    Polled every 60 seconds by the banner JS.
+    JSON status endpoint — reports whether a sandbox exists and is active.
     """
     from kanban.models import DemoSandbox
 
     user = request.user
     is_viewing_demo = getattr(getattr(user, 'profile', None), 'is_viewing_demo', False)
     try:
-        sandbox = user.demo_sandbox
-        now = timezone.now()
-        time_left = sandbox.expires_at - now
-        hours_left = time_left.total_seconds() / 3600
-
-        if hours_left <= 0:
-            # Sandbox expired
-            is_viewing_demo = False
-
+        user.demo_sandbox
         return JsonResponse({
             'has_sandbox': True,
-            'is_viewing_demo': is_viewing_demo and hours_left > 0,
-            'expires_at': sandbox.expires_at.isoformat(),
-            'hours_remaining': round(hours_left, 1),
-            'warning_sent': sandbox.warning_sent,
-            'saved_board_id': sandbox.saved_board_id,
-            'show_warning_banner': is_viewing_demo and (hours_left <= 2 or sandbox.warning_sent),
+            'is_viewing_demo': is_viewing_demo,
         })
     except DemoSandbox.DoesNotExist:
         return JsonResponse({'has_sandbox': False, 'is_viewing_demo': False})
-
-
-MAX_SANDBOX_EXTENSIONS = 3
-EXTENSION_HOURS = 1
-
-
-@login_required
-@require_http_methods(["POST"])
-def extend_demo_session(request):
-    """
-    Extend the user's sandbox expiry by EXTENSION_HOURS.
-    Limited to MAX_SANDBOX_EXTENSIONS extensions total.
-    """
-    from kanban.models import DemoSandbox
-
-    user = request.user
-    try:
-        sandbox = user.demo_sandbox
-    except DemoSandbox.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': 'No active sandbox found.'}, status=404)
-
-    # Track extensions via a simple counter stored on the sandbox
-    extensions_used = getattr(sandbox, '_extensions_used', None)
-    if extensions_used is None:
-        # Calculate extensions used from the difference between current expiry and original 24h window
-        original_expiry = sandbox.created_at + timedelta(hours=24)
-        extra_hours = (sandbox.expires_at - original_expiry).total_seconds() / 3600
-        extensions_used = max(0, int(round(extra_hours / EXTENSION_HOURS)))
-
-    if extensions_used >= MAX_SANDBOX_EXTENSIONS:
-        return JsonResponse({
-            'status': 'error',
-            'message': f'Maximum extensions ({MAX_SANDBOX_EXTENSIONS}) reached.',
-            'extensions_remaining': 0,
-        })
-
-    sandbox.expires_at += timedelta(hours=EXTENSION_HOURS)
-    sandbox.warning_sent = False  # Reset warning so banner updates
-    sandbox.save(update_fields=['expires_at', 'warning_sent'])
-
-    extensions_remaining = MAX_SANDBOX_EXTENSIONS - (extensions_used + 1)
-
-    return JsonResponse({
-        'status': 'success',
-        'new_expiry_time': sandbox.expires_at.isoformat(),
-        'extensions_remaining': extensions_remaining,
-    })

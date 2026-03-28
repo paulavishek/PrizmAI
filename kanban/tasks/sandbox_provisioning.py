@@ -6,7 +6,6 @@ Celery worker deep-copies demo template boards → streams progress updates
 via Django Channels → frontend redirects on completion.
 """
 import logging
-from datetime import timedelta
 
 from celery import shared_task
 from channels.layers import get_channel_layer
@@ -68,12 +67,15 @@ def _send_provision_error(user_id, message):
     time_limit=120,
     soft_time_limit=90,
 )
-def provision_sandbox_task(self, user_id):
+def provision_sandbox_task(self, user_id, is_reset=False):
     """
     Deep-copy all demo template boards into a private sandbox for *user_id*.
 
     Streams progress via WebSocket so the frontend can show a loading state.
     On completion, sends the redirect URL.
+
+    Args:
+        is_reset: If True, this is a reset operation and last_reset_at will be set.
     """
     from django.contrib.auth import get_user_model
     from kanban.models import Board, DemoSandbox
@@ -92,24 +94,20 @@ def provision_sandbox_task(self, user_id):
 
     _send_provision_status(user_id, 'Preparing your private workspace…', 5)
 
-    # Purge any expired sandbox
+    # Check for existing sandbox
     try:
         existing = user.demo_sandbox
-        if existing.expires_at <= timezone.now():
-            _purge_existing_sandbox(user)
-        else:
-            # Active sandbox already exists — just return it
-            first_board = Board.objects.filter(
-                owner=user,
-                is_sandbox_copy=True,
-            ).exclude(pk=existing.saved_board_id).first()
-            redirect_url = f'/boards/{first_board.id}/' if first_board else '/dashboard/'
-            _send_provision_result(user_id, {
-                'status': 'exists',
-                'redirect_url': redirect_url,
-                'expires_at': existing.expires_at.isoformat(),
-            })
-            return {'status': 'exists', 'redirect_url': redirect_url}
+        # Active sandbox already exists — just return it
+        first_board = Board.objects.filter(
+            owner=user,
+            is_sandbox_copy=True,
+        ).first()
+        redirect_url = f'/boards/{first_board.id}/' if first_board else '/dashboard/'
+        _send_provision_result(user_id, {
+            'status': 'exists',
+            'redirect_url': redirect_url,
+        })
+        return {'status': 'exists', 'redirect_url': redirect_url}
     except DemoSandbox.DoesNotExist:
         pass
 
@@ -147,7 +145,7 @@ def provision_sandbox_task(self, user_id):
 
         sandbox = DemoSandbox.objects.create(
             user=user,
-            expires_at=timezone.now() + timedelta(hours=24),
+            last_reset_at=timezone.now() if is_reset else None,
         )
 
         # Join demo org and reassign a few tasks to the real user
@@ -168,7 +166,6 @@ def provision_sandbox_task(self, user_id):
         'status': 'created',
         'boards_created': len(new_boards),
         'redirect_url': redirect_url,
-        'expires_at': sandbox.expires_at.isoformat(),
     })
     return {
         'status': 'created',

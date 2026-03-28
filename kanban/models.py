@@ -2297,24 +2297,17 @@ class DemoSandbox(models.Model):
     Personal demo sandbox — private copy of all demo template boards for a user.
     OneToOneField enforces one sandbox per user at the DB level.
 
-    Single-tier system: every user who enters demo mode gets their own
-    private copy of the demo data with full edit access from the start.
+    Persistent model: the sandbox lives as long as the user's account.
+    Users switch between Demo Workspace and My Workspace freely.
+    The only control is a Reset button to wipe back to template state.
     """
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name='demo_sandbox'
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(
-        help_text="Always created_at + 24 hours."
-    )
-    warning_sent = models.BooleanField(
-        default=False,
-        help_text="True once the 2-hour expiry warning has been sent."
-    )
-    saved_board = models.ForeignKey(
-        Board, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name='+',
-        help_text="Board the user chose to save before sandbox deletion."
+    last_reset_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user last reset their demo. NULL on first provision."
     )
     reassigned_tasks = models.JSONField(
         default=dict, blank=True,
@@ -2325,7 +2318,7 @@ class DemoSandbox(models.Model):
     )
 
     def __str__(self):
-        return f"Sandbox for {self.user.username} (expires {self.expires_at})"
+        return f"Sandbox for {self.user.username} (created {self.created_at})"
 
 
 class BoardInvitation(models.Model):

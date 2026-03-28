@@ -52,23 +52,8 @@ def demo_context(request):
                 context['is_viewing_demo'] = getattr(profile, 'is_viewing_demo', False)
             except Exception:
                 context['is_viewing_demo'] = False
-
-            # Sandbox state: read from DB model, not session
-            sandbox_expires_at = None
-            if context['is_viewing_demo']:
-                try:
-                    sandbox = request.user.demo_sandbox
-                    if sandbox.expires_at > timezone.now():
-                        sandbox_expires_at = sandbox.expires_at
-                    else:
-                        # Expired — auto-exit demo mode
-                        context['is_viewing_demo'] = False
-                except Exception:
-                    pass
-            context['sandbox_expires_at'] = sandbox_expires_at
         else:
             context['is_viewing_demo'] = False
-            context['sandbox_expires_at'] = None
         
         # User gets their standard quotas (not demo quotas)
         if request.user.is_authenticated:
