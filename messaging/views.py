@@ -426,6 +426,7 @@ def get_unread_message_count(request):
         accessible_boards = Board.objects.filter(
             Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()

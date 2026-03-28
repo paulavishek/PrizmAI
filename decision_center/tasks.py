@@ -50,6 +50,7 @@ def _user_boards(user):
     return Board.objects.filter(
         Q(created_by=user) | Q(memberships__user=user),
         is_official_demo_board=False,
+        is_sandbox_copy=False,
     ).distinct()
 
 
