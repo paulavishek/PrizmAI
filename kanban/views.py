@@ -86,10 +86,44 @@ def dashboard(request):
             is_sandbox_copy=True,
         ).distinct()
         if not boards.exists():
-            # No sandbox active — show official demo boards as read-only
-            boards = Board.objects.filter(
-                is_official_demo_board=True,
-            ).distinct()
+            # Sandbox missing — auto-re-provision synchronously so the user
+            # sees their sandbox immediately on this page load
+            from kanban.models import DemoSandbox
+            try:
+                request.user.demo_sandbox
+            except DemoSandbox.DoesNotExist:
+                from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+                try:
+                    provision_sandbox_task(request.user.id)
+                except Exception:
+                    pass
+                # Re-check for sandbox boards after provisioning
+                boards = Board.objects.filter(
+                    owner=request.user,
+                    is_sandbox_copy=True,
+                ).distinct()
+
+            if not boards.exists():
+                # Still nothing — fall back to official demo boards as read-only
+                boards = Board.objects.filter(
+                    is_official_demo_board=True,
+                ).distinct()
+        else:
+            # Catch-up: if user has sandbox boards but no tasks assigned to them
+            # (e.g. race condition on first entry, or re-entry timing), reassign now
+            has_assigned = Task.objects.filter(
+                column__board__in=boards,
+                assigned_to=request.user,
+                item_type='task',
+            ).exclude(progress=100).exists()
+            if not has_assigned:
+                from kanban.models import DemoSandbox
+                from kanban.sandbox_views import _reassign_demo_tasks_to_user
+                try:
+                    sandbox = request.user.demo_sandbox
+                    _reassign_demo_tasks_to_user(sandbox, request.user)
+                except DemoSandbox.DoesNotExist:
+                    pass
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -3048,6 +3082,11 @@ def move_task(request):
 @demo_write_guard
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+
+    # Sandbox boards are private — no real-user additions allowed
+    if board.is_sandbox_copy:
+        messages.error(request, "Sandbox boards are private and cannot have additional members.")
+        return redirect('board_detail', board_id=board.id)
     
     # RBAC: only Owner / board-level owner / ancestor owner / Org Admin can invite
     if not request.user.has_perm('prizmai.invite_board_member', board):

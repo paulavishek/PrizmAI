@@ -329,14 +329,12 @@ def _purge_existing_sandbox(user):
         sandbox = user.demo_sandbox
         # Restore assignments before deleting
         _restore_demo_task_assignments(sandbox)
-        # Delete sandbox boards (not the saved board, never official demo boards)
+        # Delete sandbox boards (never official demo boards)
         Board.objects.filter(
             owner=user,
             is_sandbox_copy=True,
             is_official_demo_board=False,
             is_seed_demo_data=False,
-        ).exclude(
-            pk=sandbox.saved_board_id
         ).delete()
         sandbox.delete()
     except Exception:
