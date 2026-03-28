@@ -447,12 +447,6 @@
         color: #6d28d9;
     }
 
-    .sandbox-browse-label {
-        font-size: 0.85rem;
-        color: #4c1d95;
-        font-weight: 500;
-    }
-
     [data-bs-theme="dark"] .demo-sandbox-controls {
         background: linear-gradient(135deg, #2e1065 0%, #3b0764 50%, #2e1065 100%);
         border-color: #6d28d9;
@@ -460,10 +454,6 @@
 
     [data-bs-theme="dark"] .sandbox-timer-inline {
         color: #c4b5fd;
-    }
-
-    [data-bs-theme="dark"] .sandbox-browse-label {
-        color: #e9d5ff;
     }
 
     @media (max-width: 768px) {
@@ -1409,8 +1399,9 @@
         <hr class="my-3">
         <div class="demo-sandbox-info">
             <i class="fas fa-shield-alt me-1" style="color: #764ba2;"></i>
-            <strong>This is your personal sandbox.</strong> It was created just for you &mdash; no other visitor can see or affect it.
-            Your changes stay here. If you want to start fresh, use the Reset button.
+            <strong>This is your personal demo workspace.</strong> It was created just for you and lasts 24 hours.
+            Make any changes you like &mdash; nothing here affects anyone else.
+            Log out and back in and you&rsquo;ll find everything exactly as you left it.
             This sandbox expires in
             <strong><span id="welcome-panel-time-remaining">{% if sandbox_expires_at %}{{ sandbox_expires_at|timeuntil }}{% else %}24 hours{% endif %}</span></strong>.
         </div>
@@ -1426,8 +1417,8 @@
 <!-- Sandbox Controls Bar — always visible below the collapsible panel -->
 <div class="demo-sandbox-controls" id="demoSandboxControls">
     <div class="sandbox-controls-inner">
-        {% if sandbox_expires_at and not is_browsing %}
-        <!-- Sandbox is active (editing mode): show beaker + timer + exit -->
+        {% if sandbox_expires_at %}
+        <!-- Sandbox is active: show beaker + timer + exit -->
         <div class="sandbox-controls-left">
             <span class="sandbox-badge-inline">
                 <i class="fas fa-flask me-1"></i>SANDBOX
@@ -1445,33 +1436,6 @@
             </button>
             <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#exitSandboxModal">
                 <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
-            </button>
-        </div>
-        {% elif sandbox_expires_at and is_browsing %}
-        <!-- Sandbox exists but in browsing mode -->
-        <div class="sandbox-controls-left">
-            <span class="sandbox-browse-label">
-                <i class="fas fa-eye me-1"></i>Read-only mode &mdash; start the sandbox to make changes
-            </span>
-        </div>
-        <div class="sandbox-controls-right">
-            <button type="button" class="btn btn-sm btn-primary" onclick="startExperimenting()">
-                <i class="fas fa-flask me-1"></i>Start Sandbox
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
-                <i class="fas fa-redo me-1"></i>Reset my demo
-            </button>
-        </div>
-        {% else %}
-        <!-- No sandbox — show option to start one -->
-        <div class="sandbox-controls-left">
-            <span class="sandbox-browse-label">
-                <i class="fas fa-eye me-1"></i>You&rsquo;re viewing the demo workspace &mdash; start a sandbox to experiment with changes
-            </span>
-        </div>
-        <div class="sandbox-controls-right">
-            <button type="button" class="btn btn-sm btn-primary" onclick="startExperimenting()">
-                <i class="fas fa-flask me-1"></i>Start Sandbox
             </button>
         </div>
         {% endif %}
@@ -1797,7 +1761,7 @@
                                     {% endif %}
                                     {% endwith %}
                                 </div>
-                                {% if demo_mode and not board.is_official_demo_board %}
+                                {% if demo_mode and not board.is_official_demo_board and not board.cloned_from %}
                                 <div class="mt-2 text-end" onclick="event.preventDefault(); event.stopPropagation(); window.location.href='{% url 'save_sandbox_board' %}';">
                                     <span class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;">
                                         <i class="fas fa-save me-1"></i>Save before sandbox expires

@@ -42,7 +42,6 @@ urlpatterns = [
     path('demo/fingerprint/', demo_views.receive_client_fingerprint, name='receive_client_fingerprint'),
 
     # Single-tier personal sandbox
-    path('demo/start-experimenting/', sandbox_views.toggle_browsing, name='toggle_browsing'),
     path('demo/reset-mine/', sandbox_views.reset_my_demo, name='reset_my_demo'),
     path('sandbox/save/', sandbox_views.save_sandbox_board, name='save_sandbox_board'),
     path('sandbox/delete/', sandbox_views.delete_sandbox, name='delete_sandbox'),
