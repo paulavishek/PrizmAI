@@ -333,10 +333,12 @@ def _purge_existing_sandbox(user):
         sandbox = user.demo_sandbox
         # Restore assignments before deleting
         _restore_demo_task_assignments(sandbox)
-        # Delete sandbox boards (not the saved board)
+        # Delete sandbox boards (not the saved board, never official demo boards)
         Board.objects.filter(
             owner=user,
             is_sandbox_copy=True,
+            is_official_demo_board=False,
+            is_seed_demo_data=False,
         ).exclude(
             pk=sandbox.saved_board_id
         ).delete()
@@ -350,7 +352,7 @@ def _purge_existing_sandbox(user):
 @login_required
 @require_http_methods(["POST"])
 def toggle_browsing(request):
-    """POST /demo/start-experimenting/ — flip is_browsing to False."""
+    """POST /demo/start-experimenting/ — flip is_browsing to False, or provision a new sandbox."""
     from kanban.models import DemoSandbox
     try:
         sandbox = request.user.demo_sandbox
@@ -358,7 +360,10 @@ def toggle_browsing(request):
         sandbox.save(update_fields=['is_browsing'])
         return JsonResponse({'status': 'ok', 'is_browsing': False})
     except DemoSandbox.DoesNotExist:
-        return JsonResponse({'error': 'No active sandbox.'}, status=404)
+        # No sandbox exists — provision one (e.g. user exited and wants to start again)
+        from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+        result = provision_sandbox_task.delay(request.user.id)
+        return JsonResponse({'status': 'provisioning', 'task_id': result.id})
 
 
 @login_required
@@ -418,7 +423,7 @@ def save_sandbox_board(request):
 @login_required
 @require_http_methods(["POST"])
 def delete_sandbox(request):
-    """Immediately delete the user's sandbox and exit demo mode."""
+    """Immediately delete the user's sandbox but keep them in demo view."""
     from kanban.models import DemoSandbox
 
     user = request.user
@@ -432,14 +437,8 @@ def delete_sandbox(request):
     _delete_sandbox(sandbox)
     sandbox.delete()
 
-    # Exit demo mode and leave demo org
-    _leave_demo_org(user)
-    try:
-        profile = user.profile
-        profile.is_viewing_demo = False
-        profile.save(update_fields=['is_viewing_demo'])
-    except Exception:
-        pass
+    # Stay in demo view — user can start a new sandbox later
+    # Do NOT set is_viewing_demo=False or leave demo org
 
     return JsonResponse({'status': 'deleted'})
 

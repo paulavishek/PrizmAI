@@ -23,15 +23,14 @@ def _send_sandbox_expiry_warning(sandbox):
 
 
 def _delete_sandbox(sandbox):
-    """Delete all boards owned by this sandbox and the sandbox record itself."""
+    """Delete all sandbox-copy boards owned by this user. Never touches official demo boards."""
     from kanban.models import Board, BoardMembership, DemoSandbox
 
-    # Find all sandbox boards — boards that were created as part of this sandbox.
-    # They have is_official_demo_board=False and the user is the owner.
-    # We use a special marker: boards owned by the user created after sandbox.created_at.
     sandbox_boards = Board.objects.filter(
         owner=sandbox.user,
         is_sandbox_copy=True,
+        is_official_demo_board=False,   # safety: never delete template boards
+        is_seed_demo_data=False,        # safety: never delete seed data
     )
 
     if sandbox.saved_board_id:

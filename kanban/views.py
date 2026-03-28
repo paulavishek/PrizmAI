@@ -80,11 +80,16 @@ def dashboard(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
     
     if demo_mode:
-        # Single-tier demo: show only this user's sandbox copies
+        # Single-tier demo: show user's sandbox copies, fall back to official demo boards
         boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
         ).distinct()
+        if not boards.exists():
+            # No sandbox active — show official demo boards as read-only
+            boards = Board.objects.filter(
+                is_official_demo_board=True,
+            ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -1036,6 +1041,11 @@ def dashboard(request):
         demo_board = Board.objects.filter(
             owner=request.user, is_sandbox_copy=True
         ).order_by('-created_at').first()
+        if not demo_board:
+            # No sandbox active — use the official demo board
+            demo_board = Board.objects.filter(
+                is_official_demo_board=True
+            ).first()
 
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
@@ -1355,6 +1365,11 @@ def create_board(request):
             # Auto-link to strategy if one was passed
             if selected_strategy:
                 board.strategy = selected_strategy
+
+            # Tag boards created during sandbox mode so they get cleaned up
+            demo_mode = getattr(profile, 'is_viewing_demo', False)
+            if demo_mode:
+                board.is_sandbox_copy = True
 
             board.save()
             board.owner = request.user
