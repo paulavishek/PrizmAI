@@ -6,6 +6,16 @@
 
 {% block extra_css %}
 <style>
+    /* Hide the base.html sandbox-active-banner on the dashboard — replaced by inline controls */
+    .sandbox-active-banner {
+        display: none !important;
+    }
+
+    /* Hide the topbar SANDBOX badge on dashboard — it's shown in the sandbox controls bar */
+    .topbar-demo-badge {
+        display: none !important;
+    }
+
     /* Styles for clickable metric cards */
     .metrics-card {
         cursor: pointer;
@@ -226,6 +236,61 @@
         background: var(--bs-body-bg, #fff);
     }
 
+    /* Skills tags in demo user cards */
+    .demo-cred-card .cred-skills {
+        margin-top: 0.65rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid var(--bs-border-color, #dee2e6);
+    }
+
+    .demo-cred-card .cred-skills-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.6;
+        margin-bottom: 0.35rem;
+    }
+
+    .demo-cred-card .cred-skill-tag {
+        display: inline-block;
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        padding: 0.15rem 0.55rem;
+        border-radius: 50px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        margin: 0.15rem 0.1rem;
+    }
+
+    [data-bs-theme="dark"] .demo-cred-card .cred-skill-tag {
+        background: rgba(102, 126, 234, 0.2);
+        color: #a5b4fc;
+    }
+
+    .demo-cred-card .cred-login-btn {
+        display: block;
+        width: 100%;
+        margin-top: 0.65rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border-radius: 0.4rem;
+        text-align: center;
+        text-decoration: none;
+        color: #fff;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .demo-cred-card .cred-login-btn:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+        color: #fff;
+    }
+
     /* Demo board row */
     .demo-board-row {
         display: flex;
@@ -325,6 +390,88 @@
         opacity: 0.55;
         text-align: center;
         margin-top: 0.75rem;
+    }
+
+    /* ================================================================
+       SANDBOX CONTROLS BAR — visible below collapsible panel
+       ================================================================ */
+    .demo-sandbox-controls {
+        border-radius: 0.6rem;
+        margin-bottom: 1rem;
+        padding: 0.65rem 1.25rem;
+        background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 50%, #f3e8ff 100%);
+        border: 1px solid #c4b5fd;
+        box-shadow: 0 1px 4px rgba(124, 58, 237, 0.1);
+    }
+
+    .sandbox-controls-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .sandbox-controls-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .sandbox-controls-right {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .sandbox-badge-inline {
+        display: inline-flex;
+        align-items: center;
+        background: #7c3aed;
+        color: #fff;
+        padding: 0.3rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .sandbox-timer-inline {
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: #6d28d9;
+    }
+
+    .sandbox-browse-label {
+        font-size: 0.85rem;
+        color: #4c1d95;
+        font-weight: 500;
+    }
+
+    [data-bs-theme="dark"] .demo-sandbox-controls {
+        background: linear-gradient(135deg, #2e1065 0%, #3b0764 50%, #2e1065 100%);
+        border-color: #6d28d9;
+    }
+
+    [data-bs-theme="dark"] .sandbox-timer-inline {
+        color: #c4b5fd;
+    }
+
+    [data-bs-theme="dark"] .sandbox-browse-label {
+        color: #e9d5ff;
+    }
+
+    @media (max-width: 768px) {
+        .sandbox-controls-inner {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
     }
     
     /* Welcome Modal Styles */
@@ -1333,7 +1480,7 @@
         <div class="demo-welcome-header-left">
             <i class="fas fa-compass welcome-icon text-primary"></i>
             <div>
-                <p class="welcome-title mb-0">Welcome to PrizmAI &mdash; here&rsquo;s how to explore</p>
+                <p class="welcome-title mb-0">Welcome to your Demo Workspace &mdash; here&rsquo;s how to explore</p>
                 <p class="welcome-subtitle mb-0 text-muted">Demo credentials, what&rsquo;s included, and how your sandbox works</p>
             </div>
         </div>
@@ -1366,6 +1513,16 @@
                     <span class="cred-field-label">Password</span>
                     <span class="cred-field-value">demo123</span>
                 </div>
+                <div class="cred-skills">
+                    <p class="cred-skills-label">Skills</p>
+                    <span class="cred-skill-tag">Project Management</span>
+                    <span class="cred-skill-tag">Agile</span>
+                    <span class="cred-skill-tag">Stakeholder Mgmt</span>
+                    <span class="cred-skill-tag">Risk Analysis</span>
+                </div>
+                <a href="{% url 'quick_demo_login' 'alex_chen_demo' %}" class="cred-login-btn">
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Alex
+                </a>
             </div>
             <!-- Sam Rivera -->
             <div class="demo-cred-card">
@@ -1384,6 +1541,16 @@
                     <span class="cred-field-label">Password</span>
                     <span class="cred-field-value">demo123</span>
                 </div>
+                <div class="cred-skills">
+                    <p class="cred-skills-label">Skills</p>
+                    <span class="cred-skill-tag">Python</span>
+                    <span class="cred-skill-tag">Django</span>
+                    <span class="cred-skill-tag">React</span>
+                    <span class="cred-skill-tag">API Design</span>
+                </div>
+                <a href="{% url 'quick_demo_login' 'sam_rivera_demo' %}" class="cred-login-btn">
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Sam
+                </a>
             </div>
             <!-- Jordan Taylor -->
             <div class="demo-cred-card">
@@ -1402,6 +1569,16 @@
                     <span class="cred-field-label">Password</span>
                     <span class="cred-field-value">demo123</span>
                 </div>
+                <div class="cred-skills">
+                    <p class="cred-skills-label">Skills</p>
+                    <span class="cred-skill-tag">UI/UX Design</span>
+                    <span class="cred-skill-tag">Figma</span>
+                    <span class="cred-skill-tag">CSS</span>
+                    <span class="cred-skill-tag">Prototyping</span>
+                </div>
+                <a href="{% url 'quick_demo_login' 'jordan_taylor_demo' %}" class="cred-login-btn">
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Jordan
+                </a>
             </div>
         </div>
 
@@ -1438,24 +1615,9 @@
         <div class="demo-sandbox-info">
             <i class="fas fa-shield-alt me-1" style="color: #764ba2;"></i>
             <strong>This is your personal sandbox.</strong> It was created just for you &mdash; no other visitor can see or affect it.
-            Your changes stay here. If you want to start fresh, use the Reset button below.
+            Your changes stay here. If you want to start fresh, use the Reset button.
             This sandbox expires in
             <strong><span id="welcome-panel-time-remaining">{% if sandbox_expires_at %}{{ sandbox_expires_at|timeuntil }}{% else %}24 hours{% endif %}</span></strong>.
-        </div>
-
-        <!-- Action buttons -->
-        <div class="demo-actions-row mt-3">
-            {% if demo_board %}
-            <a href="{% url 'board_detail' demo_board.id %}" class="btn btn-primary btn-sm">
-                Open the demo board <i class="fas fa-arrow-right ms-1"></i>
-            </a>
-            {% endif %}
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
-                <i class="fas fa-redo me-1"></i>Reset my demo
-            </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.href='{% url 'save_sandbox_board' %}'">
-                <i class="fas fa-save me-1"></i>Save a board before it expires
-            </button>
         </div>
 
         <!-- Rate limit note -->
@@ -1463,6 +1625,52 @@
             All demo accounts have AI features rate-limited to 5 calls per 10 min.
             Create your own account for unrestricted access.
         </p>
+    </div>
+</div>
+
+<!-- Sandbox Controls Bar — always visible below the collapsible panel -->
+<div class="demo-sandbox-controls" id="demoSandboxControls">
+    <div class="sandbox-controls-inner">
+        {% if not is_browsing %}
+        <!-- Sandbox is active: show beaker + timer + exit -->
+        <div class="sandbox-controls-left">
+            <span class="sandbox-badge-inline">
+                <i class="fas fa-flask me-1"></i>SANDBOX
+            </span>
+            <span class="sandbox-timer-inline">
+                <i class="fas fa-clock me-1"></i>
+                <span id="sandbox-controls-time-remaining">
+                    {% if sandbox_expires_at %}{{ sandbox_expires_at|timeuntil }} remaining{% else %}24 hours remaining{% endif %}
+                </span>
+            </span>
+        </div>
+        <div class="sandbox-controls-right">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
+                <i class="fas fa-redo me-1"></i>Reset my demo
+            </button>
+            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-sign-out-alt me-1"></i>Exit Sandbox
+                </button>
+            </form>
+        </div>
+        {% else %}
+        <!-- Browsing mode: show start sandbox button -->
+        <div class="sandbox-controls-left">
+            <span class="sandbox-browse-label">
+                <i class="fas fa-eye me-1"></i>Read-only mode &mdash; start the sandbox to make changes
+            </span>
+        </div>
+        <div class="sandbox-controls-right">
+            <button type="button" class="btn btn-sm btn-primary" onclick="startExperimenting()">
+                <i class="fas fa-flask me-1"></i>Start Sandbox
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#resetDemoModal">
+                <i class="fas fa-redo me-1"></i>Reset my demo
+            </button>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -1557,6 +1765,13 @@
                                     {% endif %}
                                     {% endwith %}
                                 </div>
+                                {% if demo_mode and not board.is_official_demo_board %}
+                                <div class="mt-2 text-end" onclick="event.preventDefault(); event.stopPropagation(); window.location.href='{% url 'save_sandbox_board' %}';">
+                                    <span class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;">
+                                        <i class="fas fa-save me-1"></i>Save before sandbox expires
+                                    </span>
+                                </div>
+                                {% endif %}
                             </div>
                         </a>
                     </div>
@@ -3481,12 +3696,12 @@
 
     // Reset demo via modal confirm button
     document.addEventListener('DOMContentLoaded', function () {
-        // --- Welcome panel: expand on first visit, remember state after ---
+        // --- Welcome panel: collapsed by default, remember state after ---
         const panel = document.getElementById('demoWelcomePanel');
         if (panel) {
             const saved = localStorage.getItem('demoWelcomePanelExpanded');
-            // null = first visit → expand; 'true' → expand; 'false' → collapsed
-            if (saved === null || saved === 'true') {
+            // null = first visit → collapsed; 'true' → expand; 'false' → collapsed
+            if (saved === 'true') {
                 panel.classList.add('expanded');
             }
             // Sync toggle label
