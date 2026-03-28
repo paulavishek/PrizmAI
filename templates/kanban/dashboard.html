@@ -3685,7 +3685,7 @@
                 })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
-                    if (data.status === 'provisioning' || data.status === 'success') {
+                    if (data.status === 'provisioning' || data.status === 'resetting' || data.status === 'success') {
                         window.location.href = '/dashboard/';
                     } else {
                         alert('Failed to reset demo: ' + (data.message || data.error || 'Unknown error'));
