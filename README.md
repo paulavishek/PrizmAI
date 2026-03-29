@@ -470,24 +470,15 @@ PrizmAI's demo gives every visitor a private, fully editable sandbox the moment 
 
 ### How it works
 
-1. **Enter demo mode** — Click **Try Demo** and PrizmAI deep-copies all demo template boards — columns, tasks, labels, comments, dependencies, and task relationships — into a private set of boards owned by you alone.
+1. **Enter demo mode** — Click **Try Demo** (or the workspace switcher in the sidebar). PrizmAI deep-copies all demo template boards — columns, tasks, labels, comments, dependencies, and task relationships — into a private set of boards owned by you alone. Provisioning runs asynchronously in the background.
 2. **Experiment freely** — Your sandbox has full write access. Create tasks, delete columns, drag and drop, trigger automations — anything you like. Changes here have no effect on the shared demo templates or any other user.
-3. **One sandbox at a time** — If you already have an active sandbox and request a new one, PrizmAI shows a confirmation dialog before replacing it.
-4. **It expires automatically** — Sandboxes last 24 hours from creation. A background task runs every hour to delete expired ones.
-5. **Two-hour warning** — When your sandbox is within 2 hours of expiry, a yellow banner appears at the top of every page.
-6. **Save one board before it goes** — Click **Save a board** in the warning banner to promote your chosen sandbox board into your regular workspace as a permanent board you own.
-7. **Delete on demand** — Click **Delete now** in the banner to wipe the sandbox immediately.
-8. **Reset** — Click **Reset my demo** to wipe your sandbox and re-provision a fresh copy at any time.
+3. **Switch workspaces freely** — Use the workspace switcher in the sidebar to toggle between your **Demo Workspace** and **My Workspace** at any time. Your sandbox is preserved between switches — nothing is deleted when you leave demo mode.
+4. **Sandbox persists** — Your sandbox has no expiry. It stays around as long as your account exists, so you can return to your demo data whenever you like.
+5. **Reset** — Click **Reset my demo** to wipe your sandbox and re-provision a fresh copy from the templates at any time.
 
-### The warning banner
+### The sandbox banner
 
-When your sandbox is 2 hours or less from expiry, a sticky yellow bar appears at the top of every page. It updates every 60 seconds. It has three buttons:
-
-| Button | What it does |
-|---|---|
-| **Save a board** | Keeps one board from your sandbox as a permanent board in your account |
-| **Delete now** | Wipes the sandbox immediately — cannot be undone |
-| **Dismiss** | Hides the banner for this browser session (sandbox still expires on schedule) |
+While you are in the demo workspace, a dismissible banner appears at the top of every page confirming that you have full edit access and that your changes are private to your sandbox.
 
 ### What is copied into the sandbox
 
@@ -570,7 +561,7 @@ Demo accounts can explore all demo boards and use every read feature freely, but
 
 > Demo accounts have rate-limited AI features (5 calls per 10 minutes). Create your own account for unrestricted AI access.
 
-> **Want to experiment freely?** Enter demo mode and PrizmAI creates a private, 24-hour copy of all demo boards with full write access — just for you. See the [Demo Experience — Personal Sandbox](#demo-experience--personal-sandbox) section for details.
+> **Want to experiment freely?** Enter demo mode and PrizmAI creates a private, persistent copy of all demo boards with full write access — just for you. See the [Demo Experience — Personal Sandbox](#demo-experience--personal-sandbox) section for details.
 
 ### Keeping Demo Data Fresh
 
