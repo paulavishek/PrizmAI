@@ -768,19 +768,20 @@ def knowledge_hub_home(request):
     # Get search query
     search_query = request.GET.get('q', '')
     
-    # Include demo organization content for all authenticated users
+    # Include demo organization content only when in demo/sandbox mode
     demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+    is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False) if hasattr(request.user, 'profile') else False
     
     # Build organization filter
     if org:
         org_filter = Q(organization=org)
-        if demo_org:
+        if demo_org and is_demo_mode:
             org_filter |= Q(organization=demo_org)
-    elif demo_org:
-        # If user has no org, show only demo org content
+    elif demo_org and is_demo_mode:
+        # If user has no org but is in demo mode, show demo org content
         org_filter = Q(organization=demo_org)
     else:
-        # No org at all, show empty results
+        # No org at all (or not in demo mode with no org), show empty results
         org_filter = Q(pk=None)
     
     # Get wiki pages from user's org AND demo org

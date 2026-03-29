@@ -299,7 +299,8 @@
 </div>
 {% endif %}
 
-{# Link / change / remove goal — always visible in sidebar #}
+{# Link / change / remove goal — owner-only in sidebar #}
+{% if can_edit %}
 <div class="sidebar-section">
     <div class="sidebar-label">
         {% if mission.organization_goal %}Change Goal{% else %}Link to Goal{% endif %}
@@ -319,6 +320,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 {% if mission.due_date %}
 <div class="sidebar-section">

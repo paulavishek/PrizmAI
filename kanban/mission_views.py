@@ -28,6 +28,7 @@ from .models import (
     OrganizationGoal, Mission, Strategy, Board, Task,
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, StrategicFollower,
+    BoardMembership,
 )
 from .forms.strategic_forms import GoalEditForm, MissionEditForm, StrategyEditForm
 from accounts.models import Organization
@@ -289,8 +290,8 @@ def goal_detail(request, goal_id):
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')
 
-    # Missions not yet linked (for the link dropdown)
-    all_missions = Mission.objects.exclude(organization_goal=goal).order_by('name')
+    # Missions not yet linked (for the link dropdown) — scoped to user's own missions
+    all_missions = Mission.objects.filter(created_by=request.user).exclude(organization_goal=goal).order_by('name')
 
     # --- Board IDs under this goal ---
     goal_board_ids = list(Board.objects.filter(
@@ -620,14 +621,31 @@ def mission_detail(request, mission_id):
     if not request.user.has_perm('prizmai.view_mission', mission):
         raise Http404
 
-    strategies = mission.strategies.all().annotate(
+    # --- RBAC: boards the current user can access under this mission ---
+    user_accessible_board_ids = set(
+        BoardMembership.objects.filter(
+            user=request.user,
+            board__strategy__mission=mission,
+        ).values_list('board_id', flat=True)
+    )
+    # Org admins / record owners see everything
+    _is_admin_or_owner = (
+        request.user.has_perm('prizmai.edit_mission', mission)
+        or request.user.groups.filter(name='OrgAdmin').exists()
+    )
+    if _is_admin_or_owner:
+        user_accessible_board_ids = set(Board.objects.filter(
+            strategy__mission=mission
+        ).values_list('id', flat=True))
+
+    strategies = mission.strategies.filter(
+        boards__id__in=user_accessible_board_ids
+    ).distinct().annotate(
         board_count=Count('boards', distinct=True)
     ).order_by('-created_at')
 
-    # --- Board IDs under this mission ---
-    board_ids = list(Board.objects.filter(
-        strategy__mission=mission
-    ).values_list('id', flat=True))
+    # --- Board IDs under this mission (scoped to user) ---
+    board_ids = list(user_accessible_board_ids)
 
     # --- Health score (0-100) ---
     health_score, completion_pct, total_tasks, done_tasks = _compute_health_score(board_ids)
@@ -635,9 +653,9 @@ def mission_detail(request, mission_id):
     # --- Per-strategy health for the strategy cards ---
     strategy_tree = []
     for strategy in strategies:
-        s_bids = list(Board.objects.filter(strategy=strategy).values_list('id', flat=True))
+        s_bids = list(Board.objects.filter(strategy=strategy, id__in=user_accessible_board_ids).values_list('id', flat=True))
         s_health, s_pct, s_total, s_done = _compute_health_score(s_bids)
-        s_boards = Board.objects.filter(strategy=strategy).order_by('name')
+        s_boards = Board.objects.filter(strategy=strategy, id__in=user_accessible_board_ids).order_by('name')
         board_items = []
         for b in s_boards:
             b_bids = [b.id]
@@ -753,8 +771,8 @@ def mission_detail(request, mission_id):
         'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
         'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
         'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
-        # All goals for the "Link to Goal" sidebar widget
-        'all_goals': OrganizationGoal.objects.order_by('name'),
+        # All goals for the "Link to Goal" sidebar widget — scoped to user's own goals
+        'all_goals': OrganizationGoal.objects.filter(created_by=request.user).order_by('name'),
     })
 
 

@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 def _user_boards(user):
     """Return boards visible to the user, including demo boards when in demo mode."""
-    profile = getattr(user, 'userprofile', None)
+    profile = getattr(user, 'profile', None)
     is_demo = getattr(profile, 'is_viewing_demo', False)
     if is_demo:
         return Board.objects.filter(
@@ -46,7 +46,7 @@ def _user_boards(user):
         ).distinct().order_by('name')
     return Board.objects.filter(
         Q(created_by=user) | Q(memberships__user=user)
-    ).distinct().order_by('name')
+    ).exclude(is_sandbox_copy=True).distinct().order_by('name')
 
 
 def _create_notification(recipient, sender, notification_type, text, action_url=None):
@@ -432,13 +432,16 @@ def calendar_create_task(request):
         except ValueError:
             pass
 
-    # Assignee
+    # Assignee — validate board membership
     assignee_id = data.get('assignee_id')
     assignee = None
     if assignee_id:
         try:
-            assignee = User.objects.get(id=assignee_id)
-        except User.DoesNotExist:
+            assignee = User.objects.filter(
+                Q(board_memberships__board=board) | Q(id=board.created_by_id),
+                id=assignee_id
+            ).first()
+        except (ValueError, TypeError):
             pass
 
     # Priority

@@ -46,11 +46,9 @@ def messaging_hub(request):
     elif _is_org_admin:
         user_boards = Board.objects.filter(is_sandbox_copy=False)
     else:
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards_query = Board.objects.filter(
+        user_boards = Board.objects.filter(
             Q(created_by=request.user) | Q(memberships__user=request.user)
-        )
-        user_boards = (demo_boards | user_boards_query).distinct()
+        ).exclude(is_sandbox_copy=True).distinct()
     
     # Calculate unread messages per board
     boards_with_unread = []
@@ -81,7 +79,11 @@ def chat_room_list(request, board_id):
     """List all chat rooms for a board"""
     board = get_object_or_404(Board, id=board_id)
 
-    if not request.user.has_perm('prizmai.view_board', board):
+    # Strict board membership check — demo boards alone are not sufficient for chat access
+    from kanban.models import BoardMembership
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    _has_membership = BoardMembership.objects.filter(user=request.user, board=board).exists()
+    if not (_has_membership or board.created_by == request.user or _is_org_admin):
         raise Http404
     
     chat_rooms = board.chat_rooms.all()
