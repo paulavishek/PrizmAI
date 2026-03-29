@@ -8,7 +8,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, Http404
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
@@ -184,6 +184,10 @@ def time_entry_create(request, task_id):
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board to log time
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TimeEntryForm(request.POST, user=request.user)
@@ -1287,6 +1291,10 @@ def quick_time_entry(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
+    # RBAC: user must have edit permission on the board to log time
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    
     try:
         hours = Decimal(request.POST.get('hours', '0'))
         description = request.POST.get('description', '').strip()
@@ -1347,6 +1355,11 @@ def delete_time_entry(request, entry_id):
     Delete a time entry
     """
     entry = get_object_or_404(TimeEntry, id=entry_id)
+    board = entry.task.column.board
+    
+    # RBAC: user must have edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     
     # Check permissions - user can only delete their own entries
     if entry.user != request.user:

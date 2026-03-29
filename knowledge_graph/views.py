@@ -29,6 +29,11 @@ def board_knowledge(request, board_id):
     """Knowledge page for a specific board — decisions, lessons, auto-captured memories."""
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        from django.http import Http404
+        raise Http404
+
     nodes = (
         MemoryNode.objects
         .filter(board=board)
@@ -57,6 +62,10 @@ def board_knowledge(request, board_id):
 def add_manual_memory(request, board_id):
     """Add a manual decision or lesson memory node to a board."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have edit permission on the board to add memories
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -355,6 +364,10 @@ def memory_feedback(request, query_id):
 def deja_vu_check(request, board_id):
     """Check if similar past projects exist — returns max 3 relevant memories."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     cache_key = f'deja_vu_{board_id}'
     cached = cache.get(cache_key)

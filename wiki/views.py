@@ -645,8 +645,15 @@ def delete_wiki_link(request, link_id):
     """Delete a wiki link"""
     link = get_object_or_404(WikiLink, pk=link_id)
     
-    # Access restriction removed - all authenticated users can delete wiki links
-    can_delete = True
+    # RBAC: user must have edit permission on the linked board
+    if link.board:
+        if not request.user.has_perm('prizmai.edit_board', link.board):
+            from django.http import Http404
+            raise Http404
+    elif link.task and link.task.column and link.task.column.board:
+        if not request.user.has_perm('prizmai.edit_board', link.task.column.board):
+            from django.http import Http404
+            raise Http404
     
     # Store the redirect URL before deleting
     if link.board:
