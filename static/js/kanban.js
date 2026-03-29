@@ -212,24 +212,17 @@ if (typeof kanbanInitialized === 'undefined') {
             kanbanInitialized = true;
               // Initialize Kanban Board functionality if board exists
             if (document.querySelector('.kanban-board')) {
-                // Force cleanup any existing scroll states first
-                setTimeout(() => {
-                    if (typeof forceCleanupAllColumns === 'function') {
-                        forceCleanupAllColumns();
-                    }
-                }, 100);
-                
-                initKanbanBoard();
-                initColumnOrdering();
-                initColumnDragDrop();  // NEW: Initialize column drag-and-drop
-                setupTaskProgress();
-                // Add keyboard support for accessibility
-                addKeyboardSupport();
-                
-                // Initialize column scrolling after other components and cleanup
-                setTimeout(() => {
+                // Defer all interactive initialization until after the first
+                // paint so that server-rendered WIP badges, task counts, and
+                // column layouts are visible to the user without any flash.
+                requestAnimationFrame(() => {
+                    initKanbanBoard();
+                    initColumnOrdering();
+                    initColumnDragDrop();
+                    setupTaskProgress();
+                    addKeyboardSupport();
                     initColumnScrolling();
-                }, 800);
+                });
             }
             
             // Initialize charts if they exist
@@ -243,9 +236,6 @@ if (typeof kanbanInitialized === 'undefined') {
 function initKanbanBoard() {
     const tasks = document.querySelectorAll('.kanban-task, .kanban-task-v2');
     const columns = document.querySelectorAll('.kanban-column-tasks');
-    
-    // Initialize column scrolling based on task count
-    initColumnScrolling();
 
     // Initialize drag for all tasks
     tasks.forEach(task => {
@@ -836,16 +826,12 @@ function initColumnScrolling() {
         document.documentElement.style.setProperty('--column-scroll-max-height', COLUMN_SCROLL_CONFIG.MAX_HEIGHT + 'px');
         document.documentElement.style.setProperty('--column-scroll-min-height', COLUMN_SCROLL_CONFIG.MIN_HEIGHT + 'px');
         
-        console.log('CSS properties set:', {
-            maxHeight: COLUMN_SCROLL_CONFIG.MAX_HEIGHT + 'px',
-            minHeight: COLUMN_SCROLL_CONFIG.MIN_HEIGHT + 'px'
-        });
+        // Skip initial task-count recalculation — server already rendered
+        // the correct counts into .column-task-count-badge elements.
+        // Client-side recounts only run after task move/delete operations.
         
-        // Initial update of task counts for all columns
-        updateAllColumnTaskCounts();
-        
-        // Initial update
-        updateColumnScrolling();
+        // Initial scrolling update (height management only, skip count update)
+        updateColumnScrolling(true);
         
         // Listen for task operations (avoid recursion)
         document.addEventListener('taskMoved', function() {
@@ -863,10 +849,9 @@ function initColumnScrolling() {
 function updateColumnTaskCount(columnWrapper, taskCount) {
     if (!columnWrapper) return;
     
-    const taskCountSpan = columnWrapper.querySelector('.column-task-count');
+    const taskCountSpan = columnWrapper.querySelector('.column-task-count-badge');
     if (taskCountSpan) {
         taskCountSpan.textContent = taskCount;
-        console.log(`Updated task count display: ${taskCount}`);
     }
 }
 
@@ -881,26 +866,24 @@ function updateAllColumnTaskCounts() {
     });
 }
 
-function updateColumnScrolling() {
+function updateColumnScrolling(skipCountUpdate) {
     try {
-        console.log('Updating column scrolling...');
-        
         const columns = document.querySelectorAll('.kanban-column-tasks');
-        console.log(`Found ${columns.length} columns`);
         
         columns.forEach((column, index) => {
             const tasks = column.querySelectorAll('.kanban-task, .kanban-task-v2');
             const taskCount = tasks.length;
             const columnWrapper = column.closest('.kanban-column');
             
-            console.log(`Column ${index + 1}: ${taskCount} tasks`);
-            
-            // Update task count display
-            updateColumnTaskCount(columnWrapper, taskCount);
+            // Only update the visible task count badge after user-initiated
+            // moves, not on the initial page load where the server already
+            // rendered the correct value.
+            if (!skipCountUpdate) {
+                updateColumnTaskCount(columnWrapper, taskCount);
+            }
             
             // Add or remove scrollable class based on task count
             if (taskCount > COLUMN_SCROLL_CONFIG.TASK_THRESHOLD) {
-                console.log(`  → Making column ${index + 1} scrollable`);
                 column.classList.add('scrollable');
                 
                 // Clear any conflicting styles first
@@ -920,7 +903,6 @@ function updateColumnScrolling() {
                     columnWrapper.style.overflow = 'visible';
                 }
                   } else {
-                console.log(`  → Removing scroll from column ${index + 1}`);
                 column.classList.remove('scrollable');
                 
                 // Thorough cleanup of all scroll-related styles
@@ -949,8 +931,6 @@ function updateColumnScrolling() {
                 }
             }
         });
-        
-        console.log('Column scrolling update completed');
         
     } catch (error) {
         console.error('Error in updateColumnScrolling:', error);
