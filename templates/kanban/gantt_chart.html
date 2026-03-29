@@ -42,7 +42,7 @@
     }
 
     /* ============================================
-       DEPENDENCY LINES â€” CUSTOM ELBOW CONNECTORS
+       DEPENDENCY LINES — CUSTOM ELBOW CONNECTORS
        ============================================ */
 
     /* Hide ALL frappe-gantt native arrow polygons */
@@ -58,7 +58,7 @@
         transform: scale(0) !important;
     }
 
-    /* Hide ALL frappe-gantt native arrow paths â€” we draw our own */
+    /* Hide ALL frappe-gantt native arrow paths — we draw our own */
     .gantt g.arrow,
     .gantt g.arrow path,
     .gantt path.arrow,
@@ -119,7 +119,7 @@
         opacity: 0.12 !important;
     }
 
-    /* Mid-line directional chevron â€” force visible against any hide rules */
+    /* Mid-line directional chevron — force visible against any hide rules */
     .dep-chevron {
         pointer-events: none;
         display: block !important;
@@ -213,6 +213,13 @@
         rx: 6;
         ry: 6;
     }
+
+    /* Priority colours via Frappe Gantt custom_class (applied at first render,
+       before any JS post-processing — eliminates the grey → colour flash). */
+    .gantt .bar-wrapper.priority-low .bar        { fill: #94a3b8 !important; }
+    .gantt .bar-wrapper.priority-medium .bar      { fill: #3b82f6 !important; }
+    .gantt .bar-wrapper.priority-high .bar        { fill: #f59e0b !important; }
+    .gantt .bar-wrapper.priority-urgent .bar      { fill: #ef4444 !important; }
 
     /* ============================================
        MILESTONE STYLING - GLOWING DIAMOND EFFECT
@@ -360,7 +367,7 @@
         background: #4338ca;
     }
 
-    /* Show in-bar progress fill â€” complements the split-view table Progress column */
+    /* Show in-bar progress fill — complements the split-view table Progress column */
     .gantt .bar-wrapper .bar-progress {
         fill: rgba(255, 255, 255, 0.25) !important;
         rx: 6;
@@ -373,7 +380,10 @@
         rx: 6;
         ry: 6;
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-        transition: all 0.2s ease;
+        /* Only transition filter/transform on hover — NOT fill/width/x/y.
+           Transitioning all properties caused a visible colour spring on load
+           because priority fills were applied after Frappe Gantt's initial grey render. */
+        transition: filter 0.2s ease, transform 0.2s ease;
     }
     
     /* Month view: enhance bar visibility with stronger shadows and borders */
@@ -851,30 +861,21 @@
     }
 
     /* IMPORTANT: Default blue color for ALL bars to prevent grey flash */
-    /* Priority colors below use !important and will override this for tasks */
-    /* Phase bars without data-priority will remain blue (phase-1, phase-2, etc.) */
+    /* Priority colors via custom_class or data-priority will override this */
+    /* Phase bars without a priority class will remain blue */
     .gantt .bar-wrapper .bar:not([data-priority]) {
         fill: #6366f1 !important;
     }
 
-    /* Gantt chart wrapper - hide until chart is ready to prevent shrink/expand animation */
+    /* Gantt chart wrapper — hidden via visibility (not opacity) so there is
+       zero visible transition.  The chart is revealed only after all styling
+       (priority colours, milestones, critical path) has been applied. */
     #gantt-chart-wrapper {
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
+        visibility: hidden;
     }
 
     #gantt-chart-wrapper.chart-ready {
-        opacity: 1;
-    }
-    
-    /* While transitioning views, keep the wrapper visible but prevent flash */
-    #gantt-chart-wrapper.transitioning {
-        opacity: 1;
-    }
-    
-    /* Ensure bars inside transitioning wrapper maintain their colors */
-    #gantt-chart-wrapper.transitioning .gantt .bar-wrapper .bar:not([data-priority]) {
-        fill: #6366f1 !important;
+        visibility: visible;
     }
 
     /* Phase collapse indicator */
@@ -1714,7 +1715,7 @@
                         <option value="active" {% if status_filter == 'active' %}selected{% endif %}>ðŸŸ¢ Active Only</option>
                         <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>ðŸ“‹ To Do</option>
                         <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>ðŸ”„ In Progress</option>
-                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>âœ… Done</option>
+                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✅ Done</option>
                     </select>
                 </div>
                 
@@ -1987,7 +1988,7 @@
                 <div class="mb-3">
                     <label for="milestone-phase" class="form-label fw-semibold">Phase</label>
                     <select class="form-select" id="milestone-phase">
-                        <option value="">â€” No specific phase â€”</option>
+                        <option value="">— No specific phase —</option>
                         {% for i in num_phases|make_range %}
                         <option value="Phase {{ forloop.counter }}">Phase {{ forloop.counter }}</option>
                         {% endfor %}
@@ -1999,7 +2000,7 @@
                 <div class="mb-3">
                     <label for="milestone-position-after" class="form-label fw-semibold">Follows task <small class="text-muted fw-normal">(row position in Gantt)</small></label>
                     <select class="form-select" id="milestone-position-after">
-                        <option value="">â€” At end of phase â€”</option>
+                        <option value="">— At end of phase —</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -2144,7 +2145,7 @@
             end: '{{ task.due_date|date:"Y-m-d" }}',
             progress: {{ task.progress|default:0 }},
             dependencies: '{% for dep in task.dependencies.all %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endfor %}',
-            custom_class: 'status-{{ task.column.name|lower|cut:" "}}',
+            custom_class: 'status-{{ task.column.name|lower|cut:" "}} priority-{{ task.priority }}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
             assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}',
@@ -2255,7 +2256,7 @@
     }
 
     // Fix milestone dates (start == end â†’ extend end by 1 day for visible bar width)
-    // IMPORTANT: use UTC arithmetic only â€” setDate()+toISOString() shifts the date in
+    // IMPORTANT: use UTC arithmetic only — setDate()+toISOString() shifts the date in
     // positive-offset timezones (e.g. IST +5:30 turns Mar 21 â†’ Mar 22).
     ganttMilestones.forEach(m => {
         const startDate = new Date(m.start);
@@ -2275,7 +2276,7 @@
     console.log('Gantt milestones:', ganttMilestones);
 
     // When a search or filter is active, hide milestones so only matching tasks
-    // are shown â€” milestones are not searchable items and would confuse results.
+    // are shown — milestones are not searchable items and would confuse results.
     const visibleMilestones = anyFiltersActive ? [] : ganttMilestones;
 
     /**
@@ -2302,7 +2303,7 @@
      * Topological sort: order tasks so predecessors always appear before successors.
      * Produces clean top-to-bottom dependency lines (Monday.com style).
      * Tasks with no dependencies are sorted by start date as a tiebreaker.
-     * O(V + E) â€” scales to 100+ tasks without issue.
+     * O(V + E) — scales to 100+ tasks without issue.
      */
     function topologicalSortTasks(taskList) {
         if (!taskList || taskList.length <= 1) return taskList;
@@ -2659,7 +2660,7 @@
                 if (bar) {
                     bar.setAttribute('data-critical-path', 'true');
                     appliedCount++;
-                    console.log(`  âœ… Applied to task ${taskId}`);
+                    console.log(`  ✅ Applied to task ${taskId}`);
                 }
             } else {
                 console.log(`  âŒ Bar wrapper not found for task ${taskId}`);
@@ -2698,6 +2699,24 @@
     let ganttChart = null;
     let currentViewMode = 'Week';
 
+    // Strip Frappe Gantt's built-in <animate> elements that expand bars from
+    // width 0 → final over 0.4 s.  We want bars to appear at full size instantly.
+    function stripBarAnimations() {
+        const svg = document.querySelector('#gantt');
+        if (!svg) return;
+        svg.querySelectorAll('animate').forEach(el => {
+            // Set the parent element's attribute to the animation's target value
+            // so the bar keeps its correct final width, then remove the <animate>.
+            const parent = el.parentElement;
+            const attr = el.getAttribute('attributeName');
+            const to = el.getAttribute('to');
+            if (parent && attr && to) {
+                parent.setAttribute(attr, to);
+            }
+            el.remove();
+        });
+    }
+
     // Initialize Gantt chart
     function initGantt(viewMode = 'Week') {
         const chartWrapper = document.getElementById('gantt-chart-wrapper');
@@ -2711,34 +2730,20 @@
         const barPadding = viewMode === 'Month' ? 24 : 20;
         
         if (ganttChart) {
-            // If chart exists and we're just changing view mode, use the built-in method
+            // If chart exists and we're just changing view mode, use the built-in method.
+            // All post-processing runs synchronously so the browser never paints an
+            // intermediate grey/unstyled frame.
             try {
-                // Add transitioning class to maintain visibility during view change
-                chartWrapper.classList.add('transitioning');
-                
-                // Apply styling BEFORE view mode change to prevent color flash
-                applyCustomStyling();
-                
                 ganttChart.change_view_mode(viewMode);
-                
-                // After changing view mode, reapply custom attributes and enhancements
-                // Use requestAnimationFrame for smoother rendering
-                requestAnimationFrame(() => {
-                    applyCustomStyling();
-                    // Second pass to ensure all elements are styled
-                    requestAnimationFrame(() => {
-                        applyCustomStyling();
-                        drawCustomDependencyLines();
-                        // Rebuild the split-view table with updated row heights
-                        refreshSplitView();
-                        // Remove transitioning class after styling is complete
-                        chartWrapper.classList.remove('transitioning');
-                    });
-                });
+                // Kill Frappe Gantt's 0→width entry animations immediately
+                stripBarAnimations();
+                // Synchronous: reapply priority attrs, milestones, critical path, etc.
+                applyCustomStyling();
+                drawCustomDependencyLines();
+                refreshSplitView();
                 return;
             } catch (e) {
                 console.warn('Error changing view mode, reinitializing chart:', e);
-                // If there's an error, fall through to recreate the chart
                 ganttChart = null;
             }
         }
@@ -2788,14 +2793,14 @@
                     // Build payload
                     const payload = {};
                     if (startChanged && endChanged) {
-                        // Bar body was dragged â€” send both dates
+                        // Bar body was dragged — send both dates
                         payload.start_date = newStart;
                         payload.due_date = newEnd;
                     } else if (startChanged) {
-                        // Left-edge resize â€” only start_date
+                        // Left-edge resize — only start_date
                         payload.start_date = newStart;
                     } else {
-                        // Right-edge resize â€” only due_date
+                        // Right-edge resize — only due_date
                         payload.due_date = newEnd;
                     }
 
@@ -2812,35 +2817,24 @@
                 }
             });
 
-        // Apply custom styling for the first time - use requestAnimationFrame for smoother rendering
-        requestAnimationFrame(() => {
-            applyCustomStyling();
-            
-            // Show chart with smooth transition after initial styling
-            requestAnimationFrame(() => {
-                applyCustomStyling();
-                const chartWrapper = document.getElementById('gantt-chart-wrapper');
-                if (chartWrapper) {
-                    chartWrapper.classList.add('chart-ready');
-                }
-                
-                // Set up arrow polygon observer for this chart instance
-                setupArrowPolygonObserver();
-                
-                // Draw custom dependency lines after chart is visible
-                requestAnimationFrame(() => {
-                    drawCustomDependencyLines();
+        // Kill Frappe Gantt's built-in 0→width <animate> elements so bars
+        // appear at full size instantly (no contraction/expansion flash).
+        stripBarAnimations();
 
-                    // Build/refresh the split-view table
-                    _lastRenderedItems = buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones);
-                    refreshSplitView();
-                    
-                    // Final cleanup pass
-                    setTimeout(() => {
-                        drawCustomDependencyLines();
-                    }, 200);
-                });
-            });
+        // Apply all styling synchronously BEFORE revealing the chart so the
+        // browser never paints an intermediate grey / compressed frame.
+        applyCustomStyling();
+        drawCustomDependencyLines();
+        _lastRenderedItems = buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones);
+        refreshSplitView();
+
+        // Reveal the fully-styled chart in one shot (visibility: hidden → visible)
+        chartWrapper.classList.add('chart-ready');
+
+        // Set up observer + one deferred cleanup pass for dependency lines
+        setupArrowPolygonObserver();
+        requestAnimationFrame(() => {
+            drawCustomDependencyLines();
         });
     }
 
@@ -2972,7 +2966,7 @@
         // Phase 1: Enhance bars with priority dots and enforce min widths (no labels yet)
         enhanceBarsWithPriorityDots();
 
-        // Phase 2: Draw dependency lines â€” obstacle list only has bars + diamonds,
+        // Phase 2: Draw dependency lines — obstacle list only has bars + diamonds,
         // NOT labels (they don't exist yet), so lines route cleanly between bars.
         drawCustomDependencyLines();
 
@@ -3160,7 +3154,7 @@
     }
 
     // ============================================
-    // CUSTOM DEPENDENCY LINES â€” ELBOW CONNECTORS WITH MID-LINE CHEVRONS
+    // CUSTOM DEPENDENCY LINES — ELBOW CONNECTORS WITH MID-LINE CHEVRONS
     // ============================================
     function drawCustomDependencyLines() {
         const ganttSvg = document.querySelector('#gantt');
@@ -3185,7 +3179,7 @@
         });
 
         // â”€â”€ Build bar geometry for dependency line endpoints â”€â”€
-        const barGeo = {};      // keyed by task id â€” endpoint geometry
+        const barGeo = {};      // keyed by task id — endpoint geometry
         const allItems = [...tasks, ...ganttMilestones];
 
         ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
@@ -3234,7 +3228,7 @@
 
         // â”€â”€ Monday.com-style dependency routing â”€â”€
         // With topological sort ensuring predecessors are above successors,
-        // we use simple L-shape / S-shape connectors â€” no collision avoidance needed.
+        // we use simple L-shape / S-shape connectors — no collision avoidance needed.
         // Each line is O(1) to compute, scaling cleanly to 100+ tasks.
 
         const depTooltip = document.getElementById('dep-tooltip');
@@ -3287,7 +3281,7 @@
                 ];
 
             } else {
-                // â”€â”€ Case 3: S-shape (successor to the left or overlapping â€” rare after topo sort) â”€â”€
+                // â”€â”€ Case 3: S-shape (successor to the left or overlapping — rare after topo sort) â”€â”€
                 // Route: right stub â†’ vertical past both bars â†’ horizontal left â†’ vertical to entry row â†’ short entry
                 const goingDown = entryY >= exitY;
                 const stubX = exitX + GAP;
@@ -3525,10 +3519,10 @@
                 // Build enhanced tooltip content
                 let tooltipContent;
                 if (isMilestone) {
-                    const statusLabel = milestoneStatus === 'completed' ? 'âœ… Completed' : 'ðŸ”· Upcoming';
-                    // Use data-due-date (the original due date) â€” data-end is bumped +1 for bar width
+                    const statusLabel = milestoneStatus === 'completed' ? '✅ Completed' : '🔷 Upcoming';
+                    // Use data-due-date (the original due date) — data-end is bumped +1 for bar width
                     const displayDate = milestoneDueDate || startDate;
-                    tooltipContent = `<strong>â—† ${fullName}</strong>`;
+                    tooltipContent = `<strong>◆ ${fullName}</strong>`;
                     tooltipContent += `<div class="tooltip-row"><i class="fas fa-diamond" style="color:#7c3aed;"></i> Milestone</div>`;
                     tooltipContent += `<div class="tooltip-row"><i class="fas fa-circle-check"></i> ${statusLabel}</div>`;
                     tooltipContent += `<div class="tooltip-row"><i class="fas fa-calendar"></i> ${formatDateDisplay(displayDate)}</div>`;
@@ -3660,7 +3654,7 @@
         }
     }
 
-    // Phase 1: Add priority dots and enforce min bar widths (NO labels â€” those come after dep lines)
+    // Phase 1: Add priority dots and enforce min bar widths (NO labels — those come after dep lines)
     function enhanceBarsWithPriorityDots() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
@@ -3670,7 +3664,7 @@
 
         const MIN_BAR_WIDTH_MONTH = 80;
 
-        // Process regular tasks only â€” milestone labels are handled separately in PASS 2
+        // Process regular tasks only — milestone labels are handled separately in PASS 2
         const allItems = [...tasks];
         allItems.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
@@ -3709,7 +3703,7 @@
             dotGroup.appendChild(dot);
             barWrapper.appendChild(dotGroup);
 
-            // Hide the default label for now â€” it will be repositioned in positionBarLabels()
+            // Hide the default label for now — it will be repositioned in positionBarLabels()
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (existingLabel) {
                 existingLabel.textContent = '';
@@ -3732,7 +3726,7 @@
         const tablePanel = document.getElementById('gantt-table-panel');
         const tableVisible = tablePanel && tablePanel.offsetParent !== null && window.innerWidth > 576;
         if (tableVisible) {
-            // Hide all task labels â€” the fixed table replaces them
+            // Hide all task labels — the fixed table replaces them
             [...tasks].forEach(task => {
                 const bw = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
                 if (!bw) return;
@@ -3952,7 +3946,7 @@
 
     function _saveDrawerField(taskId, payload) {
         const saveStatus = document.getElementById('drawer-save-status');
-        saveStatus.textContent = 'Savingâ€¦';
+        saveStatus.textContent = 'Saving…';
         saveStatus.style.color = '#94a3b8';
 
         fetch('/api/tasks/' + taskId + '/update-fields/', {
@@ -4068,7 +4062,7 @@
                         : assignedTo.substring(0, 2).toUpperCase();
                     responsibleHTML = `<span class="table-assignee-avatar has-assignee" title="${escapeHTML(displayName)}">${escapeHTML(initials)}</span>`;
                 } else {
-                    responsibleHTML = `<span class="table-assignee-avatar unassigned" title="Unassigned">â€”</span>`;
+                    responsibleHTML = `<span class="table-assignee-avatar unassigned" title="Unassigned">—</span>`;
                 }
             }
 
@@ -4077,7 +4071,7 @@
             if (isPhase) {
                 progressHTML = '';
             } else if (isMilestone) {
-                const statusLabel = item.milestoneStatus === 'completed' ? 'âœ…' : 'â—‡';
+                const statusLabel = item.milestoneStatus === 'completed' ? '✅' : '◇';
                 progressHTML = `<span style="font-size:13px;" title="${escapeHTML(item.milestoneStatus || 'upcoming')}">${statusLabel}</span>`;
             } else {
                 const pct = parseInt(item.progress) || 0;
@@ -4117,7 +4111,7 @@
     /** Truncate a string */
     function truncate(str, max) {
         if (!str) return '';
-        return str.length > max ? str.substring(0, max - 1) + 'â€¦' : str;
+        return str.length > max ? str.substring(0, max - 1) + '…' : str;
     }
 
     /**
@@ -4470,7 +4464,7 @@
         }
     }
 
-    // Update task dates (legacy â€” kept for backward compatibility)
+    // Update task dates (legacy — kept for backward compatibility)
     function updateTaskDates(taskId, start, end) {
         rescheduleTask(taskId, {
             start_date: formatDate(start),
@@ -4482,7 +4476,7 @@
      * Recalculate and update a phase bar's SVG position/width after a child
      * task has been rescheduled.  Works by scanning the local `tasks` array
      * for the task's phase, deriving min-start / max-end, and patching the
-     * bar rect + label directly in the DOM â€” no full chart rebuild needed.
+     * bar rect + label directly in the DOM — no full chart rebuild needed.
      */
     function updatePhaseBarForTask(taskId) {
         if (!ganttChart || currentView !== 'phases') return;
@@ -4547,8 +4541,8 @@
     /**
      * Reschedule a task via the new PATCH endpoint.
      * @param {string|number} taskId
-     * @param {Object} payload  â€” { start_date?, due_date? } in YYYY-MM-DD format
-     * @param {Object} [origTask] â€” local task object for snap-back & drawer sync
+     * @param {Object} payload  — { start_date?, due_date? } in YYYY-MM-DD format
+     * @param {Object} [origTask] — local task object for snap-back & drawer sync
      */
     function rescheduleTask(taskId, payload, origTask) {
         fetch(`/api/tasks/${taskId}/reschedule/`, {
@@ -4578,6 +4572,13 @@
                     if (data.task.due_date) {
                         task.end = data.task.due_date;
                         task._origEnd = data.task.due_date;
+                    }
+                    // Update the DOM data-* attributes so hover tooltips
+                    // show the new dates instead of the stale originals.
+                    const barWrapper = document.querySelector(`.bar-wrapper[data-id="${taskId}"]`);
+                    if (barWrapper) {
+                        if (data.task.start_date) barWrapper.setAttribute('data-start', data.task.start_date);
+                        if (data.task.due_date) barWrapper.setAttribute('data-end', data.task.due_date);
                     }
                 }
                 // Refresh split-view table row
@@ -4904,7 +4905,7 @@
             
             const phaseBar = {
                 id: phaseId,
-                name: `${phaseName} ${isExpanded ? 'â–¼' : 'â–¶'} (${data.task_count} tasks)`,
+                name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks)`,
                 fullName: phaseName,
                 start: phaseStart,
                 end: phaseEnd,
@@ -5091,32 +5092,24 @@
             }
         });
 
-        // Apply custom styling after render - use requestAnimationFrame for smoother rendering
-        requestAnimationFrame(() => {
-            applyPhaseStyling();
-            
-            // Show chart with smooth transition after initial styling
-            requestAnimationFrame(() => {
-                applyPhaseStyling();
-                chartWrapper.classList.add('chart-ready');
-                
-                // Set up arrow polygon observer for this chart instance
-                setupArrowPolygonObserver();
-                
-                // Draw custom dependency lines
-                requestAnimationFrame(() => {
-                    drawCustomDependencyLines();
+        // Kill Frappe Gantt's built-in 0→width <animate> elements so bars
+        // appear at full size instantly (no contraction/expansion flash).
+        stripBarAnimations();
 
-                    // Build/refresh the split-view table with same data
-                    _lastRenderedItems = data;
-                    refreshSplitView();
-                    
-                    // Final cleanup pass
-                    setTimeout(() => {
-                        drawCustomDependencyLines();
-                    }, 200);
-                });
-            });
+        // Apply all styling synchronously BEFORE revealing the chart so the
+        // browser never paints an intermediate grey / compressed frame.
+        applyPhaseStyling();
+        drawCustomDependencyLines();
+        _lastRenderedItems = data;
+        refreshSplitView();
+
+        // Reveal the fully-styled chart in one shot
+        chartWrapper.classList.add('chart-ready');
+
+        // Set up observer + one deferred cleanup pass
+        setupArrowPolygonObserver();
+        requestAnimationFrame(() => {
+            drawCustomDependencyLines();
         });
     }
 
@@ -5157,7 +5150,7 @@
                 // Start with phase view (no filters active)
                 renderGanttWithPhases();
             } else {
-                // Filters are active â€” show all tasks directly so matched bars are visible
+                // Filters are active — show all tasks directly so matched bars are visible
                 updateViewButtons();
                 initGantt(currentViewMode);
             }
