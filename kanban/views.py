@@ -2355,7 +2355,7 @@ def board_analytics(request, board_id):
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Get columns for this board
-    columns = Column.objects.filter(board=board)
+    columns = Column.objects.filter(board=board).order_by('position')
     
     # Get tasks by column (exclude milestones)
     tasks_by_column = []
@@ -2411,20 +2411,22 @@ def board_analytics(request, board_id):
         })
     
     # Get completion rate over time (last 30 days)
+    # Use Task.updated_at for tasks with progress=100, which is reliable regardless
+    # of how activity log descriptions were worded.
     thirty_days_ago = timezone.now() - timedelta(days=30)
-    completed_tasks_queryset = TaskActivity.objects.filter(
-        task__column__board=board,
-        activity_type='moved',
-        description__contains='Done',
-        created_at__gte=thirty_days_ago
-    ).values('created_at__date').annotate(
+    completed_tasks_queryset = Task.objects.filter(
+        column__board=board,
+        item_type='task',
+        progress=100,
+        updated_at__gte=thirty_days_ago,
+    ).values('updated_at__date').annotate(
         count=Count('id')
-    ).order_by('created_at__date')
-    
+    ).order_by('updated_at__date')
+
     completed_tasks = []
     for item in completed_tasks_queryset:
         completed_tasks.append({
-            'date': item['created_at__date'].strftime('%Y-%m-%d'),
+            'date': item['updated_at__date'].strftime('%Y-%m-%d'),
             'count': item['count']
         })
     
