@@ -4414,10 +4414,9 @@ def search_tasks_semantic_api(request):
                 'column', 'assigned_to', 'created_by'
             ).prefetch_related('labels')
         else:
-            # Get all accessible tasks
-            owned_boards = Board.objects.filter(created_by=request.user)
-            member_boards = Board.objects.filter(memberships__user=request.user)
-            accessible_boards = owned_boards | member_boards
+            # Get all accessible tasks (demo-aware)
+            from kanban.utils.demo_protection import get_user_boards
+            accessible_boards = get_user_boards(request.user)
             
             tasks = Task.objects.filter(
                 column__board__in=accessible_boards
