@@ -251,3 +251,40 @@ def revoke_invitation(request, invitation_id):
         messages.success(request, f"Invitation for {invitation.email} has been revoked.")
 
     return redirect('manage_board_members', board_id=invitation.board.id)
+
+
+@login_required
+@require_POST
+def update_member_role(request, board_id, user_id):
+    """Change a board member's role (Owner/Member/Viewer)."""
+    board = get_object_or_404(Board, id=board_id)
+
+    if not _can_manage_invites(request.user, board):
+        messages.error(request, "You don't have permission to change member roles.")
+        return redirect('manage_board_members', board_id=board.id)
+
+    from django.contrib.auth.models import User
+    target_user = get_object_or_404(User, id=user_id)
+
+    # Prevent changing the board creator's role
+    if target_user == board.created_by:
+        messages.error(request, "Cannot change the board creator's role.")
+        return redirect('manage_board_members', board_id=board.id)
+
+    membership = get_object_or_404(BoardMembership, board=board, user=target_user)
+
+    new_role = request.POST.get('role', '').strip()
+    valid_roles = [r[0] for r in BoardMembership.ROLE_CHOICES]
+    if new_role not in valid_roles:
+        messages.error(request, f"Invalid role: {new_role}")
+        return redirect('manage_board_members', board_id=board.id)
+
+    if membership.role != new_role:
+        membership.role = new_role
+        membership.save(update_fields=['role'])
+        messages.success(
+            request,
+            f"{target_user.get_full_name() or target_user.username}'s role changed to {membership.get_role_display()}."
+        )
+
+    return redirect('manage_board_members', board_id=board.id)

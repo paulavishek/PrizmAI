@@ -123,6 +123,7 @@ urlpatterns = [
     path('boards/<int:board_id>/create-label/', views.create_label, name='create_label'),
     path('boards/<int:board_id>/add-member/', views.add_board_member, name='add_board_member'),
     path('boards/<int:board_id>/members/<int:user_id>/remove/', views.remove_board_member, name='remove_board_member'),
+    path('boards/<int:board_id>/members/<int:user_id>/role/', invitation_views.update_member_role, name='update_member_role'),
     # Board invitations
     path('boards/<int:board_id>/members/', invitation_views.manage_board_members, name='manage_board_members'),
     path('boards/<int:board_id>/invite/', invitation_views.invite_to_board, name='invite_to_board'),
