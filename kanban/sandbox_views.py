@@ -98,6 +98,7 @@ def _duplicate_board(template_board, user):
 
     # --- Tasks ---
     task_map = {}  # old task pk → new task instance
+    task_template_dates = {}  # new task pk → template task updated_at
     for task in (
         Task.objects
         .filter(column__board=template_board)
@@ -135,6 +136,7 @@ def _duplicate_board(template_board, user):
         )
         new_task.save()
         task_map[task.pk] = new_task
+        task_template_dates[new_task.pk] = task.updated_at
 
         # Re-assign labels via new label instances
         for old_label in task.labels.all():
@@ -210,6 +212,12 @@ def _duplicate_board(template_board, user):
                     )
     except Exception:
         pass  # Budget copying is best-effort; don't block provisioning
+
+    # --- Preserve template timestamps (bypass auto_now via .update()) ---
+    # Without this, all sandbox tasks get updated_at=now which causes the
+    # Completion Velocity chart to show a single spike on today's date.
+    for new_pk, template_updated_at in task_template_dates.items():
+        Task.objects.filter(pk=new_pk).update(updated_at=template_updated_at)
 
     return new_board
 
