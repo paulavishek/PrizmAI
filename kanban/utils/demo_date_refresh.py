@@ -88,6 +88,8 @@ def refresh_all_demo_dates():
         'trend_analysis_updated': 0,
         'sprint_milestones_updated': 0,
         'skill_development_plans_updated': 0,
+        'task_activities_updated': 0,
+        'completed_task_dates_updated': 0,
     }
     
     now = timezone.now()
@@ -151,6 +153,12 @@ def refresh_all_demo_dates():
             
             # 20. Refresh Scope Snapshots and Alerts
             stats['scope_snapshots_updated'] = _refresh_scope_snapshot_dates(now, base_date)
+
+            # 21. Refresh TaskActivity dates (for Completion Velocity chart)
+            stats['task_activities_updated'] = _refresh_task_activity_dates(now)
+
+            # 22. Spread updated_at for completed tasks (for Completion Velocity chart)
+            stats['completed_task_dates_updated'] = _refresh_completed_task_updated_at(now)
         
         # Mark refresh as complete
         mark_demo_dates_refreshed()
@@ -1179,4 +1187,107 @@ def _refresh_scope_snapshot_dates(now, base_date):
         
     except Exception as e:
         logger.warning(f"Error refreshing scope snapshot dates: {e}")
+        return 0
+
+
+def _refresh_task_activity_dates(now):
+    """
+    Refresh TaskActivity dates for demo boards so the Completion Velocity
+    chart always shows data within the last 30 days.
+
+    Only updates activities whose created_at is older than 30 days to avoid
+    disturbing recently-created user activity records.
+    """
+    try:
+        import random
+        from kanban.models import TaskActivity
+
+        demo_org_ids = _get_demo_organizations()
+        if not demo_org_ids:
+            return 0
+
+        cutoff = now - timedelta(days=30)
+
+        # Only refresh stale activities on official demo boards
+        stale_activities = list(
+            TaskActivity.objects.filter(
+                task__column__board__organization_id__in=demo_org_ids,
+                task__column__board__is_official_demo_board=True,
+                created_at__lt=cutoff,
+            ).select_related('task')
+        )
+
+        if not stale_activities:
+            return 0
+
+        # Assign new dates spread across the last 28 days
+        for activity in stale_activities:
+            new_date = now - timedelta(days=random.randint(1, 28))
+            new_date = new_date.replace(
+                hour=random.randint(8, 18),
+                minute=random.randint(0, 59),
+                second=0,
+                microsecond=0,
+            )
+            activity.created_at = new_date
+
+        TaskActivity.objects.bulk_update(stale_activities, ['created_at'], batch_size=200)
+        return len(stale_activities)
+
+    except Exception as e:
+        logger.warning(f"Error refreshing task activity dates: {e}")
+        return 0
+
+
+def _refresh_completed_task_updated_at(now):
+    """
+    Spread the updated_at timestamps for completed (progress=100) demo tasks
+    across the last 28 days so the Completion Velocity chart always shows
+    a realistic multi-day trend rather than a single data point.
+
+    Uses .update() to bypass auto_now on the updated_at field.
+    """
+    try:
+        from kanban.models import Task
+        from django.db.models import Q
+
+        demo_org_ids = _get_demo_organizations()
+
+        # Build filter: tasks in demo orgs OR on boards named after known demo
+        # boards (covers boards created outside the demo org, e.g. via
+        # onboarding, that still serve as the user's demo workspace).
+        demo_board_names = ['Software Development']
+        q = Q(item_type='task', progress=100)
+        org_q = Q()
+        if demo_org_ids:
+            org_q |= Q(column__board__organization_id__in=demo_org_ids)
+        org_q |= Q(
+            column__board__name__in=demo_board_names,
+            column__board__organization__isnull=True,
+        )
+        completed_tasks = list(
+            Task.objects.filter(q & org_q).order_by('id')
+        )
+
+        if not completed_tasks:
+            return 0
+
+        # Distribute tasks evenly across the last 1–28 days.
+        # Deterministic: use task index so the spread is stable across refreshes.
+        total = len(completed_tasks)
+        for i, task in enumerate(completed_tasks):
+            # Each task gets a unique day offset: spread from 2 to 28 days ago
+            days_ago = 2 + int((26 * i) / max(total - 1, 1))
+            new_dt = now - timedelta(
+                days=days_ago,
+                hours=(task.id % 10) + 8,
+                minutes=(task.id * 7) % 60,
+            )
+            new_dt = new_dt.replace(second=0, microsecond=0)
+            Task.objects.filter(pk=task.pk).update(updated_at=new_dt)
+
+        return total
+
+    except Exception as e:
+        logger.warning(f"Error refreshing completed task updated_at: {e}")
         return 0
