@@ -295,21 +295,23 @@ def get_accessible_boards(user, organization=None):
         Board queryset
     """
     from kanban.models import Board
+    from kanban.utils.demo_protection import get_user_boards
     from django.db.models import Q
     
     if not user or not user.is_authenticated:
         return Board.objects.none()
     
     if user.is_superuser:
-        queryset = Board.objects.all()
+        # Even superusers should not see demo boards in My Workspace
+        queryset = Board.objects.exclude(
+            is_official_demo_board=True
+        ).exclude(
+            is_sandbox_copy=True
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
+        )
     else:
-        # Boards created by user OR where user is a BoardMembership member OR in user's org
-        queryset = Board.objects.filter(
-            Q(created_by=user) |
-            Q(owner=user) |
-            Q(memberships__user=user) |
-            Q(organization=user.profile.organization if hasattr(user, 'profile') else None)
-        ).distinct()
+        queryset = get_user_boards(user)
     
     if organization:
         queryset = queryset.filter(organization=organization)

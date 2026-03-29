@@ -19,6 +19,7 @@ from django.db.models import Q
 
 from kanban.models import Board, Task, Column
 from kanban.decorators import demo_ai_guard
+from kanban.utils.demo_protection import get_user_boards
 from accounts.models import Organization
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
@@ -58,12 +59,8 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         # Access restriction removed - all authenticated users can access
         
         try:
-            # MVP Mode: Get all accessible boards (demo boards + user's boards)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(memberships__user=request.user)
-            )
-            available_boards = (demo_boards | user_boards).distinct()
+            # Get boards scoped to user's current workspace (demo-aware)
+            available_boards = get_user_boards(request.user)
             
             # Prepare wiki page context
             wiki_context = {
@@ -198,12 +195,8 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         )
         
         try:
-            # MVP Mode: Get all accessible boards (demo boards + user's boards)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(memberships__user=request.user)
-            )
-            available_boards = (demo_boards | user_boards).distinct()
+            # Get boards scoped to user's current workspace (demo-aware)
+            available_boards = get_user_boards(request.user)
             
             # Prepare wiki page context
             wiki_context = {
@@ -559,12 +552,8 @@ def get_boards_for_organization(request):
     Used for board selection when creating tasks
     """
     try:
-        # MVP Mode: Get all accessible boards (demo boards + user's boards)
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # Get boards scoped to user's current workspace (demo-aware)
+        boards = get_user_boards(request.user)
         
         boards_data = []
         for board in boards:
@@ -686,12 +675,8 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
                 # Check AI quota
                 has_quota, quota, remaining = check_ai_quota(request.user)
                 if has_quota:
-                    # MVP Mode: Get all accessible boards
-                    demo_boards = Board.objects.filter(is_official_demo_board=True)
-                    user_boards = Board.objects.filter(
-                        Q(created_by=request.user) | Q(memberships__user=request.user)
-                    )
-                    available_boards = (demo_boards | user_boards).distinct()[:10]
+                    # Get boards scoped to user's current workspace (demo-aware)
+                    available_boards = get_user_boards(request.user)[:10]
                     
                     # Build wiki page context
                     wiki_page_context = {

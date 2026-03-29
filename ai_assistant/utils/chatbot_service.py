@@ -438,11 +438,8 @@ class TaskFlowChatbotService:
             
             elif self.user:
                 # Get all user's active (non-archived) boards
-                boards = Board.objects.filter(
-                    Q(is_archived=False) & (
-                        Q(created_by=self.user) | Q(memberships__user=self.user)
-                    )
-                ).distinct()[:10]
+                from kanban.utils.demo_protection import get_user_boards
+                boards = get_user_boards(self.user).filter(is_archived=False)[:10]
                 
                 if boards:
                     context += f"**User's Projects ({boards.count()} boards):**\n"
@@ -1902,11 +1899,10 @@ class TaskFlowChatbotService:
                 members_count = org.members.count()
                 
                 # Get user-accessible boards in this org
-                user_boards_in_org = Board.objects.filter(
+                from kanban.utils.demo_protection import get_user_boards
+                user_boards_in_org = get_user_boards(self.user).filter(
                     organization=org
-                ).filter(
-                    Q(created_by=self.user) | Q(memberships__user=self.user)
-                ).distinct()
+                )
                 
                 context += f"**{org.name}**\n"
                 if org.domain:

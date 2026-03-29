@@ -11,6 +11,7 @@ import os
 
 from kanban.models import Board, Task, Column
 from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 from kanban.favorite_views import is_user_favorite as _is_fav
 from .models import ChatRoom, ChatMessage, TaskThreadComment, Notification, FileAttachment
 from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, MentionForm, ChatRoomFileForm
@@ -32,23 +33,13 @@ def messaging_hub(request):
             completed_wizard=True
         )
     
-    # MVP Mode: Get all boards the user has access to
-    # Single-tier sandbox: profile-based, not session-based
-    demo_mode = getattr(profile, 'is_viewing_demo', False)
+    # MVP Mode: Get all boards the user has access to (demo-aware)
+    user_boards = get_user_boards(request.user)
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
-
-    if demo_mode:
-        # Sandbox mode: show only user's sandbox copies
-        user_boards = Board.objects.filter(
-            owner=request.user,
-            is_sandbox_copy=True,
-        ).distinct()
-    elif _is_org_admin:
-        user_boards = Board.objects.filter(is_sandbox_copy=False)
-    else:
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).exclude(is_sandbox_copy=True).distinct()
+    if _is_org_admin and not getattr(profile, 'is_viewing_demo', False):
+        user_boards = Board.objects.filter(is_sandbox_copy=False, is_official_demo_board=False).exclude(
+            created_by_session__startswith='spectra_demo_'
+        )
     
     # Calculate unread messages per board
     boards_with_unread = []
@@ -306,7 +297,15 @@ def get_mentions(request):
 @login_required
 def notifications(request):
     """View all notifications for the user"""
-    user_notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')
+    # Demo-aware: only show notifications related to current workspace boards
+    workspace_boards = get_user_boards(request.user)
+    user_notifications = Notification.objects.filter(
+        recipient=request.user
+    ).filter(
+        Q(chat_message__chat_room__board__in=workspace_boards)
+        | Q(task_thread_comment__task__column__board__in=workspace_boards)
+        | Q(chat_message__isnull=True, task_thread_comment__isnull=True)  # non-board notifications (calendar, access, etc.)
+    ).order_by('-created_at')
     
     # Mark as read if requested
     if request.GET.get('mark_read'):
@@ -337,9 +336,15 @@ def mark_notification_read(request, notification_id):
 @require_http_methods(["GET"])
 def get_unread_notification_count(request):
     """API endpoint to get unread notification count"""
+    # Demo-aware: only count notifications from current workspace
+    workspace_boards = get_user_boards(request.user)
     count = Notification.objects.filter(
         recipient=request.user,
         is_read=False
+    ).filter(
+        Q(chat_message__chat_room__board__in=workspace_boards)
+        | Q(task_thread_comment__task__column__board__in=workspace_boards)
+        | Q(chat_message__isnull=True, task_thread_comment__isnull=True)
     ).count()
     
     return JsonResponse({'count': count})

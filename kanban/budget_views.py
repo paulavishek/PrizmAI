@@ -874,13 +874,14 @@ def my_timesheet(request, board_id=None):
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
-    # MVP Mode: Check if user has any time entries, if not show demo data
+    # Check if user has any time entries; only fall back to demo data in demo mode
     user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
     
-    if not user_has_entries:
-        # Try to get a demo user with time entries
+    if not user_has_entries and is_demo_mode:
+        # Only show demo user data when explicitly in demo mode
         demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
@@ -1016,13 +1017,14 @@ def time_tracking_dashboard(request, board_id=None):
     from django.db.models import Sum, Count, Avg
     from accounts.models import Organization
     
-    # MVP Mode: Check if user has any time entries, if not show demo data
+    # Check if user has any time entries; only fall back to demo data in demo mode
     user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
     
-    if not user_has_entries:
-        # Try to get a demo user with time entries
+    if not user_has_entries and is_demo_mode:
+        # Only show demo user data when explicitly in demo mode
         demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
@@ -1545,9 +1547,8 @@ def search_tasks_for_time_entry(request):
         return JsonResponse({'success': True, 'tasks': []})
     
     # Get boards user has access to
-    boards = Board.objects.filter(
-        models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
-    ).distinct()
+    from kanban.utils.demo_protection import get_user_boards
+    boards = get_user_boards(request.user)
     
     if board_id:
         boards = boards.filter(id=board_id)
