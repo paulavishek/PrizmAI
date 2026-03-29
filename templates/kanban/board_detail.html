@@ -1263,12 +1263,12 @@
             label.style.backgroundColor = label.dataset.color;
         });
 
-        // Set progress bar widths after DOM is loaded
+        // Progress bar widths are already set server-side via inline styles.
+        // Only re-apply for bars that somehow lost their width (e.g. dynamic content).
         document.querySelectorAll('.progress-bar[data-progress], .card-progress-fill[data-progress]').forEach(el => {
-            const progressValue = el.dataset.progress;
-            el.style.width = progressValue + '%';
-            if (el.setAttribute) el.setAttribute('aria-valuenow', progressValue);
-            el.offsetHeight;
+            if (!el.style.width) {
+                el.style.width = el.dataset.progress + '%';
+            }
         });
         
         // -- Quick-view drawer open / close --
