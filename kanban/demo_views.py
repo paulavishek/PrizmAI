@@ -1426,6 +1426,14 @@ def reset_demo_data(request):
             # ============================================================
             # STEP 2: Delete all user-created boards with full cleanup
             # ============================================================
+            # Also clean up DemoSandbox records so sandbox can be
+            # re-provisioned cleanly after reset.
+            try:
+                from kanban.models import DemoSandbox
+                DemoSandbox.objects.filter(user=request.user).delete()
+            except Exception:
+                pass
+
             for board in list(user_boards):
                 try:
                     _delete_user_board_safely(board)
