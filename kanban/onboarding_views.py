@@ -363,6 +363,12 @@ def onboarding_commit(request):
             'commit_error': 'Something went wrong while creating your workspace. Please try again.',
         })
 
+    # Switch out of demo mode so the dashboard shows the user's own workspace
+    profile = request.user.profile
+    if profile.is_viewing_demo:
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['is_viewing_demo'])
+
     # Show a one-time banner on the dashboard reminding the user to assign tasks
     request.session['show_onboarding_assign_banner'] = True
 
