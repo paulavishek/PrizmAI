@@ -402,11 +402,9 @@ def _looks_like_question(text):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _user_board_names(user):
-    """Return a list of board names the user can access."""
-    from kanban.models import Board
-    boards = Board.objects.filter(
-        Q(created_by=user) | Q(memberships__user=user)
-    ).distinct().values_list('name', flat=True)[:20]
+    """Return a list of board names the user can access (demo-aware)."""
+    from kanban.utils.demo_protection import get_user_boards
+    boards = get_user_boards(user).values_list('name', flat=True)[:20]
     return list(boards)
 
 
@@ -784,12 +782,9 @@ class ConversationFlowManager:
 
         if step == -1:
             # Awaiting board selection
-            from kanban.models import Board
+            from kanban.utils.demo_protection import get_user_boards
             user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(memberships__user=user),
-                    is_archived=False,
-                ).distinct()
+                get_user_boards(user).filter(is_archived=False)
             )
             # Try to match the user's reply to a board name
             selected = None
@@ -1132,12 +1127,11 @@ class ConversationFlowManager:
     def _start_automation_flow(self, user, board, message, state):
         if board is None:
             # Auto-select if user has exactly one board
-            from kanban.models import Board
+            from kanban.utils.demo_protection import get_user_boards
             user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(memberships__user=user),
+                get_user_boards(user).filter(
                     is_archived=False,
-                ).distinct()[:2]
+                )[:2]
             )
             if len(user_boards) == 1:
                 board = user_boards[0]
@@ -1203,12 +1197,11 @@ class ConversationFlowManager:
 
         if step == -1:
             # Awaiting board selection
-            from kanban.models import Board
+            from kanban.utils.demo_protection import get_user_boards
             user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(memberships__user=user),
+                get_user_boards(user).filter(
                     is_archived=False,
-                ).distinct()
+                )
             )
             selected = None
             msg_lower = msg.lower()
@@ -1645,24 +1638,22 @@ class ConversationFlowManager:
     @staticmethod
     def _auto_select_board(user):
         """Return the user's sole board, or None."""
-        from kanban.models import Board
+        from kanban.utils.demo_protection import get_user_boards
         boards = list(
-            Board.objects.filter(
-                Q(created_by=user) | Q(memberships__user=user),
+            get_user_boards(user).filter(
                 is_archived=False,
-            ).distinct()[:2]
+            )[:2]
         )
         return boards[0] if len(boards) == 1 else None
 
     @staticmethod
     def _resolve_board_from_reply(user, message):
         """Try to match a user reply to one of their boards."""
-        from kanban.models import Board
+        from kanban.utils.demo_protection import get_user_boards
         user_boards = list(
-            Board.objects.filter(
-                Q(created_by=user) | Q(memberships__user=user),
+            get_user_boards(user).filter(
                 is_archived=False,
-            ).distinct()
+            )
         )
         msg_lower = message.lower().strip()
         for b in user_boards:

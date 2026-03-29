@@ -16,6 +16,8 @@ import threading
 import logging
 from contextlib import contextmanager
 
+from django.db.models import Q
+
 logger = logging.getLogger(__name__)
 
 # ── Thread-local state (kept for allow_demo_writes) ──────────────────────────
@@ -36,6 +38,48 @@ def allow_demo_writes():
         yield
     finally:
         _local.demo_bypass = prev
+
+
+# ── Centralised board queryset for demo / real workspace ─────────────────────
+
+def get_user_boards(user):
+    """Return a Board queryset scoped to the user's current workspace mode.
+
+    * **Demo mode** (``profile.is_viewing_demo == True``):
+      returns the user's personal sandbox copies; falls back to official
+      demo boards if no sandbox exists yet.
+    * **Real mode**: returns only the user's own boards (created or member),
+      explicitly excluding demo boards, sandbox copies, and Spectra-generated
+      demo boards.
+
+    Every view that aggregates data across boards (dashboard, calendar,
+    messaging hub, conflicts, knowledge graph, etc.) should call this helper
+    instead of building its own queryset — this is the single source of truth
+    for demo-vs-real separation.
+    """
+    from kanban.models import Board  # late import to avoid circular deps
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+
+    if is_demo:
+        sandbox_boards = Board.objects.filter(
+            owner=user,
+            is_sandbox_copy=True,
+        ).distinct()
+        if sandbox_boards.exists():
+            return sandbox_boards
+        # Fallback: official demo boards (read-only)
+        return Board.objects.filter(is_official_demo_board=True).distinct()
+
+    # Real workspace — exclude every flavour of demo data
+    return Board.objects.filter(
+        Q(created_by=user) | Q(memberships__user=user),
+        is_official_demo_board=False,
+        is_sandbox_copy=False,
+    ).exclude(
+        created_by_session__startswith='spectra_demo_'
+    ).distinct()
 
 
 # ── Demo-object detection ────────────────────────────────────────────────────

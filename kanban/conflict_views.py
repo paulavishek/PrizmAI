@@ -13,6 +13,7 @@ import json
 
 from kanban.models import Board
 from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern
@@ -30,10 +31,8 @@ def conflict_dashboard(request):
     Optional board_id parameter to filter by specific board.
     """
     try:
-        # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Check if filtering by specific board
         board_filter_id = request.GET.get('board_id')
@@ -113,10 +112,8 @@ def conflict_detail(request, conflict_id):
     Detailed view of a specific conflict with resolution options.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
@@ -179,10 +176,8 @@ def apply_resolution(request, conflict_id, resolution_id):
     Apply a specific resolution to resolve a conflict.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -240,10 +235,8 @@ def ignore_conflict(request, conflict_id):
     Mark a conflict as ignored.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -308,10 +301,8 @@ def conflict_feedback(request, conflict_id):
     Add feedback and effectiveness rating to a resolved conflict.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -364,10 +355,8 @@ def trigger_detection_all(request):
     Manually trigger conflict detection for all accessible boards.
     """
     try:
-        # Get all accessible boards
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get all accessible boards (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Trigger detection for each board
         count = 0
@@ -418,10 +407,8 @@ def trigger_detection(request, board_id):
     Manually trigger conflict detection for a specific board.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         board = get_object_or_404(
             Board,
@@ -463,10 +450,8 @@ def conflict_analytics(request):
     Analytics view showing conflict patterns and resolution effectiveness.
     """
     try:
-        # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(memberships__user=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Get resolution patterns
         patterns = ResolutionPattern.objects.filter(

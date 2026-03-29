@@ -12,6 +12,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from kanban.models import Board, Column, Task, TaskLabel, Comment
+from kanban.utils.demo_protection import get_user_boards
 from accounts.models import Organization
 from api.models import APIToken
 from api.v1.serializers import (
@@ -47,15 +48,18 @@ class BoardViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return boards accessible to the authenticated user"""
         user = self.request.user
-        # OrgAdmins can see all boards
+        # OrgAdmins can see all non-demo boards
         if user.groups.filter(name='OrgAdmin').exists():
-            return Board.objects.all().select_related(
+            return Board.objects.filter(
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).select_related(
                 'organization', 'created_by'
             ).prefetch_related('columns')
-        # Return boards where user is member or creator
-        return Board.objects.filter(
-            Q(memberships__user=user) | Q(created_by=user)
-        ).distinct().select_related('organization', 'created_by').prefetch_related('columns')
+        # Use demo-aware helper
+        return get_user_boards(user).select_related('organization', 'created_by').prefetch_related('columns')
     
     def get_serializer_class(self):
         """Use lightweight serializer for list view"""
@@ -106,18 +110,18 @@ class TaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return tasks accessible to the authenticated user"""
         user = self.request.user
-        # OrgAdmins see all tasks
+        # Use demo-aware board queryset
+        accessible_boards = get_user_boards(user)
         if user.groups.filter(name='OrgAdmin').exists():
-            queryset = Task.objects.all().select_related(
-                'column', 'column__board', 'assigned_to', 'created_by'
-            ).prefetch_related('labels')
-        else:
-            # Return tasks from boards where user is member or creator
-            queryset = Task.objects.filter(
-                Q(column__board__memberships__user=user) | Q(column__board__created_by=user)
-            ).distinct().select_related(
-                'column', 'column__board', 'assigned_to', 'created_by'
-            ).prefetch_related('labels')
+            accessible_boards = Board.objects.filter(
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            ).exclude(created_by_session__startswith='spectra_demo_')
+        queryset = Task.objects.filter(
+            column__board__in=accessible_boards
+        ).select_related(
+            'column', 'column__board', 'assigned_to', 'created_by'
+        ).prefetch_related('labels')
         
         # Filter by board_id if provided
         board_id = self.request.query_params.get('board_id')
@@ -228,9 +232,10 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return comments for tasks accessible to the authenticated user"""
         user = self.request.user
+        accessible_boards = get_user_boards(user)
         queryset = Comment.objects.filter(
-            Q(task__column__board__memberships__user=user) | Q(task__column__board__created_by=user)
-        ).distinct().select_related('task', 'user')
+            task__column__board__in=accessible_boards
+        ).select_related('task', 'user')
         
         # Filter by task_id if provided
         task_id = self.request.query_params.get('task_id')

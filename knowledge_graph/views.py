@@ -17,10 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user_boards(user):
-    """Return board IDs the user has access to."""
-    return Board.objects.filter(
-        Q(created_by=user) | Q(memberships__user=user)
-    ).values_list('id', flat=True).distinct()
+    """Return board IDs the user has access to (demo-aware)."""
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user).values_list('id', flat=True)
 
 
 # ── View 1: Board Knowledge Tab ─────────────────────────────────────────────

@@ -34,14 +34,15 @@ def assistant_welcome(request):
     # Get user's own sessions
     user_sessions = AIAssistantSession.objects.filter(user=request.user)
     
-    # Also include demo sessions for examples
-    demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
-    
-    # Combine and get recent sessions, limit to 5
-    all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
-    
-    # Total count includes both user sessions and demo sessions
-    total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    # Only include demo sessions when in demo mode
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if is_demo_mode:
+        demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
+        all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
+        total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    else:
+        all_sessions = user_sessions.order_by('-updated_at')[:5]
+        total_sessions_count = user_sessions.count()
     
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -72,11 +73,18 @@ def chat_interface(request, session_id=None):
     
     # Get session if specified, otherwise let user create one via "New Chat" button
     if session_id:
-        # Allow access to user's own sessions OR demo sessions
-        session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(is_demo=True),
-            id=session_id
-        ).first()
+        # Allow access to user's own sessions; demo sessions only in demo mode
+        is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+        if is_demo_mode:
+            session = AIAssistantSession.objects.filter(
+                Q(user=request.user) | Q(is_demo=True),
+                id=session_id
+            ).first()
+        else:
+            session = AIAssistantSession.objects.filter(
+                user=request.user,
+                id=session_id
+            ).first()
         
         if not session:
             return render(request, 'error.html', {
@@ -1082,12 +1090,13 @@ def get_analytics_data(request):
 @login_required
 def view_recommendations(request):
     """View AI task recommendations"""
+    from kanban.utils.demo_protection import get_user_boards
     board_id = request.GET.get('board_id')
     status = request.GET.get('status', 'pending')
     
     # Get recommendations
     recs_qs = AITaskRecommendation.objects.filter(
-        board__in=Board.objects.filter(Q(created_by=request.user) | Q(memberships__user=request.user)).distinct()
+        board__in=get_user_boards(request.user)
     )
     
     if board_id:

@@ -36,17 +36,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _user_boards(user):
-    """Return boards visible to the user, including demo boards when in demo mode."""
-    profile = getattr(user, 'profile', None)
-    is_demo = getattr(profile, 'is_viewing_demo', False)
-    if is_demo:
-        return Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{user.id}')
-        ).distinct().order_by('name')
-    return Board.objects.filter(
-        Q(created_by=user) | Q(memberships__user=user)
-    ).exclude(is_sandbox_copy=True).distinct().order_by('name')
+    """Return boards visible to the user, respecting demo/real workspace mode."""
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user).order_by('name')
 
 
 def _create_notification(recipient, sender, notification_type, text, action_url=None):
