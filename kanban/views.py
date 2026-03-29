@@ -2296,10 +2296,9 @@ def update_column(request, column_id):
 def create_label(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors (member/owner/ancestor-owner/org-admin) can create labels
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskLabelForm(request.POST)
@@ -2323,10 +2322,9 @@ def delete_label(request, label_id):
     label = get_object_or_404(TaskLabel, id=label_id)
     board = label.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors can delete labels
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Delete the label
     label_name = label.name
@@ -3290,8 +3288,12 @@ def join_board(request, board_id):
     """Allow users to join boards they have access to"""
     board = get_object_or_404(Board, id=board_id)
     
-    # MVP Mode: Users can join any board they can access
-    # Access restriction removed - no organization check needed
+    # Verify user belongs to the same organization as the board
+    if board.organization:
+        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        if user_org != board.organization:
+            messages.error(request, 'You do not have access to this board.')
+            return redirect('dashboard')
     
     # Check if user is already a member
     from kanban.models import BoardMembership
@@ -3315,10 +3317,9 @@ def move_column(request, column_id, direction):
     column = get_object_or_404(Column, id=column_id)
     board = column.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors can reorder columns
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Get all columns in order of position
     columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -3371,6 +3372,10 @@ def reorder_columns(request):
         column = get_object_or_404(Column, id=column_id)
         board = get_object_or_404(Board, id=board_id)
         
+        # RBAC: only board editors can reorder columns
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         # Get all columns in order
         columns = list(Column.objects.filter(board=board).order_by('position'))
         
@@ -3415,9 +3420,10 @@ def reorder_multiple_columns(request):
             
             board = get_object_or_404(Board, id=board_id)
             
-            # Simple authentication check only - no board-level access restrictions
-            if not request.user.is_authenticated:
-                print("[reorder_multiple_columns] ERROR: User not authenticated")
+            # RBAC: user must have edit permission on the board to reorder columns
+            if request.user.is_authenticated and not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+            elif not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Create a dictionary to map column_id to position
@@ -3569,6 +3575,10 @@ def get_progress_color_class(progress):
 def export_board(request, board_id):
     """Export a board's data to JSON or CSV format"""
     board = get_object_or_404(Board, id=board_id)
+    
+    # RBAC: only users who can view the board can export its data
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     export_format = request.GET.get('format', 'json')
     
@@ -3896,9 +3906,8 @@ def add_lean_labels(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         # Call the management command to add the labels
@@ -4177,9 +4186,9 @@ def wizard_create_task(request):
             
             # Get the board and verify access
             board = get_object_or_404(Board, id=board_id)
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            # RBAC: user must have edit permission to create tasks
+            if not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             # Get the first column (To Do column)
             first_column = board.columns.first()
@@ -4260,7 +4269,10 @@ def view_dependency_tree(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        board = task.column.board
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
         
         # Get all relationships
         parent_task = task.parent_task
@@ -4292,7 +4304,9 @@ def board_dependency_graph(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
         
         # Get all tasks with dependencies
         tasks = Task.objects.filter(column__board=board).prefetch_related(
@@ -4329,10 +4343,9 @@ def upload_task_file(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have edit permission on the board to upload files
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskFileForm(request.POST, request.FILES)
@@ -4372,10 +4385,9 @@ def download_task_file(request, file_id):
     file_obj = get_object_or_404(TaskFile, id=file_id)
     board = file_obj.task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have view permission on the board to download files
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     # Serve the file
     if file_obj.file:
@@ -4394,6 +4406,10 @@ def delete_task_file(request, file_id):
     file_obj = get_object_or_404(TaskFile, id=file_id)
     task = file_obj.task
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Check permissions - only uploader or staff can delete
     if request.user != file_obj.uploaded_by and not request.user.is_staff:
@@ -4419,10 +4435,9 @@ def list_task_files(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get non-deleted files
     files = task.file_attachments.filter(deleted_at__isnull=True).values(
@@ -4451,6 +4466,11 @@ def analyze_task_file(request, file_id):
     import time as _time
 
     file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    # RBAC: user must have view permission on the board to analyze files
+    board = file_obj.task.column.board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if file_obj.is_deleted():
         return JsonResponse({'error': 'File has been deleted.'}, status=404)
@@ -4524,6 +4544,11 @@ def create_tasks_from_task_file(request, file_id):
     Creates confirmed tasks from ai_tasks_suggested on the TaskFile.
     """
     file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    # RBAC: user must have edit permission on the board to create tasks from AI analysis
+    board = file_obj.task.column.board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if file_obj.is_deleted():
         return JsonResponse({'error': 'File has been deleted.'}, status=404)

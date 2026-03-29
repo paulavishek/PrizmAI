@@ -224,8 +224,10 @@ def task_thread_comments(request, task_id):
     """View and manage real-time task thread comments"""
     task = get_object_or_404(Task, id=task_id)
     
-    # Access restriction removed - all authenticated users can access task threads
+    # RBAC: user must have view permission on the task's board
     board = task.column.board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskThreadCommentForm(request.POST)
@@ -356,7 +358,9 @@ def message_history(request, room_id):
     """Get message history for a chat room (pagination)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if chat_room.board and not request.user.has_perm('prizmai.view_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     offset = int(request.GET.get('offset', 0))
     limit = 20
@@ -385,7 +389,9 @@ def task_comment_history(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     offset = int(request.GET.get('offset', 0))
     limit = 20
@@ -461,7 +467,9 @@ def mark_chat_message_read(request, message_id):
     """Mark a specific chat message as read by the current user"""
     message = get_object_or_404(ChatMessage, id=message_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if message.chat_room.board and not request.user.has_perm('prizmai.view_board', message.chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Mark message as read by this user
     message.read_by.add(request.user)
@@ -528,7 +536,9 @@ def mark_room_messages_read(request, room_id):
     """Mark all messages in a chat room as read by the current user"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if chat_room.board and not request.user.has_perm('prizmai.view_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get all messages the user hasn't read
     messages_to_mark = chat_room.messages.exclude(read_by=request.user)
@@ -677,7 +687,9 @@ def upload_chat_room_file(request, room_id):
     """Upload a file to a chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have edit permission on the board to upload files
+    if chat_room.board and not request.user.has_perm('prizmai.edit_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     if request.method == 'POST':
         form = ChatRoomFileForm(request.POST, request.FILES)
@@ -784,7 +796,10 @@ def download_chat_room_file(request, file_id):
     """Download a file from a chat room"""
     file_obj = get_object_or_404(FileAttachment, id=file_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if file_obj.chat_room and file_obj.chat_room.board:
+        if not request.user.has_perm('prizmai.view_board', file_obj.chat_room.board):
+            raise Http404
     
     # Serve the file
     if file_obj.file:
@@ -826,7 +841,9 @@ def list_chat_room_files(request, room_id):
     """Get a list of files in a chat room (JSON API)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if chat_room.board and not request.user.has_perm('prizmai.view_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get non-deleted files
     files = chat_room.file_attachments.filter(deleted_at__isnull=True).values(

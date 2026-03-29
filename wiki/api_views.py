@@ -56,7 +56,9 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         # Get the wiki page - allow access to any published page
         wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Verify user has access to this wiki page's organization
+        if wiki_page.organization and hasattr(request.user, 'profile') and request.user.profile.organization != wiki_page.organization:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         try:
             # Get boards scoped to user's current workspace (demo-aware)
@@ -165,7 +167,9 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         # Get the wiki page - allow access to any published page
         wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Verify user has access to this wiki page's organization
+        if wiki_page.organization and hasattr(request.user, 'profile') and request.user.profile.organization != wiki_page.organization:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Check if there's already a recent analysis for this content
         content_hash = hashlib.sha256(wiki_page.content.encode()).hexdigest()
@@ -319,7 +323,9 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Check user has permission to create tasks on this board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get target column
         if column_id:

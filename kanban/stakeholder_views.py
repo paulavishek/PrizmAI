@@ -30,7 +30,8 @@ from .stakeholder_utils import recalculate_stakeholder_metrics
 def check_board_access(user, board_id):
     """Helper function to check if user has access to board"""
     board = get_object_or_404(Board, id=board_id)
-    # Access restriction removed - all authenticated users can access all boards
+    if not user.has_perm('prizmai.view_board', board):
+        return None
     return board
 
 

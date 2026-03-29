@@ -576,9 +576,12 @@ def get_conflict_notifications(request):
     API endpoint to get user's unread conflict notifications.
     """
     try:
+        # RBAC: only show notifications for boards the user has access to
+        accessible_boards = get_user_boards(request.user)
         notifications = ConflictNotification.objects.filter(
             user=request.user,
-            acknowledged=False
+            acknowledged=False,
+            conflict__board__in=accessible_boards
         ).select_related('conflict__board').order_by('-sent_at')[:10]
         
         data = [{

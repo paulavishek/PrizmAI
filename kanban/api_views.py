@@ -93,6 +93,10 @@ def generate_task_description_api(request):
         if task_id:
             try:
                 task = Task.objects.select_related('column__board', 'assigned_to').get(id=task_id)
+                # RBAC: verify user has view permission on the task's board
+                if task.column and task.column.board:
+                    if not request.user.has_perm('prizmai.view_board', task.column.board):
+                        return JsonResponse({'error': 'Permission denied'}, status=403)
                 context = {
                     'board_name': task.column.board.name if task.column else '',
                     'current_description': task.description or '',
@@ -168,6 +172,10 @@ def summarize_comments_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         board = task.column.board
         
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         # Format comments for AI
         comments_data = []
         for comment in task.comments.all().order_by('created_at'):
@@ -242,9 +250,8 @@ def download_comment_summary_pdf(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board/task
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get summary data from request body
         import json
@@ -799,9 +806,8 @@ def download_analytics_summary_pdf(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Check if user has access to this board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Check if there's a summary to download (get it from session or regenerate)
         # For now, we'll fetch the analytics data and generate fresh summary
@@ -1247,9 +1253,8 @@ def _suggest_task_priority_api_legacy(request):
             return JsonResponse({'error': 'Could not determine board for task'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Gather board context for priority suggestion
         from django.db.models import Count, Avg
@@ -1417,9 +1422,8 @@ def predict_deadline_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Async mode: enqueue Celery task and return task_id for WebSocket streaming
         if request.headers.get('X-Request-Async'):
@@ -1618,9 +1622,8 @@ def recommend_columns_api(request):
             board_id_for_tracking = board.id
             
             # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             existing_columns = [col.name for col in board.columns.all()]
             board_name = board.name
@@ -1791,9 +1794,8 @@ def suggest_task_breakdown_api(request):
             board_id_for_tracking = board.id
             
             # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
         
         task_data = {
             'title': title,
@@ -1882,10 +1884,9 @@ def analyze_workflow_optimization_api(request):
         
         board = get_object_or_404(Board, id=board_id)
         
-        # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Async mode: enqueue Celery task and return task_id for WebSocket streaming
         if request.headers.get('X-Request-Async'):
@@ -2032,7 +2033,8 @@ def create_subtasks_api(request):
             return JsonResponse({'error': 'Missing required fields (board_id, subtasks)'}, status=400)
               # Verify board exists
         board = get_object_or_404(Board, id=board_id)
-        # Access restriction removed - all authenticated users can create tasks
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
             
         # Get column - if not specified, use first column
         if column_id:
@@ -2187,9 +2189,8 @@ def calculate_task_risk_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get board context
         board_context = f"Board: {board.name}. Description: {board.description or 'N/A'}"
@@ -2320,9 +2321,8 @@ def get_mitigation_suggestions_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get mitigation suggestions
         mitigation_result = generate_risk_mitigation_suggestions(
@@ -2433,9 +2433,8 @@ def assess_task_dependencies_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get related tasks
         all_tasks = Task.objects.filter(column__board=board).values(
@@ -2562,9 +2561,8 @@ def get_task_dependencies_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access to this task's board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         dependencies = {
             'task_id': task.id,
@@ -2623,9 +2621,8 @@ def set_parent_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         parent_id = data.get('parent_task_id')
@@ -2670,9 +2667,8 @@ def add_related_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         related_id = data.get('related_task_id')
@@ -2712,9 +2708,8 @@ def analyze_task_dependencies_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         auto_link = data.get('auto_link', False)
@@ -2747,9 +2742,8 @@ def get_dependency_tree_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         include_related = request.GET.get('include_related', 'false').lower() == 'true'
         tree = DependencyGraphGenerator.generate_dependency_tree(task, include_subtasks=True, include_related=include_related)
@@ -2777,10 +2771,9 @@ def get_board_dependency_graph_api(request, board_id):
         
         board = get_object_or_404(Board, id=board_id)
         
-        # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         root_task_id = request.GET.get('root_task_id')
         if root_task_id:
@@ -3098,9 +3091,8 @@ def summarize_task_details_api(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Import StakeholderTaskInvolvement here to avoid circular import
         from kanban.stakeholder_models import StakeholderTaskInvolvement
@@ -3227,9 +3219,8 @@ def get_task_prediction_api(request, task_id):
         task = get_object_or_404(Task, pk=task_id)
         
         # Check user has access to this task's board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # For POST, force recalculation
         if request.method == 'POST':
@@ -3350,9 +3341,8 @@ def bulk_update_predictions_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.task_prediction import bulk_update_predictions
         result = bulk_update_predictions(board=board)
@@ -3566,9 +3556,8 @@ def log_priority_decision_api(request):
         board = task.column.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Log the decision
         from kanban.priority_models import PriorityDecision
@@ -3629,9 +3618,8 @@ def train_priority_model_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access - only board creators can train models
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board creator check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from ai_assistant.utils.priority_service import PriorityModelTrainer
         
@@ -3658,9 +3646,8 @@ def get_priority_model_info_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.priority_models import PriorityModel, PriorityDecision
         
@@ -3718,10 +3705,9 @@ def analyze_skill_gaps_api(request, board_id):
         
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import calculate_skill_gaps, generate_skill_gap_recommendations, update_team_skill_profile_model
         from kanban.models import SkillGap
@@ -3948,9 +3934,8 @@ def match_team_to_task_api(request, task_id):
         board = task.column.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import match_team_member_to_task
         
@@ -4018,9 +4003,8 @@ def extract_task_skills_api(request, task_id):
         board = task.column.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import extract_skills_from_task
         
@@ -4073,9 +4057,8 @@ def create_skill_development_plan_api(request):
         board = skill_gap.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Create plan
         plan = SkillDevelopmentPlan.objects.create(
@@ -4135,9 +4118,8 @@ def update_skill_development_plan_api(request, plan_id):
         board = plan.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Update fields
         if 'title' in data:
@@ -4195,9 +4177,8 @@ def delete_skill_development_plan_api(request, plan_id):
         board = plan.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         plan.delete()
         
@@ -4326,9 +4307,8 @@ def get_skill_gap_detail_api(request, gap_id):
         board = gap.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get affected tasks
         affected_tasks = []
@@ -4405,9 +4385,8 @@ def search_tasks_semantic_api(request):
         # Get board and verify access
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             # Get tasks from this board
             tasks = Task.objects.filter(column__board=board).select_related(
@@ -4673,6 +4652,11 @@ def generate_task_summary_api(request, task_id):
 
         task = get_object_or_404(Task, id=task_id)
 
+        # RBAC: user must have view permission on the task's board
+        if task.column and task.column.board:
+            if not request.user.has_perm('prizmai.view_board', task.column.board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+
         summary = generate_and_save_task_summary(task)
         if not summary:
             return JsonResponse({'error': 'Failed to generate task summary.'}, status=500)
@@ -4710,6 +4694,11 @@ def generate_board_summary_api(request, board_id):
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
 
         board = get_object_or_404(Board, id=board_id)
+        
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         debounce = getattr(_dj_settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
         lock_key = f'board_ai_lock_{board_id}'
         ai_cache = _get_ai_cache()
