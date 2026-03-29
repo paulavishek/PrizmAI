@@ -98,6 +98,13 @@ def build_fc_context(user, board):
         "Extract the action parameters from the user's message. "
         "If a required parameter is missing, ask for it concisely."
     )
+
+    # RBAC context — tell the FC model about the user's access level
+    from ai_assistant.utils.rbac_utils import build_rbac_context_for_fc_prompt
+    rbac_ctx = build_rbac_context_for_fc_prompt(user, board)
+    if rbac_ctx:
+        parts.append(rbac_ctx)
+
     return '\n'.join(parts)
 
 
@@ -665,6 +672,14 @@ class ConversationFlowManager:
 
         state.mode = 'collecting_task'
         state.pending_action = 'create_task'
+
+        # ── RBAC pre-check: viewer can't create tasks ────────────────
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(user, board, 'create_task')
+        if not allowed:
+            state.reset()
+            return denial
+
         data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
 
         # Try to extract fields from the initial message
@@ -1147,6 +1162,14 @@ class ConversationFlowManager:
 
         state.mode = 'collecting_automation'
         state.pending_action = 'activate_automation'
+
+        # ── RBAC pre-check: automations need owner access ────────────
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(user, board, 'activate_automation')
+        if not allowed:
+            state.reset()
+            return denial
+
         state.collected_data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
         state.save()
 
@@ -1432,6 +1455,15 @@ class ConversationFlowManager:
         # Build compact context and call Flash FC
         from ai_assistant.utils.spectra_tools import get_action_tools, FUNCTION_TO_ACTION
         from ai_assistant.utils.ai_clients import GeminiClient
+
+        # ── RBAC pre-check before engaging the FC model ──────────────
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(
+            user, board, meta['pending'],
+        )
+        if not allowed:
+            state.reset()
+            return denial
 
         context = build_fc_context(user, board)
         tools = get_action_tools()
@@ -2031,6 +2063,22 @@ class ConversationFlowManager:
     def _execute_pending_action(self, user, board, state):
         pending = state.pending_action
         data = state.collected_data
+
+        # ── Final RBAC gate before executing any write ───────────────
+        # Resolve the board if we don't have it yet (from collected_data)
+        exec_board = board
+        if exec_board is None and data.get('board_id'):
+            from kanban.models import Board
+            try:
+                exec_board = Board.objects.get(id=data['board_id'])
+            except Board.DoesNotExist:
+                pass
+
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(user, exec_board, pending)
+        if not allowed:
+            state.reset()
+            return denial
 
         if pending == 'create_task':
             return self._execute_task_creation(user, board, state, data)

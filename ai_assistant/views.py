@@ -96,26 +96,13 @@ def chat_interface(request, session_id=None):
     if hasattr(request.user, 'profile'):
         is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
 
-    # Get user's boards for context selection — workspace-aware.
-    if is_demo_mode:
-        # Demo workspace: official demo boards + boards created via Spectra
-        # while exploring demo mode.
-        user_boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
-        ).distinct()
-    else:
-        # Personal workspace: user's own boards, excluding demo artifacts.
-        if user_org:
-            user_boards = Board.objects.filter(
-                organization=user_org,
-            ).filter(
-                Q(created_by=request.user) | Q(memberships__user=request.user)
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-        else:
-            user_boards = Board.objects.none()
+    # Get user's boards for context selection — workspace-aware + RBAC-filtered.
+    from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+    user_boards = get_accessible_boards_for_spectra(
+        request.user,
+        is_demo_mode=is_demo_mode,
+        organization=user_org,
+    )
 
     active_boards_count = user_boards.count()
     
@@ -261,11 +248,8 @@ def send_message(request):
         if board_id:
             board = get_object_or_404(Board, id=board_id)
             # Verify user has access to this board — Spectra intercepts denial
-            if not (
-                board.is_official_demo_board
-                or board.created_by_id == request.user.id
-                or board.memberships.filter(user=request.user).exists()
-            ):
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if not (board.is_official_demo_board or can_spectra_read_board(request.user, board)):
                 from kanban.simple_access import get_spectra_denial_context
                 ctx = get_spectra_denial_context(
                     request.user, board, trigger='spectra_chat',
