@@ -77,6 +77,7 @@
         <i class="fas fa-clipboard-list text-info me-2"></i>Linked Boards
         <span class="badge bg-secondary ms-1">{{ board_items|length }}</span>
     </h5>
+    {% if can_edit %}
     <div class="d-flex gap-2">
         <button class="btn btn-sm btn-outline-info shadow-sm" data-bs-toggle="collapse" data-bs-target="#linkBoardPanel">
             <i class="fas fa-link fa-sm me-1"></i>Link Existing
@@ -85,9 +86,11 @@
             <i class="fas fa-plus fa-sm me-1"></i>New Board
         </a>
     </div>
+    {% endif %}
 </div>
 
 {# Link existing board panel (collapsed by default) #}
+{% if can_edit %}
 <div class="collapse mb-4" id="linkBoardPanel">
     <div class="card card-body border-info bg-light">
         <p class="small text-muted mb-2">Select an existing board to link to this strategy:</p>
@@ -108,6 +111,7 @@
         {% endif %}
     </div>
 </div>
+{% endif %}
 
 <div class="row">
     {% if board_items %}

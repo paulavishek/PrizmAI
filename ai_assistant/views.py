@@ -611,11 +611,18 @@ def remove_attachment(request, attachment_id):
 
 @login_required
 def get_sessions(request):
-    """Get user's chat sessions including demo sessions"""
-    # Show user's own sessions AND demo sessions
-    sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True)
-    ).order_by('-updated_at')
+    """Get user's chat sessions — workspace-mode aware"""
+    is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False) if hasattr(request.user, 'profile') else False
+    if is_demo_mode:
+        # Demo mode: user's own sessions AND shared demo sessions
+        sessions = AIAssistantSession.objects.filter(
+            Q(user=request.user) | Q(is_demo=True)
+        ).order_by('-updated_at')
+    else:
+        # My Workspace mode: only user's own non-demo sessions
+        sessions = AIAssistantSession.objects.filter(
+            user=request.user, is_demo=False
+        ).order_by('-updated_at')
     
     data = {
         'sessions': [
