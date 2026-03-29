@@ -498,11 +498,19 @@ def dashboard(request):
 
     mission_tree = []
     mission_item_map = {}  # id -> item dict, used for goal_tree grouping
+    # Convert user_board_ids to a set for fast lookup in the inner loop
+    _user_board_id_set = set(user_board_ids)
     for mission in missions_qs:
         strategy_list = []
         for strategy in mission.strategies.all().order_by('-created_at'):
             board_list = []
             for board in strategy.boards.all().order_by('name'):
+                # RBAC: non-demo, non-admin users only see boards they
+                # are a member of (or created).  This prevents the
+                # Hierarchy Navigator from showing extra boards/strategies.
+                if not demo_mode and not _is_org_admin:
+                    if board.id not in _user_board_id_set:
+                        continue
                 # In demo mode, look up stats via the sandbox copy ID
                 _stats_id = _template_to_sandbox.get(board.id, board.id)
                 _bstats = _board_stats_map.get(_stats_id, {})
@@ -538,6 +546,11 @@ def dashboard(request):
             elif s_schedule == 'at_risk' or s_risk == 'medium': s_health = 'amber'
             s_total = sum(b['total_tasks'] for b in board_list)
             s_done  = sum(b['done_tasks']  for b in board_list)
+            # Skip strategies with no visible boards for non-admin,
+            # non-owner, non-demo users (RBAC board filter above may
+            # have excluded all boards under this strategy).
+            if not board_list and not demo_mode and not _is_org_admin and strategy.created_by != request.user:
+                continue
             strategy_list.append({
                 'strategy': strategy,
                 'boards': board_list,
@@ -567,6 +580,11 @@ def dashboard(request):
         strategies_on_track = sum(1 for s in strategy_list if s['schedule_status'] == 'on_track')
         strategies_at_risk = sum(1 for s in strategy_list if s['schedule_status'] == 'at_risk')
         strategies_late = sum(1 for s in strategy_list if s['schedule_status'] == 'late')
+
+        # Skip missions with no visible strategies for non-admin,
+        # non-owner, non-demo users.
+        if not strategy_list and not demo_mode and not _is_org_admin and mission.created_by != request.user:
+            continue
 
         item = {
             'mission': mission,
@@ -1159,6 +1177,14 @@ def toggle_demo_mode(request):
 
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
+
+        # Ensure the dashboard onboarding guard won't redirect away.
+        # Users who joined via board invitation have status='pending'
+        # and no goals, which would send them to /onboarding/ instead
+        # of showing the sandbox.  'demo_exploring' is an allowed
+        # pass-through status for the dashboard guard.
+        _update_onboarding = profile.onboarding_status in ('pending',)
+
         # Check for existing sandbox (persistent — no expiry check)
         try:
             existing = request.user.demo_sandbox
@@ -1166,7 +1192,11 @@ def toggle_demo_mode(request):
             _join_demo_org(request.user)
             _reassign_demo_tasks_to_user(existing, request.user)
             profile.is_viewing_demo = True
-            profile.save(update_fields=['is_viewing_demo'])
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
+            else:
+                profile.save(update_fields=['is_viewing_demo'])
             return redirect('dashboard')
         except DemoSandbox.DoesNotExist:
             pass
@@ -1179,7 +1209,11 @@ def toggle_demo_mode(request):
             # Redis/Celery unavailable — provision synchronously
             provision_sandbox_task(request.user.id)
             profile.is_viewing_demo = True
-            profile.save(update_fields=['is_viewing_demo'])
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
+            else:
+                profile.save(update_fields=['is_viewing_demo'])
             return redirect('dashboard')
 
         # If this is an AJAX request, return JSON for WebSocket streaming
@@ -1195,7 +1229,11 @@ def toggle_demo_mode(request):
 
         # Fallback for non-JS: redirect to dashboard (Celery will finish in background)
         profile.is_viewing_demo = True
-        profile.save(update_fields=['is_viewing_demo'])
+        if _update_onboarding:
+            profile.onboarding_status = 'demo_exploring'
+            profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
+        else:
+            profile.save(update_fields=['is_viewing_demo'])
         return redirect('dashboard')
     else:
         # ── Leaving demo ───────────────────────────────────────────

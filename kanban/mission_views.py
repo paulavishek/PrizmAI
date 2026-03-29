@@ -241,14 +241,39 @@ def _compute_health_score(board_ids):
 
 @login_required
 def goal_list(request):
-    """Show all Organization Goals."""
-    goals = OrganizationGoal.objects.all().annotate(
+    """Show Organization Goals scoped by RBAC board membership."""
+    from accounts.models import UserProfile
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        profile = None
+
+    demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+
+    if demo_mode:
+        goals = OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    elif _is_org_admin:
+        goals = OrganizationGoal.objects.filter(
+            is_demo=False, is_seed_demo_data=False,
+        )
+    else:
+        # RBAC: goals the user created OR goals that are ancestors of
+        # boards the user is a member of (Upward Visibility Rule).
+        goals = OrganizationGoal.objects.filter(
+            Q(created_by=request.user) |
+            Q(missions__strategies__boards__memberships__user=request.user)
+        ).filter(is_demo=False, is_seed_demo_data=False)
+
+    goals = goals.annotate(
         mission_count=Count('missions', distinct=True),
-    ).order_by('-created_at')
+    ).distinct().order_by('-created_at')
 
     return render(request, 'kanban/goal_list.html', {
         'goals': goals,
-        'can_create_goal': request.user.groups.filter(name='OrgAdmin').exists(),
+        'can_create_goal': _is_org_admin,
     })
 
 
@@ -564,13 +589,20 @@ def mission_list(request):
         missions = Mission.objects.filter(
             Q(is_demo=True) | Q(is_seed_demo_data=True)
         )
-    else:
-        # Real workspace: show user's own missions (no demo)
+    elif request.user.groups.filter(name='OrgAdmin').exists():
+        # Org Admin: all non-demo missions
         missions = Mission.objects.filter(
-            created_by=request.user, is_demo=False, is_seed_demo_data=False,
+            is_demo=False, is_seed_demo_data=False,
         )
+    else:
+        # RBAC: missions the user created OR missions whose strategies
+        # contain boards the user is a member of (Upward Visibility Rule).
+        missions = Mission.objects.filter(
+            Q(created_by=request.user) |
+            Q(strategies__boards__memberships__user=request.user)
+        ).filter(is_demo=False, is_seed_demo_data=False)
 
-    missions = missions.select_related('organization_goal').annotate(
+    missions = missions.distinct().select_related('organization_goal').annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')

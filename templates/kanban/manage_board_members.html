@@ -47,12 +47,28 @@
                 </div>
               </div>
               <div class="d-flex align-items-center gap-2">
+                {% if can_manage and membership.user != board.created_by %}
+                <form method="post" action="{% url 'update_member_role' board_id=board.id user_id=membership.user.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <select name="role" onchange="this.form.submit()" class="form-select form-select-sm"
+                    style="width:auto;font-size:.78rem;padding:.2rem 1.8rem .2rem .5rem;
+                    {% if membership.role == 'owner' %}background-color:#ffc107;color:#212529;border-color:#ffc107;
+                    {% elif membership.role == 'viewer' %}background-color:#6c757d;color:#fff;border-color:#6c757d;
+                    {% else %}background-color:#0d6efd;color:#fff;border-color:#0d6efd;{% endif %}
+                    border-radius:0.35rem;font-weight:600;">
+                    <option value="owner" {% if membership.role == 'owner' %}selected{% endif %}>Owner</option>
+                    <option value="member" {% if membership.role == 'member' %}selected{% endif %}>Member</option>
+                    <option value="viewer" {% if membership.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                  </select>
+                </form>
+                {% else %}
                 <span class="badge
                   {% if membership.role == 'owner' %}bg-warning text-dark
                   {% elif membership.role == 'viewer' %}bg-secondary
                   {% else %}bg-primary{% endif %}">
                   {{ membership.get_role_display }}
                 </span>
+                {% endif %}
                 {% if can_manage and membership.user != board.created_by %}
                 <form method="post" action="{% url 'remove_board_member' board_id=board.id user_id=membership.user.id %}"
                   onsubmit="return confirm('Remove {{ membership.user.username }} from this board?');">

@@ -115,6 +115,7 @@
                             <li><a class="dropdown-item" href="{% url 'goal_detail' goal.id %}">
                                 <i class="fas fa-eye me-2"></i>View Goal
                             </a></li>
+                            {% if request.user == goal.created_by or request.user.is_staff %}
                             <li><a class="dropdown-item" href="{% url 'edit_goal' goal.id %}">
                                 <i class="fas fa-edit me-2"></i>Edit
                             </a></li>
@@ -122,6 +123,7 @@
                             <li><a class="dropdown-item text-danger" href="{% url 'delete_goal' goal.id %}">
                                 <i class="fas fa-trash me-2"></i>Delete
                             </a></li>
+                            {% endif %}
                         </ul>
                     </div>
                 </div>
