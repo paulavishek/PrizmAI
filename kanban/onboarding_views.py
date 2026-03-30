@@ -372,7 +372,7 @@ def onboarding_commit(request):
     # Show a one-time banner on the dashboard reminding the user to assign tasks
     request.session['show_onboarding_assign_banner'] = True
 
-    return redirect('dashboard')
+    return redirect('onboarding_invite')
 
 
 # ---------------------------------------------------------------------------
@@ -419,9 +419,145 @@ def onboarding_skip(request):
     if not _is_v2(profile):
         return redirect('dashboard')
 
+    # Auto-create an Organization even when skipping, so user has a workspace
+    if not profile.organization:
+        from accounts.models import Organization
+        first_name = (request.user.first_name or request.user.username).strip()
+        org_name = f"{first_name}'s Workspace"
+        org = Organization.objects.create(
+            name=org_name,
+            created_by=request.user,
+        )
+        profile.organization = org
+
     profile.onboarding_status = 'skipped'
-    profile.save(update_fields=['onboarding_status'])
+    profile.save(update_fields=['onboarding_status', 'organization'])
     return redirect('dashboard')
+
+
+# ---------------------------------------------------------------------------
+# Invite Team Members (post-commit step)
+# ---------------------------------------------------------------------------
+
+@login_required
+def onboarding_invite(request):
+    """
+    GET  /onboarding/invite/  — show invite page with workspace name + email form
+    POST /onboarding/invite/  — parse emails, create OrgInvitations, send emails, redirect to dashboard
+    """
+    import re
+    from accounts.models import Organization, OrganizationInvitation
+
+    profile = _get_profile(request)
+
+    # Guard: only accessible after workspace commit or skip (user must have an org)
+    org = profile.organization
+    if not org:
+        return redirect('onboarding_welcome')
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'invite')
+
+        # Handle workspace rename (inline)
+        new_name = request.POST.get('workspace_name', '').strip()
+        if new_name and new_name != org.name:
+            org.name = new_name[:100]
+            org.save(update_fields=['name'])
+
+        if action == 'skip':
+            return redirect('dashboard')
+
+        # Parse emails
+        raw = request.POST.get('invite_emails', '').strip()
+        if not raw:
+            return redirect('dashboard')
+
+        raw_emails = re.split(r'[,;\n]+', raw)
+        emails = list(dict.fromkeys(
+            e.strip().lower() for e in raw_emails if e.strip()
+        ))
+
+        sent_list, skipped_list = [], []
+
+        for email in emails:
+            if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+                skipped_list.append(f"{email} (invalid format)")
+                continue
+
+            # Already an org member?
+            from accounts.models import UserProfile
+            if UserProfile.objects.filter(
+                organization=org, user__email__iexact=email
+            ).exists():
+                skipped_list.append(f"{email} (already a member)")
+                continue
+
+            # Revoke any previous pending invite for this email+org
+            OrganizationInvitation.objects.filter(
+                organization=org, email=email,
+                status=OrganizationInvitation.STATUS_PENDING,
+            ).update(status=OrganizationInvitation.STATUS_REVOKED)
+
+            invitation = OrganizationInvitation.objects.create(
+                organization=org,
+                invited_by=request.user,
+                email=email,
+            )
+
+            _send_org_invitation_email(request, invitation)
+            sent_list.append(email)
+
+        from django.contrib import messages
+        if sent_list:
+            count = len(sent_list)
+            if count == 1:
+                messages.success(request, f"Invitation sent to {sent_list[0]}.")
+            else:
+                messages.success(request, f"Invitations sent to {count} team members.")
+        for note in skipped_list:
+            messages.info(request, f"Skipped: {note}")
+
+        return redirect('dashboard')
+
+    # GET: render the invite page
+    return render(request, 'kanban/onboarding/invite.html', {
+        'organization': org,
+    })
+
+
+def _send_org_invitation_email(request, invitation):
+    """Send organization invitation email."""
+    from django.core.mail import send_mail
+    from django.template.loader import render_to_string
+    from django.urls import reverse
+
+    accept_url = request.build_absolute_uri(
+        reverse('accept_org_invitation', args=[invitation.token])
+    )
+    context = {
+        'invitation': invitation,
+        'organization': invitation.organization,
+        'invited_by': invitation.invited_by,
+        'accept_url': accept_url,
+        'expires_hours': 48,
+    }
+    subject = f"You're invited to join '{invitation.organization.name}' on PrizmAI"
+    body_text = render_to_string('kanban/email/org_invitation.txt', context)
+    body_html = render_to_string('kanban/email/org_invitation.html', context)
+
+    try:
+        send_mail(
+            subject=subject,
+            message=body_text,
+            from_email=None,
+            recipient_list=[invitation.email],
+            html_message=body_html,
+            fail_silently=False,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(f"Failed to send org invitation email to {invitation.email}: {exc}")
+        return False
 
 
 # ---------------------------------------------------------------------------
