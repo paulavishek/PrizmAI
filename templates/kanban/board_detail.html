@@ -947,9 +947,9 @@
 
                     {# -- Hover action bar -- #}
                     <div class="card-hover-actions" onclick="event.stopPropagation();">
-                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status">? Status</button>
-                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign">+ Assign</button>
-                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail">? Open</a>
+                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status"><i class="fas fa-arrows-alt-h me-1"></i> Status</button>
+                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign"><i class="fas fa-user-plus me-1"></i> Assign</button>
+                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail"><i class="fas fa-external-link-alt me-1"></i> Open</a>
                     </div>
 
                     {# -- Inline status dropdown (hidden by default) -- #}
@@ -1863,14 +1863,12 @@
     <div class="offcanvas-body">
         <!-- Section 1: Analyze -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? Analyze</div>
+            <div class="ai-panel-section-header"><i class="fas fa-chart-bar me-1"></i> Analyze</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}" title="View board analytics, charts, and AI insights" style="position:relative;">
                     <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-pie"></i></span>
                     <span class="tile-label">Analytics</span>
-                    {% if not board.project_type_confirmed %}
-                    <span style="position:absolute;top:2px;right:4px;font-size:.65rem;animation:sparkle-pulse 2s ease-in-out infinite;" title="Let Spectra analyse your board for smarter insights">&#10024;</span>
-                    {% endif %}
+
                 </a>
                 <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}" title="AI-powered burndown prediction and completion forecast">
                     <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-line"></i></span>
@@ -1893,7 +1891,7 @@
 
         <!-- Section 2: Plan -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? Plan</div>
+            <div class="ai-panel-section-header"><i class="fas fa-calendar-check me-1"></i> Plan</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}" title="Interactive Gantt chart with dependencies">
                     <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-gantt"></i></span>
@@ -1916,7 +1914,7 @@
 
         <!-- Section 3: AI Actions -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? AI Actions</div>
+            <div class="ai-panel-section-header"><i class="fas fa-robot me-1"></i> AI Actions</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}" title="Proactive AI coaching suggestions for your project">
                     <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-user-graduate"></i></span>
@@ -1959,7 +1957,7 @@
 
         <!-- Section 4: Board Settings -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? Board Settings</div>
+            <div class="ai-panel-section-header"><i class="fas fa-cog me-1"></i> Board Settings</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}" title="Configure automated workflows and rules">
                     <span class="tile-icon" style="color: #888780;"><i class="fas fa-bolt"></i></span>
