@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}PrizmBrief – {{ board.name }}{% endblock %}
 
@@ -113,7 +113,7 @@
 
   <!-- Page header -->
   <div class="pb-page-header">
-    <h1><i class="fas fa-presentation text-primary me-2"></i>✨ PrizmBrief</h1>
+    <h1><i class="fas fa-presentation text-primary me-2"></i>✨ PrizmBrief {% feature_help "prizmbrief" %}</h1>
     <div class="sub">AI Presentation Content Generator &nbsp;·&nbsp; <strong>{{ board.name }}</strong></div>
     <div class="sub mt-1" style="font-size:0.85rem;">
       Answer 3 quick questions and PrizmBrief will pull live board data to generate
