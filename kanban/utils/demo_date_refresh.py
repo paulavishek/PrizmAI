@@ -90,6 +90,7 @@ def refresh_all_demo_dates():
         'skill_development_plans_updated': 0,
         'task_activities_updated': 0,
         'completed_task_dates_updated': 0,
+        'commitment_protocols_updated': 0,
     }
     
     now = timezone.now()
@@ -159,6 +160,9 @@ def refresh_all_demo_dates():
 
             # 22. Spread updated_at for completed tasks (for Completion Velocity chart)
             stats['completed_task_dates_updated'] = _refresh_completed_task_updated_at(now)
+
+            # 23. Refresh Commitment Protocol dates
+            stats['commitment_protocols_updated'] = _refresh_commitment_protocol_dates(now, base_date)
         
         # Mark refresh as complete
         mark_demo_dates_refreshed()
@@ -1290,4 +1294,92 @@ def _refresh_completed_task_updated_at(now):
 
     except Exception as e:
         logger.warning(f"Error refreshing completed task updated_at: {e}")
+        return 0
+
+
+def _refresh_commitment_protocol_dates(now, base_date):
+    """
+    Refresh CommitmentProtocol, ConfidenceSignal, and CommitmentBet dates.
+
+    Uses the same offset-preserving strategy as tasks: compute how many days
+    each date is from the protocol's created_at, then re-anchor created_at
+    so that target_date stays a fixed number of days in the future.
+    """
+    try:
+        from kanban.commitment_models import (
+            CommitmentProtocol, ConfidenceSignal, CommitmentBet,
+        )
+
+        demo_org_ids = _get_demo_organizations()
+        if not demo_org_ids:
+            return 0
+
+        protocols = list(CommitmentProtocol.objects.filter(
+            board__organization_id__in=demo_org_ids,
+        ))
+
+        if not protocols:
+            return 0
+
+        updated = 0
+
+        for protocol in protocols:
+            # Determine original offsets relative to created_at
+            old_created = protocol.created_at
+            if old_created is None:
+                continue
+
+            # Re-anchor: keep the gap between created_at and target_date
+            # so the protocol always looks "active" relative to today.
+            original_span_days = (protocol.target_date - old_created.date()).days
+            # created_at was X days ago from the original target_date;
+            # keep target_date the same number of days in the future.
+            new_target = base_date + timedelta(days=max(original_span_days // 3, 14))
+            new_created = now - timedelta(days=original_span_days - (new_target - base_date).days)
+            # Simpler: preserve the age of the protocol
+            age_days = (now - old_created).total_seconds() / 86400
+            # If the age looks already correct (within 1 day), skip
+            expected_age = (now.date() - (new_target - timedelta(days=original_span_days))).days
+            # Use a straightforward shift like tasks:
+            # shift = how many days to move everything
+            shift = timedelta(days=(base_date - protocol.target_date).days + max(original_span_days // 3, 14))
+            if abs(shift.days) < 1:
+                continue
+
+            new_target_date = protocol.target_date + shift
+            new_created_at = old_created + shift
+
+            # Update protocol dates
+            CommitmentProtocol.objects.filter(pk=protocol.pk).update(
+                target_date=new_target_date,
+                created_at=new_created_at,
+                last_decay_calculation=now,
+            )
+            # Shift last_signal_date if set
+            if protocol.last_signal_date:
+                new_signal_date = protocol.last_signal_date + shift
+                CommitmentProtocol.objects.filter(pk=protocol.pk).update(
+                    last_signal_date=new_signal_date,
+                )
+
+            # Shift all signal timestamps
+            signals = ConfidenceSignal.objects.filter(protocol=protocol)
+            for sig in signals:
+                ConfidenceSignal.objects.filter(pk=sig.pk).update(
+                    timestamp=sig.timestamp + shift,
+                )
+
+            # Shift all bet placed_at timestamps
+            bets = CommitmentBet.objects.filter(protocol=protocol)
+            for bet in bets:
+                CommitmentBet.objects.filter(pk=bet.pk).update(
+                    placed_at=bet.placed_at + shift,
+                )
+
+            updated += 1
+
+        return updated
+
+    except Exception as e:
+        logger.warning(f"Error refreshing commitment protocol dates: {e}")
         return 0

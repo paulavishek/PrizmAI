@@ -48,6 +48,9 @@ from ai_assistant.models import (
     AIAssistantAnalytics, AITaskRecommendation, UserPreference
 )
 
+# Commitment Protocol models
+from kanban.commitment_models import CommitmentProtocol, ConfidenceSignal, CommitmentBet, UserCredibilityScore
+
 
 class Command(BaseCommand):
     help = 'Populate ALL demo data in a single command (tasks, wiki, messaging, conflicts, AI assistant)'
@@ -205,6 +208,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE('\n🏆 PHASE 8: Creating Demo Organization Goal...'))
             self.seed_demo_organization_goal()
             self.stdout.write(self.style.SUCCESS('   ✅ Demo Organization Goal seeded'))
+
+            # 9. Commitment Protocols Demo Data
+            self.stdout.write(self.style.NOTICE('\n📋 PHASE 9: Creating Commitment Protocol Demo Data...'))
+            from django.core.management import call_command as _call
+            try:
+                _call('populate_commitment_demo_data')
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'   ⚠️ Commitment protocol creation: {e}'))
 
         # Final Summary
         self.print_final_summary()
@@ -568,6 +579,16 @@ class Command(BaseCommand):
             WebhookEvent.objects.filter(board__in=self.demo_boards).delete()
         except Exception:
             pass
+
+        # =====================================================================
+        # STEP 15: Clear Commitment Protocol data
+        # =====================================================================
+        try:
+            CommitmentProtocol.objects.filter(board__in=self.demo_boards).delete()
+            UserCredibilityScore.objects.filter(user__in=self.demo_users).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Commitment Protocol data')
 
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
@@ -1770,6 +1791,9 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
         kb_entries = ProjectKnowledgeBase.objects.filter(board__in=self.demo_boards).count()
         ai_recommendations = AITaskRecommendation.objects.filter(board__in=self.demo_boards).count()
         time_entries = TimeEntry.objects.filter(task__column__board__in=self.demo_boards).count()
+        commitment_protocols = CommitmentProtocol.objects.filter(board__in=self.demo_boards).count()
+        commitment_signals = ConfidenceSignal.objects.filter(protocol__board__in=self.demo_boards).count()
+        commitment_bets = CommitmentBet.objects.filter(protocol__board__in=self.demo_boards).count()
         
         self.stdout.write(f'''
 📊 Demo Data Summary:
@@ -1781,7 +1805,8 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
    │   ├── Analytics: {ai_analytics} daily records
    │   ├── Knowledge Base: {kb_entries} entries
    │   └── Recommendations: {ai_recommendations}
-   └── Time Entries: {time_entries}
+   ├── Time Entries: {time_entries}
+   └── Commitments: {commitment_protocols} protocols, {commitment_signals} signals, {commitment_bets} bets
 
 🎉 Demo environment is now fully populated!
 
