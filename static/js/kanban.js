@@ -833,6 +833,13 @@ function initColumnScrolling() {
         // Initial scrolling update (height management only, skip count update)
         updateColumnScrolling(true);
         
+        // Reveal the board now that column heights are computed.
+        // This prevents the visible "stretch then shrink" flash on page load.
+        var board = document.querySelector('.kanban-board');
+        if (board) {
+            board.classList.add('board-ready');
+        }
+        
         // Listen for task operations (avoid recursion)
         document.addEventListener('taskMoved', function() {
             setTimeout(updateColumnScrolling, 100);
@@ -842,6 +849,11 @@ function initColumnScrolling() {
         
     } catch (error) {
         console.error('Error in initColumnScrolling:', error);
+        // Ensure board is visible even if scrolling init fails
+        var board = document.querySelector('.kanban-board');
+        if (board) {
+            board.classList.add('board-ready');
+        }
     }
 }
 

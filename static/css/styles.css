@@ -217,8 +217,22 @@ body {
     gap: 15px; /* Increased gap for better spacing */
     /* Ensure columns are properly contained */
     position: relative;
-    /* Prevent initial layout shift/vibration */
-    will-change: auto;
+    /* Prevent initial layout shift: hide board until JS applies column heights,
+       then reveal via .board-ready class added by initColumnScrolling(). */
+    opacity: 0;
+}
+
+/* JS adds this class after column heights are computed — instant reveal */
+.kanban-board.board-ready {
+    opacity: 1;
+}
+
+/* Fallback: if JS hasn't added .board-ready within 400ms, reveal anyway */
+@keyframes kanban-fallback-reveal {
+    to { opacity: 1; }
+}
+.kanban-board:not(.board-ready) {
+    animation: kanban-fallback-reveal 0s 0.4s forwards;
 }
 
 .kanban-column {
@@ -236,10 +250,6 @@ body {
     border: 1px solid var(--border-light);
     position: relative; /* Ensure proper containment */
     overflow: visible; /* Allow content to be visible but contain scroll elements */
-    /* Prevent initial layout shift/vibration */
-    backface-visibility: hidden;
-    transform: translateZ(0);
-    will-change: auto;
 }
 
 .kanban-column.dragging {
@@ -348,10 +358,10 @@ body {
     flex-grow: 0; /* Don't grow to fill remaining space */
     overflow-y: auto; /* Enable vertical scrolling */
     overflow-x: hidden; /* Hide horizontal overflow */
-    max-height: calc(100vh - 280px); /* Responsive max height based on viewport */
-    min-height: 150px; /* Minimum height for empty columns */
-    /* Smooth transition for height changes */
-    transition: height 0.3s ease, border 0.3s ease;
+    /* Cap initial max-height to match JS COLUMN_SCROLL_CONFIG.MAX_HEIGHT
+       so columns never render taller than the JS-applied constraint. */
+    max-height: var(--column-scroll-max-height, 400px);
+    min-height: var(--column-scroll-min-height, 200px);
     border-radius: 4px;
     position: relative; /* Ensure proper positioning context */
     width: 100%; /* Full width of parent column */
