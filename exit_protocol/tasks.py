@@ -25,7 +25,11 @@ def monitor_all_boards_health():
     from kanban.models import Board
 
     board_ids = list(
-        Board.objects.filter(is_archived=False).values_list('id', flat=True)
+        Board.objects.filter(
+            is_archived=False,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+        ).values_list('id', flat=True)
     )
     logger.info(f"[ExitProtocol] Monitoring health for {len(board_ids)} boards")
 

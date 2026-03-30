@@ -918,7 +918,11 @@ def my_timesheet(request, board_id=None):
                 ).distinct()
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user),
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
             ).distinct()
         tasks = Task.objects.filter(
             column__board__in=boards,
@@ -1057,7 +1061,11 @@ def time_tracking_dashboard(request, board_id=None):
                 ).distinct()
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user),
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
             ).distinct()
         board = None
     
