@@ -1230,3 +1230,30 @@ class UserCredibilityScoreAdmin(admin.ModelAdmin):
     search_fields = ('user__username',)
     readonly_fields = ('tokens_reset_date',)
 
+
+# ── Feature Guide ─────────────────────────────────────────────────────────
+
+from .feature_guide_models import FeatureGuide
+
+
+@admin.register(FeatureGuide)
+class FeatureGuideAdmin(admin.ModelAdmin):
+    list_display = ('feature_name', 'feature_key', 'is_active', 'order', 'updated_at')
+    list_filter = ('is_active',)
+    list_editable = ('is_active', 'order')
+    search_fields = ('feature_name', 'feature_key', 'brief_description')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        (None, {
+            'fields': ('feature_key', 'feature_name', 'is_active', 'order'),
+        }),
+        ('Content', {
+            'fields': ('brief_description', 'detailed_description'),
+            'description': 'Brief description appears in the popover. Detailed description appears in the modal (supports HTML).',
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
