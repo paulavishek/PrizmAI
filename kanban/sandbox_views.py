@@ -213,6 +213,100 @@ def _duplicate_board(template_board, user):
     except Exception:
         pass  # Budget copying is best-effort; don't block provisioning
 
+    # --- Commitment Protocols (with signals, bets, credibility) ---
+    try:
+        from kanban.commitment_models import (
+            CommitmentProtocol, ConfidenceSignal, CommitmentBet, UserCredibilityScore,
+        )
+        for proto in CommitmentProtocol.objects.filter(board=template_board):
+            old_proto_pk = proto.pk
+            new_proto = CommitmentProtocol(
+                board=new_board,
+                title=proto.title,
+                description=proto.description,
+                target_date=proto.target_date,
+                initial_confidence=proto.initial_confidence,
+                current_confidence=proto.current_confidence,
+                confidence_halflife_days=proto.confidence_halflife_days,
+                decay_model=proto.decay_model,
+                status=proto.status,
+                created_by=proto.created_by,
+                baseline_snapshot=proto.baseline_snapshot,
+                last_signal_date=proto.last_signal_date,
+                ai_reasoning=proto.ai_reasoning,
+                negotiation_threshold=proto.negotiation_threshold,
+                token_pool_per_member=proto.token_pool_per_member,
+            )
+            new_proto.save()
+
+            # Preserve created_at and last_decay_calculation
+            CommitmentProtocol.objects.filter(pk=new_proto.pk).update(
+                created_at=proto.created_at,
+                last_decay_calculation=proto.last_decay_calculation,
+            )
+
+            # Link tasks via task_map
+            for old_task in proto.linked_tasks.all():
+                new_task = task_map.get(old_task.pk)
+                if new_task:
+                    new_proto.linked_tasks.add(new_task)
+
+            # Copy stakeholders directly (demo personas + sandbox user)
+            new_proto.stakeholders.set(proto.stakeholders.all())
+
+            # Copy signals
+            for sig in ConfidenceSignal.objects.filter(protocol_id=old_proto_pk):
+                related = task_map.get(sig.related_task_id) if sig.related_task_id else None
+                new_sig = ConfidenceSignal.objects.create(
+                    protocol=new_proto,
+                    signal_type=sig.signal_type,
+                    signal_value=sig.signal_value,
+                    description=sig.description,
+                    confidence_before=sig.confidence_before,
+                    confidence_after=sig.confidence_after,
+                    ai_generated=sig.ai_generated,
+                    recorded_by=sig.recorded_by,
+                    related_task=related,
+                )
+                ConfidenceSignal.objects.filter(pk=new_sig.pk).update(
+                    timestamp=sig.timestamp,
+                )
+
+            # Copy bets
+            for bet in CommitmentBet.objects.filter(protocol_id=old_proto_pk):
+                new_bet = CommitmentBet.objects.create(
+                    protocol=new_proto,
+                    bettor=bet.bettor,
+                    tokens_wagered=bet.tokens_wagered,
+                    confidence_estimate=bet.confidence_estimate,
+                    reasoning=bet.reasoning,
+                    is_anonymous=bet.is_anonymous,
+                    resolved=bet.resolved,
+                    resolution_correct=bet.resolution_correct,
+                    credibility_delta=bet.credibility_delta,
+                )
+                CommitmentBet.objects.filter(pk=new_bet.pk).update(
+                    placed_at=bet.placed_at,
+                )
+
+            # Ensure credibility scores exist for bettors
+            for bet in CommitmentBet.objects.filter(protocol_id=old_proto_pk):
+                try:
+                    old_cred = UserCredibilityScore.objects.get(user=bet.bettor)
+                    UserCredibilityScore.objects.get_or_create(
+                        user=bet.bettor,
+                        defaults={
+                            'score': old_cred.score,
+                            'total_bets': old_cred.total_bets,
+                            'correct_bets': old_cred.correct_bets,
+                            'tokens_remaining': old_cred.tokens_remaining,
+                        },
+                    )
+                except UserCredibilityScore.DoesNotExist:
+                    pass
+    except Exception:
+        pass  # Commitment copying is best-effort; don't block provisioning
+
     # --- Preserve template timestamps (bypass auto_now via .update()) ---
     # Without this, all sandbox tasks get updated_at=now which causes the
     # Completion Velocity chart to show a single spike on today's date.
