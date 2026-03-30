@@ -18,6 +18,8 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 
+from django.contrib.auth import get_user_model
+
 from ai_assistant.models import SpectraConversationState
 from ai_assistant.utils.action_service import SpectraActionService
 from ai_assistant.utils.chatbot_service import detect_action_intent, classify_intent_with_ai
@@ -51,7 +53,7 @@ def build_fc_context(user, board):
         parts.append(f"Active board: {board.name} (ID {board.id}).")
 
         # Board members for resolving names like "Alex" → user object
-        members = list(board.members.all().select_related())
+        members = list(get_user_model().objects.filter(board_memberships__board=board).select_related())
         if board.created_by and board.created_by not in members:
             members.append(board.created_by)
         if members:
@@ -96,6 +98,13 @@ def build_fc_context(user, board):
         "Extract the action parameters from the user's message. "
         "If a required parameter is missing, ask for it concisely."
     )
+
+    # RBAC context — tell the FC model about the user's access level
+    from ai_assistant.utils.rbac_utils import build_rbac_context_for_fc_prompt
+    rbac_ctx = build_rbac_context_for_fc_prompt(user, board)
+    if rbac_ctx:
+        parts.append(rbac_ctx)
+
     return '\n'.join(parts)
 
 
@@ -393,11 +402,9 @@ def _looks_like_question(text):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _user_board_names(user):
-    """Return a list of board names the user can access."""
-    from kanban.models import Board
-    boards = Board.objects.filter(
-        Q(created_by=user) | Q(members=user)
-    ).distinct().values_list('name', flat=True)[:20]
+    """Return a list of board names the user can access (demo-aware)."""
+    from kanban.utils.demo_protection import get_user_boards
+    boards = get_user_boards(user).values_list('name', flat=True)[:20]
     return list(boards)
 
 
@@ -406,13 +413,14 @@ def _user_board_names_for_env(user, is_demo_mode):
     from kanban.models import Board
     if is_demo_mode:
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{user.id}')
+            owner=user,
+            is_sandbox_copy=True,
         ).distinct().values_list('name', flat=True)[:20]
     else:
         boards = Board.objects.filter(
-            Q(created_by=user) | Q(members=user),
+            Q(created_by=user) | Q(memberships__user=user),
             is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct().values_list('name', flat=True)[:20]
@@ -474,7 +482,7 @@ class ConversationFlowManager:
                 if board.is_official_demo_board or \
                         (board.created_by_session or '').startswith('spectra_demo_'):
                     return None
-                if not (board.created_by_id == user.id or board.members.filter(id=user.id).exists()):
+                if not (board.created_by_id == user.id or board.memberships.filter(user_id=user.id).exists()):
                     return None
             return board
         except Board.DoesNotExist:
@@ -622,7 +630,7 @@ class ConversationFlowManager:
             else:
                 user_boards = list(
                     Board.objects.filter(
-                        Q(created_by=user) | Q(members=user),
+                        Q(created_by=user) | Q(memberships__user=user),
                         is_archived=False,
                     ).exclude(
                         created_by_session__startswith='spectra_demo_'
@@ -662,6 +670,14 @@ class ConversationFlowManager:
 
         state.mode = 'collecting_task'
         state.pending_action = 'create_task'
+
+        # ── RBAC pre-check: viewer can't create tasks ────────────────
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(user, board, 'create_task')
+        if not allowed:
+            state.reset()
+            return denial
+
         data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
 
         # Try to extract fields from the initial message
@@ -766,12 +782,9 @@ class ConversationFlowManager:
 
         if step == -1:
             # Awaiting board selection
-            from kanban.models import Board
+            from kanban.utils.demo_protection import get_user_boards
             user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
-                    is_archived=False,
-                ).distinct()
+                get_user_boards(user).filter(is_archived=False)
             )
             # Try to match the user's reply to a board name
             selected = None
@@ -1114,12 +1127,11 @@ class ConversationFlowManager:
     def _start_automation_flow(self, user, board, message, state):
         if board is None:
             # Auto-select if user has exactly one board
-            from kanban.models import Board
+            from kanban.utils.demo_protection import get_user_boards
             user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
+                get_user_boards(user).filter(
                     is_archived=False,
-                ).distinct()[:2]
+                )[:2]
             )
             if len(user_boards) == 1:
                 board = user_boards[0]
@@ -1144,6 +1156,14 @@ class ConversationFlowManager:
 
         state.mode = 'collecting_automation'
         state.pending_action = 'activate_automation'
+
+        # ── RBAC pre-check: automations need owner access ────────────
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(user, board, 'activate_automation')
+        if not allowed:
+            state.reset()
+            return denial
+
         state.collected_data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
         state.save()
 
@@ -1177,12 +1197,11 @@ class ConversationFlowManager:
 
         if step == -1:
             # Awaiting board selection
-            from kanban.models import Board
+            from kanban.utils.demo_protection import get_user_boards
             user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
+                get_user_boards(user).filter(
                     is_archived=False,
-                ).distinct()
+                )
             )
             selected = None
             msg_lower = msg.lower()
@@ -1430,6 +1449,15 @@ class ConversationFlowManager:
         from ai_assistant.utils.spectra_tools import get_action_tools, FUNCTION_TO_ACTION
         from ai_assistant.utils.ai_clients import GeminiClient
 
+        # ── RBAC pre-check before engaging the FC model ──────────────
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(
+            user, board, meta['pending'],
+        )
+        if not allowed:
+            state.reset()
+            return denial
+
         context = build_fc_context(user, board)
         tools = get_action_tools()
         client = GeminiClient()
@@ -1610,24 +1638,22 @@ class ConversationFlowManager:
     @staticmethod
     def _auto_select_board(user):
         """Return the user's sole board, or None."""
-        from kanban.models import Board
+        from kanban.utils.demo_protection import get_user_boards
         boards = list(
-            Board.objects.filter(
-                Q(created_by=user) | Q(members=user),
+            get_user_boards(user).filter(
                 is_archived=False,
-            ).distinct()[:2]
+            )[:2]
         )
         return boards[0] if len(boards) == 1 else None
 
     @staticmethod
     def _resolve_board_from_reply(user, message):
         """Try to match a user reply to one of their boards."""
-        from kanban.models import Board
+        from kanban.utils.demo_protection import get_user_boards
         user_boards = list(
-            Board.objects.filter(
-                Q(created_by=user) | Q(members=user),
+            get_user_boards(user).filter(
                 is_archived=False,
-            ).distinct()
+            )
         )
         msg_lower = message.lower().strip()
         for b in user_boards:
@@ -2028,6 +2054,22 @@ class ConversationFlowManager:
     def _execute_pending_action(self, user, board, state):
         pending = state.pending_action
         data = state.collected_data
+
+        # ── Final RBAC gate before executing any write ───────────────
+        # Resolve the board if we don't have it yet (from collected_data)
+        exec_board = board
+        if exec_board is None and data.get('board_id'):
+            from kanban.models import Board
+            try:
+                exec_board = Board.objects.get(id=data['board_id'])
+            except Board.DoesNotExist:
+                pass
+
+        from ai_assistant.utils.rbac_utils import check_spectra_action_permission
+        allowed, denial = check_spectra_action_permission(user, exec_board, pending)
+        if not allowed:
+            state.reset()
+            return denial
 
         if pending == 'create_task':
             return self._execute_task_creation(user, board, state, data)

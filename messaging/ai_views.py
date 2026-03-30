@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 
 from .models import ChatMessage, ChatRoom
 from kanban.models import Column, Task
+from kanban.decorators import demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ def _extract_json_array(text):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def summarize_thread(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/summarize/
@@ -122,6 +124,7 @@ Be direct and professional. Do not include greetings or meta-commentary."""
 
 @login_required
 @require_POST
+@demo_ai_guard
 def extract_tasks_from_message(request, message_id):
     """
     POST /messaging/message/<message_id>/ai/extract-tasks/
@@ -190,6 +193,7 @@ Example format:
 
 @login_required
 @require_POST
+@demo_ai_guard
 def extract_tasks_from_thread(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/extract-tasks/
@@ -266,6 +270,7 @@ If there are no actionable tasks, return an empty array: []"""
 
 @login_required
 @require_POST
+@demo_ai_guard
 def confirm_create_tasks(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/confirm-tasks/
@@ -347,6 +352,7 @@ def confirm_create_tasks(request, room_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def analyze_chat_attachment(request, file_id):
     """
     POST /messaging/file/<file_id>/ai-analyze/
@@ -430,6 +436,7 @@ def analyze_chat_attachment(request, file_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def create_tasks_from_chat_attachment(request, file_id):
     """
     POST /messaging/file/<file_id>/ai-create-tasks/
@@ -536,6 +543,7 @@ _VALID_TONES = {"professional", "urgent", "friendly", "diplomatic"}
 
 @login_required
 @require_POST
+@demo_ai_guard
 def compose_message(request, room_id):
     """
     POST /messaging/room/<room_id>/ai/compose/

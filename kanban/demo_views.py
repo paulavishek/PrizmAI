@@ -27,6 +27,7 @@ from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
 from kanban.utils.demo_permissions import DemoPermissions
 from kanban.utils.demo_admin import login_as_demo_admin, logout_demo_admin, is_demo_admin_user
+from kanban.utils.demo_protection import allow_demo_writes
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,10 +62,12 @@ def _auto_grant_demo_access(request):
             return
         
         for board in demo_boards:
-            # Add user to board members (simple M2M relationship)
-            if request.user not in board.members.all():
-                board.members.add(request.user)
-                logger.info(f"Auto-granted {request.user.username} access to demo board: {board.name}")
+            # Add user to board as member via new BoardMembership
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'member'}
+            )
             
             # Add user to chat rooms for this board
             chat_rooms = ChatRoom.objects.filter(board=board)
@@ -74,6 +77,9 @@ def _auto_grant_demo_access(request):
         
         # Also set up time tracking demo data for this user
         _setup_user_time_tracking_demo(request.user, demo_boards)
+        
+        # Assign 2-3 demo tasks to the real user so My Tasks card is populated
+        _assign_demo_tasks_to_real_user(request.user, demo_boards)
         
     except Exception as e:
         logger.error(f"Error auto-granting demo access: {e}")
@@ -168,9 +174,125 @@ def _setup_user_time_tracking_demo(user, demo_boards):
     
     except Exception as e:
         logger.error(f"Error setting up time tracking demo for {user.username}: {e}")
-        
+
+
+def _assign_demo_tasks_to_real_user(user, demo_boards):
+    """
+    Assign 2-3 demo tasks to a real user so 'My Tasks' and 'My Boards'
+    cards on the dashboard are populated when viewing the demo.
+
+    Picks incomplete tasks (in-progress preferred, then to-do) and
+    reassigns them from their demo-user assignee to the real user.
+    The original assignee is stored in the user's session-scoped
+    profile field (demo_task_originals) so we can restore on exit.
+
+    Only runs once per user (skips if user already owns demo tasks).
+    """
+    # Skip demo users — they already own tasks
+    if '_demo' in user.username:
+        return
+
+    # Skip if this user already has demo tasks assigned to them
+    already_assigned = Task.objects.filter(
+        column__board__in=demo_boards,
+        assigned_to=user,
+        is_seed_demo_data=True,
+    ).exists()
+    if already_assigned:
+        return
+
+    try:
+        with allow_demo_writes():
+            for board in demo_boards:
+                # Prefer in-progress tasks (more visible), then to-do
+                candidates = list(
+                    Task.objects.filter(
+                        column__board=board,
+                        is_seed_demo_data=True,
+                        item_type='task',
+                        progress__gt=0,
+                        progress__lt=100,
+                    ).exclude(
+                        assigned_to=user,
+                    ).order_by('?')[:2]
+                )
+
+                # If we got fewer than 2 from in-progress, grab a to-do task
+                if len(candidates) < 2:
+                    extra = list(
+                        Task.objects.filter(
+                            column__board=board,
+                            is_seed_demo_data=True,
+                            item_type='task',
+                            progress=0,
+                        ).exclude(
+                            assigned_to=user,
+                        ).exclude(
+                            id__in=[c.id for c in candidates],
+                        ).order_by('?')[:3 - len(candidates)]
+                    )
+                    candidates.extend(extra)
+
+                # Cap at 3
+                candidates = candidates[:3]
+
+                # Store original assignees on the profile for later restoration
+                originals = {}
+                for task in candidates:
+                    originals[str(task.id)] = task.assigned_to_id
+                    task.assigned_to = user
+                    task.save(update_fields=['assigned_to'])
+
+                # Persist the mapping so we can restore on demo exit
+                if originals:
+                    from accounts.models import UserProfile
+                    profile = UserProfile.objects.get(user=user)
+                    # Merge with any existing originals (in case of multiple boards)
+                    existing = profile.demo_task_originals or {}
+                    existing.update(originals)
+                    profile.demo_task_originals = existing
+                    profile.save(update_fields=['demo_task_originals'])
+                    logger.info(
+                        f"Assigned {len(originals)} demo tasks to real user "
+                        f"{user.username}: task ids {list(originals.keys())}"
+                    )
+
     except Exception as e:
-        logger.error(f"Error auto-granting demo access: {e}")
+        logger.error(f"Error assigning demo tasks to {user.username}: {e}")
+
+
+def _restore_demo_task_assignments(user):
+    """
+    Restore demo tasks back to their original demo-user assignees
+    when a real user exits demo mode.
+    """
+    try:
+        with allow_demo_writes():
+            from accounts.models import UserProfile
+            profile = UserProfile.objects.get(user=user)
+            originals = profile.demo_task_originals
+            if not originals:
+                return
+
+            restored = 0
+            for task_id_str, original_user_id in originals.items():
+                try:
+                    task = Task.objects.get(id=int(task_id_str), is_seed_demo_data=True)
+                    task.assigned_to_id = original_user_id
+                    task.save(update_fields=['assigned_to'])
+                    restored += 1
+                except Task.DoesNotExist:
+                    pass
+
+            # Clear the stored originals
+            profile.demo_task_originals = {}
+            profile.save(update_fields=['demo_task_originals'])
+
+            if restored:
+                logger.info(f"Restored {restored} demo tasks from user {user.username}")
+
+    except Exception as e:
+        logger.error(f"Error restoring demo tasks for {user.username}: {e}")
 
 
 def demo_mode_selection(request):
@@ -560,28 +682,14 @@ def _ensure_user_in_demo_boards(user, demo_boards):
         user: User object
         demo_boards: QuerySet or list of Board objects
     """
-    from kanban.permission_models import BoardMembership, Role
+    from kanban.models import BoardMembership
     
     for board in demo_boards:
-        # Skip if user is already a member
-        if user in board.members.all():
-            continue
-        
-        # Add user to board members
-        board.members.add(user)
-        
-        # Create BoardMembership with Editor role for proper RBAC
-        editor_role = Role.objects.filter(
-            organization=board.organization,
-            name='Editor'
-        ).first()
-        
-        if editor_role:
-            BoardMembership.objects.get_or_create(
-                board=board,
-                user=user,
-                defaults={'role': editor_role}
-            )
+        # Create BoardMembership for the user
+        BoardMembership.objects.get_or_create(
+            board=board, user=user,
+            defaults={'role': 'member'}
+        )
         
         # Add user to all chat rooms for this board
         chat_rooms = ChatRoom.objects.filter(board=board)
@@ -664,29 +772,19 @@ def demo_dashboard(request):
         # Check if user is already a member of any demo boards
         user_demo_orgs = Organization.objects.filter(
             name__in=DEMO_ORG_NAMES,
-            boards__members=request.user
+            boards__memberships__user=request.user
         ).distinct()
         
         if not user_demo_orgs.exists():
             # User doesn't have access yet - grant it automatically
-            from kanban.permission_models import BoardMembership, Role
+            from kanban.models import BoardMembership
             
             for demo_board in demo_boards:
-                # Add user to board members
-                demo_board.members.add(request.user)
-                
-                # Create BoardMembership with Editor role
-                editor_role = Role.objects.filter(
-                    organization=demo_board.organization,
-                    name='Editor'
-                ).first()
-                
-                if editor_role:
-                    BoardMembership.objects.get_or_create(
-                        board=demo_board,
-                        user=request.user,
-                        defaults={'role': editor_role}
-                    )
+                # Create BoardMembership for the user
+                BoardMembership.objects.get_or_create(
+                    board=demo_board, user=request.user,
+                    defaults={'role': 'member'}
+                )
                 
                 # Add user to all chat rooms for this board
                 chat_rooms = ChatRoom.objects.filter(board=demo_board)
@@ -872,28 +970,18 @@ def demo_board_detail(request, board_id):
         # Organization-level access check: user must have access to at least one board in this org
         user_has_org_access = Board.objects.filter(
             organization=board.organization,
-            members=request.user
+            memberships__user=request.user
         ).exists()
         
         if not user_has_org_access:
             # Auto-grant access when user clicks on a demo board
-            from kanban.permission_models import BoardMembership, Role
+            from kanban.models import BoardMembership
             
-            # Add user to this board
-            board.members.add(request.user)
-            
-            # Create BoardMembership with Editor role
-            editor_role = Role.objects.filter(
-                organization=board.organization,
-                name='Editor'
-            ).first()
-            
-            if editor_role:
-                BoardMembership.objects.get_or_create(
-                    board=board,
-                    user=request.user,
-                    defaults={'role': editor_role}
-                )
+            # Create BoardMembership for the user
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'member'}
+            )
             
             # Add user to all chat rooms for this board
             chat_rooms = ChatRoom.objects.filter(board=board)
@@ -963,7 +1051,7 @@ def demo_board_detail(request, board_id):
     
     # Get board members - show all board members
     from accounts.models import UserProfile
-    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_ids = board.memberships.values_list('user_id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all users who aren't on the board yet
@@ -1253,9 +1341,8 @@ def _delete_user_board_safely(board):
         pass
 
     try:
-        from kanban.permission_models import BoardMembership, PermissionAuditLog
+        from kanban.models import BoardMembership
         BoardMembership.objects.filter(board=board).delete()
-        PermissionAuditLog.objects.filter(board=board).delete()
     except Exception:
         pass
 
@@ -1319,6 +1406,7 @@ def reset_demo_data(request):
 
     if request.method == 'POST':
         try:
+          with allow_demo_writes():
             from django.core.management import call_command
             from django.db import connection
             from io import StringIO
@@ -1338,6 +1426,14 @@ def reset_demo_data(request):
             # ============================================================
             # STEP 2: Delete all user-created boards with full cleanup
             # ============================================================
+            # Also clean up DemoSandbox records so sandbox can be
+            # re-provisioned cleanly after reset.
+            try:
+                from kanban.models import DemoSandbox
+                DemoSandbox.objects.filter(user=request.user).delete()
+            except Exception:
+                pass
+
             for board in list(user_boards):
                 try:
                     _delete_user_board_safely(board)

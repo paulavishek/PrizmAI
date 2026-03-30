@@ -17,7 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from kanban.models import Board
+from kanban.models import Board, BoardMembership
 from kanban.simple_access import check_access_or_403, check_management_or_403
 from kanban.audit_utils import log_audit
 
@@ -25,6 +25,7 @@ from .models import (
     ProjectHealthSignal, HospiceSession, ProjectOrgan,
     OrganTransplant, CemeteryEntry, HospiceDismissal,
 )
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ def exit_protocol_dashboard(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def recalculate_health_score(request, board_id):
     """Manually triggers a health score recomputation for this board."""
     board = get_object_or_404(Board, id=board_id)
@@ -108,6 +110,7 @@ def recalculate_health_score(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def initiate_hospice(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_management_or_403(request.user, board)
@@ -144,6 +147,7 @@ def initiate_hospice(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def complete_checklist_item(request, board_id, item_id):
     board = get_object_or_404(Board, id=board_id)
     check_access_or_403(request.user, board)
@@ -168,6 +172,7 @@ def complete_checklist_item(request, board_id, item_id):
 
 
 @login_required
+@demo_write_guard
 def view_transition_memos(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_access_or_403(request.user, board)
@@ -216,6 +221,7 @@ def view_transition_memos(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def bury_project(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_management_or_403(request.user, board)
@@ -236,10 +242,10 @@ def bury_project(request, board_id):
         _total = KanbanTask.objects.filter(column__board=board).count()
         _done = KanbanTask.objects.filter(column__board=board, completed_at__isnull=False).count()
         try:
-            from kanban.permission_models import BoardMembership
-            _team = BoardMembership.objects.filter(board=board, is_active=True).count()
+            from kanban.models import BoardMembership
+            _team = BoardMembership.objects.filter(board=board).count()
         except Exception:
-            _team = board.members.count()
+            _team = 0
         CemeteryEntry.objects.create(
             board=board,
             hospice_session=session,
@@ -271,6 +277,7 @@ def bury_project(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_hospice_banner(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
@@ -375,6 +382,7 @@ def organ_library(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def transplant_organ(request, organ_id):
     organ = get_object_or_404(ProjectOrgan, id=organ_id, status='available')
 
@@ -425,12 +433,9 @@ def transplant_organ(request, organ_id):
             created_id = node.id
 
         elif organ.organ_type == 'role_definition':
-            from kanban.permission_models import Role
-            role = Role.objects.create(
-                name=organ.payload.get('role_name', organ.name),
-                description=(organ.payload.get('description', '') + provenance_note)[:500],
-            )
-            created_id = role.id
+            # Role definitions no longer stored as separate model objects
+            # Just track the organ as transplanted
+            created_id = None
 
         else:
             # goal_framework, checklist, etc. → create as knowledge entry
@@ -477,6 +482,7 @@ def transplant_organ(request, organ_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def reject_organ(request, organ_id):
     organ = get_object_or_404(ProjectOrgan, id=organ_id)
     organ.status = 'rejected'
@@ -541,6 +547,7 @@ def autopsy_report(request, entry_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def update_lessons(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
@@ -605,6 +612,7 @@ def update_lessons(request, entry_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resurrect_project(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
@@ -621,7 +629,7 @@ def resurrect_project(request, entry_id):
         created_by=request.user,
     )
     # Add creator as member
-    new_board.members.add(request.user)
+    BoardMembership.objects.get_or_create(board=new_board, user=request.user, defaults={'role': 'member'})
 
     # 2. Import surviving knowledge nodes
     try:

@@ -16,19 +16,11 @@
     <nav class="sidebar-nav">
         <ul class="sidebar-nav-list">
             <li class="sidebar-nav-item">
-                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}" 
-                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}"
+                <a href="{% url 'dashboard' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
                    title="Dashboard">
                     <i class="fas fa-th-large sidebar-nav-icon"></i>
                     <span class="sidebar-label">Dashboard</span>
-                </a>
-            </li>
-            <li class="sidebar-nav-item">
-                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}" 
-                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
-                   title="Boards">
-                    <i class="fas fa-columns sidebar-nav-icon"></i>
-                    <span class="sidebar-label">Boards</span>
                 </a>
             </li>
             <li class="sidebar-nav-item">
@@ -47,7 +39,14 @@
                     <span class="sidebar-label">Missions</span>
                 </a>
             </li>
-            {% if not request.session.is_demo_mode %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'board_list' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
+                   title="Boards">
+                    <i class="fas fa-columns sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Boards</span>
+                </a>
+            </li>
             <li class="sidebar-nav-item">
                 <a href="{% url 'unified_calendar' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'unified_calendar' %}active{% endif %}"
@@ -56,7 +55,6 @@
                     <span class="sidebar-label">Calendar</span>
                 </a>
             </li>
-            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'wiki:knowledge_hub_home' %}" 
                    class="sidebar-nav-link {% if 'wiki' in request.path %}active{% endif %}"
@@ -105,11 +103,11 @@
             {% endif %}
         </div>
 
-        <!-- More section (collapsible) -->
+        <!-- Tools section (collapsible) -->
         <div class="sidebar-more-section">
-            <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="More" aria-expanded="false">
+            <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="Tools" aria-expanded="false">
                 <i class="fas fa-ellipsis-h sidebar-nav-icon"></i>
-                <span class="sidebar-label">More</span>
+                <span class="sidebar-label">Tools</span>
                 <i class="fas fa-chevron-down sidebar-more-arrow"></i>
             </button>
             <ul class="sidebar-more-list" id="sidebarMoreList">

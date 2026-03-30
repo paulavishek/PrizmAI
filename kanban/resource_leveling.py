@@ -143,7 +143,7 @@ class ResourceLevelingService:
             if not board:
                 return {'error': 'Task must be in a column on a board'}
             # Show ALL board members as potential assignees
-            potential_assignees = list(board.members.all())
+            potential_assignees = list(User.objects.filter(board_memberships__board=board))
         
         if not potential_assignees:
             return {'error': 'No potential assignees available'}
@@ -203,17 +203,24 @@ class ResourceLevelingService:
         if top_candidate and current_assignee:
             current_analysis = next((c for c in candidates if c['user_id'] == current_assignee.id), None)
             if current_analysis:
-                # Recommend reassignment if top candidate is significantly better
+                # Use a lower threshold when the current assignee is overloaded (>90% utilization)
+                # to make the system more responsive to workload imbalance
+                if current_analysis['utilization'] > 90:
+                    threshold = 5  # Lower bar when assignee is overloaded
+                else:
+                    threshold = 15  # Standard: at least 15 points improvement
+                
                 improvement = top_candidate['overall_score'] - current_analysis['overall_score']
-                if improvement > 15:  # At least 15 points improvement
+                if improvement > threshold:
                     result['should_reassign'] = True
                     result['reasoning'] = self._generate_reassignment_reasoning(
                         top_candidate, current_analysis, improvement
                     )
         elif top_candidate and not current_assignee:
-            # Unassigned task - recommend top candidate
-            result['should_reassign'] = True
-            result['reasoning'] = self._generate_initial_assignment_reasoning(top_candidate)
+            # Unassigned task - recommend top candidate only if they're not already overloaded
+            if top_candidate['utilization'] <= 90:
+                result['should_reassign'] = True
+                result['reasoning'] = self._generate_initial_assignment_reasoning(top_candidate)
         
         return result
     
@@ -249,9 +256,9 @@ class ResourceLevelingService:
         
         total_task_count = actual_task_count + temp_task_count
         
-        # Calculate availability based on actual task count
-        # Each task adds ~15% utilization
-        adjusted_utilization = profile.utilization_percentage + (total_task_count * 15)
+        # Use the profile's actual utilization (already computed from active tasks)
+        # Only add overhead for temporary (pending suggestion) tasks from this batch
+        adjusted_utilization = profile.utilization_percentage + (temp_task_count * 15)
         availability_score = max(100 - adjusted_utilization, 0)
         
         # 3. Velocity score (normalized to 0-100)
@@ -283,14 +290,21 @@ class ResourceLevelingService:
                 quality_normalized * 0.10      # 10% weight on quality
             )
         else:
-            # For users without history: prioritize availability and skills more
-            overall_score = (
-                skill_score * 0.35 +          # 35% weight on skills (can assess from profile)
-                availability_score * 0.45 +    # 45% weight on availability (objective fact)
-                velocity_normalized * 0.10 +   # 10% weight on velocity (no data, less important)
-                reliability_score * 0.05 +     # 5% weight on reliability (no data, less important)
-                quality_normalized * 0.05      # 5% weight on quality (minimal weight without data)
+            # For users without history: same weight scheme as above but apply
+            # a confidence discount since we have no track record to back
+            # velocity, reliability, and quality scores.
+            # Users with skills get a smaller discount than those without.
+            has_skills = bool(profile.skill_keywords)
+            raw_score = (
+                skill_score * 0.30 +          # 30% weight on skills
+                availability_score * 0.25 +    # 25% weight on availability
+                velocity_normalized * 0.20 +   # 20% weight on velocity
+                reliability_score * 0.15 +     # 15% weight on reliability
+                quality_normalized * 0.10      # 10% weight on quality
             )
+            # Apply confidence discount: 25% discount if they have skills, 40% if they don't
+            confidence_factor = 0.75 if has_skills else 0.60
+            overall_score = raw_score * confidence_factor
         
         # Predict completion time (use actual task count for workload calculation)
         estimated_hours = self._predict_completion_time_with_workload(profile, task, total_task_count)
@@ -478,7 +492,7 @@ class ResourceLevelingService:
         if board:
             exclude_user_ids = [task.assigned_to.id] if task.assigned_to else []
             has_peer_history = UserPerformanceProfile.objects.filter(
-                user__in=board.members.all(),
+                user__in=User.objects.filter(board_memberships__board=board),
                 total_tasks_completed__gt=0,
             ).exclude(user_id__in=exclude_user_ids).exists()
             if not has_peer_history:
@@ -489,9 +503,10 @@ class ResourceLevelingService:
 
         # 3. Task must have been open for at least 1 hour before any suggestion is shown.
         #    This prevents a banner firing the instant a task is saved.
+        #    Tasks with future created_at (e.g. demo/refreshed boards) are always allowed.
         if hasattr(task, 'created_at') and task.created_at:
             task_age = timezone.now() - task.created_at
-            if task_age < timedelta(hours=1):
+            if timedelta(0) <= task_age < timedelta(hours=1):
                 logger.debug(
                     f"Suppressing resource suggestion for task {task.id}: task is only "
                     f"{task_age.total_seconds() / 60:.1f} minutes old (< 1 hour required)."
@@ -755,6 +770,55 @@ class ResourceLevelingService:
         else:
             return 'improves_timeline'
     
+    def _create_suggestion_for_candidate(self, task, candidate, current_analysis, analysis):
+        """
+        Create a ResourceLevelingSuggestion for a specific alternative candidate.
+        Used when the top candidate has hit the per-user suggestion cap.
+        """
+        suggested_user = User.objects.get(id=candidate['user_id'])
+        current_assignee = task.assigned_to
+        
+        workload_impact = self._determine_workload_impact(candidate, current_analysis)
+        
+        # Calculate time savings
+        if current_analysis:
+            time_savings = current_analysis['estimated_hours'] - candidate['estimated_hours']
+            time_savings_pct = (time_savings / current_analysis['estimated_hours']) * 100 if current_analysis['estimated_hours'] > 0 else 0
+        else:
+            time_savings = 0
+            time_savings_pct = 0
+        
+        # Generate reasoning
+        if current_analysis:
+            reasoning = self._generate_reassignment_reasoning(
+                candidate, current_analysis,
+                candidate['overall_score'] - current_analysis['overall_score']
+            )
+        else:
+            reasoning = self._generate_initial_assignment_reasoning(candidate)
+        
+        ai_confidence = self._calculate_suggestion_confidence(candidate, current_analysis, workload_impact)
+        
+        try:
+            suggestion = ResourceLevelingSuggestion.objects.create(
+                task=task,
+                current_assignee=current_assignee,
+                suggested_assignee=suggested_user,
+                reasoning=reasoning,
+                time_savings_percentage=max(time_savings_pct, 0),
+                time_savings_hours=max(time_savings, 0),
+                confidence_score=ai_confidence,
+                skill_match_score=candidate['skill_match'],
+                workload_impact=workload_impact,
+                suggested_projected_date=timezone.now() + timedelta(hours=candidate['estimated_hours']),
+                expires_at=timezone.now() + timedelta(days=7),
+                status='pending'
+            )
+            return suggestion
+        except Exception as e:
+            logger.error(f"Error creating alternative suggestion: {e}")
+            return None
+    
     def get_board_optimization_suggestions(self, board, limit=10, requesting_user=None):
         """
         Analyze all tasks on a board and return top optimization opportunities
@@ -810,8 +874,41 @@ class ResourceLevelingService:
                     suggestions.append(suggestion)
                     suggestion_counts_per_user[suggested_user_id] = current_count + 1
                 else:
-                    # Delete the suggestion we just created since we won't use it
+                    # Top candidate is capped — try the next-best candidate
                     suggestion.delete()
+                    
+                    # Re-analyze to find alternative candidates
+                    analysis = self.analyze_task_assignment(task)
+                    if 'error' not in analysis and analysis.get('all_candidates'):
+                        current_assignee = task.assigned_to
+                        current_analysis = next(
+                            (c for c in analysis['all_candidates'] 
+                             if current_assignee and c['user_id'] == current_assignee.id), None
+                        )
+                        # Try candidates in score order, skipping the capped one and current assignee
+                        for candidate in analysis['all_candidates']:
+                            if candidate['user_id'] == suggested_user_id:
+                                continue  # Already capped
+                            if current_assignee and candidate['user_id'] == current_assignee.id:
+                                continue  # Don't suggest keeping current assignee
+                            if candidate['utilization'] > 90:
+                                continue  # Don't pile more work onto overloaded members
+                            alt_count = suggestion_counts_per_user.get(candidate['user_id'], 0)
+                            if alt_count >= max_suggestions_per_user:
+                                continue  # This candidate also capped
+                            # Check if this candidate is meaningfully better than current
+                            if current_analysis:
+                                threshold = 5 if current_analysis['utilization'] > 90 else 15
+                                if candidate['overall_score'] - current_analysis['overall_score'] <= threshold:
+                                    continue
+                            # Create suggestion for this alternative candidate
+                            alt_suggestion = self._create_suggestion_for_candidate(
+                                task, candidate, current_analysis, analysis
+                            )
+                            if alt_suggestion:
+                                suggestions.append(alt_suggestion)
+                                suggestion_counts_per_user[candidate['user_id']] = alt_count + 1
+                                break  # Use first valid alternative
         
         # Sort by impact (time savings percentage * confidence)
         suggestions.sort(
@@ -873,7 +970,7 @@ class ResourceLevelingService:
         """
         # Show ALL board members - this is the expected UX behavior
         # All members of a board should see all other members in the workload report
-        members = board.members.all()
+        members = User.objects.filter(board_memberships__board=board)
         
         report = {
             'board': board.name,
@@ -940,7 +1037,7 @@ class ResourceLevelingService:
         Update performance profiles for all board members
         Useful for batch updates or scheduled tasks
         """
-        members = board.members.all()
+        members = User.objects.filter(board_memberships__board=board)
         updated = 0
         
         for member in members:
@@ -981,7 +1078,7 @@ class WorkloadBalancer:
         from kanban.models import Task
         
         # Get all profiles
-        members = board.members.all()
+        members = User.objects.filter(board_memberships__board=board)
         profiles = {m.id: self.service.get_or_create_profile(m) for m in members}
         
         # Identify overloaded and underutilized members

@@ -108,6 +108,15 @@
 
 {% block content %}
 <div class="container-fluid my-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Shadow Board</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -259,23 +268,23 @@
 
                             <!-- Actions -->
                             <div class="btn-group btn-group-sm w-100 mt-3" role="group">
-                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details">
+                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <button class="btn btn-outline-secondary btn-star" data-branch-id="{{ branch.id }}" title="Star/unstar">
+                                <button class="btn btn-outline-secondary btn-star" data-branch-id="{{ branch.id }}" title="Star/unstar" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-star{% if not branch.is_starred %} far{% endif %}"></i>
                                 </button>
                                 {% if branch.status == 'active' %}
-                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" title="Commit this branch">
+                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" title="Commit this branch" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-check"></i>
                                 </button>
                                 {% endif %}
                                 {% if branch.status == 'archived' %}
-                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore branch to active">
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-undo"></i>
                                 </button>
                                 {% endif %}
-                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch">
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -379,4 +388,11 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 <script src="{% static 'js/shadow_board.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { boundary: 'window' });
+    });
+});
+</script>
 {% endblock %}

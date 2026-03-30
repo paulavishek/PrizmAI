@@ -104,7 +104,7 @@
                             {% if board.num_phases > 0 %}
                             <div class="mb-3" id="phase-field-container">
                                 <label for="{{ form.phase.id_for_label }}" class="form-label">
-                                    <i class="fas fa-layer-group me-1"></i> Phase <span class="text-danger">*</span>
+                                    <i class="fas fa-layer-group me-1"></i> Sprint / Phase <span class="text-danger">*</span>
                                 </label>
                                 {{ form.phase }}
                                 <small class="form-text text-muted">
@@ -144,19 +144,8 @@
                                     <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
                                 {% endif %}
                             </div>
-                        </div>
-                        
-                        <!-- ═══════════════════════════════════════════════════════════════════ -->
-                        <!-- SECTION 2: CONSTRAINTS & CONTEXT (The "Game Changers")              -->
-                        <!-- These fields affect AI predictions - must come BEFORE AI Analysis   -->
-                        <!-- ═══════════════════════════════════════════════════════════════════ -->
-                        <div class="mb-4">
-                            <h5 class="border-bottom pb-2 mb-3">
-                                <span class="badge bg-secondary me-2">2</span>
-                                <i class="fas fa-sliders-h text-secondary me-1"></i> Constraints & Context
-                            </h5>
-                            
-                            <!-- Assignee Selection - Required for AI Predictions -->
+
+                            <!-- Assigned To (promoted from Constraints section) -->
                             <div class="mb-3">
                                 <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
                                     <i class="fas fa-user-check me-1"></i> Assigned To
@@ -172,23 +161,60 @@
                                         <i class="fas fa-user-cog me-1"></i> AI Suggest
                                     </button>
                                 </div>
-                                <small class="form-text text-muted">
-                                    <i class="fas fa-info-circle me-1"></i>Select an assignee or use <strong>AI Suggest</strong> to find the best match based on skills, workload & performance.
-                                </small>
-                                <!-- AI Assignee Suggestion Spinner -->
                                 <div id="assignee-ai-spinner" class="d-none text-center mt-2">
                                     <div class="spinner-border spinner-border-sm text-info" role="status">
                                         <span class="visually-hidden">Analyzing team members...</span>
                                     </div>
                                     <span class="ms-2 text-muted"><i class="fas fa-wand-magic-sparkles me-1"></i>Analyzing team skills, workload & performance...</span>
                                 </div>
-                                <!-- AI Assignee Suggestion Result -->
                                 <div id="assignee-suggestion-result" class="d-none mt-2"></div>
                                 {% if form.assigned_to.errors %}
                                     <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
                                 {% endif %}
                             </div>
-                            
+
+                            <!-- Due Date (promoted from AI Analysis section) -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="{{ form.due_date.id_for_label }}" class="form-label">
+                                        <i class="fas fa-calendar-alt text-info me-1"></i> Due Date
+                                    </label>
+                                    {{ form.due_date }}
+                                    {% if form.due_date.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.due_date.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.priority.id_for_label }}" class="form-label">
+                                        <i class="fas fa-flag text-warning me-1"></i> Priority
+                                    </label>
+                                    {{ form.priority }}
+                                    {% if form.priority.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ═══════════════════════════════════════════════════════════════════ -->
+                        <!-- ADVANCED OPTIONS (collapsed by default)                             -->
+                        <!-- ═══════════════════════════════════════════════════════════════════ -->
+                        <div class="mb-4">
+                            <div class="card border-secondary">
+                                <div class="card-header bg-light cursor-pointer d-flex justify-content-between align-items-center" 
+                                     data-bs-toggle="collapse" data-bs-target="#advancedOptionsSection" 
+                                     aria-expanded="false" aria-controls="advancedOptionsSection">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-chevron-down me-2 collapse-icon"></i>
+                                        Show advanced options
+                                    </h6>
+                                    <span class="badge bg-info">
+                                        <i class="fas fa-lightbulb me-1"></i>Affects AI predictions
+                                    </span>
+                                </div>
+                                <div id="advancedOptionsSection" class="collapse">
+                                    <div class="card-body">
+
                             <!-- Regular Labels (for other tags) - Only show if non-LSS labels exist -->
                             {% if form.labels.field.queryset.exists %}
                             <div class="mb-3">
@@ -202,29 +228,10 @@
                             </div>
                             {% endif %}
                             
-                            <!-- Collapsible Advanced Constraints & Context -->
-                            <div class="card border-secondary">
-                                <div class="card-header bg-light cursor-pointer d-flex justify-content-between align-items-center" 
-                                     data-bs-toggle="collapse" data-bs-target="#advancedConstraintsSection" 
-                                     aria-expanded="false" aria-controls="advancedConstraintsSection">
-                                    <h6 class="mb-0">
-                                        <i class="fas fa-chevron-down me-2 collapse-icon"></i>
-                                        <i class="fas fa-cog text-secondary"></i> Add Constraints & Context 
-                                        <small class="text-muted">(Optional)</small>
-                                    </h6>
-                                    <span class="badge bg-info" id="constraints-hint">
-                                        <i class="fas fa-lightbulb me-1"></i>Affects AI predictions
-                                    </span>
-                                </div>
-                                <div id="advancedConstraintsSection" class="collapse">
-                                    <div class="card-body">
-                                        <div class="alert alert-info mb-3 py-2">
-                                            <small>
-                                                <i class="fas fa-wand-magic-sparkles me-1"></i>
-                                                <strong>Pro Tip:</strong> Fill out these fields <em>before</em> running AI analysis. 
-                                                The AI considers risk, complexity, and workload when suggesting deadlines and priorities.
-                                            </small>
-                                        </div>
+                            <!-- Constraints & Context -->
+                            <h6 class="border-bottom pb-2 mb-3 mt-3">
+                                <i class="fas fa-sliders-h text-secondary me-1"></i> Constraints & Context
+                            </h6>
                                         
                                         <!-- 🛡️ Risk Assessment Section -->
                                         <div class="mb-4">
@@ -343,10 +350,7 @@
 
                                         <!-- � Budget & Cost Estimation -->
                                         <div class="mb-4">
-                                            <h6><i class="fas fa-dollar-sign text-success"></i> Budget & Cost Estimation</h6>
-                                            <div class="alert alert-info py-2 mb-3">
-                                                <small><i class="fas fa-info-circle me-1"></i> Cost estimates help track project budget and enable AI-powered budget recommendations.</small>
-                                            </div>
+                                            <h6><i class="fas fa-dollar-sign text-success"></i> Budget &amp; Cost Estimation <span data-bs-toggle="tooltip" data-bs-placement="right" title="Cost estimates help track project budget and enable AI-powered budget recommendations." style="cursor:help;color:#6b7280;"><i class="fas fa-info-circle" style="font-size:0.85em;"></i></span></h6>
                                             <div class="row">
                                                 <div class="col-md-4 mb-3">
                                                     <label for="{{ form.estimated_cost.id_for_label }}" class="form-label">
@@ -449,17 +453,71 @@
                                         
                                         <hr>
                                         
-                                        <!-- Required Skills (JSON) -->
+                                        <!-- Required Skills (JSON) — P1-04: tag input UI -->
                                         <div class="mb-3">
-                                            <label for="{{ form.required_skills.id_for_label }}" class="form-label">
-                                                <i class="fas fa-tools me-1"></i> Required Skills (Advanced)
+                                            <label class="form-label">
+                                                <i class="fas fa-tools me-1"></i> Required Skills
                                             </label>
-                                            {{ form.required_skills }}
-                                            <small class="form-text text-muted">{{ form.required_skills.help_text }}</small>
+                                            <!-- Tag UI -->
+                                            <div id="skills-tag-container" style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 8px;border:1px solid #ced4da;border-radius:6px;min-height:38px;background:#fff;cursor:text;" onclick="document.getElementById('skills-tag-input').focus()">
+                                                <!-- tags rendered here by JS -->
+                                                <input id="skills-tag-input" type="text" placeholder="Type skill + Enter" style="border:none;outline:none;flex:1;min-width:120px;font-size:0.875rem;padding:2px 0;">
+                                            </div>
+                                            <!-- Hidden field with actual JSON value -->
+                                            <div style="display:none;">{{ form.required_skills }}</div>
+                                            <small class="form-text text-muted">Type a skill name and press Enter or comma to add. Click × to remove.</small>
                                             {% if form.required_skills.errors %}
                                                 <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
                                             {% endif %}
                                         </div>
+                                        <script>
+                                        (function() {
+                                            var hiddenField = document.getElementById('{{ form.required_skills.id_for_label }}');
+                                            var container = document.getElementById('skills-tag-container');
+                                            var tagInput = document.getElementById('skills-tag-input');
+                                            var skills = [];
+                                            // Parse existing value
+                                            try {
+                                                var existing = JSON.parse(hiddenField.value || '[]');
+                                                skills = existing.map(function(s) { return typeof s === 'string' ? s : (s.name || ''); }).filter(Boolean);
+                                            } catch(e) {}
+                                            function renderTags() {
+                                                container.querySelectorAll('.skill-tag').forEach(function(t) { t.remove(); });
+                                                skills.forEach(function(skill, idx) {
+                                                    var tag = document.createElement('span');
+                                                    tag.className = 'skill-tag badge bg-success d-flex align-items-center gap-1';
+                                                    tag.style.cssText = 'font-size:0.8rem;padding:4px 8px;font-weight:500;';
+                                                    tag.innerHTML = skill + ' <button type="button" style="background:none;border:none;padding:0;color:inherit;line-height:1;font-size:1rem;cursor:pointer;" aria-label="Remove">&times;</button>';
+                                                    tag.querySelector('button').addEventListener('click', function() {
+                                                        skills.splice(idx, 1);
+                                                        syncAndRender();
+                                                    });
+                                                    container.insertBefore(tag, tagInput);
+                                                });
+                                                // Sync hidden field to JSON array of {name, level} objects
+                                                hiddenField.value = JSON.stringify(skills.map(function(s) { return {name: s, level: ''}; }));
+                                            }
+                                            function syncAndRender() { renderTags(); }
+                                            function addSkill(name) {
+                                                name = name.trim();
+                                                if (name && skills.indexOf(name) === -1) { skills.push(name); syncAndRender(); }
+                                            }
+                                            tagInput.addEventListener('keydown', function(e) {
+                                                if (e.key === 'Enter' || e.key === ',') {
+                                                    e.preventDefault();
+                                                    addSkill(tagInput.value.replace(',', ''));
+                                                    tagInput.value = '';
+                                                } else if (e.key === 'Backspace' && tagInput.value === '' && skills.length) {
+                                                    skills.pop();
+                                                    syncAndRender();
+                                                }
+                                            });
+                                            tagInput.addEventListener('blur', function() {
+                                                if (tagInput.value.trim()) { addSkill(tagInput.value); tagInput.value = ''; }
+                                            });
+                                            renderTags();
+                                        })();
+                                        </script>
 
                                         <hr>
 
@@ -472,15 +530,12 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        
-                        <!-- ═══════════════════════════════════════════════════════════════════ -->
-                        <!-- SECTION 3: AI ANALYSIS (The "Intelligence" Layer)                   -->
-                        <!-- Runs AFTER user has provided context for accurate predictions       -->
-                        <!-- ═══════════════════════════════════════════════════════════════════ -->
-                        <div class="mb-4">
-                            <h5 class="border-bottom pb-2 mb-3">
+
+                            <!-- AI Analysis -->
+                            <h6 class="border-bottom pb-2 mb-3 mt-4">
+                                <i class="fas fa-wand-magic-sparkles text-info me-1"></i> AI Analysis
+                                <small class="text-muted fw-normal ms-2">(Uses all context above)</small>
+                            </h6>
                                 <span class="badge bg-info me-2">3</span>
                                 <i class="fas fa-wand-magic-sparkles text-info me-1"></i> AI Analysis
                                 <small class="text-muted fw-normal ms-2">(Uses all context above)</small>
@@ -569,77 +624,71 @@
                                 </div>
                             </div>
                             
-                            <!-- Due Date & Priority Row -->
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <div class="card border-info h-100">
-                                        <div class="card-body">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <label for="{{ form.due_date.id_for_label }}" class="form-label mb-0">
-                                                    <i class="fas fa-calendar-alt text-info me-1"></i> Due Date
-                                                </label>
-                                                <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info" 
-                                                        data-board-id="{{ board.id }}" title="AI-powered deadline prediction">
-                                                    <i class="fas fa-wand-magic-sparkles me-1"></i> Predict
-                                                </button>
-                                            </div>
-                                            {{ form.due_date }}
-                                            <!-- Helper text for prediction requirements -->
-                                            <small id="predict-assignee-hint" class="form-text text-warning d-none">
-                                                <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
-                                            </small>
-                                            <div id="deadline-ai-spinner" class="d-none text-center mt-1">
-                                                <div class="spinner-border spinner-border-sm text-info" role="status">
-                                                    <span class="visually-hidden">Loading...</span>
-                                                </div>
-                                                <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
-                                            </div>
-                                            <div id="deadline-prediction-result" class="d-none mt-2"></div>
-                                            {% if form.due_date.errors %}
-                                                <div class="invalid-feedback d-block">{{ form.due_date.errors }}</div>
-                                            {% endif %}
+                            <!-- AI Due Date Prediction -->
+                            <div class="card mb-3 border-info">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-calendar-alt text-info me-1"></i> AI Deadline Prediction</h6>
+                                            <small class="text-muted">Get AI-powered deadline suggestion based on task context</small>
                                         </div>
+                                        <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info" 
+                                                data-board-id="{{ board.id }}" title="AI-powered deadline prediction">
+                                            <i class="fas fa-wand-magic-sparkles me-1"></i> Predict
+                                        </button>
                                     </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="card border-warning h-100">
-                                        <div class="card-body">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <label for="{{ form.priority.id_for_label }}" class="form-label mb-0">
-                                                    <i class="fas fa-flag text-warning me-1"></i> Priority
-                                                </label>
-                                                <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning" 
-                                                        data-board-id="{{ board.id }}" title="AI-powered priority suggestion">
-                                                    <i class="fas fa-magic me-1"></i> Suggest
-                                                </button>
-                                            </div>
-                                            <div id="priority-suggestion-container" class="mb-2"></div>
-                                            {{ form.priority }}
-                                            <div id="priority-ai-spinner" class="d-none text-center mt-1">
-                                                <div class="spinner-border spinner-border-sm text-warning" role="status">
-                                                    <span class="visually-hidden">Loading...</span>
-                                                </div>
-                                                <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
-                                            </div>
-                                            {% if form.priority.errors %}
-                                                <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
-                                            {% endif %}
+                                    <small id="predict-assignee-hint" class="form-text text-warning d-none">
+                                        <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
+                                    </small>
+                                    <div id="deadline-ai-spinner" class="d-none text-center mt-1">
+                                        <div class="spinner-border spinner-border-sm text-info" role="status">
+                                            <span class="visually-hidden">Loading...</span>
                                         </div>
+                                        <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
+                                    </div>
+                                    <div id="deadline-prediction-result" class="d-none mt-2"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- AI Priority Suggestion -->
+                            <div class="card mb-3 border-warning">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-flag text-warning me-1"></i> AI Priority Suggestion</h6>
+                                            <small class="text-muted">Get AI-powered priority recommendation</small>
+                                        </div>
+                                        <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning" 
+                                                data-board-id="{{ board.id }}" title="AI-powered priority suggestion">
+                                            <i class="fas fa-magic me-1"></i> Suggest
+                                        </button>
+                                    </div>
+                                    <div id="priority-suggestion-container" class="mt-2"></div>
+                                    <div id="priority-ai-spinner" class="d-none text-center mt-1">
+                                        <div class="spinner-border spinner-border-sm text-warning" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
                                     </div>
                                 </div>
                             </div>
+
+                                    </div><!-- /.card-body -->
+                                </div><!-- /.collapse -->
+                            </div><!-- /.card (advanced options accordion) -->
                         </div>
                         
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
                         <!-- SECTION 4: FINAL REVIEW & CREATE                                    -->
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
-                        <div class="border-top pt-4 mt-4">
+                        <!-- Sticky footer bar (always visible) -->
+                        <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid #E5E7EB;padding:12px 24px;z-index:100;margin-left:-24px;margin-right:-24px;">
                             <div class="d-flex justify-content-between align-items-center">
                                 <button onclick="goBack()" type="button" class="btn btn-outline-secondary">
                                     <i class="fas fa-times me-1"></i> Cancel
                                 </button>
-                                <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-plus-circle me-1"></i> Create Task
+                                <button type="submit" class="btn btn-prizm-primary btn-lg">
+                                    <i class="fas fa-check-circle me-1"></i> Create Task
                                 </button>
                             </div>
                         </div>
@@ -779,8 +828,8 @@
         }
         
         // Update collapse icon aria-expanded attribute
-        const advancedSection = document.getElementById('advancedConstraintsSection');
-        const advancedHeader = document.querySelector('[data-bs-target="#advancedConstraintsSection"]');
+        const advancedSection = document.getElementById('advancedOptionsSection');
+        const advancedHeader = document.querySelector('[data-bs-target="#advancedOptionsSection"]');
         if (advancedSection && advancedHeader) {
             advancedSection.addEventListener('shown.bs.collapse', function() {
                 advancedHeader.setAttribute('aria-expanded', 'true');
@@ -850,5 +899,56 @@
 
         updateEstimatedCost();
     });
+</script>
+<script>
+// P3-08: Auto-select last option in Sprint/Phase dropdown if nothing is pre-selected
+// P3-07: Initialize tooltips
+(function() {
+    var phaseSelect = document.getElementById('{{ form.phase.id_for_label }}');
+    if (phaseSelect && !phaseSelect.value) {
+        var opts = Array.from(phaseSelect.options).filter(function(o) { return o.value; });
+        if (opts.length) phaseSelect.value = opts[opts.length - 1].value;
+    }
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+    // P1-03: Enhance raw multi-select listboxes with searchable checkbox UI
+    document.querySelectorAll('select[multiple]').forEach(function(sel) {
+        var wrapper = document.createElement('div');
+        wrapper.style.cssText = 'border:1px solid #ced4da;border-radius:6px;background:#fff;';
+        sel.parentNode.insertBefore(wrapper, sel);
+        sel.style.display = 'none';
+        wrapper.appendChild(sel);
+        // Search box
+        var search = document.createElement('input');
+        search.type = 'text';
+        search.placeholder = 'Search…';
+        search.style.cssText = 'width:100%;border:none;border-bottom:1px solid #e5e7eb;padding:5px 10px;font-size:0.875rem;outline:none;border-radius:6px 6px 0 0;';
+        wrapper.insertBefore(search, sel);
+        // Scrollable option list
+        var list = document.createElement('div');
+        list.style.cssText = 'max-height:140px;overflow-y:auto;padding:4px 0;';
+        wrapper.insertBefore(list, sel);
+        function renderList(filter) {
+            list.innerHTML = '';
+            Array.from(sel.options).forEach(function(opt) {
+                if (filter && opt.text.toLowerCase().indexOf(filter.toLowerCase()) === -1) return;
+                var label = document.createElement('label');
+                label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 10px;cursor:pointer;font-size:0.875rem;user-select:none;';
+                label.onmouseover = function() { label.style.background = '#f3f4f6'; };
+                label.onmouseout = function() { label.style.background = ''; };
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = opt.selected;
+                cb.addEventListener('change', function() { opt.selected = cb.checked; });
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(opt.text));
+                list.appendChild(label);
+            });
+        }
+        renderList('');
+        search.addEventListener('input', function() { renderList(search.value); });
+    });
+})();
 </script>
 {% endblock %}

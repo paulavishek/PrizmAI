@@ -8,7 +8,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, Http404
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
@@ -18,6 +18,7 @@ from datetime import timedelta
 import json
 
 from kanban.models import Board, Task
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from kanban.budget_models import (
     ProjectBudget, TaskCost, TimeEntry, ProjectROI, 
     BudgetRecommendation, CostPattern
@@ -33,12 +34,24 @@ from api.ai_usage_utils import track_ai_request, check_ai_quota
 logger = logging.getLogger(__name__)
 
 
+def _require_budget_access(request, board):
+    """Return HttpResponseForbidden if user lacks Owner/OrgAdmin access to this board's budget.
+    Per spec: 'View budget fields' and 'Edit budget fields' are restricted to OrgAdmin + Owner only."""
+    if not request.user.has_perm('prizmai.delete_board', board):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'You do not have permission to access budget information for this board.'}, status=403)
+        return HttpResponseForbidden('You do not have permission to access budget information for this board.')
+    return None
+
+
 @login_required
 def budget_dashboard(request, board_id):
     """
     Main budget dashboard showing overview, metrics, and AI insights
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Get or create budget
     try:
@@ -85,11 +98,14 @@ def budget_dashboard(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def budget_create_or_edit(request, board_id):
     """
     Create or edit project budget
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -121,6 +137,7 @@ def budget_create_or_edit(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def task_cost_edit(request, task_id):
     """
     Edit task cost details
@@ -160,12 +177,17 @@ def task_cost_edit(request, task_id):
 
 
 @login_required
+@demo_write_guard
 def time_entry_create(request, task_id):
     """
     Create time entry for a task
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board to log time
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TimeEntryForm(request.POST, user=request.user)
@@ -201,6 +223,8 @@ def budget_analytics(request, board_id):
     Detailed budget analytics and reports
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -289,6 +313,8 @@ def roi_dashboard(request, board_id):
     ROI tracking and analysis dashboard
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Check if budget exists
     try:
@@ -316,11 +342,14 @@ def roi_dashboard(request, board_id):
 
 
 @login_required
+@demo_write_guard
 def roi_snapshot_create(request, board_id):
     """
     Create new ROI snapshot
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     if request.method == 'POST':
         form = ProjectROIForm(request.POST)
@@ -349,6 +378,7 @@ def roi_snapshot_create(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def ai_analyze_budget(request, board_id):
     """
@@ -356,6 +386,8 @@ def ai_analyze_budget(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -425,6 +457,7 @@ def ai_analyze_budget(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def ai_generate_recommendations(request, board_id):
     """
@@ -432,6 +465,8 @@ def ai_generate_recommendations(request, board_id):
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -499,6 +534,8 @@ def recommendations_list(request, board_id):
     View all budget recommendations
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Filter by status
     status_filter = request.GET.get('status', 'all')
@@ -519,6 +556,7 @@ def recommendations_list(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def recommendation_action(request, recommendation_id):
     """
@@ -529,6 +567,8 @@ def recommendation_action(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Get action from POST data (form submission)
@@ -603,6 +643,8 @@ def recommendation_preview(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         redistributor = BudgetRedistributor(recommendation, request.user)
@@ -637,6 +679,8 @@ def recommendation_implementation_details(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
+    if denied := _require_budget_access(request, board):
+        return denied
     
     logs = BudgetImplementationLog.objects.filter(
         recommendation=recommendation
@@ -671,12 +715,15 @@ def recommendation_implementation_details(request, recommendation_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def ai_predict_overrun(request, board_id):
     """
     Get AI prediction for cost overruns
     """
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         # Check AI quota
@@ -743,11 +790,14 @@ def ai_predict_overrun(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def ai_learn_patterns(request, board_id):
     """
     Trigger AI pattern learning
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Check AI quota
     has_quota, quota, remaining = check_ai_quota(request.user)
@@ -787,6 +837,8 @@ def budget_api_metrics(request, board_id):
     API endpoint for budget metrics (for AJAX updates)
     """
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     try:
         metrics = BudgetAnalyzer.calculate_project_metrics(board)
@@ -826,13 +878,14 @@ def my_timesheet(request, board_id=None):
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
-    # MVP Mode: Check if user has any time entries, if not show demo data
+    # Check if user has any time entries; only fall back to demo data in demo mode
     user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
     
-    if not user_has_entries:
-        # Try to get a demo user with time entries
+    if not user_has_entries and is_demo_mode:
+        # Only show demo user data when explicitly in demo mode
         demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
@@ -856,16 +909,16 @@ def my_timesheet(request, board_id=None):
             if demo_org:
                 boards = Board.objects.filter(
                     models.Q(created_by=request.user) | 
-                    models.Q(members=request.user) |
+                    models.Q(memberships__user=request.user) |
                     models.Q(organization=demo_org)
                 ).distinct()
             else:
                 boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(members=request.user)
+                    models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
                 ).distinct()
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
             ).distinct()
         tasks = Task.objects.filter(
             column__board__in=boards,
@@ -968,13 +1021,14 @@ def time_tracking_dashboard(request, board_id=None):
     from django.db.models import Sum, Count, Avg
     from accounts.models import Organization
     
-    # MVP Mode: Check if user has any time entries, if not show demo data
+    # Check if user has any time entries; only fall back to demo data in demo mode
     user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
     
-    if not user_has_entries:
-        # Try to get a demo user with time entries
+    if not user_has_entries and is_demo_mode:
+        # Only show demo user data when explicitly in demo mode
         demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
@@ -994,16 +1048,16 @@ def time_tracking_dashboard(request, board_id=None):
             if demo_org:
                 boards = Board.objects.filter(
                     models.Q(created_by=request.user) | 
-                    models.Q(members=request.user) |
+                    models.Q(memberships__user=request.user) |
                     models.Q(organization=demo_org)
                 ).distinct()
             else:
                 boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(members=request.user)
+                    models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
                 ).distinct()
         else:
             boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user)
+                models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
             ).distinct()
         board = None
     
@@ -1138,6 +1192,8 @@ def team_timesheet(request, board_id):
     from django.db.models import Sum
     
     board = get_object_or_404(Board, id=board_id)
+    if denied := _require_budget_access(request, board):
+        return denied
     
     # Get week parameter
     week_offset = int(request.GET.get('week', 0))
@@ -1227,12 +1283,17 @@ def team_timesheet(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def quick_time_entry(request, task_id):
     """
     Quick time entry API for inline logging
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board to log time
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     
     try:
         hours = Decimal(request.POST.get('hours', '0'))
@@ -1288,11 +1349,17 @@ def quick_time_entry(request, task_id):
 
 @login_required
 @require_http_methods(["DELETE"])
+@demo_write_guard
 def delete_time_entry(request, entry_id):
     """
     Delete a time entry
     """
     entry = get_object_or_404(TimeEntry, id=entry_id)
+    board = entry.task.column.board
+    
+    # RBAC: user must have edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     
     # Check permissions - user can only delete their own entries
     if entry.user != request.user:
@@ -1493,9 +1560,8 @@ def search_tasks_for_time_entry(request):
         return JsonResponse({'success': True, 'tasks': []})
     
     # Get boards user has access to
-    boards = Board.objects.filter(
-        models.Q(created_by=request.user) | models.Q(members=request.user)
-    ).distinct()
+    from kanban.utils.demo_protection import get_user_boards
+    boards = get_user_boards(request.user)
     
     if board_id:
         boards = boards.filter(id=board_id)
@@ -1532,6 +1598,7 @@ def search_tasks_for_time_entry(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def validate_time_entry_api(request):
     """
     AI-powered validation of a proposed time entry.
@@ -1609,6 +1676,7 @@ def validate_time_entry_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def create_split_time_entries(request):
     """
     Create multiple time entries at once from AI split suggestions.

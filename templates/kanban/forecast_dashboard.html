@@ -377,12 +377,12 @@
     <div class="forecast-header">
         <div class="forecast-title">Team Capacity Forecast</div>
         <div class="forecast-period">
-            📅 {{ period_start|date:"M d, Y" }} - {{ period_end|date:"M d, Y" }} (3 weeks)
+            ðŸ“… {{ period_start|date:"M d, Y" }} - {{ period_end|date:"M d, Y" }} (3 weeks)
         </div>
         <div class="action-buttons">
-            <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn-action" style="background: #95a5a6; color: white; text-decoration: none;">⬅️ Back to Board</a>
-            <button class="btn-action btn-refresh" onclick="location.reload();">🔄 Refresh</button>
-            <a href="{% url 'workload_recommendations' board.id %}" class="btn-action btn-recommendations">💡 View All Recommendations</a>
+            <a href="{% url 'board_detail' board.id %}" class="btn-action" style="background: #95a5a6; color: white; text-decoration: none;">â¬…ï¸ Back to Board</a>
+            <button class="btn-action btn-refresh" onclick="location.reload();">ðŸ”„ Refresh</button>
+            <a href="{% url 'workload_recommendations' board.id %}" class="btn-action btn-recommendations">ðŸ’¡ View All Recommendations</a>
         </div>
     </div>
 
@@ -426,12 +426,12 @@
     <!-- Alerts Section -->
     {% if critical_alerts or warning_alerts %}
     <div class="alerts-section">
-        <div class="alerts-header">⚠️ Active Alerts</div>
+        <div class="alerts-header">âš ï¸ Active Alerts</div>
         
         {% for alert in critical_alerts %}
         <div class="alert-item critical">
             <div class="alert-content">
-                <div class="alert-title">🔴 CRITICAL: {{ alert.get_alert_type_display }}</div>
+                <div class="alert-title">ðŸ”´ CRITICAL: {{ alert.get_alert_type_display }}</div>
                 <div class="alert-message">{{ alert.message }}</div>
             </div>
             <div class="alert-actions">
@@ -446,7 +446,7 @@
         {% for alert in warning_alerts %}
         <div class="alert-item warning">
             <div class="alert-content">
-                <div class="alert-title">🟡 WARNING: {{ alert.get_alert_type_display }}</div>
+                <div class="alert-title">ðŸŸ¡ WARNING: {{ alert.get_alert_type_display }}</div>
                 <div class="alert-message">{{ alert.message }}</div>
             </div>
             <div class="alert-actions">
@@ -494,16 +494,16 @@
                     <td>
                         <span class="forecast-conf-badge" data-conf="{{ forecast.confidence_score }}" style="font-weight:600; font-size:0.85rem; cursor:help;"
                               title="Click for details" data-bs-toggle="collapse" data-bs-target="#forecast-explain-{{ forecast.id }}">
-                            —
+                            â€”
                         </span>
                     </td>
                     <td>
                         {% if forecast.is_overloaded %}
-                        <span class="utilization-badge high">🔴 Overloaded</span>
+                        <span class="utilization-badge high">ðŸ”´ Overloaded</span>
                         {% elif forecast.utilization_percentage >= 80 %}
-                        <span class="utilization-badge medium">🟡 High</span>
+                        <span class="utilization-badge medium">ðŸŸ¡ High</span>
                         {% else %}
-                        <span class="utilization-badge low">🟢 Good</span>
+                        <span class="utilization-badge low">ðŸŸ¢ Good</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -519,7 +519,7 @@
                                 <strong><i class="bi bi-bar-chart me-1 text-primary"></i>Confidence Factors:</strong>
                                 <ul class="mb-0 mt-1 ps-3" style="color:#64748b;">
                                 {% for factor in forecast.forecast_explainability.confidence_factors %}
-                                    <li>{{ factor.factor }}: <strong>{{ factor.status }}</strong> — {{ factor.detail }}</li>
+                                    <li>{{ factor.factor }}: <strong>{{ factor.status }}</strong> â€” {{ factor.detail }}</li>
                                 {% endfor %}
                                 </ul>
                             </div>
@@ -544,7 +544,7 @@
     </div>
     {% else %}
     <div class="empty-state">
-        <div class="empty-state-icon">📊</div>
+        <div class="empty-state-icon">ðŸ“Š</div>
         <p>No forecasts available yet. Generate forecasts to see team capacity data.</p>
         <button class="btn-action btn-refresh" onclick="location.reload();" style="margin-top: 10px;">Generate Forecasts</button>
     </div>
@@ -553,7 +553,7 @@
     <!-- Top Recommendations -->
     {% if recommendations %}
     <div class="recommendations-section" style="margin-top: 30px;">
-        <div class="recommendations-title">💡 Top Recommendations</div>
+        <div class="recommendations-title">ðŸ’¡ Top Recommendations</div>
         {% for rec in recommendations %}
         <div class="recommendation-item">
             <div>
@@ -563,7 +563,7 @@
             </div>
             <div class="recommendation-title">{{ rec.description }}</div>
             <div style="font-size: 0.85rem; color: #95a5a6; margin-top: 5px;">
-                💾 Could save ~{{ rec.expected_capacity_savings_hours|floatformat:1 }}h | 
+                ðŸ’¾ Could save ~{{ rec.expected_capacity_savings_hours|floatformat:1 }}h | 
                 Confidence: {{ rec.confidence_score|floatformat:2 }}
             </div>
             <div style="margin-top: 10px;">
@@ -572,7 +572,7 @@
         </div>
         {% endfor %}
         <div style="text-align: center; margin-top: 15px;">
-            <a href="{% url 'workload_recommendations' board.id %}" style="color: #3498db; font-weight: 600; text-decoration: none;">View All Recommendations →</a>
+            <a href="{% url 'workload_recommendations' board.id %}" style="color: #3498db; font-weight: 600; text-decoration: none;">View All Recommendations â†’</a>
         </div>
     </div>
     {% endif %}
@@ -591,11 +591,7 @@ function goBack() {
         window.history.back();
     } else {
         // Fallback to board detail if no history (demo-aware)
-        {% if is_demo_mode %}
-        window.location.href = '{% url "demo_board_detail" board.id %}';
-        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
-        {% endif %}
     }
 }
 

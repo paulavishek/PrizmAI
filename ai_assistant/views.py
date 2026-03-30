@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth.decorators import login_required
+from kanban.decorators import demo_write_guard
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Count, Sum, Q, Avg
@@ -33,14 +34,15 @@ def assistant_welcome(request):
     # Get user's own sessions
     user_sessions = AIAssistantSession.objects.filter(user=request.user)
     
-    # Also include demo sessions for examples
-    demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
-    
-    # Combine and get recent sessions, limit to 5
-    all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
-    
-    # Total count includes both user sessions and demo sessions
-    total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    # Only include demo sessions when in demo mode
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if is_demo_mode:
+        demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
+        all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
+        total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    else:
+        all_sessions = user_sessions.order_by('-updated_at')[:5]
+        total_sessions_count = user_sessions.count()
     
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -71,11 +73,18 @@ def chat_interface(request, session_id=None):
     
     # Get session if specified, otherwise let user create one via "New Chat" button
     if session_id:
-        # Allow access to user's own sessions OR demo sessions
-        session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(is_demo=True),
-            id=session_id
-        ).first()
+        # Allow access to user's own sessions; demo sessions only in demo mode
+        is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+        if is_demo_mode:
+            session = AIAssistantSession.objects.filter(
+                Q(user=request.user) | Q(is_demo=True),
+                id=session_id
+            ).first()
+        else:
+            session = AIAssistantSession.objects.filter(
+                user=request.user,
+                id=session_id
+            ).first()
         
         if not session:
             return render(request, 'error.html', {
@@ -95,26 +104,13 @@ def chat_interface(request, session_id=None):
     if hasattr(request.user, 'profile'):
         is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
 
-    # Get user's boards for context selection — workspace-aware.
-    if is_demo_mode:
-        # Demo workspace: official demo boards + boards created via Spectra
-        # while exploring demo mode.
-        user_boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
-        ).distinct()
-    else:
-        # Personal workspace: user's own boards, excluding demo artifacts.
-        if user_org:
-            user_boards = Board.objects.filter(
-                organization=user_org,
-            ).filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-        else:
-            user_boards = Board.objects.none()
+    # Get user's boards for context selection — workspace-aware + RBAC-filtered.
+    from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+    user_boards = get_accessible_boards_for_spectra(
+        request.user,
+        is_demo_mode=is_demo_mode,
+        organization=user_org,
+    )
 
     active_boards_count = user_boards.count()
     
@@ -133,6 +129,7 @@ def chat_interface(request, session_id=None):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
 def create_session(request):
     """Create a new AI Assistant session"""
@@ -174,6 +171,7 @@ def create_session(request):
 
 
 @login_required
+@demo_write_guard
 @require_POST
 def send_message(request):
     """Send message to AI Assistant and get response"""
@@ -257,16 +255,18 @@ def send_message(request):
         board = None
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            # Verify user has access to this board
-            if not (
-                board.is_official_demo_board
-                or board.created_by_id == request.user.id
-                or board.members.filter(id=request.user.id).exists()
-            ):
-                return JsonResponse(
-                    {'error': 'You do not have access to this board.'},
-                    status=403,
+            # Verify user has access to this board — Spectra intercepts denial
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if not (board.is_official_demo_board or can_spectra_read_board(request.user, board)):
+                from kanban.simple_access import get_spectra_denial_context
+                ctx = get_spectra_denial_context(
+                    request.user, board, trigger='spectra_chat',
                 )
+                return JsonResponse({
+                    'error': 'access_denied',
+                    'spectra': True,
+                    **ctx,
+                }, status=403)
             session.board = board
             session.save()
         elif session.board_id:
@@ -360,6 +360,17 @@ def send_message(request):
             })
         # ── End Conversational Spectra ───────────────────────────────
         
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import send_ai_message_task
+            result = send_ai_message_task.delay(
+                message_text, session.id, request.user.id,
+                board_id=board.id if board else None,
+                refresh_data=refresh_data,
+                file_context=file_context,
+            )
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
+
         # Get response from chatbot service
         # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(
@@ -502,6 +513,7 @@ def send_message(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def upload_attachment(request):
     """
     POST /ai-assistant/api/upload-attachment/
@@ -576,6 +588,7 @@ def upload_attachment(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def remove_attachment(request, attachment_id):
     """
     POST /ai-assistant/api/attachment/<id>/remove/
@@ -590,11 +603,18 @@ def remove_attachment(request, attachment_id):
 
 @login_required
 def get_sessions(request):
-    """Get user's chat sessions including demo sessions"""
-    # Show user's own sessions AND demo sessions
-    sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True)
-    ).order_by('-updated_at')
+    """Get user's chat sessions — workspace-mode aware"""
+    is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False) if hasattr(request.user, 'profile') else False
+    if is_demo_mode:
+        # Demo mode: user's own sessions AND shared demo sessions
+        sessions = AIAssistantSession.objects.filter(
+            Q(user=request.user) | Q(is_demo=True)
+        ).order_by('-updated_at')
+    else:
+        # My Workspace mode: only user's own non-demo sessions
+        sessions = AIAssistantSession.objects.filter(
+            user=request.user, is_demo=False
+        ).order_by('-updated_at')
     
     data = {
         'sessions': [
@@ -672,6 +692,7 @@ def get_session_messages(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def rename_session(request, session_id):
     """Rename a chat session"""
     try:
@@ -702,6 +723,7 @@ def rename_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def delete_session(request, session_id):
     """Delete a chat session (only user's own sessions, not demo sessions)"""
     try:
@@ -722,6 +744,7 @@ def delete_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def clear_session(request, session_id):
     """Clear all messages in a chat session"""
     try:
@@ -846,6 +869,7 @@ def export_session(request, session_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def toggle_star_message(request, message_id):
     """Toggle star on a message"""
     try:
@@ -861,6 +885,7 @@ def toggle_star_message(request, message_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def submit_feedback(request, message_id):
     """Submit feedback on a message and update analytics for AI learning loop"""
     try:
@@ -1065,12 +1090,13 @@ def get_analytics_data(request):
 @login_required
 def view_recommendations(request):
     """View AI task recommendations"""
+    from kanban.utils.demo_protection import get_user_boards
     board_id = request.GET.get('board_id')
     status = request.GET.get('status', 'pending')
     
     # Get recommendations
     recs_qs = AITaskRecommendation.objects.filter(
-        board__in=Board.objects.filter(Q(created_by=request.user) | Q(members=request.user)).distinct()
+        board__in=get_user_boards(request.user)
     )
     
     if board_id:
@@ -1090,6 +1116,7 @@ def view_recommendations(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def accept_recommendation(request, recommendation_id):
     """Accept a task recommendation"""
     try:
@@ -1106,6 +1133,7 @@ def accept_recommendation(request, recommendation_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def reject_recommendation(request, recommendation_id):
     """Reject a task recommendation"""
     try:
@@ -1121,6 +1149,7 @@ def reject_recommendation(request, recommendation_id):
 
 
 @login_required
+@demo_write_guard
 def user_preferences(request):
     """Manage user preferences"""
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -1140,6 +1169,7 @@ def user_preferences(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def save_preferences(request):
     """Save user preferences via AJAX"""
     try:

@@ -10,16 +10,16 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 
 from kanban.models import Board
+from kanban.decorators import demo_write_guard
 from knowledge_graph.models import MemoryNode, MemoryConnection, OrganizationalMemoryQuery
 
 logger = logging.getLogger(__name__)
 
 
 def _get_user_boards(user):
-    """Return board IDs the user has access to."""
-    return Board.objects.filter(
-        Q(created_by=user) | Q(members=user)
-    ).values_list('id', flat=True).distinct()
+    """Return board IDs the user has access to (demo-aware)."""
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user).values_list('id', flat=True)
 
 
 # ── View 1: Board Knowledge Tab ─────────────────────────────────────────────
@@ -28,6 +28,11 @@ def _get_user_boards(user):
 def board_knowledge(request, board_id):
     """Knowledge page for a specific board — decisions, lessons, auto-captured memories."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        from django.http import Http404
+        raise Http404
 
     nodes = (
         MemoryNode.objects
@@ -53,9 +58,14 @@ def board_knowledge(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def add_manual_memory(request, board_id):
     """Add a manual decision or lesson memory node to a board."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have edit permission on the board to add memories
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -315,6 +325,7 @@ def organizational_memory_search(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def memory_feedback(request, query_id):
     """Submit feedback (thumbs up/down) on a memory search result."""
     query_record = get_object_or_404(OrganizationalMemoryQuery, pk=query_id)
@@ -353,6 +364,10 @@ def memory_feedback(request, query_id):
 def deja_vu_check(request, board_id):
     """Check if similar past projects exist — returns max 3 relevant memories."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     cache_key = f'deja_vu_{board_id}'
     cached = cache.get(cache_key)

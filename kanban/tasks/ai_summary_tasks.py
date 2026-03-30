@@ -68,6 +68,85 @@ def _release_mission_lock(mission_id):
         logger.warning(f"Could not release mission AI lock for mission {mission_id}: {exc}")
 
 
+# ---------------------------------------------------------------------------
+# Goal-Aware Analytics — auto-classification tasks
+# ---------------------------------------------------------------------------
+
+@shared_task(
+    bind=True,
+    name='kanban.ai_summary.classify_board_on_creation',
+    max_retries=2,
+    default_retry_delay=30,
+    queue='summaries',
+    time_limit=60,
+    soft_time_limit=50,
+)
+def classify_board_on_creation(self, board_id):
+    """Classify a newly created board's project type in the background."""
+    from kanban.models import Board
+    from kanban.utils.ai_utils import classify_board_project_type
+
+    try:
+        board = Board.objects.get(pk=board_id)
+    except Board.DoesNotExist:
+        logger.warning(f"Board {board_id} not found for classification")
+        return
+
+    if board.project_type is not None:
+        logger.info(f"Board {board_id} already classified — skipping")
+        return
+
+    result = classify_board_project_type(board)
+    if result:
+        board.project_type = result['project_type']
+        board.project_type_confidence = result['confidence']
+        board.project_type_confirmed = False
+        board.save(update_fields=['project_type', 'project_type_confidence', 'project_type_confirmed'])
+        logger.info(f"Board {board_id} classified as {result['project_type']} (confidence={result['confidence']:.2f})")
+    else:
+        logger.warning(f"Board {board_id} classification failed")
+
+
+@shared_task(
+    bind=True,
+    name='kanban.ai_summary.generate_proxy_metrics_on_goal_creation',
+    max_retries=2,
+    default_retry_delay=30,
+    queue='summaries',
+    time_limit=90,
+    soft_time_limit=75,
+)
+def generate_proxy_metrics_on_goal_creation(self, goal_id):
+    """Generate proxy metrics for a newly created goal in the background."""
+    from kanban.models import OrganizationGoal, GoalProxyMetric
+    from kanban.utils.ai_utils import generate_proxy_metrics
+
+    try:
+        goal = OrganizationGoal.objects.get(pk=goal_id)
+    except OrganizationGoal.DoesNotExist:
+        logger.warning(f"Goal {goal_id} not found for proxy metric generation")
+        return
+
+    if goal.proxy_metrics.exists():
+        logger.info(f"Goal {goal_id} already has proxy metrics — skipping")
+        return
+
+    metrics = generate_proxy_metrics(goal)
+    if metrics:
+        GoalProxyMetric.objects.filter(goal=goal).delete()
+        for i, m in enumerate(metrics):
+            GoalProxyMetric.objects.create(
+                goal=goal,
+                name=m['name'],
+                why_it_matters=m['why_it_matters'],
+                how_to_measure=m['how_to_measure'],
+                display_order=i,
+            )
+        logger.info(f"Generated {len(metrics)} proxy metrics for goal {goal_id}")
+    else:
+        logger.warning(f"Proxy metric generation failed for goal {goal_id}")
+
+
 def _build_board_prompt(board_name, exception_lines, agg):
     """
     Build the structured Program-Manager prompt from pruned task data.

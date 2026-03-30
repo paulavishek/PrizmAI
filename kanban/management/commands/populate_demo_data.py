@@ -13,9 +13,8 @@ from datetime import timedelta, date
 from decimal import Decimal
 from kanban.models import (
     Board, Column, Task, TaskLabel, Organization, Comment, TaskActivity, TaskFile,
-    TeamSkillProfile, SkillGap, ScopeChangeSnapshot, ScopeCreepAlert
+    TeamSkillProfile, SkillGap, ScopeChangeSnapshot, ScopeCreepAlert, BoardMembership
 )
-from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction, SprintMilestone
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
@@ -619,9 +618,8 @@ class Command(BaseCommand):
                     except Exception:
                         pass
                     try:
-                        from kanban.permission_models import BoardMembership, PermissionAuditLog
+                        from kanban.models import BoardMembership
                         BoardMembership.objects.filter(board=board).delete()
-                        PermissionAuditLog.objects.filter(board=board).delete()
                     except Exception:
                         pass
                     # Delete columns then board (FK-safe)
@@ -795,7 +793,12 @@ class Command(BaseCommand):
         # Ensure "In Review" column exists between In Progress and Done
         if 'In Review' not in columns:
             done_col = columns.get('Done')
-            in_review_position = (done_col.position - 1) if done_col else (in_progress.position + 1)
+            if done_col:
+                # Shift Done to the right to make room for In Review
+                Column.objects.filter(pk=done_col.pk).update(position=done_col.position + 1)
+                in_review_position = done_col.position  # slot vacated by Done
+            else:
+                in_review_position = in_progress.position + 1
             review = Column.objects.create(
                 name='In Review',
                 board=board,
@@ -806,6 +809,14 @@ class Command(BaseCommand):
             review = columns['In Review']
 
         done = columns.get('Done') or review
+
+        # Enforce correct column positions: To Do → In Progress → In Review → Done
+        correct_order = {'To Do': 0, 'In Progress': 1, 'In Review': 2, 'Done': 3}
+        for col in Column.objects.filter(board=board):
+            expected = correct_order.get(col.name)
+            if expected is not None and col.position != expected:
+                Column.objects.filter(pk=col.pk).update(position=expected)
+
         items = []
         # Anchor Phase 1 forty days in the past so newly-created demo boards
         # already have some past-due tasks, making SPI meaningful on first load.
@@ -2509,6 +2520,9 @@ class Command(BaseCommand):
             if task.progress > 0:
                 num_activities = random.randint(1, 3)
 
+                # Determine the destination column name for move activities
+                to_col = 'Done' if task.progress == 100 else 'In Progress'
+
                 for i in range(num_activities):
                     activity_type = random.choice(['updated', 'moved', 'commented'])
                     templates = ACTIVITY_TEMPLATES.get(activity_type, ['performed an action'])
@@ -2517,7 +2531,7 @@ class Command(BaseCommand):
                     # Fill in template variables
                     description = description.format(
                         from_col='To Do',
-                        to_col='In Progress',
+                        to_col=to_col,
                         assignee=random.choice([u.username for u in users]),
                         priority=task.priority or 'medium',
                         progress=task.progress,
@@ -2540,6 +2554,24 @@ class Command(BaseCommand):
                         description=description,
                     )
                     TaskActivity.objects.filter(pk=activity.pk).update(created_at=activity_date)
+                    activities_created += 1
+
+                # For completed tasks, always ensure there is a final 'moved to Done' activity
+                # within the last 30 days so the Completion Velocity chart has data
+                if task.progress == 100:
+                    done_offset = random.randint(1, 28)
+                    done_date = now - timedelta(days=done_offset)
+                    hour, minute = random.choice(COMMENT_TIME_SLOTS)
+                    done_date = done_date.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0,
+                    )
+                    activity = TaskActivity.objects.create(
+                        task=task,
+                        user=random.choice(users),
+                        activity_type='moved',
+                        description=f"moved this task from 'In Progress' to 'Done'",
+                    )
+                    TaskActivity.objects.filter(pk=activity.pk).update(created_at=done_date)
                     activities_created += 1
 
         self.stdout.write(f'   ✅ Created {activities_created} activity logs')

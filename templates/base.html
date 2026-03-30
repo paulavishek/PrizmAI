@@ -44,17 +44,10 @@
             filter: brightness(0) saturate(100%);
         }
         .share-nav-btn {
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            animation: sharePulse 2.5s ease-in-out infinite;
+            transition: background-color 0.15s ease;
         }
         .share-nav-btn:hover {
-            transform: scale(1.07);
-            box-shadow: 0 4px 14px rgba(239,68,68,0.6) !important;
-            color: #fff !important;
-        }
-        @keyframes sharePulse {
-            0%, 100% { box-shadow: 0 2px 8px rgba(239,68,68,0.45); }
-            50%       { box-shadow: 0 2px 16px rgba(239,68,68,0.75); }
+            background-color: #F9FAFB !important;
         }
         /* ════ Quick-View Drawer (shared) ════ */
         .task-drawer {
@@ -116,7 +109,7 @@
     })();
     </script>
 </head>
-<body data-demo-mode="{% if request.session.is_demo_mode %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
+<body data-demo-mode="{% if is_viewing_demo %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -168,21 +161,42 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <h1 class="topbar-page-title">{% block page_title %}Dashboard{% endblock %}</h1>
-                {% if request.session.is_demo_mode %}
-                    <span class="topbar-demo-badge"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
+                {% if is_viewing_demo %}
+                <span class="tws-sandbox-badge" style="font-size:0.72rem;padding:3px 10px;margin-left:6px;">SANDBOX</span>
                 {% endif %}
             </div>
+            <!-- Workspace Switcher — absolutely centered in topbar -->
+            {% if user.is_authenticated %}
+            <div class="topbar-workspace-switcher" style="position:absolute;left:50%;transform:translateX(-50%);">
+                {% if is_viewing_demo %}
+                <span class="tws-btn tws-btn-active" title="Currently active">
+                    <i class="fas fa-eye me-1"></i>Demo Workspace
+                </span>
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="tws-btn">
+                        <i class="fas fa-briefcase me-1"></i>My Workspace
+                    </button>
+                </form>
+                {% else %}
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="tws-btn">
+                        <i class="fas fa-eye me-1"></i>Demo Workspace
+                    </button>
+                </form>
+                <span class="tws-btn tws-btn-active" title="Currently active">
+                    <i class="fas fa-briefcase me-1"></i>My Workspace
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <div class="topbar-right">
                 {% if is_demo_account and request.session.real_user_username %}
                 <a href="{% url 'return_to_real_account' %}" class="btn btn-sm btn-warning fw-semibold topbar-return-btn" title="Switch back to your real account">
                     <i class="fas fa-arrow-left me-1"></i>Back to {{ request.session.real_user_username }}
                 </a>
-                {% endif %}
-                {% if user.is_authenticated and not is_demo_account %}
-                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
-                        style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border-radius:8px;">
-                    <i class="fas fa-share-alt"></i>
-                </button>
                 {% endif %}
                 <!-- Display Mode Dropdown -->
                 <div class="dropdown" id="display-mode-dropdown">
@@ -217,6 +231,29 @@
                         </li>
                     </ul>
                 </div>
+                {% if is_viewing_demo %}
+                <button type="button" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
+                        style="border:1.5px solid #d97706 !important;background:transparent !important;color:#d97706 !important;font-weight:600 !important;">
+                    <i class="fas fa-redo me-1"></i>Reset Demo
+                </button>
+                {% endif %}
+                {% if is_viewing_demo %}
+                <a href="{% url 'onboarding_welcome' %}?from=dashboard" class="tws-btn tws-btn-setup-muted"
+                   style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
+                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                </a>
+                {% else %}
+                <a href="{% url 'onboarding_goal' %}" class="tws-btn tws-btn-setup-muted"
+                   style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
+                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                </a>
+                {% endif %}
+                {% if user.is_authenticated and not is_demo_account %}
+                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
+                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+                {% endif %}
                 <!-- Timezone Selector -->
                 {% if user.is_authenticated %}
                 <div id="timezone-dropdown">
@@ -226,27 +263,6 @@
                     </button>
                 </div>
                 {% endif %}
-                <div class="dropdown">
-                    <button class="topbar-icon-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="topbarNotifBell" title="Notifications">
-                        <i class="fas fa-bell"></i>
-                        <span class="topbar-badge" id="topbar-notif-badge" style="display:none;"><span id="topbar-notif-count">0</span></span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050; min-width: 300px;">
-                        <li id="dc-notif-entry" style="display:none;">
-                            <a class="dropdown-item py-2" href="{% url 'decision_center:decision_center' %}">
-                                <i class="fas fa-bolt text-warning me-2"></i>
-                                <strong>Decision Center</strong>
-                                <br><small class="text-muted" id="dc-notif-text"></small>
-                            </a>
-                        </li>
-                        <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
-                                <i class="fas fa-list me-2"></i> View all notifications
-                            </a>
-                        </li>
-                    </ul>
-                </div>
             </div>
         </header>
 
@@ -266,8 +282,8 @@
         </div>
         {% endif %}
 
-        <!-- Demo Limitation Modal (available globally for demo mode) -->
-        {% if request.session.is_demo_mode %}
+        <!-- Demo Limitation Modal (legacy — kept for demo accounts) -->
+        {% if is_demo_account %}
             {% include 'demo/partials/limitation_modal.html' %}
         {% endif %}
 
@@ -280,8 +296,16 @@
             <div class="container-fluid px-0 mb-2">
                 {% for message in messages %}
                     {% if 'success' not in message.tags and 'info' not in message.tags %}
-                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show border-0 shadow-sm" role="alert"
+                         style="{% if 'danger' in message.tags %}border-left: 5px solid #dc3545 !important; font-size: 0.95rem; padding: 1rem 1.25rem;{% endif %}">
+                        {% if 'danger' in message.tags %}
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fas fa-lock fa-lg text-danger flex-shrink-0"></i>
+                            <span><strong>Access Denied.</strong> {{ message }}</span>
+                        </div>
+                        {% else %}
                         {{ message }}
+                        {% endif %}
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                     {% endif %}
@@ -351,6 +375,26 @@
     {% endblock unauthenticated_messages %}
 
     <main class="container my-4">
+    {% endif %}
+
+    {# ── Personal Sandbox Banner (single-tier) ── #}
+    {% if is_viewing_demo %}
+    <div class="sandbox-active-banner" role="status">
+        <div class="sandbox-active-inner">
+            <div class="sandbox-active-icon">
+                <i class="fas fa-flask"></i>
+            </div>
+            <div class="sandbox-active-text">
+                <strong>You're in the demo workspace</strong>
+                <span class="sandbox-active-detail">
+                    &mdash; You have full edit access. Changes here won't affect anyone else's data.
+                </span>
+            </div>
+            <button type="button" class="sandbox-active-dismiss" onclick="this.closest('.sandbox-active-banner').classList.add('d-none')" aria-label="Dismiss notice">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
     {% endif %}
 
     {% block content %}{% endblock %}
@@ -464,6 +508,26 @@
                     }
                 })
                 .catch(error => console.error('Error fetching notification count:', error));
+
+            // Poll pending access request count for board owners
+            fetch('{% url "get_pending_access_request_count" %}')
+                .then(response => response.json())
+                .then(data => {
+                    const arEntry = document.getElementById('ar-notif-entry');
+                    const arDivider = document.getElementById('ar-notif-divider');
+                    const arText = document.getElementById('ar-notif-text');
+                    if (arEntry && arText) {
+                        if (data.count > 0) {
+                            arEntry.style.display = '';
+                            if (arDivider) arDivider.style.display = '';
+                            arText.textContent = data.count + ' pending request' + (data.count !== 1 ? 's' : '');
+                        } else {
+                            arEntry.style.display = 'none';
+                            if (arDivider) arDivider.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => console.error('Error fetching access request count:', error));
             {% endif %}
         }
 
@@ -576,6 +640,9 @@
     
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>
+
+    <!-- AI Progressive Disclosure (WebSocket streaming) -->
+    <script src="{% static 'js/ai_progressive.js' %}"></script>
     
     <!-- Unified Display Mode JS -->
     <script src="{% static 'js/display-mode.js' %}"></script>
@@ -586,7 +653,7 @@
     {% endif %}
     
     <!-- Demo Mode GA4 Analytics -->
-    {% if request.session.is_demo_mode %}
+    {% if is_viewing_demo %}
     <script src="{% static 'js/demo_ga4_analytics.js' %}"></script>
     {% endif %}
     
@@ -626,6 +693,34 @@
     <div id="task-drawer-body"></div>
 </div>
     {% block extra_js %}{% endblock %}
+{% if user.is_authenticated %}
+<script>
+(function() {
+    function getCsrfToken() {
+        var match = document.cookie.split(';').map(function(c) { return c.trim().split('='); }).find(function(p) { return p[0] === 'csrftoken'; });
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    window.resetMyDemo = function() {
+        if (!confirm('Reset your sandbox? This re-copies the demo data from scratch. All your current edits will be lost.')) return;
+        fetch('/demo/reset-mine/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'resetting' || data.status === 'provisioning') {
+                window.location.href = '/dashboard/';
+            }
+        })
+        .catch(function() {});
+    };
+})();
+</script>
+{% endif %}
 {% if is_demo_account %}
 <script>
 function demoResetFromNav(e) {

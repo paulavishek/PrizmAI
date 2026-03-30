@@ -121,7 +121,7 @@
                                         </td>
                                         <td>
                                             {% if meeting.related_board %}
-                                                <a href="{% url 'kanban:board_detail' meeting.related_board.id %}">
+                                                <a href="{% url 'board_detail' meeting.related_board.id %}">
                                                     {{ meeting.related_board.name }}
                                                 </a>
                                             {% else %}

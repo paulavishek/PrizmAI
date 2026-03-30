@@ -26,6 +26,7 @@ from kanban.coach_models import (
 from kanban.utils.coaching_rules import CoachingRuleEngine
 from kanban.utils.ai_coach_service import AICoachService
 from kanban.utils.feedback_learning import FeedbackLearningSystem
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ def suggestion_detail(request, suggestion_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def generate_suggestions(request, board_id):
     """
     Generate new coaching suggestions for a board
@@ -135,7 +137,7 @@ def generate_suggestions(request, board_id):
         # Create board context for AI enhancement
         context = {
             'board_name': board.name,
-            'team_size': board.members.count(),
+            'team_size': board.memberships.count(),
             'active_tasks': Task.objects.filter(column__board=board, progress__isnull=False, progress__lt=100).count(),
             'project_phase': 'active',  # Could be enhanced
         }
@@ -191,20 +193,22 @@ def generate_suggestions(request, board_id):
                     logger.error(f"AI enhancement failed for '{suggestion_data['title']}': {enhance_error}")
             
             # Check if similar suggestion already exists
-            # Block if recent suggestion exists in these statuses:
-            # - active: already showing
-            # - acknowledged: user is aware, don't nag (3 days)
-            # - in_progress: user is working on it (7 days)
+            # Block if recent suggestion exists (by type OR by title) in these statuses:
+            # - active: already showing (7 days)
+            # - acknowledged: user is aware, don't nag (7 days)
+            # - in_progress: user is working on it (14 days)
             # - resolved: user fixed it, don't show again (30 days)
             from django.db.models import Q
             
             existing = CoachingSuggestion.objects.filter(
                 board=board,
-                suggestion_type=suggestion_data['suggestion_type']
             ).filter(
-                Q(status='active', created_at__gte=timezone.now() - timedelta(days=3)) |
-                Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=3)) |
-                Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=7)) |
+                Q(suggestion_type=suggestion_data['suggestion_type']) |
+                Q(title=suggestion_data.get('title', ''))
+            ).filter(
+                Q(status='active', created_at__gte=timezone.now() - timedelta(days=7)) |
+                Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=7)) |
+                Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=14)) |
                 Q(status='resolved', created_at__gte=timezone.now() - timedelta(days=30))
             ).exists()
             
@@ -250,6 +254,7 @@ def generate_suggestions(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_suggestion(request, suggestion_id):
     """
     Mark a suggestion as acknowledged
@@ -274,6 +279,7 @@ def acknowledge_suggestion(request, suggestion_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_suggestion(request, suggestion_id):
     """
     Dismiss a suggestion
@@ -309,6 +315,7 @@ def dismiss_suggestion(request, suggestion_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def submit_feedback(request, suggestion_id):
     """
     Submit detailed feedback on a suggestion
@@ -373,6 +380,7 @@ def submit_feedback(request, suggestion_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_ai_guard
 def ask_coach(request, board_id):
     """
     Ask the AI coach a question

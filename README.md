@@ -20,6 +20,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Visual Kanban Boards** — Drag-and-drop task management with AI-suggested column structures
 - **Gantt Charts** — Interactive timelines with milestone tracking and task dependency visualization
 - **Burndown Charts & Sprint Forecasting** — Real-time sprint progress with AI-powered completion predictions and confidence intervals
+- **Goal-Aware Analytics & Dynamic Charts** — Spectra classifies each board's project type (Product / Tech, Marketing / Campaign, Operations) and automatically promotes the metrics and charts most relevant to that type. Product boards surface cycle time, deployment rate, and bug density; marketing boards highlight campaign ROI and conversion metrics; operations boards foreground SLA adherence and throughput. Boards without a classification fall back to the standard four charts (column distribution, priority, user workload, Lean Six Sigma) and show a Spectra banner with one-click AI analysis or manual type selection. A subtle sparkle hint on the Analytics tile signals when a board has not yet been classified.
 - **Time Tracking & Timesheets** — Log hours, track team utilization, and manage labor costs
 - **Budget & ROI Tracking** — Multi-currency support, cost forecasting, and ROI analytics
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
@@ -67,10 +68,13 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### Enterprise & Collaboration
 
-- **Open Access Model** — Any authenticated user can access all boards and features; access control is intentionally kept flat to reduce friction
+- **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy, but never upward without an explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins.
+- **Decision Center** — A unified morning review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
+- **Favorites Sidebar** — Star and reorder boards, goals, tasks, wiki pages, and other items for quick access from the sidebar
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
 - **Real-Time Messaging** — WebSocket-powered team chat with @mentions, notifications, and **AI Message Composer** — type a rough draft and let AI rewrite it as a polished, professional team update in one click
 - **Board Member Invitations** — Invite collaborators via email with tokenized invitation links
+- **Task Search** — Press `/` to instantly search tasks by keyword across all boards, or switch to AI semantic search for meaning-based results with relevance scoring
 - **Knowledge Base & Wiki** — Markdown documentation with AI-assisted meeting analysis
 - **Meeting Transcript Import** — Import from Fireflies, Otter, Zoom, Teams, and Meet with AI extraction
 - **File Attachments with AI Analysis** — Attach files to tasks and let AI extract structured tasks from documents
@@ -431,6 +435,66 @@ The **Commitments dashboard** shows all protocols for a board at a glance — po
 
 ---
 
+## Role-Based Access Control (RBAC)
+
+> **In plain English:** Not everyone on a project should be able to do everything. A new contractor shouldn't be able to delete the entire board, and a client observer shouldn't be able to edit the budget. RBAC gives each person exactly the level of access they need — no more, no less.
+
+### The four roles
+
+Every board in PrizmAI has four possible roles. Think of it like a set of keys to a building:
+
+| Role | What they can do | The analogy |
+|---|---|---|
+| **Org Admin** | Everything system-wide — create Goals, manage all users, override any permission. Only one user holds this role | Building owner with every key |
+| **Owner** | Full control of records they own — edit, delete, invite others. Access flows down automatically to all children in the hierarchy | Landlord with a master key |
+| **Member** | Day-to-day work — create and edit tasks, post updates, log time, comment, and upload files. Cannot delete boards or touch parent levels unless separately invited | Tenant with a room key |
+| **Viewer** | Read-only — see everything they are invited to but cannot create, edit, or delete anything | Guest with a visitor pass |
+
+### How access works
+
+- **Board access is invitation-based.** You only see boards you have been explicitly added to by an Owner or Org Admin. There is no "everyone can see everything" mode.
+- **Roles apply per board.** You might be an Owner on one board and a Member on another, even within the same organisation. The only system-wide elevated role is Org Admin.
+- **Access flows down, never up.** Owning a Strategy gives automatic Owner access to all Boards beneath it. Owning a Mission gives access to all Strategies and Boards below. But being a Member of a Board does **not** grant any access to the Strategy above — you must be separately invited at that level.
+- **Strategic goals have their own protection.** Only Org Admin can create new Goals. Missions and Strategies can be created or edited by Org Admin and by Owners at those levels.
+- **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Org Admins, keeping financial data private from the wider team.
+
+### Inviting people to a board
+
+From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Org Admins can also remove members or change their role at any time.
+
+---
+
+## Demo Experience — Personal Sandbox
+
+PrizmAI's demo gives every visitor a private, fully editable sandbox the moment they enter demo mode. There is no read-only phase — you have full write access from the start.
+
+### How it works
+
+1. **Enter demo mode** — Click **Try Demo** (or the workspace switcher in the sidebar). PrizmAI deep-copies all demo template boards — columns, tasks, labels, comments, dependencies, and task relationships — into a private set of boards owned by you alone. Provisioning runs asynchronously in the background.
+2. **Experiment freely** — Your sandbox has full write access. Create tasks, delete columns, drag and drop, trigger automations — anything you like. Changes here have no effect on the shared demo templates or any other user.
+3. **Switch workspaces freely** — Use the workspace switcher in the sidebar to toggle between your **Demo Workspace** and **My Workspace** at any time. Your sandbox is preserved between switches — nothing is deleted when you leave demo mode.
+4. **Sandbox persists** — Your sandbox has no expiry. It stays around as long as your account exists, so you can return to your demo data whenever you like.
+5. **Reset** — Click **Reset my demo** to wipe your sandbox and re-provision a fresh copy from the templates at any time.
+
+### The sandbox banner
+
+While you are in the demo workspace, a dismissible banner appears at the top of every page confirming that you have full edit access and that your changes are private to your sandbox.
+
+### What is copied into the sandbox
+
+| Data | Copied? |
+|---|---|
+| Boards, columns, labels | Yes — full deep copy |
+| Tasks (titles, descriptions, priorities, dates) | Yes |
+| Task comments | Yes (attributed to you) |
+| Task dependencies & related-task links | Yes |
+| Parent-child task relationships | Yes |
+| Board memberships from the template | No — you are the sole Owner |
+| Strategic context (Mission / Strategy links) | No — sandbox boards are standalone |
+| File attachments | No |
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -493,9 +557,11 @@ To explore without creating an account:
 | `sam_rivera_demo` | `demo123` |
 | `jordan_taylor_demo` | `demo123` |
 
-All users have equal access — PrizmAI uses an open access model where every authenticated user can access all boards and features.
+Demo accounts can explore all demo boards and use every read feature freely, but cannot make permanent changes — create, edit, and delete actions are blocked to keep the shared demo environment clean for everyone.
 
 > Demo accounts have rate-limited AI features (5 calls per 10 minutes). Create your own account for unrestricted AI access.
+
+> **Want to experiment freely?** Enter demo mode and PrizmAI creates a private, persistent copy of all demo boards with full write access — just for you. See the [Demo Experience — Personal Sandbox](#demo-experience--personal-sandbox) section for details.
 
 ### Keeping Demo Data Fresh
 
@@ -555,6 +621,7 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 - django-csp (Content Security Policy)
 - django-axes (brute-force protection)
 - django-allauth with OAuth 2.0 (Google login)
+- django-rules (predicate-based RBAC permissions)
 - PyJWT, cryptography
 
 ---

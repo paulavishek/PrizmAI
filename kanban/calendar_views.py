@@ -26,6 +26,7 @@ from django.views.decorators.http import require_POST, require_GET
 from django.db.models import Max
 
 from .models import Board, Column, Task, TaskActivity, CalendarEvent
+from .decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _user_boards(user):
-    """Return all boards the user owns or is a member of (excluding official demo boards)."""
-    return Board.objects.filter(
-        Q(created_by=user) | Q(members=user)
-    ).distinct().order_by('name')
+    """Return boards visible to the user, respecting demo/real workspace mode."""
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user).order_by('name')
 
 
 def _create_notification(recipient, sender, notification_type, text, action_url=None):
@@ -107,7 +107,7 @@ def unified_calendar(request):
 
     # Gather all board members across user's boards for participant typeahead
     participant_qs = User.objects.filter(
-        Q(member_boards__in=boards) | Q(created_boards__in=boards)
+        Q(board_memberships__board__in=boards) | Q(created_boards__in=boards)
     ).exclude(id=request.user.id).distinct().order_by('username')
     participants_data = [
         {'id': u.id, 'username': u.username,
@@ -205,7 +205,7 @@ def unified_calendar_events_api(request):
     # Collect board member IDs (not including self) for teammate-status event query
     board_member_ids = list(
         User.objects.filter(
-            Q(member_boards__in=boards) | Q(created_boards__in=boards)
+            Q(board_memberships__board__in=boards) | Q(created_boards__in=boards)
         ).exclude(id=request.user.id).values_list('id', flat=True)
     )
 
@@ -373,6 +373,7 @@ def unified_calendar_events_api(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def calendar_create_task(request):
     try:
         data = json.loads(request.body)
@@ -423,13 +424,16 @@ def calendar_create_task(request):
         except ValueError:
             pass
 
-    # Assignee
+    # Assignee — validate board membership
     assignee_id = data.get('assignee_id')
     assignee = None
     if assignee_id:
         try:
-            assignee = User.objects.get(id=assignee_id)
-        except User.DoesNotExist:
+            assignee = User.objects.filter(
+                Q(board_memberships__board=board) | Q(id=board.created_by_id),
+                id=assignee_id
+            ).first()
+        except (ValueError, TypeError):
             pass
 
     # Priority
@@ -505,6 +509,7 @@ def calendar_create_task(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def calendar_create_event(request):
     try:
         data = json.loads(request.body)
@@ -661,7 +666,7 @@ def calendar_get_board_columns(request, board_id):
     # Also return board members for the assignee dropdown
     members = list(
         User.objects.filter(
-            Q(member_boards=board) | Q(created_boards=board)
+            Q(board_memberships__board=board) | Q(created_boards=board)
         ).distinct().values('id', 'username')
     )
     for m in members:
@@ -690,7 +695,7 @@ def calendar_event_detail(request, event_id):
     if not can_view and event.visibility == 'team':
         # Board members may view team-shared OOO/busy/team events
         shared_boards = _user_boards(request.user).filter(
-            Q(created_by=event.created_by) | Q(members=event.created_by)
+            Q(created_by=event.created_by) | Q(memberships__user=event.created_by)
         )
         can_view = shared_boards.exists()
     if not can_view:
@@ -703,6 +708,7 @@ def calendar_event_detail(request, event_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def calendar_event_delete(request, event_id):
     """Delete a CalendarEvent (creator only)."""
     event = get_object_or_404(CalendarEvent, id=event_id, created_by=request.user)

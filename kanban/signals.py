@@ -490,7 +490,7 @@ def _send_automation_notification(task, rule, config=None):
         elif recipient_key == 'creator' and task.created_by:
             recipients = [task.created_by]
         elif recipient_key == 'board_members':
-            recipients = list(board.members.all())
+            recipients = list(User.objects.filter(board_memberships__board=board))
             if board.created_by and board.created_by not in recipients:
                 recipients.append(board.created_by)
 
@@ -946,6 +946,35 @@ def trigger_commitment_signals_on_task_save(sender, instance, created, **kwargs)
             'trigger_commitment_signals_on_task_save: unexpected error',
             exc_info=True,
         )
+
+
+# ---------------------------------------------------------------------------
+# Auto-assign color to new columns based on common naming conventions
+# ---------------------------------------------------------------------------
+_COLUMN_COLOR_MAP = {
+    'done': 'green', 'complete': 'green', 'completed': 'green', 'finished': 'green',
+    'in progress': 'blue', 'working on it': 'blue', 'doing': 'blue', 'active': 'blue',
+    'stuck': 'red', 'blocked': 'red',
+    'not started': 'gray', 'backlog': 'gray', 'to do': 'gray', 'todo': 'gray',
+    'review': 'purple', 'testing': 'purple', 'qa': 'purple',
+    'ready': 'teal', 'approved': 'teal',
+    'on hold': 'orange', 'waiting': 'orange', 'pending': 'orange',
+    'urgent': 'red', 'critical': 'red',
+}
+
+
+@receiver(pre_save, sender='kanban.Column')
+def auto_assign_column_color(sender, instance, **kwargs):
+    """Auto-assign a color to new columns based on their name."""
+    if instance.pk:
+        return  # Only for new columns
+    if instance.color != 'blue':
+        return  # User already picked a color
+    name_lower = instance.name.strip().lower()
+    for pattern, color in _COLUMN_COLOR_MAP.items():
+        if pattern in name_lower:
+            instance.color = color
+            break
 
 
 @receiver(post_delete, sender='kanban.Task')

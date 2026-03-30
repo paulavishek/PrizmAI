@@ -5,11 +5,20 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Project Stress Test</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-bolt text-warning"></i> Project Stress Test — {{ board.name }}</h2>
-            <p class="text-muted mb-1">Simulate failure before it happens. Measure how much your plan can take.</p>
+            <h2><i class="fas fa-bolt text-warning"></i> Project Stress Test</h2>
+            <p class="text-muted mb-1">{{ board.name }} — Simulate failure before it happens. Measure how much your plan can take.</p>
             <button class="btn btn-link btn-sm ps-0 text-decoration-none text-muted"
                     type="button"
                     data-bs-toggle="collapse"
@@ -18,7 +27,7 @@
                     aria-controls="stressTestGuide">
                 <i class="fas fa-question-circle me-1"></i>
                 <span id="guide-toggle-label">How does this work?</span>
-                <i class="fas fa-chevron-down ms-1" style="font-size:0.7rem;"></i>
+                <i class="fas fa-chevron-down ms-1 guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
             </button>
         </div>
         <div class="col-md-4 text-end">
@@ -246,7 +255,7 @@
     {% endif %}
 
     <!-- Re-run reminder (shown via JS when user makes changes) -->
-    <div id="rerun-reminder-banner" class="alert alert-warning d-none mb-3 d-flex justify-content-between align-items-center" role="alert">
+    <div id="rerun-reminder-banner" class="alert alert-warning d-none mb-3 d-flex justify-content-between align-items-center" role="alert" style="position: sticky; top: 0; z-index: 1020;">
         <span><i class="fas fa-sync-alt me-2"></i><strong>You've made changes!</strong> The Immunity Score only updates when you re-run the Stress Test.</span>
         <a href="#" class="btn btn-warning btn-sm ms-3" onclick="runStressTest(); return false;">
             <i class="fas fa-bolt me-1"></i> Re-run Now
@@ -309,7 +318,7 @@
                     <!-- Mini trend chart -->
                     {% if immunity_history != '[]' %}
                     <div class="mt-3">
-                        <canvas id="trendChart" height="60"></canvas>
+                        <canvas id="trendChart" height="120"></canvas>
                     </div>
                     {% endif %}
                 </div>
@@ -333,7 +342,7 @@
                     <div class="card h-100 text-center">
                         <div class="card-body">
                             <i class="fas fa-syringe fa-2x text-success mb-2"></i>
-                            <h3>{{ vaccines_applied }} / {{ vaccines_total }}</h3>
+                            <h3 id="vaccines-applied-counter">{{ vaccines_applied }} / {{ vaccines_total }}</h3>
                             <p class="text-muted mb-0">Vaccines Applied</p>
                             <small class="text-muted">across all sessions</small>
                         </div>
@@ -367,7 +376,7 @@
                                 <small>{{ score.schedule }}/100</small>
                             </div>
                             <div class="progress mb-1" style="height: 8px;">
-                                <div class="progress-bar" role="progressbar" style="width: {{ score.schedule }}%; background-color: {{ score.get_band_colour }};"></div>
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.schedule }}%; background-color: {% if score.schedule >= 70 %}#198754{% elif score.schedule >= 40 %}#fd7e14{% else %}#dc3545{% endif %};"></div>
                             </div>
                             {% if score.schedule_rationale %}<small class="text-muted">{{ score.schedule_rationale }}</small>{% endif %}
                         </div>
@@ -377,7 +386,7 @@
                                 <small>{{ score.budget }}/100</small>
                             </div>
                             <div class="progress mb-1" style="height: 8px;">
-                                <div class="progress-bar" role="progressbar" style="width: {{ score.budget }}%; background-color: {{ score.get_band_colour }};"></div>
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.budget }}%; background-color: {% if score.budget >= 70 %}#198754{% elif score.budget >= 40 %}#fd7e14{% else %}#dc3545{% endif %};"></div>
                             </div>
                             {% if score.budget_rationale %}<small class="text-muted">{{ score.budget_rationale }}</small>{% endif %}
                         </div>
@@ -387,7 +396,7 @@
                                 <small>{{ score.team }}/100</small>
                             </div>
                             <div class="progress mb-1" style="height: 8px;">
-                                <div class="progress-bar" role="progressbar" style="width: {{ score.team }}%; background-color: {{ score.get_band_colour }};"></div>
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.team }}%; background-color: {% if score.team >= 70 %}#198754{% elif score.team >= 40 %}#fd7e14{% else %}#dc3545{% endif %};"></div>
                             </div>
                             {% if score.team_rationale %}<small class="text-muted">{{ score.team_rationale }}</small>{% endif %}
                         </div>
@@ -397,7 +406,7 @@
                                 <small>{{ score.dependencies }}/100</small>
                             </div>
                             <div class="progress mb-1" style="height: 8px;">
-                                <div class="progress-bar" role="progressbar" style="width: {{ score.dependencies }}%; background-color: {{ score.get_band_colour }};"></div>
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.dependencies }}%; background-color: {% if score.dependencies >= 70 %}#198754{% elif score.dependencies >= 40 %}#fd7e14{% else %}#dc3545{% endif %};"></div>
                             </div>
                             {% if score.dependencies_rationale %}<small class="text-muted">{{ score.dependencies_rationale }}</small>{% endif %}
                         </div>
@@ -407,7 +416,7 @@
                                 <small>{{ score.scope_stability }}/100</small>
                             </div>
                             <div class="progress mb-1" style="height: 8px;">
-                                <div class="progress-bar" role="progressbar" style="width: {{ score.scope_stability }}%; background-color: {{ score.get_band_colour }};"></div>
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.scope_stability }}%; background-color: {% if score.scope_stability >= 70 %}#198754{% elif score.scope_stability >= 40 %}#fd7e14{% else %}#dc3545{% endif %};"></div>
                             </div>
                             {% if score.scope_stability_rationale %}<small class="text-muted">{{ score.scope_stability_rationale }}</small>{% endif %}
                         </div>
@@ -487,7 +496,7 @@
                     <div class="d-flex gap-2 mt-2 align-items-center">
                         <button class="btn btn-sm {% if scenario.is_addressed %}btn-success{% else %}btn-outline-secondary{% endif %}"
                                 onclick="toggleScenarioAddressed({{ scenario.id }}, this)"
-                                data-bs-toggle="tooltip" data-bs-placement="top"
+                                data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-container="body"
                                 title="Acknowledge you&rsquo;re monitoring this risk. +3–8 pts on next run. Apply the linked vaccine for much higher score impact.">
                             <i class="fas {% if scenario.is_addressed %}fa-check-circle{% else %}fa-circle{% endif %} me-1"></i>
                             {% if scenario.is_addressed %}Addressed{% else %}Mark Addressed{% endif %}
@@ -559,7 +568,7 @@
                             Mark as applied
                             {% endif %}
                         </label>
-                        <span data-bs-toggle="tooltip" data-bs-placement="top"
+                        <span data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-container="body"
                               title="Tick this when you&rsquo;ve actually made this structural change. +{{ vaccine.projected_score_improvement }} pts banked permanently. Also mark the linked scenario as Addressed.">
                             <i class="fas fa-question-circle text-muted" style="font-size:0.7rem; cursor:help;"></i>
                         </span>
@@ -639,7 +648,7 @@
                             <td>
                                 {{ s.scenarios.count }} attacks
                                 <small class="text-muted">
-                                    ({{ s.scenarios_fail_count }} failed)
+                                    ({{ s.scenarios_fail_count }} not yet addressed)
                                 </small>
                             </td>
                             <td>{{ s.vaccines_applied_count }} / {{ s.vaccines.count }}</td>
@@ -819,6 +828,14 @@ function toggleVaccine(vaccineId, checkbox) {
                 showStressToast('Vaccine unapplied.', 'info');
             }
             updateProjectedScore();
+            // Update vaccines applied counter
+            var vcCounter = document.getElementById('vaccines-applied-counter');
+            if (vcCounter) {
+                var allVaccines = document.querySelectorAll('[id^="vaccine-"]:not([id="vaccine-summary-card"]):not([id^="vaccine-check-"])');
+                var applied = 0;
+                allVaccines.forEach(function(el) { if (el.classList.contains('border-success')) applied++; });
+                vcCounter.textContent = applied + ' / ' + allVaccines.length;
+            }
         } else {
             checkbox.checked = !checkbox.checked;
             alert(data.error || 'Failed to update vaccine.');
@@ -915,7 +932,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialise Bootstrap tooltips
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
-        new bootstrap.Tooltip(el, { html: true });
+        new bootstrap.Tooltip(el, { html: true, boundary: 'window' });
     });
 
     // Update the collapse toggle label when opened/closed
@@ -924,10 +941,14 @@ document.addEventListener('DOMContentLoaded', function() {
         guide.addEventListener('shown.bs.collapse', function() {
             var label = document.getElementById('guide-toggle-label');
             if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
         });
         guide.addEventListener('hidden.bs.collapse', function() {
             var label = document.getElementById('guide-toggle-label');
             if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
         });
     }
 

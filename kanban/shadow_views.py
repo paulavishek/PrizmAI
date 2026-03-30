@@ -25,8 +25,26 @@ from kanban.models import Board, Task
 from kanban.whatif_models import WhatIfScenario
 from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
 from kanban.audit_models import SystemAuditLog
+from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_initial_feasibility(board, params):
+    """Compute feasibility score synchronously so branches don't start at 0%."""
+    try:
+        from kanban.utils.whatif_engine import WhatIfEngine
+        from kanban.tasks.shadow_branch_tasks import scale_feasibility
+        engine = WhatIfEngine(board)
+        results = engine.simulate({
+            'tasks_added': int(params.get('tasks_added', 0)),
+            'team_size_delta': int(params.get('team_size_delta', 0)),
+            'deadline_shift_days': int(params.get('deadline_shift_days', 0)),
+        })
+        return scale_feasibility(results.get('feasibility_score', 0))
+    except Exception:
+        logger.warning("Could not compute initial feasibility, defaulting to 50", exc_info=True)
+        return 50
 
 # Define predefined color palette for branches
 BRANCH_COLOR_PALETTE = [
@@ -64,7 +82,7 @@ class ShadowBoardListView(ListView):
         board = get_object_or_404(Board, id=board_id)
         
         # Check user is board member
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             self.permission_denied()
         
         # Return active, committed, and recently archived branches (last 7 days)
@@ -157,7 +175,7 @@ class CreateBranchView(CreateView):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = form.save(commit=False)
@@ -183,7 +201,7 @@ class CreateBranchView(CreateView):
                 scope_delta=int(params.get('tasks_added', 0)),
                 team_delta=int(params.get('team_size_delta', 0)),
                 deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,
+                feasibility_score=_compute_initial_feasibility(board, params),
             )
 
         # Trigger initial branch recalculation
@@ -232,7 +250,7 @@ class CreateBranchView(CreateView):
                                 scope_delta=int(params.get('tasks_added', 0)),
                                 team_delta=int(params.get('team_size_delta', 0)),
                                 deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                                feasibility_score=0,
+                                feasibility_score=_compute_initial_feasibility(board, params),
                             )
                     except WhatIfScenario.DoesNotExist:
                         pass
@@ -279,7 +297,7 @@ class BranchDetailView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             self.permission_denied()
 
         return ShadowBranch.objects.filter(board=board).select_related(
@@ -336,7 +354,7 @@ class CommitBranchView(DetailView):
         branch = self.get_object()
 
         # Check user is board member or admin
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Check for confirmation (supports both JSON body and form POST)
@@ -397,7 +415,7 @@ class CommitBranchView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if self.request.user not in board.members.all() and self.request.user != board.created_by:
+        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
             self.permission_denied()
 
         return get_object_or_404(
@@ -433,7 +451,7 @@ def merge_conflict_check(request, board_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a_id = request.GET.get('branch_a')
@@ -510,6 +528,7 @@ def merge_conflict_check(request, board_id):
 
 @login_required
 @require_http_methods(['POST'])
+@demo_write_guard
 def promote_scenario_to_branch(request, board_id):
     """
     API endpoint: Promote a What-If scenario to a Shadow Branch.
@@ -525,7 +544,7 @@ def promote_scenario_to_branch(request, board_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Handle both form-encoded and JSON data
@@ -566,7 +585,7 @@ def promote_scenario_to_branch(request, board_id):
                 scope_delta=int(params.get('tasks_added', 0)),
                 team_delta=int(params.get('team_size_delta', 0)),
                 deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=0,  # Will be updated by recalculation
+                feasibility_score=_compute_initial_feasibility(board, params),
             )
 
         # Trigger recalculation with scenario's parameters as seed
@@ -601,7 +620,7 @@ def get_branch_snapshots(request, board_id, branch_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -641,7 +660,7 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
         board = get_object_or_404(Board, id=board_id)
 
         # Check user is board member
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a = get_object_or_404(ShadowBranch, id=branch_a_id, board=board)
@@ -698,6 +717,7 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def delete_branch(request, board_id, branch_id):
     """
     API endpoint: Permanently delete a shadow branch and all its snapshots.
@@ -705,7 +725,7 @@ def delete_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -725,6 +745,7 @@ def delete_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def link_scenario_to_branch(request, board_id, branch_id):
     """
     API endpoint: Link (or unlink) a saved WhatIfScenario to an existing branch.
@@ -739,7 +760,7 @@ def link_scenario_to_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -782,11 +803,12 @@ def link_scenario_to_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def restore_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -809,11 +831,12 @@ def restore_branch(request, board_id, branch_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def toggle_star_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if request.user not in board.members.all() and request.user != board.created_by:
+        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)

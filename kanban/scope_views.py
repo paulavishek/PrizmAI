@@ -21,6 +21,7 @@ from kanban.utils.scope_analysis import (
     create_scope_alert_if_needed,
     refresh_active_alerts,
 )
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ def scope_dashboard(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def set_scope_baseline(request, board_id):
     """
     Set or reset the scope baseline for a board.
@@ -255,6 +257,7 @@ def set_scope_baseline(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def create_scope_snapshot(request, board_id):
     """
     Create a manual scope snapshot for tracking
@@ -343,6 +346,7 @@ def scope_snapshot_detail(request, board_id, snapshot_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_scope_alert(request, board_id, alert_id):
     """
     Acknowledge a scope creep alert
@@ -361,6 +365,7 @@ def acknowledge_scope_alert(request, board_id, alert_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_scope_alert(request, board_id, alert_id):
     """
     Resolve a scope creep alert with optional notes
@@ -380,6 +385,7 @@ def resolve_scope_alert(request, board_id, alert_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_scope_alert(request, board_id, alert_id):
     """
     Dismiss a scope creep alert (mark as not applicable)
@@ -403,6 +409,7 @@ def dismiss_scope_alert(request, board_id, alert_id):
 
 @login_required
 @require_POST
+@demo_ai_guard
 def run_scope_analysis(request, board_id):
     """
     Run AI analysis on current scope vs baseline
@@ -548,6 +555,10 @@ def scope_comparison(request, board_id):
     if snapshot1_id and snapshot2_id:
         snapshot1 = get_object_or_404(ScopeChangeSnapshot, id=snapshot1_id, board=board)
         snapshot2 = get_object_or_404(ScopeChangeSnapshot, id=snapshot2_id, board=board)
+        
+        # Auto-swap if dates are in wrong order (SCP-03)
+        if snapshot1.snapshot_date > snapshot2.snapshot_date:
+            snapshot1, snapshot2 = snapshot2, snapshot1
         
         comparison = {
             'tasks_diff': snapshot2.total_tasks - snapshot1.total_tasks,

@@ -18,6 +18,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 from kanban.models import Task, Comment, Board, Column, TaskActivity
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from accounts.models import UserProfile
 from django.contrib.auth.models import User
 from kanban.utils.ai_utils import (
@@ -43,8 +44,12 @@ from kanban.utils.ai_utils import (
     generate_and_save_strategy_summary,
     generate_and_save_mission_summary,
     suggest_optimal_assignee,
+    classify_board_project_type,
+    generate_board_analytics_narrative,
+    generate_portfolio_analytics_narrative,
+    generate_proxy_metrics,
 )
-from api.ai_usage_utils import track_ai_request, check_ai_quota
+from api.ai_usage_utils import track_ai_request, check_ai_quota, require_ai_quota
 from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit, increment_ai_generation_count
 from django.core.cache import caches as _dj_caches
 from django.conf import settings as _dj_settings
@@ -60,6 +65,7 @@ def _get_ai_cache():
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_task_description_api(request):
     """
     API endpoint to generate a task description using AI.
@@ -87,6 +93,10 @@ def generate_task_description_api(request):
         if task_id:
             try:
                 task = Task.objects.select_related('column__board', 'assigned_to').get(id=task_id)
+                # RBAC: verify user has view permission on the task's board
+                if task.column and task.column.board:
+                    if not request.user.has_perm('prizmai.view_board', task.column.board):
+                        return JsonResponse({'error': 'Permission denied'}, status=403)
                 context = {
                     'board_name': task.column.board.name if task.column else '',
                     'current_description': task.description or '',
@@ -143,6 +153,7 @@ def generate_task_description_api(request):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def summarize_comments_api(request, task_id):
     """
     API endpoint to summarize task comments using AI
@@ -160,6 +171,10 @@ def summarize_comments_api(request, task_id):
         # Get the task and verify user access
         task = get_object_or_404(Task, id=task_id)
         board = task.column.board
+        
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Format comments for AI
         comments_data = []
@@ -215,6 +230,7 @@ def summarize_comments_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def download_comment_summary_pdf(request, task_id):
     """
     API endpoint to download comment summary as PDF
@@ -234,9 +250,8 @@ def download_comment_summary_pdf(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board/task
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get summary data from request body
         import json
@@ -466,6 +481,7 @@ def download_comment_summary_pdf(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_lss_classification_api(request):
     """
     API endpoint to suggest Lean Six Sigma classification for a task
@@ -573,6 +589,7 @@ def suggest_lss_classification_api(request):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def summarize_board_analytics_api(request, board_id):
     """
     API endpoint to summarize board analytics using AI
@@ -589,6 +606,12 @@ def summarize_board_analytics_api(request, board_id):
                 'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
                 'quota_exceeded': True
             }, status=429)
+
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import summarize_board_analytics_task
+            result = summarize_board_analytics_task.delay(board_id, request.user.id)
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
         
         # Gather analytics data (same as in board_analytics view)
         from django.db.models import Count, Q
@@ -765,6 +788,7 @@ def summarize_board_analytics_api(request, board_id):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def download_analytics_summary_pdf(request, board_id):
     """
     API endpoint to download board analytics summary as PDF
@@ -782,9 +806,8 @@ def download_analytics_summary_pdf(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Check if user has access to this board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Check if there's a summary to download (get it from session or regenerate)
         # For now, we'll fetch the analytics data and generate fresh summary
@@ -866,16 +889,18 @@ def download_analytics_summary_pdf(request, board_id):
         # Task distribution by user
         user_queryset = Task.objects.filter(
             column__board=board
-        ).values('assigned_to__username').annotate(
+        ).values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name').annotate(
             count=Count('id')
         ).order_by('-count')
         
         tasks_by_user = []
         for item in user_queryset:
-            username = item['assigned_to__username'] or 'Unassigned'
+            raw_username = item['assigned_to__username'] or 'Unassigned'
+            full_name = f"{item.get('assigned_to__first_name', '')} {item.get('assigned_to__last_name', '')}".strip()
+            display_name = full_name or raw_username
             user_tasks = Task.objects.filter(
                 column__board=board, 
-                assigned_to__username=username
+                assigned_to__username=raw_username
             )
             completed_by_user = user_tasks.filter(progress=100).count()
             user_completion_rate = 0
@@ -883,7 +908,7 @@ def download_analytics_summary_pdf(request, board_id):
                 user_completion_rate = (completed_by_user / item['count']) * 100
             
             tasks_by_user.append({
-                'username': username,
+                'username': display_name,
                 'count': item['count'],
                 'completion_rate': int(user_completion_rate)
             })
@@ -1158,6 +1183,7 @@ def download_analytics_summary_pdf(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def _suggest_task_priority_api_legacy(request):
     """
     LEGACY — Superseded by the PrioritySuggestionService-based version below.
@@ -1227,9 +1253,8 @@ def _suggest_task_priority_api_legacy(request):
             return JsonResponse({'error': 'Could not determine board for task'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Gather board context for priority suggestion
         from django.db.models import Count, Avg
@@ -1330,6 +1355,7 @@ def _suggest_task_priority_api_legacy(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def predict_deadline_api(request):
     """
     API endpoint to predict realistic deadline for a task using AI
@@ -1396,9 +1422,26 @@ def predict_deadline_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
 
-        pass  # Original: board membership check removed
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import predict_deadline_task
+            # Pass serializable data; the task will rebuild team_context internally
+            task_data_for_celery = {
+                'title': title, 'description': description, 'priority': priority,
+                'assigned_to': assigned_to, 'start_date': start_date,
+                'complexity_score': complexity_score, 'workload_impact': workload_impact,
+                'skill_match_score': skill_match_score,
+                'collaboration_required': collaboration_required,
+                'dependencies_count': dependencies_count,
+                'risk_score': risk_score, 'risk_level': risk_level,
+            }
+            result = predict_deadline_task.delay(
+                task_data_for_celery, {}, board.id, request.user.id
+            )
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
         
         # Gather team context for deadline prediction
         from django.db.models import Avg
@@ -1554,6 +1597,7 @@ def predict_deadline_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def recommend_columns_api(request):
     """
     API endpoint to recommend optimal column structure for a board using AI
@@ -1578,14 +1622,13 @@ def recommend_columns_api(request):
             board_id_for_tracking = board.id
             
             # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             existing_columns = [col.name for col in board.columns.all()]
             board_name = board.name
             board_description = board.description
-            team_size = board.members.count() + 1  # +1 for creator
+            team_size = board.memberships.count() + 1  # +1 for creator
         else:
             # New board recommendations
             board_name = data.get('name', '')
@@ -1650,6 +1693,7 @@ def recommend_columns_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_board_setup_api(request):
     """
     API endpoint to generate AI-powered board setup recommendations.
@@ -1719,6 +1763,7 @@ def generate_board_setup_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_task_breakdown_api(request):
     """
     API endpoint to suggest automated breakdown of complex tasks using AI
@@ -1749,9 +1794,8 @@ def suggest_task_breakdown_api(request):
             board_id_for_tracking = board.id
             
             # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
         
         task_data = {
             'title': title,
@@ -1817,6 +1861,7 @@ def suggest_task_breakdown_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_workflow_optimization_api(request):
     """
     API endpoint to analyze workflow and suggest optimizations using AI
@@ -1839,10 +1884,15 @@ def analyze_workflow_optimization_api(request):
         
         board = get_object_or_404(Board, id=board_id)
         
-        # Check access
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
 
-        pass  # Original: board membership check removed
+        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+        if request.headers.get('X-Request-Async'):
+            from kanban.tasks.ai_streaming_tasks import analyze_workflow_task
+            result = analyze_workflow_task.delay(board_id, request.user.id)
+            return JsonResponse({'task_id': result.id, 'status': 'queued'})
         
         # Gather comprehensive board analytics (similar to existing analytics)
         from django.db.models import Count, Avg
@@ -1882,10 +1932,12 @@ def analyze_workflow_optimization_api(request):
             tasks_by_priority.append({'priority': priority_name, 'count': item['count']})
         
         # Task distribution by user
-        user_queryset = all_tasks.values('assigned_to__username').annotate(count=Count('id'))
+        user_queryset = all_tasks.values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name').annotate(count=Count('id'))
         tasks_by_user = []
         for item in user_queryset:
-            username = item['assigned_to__username'] or 'Unassigned'
+            raw_username = item['assigned_to__username'] or 'Unassigned'
+            full_name = f"{item.get('assigned_to__first_name', '')} {item.get('assigned_to__last_name', '')}".strip()
+            display_name = full_name or raw_username
             completed_user_tasks = completed_tasks.filter(
                 assigned_to__username=item['assigned_to__username']
             ).count()
@@ -1895,7 +1947,7 @@ def analyze_workflow_optimization_api(request):
                 completion_rate = (completed_user_tasks / item['count']) * 100
                 
             tasks_by_user.append({
-                'username': username,
+                'username': display_name,
                 'count': item['count'],
                 'completion_rate': int(completion_rate)
             })
@@ -1966,6 +2018,7 @@ def analyze_workflow_optimization_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_subtasks_api(request):
     """
     API endpoint to create multiple tasks from AI-generated subtask breakdown
@@ -1980,7 +2033,8 @@ def create_subtasks_api(request):
             return JsonResponse({'error': 'Missing required fields (board_id, subtasks)'}, status=400)
               # Verify board exists
         board = get_object_or_404(Board, id=board_id)
-        # Access restriction removed - all authenticated users can create tasks
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
             
         # Get column - if not specified, use first column
         if column_id:
@@ -2077,6 +2131,7 @@ def create_subtasks_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def calculate_task_risk_api(request):
     """
     API endpoint to calculate AI-powered risk score for a task
@@ -2134,9 +2189,8 @@ def calculate_task_risk_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get board context
         board_context = f"Board: {board.name}. Description: {board.description or 'N/A'}"
@@ -2220,6 +2274,7 @@ def calculate_task_risk_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def get_mitigation_suggestions_api(request):
     """
     API endpoint to get AI-generated mitigation suggestions for a high-risk task
@@ -2266,9 +2321,8 @@ def get_mitigation_suggestions_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get mitigation suggestions
         mitigation_result = generate_risk_mitigation_suggestions(
@@ -2339,6 +2393,7 @@ def get_mitigation_suggestions_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def assess_task_dependencies_api(request):
     """
     API endpoint to assess task dependencies and cascading risks
@@ -2378,9 +2433,8 @@ def assess_task_dependencies_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get related tasks
         all_tasks = Task.objects.filter(column__board=board).values(
@@ -2507,9 +2561,8 @@ def get_task_dependencies_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access to this task's board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         dependencies = {
             'task_id': task.id,
@@ -2568,9 +2621,8 @@ def set_parent_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         parent_id = data.get('parent_task_id')
@@ -2615,9 +2667,8 @@ def add_related_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         related_id = data.get('related_task_id')
@@ -2646,6 +2697,7 @@ def add_related_task_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_task_dependencies_api(request, task_id):
     """
     Analyze a task and suggest dependencies
@@ -2656,9 +2708,8 @@ def analyze_task_dependencies_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         auto_link = data.get('auto_link', False)
@@ -2691,9 +2742,8 @@ def get_dependency_tree_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         include_related = request.GET.get('include_related', 'false').lower() == 'true'
         tree = DependencyGraphGenerator.generate_dependency_tree(task, include_subtasks=True, include_related=include_related)
@@ -2721,10 +2771,9 @@ def get_board_dependency_graph_api(request, board_id):
         
         board = get_object_or_404(Board, id=board_id)
         
-        # Verify user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         root_task_id = request.GET.get('root_task_id')
         if root_task_id:
@@ -2823,7 +2872,7 @@ def reschedule_task_api(request, task_id):
         board = task.column.board
 
         # Permission check: only board creator or members can reschedule
-        if request.user != board.created_by and not board.members.filter(id=request.user.id).exists():
+        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         data = json.loads(request.body)
@@ -2925,7 +2974,7 @@ def update_task_fields_api(request, task_id):
         board = task.column.board
 
         # Verify the requesting user is a board member or creator
-        if request.user != board.created_by and not board.members.filter(id=request.user.id).exists():
+        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         data = json.loads(request.body)
@@ -3014,6 +3063,7 @@ def update_task_fields_api(request, task_id):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def summarize_task_details_api(request, task_id):
     """
     API endpoint to generate a comprehensive AI-powered summary of a task's details.
@@ -3041,9 +3091,8 @@ def summarize_task_details_api(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Import StakeholderTaskInvolvement here to avoid circular import
         from kanban.stakeholder_models import StakeholderTaskInvolvement
@@ -3159,6 +3208,7 @@ def summarize_task_details_api(request, task_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_ai_guard
 def get_task_prediction_api(request, task_id):
     """
     API endpoint to get or update task completion prediction
@@ -3169,9 +3219,8 @@ def get_task_prediction_api(request, task_id):
         task = get_object_or_404(Task, pk=task_id)
         
         # Check user has access to this task's board
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: task board membership check removed
+        if not request.user.has_perm('prizmai.view_board', task.column.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # For POST, force recalculation
         if request.method == 'POST':
@@ -3283,6 +3332,7 @@ def get_task_prediction_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def bulk_update_predictions_api(request, board_id):
     """
     API endpoint to update predictions for all tasks in a board
@@ -3291,9 +3341,8 @@ def bulk_update_predictions_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check user has access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.task_prediction import bulk_update_predictions
         result = bulk_update_predictions(board=board)
@@ -3313,6 +3362,7 @@ def bulk_update_predictions_api(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_task_priority_api(request):
     """
     API endpoint to get AI-powered priority suggestion for a task
@@ -3506,9 +3556,8 @@ def log_priority_decision_api(request):
         board = task.column.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Log the decision
         from kanban.priority_models import PriorityDecision
@@ -3558,6 +3607,7 @@ def log_priority_decision_api(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def train_priority_model_api(request, board_id):
     """
     API endpoint to train/retrain priority model for a board
@@ -3568,9 +3618,8 @@ def train_priority_model_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access - only board creators can train models
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board creator check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from ai_assistant.utils.priority_service import PriorityModelTrainer
         
@@ -3597,9 +3646,8 @@ def get_priority_model_info_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.priority_models import PriorityModel, PriorityDecision
         
@@ -3639,6 +3687,7 @@ def get_priority_model_info_api(request, board_id):
 
 @login_required
 @require_http_methods(["GET"])
+@demo_ai_guard
 def analyze_skill_gaps_api(request, board_id):
     """
     Analyze skill gaps for a board
@@ -3656,10 +3705,9 @@ def analyze_skill_gaps_api(request, board_id):
         
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import calculate_skill_gaps, generate_skill_gap_recommendations, update_team_skill_profile_model
         from kanban.models import SkillGap
@@ -3876,6 +3924,7 @@ def get_team_skill_profile_api(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def match_team_to_task_api(request, task_id):
     """
     Find best team members for a task based on skill matching
@@ -3885,14 +3934,13 @@ def match_team_to_task_api(request, task_id):
         board = task.column.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import match_team_member_to_task
         
         # Get board members
-        board_members = board.members.select_related('profile').all()
+        board_members = User.objects.filter(board_memberships__board=board).select_related('profile')
         
         # Find matches
         matches = match_team_member_to_task(task, board_members)
@@ -3927,6 +3975,7 @@ def match_team_to_task_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def extract_task_skills_api(request, task_id):
     """
     AI-extract required skills from a task description
@@ -3954,9 +4003,8 @@ def extract_task_skills_api(request, task_id):
         board = task.column.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import extract_skills_from_task
         
@@ -3987,6 +4035,7 @@ def extract_task_skills_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_skill_development_plan_api(request):
     """
     Create a skill development plan to address a gap
@@ -4008,9 +4057,8 @@ def create_skill_development_plan_api(request):
         board = skill_gap.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Create plan
         plan = SkillDevelopmentPlan.objects.create(
@@ -4070,9 +4118,8 @@ def update_skill_development_plan_api(request, plan_id):
         board = plan.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Update fields
         if 'title' in data:
@@ -4130,9 +4177,8 @@ def delete_skill_development_plan_api(request, plan_id):
         board = plan.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         plan.delete()
         
@@ -4261,9 +4307,8 @@ def get_skill_gap_detail_api(request, gap_id):
         board = gap.board
         
         # Check access
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get affected tasks
         affected_tasks = []
@@ -4304,6 +4349,7 @@ def get_skill_gap_detail_api(request, gap_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def search_tasks_semantic_api(request):
     """
     AI-powered semantic search for tasks using Gemini
@@ -4339,19 +4385,17 @@ def search_tasks_semantic_api(request):
         # Get board and verify access
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             # Get tasks from this board
             tasks = Task.objects.filter(column__board=board).select_related(
                 'column', 'assigned_to', 'created_by'
             ).prefetch_related('labels')
         else:
-            # Get all accessible tasks
-            owned_boards = Board.objects.filter(created_by=request.user)
-            member_boards = Board.objects.filter(members=request.user)
-            accessible_boards = owned_boards | member_boards
+            # Get all accessible tasks (demo-aware)
+            from kanban.utils.demo_protection import get_user_boards
+            accessible_boards = get_user_boards(request.user)
             
             tasks = Task.objects.filter(
                 column__board__in=accessible_boards
@@ -4597,6 +4641,7 @@ def add_phase(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_task_summary_api(request, task_id):
     """Generate and persist an AI summary for a single task."""
     start_time = time.time()
@@ -4606,6 +4651,11 @@ def generate_task_summary_api(request, task_id):
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
 
         task = get_object_or_404(Task, id=task_id)
+
+        # RBAC: user must have view permission on the task's board
+        if task.column and task.column.board:
+            if not request.user.has_perm('prizmai.view_board', task.column.board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
 
         summary = generate_and_save_task_summary(task)
         if not summary:
@@ -4631,6 +4681,7 @@ def generate_task_summary_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_board_summary_api(request, board_id):
     """
     Enqueue an async Celery task to regenerate the board AI summary.
@@ -4643,6 +4694,11 @@ def generate_board_summary_api(request, board_id):
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
 
         board = get_object_or_404(Board, id=board_id)
+        
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         debounce = getattr(_dj_settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
         lock_key = f'board_ai_lock_{board_id}'
         ai_cache = _get_ai_cache()
@@ -4675,16 +4731,21 @@ def generate_board_summary_api(request, board_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_strategy_summary_api(request, strategy_id):
     """Enqueue an async Celery task to regenerate the strategy AI summary."""
     try:
+        from kanban.models import Strategy
+        strategy = get_object_or_404(Strategy, id=strategy_id)
+
+        if not request.user.has_perm('prizmai.edit_strategy', strategy):
+            return JsonResponse({'error': 'You do not have permission to regenerate the summary for this strategy.'}, status=403)
+
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
-
-        from kanban.models import Strategy
-        strategy = get_object_or_404(Strategy, id=strategy_id)
         lock_key = f'strategy_ai_lock_{strategy_id}'
         debounce = getattr(_dj_settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
         ai_cache = _get_ai_cache()
@@ -4715,16 +4776,21 @@ def generate_strategy_summary_api(request, strategy_id):
 
 
 @login_required
+@demo_write_guard
 @require_http_methods(["POST"])
+@demo_ai_guard
 def generate_mission_summary_api(request, mission_id):
     """Enqueue an async Celery task to regenerate the mission AI summary."""
     try:
+        from kanban.models import Mission
+        mission = get_object_or_404(Mission, id=mission_id)
+
+        if not request.user.has_perm('prizmai.edit_mission', mission):
+            return JsonResponse({'error': 'You do not have permission to regenerate the summary for this mission.'}, status=403)
+
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
             return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
-
-        from kanban.models import Mission
-        mission = get_object_or_404(Mission, id=mission_id)
         lock_key = f'mission_ai_lock_{mission_id}'
         debounce = getattr(_dj_settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
         ai_cache = _get_ai_cache()
@@ -4802,6 +4868,7 @@ def summary_status_api(request, level, obj_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def suggest_assignee_api(request):
     """
     API endpoint to suggest the optimal assignee for a task using AI.
@@ -4873,11 +4940,11 @@ def suggest_assignee_api(request):
         board = get_object_or_404(Board, id=board_id)
         
         # Verify user has access to this board
-        if request.user != board.created_by and request.user not in board.members.all():
+        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
             return JsonResponse({'error': 'You do not have access to this board.'}, status=403)
         
         # Check board has members
-        members = list(board.members.all())
+        members = list(User.objects.filter(board_memberships__board=board))
         if not members:
             return JsonResponse({
                 'error': 'No board members available for assignment suggestion. Add members to the board first.',
@@ -5030,3 +5097,262 @@ def suggest_assignee_api(request):
         except Exception:
             pass
         return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# GOAL-AWARE ANALYTICS API VIEWS
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('board_classification', 'classify')
+@demo_ai_guard
+def classify_board_api(request, board_id):
+    """Classify a board's project type using Gemini. Does NOT auto-confirm."""
+    board = get_object_or_404(Board, id=board_id)
+
+    result = classify_board_project_type(board)
+    if result is None:
+        return JsonResponse({'success': False, 'error': 'Classification failed. Please try again.'}, status=500)
+
+    board.project_type = result['project_type']
+    board.project_type_confidence = result['confidence']
+    board.project_type_confirmed = False
+    board.save(update_fields=['project_type', 'project_type_confidence', 'project_type_confirmed'])
+
+    return JsonResponse({
+        'success': True,
+        'project_type': result['project_type'],
+        'project_type_label': dict(Board.PROJECT_TYPE_CHOICES).get(result['project_type'], result['project_type']),
+        'confidence': result['confidence'],
+        'reason': result['reason'],
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def confirm_board_type_api(request, board_id):
+    """Confirm or manually set a board's project type."""
+    board = get_object_or_404(Board, id=board_id)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    project_type = data.get('project_type', '')
+    valid_types = [c[0] for c in Board.PROJECT_TYPE_CHOICES]
+    if project_type not in valid_types:
+        return JsonResponse({
+            'success': False,
+            'error': f'Invalid project type. Must be one of: {", ".join(valid_types)}'
+        }, status=400)
+
+    board.project_type = project_type
+    board.project_type_confirmed = True
+    board.save(update_fields=['project_type', 'project_type_confirmed'])
+
+    from kanban.audit_utils import log_audit
+    log_audit(
+        'board.type_confirmed',
+        user=request.user,
+        request=request,
+        object_type='board',
+        object_id=board.id,
+        object_repr=board.name,
+        board_id=board.id,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'project_type': project_type,
+        'project_type_label': dict(Board.PROJECT_TYPE_CHOICES).get(project_type, project_type),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def portfolio_analytics_api(request, record_type, record_id):
+    """Return aggregated analytics grouped by project type for a Goal/Mission/Strategy."""
+    from kanban.models import OrganizationGoal, Mission, Strategy
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+
+    model_map = {
+        'goal': OrganizationGoal,
+        'mission': Mission,
+        'strategy': Strategy,
+    }
+    model_cls = model_map.get(record_type)
+    if not model_cls:
+        return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
+
+    record = get_object_or_404(model_cls, id=record_id)
+    result = get_portfolio_analytics(record, record_type)
+
+    # Serialise for JSON (convert any non-serialisable values)
+    for group in result['groups']:
+        serialised_metrics = {}
+        for k, v in group['metrics'].items():
+            if isinstance(v, dict):
+                serialised_metrics[k] = v
+            else:
+                serialised_metrics[k] = v
+        group['metrics'] = serialised_metrics
+
+    return JsonResponse({'success': True, **result})
+
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('analytics_narrative', 'generate')
+def generate_board_narrative_api(request, board_id):
+    """Generate a 2-sentence analytics narrative for a board."""
+    from kanban.utils.analytics_helpers import get_promoted_metrics
+
+    board = get_object_or_404(Board, id=board_id)
+
+    metrics = get_promoted_metrics(board)
+    narrative = generate_board_analytics_narrative(board, metrics)
+    if narrative is None:
+        return JsonResponse({'success': False, 'error': 'Narrative generation failed.'}, status=500)
+
+    board.analytics_narrative = narrative
+    board.analytics_narrative_generated_at = timezone.now()
+    board.analytics_narrative_metric_snapshot = {
+        k: v for k, v in metrics.items() if isinstance(v, (str, int, float))
+    }
+    board.save(update_fields=[
+        'analytics_narrative', 'analytics_narrative_generated_at',
+        'analytics_narrative_metric_snapshot',
+    ])
+
+    return JsonResponse({
+        'success': True,
+        'narrative': narrative,
+        'generated_at': board.analytics_narrative_generated_at.isoformat(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('portfolio_narrative', 'generate')
+def generate_portfolio_narrative_api(request, record_type, record_id):
+    """Generate a portfolio-level narrative for a Goal/Mission/Strategy."""
+    from kanban.models import OrganizationGoal, Mission, Strategy
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+
+    model_map = {
+        'goal': OrganizationGoal,
+        'mission': Mission,
+        'strategy': Strategy,
+    }
+    model_cls = model_map.get(record_type)
+    if not model_cls:
+        return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
+
+    record = get_object_or_404(model_cls, id=record_id)
+    portfolio = get_portfolio_analytics(record, record_type)
+
+    narrative = generate_portfolio_analytics_narrative(record, record_type, portfolio['groups'])
+    if narrative is None:
+        return JsonResponse({'success': False, 'error': 'Narrative generation failed.'}, status=500)
+
+    record.portfolio_narrative = narrative
+    record.portfolio_narrative_generated_at = timezone.now()
+    record.portfolio_narrative_metric_snapshot = {
+        'groups_count': len(portfolio['groups']),
+        'unclassified': portfolio['unclassified_count'],
+    }
+    record.save(update_fields=[
+        'portfolio_narrative', 'portfolio_narrative_generated_at',
+        'portfolio_narrative_metric_snapshot',
+    ])
+
+    return JsonResponse({
+        'success': True,
+        'narrative': narrative,
+        'generated_at': record.portfolio_narrative_generated_at.isoformat(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+@require_ai_quota('proxy_metrics', 'generate')
+def generate_proxy_metrics_api(request, goal_id):
+    """Generate 3 proxy metrics for a Goal. Replaces existing ones."""
+    from kanban.models import OrganizationGoal, GoalProxyMetric
+
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+    metrics = generate_proxy_metrics(goal)
+    if metrics is None:
+        return JsonResponse({'success': False, 'error': 'Proxy metric generation failed.'}, status=500)
+
+    # Delete existing and create new
+    GoalProxyMetric.objects.filter(goal=goal).delete()
+    created = []
+    for i, m in enumerate(metrics):
+        pm = GoalProxyMetric.objects.create(
+            goal=goal,
+            name=m['name'],
+            why_it_matters=m['why_it_matters'],
+            how_to_measure=m['how_to_measure'],
+            display_order=i,
+        )
+        created.append({
+            'id': pm.id,
+            'name': pm.name,
+            'why_it_matters': pm.why_it_matters,
+            'how_to_measure': pm.how_to_measure,
+            'current_value': pm.current_value,
+            'previous_value': pm.previous_value,
+            'display_order': pm.display_order,
+        })
+
+    return JsonResponse({'success': True, 'metrics': created})
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_proxy_metric_value_api(request, goal_id, metric_id):
+    """Update the current value of a proxy metric."""
+    from kanban.models import GoalProxyMetric
+
+    metric = get_object_or_404(GoalProxyMetric, id=metric_id, goal_id=goal_id)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    new_value = data.get('value', '').strip()
+    if not new_value:
+        return JsonResponse({'success': False, 'error': 'Value is required'}, status=400)
+
+    # Rotate current → previous
+    metric.previous_value = metric.current_value
+    metric.current_value = new_value
+    metric.last_updated = timezone.now()
+    metric.save(update_fields=['current_value', 'previous_value', 'last_updated'])
+
+    # Determine trend
+    trend = '—'
+    if metric.previous_value and metric.current_value:
+        try:
+            prev = float(metric.previous_value.replace('%', '').replace(',', '').strip())
+            curr = float(metric.current_value.replace('%', '').replace(',', '').strip())
+            if curr > prev:
+                trend = '↑'
+            elif curr < prev:
+                trend = '↓'
+            else:
+                trend = '→'
+        except (ValueError, AttributeError):
+            trend = '→'  # Can't compare non-numeric values
+
+    return JsonResponse({
+        'success': True,
+        'current_value': metric.current_value,
+        'previous_value': metric.previous_value,
+        'trend': trend,
+        'last_updated': metric.last_updated.isoformat(),
+    })

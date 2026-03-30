@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static %}
 {% load kanban_filters %}
 
@@ -236,6 +236,10 @@
         0%, 100% { box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4); }
         50% { box-shadow: 0 8px 24px rgba(13, 110, 253, 0.6); }
     }
+    @keyframes sparkle-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: .5; transform: scale(1.3); }
+    }
     
     /* Live filter - hide non-matching tasks */
     .kanban-task-v2.filtered-out,
@@ -243,7 +247,7 @@
         display: none !important;
     }
 
-    /* ════ Redesigned Card (v2 — 110px compact) ════ */
+    /* ---- Redesigned Card (v2 � 110px compact) ---- */
     .kanban-task-v2 {
         position: relative;
         background: var(--card-bg);
@@ -265,9 +269,9 @@
     .kanban-task-v2.done-card { opacity: .65; }
 
     .card-inner { display: flex; flex-direction: column; gap: 4px; }
-    .card-task-id { font-size: .7rem; font-weight: 600; color: #6b7280; letter-spacing: .02em; line-height: 1; }
+    .card-task-id { font-size: .7rem; font-weight: 600; color: #888780; letter-spacing: .02em; line-height: 1; }
 
-    /* Title — 2-line clamp */
+    /* Title � 2-line clamp */
     .card-task-title {
         font-weight: 600;
         font-size: .82rem;
@@ -366,7 +370,7 @@
         transition: width .3s;
     }
 
-    /* ══ Hover action bar ══ */
+    /* -- Hover action bar -- */
     .card-hover-actions {
         position: absolute;
         bottom: 4px; left: 4px; right: 4px;
@@ -421,7 +425,7 @@
     .inline-pick-option:hover { background: var(--bg-tertiary); }
     .inline-pick-option.active { font-weight: 700; color: #0d6efd; }
 
-    /* ════ Column header — WIP badges ════ */
+    /* ---- Column header � WIP badges ---- */
     .wip-badge {
         display: inline-flex;
         align-items: center;
@@ -440,7 +444,7 @@
         background-color: #fef3c7 !important;
     }
 
-    /* ════ Quick-View Drawer — styles now in base.html ════ */
+    /* ---- Quick-View Drawer � styles now in base.html ---- */
 
     /* Task Search Bar Styling */
     #taskSearchCard {
@@ -457,9 +461,10 @@
         border-color: #667eea;
     }
 
-    /* ── AI Tools Slide-Out Panel ── */
+    /* -- AI Tools Slide-Out Panel -- */
     #aiToolsPanel {
         width: 280px;
+        z-index: 1050;
         background-color: var(--bg-secondary);
         border-left: 1px solid var(--border-color);
         box-shadow: -4px 0 16px var(--shadow-color);
@@ -477,16 +482,20 @@
         padding: 12px 14px;
     }
     .ai-panel-section-header {
-        font-size: .65rem;
+        font-size: .7rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .06em;
-        color: var(--text-muted);
+        color: var(--text-primary);
         padding: 0 4px 6px;
         margin-top: 14px;
+        border-top: 1px solid var(--border-color);
+        padding-top: 12px;
     }
     .ai-panel-section:first-child .ai-panel-section-header {
         margin-top: 0;
+        border-top: none;
+        padding-top: 0;
     }
     .ai-panel-grid {
         display: grid;
@@ -533,7 +542,7 @@
 {% endblock %}
 
 {% block content %}
-<!-- Hierarchy breadcrumb — shows Mission → Strategy → Board chain when available -->
+<!-- Hierarchy breadcrumb � shows Mission ? Strategy ? Board chain when available -->
 {% if board.strategy %}
 <nav aria-label="breadcrumb" class="mb-2">
     <ol class="breadcrumb small mb-0">
@@ -546,25 +555,11 @@
 </nav>
 {% endif %}
 
-<!-- Demo Mode Banner - only show in legacy (non-simplified) mode -->
-{% if is_demo_board and not simplified_mode %}
-<div class="alert alert-info border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <strong><i class="fas fa-hands-helping me-2"></i>Interactive Demo</strong> —
-            <span class="small">Experiment freely!
-                <a href="{% url 'demo_dashboard' %}" class="text-white text-decoration-underline">Demo Dashboard</a> |
-                <a href="{% url 'dashboard' %}" class="text-white text-decoration-underline">Exit</a>
-            </span>
-        </div>
-        <span class="badge bg-light text-primary"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
-    </div>
-</div>
-{% endif %}
+<!-- Demo Mode Banner removed — single-tier personal sandbox uses the unified banner in base.html -->
 
-<!-- Déjà Vu Banner (Knowledge Graph) — compact -->
+<!-- D�j� Vu Banner (Knowledge Graph) � compact -->
 <div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-2 py-2" role="alert" style="display:none; font-size:.9rem;">
-    <i class="fas fa-lightbulb me-1"></i><strong>Déjà Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
+    <i class="fas fa-lightbulb me-1"></i><strong>D�j� Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
     <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View &rarr;</a>
     <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close" style="padding:.5rem;"></button>
 </div>
@@ -572,7 +567,7 @@
 <!-- Exit Protocol: Hospice Banner -->
 {% include 'exit_protocol/partials/hospice_banner.html' %}
 
-<!-- ═══════ BOARD HEADER ═══════ -->
+<!-- ------- BOARD HEADER ------- -->
 <div class="d-flex justify-content-between align-items-center mb-2">
     <div class="d-flex align-items-center gap-2 flex-wrap">
         <h1 class="h4 mb-0">{{ board.name }}</h1>
@@ -597,16 +592,21 @@
         {% endif %}
     </div>
 
-    <!-- ── Right: compact toolbar ── -->
+    <!-- -- Right: compact toolbar -- -->
     <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
         <!-- Primary: Add Task (uses first To-Do column) -->
         {% for col in columns %}{% if col.name|lower == 'to do' or col.name|lower == 'todo' or col.name|lower == 'backlog' or forloop.first %}
         {% if forloop.first or col.name|lower == 'to do' or col.name|lower == 'todo' %}
-        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-primary">
+        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-prizm-primary">
             <i class="fas fa-plus me-1"></i><span class="d-none d-md-inline">Add Task</span>
         </a>
         {% endif %}
         {% endif %}{% endfor %}
+
+        <!-- Reorder Columns -->
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnReorderModal" title="Reorder Columns">
+            <i class="fas fa-sort"></i><span class="d-none d-lg-inline ms-1">Reorder</span>
+        </button>
 
         <!-- Filter toggle -->
         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#boardToolsPanel" aria-expanded="false" title="Filter & Search">
@@ -628,10 +628,12 @@
                 <li><a class="dropdown-item" href="{% url 'create_column' board.id %}"><i class="fas fa-columns me-2"></i>Add Column</a></li>
                 <li><a class="dropdown-item" href="{% url 'create_label' board.id %}"><i class="fas fa-tags me-2"></i>Manage Labels</a></li>
                 <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
-                {% if can_manage_invites and not board.is_official_demo_board %}
+                {% if can_manage_invites and not board.is_official_demo_board and not board.is_sandbox_copy %}
                 <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-user-plus me-2 text-success"></i>Invite Members</a></li>
                 {% endif %}
+                {% if not board.is_sandbox_copy %}
                 <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users me-2 text-info"></i>Manage Members</a></li>
+                {% endif %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
                 {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
@@ -643,7 +645,7 @@
     </div>
 </div>
 
-<!-- ═══════ VIEW MODE TABS ═══════ -->
+<!-- ------- VIEW MODE TABS ------- -->
 <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
     <li class="nav-item"><a class="nav-link active" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
     <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
@@ -651,10 +653,9 @@
     <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
 </ul>
 
-<!-- ═══════ AI RESOURCE OPTIMIZATION (standalone, always in DOM) ═══════ -->
-{% include 'kanban/resource_leveling_widget.html' %}
+<!-- AI Resource Optimization moved to AI Tools panel -->
 
-<!-- ═══════ COLLAPSIBLE BOARD TOOLS (Filter/Search) ═══════ -->
+<!-- ------- COLLAPSIBLE BOARD TOOLS (Filter/Search) ------- -->
 <div class="collapse mb-3" id="boardToolsPanel">
     <!-- Search Panel -->
     <div class="card card-body mb-2">
@@ -686,11 +687,8 @@
                 {{ search_form.assignee }}
             </div>
             <div class="col-12 mt-3">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-search me-1"></i> Search
-                </button>
                 {% if any_filter_active %}
-                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary ms-2">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                     <i class="fas fa-times me-1"></i> Clear Filters
                 </a>
                 {% endif %}
@@ -730,59 +728,86 @@
         </div><!-- /search-form-container -->
     </div><!-- /card search -->
 
+    <script>
+    // P3-01: Live filter � dropdowns auto-submit, search input debounced
+    (function() {
+        var form = document.querySelector('#search-form-container form');
+        if (!form) return;
+        // Auto-submit all selects on change
+        form.querySelectorAll('select').forEach(function(sel) {
+            sel.addEventListener('change', function() { form.submit(); });
+        });
+        // Debounce text inputs
+        var searchInput = form.querySelector('input[type="text"], input[name="search_term"]');
+        if (searchInput) {
+            var debounceTimer = null;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function() { form.submit(); }, 300);
+            });
+        }
+    })();
+    </script>
+
 </div><!-- /boardToolsPanel collapse -->
 
-<!-- Quick Column Reorder Panel (standalone) -->
-<div class="column-ordering-panel" id="column-ordering-panel">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <div>
-            <h5 class="mb-0">
-                <i class="fas fa-sort me-2 text-primary"></i>Quick Column Reorder
-                <small class="text-muted" style="font-size: 0.7em; font-weight: normal;">(for large boards)</small>
-            </h5>
-        </div>
-        <div>
-            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="toggle-column-panel">
-                <i class="fas fa-chevron-up" id="toggle-column-icon"></i>
-            </button>
-        </div>
-    </div>
-
-    <div id="column-ordering-content">
-        <p class="text-muted small mb-2">
-            <i class="fas fa-keyboard me-1"></i> <strong>Keyboard shortcut:</strong> Press <kbd>Alt</kbd> + <kbd>R</kbd> to quickly access this panel
-        </p>
-
-        <div id="column-ordering-badges" class="mb-3">
-            {% for column in columns %}
-            <div class="column-ordering-badge">
-                <input type="number" min="1" max="{{ columns|length }}" value="{{ column.position|add:1 }}" 
-                       class="form-control form-control-sm column-position-input" 
-                       data-column-id="{{ column.id }}"
-                       title="Position for {{ column.name }}">
-                <span>{{ column.name }}</span>
+<!-- Quick Column Reorder Modal (P3-05) -->
+<div class="modal fade" id="columnReorderModal" tabindex="-1" aria-labelledby="columnReorderModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="columnReorderModalLabel">
+                    <i class="fas fa-sort me-2 text-primary"></i>Quick Column Reorder
+                </h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" id="toggle-column-panel" aria-label="Close"></button>
             </div>
-            {% endfor %}
-        </div>
-
-        <div class="d-flex gap-2">
-            <button id="refresh-columns-btn" class="btn btn-primary btn-sm">
-                <i class="fas fa-sync-alt me-1"></i> Apply Reorder
-            </button>
-            <button id="reset-columns-btn" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-undo me-1"></i> Reset to Default
-            </button>
+            <div class="modal-body" id="column-ordering-content">
+                <p class="text-muted small mb-2">
+                    <i class="fas fa-keyboard me-1"></i> Enter position numbers and click Apply, or press <kbd>Alt</kbd>+<kbd>R</kbd>
+                </p>
+                <div id="column-ordering-badges" class="mb-3">
+                    {% for column in columns %}
+                    <div class="column-ordering-badge">
+                        <input type="number" min="1" max="{{ columns|length }}" value="{{ column.position|add:1 }}"
+                               class="form-control form-control-sm column-position-input"
+                               data-column-id="{{ column.id }}"
+                               title="Position for {{ column.name }}">
+                        <span>{{ column.name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button id="reset-columns-btn" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-undo me-1"></i> Reset
+                </button>
+                <button id="refresh-columns-btn" class="btn btn-primary btn-sm">
+                    <i class="fas fa-sync-alt me-1"></i> Apply Reorder
+                </button>
+            </div>
         </div>
     </div>
 </div>
+<script>
+// P3-05: Ensure column-ordering-content is always visible when modal opens
+(function() {
+    var modal = document.getElementById('columnReorderModal');
+    if (modal) {
+        modal.addEventListener('show.bs.modal', function() {
+            var content = document.getElementById('column-ordering-content');
+            if (content) content.classList.remove('d-none');
+        });
+    }
+})();
+</script>
 
 <!-- Kanban Board -->
 <div class="kanban-board" id="kanban-board">
     {% for column in columns %}
     {% with col_meta=column_meta|get_item:column.id %}
     <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
-        {# ── Column Header (redesigned) ── #}
-        <div class="kanban-column-header {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
+        {# -- Column Header (redesigned) -- #}
+        <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
             <div class="d-flex justify-content-between align-items-center w-100">
                 <div class="d-flex align-items-center gap-2">
                     <span class="column-name-text fw-bold">{{ column.name }}</span>
@@ -829,6 +854,23 @@
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
+                                <div class="dropdown-item pe-none" style="cursor:default;">
+                                    <i class="fas fa-palette me-2 text-muted"></i>Color
+                                    <div class="d-flex gap-1 mt-1">
+                                        {% for color_val, color_label in column.COLOR_CHOICES %}
+                                        <button type="button"
+                                                class="btn btn-sm p-0 border{% if column.color == color_val %} border-dark border-2{% endif %} column-color-btn"
+                                                data-column-id="{{ column.id }}" data-color="{{ color_val }}"
+                                                title="{{ color_label }}"
+                                                style="width:20px;height:20px;border-radius:50%;cursor:pointer;
+                                                {% if color_val == 'green' %}background:#c3e6cb;{% elif color_val == 'blue' %}background:#b8daff;{% elif color_val == 'purple' %}background:#d5c5f0;{% elif color_val == 'orange' %}background:#ffd8b2;{% elif color_val == 'red' %}background:#f5c6cb;{% elif color_val == 'yellow' %}background:#fff3cd;{% elif color_val == 'teal' %}background:#b2dfdb;{% elif color_val == 'gray' %}background:#e2e3e5;{% endif %}">
+                                        </button>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
                                 <button type="button" class="dropdown-item edit-column-btn"
                                         data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
                                         data-bs-toggle="modal" data-bs-target="#editColumnModal">
@@ -850,7 +892,7 @@
             </div>
         </div>
 
-        {# ── Task Cards (redesigned — compact, 110px) ── #}
+        {# -- Task Cards (redesigned � compact, 110px) -- #}
         <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
             {% for task in tasks %}
                 {% if task.column.id == column.id %}
@@ -863,7 +905,7 @@
                      hx-swap="innerHTML"
                      hx-trigger="click"
                      style="border-left-color:{% if task.priority == 'high' or task.priority == 'urgent' %}#dc3545{% elif task.priority == 'medium' %}#f59e0b{% else %}#6c757d{% endif %};">
-                    {# ── Card body ── #}
+                    {# -- Card body -- #}
                     <div class="card-inner">
                         <div class="card-title-row">
                             <span class="card-task-id">{{ task_prefix }}-{{ task.id }}</span>
@@ -903,14 +945,14 @@
                         </div>
                     </div>
 
-                    {# ── Hover action bar ── #}
+                    {# -- Hover action bar -- #}
                     <div class="card-hover-actions" onclick="event.stopPropagation();">
-                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status">⇄ Status</button>
+                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status">? Status</button>
                         <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign">+ Assign</button>
-                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail">↗ Open</a>
+                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail">? Open</a>
                     </div>
 
-                    {# ── Inline status dropdown (hidden by default) ── #}
+                    {# -- Inline status dropdown (hidden by default) -- #}
                     <div class="inline-status-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
                         {% for col in columns %}{% if col.id != task.column.id %}
                         <button class="inline-pick-option"
@@ -918,7 +960,7 @@
                         {% endif %}{% endfor %}
                     </div>
 
-                    {# ── Inline assignee picker (hidden by default) ── #}
+                    {# -- Inline assignee picker (hidden by default) -- #}
                     <div class="inline-assignee-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
                         <button class="inline-pick-option {% if not task.assigned_to %}active{% endif %}"
                                 data-assignee-id="">Unassigned</button>
@@ -928,7 +970,7 @@
                         {% endfor %}
                     </div>
 
-                    {# ── 3px progress bar at bottom ── #}
+                    {# -- 3px progress bar at bottom -- #}
                     <div class="card-progress-strip">
                         <div class="card-progress-fill {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                              style="width:{{ task.progress }}%;" data-progress="{{ task.progress }}"></div>
@@ -938,7 +980,7 @@
             {% endfor %}
         </div>
 
-        {# ── Add Task Button ── #}
+        {# -- Add Task Button -- #}
         <div class="p-2">
             <a href="{% url 'create_task_in_column' board.id column.id %}" class="btn btn-sm btn-outline-secondary w-100 add-task-btn"
                onclick="event.stopPropagation();">
@@ -957,8 +999,8 @@
     </div>
 </div>
 
-{# ═══════ Quick-View Drawer (Tier 1) — HTML now in base.html ═══════ #}
-<!-- Wiki Links moved to Board Settings → Link Wiki Pages (3-dot menu) -->
+{# ------- Quick-View Drawer (Tier 1) � HTML now in base.html ------- #}
+<!-- Wiki Links moved to Board Settings ? Link Wiki Pages (3-dot menu) -->
 
 <!-- Set WIP Limit Modal -->
 <div class="modal fade" id="wipLimitModal" tabindex="-1" aria-hidden="true">
@@ -1204,21 +1246,32 @@
 {% block extra_js %}
 <script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
 <script>
+    // Lightweight toast helper (showToast not provided globally by kanban.js)
+    function showToast(message, type) {
+        const bg = type === 'success' ? '#198754' : type === 'danger' ? '#dc3545' : '#0d6efd';
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.2);transition:opacity .4s';
+        toast.style.backgroundColor = bg;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3500);
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         // Apply label colors
         document.querySelectorAll('.task-label').forEach(label => {
             label.style.backgroundColor = label.dataset.color;
         });
 
-        // Set progress bar widths after DOM is loaded
+        // Progress bar widths are already set server-side via inline styles.
+        // Only re-apply for bars that somehow lost their width (e.g. dynamic content).
         document.querySelectorAll('.progress-bar[data-progress], .card-progress-fill[data-progress]').forEach(el => {
-            const progressValue = el.dataset.progress;
-            el.style.width = progressValue + '%';
-            if (el.setAttribute) el.setAttribute('aria-valuenow', progressValue);
-            el.offsetHeight;
+            if (!el.style.width) {
+                el.style.width = el.dataset.progress + '%';
+            }
         });
         
-        // ── Quick-view drawer open / close ──
+        // -- Quick-view drawer open / close --
         const drawer    = document.getElementById('task-drawer');
         const backdrop  = document.getElementById('drawer-backdrop');
 
@@ -1241,9 +1294,9 @@
             }
         });
 
-        // ══════════════════════════════════════════════════════
+        // ------------------------------------------------------
         // Quick-view drawer field handlers (event delegation)
-        // ══════════════════════════════════════════════════════
+        // ------------------------------------------------------
         // ONE change handler + ONE click handler on the
         // persistent #task-drawer-body container.  Uses plain
         // fetch (not htmx.ajax) for drawer reload to avoid
@@ -1277,7 +1330,7 @@
                 if (badge) badge.textContent = cnt;
             }
 
-            // ── Update the kanban card on the board using data from the API ──
+            // -- Update the kanban card on the board using data from the API --
             function refreshCard(cardData) {
                 if (!cardData || !cardData.id) return;
                 var card = document.getElementById('task-' + cardData.id);
@@ -1289,14 +1342,14 @@
                     taskIdEl.textContent = cardData.task_id_display;
                 }
 
-                // Priority → border-left color
+                // Priority ? border-left color
                 var prio = cardData.priority;
                 var borderColor = '#6c757d'; // default (low)
                 if (prio === 'high' || prio === 'urgent') borderColor = '#dc3545';
                 else if (prio === 'medium') borderColor = '#f59e0b';
                 card.style.borderLeftColor = borderColor;
 
-                // Progress → bottom strip
+                // Progress ? bottom strip
                 var fill = card.querySelector('.card-progress-fill');
                 if (fill) {
                     fill.style.width = cardData.progress + '%';
@@ -1373,7 +1426,7 @@
                 .catch(function() { reloadDrawer(); });
             }
 
-            // ── Single CHANGE handler (covers all selects & inputs) ──
+            // -- Single CHANGE handler (covers all selects & inputs) --
             drawerBody.addEventListener('change', function(e) {
                 var target = e.target;
 
@@ -1444,7 +1497,7 @@
                 }
             });
 
-            // ── Single CLICK handler (progress +/− buttons) ──
+            // -- Single CLICK handler (progress +/- buttons) --
             drawerBody.addEventListener('click', function(e) {
                 var btn = e.target.closest('.qv-progress-btn');
                 if (!btn) return;
@@ -1468,7 +1521,7 @@
             });
         })();
 
-        // ── Inline status picker (card hover bar) ──
+        // -- Inline status picker (card hover bar) --
         // Attach directly to buttons (not document delegation) because
         // the parent .card-hover-actions div uses stopPropagation to
         // prevent card-level HTMX click from firing.
@@ -1476,7 +1529,7 @@
             return document.querySelector('[name=csrfmiddlewaretoken]')?.value
                 || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
         }
-        // ── Flyout portal: single fixed div on <body> for all card pickers ──
+        // -- Flyout portal: single fixed div on <body> for all card pickers --
         const flyout = document.getElementById('inline-picker-flyout');
         let flyoutTaskId = null;
         let flyoutType = null;
@@ -1518,10 +1571,10 @@
 
             flyout.style.left = cardRect.left + 'px';
             if (btnRect.top >= flyoutH + 8) {
-                // Enough space above — open upward
+                // Enough space above � open upward
                 flyout.style.top = (btnRect.top - flyoutH - 4) + 'px';
             } else {
-                // Not enough space above — open downward
+                // Not enough space above � open downward
                 flyout.style.top = (btnRect.bottom + 4) + 'px';
             }
         }
@@ -1564,14 +1617,14 @@
             });
         });
 
-        // ── Close flyout on click outside ──
+        // -- Close flyout on click outside --
         document.addEventListener('click', function(e) {
             if (!e.target.closest('#inline-picker-flyout, .status-change-btn, .assignee-change-btn')) {
                 closeFlyout();
             }
         });
 
-        // ── Set WIP Limit modal handler ──
+        // -- Set WIP Limit modal handler --
         (function() {
             const wipModal = document.getElementById('wipLimitModal');
             const wipInput = document.getElementById('wipLimitInput');
@@ -1617,7 +1670,7 @@
             });
         })();
 
-        // ── Collapse Column handler ──
+        // -- Collapse Column handler --
         // Use direct per-button listeners (not document delegation) so the
         // handler fires at the button level, before Bootstrap's document-level
         // clearMenus handler can call stopImmediatePropagation and swallow it.
@@ -1634,6 +1687,42 @@
                 this.innerHTML = isCollapsed
                     ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
                     : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+            });
+        });
+
+        // -- Column Color Picker handler --
+        document.querySelectorAll('.column-color-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const colId = this.dataset.columnId;
+                const color = this.dataset.color;
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                const formData = new FormData();
+                formData.append('color', color);
+                fetch(`/columns/${colId}/update-color/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const header = document.querySelector(`#column-${colId} .kanban-column-header`);
+                        if (header) {
+                            header.className = header.className.replace(/kanban-column-header--\w+/g, '');
+                            header.classList.add('kanban-column-header--' + color);
+                        }
+                        // Update selected indicator
+                        const parent = this.closest('.d-flex.gap-1');
+                        if (parent) {
+                            parent.querySelectorAll('.column-color-btn').forEach(b => {
+                                b.classList.remove('border-dark', 'border-2');
+                            });
+                            this.classList.add('border-dark', 'border-2');
+                        }
+                    }
+                });
             });
         });
         
@@ -1748,7 +1837,7 @@
 
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 
-<!-- Déjà Vu Banner Script -->
+<!-- D�j� Vu Banner Script -->
 <script>
 (function() {
     fetch("{% url 'deja_vu_check' board.id %}")
@@ -1765,7 +1854,7 @@
 </script>
 {% endblock %}
 
-<!-- ── AI Tools Slide-Out Panel ── -->
+<!-- -- AI Tools Slide-Out Panel -- -->
 <div class="offcanvas offcanvas-end" id="aiToolsPanel" tabindex="-1" aria-labelledby="aiToolsPanelLabel" data-bs-scroll="true" data-bs-backdrop="false">
     <div class="offcanvas-header">
         <h5 class="offcanvas-title" id="aiToolsPanelLabel"><i class="fas fa-bolt me-2"></i>AI Tools</h5>
@@ -1774,45 +1863,52 @@
     <div class="offcanvas-body">
         <!-- Section 1: Analyze -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">📊 Analyze</div>
+            <div class="ai-panel-section-header">?? Analyze</div>
             <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}">
-                    <span class="tile-icon text-primary"><i class="fas fa-chart-pie"></i></span>
+                <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}" title="View board analytics, charts, and AI insights" style="position:relative;">
+                    <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-pie"></i></span>
                     <span class="tile-label">Analytics</span>
+                    {% if not board.project_type_confirmed %}
+                    <span style="position:absolute;top:2px;right:4px;font-size:.65rem;animation:sparkle-pulse 2s ease-in-out infinite;" title="Let Spectra analyse your board for smarter insights">&#10024;</span>
+                    {% endif %}
                 </a>
-                <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}">
-                    <span class="tile-icon text-success"><i class="fas fa-chart-line"></i></span>
+                <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}" title="AI-powered burndown prediction and completion forecast">
+                    <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-line"></i></span>
                     <span class="tile-label">Burndown</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'skill_gap_dashboard' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-wand-magic-sparkles"></i></span>
+                <a class="ai-panel-tile" href="{% url 'skill_gap_dashboard' board.id %}" title="Identify team skill gaps and create development plans">
+                    <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-wand-magic-sparkles"></i></span>
                     <span class="tile-label">Skill Gaps</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'board_status_report' board.id %}">
-                    <span class="tile-icon text-dark"><i class="fas fa-file-alt"></i></span>
+                <a class="ai-panel-tile" href="{% url 'board_status_report' board.id %}" title="Generate stakeholder-ready project status reports">
+                    <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-file-alt"></i></span>
                     <span class="tile-label">Status Report</span>
+                </a>
+                <a class="ai-panel-tile" href="#" onclick="event.preventDefault(); openResourceOptimization();" title="AI-powered team workload optimization and task reassignment">
+                    <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-users-cog"></i></span>
+                    <span class="tile-label">Resource Optimization</span>
                 </a>
             </div>
         </div>
 
         <!-- Section 2: Plan -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">📅 Plan</div>
+            <div class="ai-panel-section-header">?? Plan</div>
             <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}">
-                    <span class="tile-icon text-info"><i class="fas fa-chart-gantt"></i></span>
+                <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}" title="Interactive Gantt chart with dependencies">
+                    <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-gantt"></i></span>
                     <span class="tile-label">Gantt Chart</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'board_calendar' board.id %}">
-                    <span class="tile-icon text-secondary"><i class="fas fa-calendar-alt"></i></span>
+                <a class="ai-panel-tile" href="{% url 'board_calendar' board.id %}" title="Calendar view of tasks and deadlines">
+                    <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-calendar-alt"></i></span>
                     <span class="tile-label">Calendar</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'budget_dashboard' board.id %}">
-                    <span class="tile-icon text-success"><i class="fas fa-dollar-sign"></i></span>
+                <a class="ai-panel-tile" href="{% url 'budget_dashboard' board.id %}" title="Track budget, costs, and return on investment">
+                    <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-dollar-sign"></i></span>
                     <span class="tile-label">Budget & ROI</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'scope_dashboard' board.id %}">
-                    <span class="tile-icon text-primary"><i class="fas fa-chart-area"></i></span>
+                <a class="ai-panel-tile" href="{% url 'scope_dashboard' board.id %}" title="Monitor scope changes, snapshots, and constraints">
+                    <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-area"></i></span>
                     <span class="tile-label">Scope</span>
                 </a>
             </div>
@@ -1820,42 +1916,42 @@
 
         <!-- Section 3: AI Actions -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">🤖 AI Actions</div>
+            <div class="ai-panel-section-header">?? AI Actions</div>
             <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}">
-                    <span class="tile-icon" style="color:#667eea;"><i class="fas fa-user-graduate"></i></span>
+                <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}" title="Proactive AI coaching suggestions for your project">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-user-graduate"></i></span>
                     <span class="tile-label">AI Coach</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'prizmbrief_setup' board.id %}">
-                    <span class="tile-icon text-primary"><i class="fas fa-magic"></i></span>
+                <a class="ai-panel-tile" href="{% url 'prizmbrief_setup' board.id %}" title="Generate AI presentation slides from board data">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-magic"></i></span>
                     <span class="tile-label">PrizmBrief</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'whatif_dashboard' board.id %}">
-                    <span class="tile-icon text-info"><i class="fas fa-flask"></i></span>
+                <a class="ai-panel-tile" href="{% url 'whatif_dashboard' board.id %}" title="Simulate scenario changes and analyze impact">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-flask"></i></span>
                     <span class="tile-label">What-If</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'shadow_board_list' board.id %}">
-                    <span class="tile-icon" style="color: #9c27b0;"><i class="fas fa-atom"></i></span>
+                <a class="ai-panel-tile" href="{% url 'shadow_board_list' board.id %}" title="Create parallel universe simulations of your project">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-atom"></i></span>
                     <span class="tile-label">Shadow Board</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}">
-                    <span class="tile-icon text-danger"><i class="fas fa-shield-alt"></i></span>
+                <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}" title="Simulate failure scenarios before they happen">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-shield-alt"></i></span>
                     <span class="tile-label">Pre-Mortem</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'stress_test_dashboard' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-bolt"></i></span>
+                <a class="ai-panel-tile" href="{% url 'stress_test_dashboard' board.id %}" title="Red-team your project plan with AI attack scenarios">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-bolt"></i></span>
                     <span class="tile-label">Stress Test</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}">
-                    <span class="tile-icon text-secondary"><i class="fas fa-history"></i></span>
+                <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}" title="AI-powered retrospectives and improvement tracking">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-history"></i></span>
                     <span class="tile-label">Retrospectives</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-microscope"></i></span>
+                <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}" title="Forensic analysis of how your scope grew">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-microscope"></i></span>
                     <span class="tile-label">Scope Autopsy</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}">
-                    <span class="tile-icon" style="color: #e65100;"><i class="fas fa-skull-crossbones"></i></span>
+                <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}" title="Manage project wind-down, knowledge preservation, and archival">
+                    <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-skull-crossbones"></i></span>
                     <span class="tile-label">Exit Protocol</span>
                 </a>
             </div>
@@ -1863,22 +1959,22 @@
 
         <!-- Section 4: Board Settings -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">⚙️ Board Settings</div>
+            <div class="ai-panel-section-header">?? Board Settings</div>
             <div class="ai-panel-grid">
-                <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}">
-                    <span class="tile-icon text-warning"><i class="fas fa-bolt"></i></span>
+                <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}" title="Configure automated workflows and rules">
+                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-bolt"></i></span>
                     <span class="tile-label">Automations</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}">
-                    <span class="tile-icon text-info"><i class="fas fa-wand-magic-sparkles"></i></span>
+                <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}" title="Manage board knowledge base for AI context">
+                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-wand-magic-sparkles"></i></span>
                     <span class="tile-label">Knowledge Base</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=json">
-                    <span class="tile-icon text-success"><i class="fas fa-file-export"></i></span>
+                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=json" title="Export board data as JSON file">
+                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-file-export"></i></span>
                     <span class="tile-label">Export JSON</span>
                 </a>
-                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=csv">
-                    <span class="tile-icon text-success"><i class="fas fa-file-csv"></i></span>
+                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=csv" title="Export board data as CSV spreadsheet">
+                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-file-csv"></i></span>
                     <span class="tile-label">Export CSV</span>
                 </a>
             </div>
@@ -1917,10 +2013,43 @@
 })();
 </script>
 
-{# ── Single flyout portal for card hover pickers (escapes all overflow containers) ── #}
+{# -- Single flyout portal for card hover pickers (escapes all overflow containers) -- #}
 <div id="inline-picker-flyout"
      class="d-none"
      onclick="event.stopPropagation();"
      style="position:fixed;z-index:9999;background:var(--card-bg,#fff);border:1px solid var(--border-color,#dee2e6);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:200px;overflow-y:auto;min-width:120px;"></div>
+
+<!-- Resource Optimization Modal -->
+<div class="modal fade" id="resourceOptimizationModal" tabindex="-1" aria-labelledby="resourceOptimizationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="border-left:4px solid #5046e5;">
+                <h5 class="modal-title" id="resourceOptimizationModalLabel">
+                    <i class="fas fa-users-cog" style="color:#5046e5;"></i> AI Resource Optimization
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% include 'kanban/resource_leveling_widget.html' %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openResourceOptimization() {
+    // Close the AI Tools panel
+    var aiPanel = document.getElementById('aiToolsPanel');
+    if (aiPanel && aiPanel.classList.contains('show')) {
+        var offcanvas = bootstrap.Offcanvas.getInstance(aiPanel);
+        if (offcanvas) offcanvas.hide();
+    }
+    // Open the resource optimization modal
+    var modal = new bootstrap.Modal(document.getElementById('resourceOptimizationModal'));
+    modal.show();
+    // Load data when modal opens
+    loadResourceOptimization();
+}
+</script>
 
 {% endblock content %}

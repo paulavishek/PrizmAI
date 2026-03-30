@@ -142,10 +142,14 @@
                 <div class="notification-item {% if not notification.is_read %}unread{% endif %}{% if notification.task_thread_comment or notification.chat_message or notification.action_url %} has-link{% endif %}">  
                     <div class="notification-header">
                         <span class="notification-type">
-                            {% if notification.notification_type == 'mention' %}
+                            {% if notification.notification_type == 'MENTION' %}
                                 <i class="fas fa-at me-1"></i> Mention
-                            {% elif notification.notification_type == 'message' %}
+                            {% elif notification.notification_type == 'CHAT_MESSAGE' %}
                                 <i class="fas fa-comment me-1"></i> Message
+                            {% elif notification.notification_type == 'ACCESS_REQUEST' %}
+                                <i class="fas fa-user-lock me-1"></i> Access Request
+                            {% elif notification.notification_type == 'ACCESS_RESPONSE' %}
+                                <i class="fas fa-key me-1"></i> Access Response
                             {% else %}
                                 <i class="fas fa-info-circle me-1"></i> Notification
                             {% endif %}
@@ -193,6 +197,8 @@
                                 {% elif notification.notification_type == 'ACTIVITY' %}View Task
                                 {% elif notification.notification_type == 'TASK_ASSIGNED_CAL' %}View Task
                                 {% elif notification.notification_type == 'EVENT_INVITED' %}View Calendar
+                                {% elif notification.notification_type == 'ACCESS_REQUEST' %}Review Request
+                                {% elif notification.notification_type == 'ACCESS_RESPONSE' %}Open Board
                                 {% else %}View Details{% endif %}
                             </a>
                         {% endif %}

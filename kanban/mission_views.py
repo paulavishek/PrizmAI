@@ -1,19 +1,24 @@
 """
 Mission & Strategy views.
 
-Hierarchy:   Mission (problem) → Strategy (solution) → Board → Task
+Hierarchy:   Goal → Mission (problem) → Strategy (solution) → Board → Task
 
-Access policy: NO restrictions beyond simple login_required.
-All authenticated users can view, create, edit and delete any mission or strategy.
-This matches the same open-access model used for Boards in the rest of the app.
+Access policy (RBAC Phase 3 — Upward Visibility Rule):
+  - View access: view_goal / view_mission / view_strategy predicates.
+  - Edit/Delete: edit_goal / edit_mission / edit_strategy predicates.
+  - Goal creation: OrgAdmin only.
+  - Board Members can SEE parent Strategy/Mission/Goal names (read-only)
+    but CANNOT edit strategic-level records.
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from kanban.decorators import demo_write_guard
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.utils import timezone
 from django.conf import settings as django_settings
+from django.http import Http404
 from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
@@ -23,9 +28,11 @@ from .models import (
     OrganizationGoal, Mission, Strategy, Board, Task,
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, StrategicFollower,
+    BoardMembership,
 )
 from .forms.strategic_forms import GoalEditForm, MissionEditForm, StrategyEditForm
 from accounts.models import Organization
+from django.contrib.auth.models import User
 
 import logging
 logger = logging.getLogger(__name__)
@@ -35,48 +42,63 @@ def _handle_edit_cascade(request, record, change_reason, level):
     """
     Post-edit cascade logic based on change_reason.
 
-    minor_tweak   → save silently (stale flag handled by timestamp comparison)
-    scope_change  → notify board members + trigger AI regeneration (this level + one above)
+    minor_tweak     → notify followers only (soft message, no AI regen)
+    scope_change    → notify board members + followers + trigger AI regeneration
     strategic_pivot → same as scope_change + Spectra warning about linked boards
     """
-    if change_reason == 'minor_tweak':
-        return  # Nothing extra — stale indicator derives from timestamps
+    level_display = level.capitalize()
 
-    # Collect board members to notify
-    board_members = set()
-    if level == 'goal':
-        boards = Board.objects.filter(strategy__mission__organization_goal=record)
-    elif level == 'mission':
-        boards = Board.objects.filter(strategy__mission=record)
-    else:  # strategy
-        boards = Board.objects.filter(strategy=record)
-
-    for board in boards.select_related():
-        board_members.update(board.members.all())
-
-    # Send in-app notifications to board members AND followers
+    # --- Always notify followers (even for minor tweaks) ---
     try:
         from messaging.models import Notification
         from django.contrib.contenttypes.models import ContentType
-        level_display = level.capitalize()
         ct = ContentType.objects.get_for_model(record)
         followers_qs = StrategicFollower.objects.filter(
             content_type=ct, object_id=record.pk,
         ).select_related('user')
         follower_users = {f.user for f in followers_qs}
 
-        # Union of board members and followers, excluding the editor
-        recipients = (board_members | follower_users) - {request.user}
+        if change_reason == 'minor_tweak':
+            notification_text = f'{level_display} "{record.name}" was updated (minor edit).'
+            recipients = follower_users - {request.user}
+        else:
+            # scope_change / strategic_pivot — also notify board members
+            board_members = set()
+            if level == 'goal':
+                boards = Board.objects.filter(strategy__mission__organization_goal=record)
+            elif level == 'mission':
+                boards = Board.objects.filter(strategy__mission=record)
+            else:  # strategy
+                boards = Board.objects.filter(strategy=record)
+
+            for board in boards.select_related():
+                board_members.update(User.objects.filter(board_memberships__board=board))
+
+            notification_text = f'{level_display} "{record.name}" was updated — review impact.'
+            recipients = (board_members | follower_users) - {request.user}
+
         for recipient in recipients:
             Notification.objects.create(
                 recipient=recipient,
                 sender=request.user,
                 notification_type='ACTIVITY',
-                text=f'{level_display} "{record.name}" was updated — review impact.',
+                text=notification_text,
                 action_url=record.get_absolute_url(),
             )
     except Exception as e:
         logger.warning("Failed to send edit notifications: %s", e)
+
+    # Minor tweaks don't need AI regeneration — stop here
+    if change_reason == 'minor_tweak':
+        return
+
+    # Collect boards reference for strategic_pivot logging below
+    if level == 'goal':
+        boards = Board.objects.filter(strategy__mission__organization_goal=record)
+    elif level == 'mission':
+        boards = Board.objects.filter(strategy__mission=record)
+    else:
+        boards = Board.objects.filter(strategy=record)
 
     # Trigger AI summary regeneration at this level + one level above
     try:
@@ -220,13 +242,39 @@ def _compute_health_score(board_ids):
 
 @login_required
 def goal_list(request):
-    """Show all Organization Goals."""
-    goals = OrganizationGoal.objects.all().annotate(
+    """Show Organization Goals scoped by RBAC board membership."""
+    from accounts.models import UserProfile
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        profile = None
+
+    demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+
+    if demo_mode:
+        goals = OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    elif _is_org_admin:
+        goals = OrganizationGoal.objects.filter(
+            is_demo=False, is_seed_demo_data=False,
+        )
+    else:
+        # RBAC: goals the user created OR goals that are ancestors of
+        # boards the user is a member of (Upward Visibility Rule).
+        goals = OrganizationGoal.objects.filter(
+            Q(created_by=request.user) |
+            Q(missions__strategies__boards__memberships__user=request.user)
+        ).filter(is_demo=False, is_seed_demo_data=False)
+
+    goals = goals.annotate(
         mission_count=Count('missions', distinct=True),
-    ).order_by('-created_at')
+    ).distinct().order_by('-created_at')
 
     return render(request, 'kanban/goal_list.html', {
         'goals': goals,
+        'can_create_goal': _is_org_admin,
     })
 
 
@@ -234,13 +282,16 @@ def goal_list(request):
 def goal_detail(request, goal_id):
     """Show a single Organization Goal with 4-tab layout, health score, versions, updates, followers."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.view_goal', goal):
+        raise Http404
     linked_missions = goal.missions.all().annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')
 
-    # Missions not yet linked (for the link dropdown)
-    all_missions = Mission.objects.exclude(organization_goal=goal).order_by('name')
+    # Missions not yet linked (for the link dropdown) — scoped to user's own missions
+    all_missions = Mission.objects.filter(created_by=request.user).exclude(organization_goal=goal).order_by('name')
 
     # --- Board IDs under this goal ---
     goal_board_ids = list(Board.objects.filter(
@@ -287,6 +338,12 @@ def goal_detail(request, goal_id):
         days_remaining = delta.days
         days_remaining_abs = abs(days_remaining)
 
+    # ── Goal-Aware Analytics: portfolio + proxy metrics ──
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+    from kanban.models import GoalProxyMetric
+    portfolio = get_portfolio_analytics(goal, 'goal')
+    proxy_metrics = GoalProxyMetric.objects.filter(goal=goal).order_by('display_order')
+
     return render(request, 'kanban/goal_detail.html', {
         # Shared skeleton context
         'record': goal,
@@ -311,12 +368,25 @@ def goal_detail(request, goal_id):
         'all_missions': all_missions,
         'favorite_type': 'goal',
         'is_favorited': _is_fav(request.user, 'goal', goal.pk),
+        # Goal-Aware Analytics
+        'portfolio': portfolio,
+        'proxy_metrics': proxy_metrics,
+        'portfolio_narrative': goal.portfolio_narrative,
+        # RBAC context
+        'can_edit': request.user.has_perm('prizmai.edit_goal', goal),
+        'can_delete': request.user.has_perm('prizmai.edit_goal', goal),
+        'can_create_child': request.user.has_perm('prizmai.edit_goal', goal) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
     })
 
 
 @login_required
+@demo_write_guard
 def create_goal(request):
     """Create a new Organization Goal."""
+    if not request.user.groups.filter(name='OrgAdmin').exists():
+        messages.error(request, 'Only organization administrators can create goals.')
+        return redirect('goal_list')
+
     organizations = Organization.objects.all().order_by('name')
 
     if request.method == 'POST':
@@ -347,6 +417,14 @@ def create_goal(request):
             organization=organization,
             created_by=request.user,
         )
+
+        # Auto-generate proxy metrics in background
+        try:
+            from kanban.tasks.ai_summary_tasks import generate_proxy_metrics_on_goal_creation
+            generate_proxy_metrics_on_goal_creation.delay(goal.id)
+        except Exception:
+            pass  # Celery/Redis may be unavailable in dev
+
         messages.success(request, f'Organization Goal "{goal.name}" created successfully!')
         return redirect('goal_detail', goal_id=goal.id)
 
@@ -356,9 +434,15 @@ def create_goal(request):
 
 
 @login_required
+@demo_write_guard
 def edit_goal(request, goal_id):
     """Edit an existing Organization Goal with version history."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to edit this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
+
     organizations = Organization.objects.all().order_by('name')
 
     if request.method == 'POST':
@@ -404,9 +488,14 @@ def edit_goal(request, goal_id):
 
 
 @login_required
+@demo_write_guard
 def delete_goal(request, goal_id):
     """Delete an Organization Goal. Linked Missions become unlinked (SET_NULL)."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to delete this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
 
     if request.method == 'POST':
         name = goal.name
@@ -418,9 +507,39 @@ def delete_goal(request, goal_id):
 
 
 @login_required
+@demo_write_guard
+def set_mission_goal(request, mission_id):
+    """POST: Set (or clear) the parent Goal for a Mission — from the Mission's own detail page."""
+    mission = get_object_or_404(Mission, id=mission_id)
+
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to modify this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
+
+    if request.method == 'POST':
+        goal_id = request.POST.get('goal_id', '').strip()
+        if goal_id:
+            goal = get_object_or_404(OrganizationGoal, id=goal_id)
+            mission.organization_goal = goal
+            mission.save(update_fields=['organization_goal'])
+            messages.success(request, f'Mission linked to goal "{goal.name}".')
+        else:
+            mission.organization_goal = None
+            mission.save(update_fields=['organization_goal'])
+            messages.success(request, 'Mission unlinked from its goal.')
+
+    return redirect('mission_detail', mission_id=mission.id)
+
+
+@login_required
+@demo_write_guard
 def link_mission_to_goal(request, goal_id):
     """Link an existing Mission to this Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to modify this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
 
     if request.method == 'POST':
         mission_id = request.POST.get('mission_id')
@@ -433,10 +552,15 @@ def link_mission_to_goal(request, goal_id):
 
 
 @login_required
+@demo_write_guard
 def unlink_mission_from_goal(request, goal_id, mission_id):
     """Remove the link between a Mission and an Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
     mission = get_object_or_404(Mission, id=mission_id, organization_goal=goal)
+
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        messages.error(request, 'You do not have permission to modify this goal.')
+        return redirect('goal_detail', goal_id=goal.id)
 
     if request.method == 'POST':
         mission.organization_goal = None
@@ -452,8 +576,34 @@ def unlink_mission_from_goal(request, goal_id, mission_id):
 
 @login_required
 def mission_list(request):
-    """Show all missions — no filtering, everyone sees everything (same as board list)."""
-    missions = Mission.objects.select_related('organization_goal').all().annotate(
+    """Show missions filtered by current mode (sandbox/demo/real)."""
+    from accounts.models import UserProfile
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        profile = None
+
+    demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
+
+    if demo_mode:
+        # Sandbox: show official demo missions (the template hierarchy)
+        missions = Mission.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    elif request.user.groups.filter(name='OrgAdmin').exists():
+        # Org Admin: all non-demo missions
+        missions = Mission.objects.filter(
+            is_demo=False, is_seed_demo_data=False,
+        )
+    else:
+        # RBAC: missions the user created OR missions whose strategies
+        # contain boards the user is a member of (Upward Visibility Rule).
+        missions = Mission.objects.filter(
+            Q(created_by=request.user) |
+            Q(strategies__boards__memberships__user=request.user)
+        ).filter(is_demo=False, is_seed_demo_data=False)
+
+    missions = missions.distinct().select_related('organization_goal').annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')
@@ -467,14 +617,35 @@ def mission_list(request):
 def mission_detail(request, mission_id):
     """Show a single mission with 4-tab layout, health score, versions, updates, followers."""
     mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
-    strategies = mission.strategies.all().annotate(
+
+    if not request.user.has_perm('prizmai.view_mission', mission):
+        raise Http404
+
+    # --- RBAC: boards the current user can access under this mission ---
+    user_accessible_board_ids = set(
+        BoardMembership.objects.filter(
+            user=request.user,
+            board__strategy__mission=mission,
+        ).values_list('board_id', flat=True)
+    )
+    # Org admins / record owners see everything
+    _is_admin_or_owner = (
+        request.user.has_perm('prizmai.edit_mission', mission)
+        or request.user.groups.filter(name='OrgAdmin').exists()
+    )
+    if _is_admin_or_owner:
+        user_accessible_board_ids = set(Board.objects.filter(
+            strategy__mission=mission
+        ).values_list('id', flat=True))
+
+    strategies = mission.strategies.filter(
+        boards__id__in=user_accessible_board_ids
+    ).distinct().annotate(
         board_count=Count('boards', distinct=True)
     ).order_by('-created_at')
 
-    # --- Board IDs under this mission ---
-    board_ids = list(Board.objects.filter(
-        strategy__mission=mission
-    ).values_list('id', flat=True))
+    # --- Board IDs under this mission (scoped to user) ---
+    board_ids = list(user_accessible_board_ids)
 
     # --- Health score (0-100) ---
     health_score, completion_pct, total_tasks, done_tasks = _compute_health_score(board_ids)
@@ -482,9 +653,9 @@ def mission_detail(request, mission_id):
     # --- Per-strategy health for the strategy cards ---
     strategy_tree = []
     for strategy in strategies:
-        s_bids = list(Board.objects.filter(strategy=strategy).values_list('id', flat=True))
+        s_bids = list(Board.objects.filter(strategy=strategy, id__in=user_accessible_board_ids).values_list('id', flat=True))
         s_health, s_pct, s_total, s_done = _compute_health_score(s_bids)
-        s_boards = Board.objects.filter(strategy=strategy).order_by('name')
+        s_boards = Board.objects.filter(strategy=strategy, id__in=user_accessible_board_ids).order_by('name')
         board_items = []
         for b in s_boards:
             b_bids = [b.id]
@@ -559,6 +730,10 @@ def mission_detail(request, mission_id):
         premortem_boards.append({'board': b, 'risk_level': None, 'created_at': None})
     high_risk_count = sum(1 for b in premortem_boards if b['risk_level'] == 'high')
 
+    # ── Goal-Aware Analytics: portfolio analytics ──
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+    portfolio = get_portfolio_analytics(mission, 'mission')
+
     return render(request, 'kanban/mission_detail.html', {
         # Shared skeleton context
         'record': mission,
@@ -589,39 +764,67 @@ def mission_detail(request, mission_id):
         'premortem_total_boards': len(premortem_boards),
         'favorite_type': 'mission',
         'is_favorited': _is_fav(request.user, 'mission', mission.pk),
+        # Goal-Aware Analytics
+        'portfolio': portfolio,
+        'portfolio_narrative': mission.portfolio_narrative,
+        # RBAC context
+        'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
+        'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
+        'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
+        # All goals for the "Link to Goal" sidebar widget — scoped to user's own goals
+        'all_goals': OrganizationGoal.objects.filter(created_by=request.user).order_by('name'),
     })
 
 
 @login_required
+@demo_write_guard
 def create_mission(request):
     """Create a new mission."""
+    all_goals = OrganizationGoal.objects.order_by('name')
+
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         description = request.POST.get('description', '').strip()
         status = request.POST.get('status', 'active')
+        goal_id = request.POST.get('organization_goal_id', '').strip()
 
         if not name:
             messages.error(request, 'Mission name is required.')
             return render(request, 'kanban/create_mission.html', {
                 'post': request.POST,
+                'all_goals': all_goals,
             })
+
+        organization_goal = None
+        if goal_id:
+            try:
+                organization_goal = OrganizationGoal.objects.get(id=int(goal_id))
+            except (OrganizationGoal.DoesNotExist, ValueError):
+                pass
 
         mission = Mission.objects.create(
             name=name,
             description=description or None,
             status=status,
+            organization_goal=organization_goal,
             created_by=request.user,
+            owner=request.user,
         )
         messages.success(request, f'Mission "{mission.name}" created successfully!')
         return redirect('mission_detail', mission_id=mission.id)
 
-    return render(request, 'kanban/create_mission.html', {})
+    return render(request, 'kanban/create_mission.html', {'all_goals': all_goals})
 
 
 @login_required
+@demo_write_guard
 def edit_mission(request, mission_id):
     """Edit an existing mission with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
+
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to edit this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
 
     if request.method == 'POST':
         form = MissionEditForm(request.POST, instance=mission)
@@ -661,9 +864,14 @@ def edit_mission(request, mission_id):
 
 
 @login_required
+@demo_write_guard
 def delete_mission(request, mission_id):
     """Delete a mission (and cascade-delete its strategies; boards become unlinked)."""
     mission = get_object_or_404(Mission, id=mission_id)
+
+    if not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to delete this mission.')
+        return redirect('mission_list')
 
     if request.method == 'POST':
         name = mission.name
@@ -687,9 +895,15 @@ def strategy_detail_shortcut(request, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def create_strategy(request, mission_id):
     """Create a strategy under a mission."""
     mission = get_object_or_404(Mission, id=mission_id)
+
+    is_demo_viewer = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if not is_demo_viewer and not request.user.has_perm('prizmai.edit_mission', mission):
+        messages.error(request, 'You do not have permission to create strategies under this mission.')
+        return redirect('mission_detail', mission_id=mission.id)
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -722,6 +936,9 @@ def strategy_detail(request, mission_id, strategy_id):
     mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
+    if not request.user.has_perm('prizmai.view_strategy', strategy):
+        raise Http404
+
     linked_boards = strategy.boards.all().order_by('-created_at')
 
     # All boards (for "link existing board" dropdown) — no restriction
@@ -741,7 +958,7 @@ def strategy_detail(request, mission_id, strategy_id):
             column__board=b, due_date__lt=timezone.now(),
             completed_at__isnull=True, item_type='task',
         ).count()
-        member_count = b.members.count()
+        member_count = b.memberships.count()
         board_items.append({
             'board': b, 'total_tasks': b_total, 'done_tasks': b_done,
             'completion_pct': b_pct, 'health_score': b_health,
@@ -783,6 +1000,10 @@ def strategy_detail(request, mission_id, strategy_id):
         days_remaining = delta.days
         days_remaining_abs = abs(days_remaining)
 
+    # ── Goal-Aware Analytics: portfolio analytics ──
+    from kanban.utils.analytics_helpers import get_portfolio_analytics
+    portfolio = get_portfolio_analytics(strategy, 'strategy')
+
     return render(request, 'kanban/strategy_detail.html', {
         # Shared skeleton context
         'record': strategy,
@@ -811,14 +1032,26 @@ def strategy_detail(request, mission_id, strategy_id):
         'milestones_missed': milestones_missed,
         'milestones_complete': milestones_complete,
         'milestones_pending': milestones_pending,
+        # Goal-Aware Analytics
+        'portfolio': portfolio,
+        'portfolio_narrative': strategy.portfolio_narrative,
+        # RBAC context
+        'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy),
+        'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy),
+        'can_create_child': request.user.has_perm('prizmai.edit_strategy', strategy) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
     })
 
 
 @login_required
+@demo_write_guard
 def edit_strategy(request, mission_id, strategy_id):
     """Edit an existing strategy with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
+
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to edit this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
         form = StrategyEditForm(request.POST, instance=strategy)
@@ -859,10 +1092,15 @@ def edit_strategy(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def delete_strategy(request, mission_id, strategy_id):
     """Delete a strategy; boards linked to it become unlinked (SET_NULL)."""
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
+
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to delete this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
         name = strategy.name
@@ -877,10 +1115,15 @@ def delete_strategy(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def link_board_to_strategy(request, mission_id, strategy_id):
     """Link an existing board to this strategy (AJAX-friendly POST)."""
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
+
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to modify this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
         board_id = request.POST.get('board_id')
@@ -893,11 +1136,16 @@ def link_board_to_strategy(request, mission_id, strategy_id):
 
 
 @login_required
+@demo_write_guard
 def unlink_board_from_strategy(request, mission_id, strategy_id, board_id):
     """Remove the link between a board and a strategy."""
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
     board = get_object_or_404(Board, id=board_id, strategy=strategy)
+
+    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+        messages.error(request, 'You do not have permission to modify this strategy.')
+        return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
         board.strategy = None
@@ -917,6 +1165,12 @@ _LEVEL_MODELS = {
     'strategy': Strategy,
 }
 
+_LEVEL_EDIT_PERM = {
+    'goal': 'prizmai.edit_goal',
+    'mission': 'prizmai.edit_mission',
+    'strategy': 'prizmai.edit_strategy',
+}
+
 
 @login_required
 def post_strategic_update(request, level, pk):
@@ -929,6 +1183,10 @@ def post_strategic_update(request, level, pk):
         return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
 
     record = get_object_or_404(model_cls, pk=pk)
+
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
@@ -998,6 +1256,11 @@ def regenerate_summary(request, level, pk):
 
     get_object_or_404(model_cls, pk=pk)  # existence check
 
+    record = model_cls.objects.get(pk=pk)
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
+
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
 
@@ -1016,3 +1279,113 @@ def regenerate_summary(request, level, pk):
         return JsonResponse({'success': False, 'error': 'Failed to enqueue task.'}, status=500)
 
     return JsonResponse({'success': True})
+
+
+# ---------------------------------------------------------------------------
+# Strategic Membership Invite Views  (Phase 4)
+# ---------------------------------------------------------------------------
+
+@login_required
+def invite_strategic_member(request, level, pk):
+    """AJAX POST — invite a user to a Goal/Mission/Strategy with a given role."""
+    from django.http import JsonResponse
+    from kanban.models import StrategicMembership
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    # Only the record owner / OrgAdmin can invite
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    user_id = request.POST.get('user_id')
+    role = request.POST.get('role', 'member')
+
+    if role not in ('owner', 'member', 'viewer'):
+        return JsonResponse({'success': False, 'error': 'Invalid role.'}, status=400)
+
+    try:
+        target_user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'User not found.'}, status=404)
+
+    ct = ContentType.objects.get_for_model(record)
+    _, created = StrategicMembership.objects.get_or_create(
+        content_type=ct, object_id=record.pk, user=target_user,
+        defaults={'role': role},
+    )
+    if not created:
+        # Update existing membership role
+        StrategicMembership.objects.filter(
+            content_type=ct, object_id=record.pk, user=target_user,
+        ).update(role=role)
+
+    return JsonResponse({
+        'success': True,
+        'created': created,
+        'username': target_user.username,
+        'role': role,
+    })
+
+
+@login_required
+def remove_strategic_member(request, level, pk, user_id):
+    """AJAX POST — remove a user's StrategicMembership."""
+    from django.http import JsonResponse
+    from kanban.models import StrategicMembership
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    edit_perm = _LEVEL_EDIT_PERM.get(level)
+    if edit_perm and not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    ct = ContentType.objects.get_for_model(record)
+    deleted, _ = StrategicMembership.objects.filter(
+        content_type=ct, object_id=record.pk, user_id=user_id,
+    ).delete()
+
+    return JsonResponse({'success': True, 'deleted': deleted > 0})
+
+
+@login_required
+def list_strategic_members(request, level, pk):
+    """AJAX GET — list StrategicMembership entries for a record."""
+    from django.http import JsonResponse
+    from kanban.models import StrategicMembership
+
+    model_cls = _LEVEL_MODELS.get(level)
+    if model_cls is None:
+        return JsonResponse({'success': False, 'error': 'Invalid level.'}, status=400)
+
+    record = get_object_or_404(model_cls, pk=pk)
+
+    ct = ContentType.objects.get_for_model(record)
+    members = StrategicMembership.objects.filter(
+        content_type=ct, object_id=record.pk,
+    ).select_related('user').order_by('role', 'user__username')
+
+    data = [
+        {
+            'user_id': m.user_id,
+            'username': m.user.username,
+            'role': m.role,
+        }
+        for m in members
+    ]
+
+    return JsonResponse({'success': True, 'members': data})

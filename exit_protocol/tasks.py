@@ -209,8 +209,7 @@ def trigger_hospice_notification(board_id):
     Creates a Notification (type ACTIVITY) for board managers.
     Does NOT auto-create HospiceSession — that requires manager action.
     """
-    from kanban.models import Board
-    from kanban.permission_models import BoardMembership
+    from kanban.models import Board, BoardMembership
     from messaging.models import Notification
     from django.contrib.auth.models import User
 
@@ -219,10 +218,10 @@ def trigger_hospice_notification(board_id):
     except Board.DoesNotExist:
         return
 
-    # Get all board members (managers or anyone with board.edit permission)
+    # Get all board members (owners/members who can edit)
     memberships = BoardMembership.objects.filter(
-        board=board, is_active=True
-    ).select_related('user', 'role')
+        board=board
+    ).select_related('user')
 
     # Use the first member or system as sender
     sender = None
@@ -230,7 +229,7 @@ def trigger_hospice_notification(board_id):
     for membership in memberships:
         if sender is None:
             sender = membership.user
-        if membership.has_permission('board.edit') or membership.has_permission('admin.full'):
+        if membership.role in ('owner', 'member'):
             recipients.append(membership.user)
 
     # Fallback: if no managers found, notify all members
@@ -393,14 +392,20 @@ def generate_knowledge_checklist(session_id):
 
         nodes = MemoryNode.objects.filter(board=board).order_by('-importance_score')
 
-        # Track seen scope-change percentages to deduplicate repeat alerts at the same level
+        # Track seen scope-change percentages and titles to deduplicate
         seen_scope_pcts = set()
+        seen_titles = set()
 
         for node in nodes:
             category = type_to_category.get(node.node_type)
             if category:
-                # Deduplicate scope_change nodes that have the same percentage
-                # (can accumulate when alerts are dismissed and re-fired at the same level)
+                # Deduplicate by title across all node types
+                title_key = (node.title or '').strip().lower()
+                if title_key in seen_titles:
+                    continue
+                seen_titles.add(title_key)
+
+                # Also deduplicate scope_change nodes by percentage
                 if node.node_type == 'scope_change' and node.context_data:
                     pct = node.context_data.get('scope_increase_pct')
                     if pct is not None:
@@ -420,6 +425,9 @@ def generate_knowledge_checklist(session_id):
                 })
     except Exception as e:
         logger.error(f"[ExitProtocol] Knowledge checklist failed for session {session_id}: {e}")
+
+    # Strip empty categories so template doesn't show blank headings (EXP-05)
+    checklist = {k: v for k, v in checklist.items() if v}
 
     session.knowledge_checklist = checklist
     session.save(update_fields=['knowledge_checklist'])
@@ -445,12 +453,12 @@ def generate_team_transition_memos(session_id):
     memos = {}
 
     try:
-        from kanban.permission_models import BoardMembership
+        from kanban.models import BoardMembership
         from kanban.models import Task
 
         memberships = BoardMembership.objects.filter(
-            board=board, is_active=True
-        ).select_related('user', 'role')
+            board=board
+        ).select_related('user')
 
         for membership in memberships:
             member = membership.user
@@ -460,7 +468,7 @@ def generate_team_transition_memos(session_id):
             ).values_list('title', flat=True)[:15]
 
             tasks_summary = ', '.join(member_tasks) if member_tasks else 'No specific task assignments recorded'
-            role_name = membership.role.name if membership.role else 'Team Member'
+            role_name = membership.role.capitalize() if membership.role else 'Team Member'
 
             try:
                 memo = ai_utils.generate_transition_memo(user, {
@@ -617,27 +625,27 @@ def scan_and_extract_organs(session_id):
 
     # 4. Role Definitions
     try:
-        from kanban.permission_models import BoardMembership
+        from kanban.models import BoardMembership
 
         memberships = BoardMembership.objects.filter(
-            board=board, is_active=True
-        ).select_related('role')
+            board=board
+        )
 
         roles_seen = set()
         for m in memberships:
-            if m.role and m.role.name not in roles_seen:
-                roles_seen.add(m.role.name)
+            if m.role and m.role not in roles_seen:
+                roles_seen.add(m.role)
                 payload = {
-                    'role_name': m.role.name,
-                    'description': m.role.description or '',
-                    'permissions': m.role.permissions if m.role.permissions else [],
+                    'role_name': m.role,
+                    'description': f'Board {m.role} role',
+                    'permissions': [],
                 }
                 organ = ProjectOrgan.objects.create(
                     source_board=board,
                     hospice_session=session,
                     organ_type='role_definition',
-                    name=f"Role: {m.role.name}",
-                    description=m.role.description or f"Role definition for {m.role.name}",
+                    name=f"Role: {m.role}",
+                    description=f"Role definition for {m.role}",
                     payload=payload,
                 )
                 organs_created.append(organ.id)
@@ -766,10 +774,10 @@ def perform_burial(session_id):
 
     team_size = 0
     try:
-        from kanban.permission_models import BoardMembership
-        team_size = BoardMembership.objects.filter(board=board, is_active=True).count()
+        from kanban.models import BoardMembership
+        team_size = BoardMembership.objects.filter(board=board).count()
     except Exception:
-        team_size = board.members.count()
+        team_size = 0
 
     budget_allocated = None
     budget_spent = None
@@ -817,8 +825,8 @@ def perform_burial(session_id):
         # Team turnover
         team_turnover = 0
         try:
-            from kanban.permission_models import BoardMembership
-            team_turnover = BoardMembership.objects.filter(board=board, is_active=False).count()
+            # No is_active tracking in new model; turnover not available
+            team_turnover = 0
         except Exception:
             pass
 
@@ -983,7 +991,8 @@ def perform_burial(session_id):
     session.save(update_fields=['status', 'buried_at'])
 
     # ── 9. Send closure notification ──
-    members = board.members.all()
+    from django.contrib.auth.models import User
+    members = User.objects.filter(board_memberships__board=board)
     sender = user if user else User.objects.filter(is_superuser=True).first()
     if sender:
         for member in members:

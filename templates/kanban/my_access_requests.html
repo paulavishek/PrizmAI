@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}My Access Requests{% endblock %}
+
+{% block extra_css %}
+<style>
+    .mar-container { max-width: 700px; margin: 40px auto 0; }
+    .mar-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        padding: 1.25rem; margin-bottom: 1rem;
+        display: flex; align-items: center; gap: 1rem;
+    }
+    .mar-icon {
+        width: 40px; height: 40px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; font-size: 1.1rem;
+    }
+    .mar-icon.pending { background: #fef3c7; color: #f59e0b; }
+    .mar-icon.approved { background: #d1fae5; color: #10b981; }
+    .mar-icon.denied { background: #fee2e2; color: #ef4444; }
+    .mar-icon.cancelled { background: #f3f4f6; color: #9ca3af; }
+    .mar-icon.expired { background: #f3f4f6; color: #9ca3af; }
+    .mar-info { flex: 1; }
+    .mar-board { font-weight: 600; }
+    .mar-meta { font-size: .82rem; color: #888; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mar-container">
+    <h2 class="mb-1"><i class="fas fa-paper-plane me-2"></i>My Access Requests</h2>
+    <p class="text-muted mb-3">Track the status of board access requests you've sent.</p>
+
+    {% if access_requests %}
+    {% for req in access_requests %}
+    <div class="mar-card">
+        <div class="mar-icon {{ req.status }}">
+            {% if req.status == 'pending' %}<i class="fas fa-clock"></i>
+            {% elif req.status == 'approved' %}<i class="fas fa-check"></i>
+            {% elif req.status == 'denied' %}<i class="fas fa-times"></i>
+            {% else %}<i class="fas fa-minus"></i>{% endif %}
+        </div>
+        <div class="mar-info">
+            <div class="mar-board">{{ req.board.name }}</div>
+            <div class="mar-meta">
+                {{ req.get_status_display }} &middot;
+                Sent to {{ req.owner.get_full_name|default:req.owner.username }} &middot;
+                {{ req.created_at|timesince }} ago
+            </div>
+            {% if req.reviewer_message %}
+            <div class="mar-meta mt-1"><i class="fas fa-reply me-1"></i>{{ req.reviewer_message }}</div>
+            {% endif %}
+        </div>
+        {% if req.status == 'pending' %}
+        <form method="post" action="{% url 'cancel_access_request' request_id=req.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Cancel request">
+                <i class="fas fa-times"></i>
+            </button>
+        </form>
+        {% elif req.status == 'approved' %}
+        <a href="{% url 'board_detail' board_id=req.board.id %}" class="btn btn-sm btn-outline-success">
+            <i class="fas fa-arrow-right me-1"></i> Open Board
+        </a>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="text-center text-muted py-4">
+        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+        You haven't sent any access requests yet.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

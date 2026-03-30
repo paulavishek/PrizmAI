@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   /* ── Cemetery Dark Theme Override ── */
-  .cemetery-page { background: #0d0d0d; min-height: 100vh; color: #c9c9c9; }
+  .cemetery-page { background: #0d1117; min-height: 100vh; color: #c9c9c9; }
   .cemetery-page h1, .cemetery-page h2, .cemetery-page h3 { font-family: 'Playfair Display', serif; color: #e8e0d0; }
   .cemetery-header { text-align: center; padding: 3rem 1rem 2rem; }
   .cemetery-header h1 { font-size: 2.4rem; letter-spacing: 0.03em; margin-bottom: 0.5rem; }
@@ -66,6 +66,14 @@
 
 {% block content %}
 <div class="cemetery-page">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}" style="color: #aaa;">Dashboard</a></li>
+      <li class="breadcrumb-item active" style="color: #ccc;">Project Cemetery</li>
+    </ol>
+  </nav>
+
   <div class="cemetery-header">
     <h1>🪦 Project Cemetery</h1>
     <p class="subtitle">Learn from the projects that came before</p>
@@ -107,6 +115,15 @@
       <div class="gravestone-stats">
         👥 {{ entry.team_size|default:"?" }} · ✅ {{ entry.completed_tasks }}/{{ entry.total_tasks }} tasks
       </div>
+      {% if entry.autopsy_summary %}
+      <div style="font-size:0.78rem; color:#888; margin-top:0.6rem; font-style:italic; border-top:1px solid #2a2a2a; padding-top:0.5rem;">
+        💡 {{ entry.autopsy_summary|truncatewords:15 }}
+      </div>
+      {% elif entry.ai_cause_rationale %}
+      <div style="font-size:0.78rem; color:#888; margin-top:0.6rem; font-style:italic; border-top:1px solid #2a2a2a; padding-top:0.5rem;">
+        💡 {{ entry.ai_cause_rationale|truncatewords:15 }}
+      </div>
+      {% endif %}
       {% if entry.tags %}
       <div class="gravestone-tags">
         {% for tag in entry.tags %}
@@ -114,6 +131,7 @@
         {% endfor %}
       </div>
       {% endif %}
+      <div style="margin-top:0.75rem; font-size:0.75rem; color:#555;">View Autopsy →</div>
     </a>
     {% endfor %}
   </div>

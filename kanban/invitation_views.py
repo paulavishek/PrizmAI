@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Board, BoardInvitation
+from .models import Board, BoardInvitation, BoardMembership
 from accounts.models import UserProfile
 
 logger = logging.getLogger(__name__)
@@ -69,11 +69,36 @@ def _send_invitation_email(request, invitation):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
+def manage_board_members(request, board_id):
+    """Display the board member management page (members + pending invitations)."""
+    board = get_object_or_404(Board, id=board_id)
+
+    can_manage = _can_manage_invites(request.user, board)
+
+    memberships = board.memberships.select_related('user', 'added_by').order_by('user__username')
+    pending_invitations = board.invitations.filter(
+        status=BoardInvitation.STATUS_PENDING
+    ).order_by('-created_at')
+
+    return render(request, 'kanban/manage_board_members.html', {
+        'board': board,
+        'memberships': memberships,
+        'pending_invitations': pending_invitations,
+        'can_manage': can_manage,
+    })
+
+
+@login_required
 @require_POST
 def invite_to_board(request, board_id):
     """Send email invitations to one or more addresses (comma/newline separated)."""
     import re
     board = get_object_or_404(Board, id=board_id)
+
+    # Sandbox boards are private — no real-user invitations allowed
+    if board.is_sandbox_copy:
+        messages.error(request, "Sandbox boards are private and cannot have additional members.")
+        return redirect('board_detail', board_id=board.id)
 
     if not _can_manage_invites(request.user, board):
         messages.error(request, "You don't have permission to invite members to this board.")
@@ -103,7 +128,7 @@ def invite_to_board(request, board_id):
             continue
 
         # Already a board member?
-        if board.members.filter(email__iexact=email).exists():
+        if board.memberships.filter(user__email__iexact=email).exists():
             skipped_list.append(f"{email} (already a member)")
             continue
 
@@ -184,13 +209,20 @@ def accept_invitation(request, token):
 
     board = invitation.board
 
-    if user in board.members.all():
+    # Sandbox boards are private — reject even if a token somehow exists
+    if board.is_sandbox_copy:
+        return render(request, 'kanban/invitation_invalid.html', {
+            'reason': 'This board is a private sandbox and cannot accept members.',
+            'board': board,
+        })
+
+    if board.memberships.filter(user=user).exists():
         messages.info(request, f"You are already a member of '{board.name}'.")
         invitation.mark_accepted(user)
         return redirect('board_detail', board_id=board.id)
 
     # Add member and finalise invite
-    board.members.add(user)
+    BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'member'})
     invitation.mark_accepted(user)
 
     # Clear session key if it was set
@@ -219,3 +251,40 @@ def revoke_invitation(request, invitation_id):
         messages.success(request, f"Invitation for {invitation.email} has been revoked.")
 
     return redirect('manage_board_members', board_id=invitation.board.id)
+
+
+@login_required
+@require_POST
+def update_member_role(request, board_id, user_id):
+    """Change a board member's role (Owner/Member/Viewer)."""
+    board = get_object_or_404(Board, id=board_id)
+
+    if not _can_manage_invites(request.user, board):
+        messages.error(request, "You don't have permission to change member roles.")
+        return redirect('manage_board_members', board_id=board.id)
+
+    from django.contrib.auth.models import User
+    target_user = get_object_or_404(User, id=user_id)
+
+    # Prevent changing the board creator's role
+    if target_user == board.created_by:
+        messages.error(request, "Cannot change the board creator's role.")
+        return redirect('manage_board_members', board_id=board.id)
+
+    membership = get_object_or_404(BoardMembership, board=board, user=target_user)
+
+    new_role = request.POST.get('role', '').strip()
+    valid_roles = [r[0] for r in BoardMembership.ROLE_CHOICES]
+    if new_role not in valid_roles:
+        messages.error(request, f"Invalid role: {new_role}")
+        return redirect('manage_board_members', board_id=board.id)
+
+    if membership.role != new_role:
+        membership.role = new_role
+        membership.save(update_fields=['role'])
+        messages.success(
+            request,
+            f"{target_user.get_full_name() or target_user.username}'s role changed to {membership.get_role_display()}."
+        )
+
+    return redirect('manage_board_members', board_id=board.id)

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Access Required — Spectra{% endblock %}
+
+{% block extra_css %}
+<style>
+    .spectra-denial-container {
+        max-width: 560px;
+        margin: 80px auto 0;
+        text-align: center;
+    }
+    .spectra-avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.35);
+    }
+    .spectra-avatar i {
+        font-size: 2rem;
+        color: #fff;
+    }
+    .spectra-bubble {
+        background: #f8f9ff;
+        border: 1px solid #e0e4f5;
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: left;
+        position: relative;
+        margin-bottom: 1.5rem;
+    }
+    .spectra-bubble::before {
+        content: '';
+        position: absolute;
+        top: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-bottom: 10px solid #e0e4f5;
+    }
+    .spectra-bubble::after {
+        content: '';
+        position: absolute;
+        top: -9px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-bottom: 10px solid #f8f9ff;
+    }
+    .spectra-label {
+        font-size: .75rem;
+        font-weight: 600;
+        color: #667eea;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin-bottom: .5rem;
+    }
+    .spectra-msg {
+        font-size: 1rem;
+        line-height: 1.6;
+        color: #333;
+    }
+    .spectra-msg strong {
+        color: #667eea;
+    }
+    .spectra-actions {
+        display: flex;
+        gap: .75rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .btn-spectra {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+        border: none;
+        padding: .6rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: transform .15s, box-shadow .15s;
+    }
+    .btn-spectra:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+        color: #fff;
+    }
+    .btn-spectra:disabled {
+        opacity: .6;
+        transform: none;
+    }
+    .spectra-success {
+        display: none;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 12px;
+        padding: 1.25rem;
+        text-align: left;
+        color: #065f46;
+    }
+    .spectra-success i {
+        color: #10b981;
+    }
+    .request-message-input {
+        border: 1px solid #e0e4f5;
+        border-radius: 8px;
+        padding: .5rem .75rem;
+        width: 100%;
+        margin-bottom: .75rem;
+        font-size: .9rem;
+        display: none;
+    }
+    .request-message-input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="spectra-denial-container">
+    <!-- Spectra Avatar -->
+    <div class="spectra-avatar">
+        <i class="fas fa-sparkles"></i>
+    </div>
+
+    <!-- Spectra Message Bubble -->
+    <div class="spectra-bubble">
+        <div class="spectra-label">Spectra</div>
+        <div class="spectra-msg" id="spectra-denial-msg">
+            {{ spectra_message|safe }}
+        </div>
+    </div>
+
+    <!-- Request Form (only if user can request) -->
+    {% if can_request %}
+    <div id="request-form-section">
+        <input type="text"
+               id="access-request-message"
+               class="request-message-input"
+               placeholder="Add a message (optional) — e.g. 'I need to check the Q4 timeline'"
+               maxlength="500">
+
+        <div class="spectra-actions">
+            <button type="button" class="btn btn-spectra" id="btn-send-request"
+                    data-board-id="{{ board_id }}" data-trigger="{{ trigger }}">
+                <i class="fas fa-paper-plane me-1"></i> Send Access Request
+            </button>
+            <a href="{% url 'board_list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Boards
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div class="spectra-actions">
+        <a href="{% url 'my_access_requests' %}" class="btn btn-outline-primary">
+            <i class="fas fa-clock me-1"></i> View My Requests
+        </a>
+        <a href="{% url 'board_list' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Back to Boards
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Success state (shown after request is sent) -->
+    <div class="spectra-success" id="request-success">
+        <i class="fas fa-check-circle me-2"></i>
+        <span id="success-message"></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnSend = document.getElementById('btn-send-request');
+    if (!btnSend) return;
+
+    // Show message input on first click, send on second
+    let showingInput = false;
+
+    btnSend.addEventListener('click', function() {
+        const msgInput = document.getElementById('access-request-message');
+
+        if (!showingInput) {
+            msgInput.style.display = 'block';
+            msgInput.focus();
+            showingInput = true;
+            return;
+        }
+
+        // Disable button to prevent double-click
+        btnSend.disabled = true;
+        btnSend.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Sending...';
+
+        const boardId = btnSend.dataset.boardId;
+        const trigger = btnSend.dataset.trigger;
+        const message = msgInput.value.trim();
+
+        fetch('{% url "submit_access_request" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                board_id: parseInt(boardId),
+                trigger: trigger,
+                message: message,
+                requested_role: 'member',
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('request-form-section').style.display = 'none';
+                const successEl = document.getElementById('request-success');
+                document.getElementById('success-message').textContent =
+                    data.spectra_message.replace(/\*\*/g, '');
+                successEl.style.display = 'block';
+            } else {
+                btnSend.disabled = false;
+                btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Access Request';
+                alert(data.error || 'Something went wrong. Please try again.');
+            }
+        })
+        .catch(() => {
+            btnSend.disabled = false;
+            btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Access Request';
+            alert('Network error. Please try again.');
+        });
+    });
+
+    function getCookie(name) {
+        let val = null;
+        document.cookie.split(';').forEach(c => {
+            c = c.trim();
+            if (c.startsWith(name + '=')) val = decodeURIComponent(c.substring(name.length + 1));
+        });
+        return val;
+    }
+});
+</script>
+{% endblock %}

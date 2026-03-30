@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.contrib.auth.models import User
 from accounts.models import Organization
-from kanban.models import Board, Task
+from kanban.models import Board, BoardMembership, Task
 
 
 class Command(BaseCommand):
@@ -66,7 +66,7 @@ class Command(BaseCommand):
         self.stdout.write(f'✓ Found {official_demo_boards.count()} official demo board(s):')
         for board in official_demo_boards:
             task_count = Task.objects.filter(column__board=board).count()
-            member_count = board.members.count()
+            member_count = board.memberships.count()
             self.stdout.write(f'  • {board.name} ({board.organization.name}) - {task_count} tasks, {member_count} members')
 
         # Find duplicate demo boards in other organizations
@@ -100,7 +100,7 @@ class Command(BaseCommand):
             self.stdout.write(f'\n  📁 Organization: {org_name}')
             for board in boards:
                 task_count = Task.objects.filter(column__board=board).count()
-                member_count = board.members.count()
+                member_count = board.memberships.count()
                 total_tasks_to_remove += task_count
                 total_members_affected += member_count
                 
@@ -139,7 +139,7 @@ class Command(BaseCommand):
         for board in duplicate_boards:
             try:
                 # Get members of the duplicate board
-                members = list(board.members.all())
+                members = list(User.objects.filter(board_memberships__board=board))
                 
                 # Find the corresponding official demo board
                 official_board = official_demo_boards.filter(name=board.name).first()
@@ -147,8 +147,8 @@ class Command(BaseCommand):
                 if official_board:
                     # Add members to the official board
                     for member in members:
-                        if member not in official_board.members.all():
-                            official_board.members.add(member)
+                        if not official_board.memberships.filter(user=member).exists():
+                            BoardMembership.objects.get_or_create(board=official_board, user=member, defaults={'role': 'member'})
                             migrated_users.add(member.username)
                             self.stdout.write(f'  ✓ Migrated {member.username} to official {official_board.name}')
                 

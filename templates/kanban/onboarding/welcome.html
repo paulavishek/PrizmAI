@@ -4,95 +4,558 @@
 
 {% block extra_css %}
 <style>
-    .btn-prizm-outline {
+    /* ── Split-screen layout ── */
+    .welcome-split {
+        display: flex;
+        width: 100%;
+        max-width: 1100px;
+        min-height: 80vh;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        box-shadow: 0 8px 40px rgba(80, 70, 229, 0.10), 0 1.5px 6px rgba(0,0,0,0.06);
+        background: #fff;
+    }
+    .welcome-left {
+        flex: 1 1 50%;
+        padding: 3rem 2.75rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: #fff;
+        position: relative;
+        z-index: 2;
+    }
+    .welcome-right {
+        flex: 1 1 50%;
+        background: linear-gradient(135deg, #0f0a2e 0%, #1a1145 30%, #2d1b69 60%, #1e3a5f 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* ── Animated background on right panel ── */
+    .welcome-right::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(circle at 25% 20%, rgba(127,119,221,0.20) 0%, transparent 45%),
+            radial-gradient(circle at 75% 80%, rgba(55,138,221,0.15) 0%, transparent 45%),
+            radial-gradient(circle at 50% 50%, rgba(29,158,117,0.10) 0%, transparent 50%);
+        z-index: 0;
+    }
+
+    /* ── Grid overlay for "blueprint" feel ── */
+    .welcome-right::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+        background-size: 32px 32px;
+        z-index: 0;
+    }
+
+    /* ── Hierarchy node graph ── */
+    .hierarchy-graph {
+        position: relative;
+        z-index: 1;
+        width: 360px;
+        height: 460px;
+    }
+
+    /* Connection lines (SVG behind nodes) */
+    .hierarchy-lines {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+    }
+
+    /* Tier node */
+    .tier-node {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.65rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #fff;
+        z-index: 2;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.30);
+        animation: nodeFloat 5s ease-in-out infinite;
+        transform-style: preserve-3d;
+        perspective: 600px;
+    }
+    .tier-node .tier-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 0.4rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+    .tier-node .tier-label {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+    }
+    .tier-node .tier-label small {
+        font-size: 0.6rem;
+        font-weight: 400;
+        opacity: 0.7;
+        letter-spacing: 0.3px;
+    }
+
+    /* Individual tier styles & positions */
+    .tier-goal {
+        background: linear-gradient(135deg, #7c3aed, #6d28d9);
+        left: 50%; top: 2%;
+        transform: translateX(-50%);
+        animation-delay: 0s;
+        box-shadow: 0 4px 28px rgba(124,58,237,0.45);
+    }
+    .tier-goal .tier-icon { background: rgba(255,255,255,0.20); }
+
+    .tier-mission {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        left: 12%; top: 22%;
+        animation-delay: 0.6s;
+        box-shadow: 0 4px 24px rgba(37,99,235,0.40);
+    }
+    .tier-mission .tier-icon { background: rgba(255,255,255,0.18); }
+
+    .tier-strategy {
+        background: linear-gradient(135deg, #0891b2, #0e7490);
+        right: 8%; top: 40%;
+        animation-delay: 1.2s;
+        box-shadow: 0 4px 24px rgba(8,145,178,0.40);
+    }
+    .tier-strategy .tier-icon { background: rgba(255,255,255,0.18); }
+
+    .tier-board {
+        background: linear-gradient(135deg, #059669, #047857);
+        left: 8%; top: 60%;
+        animation-delay: 1.8s;
+        box-shadow: 0 4px 24px rgba(5,150,105,0.40);
+    }
+    .tier-board .tier-icon { background: rgba(255,255,255,0.18); }
+
+    .tier-task {
+        background: linear-gradient(135deg, #d97706, #b45309);
+        left: 50%; top: 80%;
+        transform: translateX(-50%);
+        animation-delay: 2.4s;
+        box-shadow: 0 4px 24px rgba(217,119,6,0.40);
+    }
+    .tier-task .tier-icon { background: rgba(255,255,255,0.18); }
+
+    /* AI overlay badges */
+    .ai-badge {
+        position: absolute;
+        background: rgba(139, 92, 246, 0.85);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 2rem;
+        padding: 0.3rem 0.7rem;
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: rgba(255,255,255,0.9);
+        white-space: nowrap;
+        z-index: 3;
+        animation: badgePulse 3s ease-in-out infinite;
+        letter-spacing: 0.3px;
+    }
+    .ai-badge i { font-size: 0.55rem; }
+
+    .ai-badge-1 { top: 14%; right: 6%; animation-delay: 0.5s; }
+    .ai-badge-2 { top: 35%; left: 2%; animation-delay: 1.5s; }
+    .ai-badge-3 { bottom: 28%; right: 3%; animation-delay: 2.5s; }
+    .ai-badge-4 { bottom: 10%; left: 15%; animation-delay: 0s; background: rgba(6, 182, 212, 0.80); }
+
+    /* Sparkle dots */
+    .sparkle-dot {
+        position: absolute;
+        border-radius: 50%;
+        animation: sparkle 4s ease-in-out infinite;
+    }
+
+    /* Floating data lines (scanning effect) */
+    .scan-line {
+        position: absolute;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(139,92,246,0.4), transparent);
+        z-index: 1;
+        animation: scanMove 8s linear infinite;
+    }
+
+    @keyframes nodeFloat {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-6px); }
+    }
+    .tier-goal { animation-name: nodeFloatCenter; }
+    .tier-task { animation-name: nodeFloatCenter; }
+    @keyframes nodeFloatCenter {
+        0%, 100% { transform: translateX(-50%) translateY(0px); }
+        50% { transform: translateX(-50%) translateY(-6px); }
+    }
+    @keyframes badgePulse {
+        0%, 100% { opacity: 0.7; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.04); }
+    }
+    @keyframes sparkle {
+        0%, 100% { opacity: 0.15; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(1.4); }
+    }
+    @keyframes scanMove {
+        0% { transform: translateY(-100vh); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(100vh); opacity: 0; }
+    }
+
+    /* ── Left panel content ── */
+    .welcome-logo {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #4338ca;
+        letter-spacing: -0.5px;
+        text-decoration: none;
+    }
+    .welcome-logo:hover { color: #4338ca; text-decoration: none; }
+    .welcome-tagline {
+        color: #6b7280;
+        font-size: 1.1rem;
+        margin-bottom: 2rem;
+    }
+    .feature-box {
+        background: #f8f9fc;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.85rem;
+        padding: 1.5rem 1.5rem 1.25rem;
+        margin-bottom: 2rem;
+    }
+    .feature-box-title {
+        font-weight: 700;
+        font-size: 1rem;
+        color: #1e293b;
+        margin-bottom: 1rem;
+    }
+    .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
+        margin-bottom: 0.75rem;
+        color: #475569;
+        font-size: 0.95rem;
+        line-height: 1.45;
+    }
+    .feature-item:last-child { margin-bottom: 0; }
+    .feature-item i {
+        color: #22c55e;
+        font-size: 1rem;
+        margin-top: 0.15rem;
+        flex-shrink: 0;
+    }
+    .btn-primary-ai {
         display: block;
         width: 100%;
-        padding: 0.65rem 1.75rem;
-        border-radius: 6px;
-        border: 1px solid #5046e5;
+        padding: 0.85rem 1.75rem;
+        border-radius: 0.6rem;
+        border: none;
+        background: #5046e5;
+        background-image: none !important;
+        color: #fff;
+        font-weight: 600;
+        font-size: 1.05rem;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+        box-shadow: 0 2px 12px rgba(80, 70, 229, 0.25);
+    }
+    .btn-primary-ai:hover {
+        background: #4338ca;
+        background-image: none !important;
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px rgba(80, 70, 229, 0.35);
+    }
+    .btn-demo-outline {
+        display: block;
+        width: 100%;
+        padding: 0.75rem 1.75rem;
+        border-radius: 0.6rem;
+        border: 1.5px solid #d1d5db;
         background: #fff;
         background-image: none !important;
-        color: #5046e5;
+        color: #374151;
         font-weight: 500;
         font-size: 1rem;
         text-align: center;
         text-decoration: none;
         cursor: pointer;
-        transition: background-color 0.15s, color 0.15s;
+        transition: border-color 0.15s, background-color 0.15s, color 0.15s;
     }
-    .btn-prizm-outline:hover {
-        background-color: #f5f4ff;
-        color: #4338ca;
+    .btn-demo-outline:hover {
+        border-color: #5046e5;
+        background-color: #f9f8ff;
+        color: #5046e5;
     }
-    .btn-skip {
-        display: block;
-        width: 100%;
+    .link-manual {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
         background: none;
         border: none;
-        padding: 0.4rem 0;
-        color: #9ca3af;
-        font-size: 0.9rem;
-        cursor: pointer;
-        text-align: center;
-        transition: color 0.15s;
-    }
-    .btn-skip:hover {
+        padding: 0.35rem 0.75rem;
         color: #6b7280;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        transition: color 0.2s, background-color 0.2s;
+        border-radius: 0.4rem;
+    }
+    .link-manual:hover {
+        color: #5046e5;
+        background-color: #f5f3ff;
+    }
+
+    /* ── Responsive: stack on small screens ── */
+    @media (max-width: 768px) {
+        .welcome-split {
+            flex-direction: column;
+            min-height: auto;
+            border-radius: 1rem;
+        }
+        .welcome-left {
+            padding: 2rem 1.5rem;
+        }
+        .welcome-right {
+            min-height: 340px;
+            order: -1;
+            border-radius: 1rem 1rem 0 0;
+        }
+        .hierarchy-graph {
+            width: 300px;
+            height: 380px;
+        }
     }
 </style>
 {% endblock %}
 
 {% block body %}
-<div class="text-center" style="max-width: 400px;">
-    {% load static %}
-    <!-- Logo -->
-    <div class="mb-3">
-        <a href="/" style="font-size: 1.8rem; font-weight: 800; color: #4338ca; letter-spacing: -0.5px; text-decoration: none;">
-            <img src="{% static 'kanban/images/logo.svg' %}" alt="PrizmAI logo" width="32" height="32" class="me-1" style="vertical-align:middle;">Pri<span style="color: #ef4444; font-style: italic;">z</span>mAI
-        </a>
-    </div>
-
-    <p class="mb-4" style="color: #6b7280; font-size: 1rem;">
-        Turn strategy into execution — powered by AI.
-    </p>
-
-    <!-- Feature checklist card -->
-    <div class="onboarding-card mb-4 p-3 text-start">
-        <div class="d-flex align-items-center gap-2 mb-3" style="font-weight: 600; color: #334155;">
-            What you'll get in 2 minutes
+{% load static %}
+<div class="welcome-split">
+    <!-- ════════ LEFT PANEL: Content ════════ -->
+    <div class="welcome-left">
+        <!-- Back link -->
+        {% if from_dashboard %}
+        <div class="mb-3">
+            <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
+                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+            </a>
         </div>
-        <ul class="list-unstyled mb-0" style="color: #64748b; font-size: 0.925rem;">
-            <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Organization goal &amp; strategic missions</li>
-            <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Kanban boards with smart columns</li>
-            <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Starter tasks ready for your team</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>All generated by AI from your goal</li>
-        </ul>
+        {% endif %}
+
+        <!-- Logo -->
+        <div class="mb-2">
+            <a href="/" class="welcome-logo">
+                <img src="{% static 'kanban/images/logo.svg' %}" alt="PrizmAI logo" width="38" height="38" class="me-1" style="vertical-align: middle;">Pri<span style="color: #ef4444; font-style: italic;">z</span>mAI
+            </a>
+        </div>
+
+        <!-- Tagline -->
+        <p class="welcome-tagline">
+            Turn strategy into execution — powered by AI.
+        </p>
+
+        <!-- Feature checklist -->
+        <div class="feature-box">
+            <div class="feature-box-title">What you'll get in 2 minutes</div>
+            <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Enter one goal — AI builds your entire workspace from it</span>
+            </div>
+            <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Auto-structured hierarchy: Goal → Missions → Strategies → Boards → Tasks</span>
+            </div>
+            <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Equip your team with actionable, ready-to-use starter tasks</span>
+            </div>
+            <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Generate your entire workspace in seconds using AI</span>
+            </div>
+        </div>
+
+        <!-- Primary CTA -->
+        <div class="mb-2">
+            <a href="{% url 'onboarding_goal' %}" class="btn-primary-ai">
+                <i class="bi bi-stars me-1"></i> Set up my workspace with AI
+            </a>
+        </div>
+
+        {% if not from_dashboard %}
+        <!-- Secondary CTA -->
+        <div class="mb-3">
+            <form method="post" action="{% url 'onboarding_explore_demo' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-demo-outline">
+                    Show me a demo first
+                </button>
+            </form>
+        </div>
+
+        <!-- Tertiary — styled text link -->
+        <div class="text-center">
+            <form method="post" action="{% url 'onboarding_skip' %}">
+                {% csrf_token %}
+                <button type="submit" class="link-manual">
+                    <i class="bi bi-gear"></i> Or configure manually
+                </button>
+            </form>
+        </div>
+        {% endif %}
     </div>
 
-    <!-- Actions: primary, secondary, tertiary -->
-    <div class="d-grid gap-2 mb-2" style="max-width: 340px; margin: 0 auto;">
-        <!-- Primary -->
-        <a href="{% url 'onboarding_goal' %}" class="btn btn-prizm btn-lg">
-            Set up my workspace
-        </a>
+    <!-- ════════ RIGHT PANEL: Hierarchy Node Graph ════════ -->
+    <div class="welcome-right">
+        <!-- Sparkle dots -->
+        <div class="sparkle-dot" style="width:5px;height:5px;background:#7c3aed;top:8%;left:12%;animation-delay:0s;"></div>
+        <div class="sparkle-dot" style="width:4px;height:4px;background:#4da6ff;top:50%;left:90%;animation-delay:1s;"></div>
+        <div class="sparkle-dot" style="width:5px;height:5px;background:#2ecc71;top:75%;left:8%;animation-delay:2s;"></div>
+        <div class="sparkle-dot" style="width:3px;height:3px;background:#ef9f27;top:92%;left:70%;animation-delay:3s;"></div>
+        <div class="sparkle-dot" style="width:4px;height:4px;background:#d4537e;top:18%;left:85%;animation-delay:1.5s;"></div>
+        <div class="sparkle-dot" style="width:3px;height:3px;background:#fff;top:60%;left:50%;animation-delay:2.5s;"></div>
 
-        <!-- Secondary -->
-        <form method="post" action="{% url 'onboarding_explore_demo' %}">
-            {% csrf_token %}
-            <button type="submit" class="btn-prizm-outline btn-lg">
-                Show me a demo first
-            </button>
-        </form>
-    </div>
+        <!-- Scanning lines for AI vibe -->
+        <div class="scan-line" style="width:60%;left:20%;animation-delay:0s;"></div>
+        <div class="scan-line" style="width:40%;left:35%;animation-delay:3s;"></div>
 
-    <!-- Tertiary skip — plain text link -->
-    <div style="max-width: 340px; margin: 0 auto;">
-        <form method="post" action="{% url 'onboarding_skip' %}">
-            {% csrf_token %}
-            <button type="submit" class="btn-skip">
-                Skip — I'll set things up myself
-            </button>
-        </form>
+        <!-- AI data overlay badges -->
+        <div class="ai-badge ai-badge-1"><i class="bi bi-stars me-1"></i> AI Summary</div>
+        <div class="ai-badge ai-badge-2"><i class="bi bi-graph-up me-1"></i> Velocity</div>
+        <div class="ai-badge ai-badge-3"><i class="bi bi-shield-check me-1"></i> Risk Score</div>
+        <div class="ai-badge ai-badge-4"><i class="bi bi-cpu me-1"></i> Auto-generated</div>
+
+        <!-- Hierarchy node graph -->
+        <div class="hierarchy-graph">
+            <!-- Connection lines SVG -->
+            <svg class="hierarchy-lines" viewBox="0 0 360 460" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Goal → Mission -->
+                <path d="M180,35 C180,65 95,75 95,105" stroke="url(#lineGrad1)" stroke-width="2" stroke-dasharray="6,4" opacity="0.5">
+                    <animate attributeName="stroke-dashoffset" values="0;-20" dur="2s" repeatCount="indefinite"/>
+                </path>
+                <!-- Goal → Strategy (through right) -->
+                <path d="M180,35 C250,55 280,130 270,190" stroke="url(#lineGrad2)" stroke-width="2" stroke-dasharray="6,4" opacity="0.5">
+                    <animate attributeName="stroke-dashoffset" values="0;-20" dur="2.5s" repeatCount="indefinite"/>
+                </path>
+                <!-- Mission → Strategy -->
+                <path d="M130,130 C170,150 230,160 260,190" stroke="url(#lineGrad2)" stroke-width="1.5" stroke-dasharray="4,4" opacity="0.35">
+                    <animate attributeName="stroke-dashoffset" values="0;-16" dur="2s" repeatCount="indefinite"/>
+                </path>
+                <!-- Mission → Board -->
+                <path d="M95,130 C60,170 40,230 60,280" stroke="url(#lineGrad3)" stroke-width="2" stroke-dasharray="6,4" opacity="0.5">
+                    <animate attributeName="stroke-dashoffset" values="0;-20" dur="2.2s" repeatCount="indefinite"/>
+                </path>
+                <!-- Strategy → Board -->
+                <path d="M260,215 C200,240 120,260 75,280" stroke="url(#lineGrad3)" stroke-width="1.5" stroke-dasharray="4,4" opacity="0.35">
+                    <animate attributeName="stroke-dashoffset" values="0;-16" dur="2.3s" repeatCount="indefinite"/>
+                </path>
+                <!-- Board → Tasks -->
+                <path d="M75,305 C100,340 150,360 180,375" stroke="url(#lineGrad4)" stroke-width="2" stroke-dasharray="6,4" opacity="0.5">
+                    <animate attributeName="stroke-dashoffset" values="0;-20" dur="2s" repeatCount="indefinite"/>
+                </path>
+
+                <!-- Data flow particles (small circles traveling along paths) -->
+                <circle r="3" fill="#a78bfa" opacity="0.8">
+                    <animateMotion dur="3s" repeatCount="indefinite" path="M180,35 C180,65 95,75 95,105"/>
+                </circle>
+                <circle r="3" fill="#60a5fa" opacity="0.8">
+                    <animateMotion dur="3.5s" repeatCount="indefinite" path="M180,35 C250,55 280,130 270,190"/>
+                </circle>
+                <circle r="2.5" fill="#34d399" opacity="0.8">
+                    <animateMotion dur="3s" repeatCount="indefinite" path="M95,130 C60,170 40,230 60,280"/>
+                </circle>
+                <circle r="2.5" fill="#fbbf24" opacity="0.8">
+                    <animateMotion dur="2.8s" repeatCount="indefinite" path="M75,305 C100,340 150,360 180,375"/>
+                </circle>
+
+                <defs>
+                    <linearGradient id="lineGrad1" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#a78bfa"/>
+                        <stop offset="100%" stop-color="#60a5fa"/>
+                    </linearGradient>
+                    <linearGradient id="lineGrad2" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#60a5fa"/>
+                        <stop offset="100%" stop-color="#22d3ee"/>
+                    </linearGradient>
+                    <linearGradient id="lineGrad3" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#22d3ee"/>
+                        <stop offset="100%" stop-color="#34d399"/>
+                    </linearGradient>
+                    <linearGradient id="lineGrad4" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#34d399"/>
+                        <stop offset="100%" stop-color="#fbbf24"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+
+            <!-- Tier 1: Goal -->
+            <div class="tier-node tier-goal">
+                <div class="tier-icon"><i class="bi bi-bullseye"></i></div>
+                <div class="tier-label">
+                    Goal
+                    <small>Your big objective</small>
+                </div>
+            </div>
+
+            <!-- Tier 2: Missions -->
+            <div class="tier-node tier-mission">
+                <div class="tier-icon"><i class="bi bi-rocket-takeoff"></i></div>
+                <div class="tier-label">
+                    Missions
+                    <small>Key initiatives</small>
+                </div>
+            </div>
+
+            <!-- Tier 3: Strategies -->
+            <div class="tier-node tier-strategy">
+                <div class="tier-icon"><i class="bi bi-compass"></i></div>
+                <div class="tier-label">
+                    Strategies
+                    <small>How to get there</small>
+                </div>
+            </div>
+
+            <!-- Tier 4: Boards -->
+            <div class="tier-node tier-board">
+                <div class="tier-icon"><i class="bi bi-kanban"></i></div>
+                <div class="tier-label">
+                    Boards
+                    <small>Organize work</small>
+                </div>
+            </div>
+
+            <!-- Tier 5: Tasks -->
+            <div class="tier-node tier-task">
+                <div class="tier-icon"><i class="bi bi-check2-square"></i></div>
+                <div class="tier-label">
+                    Tasks
+                    <small>Execute &amp; deliver</small>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

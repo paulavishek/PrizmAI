@@ -2,7 +2,8 @@ import logging
 import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
+from kanban.decorators import demo_write_guard
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse, Http404
 from django.contrib import messages
 from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
 from django.utils import timezone
@@ -25,6 +26,7 @@ from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 from .favorite_views import is_user_favorite as _is_fav
 from .ai_briefing import build_action_plan as _build_action_plan
+from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
 @login_required
 def dashboard(request):
@@ -45,12 +47,18 @@ def dashboard(request):
     # ── Onboarding v2 redirect guard ────────────────────────────────
     # Covers: pending, goal_submitted, workspace_generated, demo_exploring
     if profile.onboarding_version >= 2:
-        if profile.onboarding_status == 'pending':
-            return redirect('onboarding_welcome')
         if profile.onboarding_status == 'goal_submitted':
             return redirect('onboarding_generating')
         if profile.onboarding_status == 'workspace_generated':
             return redirect('onboarding_review')
+        if profile.onboarding_status == 'pending':
+            # Only redirect brand-new users who have no data yet.
+            # Returning users whose status was reset (e.g. mid-new-setup)
+            # should still reach the dashboard if they navigate away.
+            from kanban.models import OrganizationGoal
+            has_goals = OrganizationGoal.objects.filter(created_by=request.user).exists()
+            if not has_goals:
+                return redirect('onboarding_welcome')
         # demo_exploring, completed, skipped → continue to dashboard
     
     # MVP Mode: Organization is optional (can be None)
@@ -65,22 +73,73 @@ def dashboard(request):
     from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     # MVP Mode: Get all boards the user has access to
-    # v2 demo mode: separate demo boards from real boards via toggle
+    # Single-tier demo: when is_viewing_demo, show user's personal sandbox copies
     demo_mode = getattr(profile, 'is_viewing_demo', False)
     
+    # Org Admins see all boards regardless of membership
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    
     if demo_mode:
-        # Demo mode: show official demo boards + boards the user created
-        # via Spectra while exploring demo mode.
+        # Single-tier demo: show user's sandbox copies, fall back to official demo boards
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+            owner=request.user,
+            is_sandbox_copy=True,
+        ).distinct()
+        if not boards.exists():
+            # Sandbox missing — auto-re-provision synchronously so the user
+            # sees their sandbox immediately on this page load
+            from kanban.models import DemoSandbox
+            try:
+                request.user.demo_sandbox
+            except DemoSandbox.DoesNotExist:
+                from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+                try:
+                    provision_sandbox_task(request.user.id)
+                except Exception:
+                    pass
+                # Re-check for sandbox boards after provisioning
+                boards = Board.objects.filter(
+                    owner=request.user,
+                    is_sandbox_copy=True,
+                ).distinct()
+
+            if not boards.exists():
+                # Still nothing — fall back to official demo boards as read-only
+                boards = Board.objects.filter(
+                    is_official_demo_board=True,
+                ).distinct()
+        else:
+            # Catch-up: if user has sandbox boards but no tasks assigned to them
+            # (e.g. race condition on first entry, or re-entry timing), reassign now
+            has_assigned = Task.objects.filter(
+                column__board__in=boards,
+                assigned_to=request.user,
+                item_type='task',
+            ).exclude(progress=100).exists()
+            if not has_assigned:
+                from kanban.models import DemoSandbox
+                from kanban.sandbox_views import _reassign_demo_tasks_to_user
+                try:
+                    sandbox = request.user.demo_sandbox
+                    _reassign_demo_tasks_to_user(sandbox, request.user)
+                except DemoSandbox.DoesNotExist:
+                    pass
+    elif _is_org_admin:
+        # Org Admin: see all non-demo boards, exclude sandbox copies
+        boards = Board.objects.filter(
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
     elif profile.onboarding_version >= 2:
         # v2 real mode: only the user's own boards (no demo boards,
-        # no boards created during demo exploration via Spectra).
+        # no boards created during demo exploration via Spectra,
+        # no sandbox copies).
         boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
+            Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()
@@ -88,7 +147,7 @@ def dashboard(request):
         # v1 legacy: demo + user boards mixed
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
+            Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
     
@@ -263,9 +322,9 @@ def dashboard(request):
 
     # Missions the user has direct ownership of or demo missions
     if demo_mode:
+        # Single-tier demo: show official demo missions (the template hierarchy)
         missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True) |
-            Q(strategies__boards__id__in=user_board_ids)
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
         ).distinct().select_related('organization_goal').prefetch_related(
             'strategies__boards'
         ).order_by('-created_at')
@@ -427,14 +486,34 @@ def dashboard(request):
         if 'medium' in levels: return 'medium'
         return 'low'
 
+    # ── Sandbox board mapping ────────────────────────────────────────
+    # In demo mode, the mission tree references template boards (via
+    # Strategy FK), but our stats are computed on the user's sandbox
+    # copies. Build a template_id → sandbox_id mapping so we can look
+    # up the correct stats when iterating template boards in the tree.
+    _template_to_sandbox = {}
+    if demo_mode:
+        for _sb in boards.filter(cloned_from__isnull=False):
+            _template_to_sandbox[_sb.cloned_from_id] = _sb.id
+
     mission_tree = []
     mission_item_map = {}  # id -> item dict, used for goal_tree grouping
+    # Convert user_board_ids to a set for fast lookup in the inner loop
+    _user_board_id_set = set(user_board_ids)
     for mission in missions_qs:
         strategy_list = []
         for strategy in mission.strategies.all().order_by('-created_at'):
             board_list = []
             for board in strategy.boards.all().order_by('name'):
-                _bstats = _board_stats_map.get(board.id, {})
+                # RBAC: non-demo, non-admin users only see boards they
+                # are a member of (or created).  This prevents the
+                # Hierarchy Navigator from showing extra boards/strategies.
+                if not demo_mode and not _is_org_admin:
+                    if board.id not in _user_board_id_set:
+                        continue
+                # In demo mode, look up stats via the sandbox copy ID
+                _stats_id = _template_to_sandbox.get(board.id, board.id)
+                _bstats = _board_stats_map.get(_stats_id, {})
                 total_t = _bstats.get('total_tasks', 0)
                 done_t = _bstats.get('done_tasks', 0)
                 high_risk_t = _bstats.get('high_risk_tasks', 0)
@@ -467,6 +546,11 @@ def dashboard(request):
             elif s_schedule == 'at_risk' or s_risk == 'medium': s_health = 'amber'
             s_total = sum(b['total_tasks'] for b in board_list)
             s_done  = sum(b['done_tasks']  for b in board_list)
+            # Skip strategies with no visible boards for non-admin,
+            # non-owner, non-demo users (RBAC board filter above may
+            # have excluded all boards under this strategy).
+            if not board_list and not demo_mode and not _is_org_admin and strategy.created_by != request.user:
+                continue
             strategy_list.append({
                 'strategy': strategy,
                 'boards': board_list,
@@ -496,6 +580,11 @@ def dashboard(request):
         strategies_on_track = sum(1 for s in strategy_list if s['schedule_status'] == 'on_track')
         strategies_at_risk = sum(1 for s in strategy_list if s['schedule_status'] == 'at_risk')
         strategies_late = sum(1 for s in strategy_list if s['schedule_status'] == 'late')
+
+        # Skip missions with no visible strategies for non-admin,
+        # non-owner, non-demo users.
+        if not strategy_list and not demo_mode and not _is_org_admin and mission.created_by != request.user:
+            continue
 
         item = {
             'mission': mission,
@@ -922,7 +1011,12 @@ def dashboard(request):
                 premortem_risk_map[bid] = level
 
     # Standalone boards: user-accessible boards not linked to any strategy
-    standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
+    # In demo mode, exclude sandbox copies — they appear via the mission tree
+    # through the template→sandbox mapping, not as standalone.
+    _standalone_qs = boards.filter(strategy__isnull=True)
+    if demo_mode:
+        _standalone_qs = _standalone_qs.exclude(cloned_from__isnull=False)
+    standalone_boards = _standalone_qs.order_by('name')
 
     # Flat list of accessible strategies for the "Link to Strategy" dropdown on standalone boards
     # Query directly using mission IDs already in mission_tree for reliability
@@ -959,6 +1053,52 @@ def dashboard(request):
     # One-time onboarding banner (tasks are unassigned after AI workspace generation)
     show_assign_banner = request.session.pop('show_onboarding_assign_banner', False)
 
+    # ── Decision Center badge counts (server-side to avoid flash) ───
+    _dc_effective_demo = demo_mode or '_demo' in request.user.username
+    _dc_cache_key = f"dc_widget_{request.user.id}_{'demo' if _dc_effective_demo else 'real'}"
+    _dc_cached = cache.get(_dc_cache_key)
+    if _dc_cached:
+        dc_action_count = _dc_cached.get('action_required_count', 0)
+        dc_awareness_count = _dc_cached.get('awareness_count', 0)
+        dc_quickwin_count = _dc_cached.get('quick_win_count', 0)
+    else:
+        _dc_pending = DecisionItem.objects.filter(created_for=request.user, status='pending')
+        if _dc_effective_demo:
+            _dc_pending = _dc_pending.filter(board__is_official_demo_board=True)
+        else:
+            _dc_pending = (
+                _dc_pending.filter(
+                    board__is_official_demo_board=False,
+                    board__is_sandbox_copy=False,
+                )
+                | DecisionItem.objects.filter(
+                    created_for=request.user, status='pending', board__isnull=True
+                )
+            ).distinct()
+        _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
+        dc_action_count = _dc_pending.filter(priority_level='action_required').count()
+        dc_awareness_count = (
+            _dc_pending.filter(priority_level='awareness').count()
+            if _dc_settings.show_awareness_items else 0
+        )
+        dc_quickwin_count = (
+            _dc_pending.filter(priority_level='quick_win').count()
+            if _dc_settings.show_quick_wins else 0
+        )
+    dc_total_count = dc_action_count + dc_awareness_count + dc_quickwin_count
+
+    # Demo welcome panel: pass the user's primary sandbox board for links
+    demo_board = None
+    if demo_mode:
+        demo_board = Board.objects.filter(
+            owner=request.user, is_sandbox_copy=True
+        ).order_by('-created_at').first()
+        if not demo_board:
+            # No sandbox active — use the official demo board
+            demo_board = Board.objects.filter(
+                is_official_demo_board=True
+            ).first()
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -977,6 +1117,7 @@ def dashboard(request):
             'now': timezone.now(),  # For comparing dates in the template
         # Demo mode / onboarding v2
         'demo_mode': demo_mode,
+        'demo_board': demo_board,
         'onboarding_profile': profile,
         # Mission tree  
         'mission_tree': mission_tree,
@@ -1003,18 +1144,108 @@ def dashboard(request):
         'daily_briefing':    daily_briefing,
         'premortem_risk_map': premortem_risk_map,
         'show_assign_banner': show_assign_banner,
+        'dc_action_count': dc_action_count,
+        'dc_awareness_count': dc_awareness_count,
+        'dc_quickwin_count': dc_quickwin_count,
+        'dc_total_count': dc_total_count,
         })
 
 
 @login_required
 def toggle_demo_mode(request):
-    """POST /toggle-demo-mode/ — flip the demo viewing mode and redirect to dashboard."""
+    """POST /toggle-demo-mode/ — enter or leave demo mode.
+
+    Entering demo:
+      - If user already has a sandbox → re-enter: join demo org,
+        reassign tasks, flip is_viewing_demo on.
+      - Otherwise → kick off async provisioning via Celery and return JSON
+        with a task_id so the frontend can stream progress via WebSocket.
+    Leaving demo:
+      - Restore demo task assignments, leave demo org, flip is_viewing_demo off.
+        Sandbox boards are NOT deleted — the sandbox persists so the
+        user can re-enter any time.
+    """
     if request.method != 'POST':
         return redirect('dashboard')
+
     profile = request.user.profile
-    profile.is_viewing_demo = not profile.is_viewing_demo
-    profile.save(update_fields=['is_viewing_demo'])
-    return redirect('dashboard')
+    from kanban.models import DemoSandbox
+    from kanban.sandbox_views import (
+        _join_demo_org, _leave_demo_org,
+        _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+    )
+
+    if not profile.is_viewing_demo:
+        # ── Entering demo ──────────────────────────────────────────
+
+        # Ensure the dashboard onboarding guard won't redirect away.
+        # Users who joined via board invitation have status='pending'
+        # and no goals, which would send them to /onboarding/ instead
+        # of showing the sandbox.  'demo_exploring' is an allowed
+        # pass-through status for the dashboard guard.
+        _update_onboarding = profile.onboarding_status in ('pending',)
+
+        # Check for existing sandbox (persistent — no expiry check)
+        try:
+            existing = request.user.demo_sandbox
+            # Re-enter existing sandbox instantly
+            _join_demo_org(request.user)
+            _reassign_demo_tasks_to_user(existing, request.user)
+            profile.is_viewing_demo = True
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
+            else:
+                profile.save(update_fields=['is_viewing_demo'])
+            return redirect('dashboard')
+        except DemoSandbox.DoesNotExist:
+            pass
+
+        # No sandbox yet — provision asynchronously (or sync fallback)
+        from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+        try:
+            result = provision_sandbox_task.delay(request.user.id)
+        except Exception:
+            # Redis/Celery unavailable — provision synchronously
+            provision_sandbox_task(request.user.id)
+            profile.is_viewing_demo = True
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
+            else:
+                profile.save(update_fields=['is_viewing_demo'])
+            return redirect('dashboard')
+
+        # If this is an AJAX request, return JSON for WebSocket streaming
+        is_ajax = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or request.content_type == 'application/json'
+        )
+        if is_ajax:
+            return JsonResponse({
+                'status': 'provisioning',
+                'task_id': result.id,
+            })
+
+        # Fallback for non-JS: redirect to dashboard (Celery will finish in background)
+        profile.is_viewing_demo = True
+        if _update_onboarding:
+            profile.onboarding_status = 'demo_exploring'
+            profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
+        else:
+            profile.save(update_fields=['is_viewing_demo'])
+        return redirect('dashboard')
+    else:
+        # ── Leaving demo ───────────────────────────────────────────
+        try:
+            sandbox = request.user.demo_sandbox
+            _restore_demo_task_assignments(sandbox)
+        except DemoSandbox.DoesNotExist:
+            pass
+        _leave_demo_org(request.user)
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['is_viewing_demo'])
+        return redirect('dashboard')
 
 
 @login_required
@@ -1033,23 +1264,33 @@ def board_list(request):
     # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
     demo_mode = getattr(profile, 'is_viewing_demo', False)
 
+    # Org Admins see all boards regardless of membership
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+
     if demo_mode:
-        # Demo mode: show official demo boards + boards created via Spectra
+        # Single-tier demo: show only user's sandbox copies
         boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+            owner=request.user,
+            is_sandbox_copy=True,
+        ).distinct()
+    elif _is_org_admin:
+        # Org Admin: see all non-demo boards, exclude sandbox copies
+        boards = Board.objects.filter(
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).distinct()
     elif profile.onboarding_version >= 2:
-        # v2 onboarding (AI-generated or scratch) — never show demo boards
+        # v2 onboarding (AI-generated or scratch) — never show demo or sandbox boards
         boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
-            is_official_demo_board=False
+            Q(created_by=request.user) | Q(memberships__user=request.user),
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).distinct()
     else:
         # v1 legacy — demo + user boards mixed
         demo_boards = Board.objects.filter(is_official_demo_board=True)
         user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
+            Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
 
@@ -1152,6 +1393,7 @@ def board_list(request):
     })
 
 @login_required
+@demo_write_guard
 def create_board(request):
     from kanban.audit_utils import log_model_change
     from kanban.permission_utils import assign_default_role_to_user
@@ -1192,27 +1434,21 @@ def create_board(request):
             if selected_strategy:
                 board.strategy = selected_strategy
 
+            # Tag boards created during sandbox mode so they get cleaned up
+            demo_mode = getattr(profile, 'is_viewing_demo', False)
+            if demo_mode:
+                board.is_sandbox_copy = True
+
             board.save()
-            board.members.add(request.user)
-            
-            # Assign creator as Admin in RBAC system (if organization exists)
-            if organization:
-                try:
-                    from kanban.permission_models import Role, BoardMembership
-                    admin_role = Role.objects.filter(
-                        organization=organization,
-                        name='Admin'
-                    ).first()
-                    if admin_role:
-                        BoardMembership.objects.create(
-                            board=board,
-                            user=request.user,
-                            role=admin_role,
-                            added_by=request.user
-                        )
-                except Exception as e:
-                    # Continue even if RBAC setup fails
-                    pass
+            board.owner = request.user
+            board.save(update_fields=['owner'])
+
+            # Create RBAC membership for the creator as Owner
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'owner', 'added_by': request.user}
+            )
             
             # Log board creation
             log_model_change('board.created', board, request.user, request)
@@ -1258,6 +1494,13 @@ def create_board(request):
                     Column.objects.create(name=name, board=board, position=i)
                 messages.success(request, f'Board "{board.name}" created successfully!')
 
+            # Auto-classify board project type in background
+            try:
+                from kanban.tasks.ai_summary_tasks import classify_board_on_creation
+                classify_board_on_creation.delay(board.id)
+            except Exception:
+                pass  # Celery/Redis may be unavailable in dev
+
             # Redirect back to strategy if we came from one
             if selected_strategy:
                 return redirect('strategy_detail',
@@ -1267,9 +1510,19 @@ def create_board(request):
     else:
         form = BoardForm()
     
+    # All strategies for the optional "Link to Strategy" dropdown (only when no strategy pre-selected)
+    all_strategies = []
+    if not selected_strategy:
+        from kanban.models import Strategy as _Strategy
+        all_strategies = list(
+            _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+            .values('id', 'name', 'mission__name', 'mission_id')
+        )
+
     return render(request, 'kanban/create_board.html', {
         'form': form,
         'selected_strategy': selected_strategy,
+        'all_strategies': all_strategies,
     })
 
 @login_required
@@ -1283,8 +1536,18 @@ def board_detail(request, board_id):
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Auto-add user to demo boards - ensures they appear in AI Resource Optimization
-    if is_demo_board and request.user not in board.members.all():
-        board.members.add(request.user)
+    if is_demo_board:
+        from kanban.models import BoardMembership
+        BoardMembership.objects.get_or_create(
+            board=board, user=request.user,
+            defaults={'role': 'member', 'added_by': request.user}
+        )
+    
+    # RBAC: check view permission (demo boards pass via is_demo_board predicate)
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='board_view')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
     
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
@@ -1354,7 +1617,7 @@ def board_detail(request, board_id):
     labels = TaskLabel.objects.filter(board=board)
     
     # Get board members - all members of this board
-    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_ids = board.memberships.values_list('user_id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all non-demo users who aren't on the board yet
@@ -1398,9 +1661,11 @@ def board_detail(request, board_id):
             column_permissions[column.id] = perms
     
     # All restrictions removed - all authenticated users have full access
-    can_manage_members = True
-    can_edit_board = True
-    can_create_tasks = True
+    # RBAC: derive template permissions from django-rules
+    can_manage_members = request.user.has_perm('prizmai.invite_board_member', board)
+    can_edit_board = request.user.has_perm('prizmai.edit_board', board)
+    can_create_tasks = can_edit_board
+    can_delete_board = request.user.has_perm('prizmai.delete_board', board)
 
     # Invitation permission: board creator or site admin
     can_manage_invites = (
@@ -1435,14 +1700,10 @@ def board_detail(request, board_id):
         }
 
     # Board members list for inline assignee picker.
-    # Combine legacy board.members M2M with the RBAC BoardMembership model so
-    # all users – regardless of which path they were added through – appear.
-    from kanban.permission_models import BoardMembership as BM
-    rbac_member_ids = BM.objects.filter(board=board).values_list('user_id', flat=True)
-    all_member_ids = set(board_member_ids) | set(rbac_member_ids)
+    from kanban.models import BoardMembership
     board_members_list = (
         User.objects
-        .filter(id__in=all_member_ids)
+        .filter(board_memberships__board=board)
         .select_related('profile')
         .order_by('first_name', 'username')
     )
@@ -1484,6 +1745,7 @@ def board_detail(request, board_id):
         'can_manage_members': can_manage_members,  # Permission flags for UI
         'can_edit_board': can_edit_board,
         'can_create_tasks': can_create_tasks,
+        'can_delete_board': can_delete_board,
         'can_manage_invites': can_manage_invites,  # For invite button visibility
         'column_meta': column_meta,  # Per-column WIP/count metadata
         'board_members_list': board_members_list,  # For inline assignee picker
@@ -1784,10 +2046,16 @@ def task_detail(request, task_id):
     })
 
 @login_required
+@demo_write_guard
 def create_task(request, board_id, column_id=None):
     from kanban.audit_utils import log_model_change
 
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to create tasks on this board.")
+        return redirect('board_detail', board_id=board.id)
 
     # Demo mode flags — always False for authenticated users on this view
     is_demo_mode = False
@@ -1922,7 +2190,10 @@ def delete_task(request, task_id):
         from django.contrib.auth.views import redirect_to_login
         return redirect_to_login(request.get_full_path())
     
-    # All restrictions removed - all authenticated users can delete tasks
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to delete tasks on this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         board_id = task.column.board.id
@@ -1951,6 +2222,11 @@ def create_column(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can create columns
+    
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         form = ColumnForm(request.POST)
@@ -1989,6 +2265,11 @@ def update_column(request, column_id):
     
     # All restrictions removed - all authenticated users can edit columns
     
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
+    
     if request.method == 'POST':
         new_name = request.POST.get('name', '').strip()
         if new_name:
@@ -2015,10 +2296,9 @@ def update_column(request, column_id):
 def create_label(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors (member/owner/ancestor-owner/org-admin) can create labels
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskLabelForm(request.POST)
@@ -2042,10 +2322,9 @@ def delete_label(request, label_id):
     label = get_object_or_404(TaskLabel, id=label_id)
     board = label.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors can delete labels
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Delete the label
     label_name = label.name
@@ -2066,12 +2345,15 @@ def board_analytics(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view analytics
+    # RBAC: check view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     # Demo mode removed - always False
     is_demo_mode = False
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Get columns for this board
-    columns = Column.objects.filter(board=board)
+    columns = Column.objects.filter(board=board).order_by('position')
     
     # Get tasks by column (exclude milestones)
     tasks_by_column = []
@@ -2127,20 +2409,22 @@ def board_analytics(request, board_id):
         })
     
     # Get completion rate over time (last 30 days)
+    # Use Task.updated_at for tasks with progress=100, which is reliable regardless
+    # of how activity log descriptions were worded.
     thirty_days_ago = timezone.now() - timedelta(days=30)
-    completed_tasks_queryset = TaskActivity.objects.filter(
-        task__column__board=board,
-        activity_type='moved',
-        description__contains='Done',
-        created_at__gte=thirty_days_ago
-    ).values('created_at__date').annotate(
+    completed_tasks_queryset = Task.objects.filter(
+        column__board=board,
+        item_type='task',
+        progress=100,
+        updated_at__gte=thirty_days_ago,
+    ).values('updated_at__date').annotate(
         count=Count('id')
-    ).order_by('created_at__date')
-    
+    ).order_by('updated_at__date')
+
     completed_tasks = []
     for item in completed_tasks_queryset:
         completed_tasks.append({
-            'date': item['created_at__date'].strftime('%Y-%m-%d'),
+            'date': item['updated_at__date'].strftime('%Y-%m-%d'),
             'count': item['count']
         })
     
@@ -2224,7 +2508,15 @@ def board_analytics(request, board_id):
     
     # Calculate remaining tasks
     remaining_tasks = total_tasks - completed_count
-    
+
+    # ── Goal-Aware Analytics: promoted metrics & charts ──
+    promoted_metrics = None
+    promoted_chart_configs = None
+    if board.project_type:
+        from kanban.utils.analytics_helpers import get_promoted_metrics, get_promoted_charts
+        promoted_metrics = get_promoted_metrics(board)
+        promoted_chart_configs = get_promoted_charts(board)
+
     response = render(request, 'kanban/board_analytics.html', {
         'board': board,
         'columns': columns,
@@ -2236,7 +2528,7 @@ def board_analytics(request, board_id):
         'tasks_by_lean_category': tasks_by_lean_category, # Raw data for JSON encoding in template
         'productivity': round(productivity, 1),
         'upcoming_tasks': upcoming_tasks,
-        'overdue_tasks': overdue_tasks,  # Add overdue tasks
+        'overdue_tasks': overdue_tasks,  # Add overdue count
         'overdue_count': overdue_count,  # Add overdue count
         'total_tasks': total_tasks,
         'completed_count': completed_count,
@@ -2247,6 +2539,9 @@ def board_analytics(request, board_id):
         'total_categorized': total_categorized,
         'is_demo_mode': is_demo_mode,
         'is_demo_board': is_demo_board,
+        # Goal-Aware Analytics
+        'promoted_metrics': promoted_metrics,
+        'promoted_chart_configs': promoted_chart_configs,
     })
     
     # Prevent caching of analytics data
@@ -2268,6 +2563,9 @@ def gantt_chart(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view Gantt chart
+    # RBAC: check view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     # Demo mode removed - always False
     is_demo_mode = False
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
@@ -2380,7 +2678,7 @@ def gantt_chart(request, board_id):
     # Data for triage drawer: board columns (for status dropdown) and members (for assignee dropdown)
     board_columns = board.columns.order_by('position').values_list('id', 'name')
     board_members = User.objects.filter(
-        Q(member_boards=board) | Q(created_boards=board)
+        Q(board_memberships__board=board) | Q(created_boards=board)
     ).distinct().order_by('username')
 
     context = {
@@ -2421,10 +2719,10 @@ def board_calendar(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
     # Membership guard — only board owner/members may view this calendar
-    from django.db.models import Q as _CalQ
-    from django.contrib.auth.models import User as _CalUser
+    from kanban.models import BoardMembership
     if not (board.created_by == request.user or
-            board.members.filter(id=request.user.id).exists()):
+            board.owner == request.user or
+            BoardMembership.objects.filter(board=board, user=request.user).exists()):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You are not a member of this board.")
 
@@ -2470,8 +2768,10 @@ def board_calendar(request, board_id):
     import json as _json
 
     # Collect all board members and map user_id → color (for the legend)
+    from django.db.models import Q as _CalQ
+    _CalUser = User
     _mem_qs = _CalUser.objects.filter(
-        _CalQ(member_boards=board) | _CalQ(created_boards=board)
+        _CalQ(board_memberships__board=board) | _CalQ(created_boards=board)
     ).distinct().order_by('username')
 
     _mem_data = []
@@ -2763,7 +3063,9 @@ def move_task(request):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
         
-        # All restrictions removed - all authenticated users can move tasks
+        # RBAC: check edit permission on the board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'You do not have permission to edit this board'}, status=403)
         
         old_column = task.column
         task.column = new_column
@@ -2815,10 +3117,19 @@ def move_task(request):
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
 @login_required
+@demo_write_guard
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+
+    # Sandbox boards are private — no real-user additions allowed
+    if board.is_sandbox_copy:
+        messages.error(request, "Sandbox boards are private and cannot have additional members.")
+        return redirect('board_detail', board_id=board.id)
     
-    # All restrictions removed - all authenticated users can add members
+    # RBAC: only Owner / board-level owner / ancestor owner / Org Admin can invite
+    if not request.user.has_perm('prizmai.invite_board_member', board):
+        messages.error(request, "You don't have permission to add members to this board.")
+        return redirect('board_detail', board_id=board.id)
     
     if request.method == 'POST':
         user_id = request.POST.get('user_id')
@@ -2839,11 +3150,15 @@ def add_board_member(request, board_id):
                     if is_demo_board:
                         # For demo boards: add user to ALL boards in this demo organization
                         # This maintains organization-level access consistency
+                        from kanban.models import BoardMembership
                         demo_boards = Board.objects.filter(organization=board.organization)
                         added_count = 0
                         for demo_board in demo_boards:
-                            if user not in demo_board.members.all():
-                                demo_board.members.add(user)
+                            _, created = BoardMembership.objects.get_or_create(
+                                board=demo_board, user=user,
+                                defaults={'role': 'member', 'added_by': request.user}
+                            )
+                            if created:
                                 added_count += 1
                         
                         if added_count > 0:
@@ -2852,8 +3167,12 @@ def add_board_member(request, board_id):
                             messages.info(request, f'{user.username} is already a member of all demo boards.')
                     else:
                         # For regular boards: add user to this board only
-                        if user not in board.members.all():
-                            board.members.add(user)
+                        from kanban.models import BoardMembership
+                        _, created = BoardMembership.objects.get_or_create(
+                            board=board, user=user,
+                            defaults={'role': 'member', 'added_by': request.user}
+                        )
+                        if created:
                             messages.success(request, f'{user.username} added to the board successfully!')
                         else:
                             messages.info(request, f'{user.username} is already a member of this board.')
@@ -2869,18 +3188,13 @@ def add_board_member(request, board_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def remove_board_member(request, board_id, user_id):
     board = get_object_or_404(Board, id=board_id)
     user_to_remove = get_object_or_404(User, id=user_id)
     
-    # Check if user has permission to remove members
-    # Only board creator, org admins, and org creator can remove members
-    user_profile = getattr(request.user, 'profile', None)
-    has_permission = (
-        board.created_by == request.user or  # Board creator
-        (user_profile and user_profile.is_admin) or  # Organization admin
-        (user_profile and board.organization and request.user == board.organization.created_by)  # Organization creator
-    )
+    # RBAC: reuse invite_board_member — same actors who can add can also remove
+    has_permission = request.user.has_perm('prizmai.invite_board_member', board)
     
     # Get the redirect destination (manage_board_members if came from there, else board_detail)
     referer = request.META.get('HTTP_REFERER', '')
@@ -2900,14 +3214,16 @@ def remove_board_member(request, board_id, user_id):
         return redirect('board_detail', board_id=board.id)
     
     # Check if user is actually a member of the board
-    if user_to_remove not in board.members.all():
+    from kanban.models import BoardMembership
+    membership = BoardMembership.objects.filter(board=board, user=user_to_remove).first()
+    if not membership:
         messages.error(request, "This user is not a member of the board.")
         if redirect_to_manage:
             return redirect('manage_board_members', board_id=board.id)
         return redirect('board_detail', board_id=board.id)
     
     # Remove the member
-    board.members.remove(user_to_remove)
+    membership.delete()
     messages.success(request, f'{user_to_remove.username} has been removed from the board.')
     
     if redirect_to_manage:
@@ -2915,8 +3231,14 @@ def remove_board_member(request, board_id, user_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
+    
+    # RBAC: only Owner / ancestor owner / Org Admin can delete
+    if not request.user.has_perm('prizmai.delete_board', board):
+        messages.error(request, "You don't have permission to delete this board.")
+        return redirect('board_detail', board_id=board_id)
     
     # Delete the board
     if request.method == 'POST':
@@ -2945,7 +3267,7 @@ def organization_boards(request):
         # Determine which boards the user is a member of
         user_boards = Board.objects.filter(
             Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(members=request.user))
+            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user))
         ).exclude(
             organization__name__in=demo_org_names
         ).distinct()
@@ -2966,15 +3288,23 @@ def join_board(request, board_id):
     """Allow users to join boards they have access to"""
     board = get_object_or_404(Board, id=board_id)
     
-    # MVP Mode: Users can join any board they can access
-    # Access restriction removed - no organization check needed
+    # Verify user belongs to the same organization as the board
+    if board.organization:
+        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        if user_org != board.organization:
+            messages.error(request, 'You do not have access to this board.')
+            return redirect('dashboard')
     
     # Check if user is already a member
-    if request.user in board.members.all() or board.created_by == request.user:
+    from kanban.models import BoardMembership
+    if BoardMembership.objects.filter(board=board, user=request.user).exists() or board.created_by == request.user:
         messages.info(request, f"You are already a member of the board '{board.name}'.")
     else:
         # Add user to board members
-        board.members.add(request.user)
+        BoardMembership.objects.get_or_create(
+            board=board, user=request.user,
+            defaults={'role': 'member'}
+        )
         messages.success(request, f"You've successfully joined the board '{board.name}'!")
     
     return redirect('board_detail', board_id=board.id)
@@ -2987,10 +3317,9 @@ def move_column(request, column_id, direction):
     column = get_object_or_404(Column, id=column_id)
     board = column.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: only board editors can reorder columns
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Get all columns in order of position
     columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -3043,6 +3372,10 @@ def reorder_columns(request):
         column = get_object_or_404(Column, id=column_id)
         board = get_object_or_404(Board, id=board_id)
         
+        # RBAC: only board editors can reorder columns
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         # Get all columns in order
         columns = list(Column.objects.filter(board=board).order_by('position'))
         
@@ -3087,9 +3420,10 @@ def reorder_multiple_columns(request):
             
             board = get_object_or_404(Board, id=board_id)
             
-            # Simple authentication check only - no board-level access restrictions
-            if not request.user.is_authenticated:
-                print("[reorder_multiple_columns] ERROR: User not authenticated")
+            # RBAC: user must have edit permission on the board to reorder columns
+            if request.user.is_authenticated and not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+            elif not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Create a dictionary to map column_id to position
@@ -3137,10 +3471,10 @@ def delete_column(request, column_id):
     column = get_object_or_404(Column, id=column_id)
     board = column.board
     
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: check edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify this board.")
+        return redirect('board_detail', board_id=board.id)
     
     # Prevent deletion of "To Do" column as it's required for task creation
     if column.name.lower() in ['to do', 'todo']:
@@ -3242,6 +3576,10 @@ def export_board(request, board_id):
     """Export a board's data to JSON or CSV format"""
     board = get_object_or_404(Board, id=board_id)
     
+    # RBAC: only users who can view the board can export its data
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+    
     export_format = request.GET.get('format', 'json')
     
     # Get all columns for this board
@@ -3325,6 +3663,7 @@ def export_board(request, board_id):
         return redirect('board_detail', board_id=board.id)
 
 @login_required
+@demo_write_guard
 def import_board(request):
     """
     Import a board from external PM tools (Trello, Jira, Asana) or CSV/JSON files.
@@ -3455,7 +3794,13 @@ def _create_board_from_import_result(result, user, organization, session):
         created_by=user,
         num_phases=board_data.get('num_phases', 0)
     )
-    new_board.members.add(user)
+    new_board.owner = user
+    new_board.save(update_fields=['owner'])
+    from kanban.models import BoardMembership
+    BoardMembership.objects.get_or_create(
+        board=new_board, user=user,
+        defaults={'role': 'owner', 'added_by': user}
+    )
     
     # Create labels first (so we can reference them from tasks)
     labels_map = {}  # label_name -> TaskLabel instance
@@ -3561,9 +3906,8 @@ def add_lean_labels(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         # Call the management command to add the labels
@@ -3617,9 +3961,11 @@ def link_board_to_strategy_dashboard(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
     # Access check: user must be the board creator or a member
+    from kanban.models import BoardMembership
     if not (board.created_by == request.user or
+            board.owner == request.user or
             board.is_official_demo_board or
-            board.members.filter(id=request.user.id).exists()):
+            BoardMembership.objects.filter(board=board, user=request.user).exists()):
         return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     strategy_id = request.POST.get('strategy_id', '').strip()
@@ -3651,23 +3997,49 @@ def link_board_to_strategy_dashboard(request, board_id):
 
 @login_required
 def edit_board(request, board_id):
-      # Check if user is the board creator or a member
-    # Access restriction removed - all authenticated users can access
+    board = get_object_or_404(Board, id=board_id)
 
-    pass  # Original: board membership check removed
-    
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to edit this board.")
+        return redirect('board_detail', board_id=board.id)
+
     if request.method == 'POST':
         form = BoardForm(request.POST, instance=board)
         if form.is_valid():
             form.save()
-            messages.success(request, f'Board "{board.name}" updated successfully!')
+
+            # Handle strategy linking/unlinking
+            strategy_id = request.POST.get('strategy_id', '').strip()
+            if strategy_id:
+                try:
+                    new_strategy = Strategy.objects.get(id=int(strategy_id))
+                    board.strategy = new_strategy
+                    board.save(update_fields=['strategy'])
+                    messages.success(request, f'Board "{board.name}" updated and linked to strategy "{new_strategy.name}"!')
+                except (Strategy.DoesNotExist, ValueError):
+                    messages.success(request, f'Board "{board.name}" updated successfully!')
+            elif 'strategy_id' in request.POST:
+                # Empty value submitted = unlink
+                board.strategy = None
+                board.save(update_fields=['strategy'])
+                messages.success(request, f'Board "{board.name}" updated and unlinked from strategy.')
+            else:
+                messages.success(request, f'Board "{board.name}" updated successfully!')
+
             return redirect('board_detail', board_id=board.id)
     else:
         form = BoardForm(instance=board)
-    
+
+    from kanban.models import Strategy as _Strategy
+    all_strategies = list(
+        _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+        .values('id', 'name', 'mission__name', 'mission_id')
+    )
+
     return render(request, 'kanban/edit_board.html', {
         'form': form,
-        'board': board
+        'board': board,
+        'all_strategies': all_strategies,
     })
 
 @login_required
@@ -3737,9 +4109,14 @@ def wizard_create_board(request):
                 name=board_name,
                 description=board_description,
                 organization=organization,
-                created_by=request.user
+                created_by=request.user,
+                owner=request.user
             )
-            board.members.add(request.user)
+            from kanban.models import BoardMembership
+            BoardMembership.objects.get_or_create(
+                board=board, user=request.user,
+                defaults={'role': 'owner', 'added_by': request.user}
+            )
             
             # If AI columns are requested, get AI recommendations
             if use_ai_columns:
@@ -3809,9 +4186,9 @@ def wizard_create_task(request):
             
             # Get the board and verify access
             board = get_object_or_404(Board, id=board_id)
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
+            # RBAC: user must have edit permission to create tasks
+            if not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             # Get the first column (To Do column)
             first_column = board.columns.first()
@@ -3892,7 +4269,10 @@ def view_dependency_tree(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        board = task.column.board
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
         
         # Get all relationships
         parent_task = task.parent_task
@@ -3924,7 +4304,9 @@ def board_dependency_graph(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
+        # RBAC: user must have view permission on the board
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
         
         # Get all tasks with dependencies
         tasks = Task.objects.filter(column__board=board).prefetch_related(
@@ -3961,10 +4343,9 @@ def upload_task_file(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have edit permission on the board to upload files
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskFileForm(request.POST, request.FILES)
@@ -4004,10 +4385,9 @@ def download_task_file(request, file_id):
     file_obj = get_object_or_404(TaskFile, id=file_id)
     board = file_obj.task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have view permission on the board to download files
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     # Serve the file
     if file_obj.file:
@@ -4026,6 +4406,10 @@ def delete_task_file(request, file_id):
     file_obj = get_object_or_404(TaskFile, id=file_id)
     task = file_obj.task
     board = task.column.board
+    
+    # RBAC: user must have edit permission on the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     # Check permissions - only uploader or staff can delete
     if request.user != file_obj.uploaded_by and not request.user.is_staff:
@@ -4051,10 +4435,9 @@ def list_task_files(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user is board member
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get non-deleted files
     files = task.file_attachments.filter(deleted_at__isnull=True).values(
@@ -4083,6 +4466,11 @@ def analyze_task_file(request, file_id):
     import time as _time
 
     file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    # RBAC: user must have view permission on the board to analyze files
+    board = file_obj.task.column.board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if file_obj.is_deleted():
         return JsonResponse({'error': 'File has been deleted.'}, status=404)
@@ -4156,6 +4544,11 @@ def create_tasks_from_task_file(request, file_id):
     Creates confirmed tasks from ai_tasks_suggested on the TaskFile.
     """
     file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    # RBAC: user must have edit permission on the board to create tasks from AI analysis
+    board = file_obj.task.column.board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     if file_obj.is_deleted():
         return JsonResponse({'error': 'File has been deleted.'}, status=404)
@@ -4379,7 +4772,8 @@ def load_demo_data(request):
                 return redirect('board_list')
             
             # Check if user is already a member of any demo boards
-            already_member_boards = demo_boards.filter(members=request.user)
+            from kanban.models import BoardMembership
+            already_member_boards = demo_boards.filter(memberships__user=request.user)
             
             if already_member_boards.count() >= demo_boards.count():
                 # Mark wizard as completed even if they already have access
@@ -4391,38 +4785,18 @@ def load_demo_data(request):
                 return redirect('dashboard')
             
             # Add user as member to all demo boards with proper roles
-            # NOTE: This grants organization-level access - once added to one board in a demo org,
-            # user can access all boards in that organization
-            from kanban.permission_models import BoardMembership, Role
             from messaging.models import ChatRoom
             
             added_count = 0
             for demo_board in demo_boards:
-                # Add to members list if not already
-                # This gives them the "key" to access all boards in this demo organization
-                if request.user not in demo_board.members.all():
-                    demo_board.members.add(request.user)
-                    added_count += 1
-                
-                # Create BoardMembership with Editor role (allows full access)
-                membership_exists = BoardMembership.objects.filter(
+                # Create BoardMembership with member role
+                _, created = BoardMembership.objects.get_or_create(
                     board=demo_board,
-                    user=request.user
-                ).exists()
-                
-                if not membership_exists:
-                    # Get the Editor role for the board's organization
-                    editor_role = Role.objects.filter(
-                        organization=demo_board.organization,
-                        name='Editor'
-                    ).first()
-                    
-                    if editor_role:
-                        BoardMembership.objects.create(
-                            board=demo_board,
-                            user=request.user,
-                            role=editor_role
-                        )
+                    user=request.user,
+                    defaults={'role': 'member'}
+                )
+                if created:
+                    added_count += 1
                 
                 # Add user to all chat rooms for this board
                 chat_rooms = ChatRoom.objects.filter(board=demo_board)
@@ -4642,7 +5016,7 @@ def task_quick_view(request, task_id):
     # Board columns (for status dropdown) and members (for assignee picker)
     columns = Column.objects.filter(board=board).order_by('position')
     board_members = User.objects.filter(
-        id__in=board.members.values_list('id', flat=True)
+        board_memberships__board=board
     ).select_related('profile')
 
     return render(request, 'kanban/task_quick_view.html', {
@@ -4760,6 +5134,20 @@ def column_update_wip(request, column_id):
             return JsonResponse({'error': 'Invalid WIP limit value'}, status=400)
     column.save()
     return JsonResponse({'success': True, 'wip_limit': column.wip_limit})
+
+
+@login_required
+@require_http_methods(["POST"])
+def column_update_color(request, column_id):
+    """Set the color badge on a column header."""
+    column = get_object_or_404(Column, id=column_id)
+    color = request.POST.get('color', '').strip()
+    valid_colors = [c[0] for c in Column.COLOR_CHOICES]
+    if color not in valid_colors:
+        return JsonResponse({'error': 'Invalid color'}, status=400)
+    column.color = color
+    column.save(update_fields=['color'])
+    return JsonResponse({'success': True, 'color': column.color})
 
 
 @login_required

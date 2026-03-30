@@ -4,7 +4,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
 from .models import ChatMessage, ChatRoom, TaskThreadComment, UserTypingStatus, Notification
-from kanban.models import Task
+from kanban.models import Task, BoardMembership
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -318,15 +318,30 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
     # Database operations
     @database_sync_to_async
     def is_user_authorized(self):
-        """Check if user is authorized to access this room.
-        
-        Matches the HTTP view (chat_room_detail): all authenticated users
-        can access chat rooms.  If the user is not yet a member, they are
-        added automatically so they appear in the members list and can
-        receive messages.
+        """Check if user is authorized to access this chat room.
+
+        Access is granted when the user:
+        - is an OrgAdmin, OR
+        - has a BoardMembership on the room's board, OR
+        - the board is an official demo board.
+
+        If authorized and not yet a ChatRoom member, the user is added
+        automatically so they appear in the members list.
         """
         try:
             chat_room = ChatRoom.objects.get(id=self.room_id)
+            board = chat_room.board
+
+            is_org_admin = self.user.groups.filter(name='OrgAdmin').exists()
+            has_membership = BoardMembership.objects.filter(
+                board=board, user=self.user
+            ).exists()
+            is_demo = getattr(board, 'is_official_demo_board', False)
+
+            if not (is_org_admin or has_membership or is_demo):
+                return False
+
+            # Auto-add to chat room members list so they appear in UI
             if not chat_room.members.filter(id=self.user.id).exists():
                 chat_room.members.add(self.user)
             return True
@@ -602,15 +617,28 @@ class TaskCommentConsumer(AsyncWebsocketConsumer):
     
     @database_sync_to_async
     def is_user_authorized(self):
-        """Check if user is authorized to access this task"""
+        """Check if user is authorized to access this task's comment thread.
+
+        Access is granted when the user:
+        - is an OrgAdmin, OR
+        - is assigned to the task, OR
+        - created the task, OR
+        - has a BoardMembership on the task's board, OR
+        - the board is an official demo board.
+        """
         try:
             task = Task.objects.get(id=self.task_id)
-            # Check if user is assigned, created task, or board member
             board = task.column.board
+
+            is_org_admin = self.user.groups.filter(name='OrgAdmin').exists()
+            is_demo = getattr(board, 'is_official_demo_board', False)
+
             return (
-                task.assigned_to == self.user or 
-                task.created_by == self.user or 
-                board.members.filter(id=self.user.id).exists()
+                is_org_admin or
+                is_demo or
+                task.assigned_to == self.user or
+                task.created_by == self.user or
+                board.memberships.filter(user_id=self.user.id).exists()
             )
         except Task.DoesNotExist:
             return False

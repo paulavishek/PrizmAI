@@ -8,7 +8,7 @@ AI plays devil's advocate and simulates 5 ways the project could fail.
 import json
 import time
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
@@ -21,6 +21,7 @@ from django.conf import settings
 from kanban.models import Board, Task
 from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from kanban.audit_utils import log_audit
+from kanban.decorators import demo_write_guard, demo_ai_guard
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ def _collect_board_snapshot(board):
     no_deadline_count = task_count - no_deadline_count  # tasks WITHOUT a due date
 
     # Team size – union of board members and distinct assignees
-    member_ids = set(board.members.values_list('id', flat=True))
+    member_ids = set(board.memberships.values_list('user_id', flat=True))
     assignee_ids = set(
         tasks.filter(assigned_to__isnull=False)
         .values_list('assigned_to_id', flat=True)
@@ -251,6 +252,10 @@ def premortem_dashboard(request, board_id):
     readiness = board_premortem_ready(board)
     latest = board.pre_mortems.first()  # ordered by -created_at
 
+    # Flag stale analyses (older than 7 days)
+    if latest:
+        latest.is_stale = (timezone.now() - latest.created_at) > timedelta(days=7)
+
     # Gather acknowledgments and enrich scenario data for the template
     enriched_scenarios = []
     if latest and latest.analysis_json and latest.analysis_json.get('failure_scenarios'):
@@ -296,6 +301,7 @@ def premortem_dashboard(request, board_id):
 @login_required
 @require_POST
 @require_ai_quota('premortem')
+@demo_ai_guard
 def run_premortem(request, board_id):
     """
     Run a new Pre-Mortem AI analysis for the board.
@@ -309,6 +315,12 @@ def run_premortem(request, board_id):
             'success': False,
             'error': 'Board does not meet the Pre-Mortem unlock conditions.',
         }, status=400)
+
+    # Async mode: enqueue Celery task and return task_id for WebSocket streaming
+    if request.headers.get('X-Request-Async'):
+        from kanban.tasks.ai_streaming_tasks import run_premortem_task
+        result = run_premortem_task.delay(board_id, request.user.id)
+        return JsonResponse({'task_id': result.id, 'status': 'queued'})
 
     start_time = time.time()
     snapshot = _collect_board_snapshot(board)
@@ -388,6 +400,7 @@ def run_premortem(request, board_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_scenario(request, premortem_id, scenario_index):
     """
     Mark a Pre-Mortem scenario as addressed / acknowledged.

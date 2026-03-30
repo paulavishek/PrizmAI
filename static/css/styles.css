@@ -4,8 +4,8 @@
     --bg-secondary: #ffffff;
     --bg-tertiary: #e9ecef;
     --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --text-muted: #999999;
+    --text-secondary: #495057;
+    --text-muted: #6b7280;
     --border-color: #dee2e6;
     --border-light: #e9ecef;
     --shadow-color: rgba(0, 0, 0, 0.1);
@@ -20,12 +20,23 @@
     --btn-hover-bg: #dde2e6;
     --card-bg: #ffffff;
     --footer-bg: #f8f9fa;
+
+    /* ── Typography Scale ──────────────────────────────────────────── */
+    --font-size-xs:  0.75rem;   /* 12px — decorative / disabled only  */
+    --font-size-sm:  0.8125rem; /* 13px — small labels                */
+    --font-size-base: 0.875rem; /* 14px — standard component text     */
+    --font-size-md:  0.9375rem; /* 15px                               */
+    --font-size-lg:  1.0625rem; /* 17px — section headers             */
+    --font-size-xl:  1.25rem;   /* 20px — page titles                 */
+    --font-size-2xl: 1.5rem;    /* 24px — major headings              */
 }
 
 /* General Styles */
 body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.6;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -34,6 +45,120 @@ body {
 .footer {
     margin-top: auto;
 }
+
+/* ======================================== */
+/* UNIVERSAL BUTTON INTERACTION SYSTEM     */
+/* ======================================== */
+.btn {
+    transition: all 0.15s ease-in-out;
+}
+
+.btn:hover {
+    filter: brightness(0.92);
+}
+
+.btn:focus-visible {
+    outline: 3px solid rgba(102, 126, 234, 0.5);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+.btn:active {
+    transform: scale(0.98);
+    filter: brightness(0.88);
+}
+
+/* ── Signature Primary Button ─────────────────────────────────────── */
+.btn-prizm-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 50px;
+    padding: 10px 28px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    transition: all 0.2s ease;
+}
+
+.btn-prizm-primary:hover {
+    background: linear-gradient(135deg, #5a6fd6 0%, #6a4199 100%);
+    box-shadow: 0 4px 14px rgba(102, 126, 234, 0.45);
+    transform: translateY(-1px);
+    color: #ffffff;
+    filter: none;
+}
+
+.btn-prizm-primary:active {
+    transform: scale(0.98) translateY(0);
+    box-shadow: 0 1px 4px rgba(102, 126, 234, 0.3);
+    filter: none;
+}
+
+.btn-prizm-primary:focus-visible {
+    outline: 3px solid rgba(102, 126, 234, 0.5);
+    outline-offset: 2px;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Small variant for toolbar use */
+.btn-prizm-primary.btn-sm {
+    padding: 6px 18px;
+    font-size: 0.875rem;
+}
+
+.btn-prizm-primary.btn-lg {
+    padding: 12px 36px;
+    font-size: 1.1rem;
+}
+/* ── End Signature Primary Button ─────────────────────────────────── */
+
+/* ── AI Skeleton / Progressive Disclosure ─────────────────────────── */
+@keyframes ai-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.ai-skeleton {
+    background: var(--card-bg, #f0f0f0);
+    border-radius: 8px;
+    min-height: 80px;
+}
+
+.ai-skeleton--shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--card-bg, #f0f0f0) 25%,
+        rgba(255,255,255,0.45) 37%,
+        var(--card-bg, #f0f0f0) 63%
+    );
+    background-size: 800px 100%;
+    animation: ai-shimmer 1.4s ease-in-out infinite;
+}
+
+.ai-status-text {
+    font-size: 0.9rem;
+    color: var(--text-muted, #6c757d);
+    margin-top: 8px;
+    transition: opacity 0.3s ease;
+}
+
+.ai-progress-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-color, #dee2e6);
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.ai-progress-bar__fill {
+    height: 100%;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+}
+/* ── End AI Skeleton ──────────────────────────────────────────────── */
 
 /* ======================================== */
 /* PRIZMAI BRAND STYLING                   */
@@ -167,6 +292,33 @@ body {
     background-color: var(--btn-hover-bg);
 }
 
+/* ── Monday.com-style Column Color System ──────────────────────────── */
+.kanban-column-header--green  { background-color: #c3e6cb; border-left: 4px solid #28a745; color: #155724; }
+.kanban-column-header--blue   { background-color: #b8daff; border-left: 4px solid #007bff; color: #004085; }
+.kanban-column-header--purple { background-color: #d5c5f0; border-left: 4px solid #6f42c1; color: #2d1a54; }
+.kanban-column-header--orange { background-color: #ffd8b2; border-left: 4px solid #fd7e14; color: #663000; }
+.kanban-column-header--red    { background-color: #f5c6cb; border-left: 4px solid #dc3545; color: #721c24; }
+.kanban-column-header--yellow { background-color: #fff3cd; border-left: 4px solid #ffc107; color: #594300; }
+.kanban-column-header--teal   { background-color: #b2dfdb; border-left: 4px solid #20c997; color: #0c4b3e; }
+.kanban-column-header--gray   { background-color: #e2e3e5; border-left: 4px solid #6c757d; color: #383d41; }
+
+/* Hover states for colored headers — slight darkening */
+.kanban-column-header--green:hover  { background-color: #b1dfbb; }
+.kanban-column-header--blue:hover   { background-color: #a4cfff; }
+.kanban-column-header--purple:hover { background-color: #c4b0e8; }
+.kanban-column-header--orange:hover { background-color: #ffc999; }
+.kanban-column-header--red:hover    { background-color: #f0adb4; }
+.kanban-column-header--yellow:hover { background-color: #ffe9a0; }
+.kanban-column-header--teal:hover   { background-color: #9dd5d0; }
+.kanban-column-header--gray:hover   { background-color: #d3d4d7; }
+
+/* Ensure column header text inherits the correct color */
+.kanban-column-header[class*="kanban-column-header--"] .column-name-text,
+.kanban-column-header[class*="kanban-column-header--"] .column-task-count {
+    color: inherit;
+}
+/* ── End Column Color System ───────────────────────────────────────── */
+
 .drag-handle {
     cursor: grab;
     margin-right: 8px;
@@ -186,8 +338,8 @@ body {
 }
 
 .column-task-count {
-    font-size: 0.85rem;
-    color: #6c757d;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
@@ -422,8 +574,8 @@ body {
     background-color: var(--card-bg);
     border-radius: 5px;
     padding: 15px;
-    margin-bottom: 10px;
-    box-shadow: 0 1px 3px var(--shadow-color);
+    margin-bottom: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     cursor: grab;
     position: relative;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -507,7 +659,7 @@ body {
 }
 
 .task-description {
-    font-size: 0.9rem;
+    font-size: 0.925rem;
     color: var(--text-secondary);
     margin-bottom: 10px;
 }
@@ -516,7 +668,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
 }
 
 .task-labels {
@@ -526,8 +678,8 @@ body {
 }
 
 .task-label {
-    font-size: 0.7rem;
-    padding: 2px 8px;
+    font-size: 0.78rem;
+    padding: 3px 10px;
     border-radius: 10px;
     margin-right: 5px;
     margin-bottom: 5px;
@@ -544,15 +696,15 @@ body {
 
 .task-label.lean-label i {
     margin-right: 4px;
-    font-size: 0.65rem;
+    font-size: 0.72rem;
 }
 
 /* ── Required-Skills Chip UI ─────────────────────────────────────────── */
 .skill-chip {
     background-color: #0d6efd;
     color: #fff;
-    font-size: 0.72rem;
-    padding: 3px 9px 3px 10px;
+    font-size: 0.8rem;
+    padding: 4px 10px 4px 11px;
     border-radius: 20px;
     line-height: 1.4;
     gap: 4px;
@@ -560,7 +712,7 @@ body {
 
 .skill-chip .skill-chip-sep {
     opacity: 0.65;
-    font-size: 0.65rem;
+    font-size: 0.72rem;
 }
 
 .skill-chip-remove {
@@ -591,9 +743,9 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    padding: 2px 8px;
+    padding: 4px 12px;
     border-radius: 20px;
     letter-spacing: 0.3px;
     white-space: nowrap;
@@ -625,8 +777,8 @@ body {
 }
 
 .task-priority {
-    font-size: 0.7rem;
-    padding: 2px 8px;
+    font-size: 0.85rem;
+    padding: 4px 12px;
     border-radius: 10px;
     margin-bottom: 5px;
 }

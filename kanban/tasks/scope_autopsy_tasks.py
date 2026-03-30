@@ -124,9 +124,13 @@ def generate_scope_autopsy(self, report_id):
         report.save()
 
         # 9. Create ScopeTimelineEvent records
+        # Clamp cumulative to actual task count to avoid contradictions
+        actual_task_count = report.final_task_count
         cumulative = baseline['task_count']
         for e in events:
             cumulative += e['net_task_change']
+            if cumulative > actual_task_count:
+                cumulative = actual_task_count
             ScopeTimelineEvent.objects.create(
                 report=report,
                 event_date=e['date'],
@@ -221,7 +225,7 @@ def _get_past_scope_patterns(board, user):
         # Get boards accessible to user
         if user:
             user_board_ids = set(
-                user.member_boards.values_list('id', flat=True)
+                Board.objects.filter(memberships__user=user).values_list('id', flat=True)
             ) | set(
                 user.created_boards.values_list('id', flat=True)
             )
@@ -481,7 +485,7 @@ def _create_autopsy_memory_node(report, ai_result, user):
         # Check for cross-project pattern count
         if user:
             user_board_ids = set(
-                user.member_boards.values_list('id', flat=True)
+                Board.objects.filter(memberships__user=user).values_list('id', flat=True)
             ) | set(
                 user.created_boards.values_list('id', flat=True)
             )

@@ -200,7 +200,20 @@ def collect_scope_history(board):
         a for a in alert_events
         if a['date'].date() not in task_event_dates
     ]
-    events = non_alert_events + filtered_alerts
+
+    # Also remove conflict/meeting events on dates already covered by task_added,
+    # since those tasks are already counted in SOURCE 2's daily task additions.
+    primary_events = [e for e in non_alert_events if e['source_type'] == 'task_added']
+    secondary_events = [
+        e for e in non_alert_events
+        if e['source_type'] in ('conflict', 'meeting')
+        and e['date'].date() not in task_event_dates
+    ]
+    other_events = [
+        e for e in non_alert_events
+        if e['source_type'] not in ('task_added', 'conflict', 'meeting')
+    ]
+    events = primary_events + secondary_events + other_events + filtered_alerts
 
     # Mark major events
     for event in events:

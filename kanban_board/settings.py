@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     'axes',  # django-axes for brute force protection
     'csp',  # django-csp for Content Security Policy
     'django_celery_beat',  # Database-backed periodic task scheduler
+    'rules',  # django-rules for predicate-based RBAC permissions
     
     # Django Allauth
     'allauth',
@@ -276,6 +277,7 @@ SITE_ID = 1
 AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',  # django-rules object-level permissions
 )
 
 # Allauth settings (updated for django-allauth 65.9.0+)
@@ -655,6 +657,7 @@ CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
 # Start the worker with: celery -A kanban_board worker -Q celery,summaries
 CELERY_TASK_ROUTES = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
+    'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
 }
 
 # ---------------------------------------------------------------------------
@@ -668,6 +671,16 @@ AI_SUMMARY_DEBOUNCE_SECONDS = 600          # 10 minutes
 # Summaries older than this many minutes are flagged as "stale" in the
 # dashboard UI and in the /api/summary-status/ polling endpoint.
 AI_SUMMARY_STALE_THRESHOLD_MINUTES = 120   # 2 hours
+
+# Map Django message levels to Bootstrap CSS classes
+from django.contrib.messages import constants as message_constants
+MESSAGE_TAGS = {
+    message_constants.DEBUG:   'debug',
+    message_constants.INFO:    'info',
+    message_constants.SUCCESS: 'success',
+    message_constants.WARNING: 'warning',
+    message_constants.ERROR:   'danger',
+}
 
 # ============================================
 # REST FRAMEWORK CONFIGURATION
@@ -815,6 +828,7 @@ AUTHENTICATION_BACKENDS = (
     'axes.backends.AxesStandaloneBackend',  # AxesStandaloneBackend should be first
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',  # django-rules object-level permissions
 )
 
 # Axes Configuration

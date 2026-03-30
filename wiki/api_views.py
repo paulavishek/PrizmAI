@@ -18,6 +18,8 @@ from django.db import models
 from django.db.models import Q
 
 from kanban.models import Board, Task, Column
+from kanban.decorators import demo_ai_guard
+from kanban.utils.demo_protection import get_user_boards
 from accounts.models import Organization
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_wiki_documentation_page(request, wiki_page_id):
     """
     API endpoint to analyze a general wiki documentation page using AI
@@ -53,15 +56,13 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         # Get the wiki page - allow access to any published page
         wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Verify user has access to this wiki page's organization
+        if wiki_page.organization and hasattr(request.user, 'profile') and request.user.profile.organization != wiki_page.organization:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         try:
-            # MVP Mode: Get all accessible boards (demo boards + user's boards)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            available_boards = (demo_boards | user_boards).distinct()
+            # Get boards scoped to user's current workspace (demo-aware)
+            available_boards = get_user_boards(request.user)
             
             # Prepare wiki page context
             wiki_context = {
@@ -140,6 +141,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def analyze_wiki_meeting_page(request, wiki_page_id):
     """
     API endpoint to analyze a wiki page as meeting notes using AI
@@ -165,7 +167,9 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         # Get the wiki page - allow access to any published page
         wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Verify user has access to this wiki page's organization
+        if wiki_page.organization and hasattr(request.user, 'profile') and request.user.profile.organization != wiki_page.organization:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Check if there's already a recent analysis for this content
         content_hash = hashlib.sha256(wiki_page.content.encode()).hexdigest()
@@ -195,12 +199,8 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         )
         
         try:
-            # MVP Mode: Get all accessible boards (demo boards + user's boards)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            available_boards = (demo_boards | user_boards).distinct()
+            # Get boards scoped to user's current workspace (demo-aware)
+            available_boards = get_user_boards(request.user)
             
             # Prepare wiki page context
             wiki_context = {
@@ -293,6 +293,7 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def create_tasks_from_meeting_analysis(request, analysis_id):
     """
     API endpoint to create tasks from wiki meeting analysis
@@ -322,7 +323,9 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
+        # Check user has permission to create tasks on this board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get target column
         if column_id:
@@ -376,7 +379,7 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     if assignee_name:
                         try:
                             # Restrict lookup to board members (creator + members)
-                            board_member_ids = list(board.members.values_list('id', flat=True))
+                            board_member_ids = list(board.memberships.values_list('user_id', flat=True))
                             board_member_ids.append(board.created_by_id)
                             board_qs = User.objects.filter(id__in=board_member_ids)
 
@@ -519,6 +522,7 @@ def get_meeting_analysis_details(request, analysis_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def mark_analysis_reviewed(request, analysis_id):
     """
     Mark an analysis as reviewed by user, optionally with notes
@@ -554,12 +558,8 @@ def get_boards_for_organization(request):
     Used for board selection when creating tasks
     """
     try:
-        # MVP Mode: Get all accessible boards (demo boards + user's boards)
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # Get boards scoped to user's current workspace (demo-aware)
+        boards = get_user_boards(request.user)
         
         boards_data = []
         for board in boards:
@@ -574,7 +574,7 @@ def get_boards_for_organization(request):
             # Collect board members (creator + members, deduplicated)
             seen_ids = set()
             members_data = []
-            for member in [board.created_by] + list(board.members.all()):
+            for member in [board.created_by] + list(User.objects.filter(board_memberships__board=board)):
                 if member.id not in seen_ids:
                     seen_ids.add(member.id)
                     members_data.append({
@@ -604,6 +604,7 @@ def get_boards_for_organization(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def import_transcript_to_wiki_page(request, wiki_page_id):
     """
     Import a meeting transcript into a wiki page
@@ -680,12 +681,8 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
                 # Check AI quota
                 has_quota, quota, remaining = check_ai_quota(request.user)
                 if has_quota:
-                    # MVP Mode: Get all accessible boards
-                    demo_boards = Board.objects.filter(is_official_demo_board=True)
-                    user_boards = Board.objects.filter(
-                        Q(created_by=request.user) | Q(members=request.user)
-                    )
-                    available_boards = (demo_boards | user_boards).distinct()[:10]
+                    # Get boards scoped to user's current workspace (demo-aware)
+                    available_boards = get_user_boards(request.user)[:10]
                     
                     # Build wiki page context
                     wiki_page_context = {
@@ -747,6 +744,7 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_ai_guard
 def extract_text_from_uploaded_file(request):
     """
     Extract text from uploaded Word (.docx, .doc) or PDF files

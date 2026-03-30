@@ -5,11 +5,20 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Pre-Mortem Analysis</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis — {{ board.name }}</h2>
-            <p class="text-muted">Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
+            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis</h2>
+            <p class="text-muted">{{ board.name }} — Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
         </div>
         <div class="col-md-4 text-end">
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
@@ -113,6 +122,7 @@
                 </span>
                 <span class="text-muted me-3">
                     Analyzed on: {{ latest.created_at|date:"M d, Y H:i" }}
+                    {% if latest.is_stale %}<span class="badge bg-warning text-dark ms-2" data-bs-toggle="tooltip" title="Analysis is over 7 days old — consider re-running with latest board data"><i class="fas fa-clock me-1"></i>Stale</span>{% endif %}
                 </span>
                 <span class="text-muted">
                     Run by: {% if latest.created_by %}{{ latest.created_by.get_full_name|default:latest.created_by.username }}{% else %}Unknown{% endif %}
@@ -154,8 +164,8 @@
     </div>
 
     {% if latest.analysis_json.confidence_note %}
-    <div class="alert alert-info mb-4">
-        <i class="fas fa-info-circle me-2"></i>
+    <div class="alert alert-warning mb-4">
+        <i class="fas fa-exclamation-triangle me-2"></i>
         {{ latest.analysis_json.confidence_note }}
     </div>
     {% endif %}
@@ -174,19 +184,30 @@
     <div class="card mb-3 border-start border-4
         {% if scenario.probability == 'High' %}border-danger
         {% elif scenario.probability == 'Medium' %}border-warning
-        {% else %}border-success{% endif %}">
+        {% else %}border-success{% endif %}
+        {% if scenario.acknowledged %}opacity-75{% endif %}"
+        id="scenario-card-{{ scenario.index }}">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <h5 class="card-title mb-0">Scenario {{ scenario.number }}: {{ scenario.title }}</h5>
-                {% if scenario.probability == 'High' %}
-                    <span class="badge bg-danger">HIGH RISK</span>
-                {% elif scenario.probability == 'Medium' %}
-                    <span class="badge bg-warning text-dark">MEDIUM RISK</span>
-                {% else %}
-                    <span class="badge bg-success">LOW RISK</span>
-                {% endif %}
+            <div class="d-flex justify-content-between align-items-start mb-0" role="button" data-bs-toggle="collapse" data-bs-target="#scenario-body-{{ scenario.index }}" aria-expanded="true">
+                <h5 class="card-title mb-0">
+                    {% if scenario.acknowledged %}<i class="fas fa-check-circle text-success me-1"></i>{% endif %}
+                    Scenario {{ scenario.number }}: {{ scenario.title }}
+                </h5>
+                <div class="d-flex align-items-center gap-2">
+                    {% if scenario.acknowledged %}
+                        <span class="badge bg-success">ADDRESSED</span>
+                    {% elif scenario.probability == 'High' %}
+                        <span class="badge bg-danger">HIGH RISK</span>
+                    {% elif scenario.probability == 'Medium' %}
+                        <span class="badge bg-warning text-dark">MEDIUM RISK</span>
+                    {% else %}
+                        <span class="badge bg-success">LOW RISK</span>
+                    {% endif %}
+                    <i class="fas fa-chevron-down text-muted" style="font-size:0.75rem; transition: transform 0.2s;"></i>
+                </div>
             </div>
-            <p class="card-text">{{ scenario.description }}</p>
+            <div class="collapse show" id="scenario-body-{{ scenario.index }}">
+            <p class="card-text mt-2">{{ scenario.description }}</p>
 
             <div class="mt-3 p-3 bg-light rounded">
                 <p class="mb-2">
@@ -211,6 +232,7 @@
                     <i class="fas fa-check me-1"></i> Mark as Addressed
                 </button>
                 {% endif %}
+            </div>
             </div>
         </div>
     </div>
@@ -244,6 +266,37 @@ function runPreMortem() {
     if (resultsEl) resultsEl.style.display = 'none';
     if (runBtn) runBtn.disabled = true;
 
+    // Use progressive disclosure if the library is loaded
+    if (typeof triggerAITask === 'function') {
+        if (loadingEl) {
+            loadingEl.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:140px"></div>' +
+                '<div class="ai-progress-bar mt-2"><div id="premortem-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
+                '<p id="premortem-status" class="ai-status-text">Preparing…</p>';
+        }
+
+        triggerAITask(`{% url 'run_premortem' board.id %}`, {
+            method: 'POST',
+            statusSelector: '#premortem-status',
+            progressSelector: '#premortem-progress',
+            onResult: function(data) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Analysis failed. Please try again.');
+                    if (runBtn) runBtn.disabled = false;
+                }
+            },
+            onError: function(msg) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                alert(msg || 'Analysis failed. Please try again.');
+                if (runBtn) runBtn.disabled = false;
+            },
+        });
+        return;
+    }
+
+    // Fallback: synchronous fetch (original behavior)
     fetch(`{% url 'run_premortem' board.id %}`, {
         method: 'POST',
         headers: {
@@ -288,6 +341,21 @@ function acknowledgeScenario(premortemId, scenarioIndex, btnEl) {
                 <i class="fas fa-check-circle me-1"></i>
                 Addressed by ${data.acknowledged_by} on ${new Date(data.acknowledged_at).toLocaleDateString()}
             </span>`;
+
+            // Visual state change on the card
+            const card = document.getElementById(`scenario-card-${scenarioIndex}`);
+            if (card) {
+                card.classList.add('opacity-75');
+                const badge = card.querySelector('.badge');
+                if (badge) {
+                    badge.className = 'badge bg-success';
+                    badge.textContent = 'ADDRESSED';
+                }
+                const title = card.querySelector('.card-title');
+                if (title && !title.querySelector('.fa-check-circle')) {
+                    title.insertAdjacentHTML('afterbegin', '<i class="fas fa-check-circle text-success me-1"></i>');
+                }
+            }
 
             // Update the progress tracker
             const counterEl = document.getElementById('ack-counter');

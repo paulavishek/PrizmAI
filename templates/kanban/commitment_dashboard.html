@@ -27,6 +27,15 @@
 {% block content %}
 <div class="container-fluid py-4">
 
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+      <li class="breadcrumb-item active">Commitments</li>
+    </ol>
+  </nav>
+
   <!-- View Mode Tabs -->
   <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
     <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>

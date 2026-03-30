@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional, Any
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from django.db.models import Sum, Count, Q, F, Avg
 import statistics
 
@@ -45,7 +46,8 @@ class DemandForecastingService:
         period_end = period_start + timedelta(days=days_ahead)
         
         # Get all board members
-        team_members = board.members.all()
+        User = get_user_model()
+        team_members = User.objects.filter(board_memberships__board=board)
         forecasts = []
         alerts = []
         

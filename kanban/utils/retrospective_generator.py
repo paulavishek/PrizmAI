@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from django.db.models import Avg, Count, Sum, Q, F, Max, Min
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from ai_assistant.utils.ai_clients import GeminiClient
 
@@ -183,7 +184,8 @@ class RetrospectiveGenerator:
         """Return a list of board members with their current open-task count."""
         from kanban.models import Task
         members = []
-        board_users = list(self.board.members.all())
+        User = get_user_model()
+        board_users = list(User.objects.filter(board_memberships__board=self.board))
         # Always include the board creator
         creator = self.board.created_by
         if not any(u.id == creator.id for u in board_users):
@@ -851,7 +853,11 @@ Format the response with clear sections using the headers above.
                     retrospective=retrospective,
                     board=self.board,
                     title=lesson.get('title', lesson.get('description', 'Untitled')[:100]),
-                    description=lesson.get('description', ''),
+                    description=self._clean_lesson_description(
+                        lesson.get('description', ''),
+                        lesson.get('title', ''),
+                        lesson.get('evidence', '')
+                    ),
                     category=lesson.get('category', 'other'),
                     priority=lesson.get('priority', 'medium'),
                     recommended_action=lesson.get('recommended_action', 'Review and implement'),
@@ -861,6 +867,20 @@ Format the response with clear sections using the headers above.
             except Exception as e:
                 logger.error(f"Error creating lesson learned: {e}")
     
+    @staticmethod
+    def _clean_lesson_description(description, title, evidence=''):
+        """Avoid storing placeholder-like or title-duplicate descriptions."""
+        desc = (description or '').strip()
+        title_clean = (title or '').strip()
+        # Detect placeholder patterns
+        if (not desc
+                or desc == title_clean
+                or desc.startswith('Detailed insight about')
+                or desc.startswith('No additional details')):
+            # Fall back to evidence if available
+            return (evidence or '').strip()
+        return desc
+
     def _create_action_items(self, retrospective, recommendations_data):
         """Create RetrospectiveActionItem records from recommendations"""
         from kanban.retrospective_models import RetrospectiveActionItem

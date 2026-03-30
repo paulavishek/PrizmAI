@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Members — {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex align-items-center mb-4 gap-3">
+    <a href="{% url 'board_detail' board_id=board.id %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Back to Board
+    </a>
+    <h2 class="mb-0 fw-bold">
+      <i class="fas fa-users me-2 text-info"></i>{{ board.name }} — Members
+    </h2>
+  </div>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="row g-4">
+
+    <!-- Current Members -->
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-user-check me-2 text-success"></i>Current Members
+          <span class="badge bg-secondary ms-2">{{ memberships.count }}</span>
+        </div>
+        <div class="card-body p-0">
+          {% if memberships %}
+          <div class="list-group list-group-flush">
+            {% for membership in memberships %}
+            <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+              <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white fw-bold"
+                  style="width:38px;height:38px;font-size:.9rem;">
+                  {{ membership.user.username|first|upper }}
+                </div>
+                <div>
+                  <div class="fw-semibold">{{ membership.user.get_full_name|default:membership.user.username }}</div>
+                  <div class="text-muted small">{{ membership.user.email }}</div>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                {% if can_manage and membership.user != board.created_by %}
+                <form method="post" action="{% url 'update_member_role' board_id=board.id user_id=membership.user.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <select name="role" onchange="this.form.submit()" class="form-select form-select-sm"
+                    style="width:auto;font-size:.78rem;padding:.2rem 1.8rem .2rem .5rem;
+                    {% if membership.role == 'owner' %}background-color:#ffc107;color:#212529;border-color:#ffc107;
+                    {% elif membership.role == 'viewer' %}background-color:#6c757d;color:#fff;border-color:#6c757d;
+                    {% else %}background-color:#0d6efd;color:#fff;border-color:#0d6efd;{% endif %}
+                    border-radius:0.35rem;font-weight:600;">
+                    <option value="owner" {% if membership.role == 'owner' %}selected{% endif %}>Owner</option>
+                    <option value="member" {% if membership.role == 'member' %}selected{% endif %}>Member</option>
+                    <option value="viewer" {% if membership.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                  </select>
+                </form>
+                {% else %}
+                <span class="badge
+                  {% if membership.role == 'owner' %}bg-warning text-dark
+                  {% elif membership.role == 'viewer' %}bg-secondary
+                  {% else %}bg-primary{% endif %}">
+                  {{ membership.get_role_display }}
+                </span>
+                {% endif %}
+                {% if can_manage and membership.user != board.created_by %}
+                <form method="post" action="{% url 'remove_board_member' board_id=board.id user_id=membership.user.id %}"
+                  onsubmit="return confirm('Remove {{ membership.user.username }} from this board?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove member">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted p-4 mb-0">No members yet.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Invite & Pending -->
+    <div class="col-lg-5">
+
+      {% if can_manage and not board.is_official_demo_board %}
+      <!-- Invite Form -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-user-plus me-2 text-success"></i>Invite Members
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'invite_to_board' board_id=board.id %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label for="invite_emails" class="form-label text-muted small">
+                Email addresses (comma or newline separated)
+              </label>
+              <textarea id="invite_emails" name="invite_emails" rows="3"
+                class="form-control form-control-sm"
+                placeholder="alice@example.com, bob@example.com"></textarea>
+            </div>
+            <button type="submit" class="btn btn-success btn-sm w-100">
+              <i class="fas fa-paper-plane me-1"></i>Send Invitations
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Pending Invitations -->
+      {% if pending_invitations %}
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-hourglass-half me-2 text-warning"></i>Pending Invitations
+          <span class="badge bg-secondary ms-2">{{ pending_invitations.count }}</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="list-group list-group-flush">
+            {% for inv in pending_invitations %}
+            <div class="list-group-item d-flex align-items-center justify-content-between py-2 px-4">
+              <div>
+                <div class="fw-semibold small">{{ inv.email }}</div>
+                <div class="text-muted" style="font-size:.75rem;">
+                  Invited {{ inv.created_at|timesince }} ago · expires {{ inv.expires_at|timesince }} left
+                </div>
+              </div>
+              {% if can_manage %}
+              <form method="post" action="{% url 'revoke_board_invitation' invitation_id=inv.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Revoke invitation">
+                  <i class="fas fa-ban"></i>
+                </button>
+              </form>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+{% endblock %}

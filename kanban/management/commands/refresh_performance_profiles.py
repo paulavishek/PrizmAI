@@ -43,7 +43,7 @@ class Command(BaseCommand):
             # Get all unique users who are members of these boards
             board_members = set()
             for board in boards:
-                board_members.update(board.members.all())
+                board_members.update(User.objects.filter(board_memberships__board=board))
             
             self.stdout.write(f'  Found {len(board_members)} unique team members')
             

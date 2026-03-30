@@ -6,6 +6,16 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'coach_dashboard' board.id %}">AI Coach</a></li>
+            <li class="breadcrumb-item active">Analytics</li>
+        </ol>
+    </nav>
+
     <div class="row mb-4">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">

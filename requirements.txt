@@ -6,6 +6,9 @@ sqlparse==0.5.3
 tzdata==2025.2
 pytz==2026.1.post1
 
+# RBAC Permissions
+rules==3.5.0
+
 # RESTful API Framework (for external integrations)
 djangorestframework==3.15.2
 django-cors-headers==4.6.0
@@ -91,7 +94,7 @@ zope.interface==8.0.1
 
 # Asynchronous Task Processing
 celery==5.3.4
-django-celery-beat==2.6.0
+django-celery-beat==2.9.0
 redis==5.0.1
 django-redis==5.4.0
 amqp==5.3.1
@@ -116,8 +119,8 @@ vaderSentiment==3.3.2
 
 # Security Tools
 bandit==1.7.5
-safety==3.0.1
-safety-schemas==0.0.5
+safety==3.7.0
+safety-schemas==0.0.16
 dparse==0.6.4
 ruamel.yaml==0.18.16
 ruamel.yaml.clib==0.2.15

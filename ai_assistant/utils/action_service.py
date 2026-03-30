@@ -6,6 +6,7 @@ Every database write is wrapped in try / except and returns a structured dict.
 """
 import logging
 import re
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
 from django.urls import reverse
@@ -31,10 +32,30 @@ class SpectraActionService:
 
     @staticmethod
     def _user_has_board_access(user, board):
-        """Return True if *user* is a member of (or creator of) *board*."""
-        if board.created_by_id == user.id:
-            return True
-        return board.members.filter(id=user.id).exists()
+        """Return True if *user* has any access (including viewer) to *board*."""
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
+        return can_spectra_read_board(user, board)
+
+    @staticmethod
+    def _user_can_modify_board(user, board):
+        """Return True if *user* can create/edit/delete content on *board* (not viewer)."""
+        from ai_assistant.utils.rbac_utils import can_spectra_write_board
+        return can_spectra_write_board(user, board)
+
+    @staticmethod
+    def _user_can_manage_board(user, board):
+        """Return True if *user* has owner-level access on *board*."""
+        from ai_assistant.utils.rbac_utils import can_spectra_manage_board
+        return can_spectra_manage_board(user, board)
+
+    @staticmethod
+    def _viewer_denial_message(board):
+        """Standard denial message for viewer-role users attempting writes."""
+        return (
+            f"You have **viewer** access on **{board.name}**, which is read-only. "
+            "I can answer questions about this board, but I can't create, edit, or "
+            "delete content on your behalf. Please ask a board owner to upgrade your role."
+        )
 
     @staticmethod
     def _resolve_column(board):
@@ -60,7 +81,7 @@ class SpectraActionService:
         name_lower = name.lower().strip()
         if not name_lower:
             return None, []
-        candidates = list(board.members.all())
+        candidates = list(get_user_model().objects.filter(board_memberships__board=board))
         if board.created_by and board.created_by not in candidates:
             candidates.append(board.created_by)
 
@@ -97,8 +118,13 @@ class SpectraActionService:
         from kanban.audit_utils import log_model_change
 
         try:
-            # Permission check
-            if not self._user_has_board_access(user, board):
+            # Permission check — must be member or owner to create tasks
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {
+                        'success': False,
+                        'error': self._viewer_denial_message(board),
+                    }
                 return {
                     'success': False,
                     'error': "You don't have access to this board.",
@@ -203,25 +229,15 @@ class SpectraActionService:
                 if is_demo_mode:
                     board.created_by_session = f'spectra_demo_{user.id}'
                 board.save()
-                board.members.add(user)
+                board.owner = user
+                board.save(update_fields=['owner'])
 
-                # Assign Admin role via RBAC if organization exists
-                if organization:
-                    try:
-                        from kanban.permission_models import Role, BoardMembership
-                        admin_role = Role.objects.filter(
-                            organization=organization,
-                            name='Admin',
-                        ).first()
-                        if admin_role:
-                            BoardMembership.objects.create(
-                                board=board,
-                                user=user,
-                                role=admin_role,
-                                added_by=user,
-                            )
-                    except Exception as rbac_err:
-                        logger.warning('Spectra RBAC setup failed for board %s: %s', board.id, rbac_err)
+                # Create RBAC membership for the creator as Owner
+                from kanban.models import BoardMembership
+                BoardMembership.objects.get_or_create(
+                    board=board, user=user,
+                    defaults={'role': 'owner', 'added_by': user}
+                )
 
                 # Create 3 default columns (matching existing board creation behaviour)
                 default_columns = ['To Do', 'In Progress', 'Done']
@@ -260,7 +276,17 @@ class SpectraActionService:
         from kanban.automation_models import AutomationRule, AutomationTemplate
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_manage_board(user, board):
+                if self._user_has_board_access(user, board):
+                    from ai_assistant.utils.rbac_utils import get_user_board_role
+                    role = get_user_board_role(user, board)
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Managing automations on **{board.name}** requires **owner** access. "
+                            f"You're currently a **{role}**."
+                        ),
+                    }
                 return {'success': False, 'error': "You don't have access to this board."}
 
             # Map number → template by ID order
@@ -327,7 +353,9 @@ class SpectraActionService:
         from messaging.models import ChatRoom, ChatMessage
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             # Resolve recipient
@@ -397,7 +425,9 @@ class SpectraActionService:
         from kanban.models import Task
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             # Resolve task by name using fuzzy matching
@@ -555,7 +585,9 @@ class SpectraActionService:
         ``retrospective_type`` (str, optional), ``manual_insights`` (str, optional).
         """
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             from ai_assistant.utils.conversation_flow import _parse_date
@@ -617,7 +649,17 @@ class SpectraActionService:
         from kanban.automation_models import AutomationRule
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_manage_board(user, board):
+                if self._user_has_board_access(user, board):
+                    from ai_assistant.utils.rbac_utils import get_user_board_role
+                    role = get_user_board_role(user, board)
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Managing automations on **{board.name}** requires **owner** access. "
+                            f"You're currently a **{role}**."
+                        ),
+                    }
                 return {'success': False, 'error': "You don't have access to this board."}
 
             name = collected_data.get('name', 'Untitled Automation')
@@ -671,7 +713,17 @@ class SpectraActionService:
         from kanban.automation_models import ScheduledAutomation
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_manage_board(user, board):
+                if self._user_has_board_access(user, board):
+                    from ai_assistant.utils.rbac_utils import get_user_board_role
+                    role = get_user_board_role(user, board)
+                    return {
+                        'success': False,
+                        'error': (
+                            f"Managing automations on **{board.name}** requires **owner** access. "
+                            f"You're currently a **{role}**."
+                        ),
+                    }
                 return {'success': False, 'error': "You don't have access to this board."}
 
             name = collected_data.get('name', 'Untitled Scheduled Automation')
@@ -744,8 +796,10 @@ class SpectraActionService:
         from kanban.models import Task, Column
 
         try:
-            if not self._user_has_board_access(user, board):
-                return {'success': False, 'error': 'Access denied.'}
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
+                return {'success': False, 'error': 'You don\'t have access to this board.'}
 
             task_name = collected_data.get('task_name', '').strip()
             field = collected_data.get('field', '').strip().lower()
@@ -1013,7 +1067,9 @@ class SpectraActionService:
         from kanban.commitment_models import CommitmentProtocol, CommitmentBet, UserCredibilityScore
 
         try:
-            if not self._user_has_board_access(user, board):
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
                 return {'success': False, 'error': "You don't have access to this board."}
 
             commitment_id = collected_data.get('commitment_id')

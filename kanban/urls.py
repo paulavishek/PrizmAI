@@ -6,7 +6,7 @@ from . import burndown_views
 from . import retrospective_views
 from . import conflict_views
 from . import demo_views
-from . import permission_views
+# permission_views deleted in RBAC Phase 1 — legacy permission UI removed.
 from . import invitation_views
 from . import triple_constraint_views
 from . import automation_views
@@ -20,6 +20,8 @@ from . import whatif_views
 from . import shadow_views
 from . import commitment_views
 from . import favorite_views
+from . import sandbox_views
+from . import access_request_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -32,12 +34,16 @@ urlpatterns = [
     path('api/wizard/create-board/', views.wizard_create_board, name='wizard_create_board'),
     path('api/wizard/create-task/', views.wizard_create_task, name='wizard_create_task'),
     
-    # Demo Mode (New System)
+    # Demo Mode — legacy routes kept as redirects, new single-tier sandbox
     path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
     path('demo/start/', demo_views.demo_mode_selection, name='demo_mode_selection'),
     path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
     path('demo/exit/', demo_views.exit_demo, name='exit_demo'),
     path('demo/fingerprint/', demo_views.receive_client_fingerprint, name='receive_client_fingerprint'),
+
+    # Single-tier personal sandbox
+    path('demo/reset-mine/', sandbox_views.reset_my_demo, name='reset_my_demo'),
+    path('sandbox/status/', sandbox_views.sandbox_status, name='sandbox_status'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
     path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),
     path('demo/track-nudge/', demo_views.track_nudge, name='track_nudge'),
@@ -70,6 +76,7 @@ urlpatterns = [
     path('missions/<int:mission_id>/', mission_views.mission_detail, name='mission_detail'),
     path('missions/<int:mission_id>/edit/', mission_views.edit_mission, name='edit_mission'),
     path('missions/<int:mission_id>/delete/', mission_views.delete_mission, name='delete_mission'),
+    path('missions/<int:mission_id>/set-goal/', mission_views.set_mission_goal, name='set_mission_goal'),
     # Top-level strategy shortcut (spec §8.2)
     path('strategies/<int:strategy_id>/', mission_views.strategy_detail_shortcut, name='strategy_detail_shortcut'),
     path('missions/<int:mission_id>/strategies/create/', mission_views.create_strategy, name='create_strategy'),
@@ -82,6 +89,9 @@ urlpatterns = [
     path('api/strategic/<str:level>/<int:pk>/update/', mission_views.post_strategic_update, name='post_strategic_update'),
     path('api/strategic/<str:level>/<int:pk>/follow/', mission_views.toggle_follow, name='toggle_follow'),
     path('api/strategic/<str:level>/<int:pk>/regenerate/', mission_views.regenerate_summary, name='regenerate_summary'),
+    path('api/strategic/<str:level>/<int:pk>/members/', mission_views.list_strategic_members, name='list_strategic_members'),
+    path('api/strategic/<str:level>/<int:pk>/members/invite/', mission_views.invite_strategic_member, name='invite_strategic_member'),
+    path('api/strategic/<str:level>/<int:pk>/members/<int:user_id>/remove/', mission_views.remove_strategic_member, name='remove_strategic_member'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/', views.board_detail, name='board_detail'),
     path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
@@ -113,7 +123,9 @@ urlpatterns = [
     path('boards/<int:board_id>/create-label/', views.create_label, name='create_label'),
     path('boards/<int:board_id>/add-member/', views.add_board_member, name='add_board_member'),
     path('boards/<int:board_id>/members/<int:user_id>/remove/', views.remove_board_member, name='remove_board_member'),
+    path('boards/<int:board_id>/members/<int:user_id>/role/', invitation_views.update_member_role, name='update_member_role'),
     # Board invitations
+    path('boards/<int:board_id>/members/', invitation_views.manage_board_members, name='manage_board_members'),
     path('boards/<int:board_id>/invite/', invitation_views.invite_to_board, name='invite_to_board'),
     path('invite/<uuid:token>/', invitation_views.accept_invitation, name='accept_board_invitation'),
     path('invitations/<int:invitation_id>/revoke/', invitation_views.revoke_invitation, name='revoke_board_invitation'),
@@ -137,6 +149,7 @@ urlpatterns = [
     path('columns/reorder-multiple/', views.reorder_multiple_columns, name='reorder_multiple_columns'),
     path('columns/<int:column_id>/update/', views.update_column, name='update_column'),
     path('columns/<int:column_id>/update-wip/', views.column_update_wip, name='column_update_wip'),
+    path('columns/<int:column_id>/update-color/', views.column_update_color, name='column_update_color'),
     path('columns/<int:column_id>/delete/', views.delete_column, name='delete_column'),    path('boards/<int:board_id>/add-lean-labels/', views.add_lean_labels, name='add_lean_labels'),
     
     # Test page for AI features
@@ -322,17 +335,8 @@ urlpatterns = [
     path('conflicts/notifications/<int:notification_id>/acknowledge/', conflict_views.acknowledge_notification, name='acknowledge_notification'),
     path('conflicts/analytics/', conflict_views.conflict_analytics, name='conflict_analytics'),
     
-    # Permission Management URLs - NEW ADVANCED FEATURES
-    path('permissions/roles/', permission_views.manage_roles, name='manage_roles'),
-    path('permissions/roles/create/', permission_views.create_role, name='create_role'),
-    path('permissions/roles/<int:role_id>/edit/', permission_views.edit_role, name='edit_role'),
-    path('permissions/roles/<int:role_id>/delete/', permission_views.delete_role, name='delete_role'),
-    path('board/<int:board_id>/members/manage/', permission_views.manage_board_members, name='manage_board_members'),
-    path('board/membership/<int:membership_id>/change-role/', permission_views.change_member_role, name='change_member_role'),
-    path('board/<int:board_id>/members/add/', permission_views.add_board_member_with_role, name='add_board_member_with_role'),
-    path('board/membership/<int:membership_id>/remove/', permission_views.remove_board_member_role, name='remove_board_member_role'),
-    path('permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit_org'),
-    path('board/<int:board_id>/permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit'),
+    # Legacy Permission Management URLs removed in RBAC Phase 1.
+    # New RBAC uses django-rules predicates defined in kanban/permissions.py.
 
     # Onboarding v2 — AI-powered workspace setup
     path('onboarding/', onboarding_views.onboarding_welcome, name='onboarding_welcome'),
@@ -344,6 +348,8 @@ urlpatterns = [
     path('onboarding/start-over/', onboarding_views.onboarding_start_over, name='onboarding_start_over'),
     path('onboarding/skip/', onboarding_views.onboarding_skip, name='onboarding_skip'),
     path('onboarding/demo/', onboarding_views.onboarding_explore_demo, name='onboarding_explore_demo'),
+    path('onboarding/validate/', onboarding_views.onboarding_validate, name='onboarding_validate'),
+    path('onboarding/regenerate-children/', onboarding_views.onboarding_regenerate_children, name='onboarding_regenerate_children'),
 
     # Demo mode toggle (v2)
     path('toggle-demo-mode/', views.toggle_demo_mode, name='toggle_demo_mode'),
@@ -361,6 +367,18 @@ urlpatterns = [
     # Commitment API endpoints (JSON, used by JS auto-refresh and Chart.js)
     path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
     path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
+
+    # -----------------------------------------------------------------------
+    # Spectra Smart Access Request System
+    # -----------------------------------------------------------------------
+    path('access-requests/submit/', access_request_views.submit_access_request, name='submit_access_request'),
+    path('access-requests/mine/', access_request_views.my_access_requests, name='my_access_requests'),
+    path('access-requests/<int:request_id>/review/', access_request_views.review_access_request, name='review_access_request'),
+    path('access-requests/<int:request_id>/cancel/', access_request_views.cancel_access_request, name='cancel_access_request'),
+    path('access-requests/pending/', access_request_views.pending_access_requests, name='pending_access_requests'),
+    path('api/access-requests/<int:request_id>/approve/', access_request_views.api_approve_access_request, name='api_approve_access_request'),
+    path('api/access-requests/<int:request_id>/deny/', access_request_views.api_deny_access_request, name='api_deny_access_request'),
+    path('api/access-requests/pending-count/', access_request_views.get_pending_access_request_count, name='get_pending_access_request_count'),
     path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
 
     # -----------------------------------------------------------------------
@@ -369,4 +387,15 @@ urlpatterns = [
     path('api/favorites/toggle/', favorite_views.toggle_favorite, name='toggle_favorite'),
     path('api/favorites/reorder/', favorite_views.reorder_favorites, name='reorder_favorites'),
     path('api/favorites/list/', favorite_views.favorites_list_api, name='favorites_list_api'),
+
+    # -----------------------------------------------------------------------
+    # Goal-Aware Analytics API Endpoints
+    # -----------------------------------------------------------------------
+    path('api/boards/<int:board_id>/classify/', api_views.classify_board_api, name='classify_board_api'),
+    path('api/boards/<int:board_id>/confirm-type/', api_views.confirm_board_type_api, name='confirm_board_type_api'),
+    path('api/boards/<int:board_id>/generate-narrative/', api_views.generate_board_narrative_api, name='generate_board_narrative_api'),
+    path('api/strategic/<str:record_type>/<int:record_id>/portfolio-analytics/', api_views.portfolio_analytics_api, name='portfolio_analytics_api'),
+    path('api/strategic/<str:record_type>/<int:record_id>/generate-portfolio-narrative/', api_views.generate_portfolio_narrative_api, name='generate_portfolio_narrative_api'),
+    path('api/goals/<int:goal_id>/generate-proxy-metrics/', api_views.generate_proxy_metrics_api, name='generate_proxy_metrics_api'),
+    path('api/goals/<int:goal_id>/proxy-metrics/<int:metric_id>/update-value/', api_views.update_proxy_metric_value_api, name='update_proxy_metric_value_api'),
 ]

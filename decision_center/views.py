@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import DecisionCenterBriefing, DecisionCenterSettings, DecisionItem
+from kanban.decorators import demo_write_guard
 
 
 # ---------------------------------------------------------------------------
@@ -71,15 +72,16 @@ def decision_center_view(request):
         pending = pending.filter(board__is_official_demo_board=True)
     else:
         pending = pending.filter(
-            board__is_official_demo_board=False
+            board__is_official_demo_board=False,
+            board__is_sandbox_copy=False,
         ) | DecisionItem.objects.filter(
             created_for=user, status='pending', board__isnull=True
         )
         pending = pending.distinct()
 
     action_required = list(pending.filter(priority_level='action_required'))
-    awareness = list(pending.filter(priority_level='awareness'))
-    quick_wins = list(pending.filter(priority_level='quick_win'))
+    awareness = list(pending.filter(priority_level='awareness')) if settings_obj.show_awareness_items else []
+    quick_wins = list(pending.filter(priority_level='quick_win')) if settings_obj.show_quick_wins else []
 
     today = timezone.localdate()
     briefing = (
@@ -145,21 +147,28 @@ def decision_center_widget_data(request):
         pending = pending.filter(board__is_official_demo_board=True)
     else:
         pending = (
-            pending.filter(board__is_official_demo_board=False)
+            pending.filter(
+                board__is_official_demo_board=False,
+                board__is_sandbox_copy=False,
+            )
             | DecisionItem.objects.filter(
                 created_for=user, status='pending', board__isnull=True
             )
         ).distinct()
+
+    settings_obj = _get_settings(user)
     counts = {
         'action_required_count': pending.filter(
             priority_level='action_required',
         ).count(),
-        'awareness_count': pending.filter(
-            priority_level='awareness',
-        ).count(),
-        'quick_win_count': pending.filter(
-            priority_level='quick_win',
-        ).count(),
+        'awareness_count': (
+            pending.filter(priority_level='awareness').count()
+            if settings_obj.show_awareness_items else 0
+        ),
+        'quick_win_count': (
+            pending.filter(priority_level='quick_win').count()
+            if settings_obj.show_quick_wins else 0
+        ),
     }
 
     today = timezone.localdate()
@@ -201,6 +210,7 @@ def decision_center_widget_data(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_decision_item(request, item_id):
     """Mark a single item as resolved."""
     item = _get_item_or_404(request.user, item_id)
@@ -234,6 +244,7 @@ def resolve_decision_item(request, item_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def snooze_decision_item(request, item_id):
     """Snooze an item for 24, 48, or 168 hours."""
     item = _get_item_or_404(request.user, item_id)
@@ -259,6 +270,7 @@ def snooze_decision_item(request, item_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def dismiss_decision_item(request, item_id):
     """Dismiss a single item."""
     item = _get_item_or_404(request.user, item_id)
@@ -288,6 +300,7 @@ def dismiss_decision_item(request, item_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def resolve_all_quick_wins(request):
     """Bulk-resolve every pending quick-win item for the user."""
     now = timezone.now()
@@ -315,6 +328,7 @@ def resolve_all_quick_wins(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_write_guard
 def decision_center_settings_view(request):
     """GET: return current settings. POST: update them."""
     settings_obj = _get_settings(request.user)
@@ -381,6 +395,7 @@ def decision_center_settings_view(request):
 
     if changed:
         settings_obj.save()
+        _invalidate_widget_cache(request.user.id)
         try:
             from kanban.audit_utils import log_audit
             log_audit(

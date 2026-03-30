@@ -32,71 +32,78 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
         # All authenticated users can access wiki content
         return self.request.user.is_authenticated
     
+    def _is_viewing_demo(self):
+        """Check if the current user is in demo mode."""
+        profile = getattr(self.request.user, 'profile', None)
+        return getattr(profile, 'is_viewing_demo', False)
+    
     def get_organization(self):
         """
-        Get organization - MVP mode uses demo organization for all wiki data.
-        Returns demo org or user's org (can be None in MVP mode).
+        Get organization scoped to current workspace mode.
+        Demo mode: returns demo org.  Real mode: returns user's org (or None).
         """
         org_id = self.kwargs.get('org_id')
         if org_id:
             return get_object_or_404(Organization, pk=org_id)
         
-        # MVP Mode: First try user's org, then fall back to demo org
+        if self._is_viewing_demo():
+            return Organization.objects.filter(is_demo=True).first()
+        
+        # Real mode: user's own org (can be None in MVP mode)
         if hasattr(self.request.user, 'profile') and self.request.user.profile and self.request.user.profile.organization:
             return self.request.user.profile.organization
         
-        # Fall back to demo organization for wiki content
-        return Organization.objects.filter(is_demo=True).first()
+        return None
+    
+    def _wiki_org_filter(self):
+        """Return a Q filter for wiki objects based on workspace mode."""
+        org = self.get_organization()
+        if self._is_viewing_demo():
+            # Demo mode: show demo org content
+            if org:
+                return Q(organization=org) | Q(organization__isnull=True)
+            return Q()  # no demo org found
+        else:
+            # Real mode: only show user's org content (never demo org)
+            if org:
+                return Q(organization=org) | Q(organization__isnull=True)
+            # User has no org — show only org-less wiki pages
+            return Q(organization__isnull=True)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         org = self.get_organization()
         context['organization'] = org
         
-        # MVP Mode: Show all wiki categories (from demo org)
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        if demo_org:
-            context['categories'] = WikiCategory.objects.filter(
-                Q(organization=demo_org) | Q(organization__isnull=True)
-            ).distinct()
-        else:
-            context['categories'] = WikiCategory.objects.all()
+        # Categories scoped to current workspace mode
+        context['categories'] = WikiCategory.objects.filter(
+            self._wiki_org_filter()
+        ).distinct()
         return context
 
 
 class WikiCategoryListView(WikiBaseView, ListView):
-    """List all wiki categories - MVP mode shows all categories"""
+    """List all wiki categories - scoped to current workspace mode"""
     model = WikiCategory
     template_name = 'wiki/category_list.html'
     context_object_name = 'categories'
     paginate_by = 20
     
     def get_queryset(self):
-        # MVP Mode: Show all wiki categories (from demo org primarily)
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        if demo_org:
-            return WikiCategory.objects.filter(
-                Q(organization=demo_org) | Q(organization__isnull=True)
-            ).prefetch_related('pages').distinct()
-        return WikiCategory.objects.all().prefetch_related('pages')
+        return WikiCategory.objects.filter(
+            self._wiki_org_filter()
+        ).prefetch_related('pages').distinct()
 
 
 class WikiPageListView(WikiBaseView, ListView):
-    """List all wiki pages - MVP mode shows all pages"""
+    """List all wiki pages - scoped to current workspace mode"""
     model = WikiPage
     template_name = 'wiki/page_list.html'
     context_object_name = 'pages'
     paginate_by = 20
     
     def get_queryset(self):
-        # MVP Mode: Show all wiki pages (from demo org primarily)
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        if demo_org:
-            org_filter = Q(organization=demo_org) | Q(organization__isnull=True)
-        else:
-            org_filter = Q()
-        
-        queryset = WikiPage.objects.filter(org_filter, is_published=True)
+        queryset = WikiPage.objects.filter(self._wiki_org_filter(), is_published=True)
         
         category_id = self.kwargs.get('category_id')
         if category_id:
@@ -139,35 +146,20 @@ class WikiPageDetailView(WikiBaseView, DetailView):
     slug_url_kwarg = 'slug'
     
     def test_func(self):
-        """Allow access to user's org pages AND demo org pages"""
-        # First try to get the page to check its organization
+        """Allow access to pages within the user's current workspace scope."""
         slug = self.kwargs.get('slug')
         if slug:
-            demo_org_names = ['Demo - Acme Corporation']
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            
-            # Check if the page is in demo org
+            # Allow access if the page is within the user's workspace scope
             page = WikiPage.objects.filter(
-                Q(slug=slug),
-                Q(organization__in=demo_orgs)
+                self._wiki_org_filter(),
+                slug=slug,
             ).first()
             if page:
-                return True  # Allow access to demo pages
-        
-        # Otherwise, use the default test (user's org)
+                return True
         return super().test_func()
     
     def get_queryset(self):
-        org = self.get_organization()
-        # Also allow access to demo organization wiki pages
-        demo_org_names = ['Demo - Acme Corporation']
-        demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-        
-        # Include both user's org and demo org pages
-        queryset = WikiPage.objects.filter(
-            Q(organization=org) | Q(organization__in=demo_orgs)
-        )
-        return queryset
+        return WikiPage.objects.filter(self._wiki_org_filter())
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -589,12 +581,7 @@ def quick_link_wiki(request, content_type, object_id):
     if not org:
         org = demo_org
     
-    # MVP Mode: Get all accessible boards (demo boards + user boards)
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    )
-    accessible_boards = (demo_boards | user_boards).distinct()
+    # Get boards scoped to user's current workspace (demo-aware)\n    from kanban.utils.demo_protection import get_user_boards\n    accessible_boards = get_user_boards(request.user)
     
     if content_type == 'task':
         # MVP Mode: Allow tasks from any accessible board
@@ -658,8 +645,15 @@ def delete_wiki_link(request, link_id):
     """Delete a wiki link"""
     link = get_object_or_404(WikiLink, pk=link_id)
     
-    # Access restriction removed - all authenticated users can delete wiki links
-    can_delete = True
+    # RBAC: user must have edit permission on the linked board
+    if link.board:
+        if not request.user.has_perm('prizmai.edit_board', link.board):
+            from django.http import Http404
+            raise Http404
+    elif link.task and link.task.column and link.task.column.board:
+        if not request.user.has_perm('prizmai.edit_board', link.task.column.board):
+            from django.http import Http404
+            raise Http404
     
     # Store the redirect URL before deleting
     if link.board:
@@ -768,19 +762,20 @@ def knowledge_hub_home(request):
     # Get search query
     search_query = request.GET.get('q', '')
     
-    # Include demo organization content for all authenticated users
+    # Include demo organization content only when in demo/sandbox mode
     demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+    is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False) if hasattr(request.user, 'profile') else False
     
     # Build organization filter
     if org:
         org_filter = Q(organization=org)
-        if demo_org:
+        if demo_org and is_demo_mode:
             org_filter |= Q(organization=demo_org)
-    elif demo_org:
-        # If user has no org, show only demo org content
+    elif demo_org and is_demo_mode:
+        # If user has no org but is in demo mode, show demo org content
         org_filter = Q(organization=demo_org)
     else:
-        # No org at all, show empty results
+        # No org at all (or not in demo mode with no org), show empty results
         org_filter = Q(pk=None)
     
     # Get wiki pages from user's org AND demo org

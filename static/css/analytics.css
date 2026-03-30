@@ -149,7 +149,7 @@
 
 .progress-label {
     font-size: 12px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 500;
     margin-top: 4px;
 }
@@ -348,7 +348,7 @@
 
 .flow-description {
     font-size: 13px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 500;
     text-align: center;
     margin-top: 4px;
@@ -444,7 +444,7 @@
 
 .flow-subtitle {
     font-size: 12px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 500;
 }
 
@@ -463,7 +463,7 @@
 .flow-percentage {
     display: block;
     font-size: 14px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 600;
     margin-top: 2px;
 }
@@ -649,7 +649,7 @@
 
 .total-label {
     font-size: 12px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 500;
 }
 
@@ -687,7 +687,7 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 500;
 }
 
@@ -942,7 +942,7 @@
 
 .flow-subtitle-compact {
     font-size: 11px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 500;
     margin-bottom: 8px;
 }
@@ -962,7 +962,7 @@
 .flow-percentage-compact {
     display: block;
     font-size: 12px;
-    color: #6c757d;
+    color: var(--text-secondary, #495057);
     font-weight: 600;
     margin-top: 2px;
 }

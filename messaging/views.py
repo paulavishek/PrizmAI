@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages as django_messages
-from django.http import JsonResponse, FileResponse, HttpResponse
+from django.http import JsonResponse, FileResponse, HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.contrib.auth.models import User
@@ -10,6 +10,8 @@ from django.utils import timezone
 import os
 
 from kanban.models import Board, Task, Column
+from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 from kanban.favorite_views import is_user_favorite as _is_fav
 from .models import ChatRoom, ChatMessage, TaskThreadComment, Notification, FileAttachment
 from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, MentionForm, ChatRoomFileForm
@@ -31,13 +33,13 @@ def messaging_hub(request):
             completed_wizard=True
         )
     
-    # MVP Mode: Get all boards the user has access to
-    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards_query = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    )
-    user_boards = (demo_boards | user_boards_query).distinct()
+    # MVP Mode: Get all boards the user has access to (demo-aware)
+    user_boards = get_user_boards(request.user)
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    if _is_org_admin and not getattr(profile, 'is_viewing_demo', False):
+        user_boards = Board.objects.filter(is_sandbox_copy=False, is_official_demo_board=False).exclude(
+            created_by_session__startswith='spectra_demo_'
+        )
     
     # Calculate unread messages per board
     boards_with_unread = []
@@ -67,8 +69,13 @@ def messaging_hub(request):
 def chat_room_list(request, board_id):
     """List all chat rooms for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Access restriction removed - all authenticated users can access
+
+    # Strict board membership check — demo boards alone are not sufficient for chat access
+    from kanban.models import BoardMembership
+    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    _has_membership = BoardMembership.objects.filter(user=request.user, board=board).exists()
+    if not (_has_membership or board.created_by == request.user or _is_org_admin):
+        raise Http404
     
     chat_rooms = board.chat_rooms.all()
     
@@ -96,9 +103,10 @@ def chat_room_list(request, board_id):
 def chat_room_detail(request, room_id):
     """Display a specific chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
-    
-    # Access restriction removed - all authenticated users can access chat rooms
-    
+
+    if not request.user.has_perm('prizmai.view_board', chat_room.board):
+        raise Http404
+
     # Mark all notifications related to this chat room as read
     Notification.objects.filter(
         recipient=request.user,
@@ -139,12 +147,15 @@ def chat_room_detail(request, room_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_write_guard
 def create_chat_room(request, board_id):
     """Create a new chat room for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Access restriction removed - all authenticated users can create chat rooms
-    
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        django_messages.error(request, 'You do not have permission to create chat rooms on this board.')
+        return redirect('chat_room_list', board_id=board_id)
+
     if request.method == 'POST':
         form = ChatRoomForm(request.POST, board=board)
         if form.is_valid():
@@ -173,12 +184,16 @@ def create_chat_room(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def send_chat_message(request, room_id):
     """Send a message to a chat room (for non-WebSocket clients)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
-    
-    # Access restriction removed - all authenticated users can send messages
-    
+
+    if not request.user.has_perm('prizmai.edit_board', chat_room.board):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        raise Http404
+
     form = ChatMessageForm(request.POST)
     if form.is_valid():
         message = form.save(commit=False)
@@ -204,12 +219,15 @@ def send_chat_message(request, room_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@demo_write_guard
 def task_thread_comments(request, task_id):
     """View and manage real-time task thread comments"""
     task = get_object_or_404(Task, id=task_id)
     
-    # Access restriction removed - all authenticated users can access task threads
+    # RBAC: user must have view permission on the task's board
     board = task.column.board
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
     
     if request.method == 'POST':
         form = TaskThreadCommentForm(request.POST)
@@ -281,7 +299,15 @@ def get_mentions(request):
 @login_required
 def notifications(request):
     """View all notifications for the user"""
-    user_notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')
+    # Demo-aware: only show notifications related to current workspace boards
+    workspace_boards = get_user_boards(request.user)
+    user_notifications = Notification.objects.filter(
+        recipient=request.user
+    ).filter(
+        Q(chat_message__chat_room__board__in=workspace_boards)
+        | Q(task_thread_comment__task__column__board__in=workspace_boards)
+        | Q(chat_message__isnull=True, task_thread_comment__isnull=True)  # non-board notifications (calendar, access, etc.)
+    ).order_by('-created_at')
     
     # Mark as read if requested
     if request.GET.get('mark_read'):
@@ -312,9 +338,15 @@ def mark_notification_read(request, notification_id):
 @require_http_methods(["GET"])
 def get_unread_notification_count(request):
     """API endpoint to get unread notification count"""
+    # Demo-aware: only count notifications from current workspace
+    workspace_boards = get_user_boards(request.user)
     count = Notification.objects.filter(
         recipient=request.user,
         is_read=False
+    ).filter(
+        Q(chat_message__chat_room__board__in=workspace_boards)
+        | Q(task_thread_comment__task__column__board__in=workspace_boards)
+        | Q(chat_message__isnull=True, task_thread_comment__isnull=True)
     ).count()
     
     return JsonResponse({'count': count})
@@ -326,7 +358,9 @@ def message_history(request, room_id):
     """Get message history for a chat room (pagination)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if chat_room.board and not request.user.has_perm('prizmai.view_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     offset = int(request.GET.get('offset', 0))
     limit = 20
@@ -355,7 +389,9 @@ def task_comment_history(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     offset = int(request.GET.get('offset', 0))
     limit = 20
@@ -401,8 +437,9 @@ def get_unread_message_count(request):
         ).distinct()
     else:
         accessible_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(members=request.user),
+            Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
+            is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()
@@ -430,7 +467,9 @@ def mark_chat_message_read(request, message_id):
     """Mark a specific chat message as read by the current user"""
     message = get_object_or_404(ChatMessage, id=message_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if message.chat_room.board and not request.user.has_perm('prizmai.view_board', message.chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Mark message as read by this user
     message.read_by.add(request.user)
@@ -497,7 +536,9 @@ def mark_room_messages_read(request, room_id):
     """Mark all messages in a chat room as read by the current user"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if chat_room.board and not request.user.has_perm('prizmai.view_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get all messages the user hasn't read
     messages_to_mark = chat_room.messages.exclude(read_by=request.user)
@@ -519,6 +560,7 @@ def mark_room_messages_read(request, room_id):
 
 @login_required
 @require_http_methods(["DELETE"])
+@demo_write_guard
 def delete_chat_message(request, message_id):
     """Delete a specific chat message and broadcast to all connected users"""
     from channels.layers import get_channel_layer
@@ -561,6 +603,7 @@ def delete_chat_message(request, message_id):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def clear_chat_room_messages(request, room_id):
     """Delete all messages in a chat room and broadcast to all connected users"""
     from channels.layers import get_channel_layer
@@ -639,11 +682,14 @@ def go_to_first_unread_room(request):
 
 @login_required
 @require_http_methods(["POST"])
+@demo_write_guard
 def upload_chat_room_file(request, room_id):
     """Upload a file to a chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have edit permission on the board to upload files
+    if chat_room.board and not request.user.has_perm('prizmai.edit_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     if request.method == 'POST':
         form = ChatRoomFileForm(request.POST, request.FILES)
@@ -750,7 +796,10 @@ def download_chat_room_file(request, file_id):
     """Download a file from a chat room"""
     file_obj = get_object_or_404(FileAttachment, id=file_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if file_obj.chat_room and file_obj.chat_room.board:
+        if not request.user.has_perm('prizmai.view_board', file_obj.chat_room.board):
+            raise Http404
     
     # Serve the file
     if file_obj.file:
@@ -792,7 +841,9 @@ def list_chat_room_files(request, room_id):
     """Get a list of files in a chat room (JSON API)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Access restriction removed - all authenticated users can access
+    # RBAC: user must have view permission on the board
+    if chat_room.board and not request.user.has_perm('prizmai.view_board', chat_room.board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get non-deleted files
     files = chat_room.file_attachments.filter(deleted_at__isnull=True).values(

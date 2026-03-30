@@ -45,10 +45,11 @@ def demo_context(request):
         context['show_demo_limitations'] = False  # No limitations for authenticated users
         context['is_authenticated_exploring_demo'] = False
 
-        # V2 onboarding demo toggle (profile-based, not session-based)
+        # Single-tier personal sandbox (profile-based, not session-based)
         if request.user.is_authenticated:
             try:
-                context['is_viewing_demo'] = getattr(request.user.profile, 'is_viewing_demo', False)
+                profile = request.user.profile
+                context['is_viewing_demo'] = getattr(profile, 'is_viewing_demo', False)
             except Exception:
                 context['is_viewing_demo'] = False
         else:
@@ -192,13 +193,14 @@ def conflict_count(request):
 
         if demo_mode:
             boards = Board.objects.filter(
-                Q(is_official_demo_board=True)
-                | Q(created_by_session=f'spectra_demo_{request.user.id}')
+                owner=request.user,
+                is_sandbox_copy=True,
             ).distinct()
         else:
             boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user),
+                Q(created_by=request.user) | Q(memberships__user=request.user),
                 is_official_demo_board=False,
+                is_sandbox_copy=False,
             ).exclude(
                 created_by_session__startswith='spectra_demo_'
             ).distinct()

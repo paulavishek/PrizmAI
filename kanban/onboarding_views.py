@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from kanban.onboarding_models import OnboardingWorkspacePreview
 from kanban.onboarding_utils import commit_onboarding_workspace
+from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +60,14 @@ def onboarding_welcome(request):
     """
     profile = _get_profile(request)
 
-    if profile.onboarding_status in ('completed', 'skipped'):
-        return redirect('dashboard')
-
     # Resume mid-flow states
     if profile.onboarding_status == 'goal_submitted':
         return redirect('onboarding_generating')
     if profile.onboarding_status == 'workspace_generated':
         return redirect('onboarding_review')
 
-    return render(request, 'kanban/onboarding/welcome.html')
+    from_dashboard = request.GET.get('from') == 'dashboard'
+    return render(request, 'kanban/onboarding/welcome.html', {'from_dashboard': from_dashboard})
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +75,7 @@ def onboarding_welcome(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@demo_ai_guard
 def onboarding_goal_input(request):
     """
     GET  /onboarding/goal/ — render goal input form
@@ -295,6 +295,9 @@ def onboarding_review(request):
     GET /onboarding/review/
     Show the review page with the generated hierarchy.
     """
+    from django.utils import timezone
+    import datetime
+
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
     except OnboardingWorkspacePreview.DoesNotExist:
@@ -307,10 +310,16 @@ def onboarding_review(request):
 
     data = preview.edited_data if preview.edited_data else preview.generated_data
 
+    # Detect stale previews (generated >6 hours ago and never committed)
+    age = timezone.now() - preview.created_at
+    is_stale = age > datetime.timedelta(hours=6)
+
     return render(request, 'kanban/onboarding/review.html', {
         'preview': preview,
         'data': data,
         'data_json': json.dumps(data),
+        'is_stale': is_stale,
+        'preview_age_hours': int(age.total_seconds() // 3600),
     })
 
 
@@ -320,6 +329,7 @@ def onboarding_review(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_commit(request):
     """
     POST /onboarding/commit/
@@ -353,6 +363,12 @@ def onboarding_commit(request):
             'commit_error': 'Something went wrong while creating your workspace. Please try again.',
         })
 
+    # Switch out of demo mode so the dashboard shows the user's own workspace
+    profile = request.user.profile
+    if profile.is_viewing_demo:
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['is_viewing_demo'])
+
     # Show a one-time banner on the dashboard reminding the user to assign tasks
     request.session['show_onboarding_assign_banner'] = True
 
@@ -365,6 +381,7 @@ def onboarding_commit(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_start_over(request):
     """
     POST /onboarding/start-over/
@@ -391,6 +408,7 @@ def onboarding_start_over(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_skip(request):
     """
     POST /onboarding/skip/
@@ -412,6 +430,7 @@ def onboarding_skip(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def onboarding_explore_demo(request):
     """
     POST /onboarding/demo/
@@ -427,3 +446,169 @@ def onboarding_explore_demo(request):
         profile.onboarding_status = 'demo_exploring'
     profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
     return redirect('dashboard')
+
+
+# ---------------------------------------------------------------------------
+# HITL: Validate workspace coherence (Phase 3)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+@demo_ai_guard
+def onboarding_validate(request):
+    """
+    POST /onboarding/validate/
+    Accept the edited workspace JSON and run an AI coherence check.
+    Returns JSON: {status, flags[]}.
+    """
+    from kanban.utils.ai_utils import validate_workspace_coherence
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+    import time
+
+    try:
+        workspace_data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    if not workspace_data.get('goal') or not workspace_data.get('missions'):
+        return JsonResponse({
+            'status': 'structural_issue',
+            'flags': [{
+                'level': 'goal',
+                'item_title': '',
+                'message': 'Workspace must have a goal and at least one mission.',
+                'suggested_fix': 'Add a goal and missions before validating.'
+            }]
+        })
+
+    mission_names = [m.get('name', '') for m in workspace_data.get('missions', [])]
+    logger.info(f"[validate] user={request.user.username} missions={mission_names}")
+
+    start_time = time.time()
+    try:
+        result = validate_workspace_coherence(workspace_data)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        logger.info(f"[validate] result status={result.get('status')} flags={len(result.get('flags', []))}")
+        track_ai_request(
+            user=request.user,
+            feature='onboarding_validation',
+            request_type='validate',
+            success=True,
+            response_time_ms=response_time_ms,
+        )
+        log_audit(
+            'system.warning',
+            user=request.user,
+            message=f"Onboarding workspace validated: {result.get('status', 'unknown')}",
+        )
+
+        return JsonResponse(result)
+
+    except Exception as exc:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        logger.error(f"[validate] Workspace validation error: {exc}", exc_info=True)
+        track_ai_request(
+            user=request.user,
+            feature='onboarding_validation',
+            request_type='validate',
+            success=False,
+            error_message=str(exc),
+            response_time_ms=response_time_ms,
+        )
+        # Return service_error so the frontend shows a warning rather than faking 'clear'
+        return JsonResponse({'status': 'service_error', 'flags': []})
+
+
+# ---------------------------------------------------------------------------
+# HITL: Regenerate child titles (Phase 4)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_POST
+@demo_ai_guard
+def onboarding_regenerate_children(request):
+    """
+    POST /onboarding/regenerate-children/
+    Accept a renamed parent's new title and current child titles,
+    return updated child titles from Gemini.
+
+    Request body: {
+        "parent_title": "string",
+        "parent_level": "mission" | "strategy",
+        "current_children": ["title1", "title2", ...]
+    }
+
+    Response: {
+        "success": true,
+        "titles": ["new1", "new2", ...]
+    }
+    """
+    from kanban.utils.ai_utils import regenerate_child_titles
+    from api.ai_usage_utils import track_ai_request
+    from kanban.audit_utils import log_audit
+    import time
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+
+    parent_title = (body.get('parent_title') or '').strip()
+    parent_level = (body.get('parent_level') or '').strip()
+    current_children = body.get('current_children', [])
+
+    if not parent_title or parent_level not in ('mission', 'strategy'):
+        return JsonResponse({'success': False, 'error': 'Invalid parent_title or parent_level'}, status=400)
+    if not isinstance(current_children, list) or len(current_children) == 0:
+        return JsonResponse({'success': False, 'error': 'current_children must be a non-empty list'}, status=400)
+
+    start_time = time.time()
+    try:
+        titles = regenerate_child_titles(parent_title, parent_level, current_children)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        if titles:
+            track_ai_request(
+                user=request.user,
+                feature='onboarding_regeneration',
+                request_type='regenerate',
+                success=True,
+                response_time_ms=response_time_ms,
+            )
+            log_audit(
+                'system.warning',
+                user=request.user,
+                message=f"Onboarding children regenerated: {len(titles)} titles for {parent_level}: {parent_title}",
+            )
+            return JsonResponse({'success': True, 'titles': titles})
+        else:
+            track_ai_request(
+                user=request.user,
+                feature='onboarding_regeneration',
+                request_type='regenerate',
+                success=False,
+                error_message='Regeneration returned None',
+                response_time_ms=response_time_ms,
+            )
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not generate new titles. Please try again.'
+            }, status=500)
+
+    except Exception as exc:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='onboarding_regeneration',
+            request_type='regenerate',
+            success=False,
+            error_message=str(exc),
+            response_time_ms=response_time_ms,
+        )
+        logger.error(f"Child title regeneration error: {exc}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Something went wrong. Please try again.'
+        }, status=500)

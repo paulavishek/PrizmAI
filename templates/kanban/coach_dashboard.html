@@ -12,18 +12,22 @@
     }
 
     .coach-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 15px;
+        padding-bottom: 20px;
         margin-bottom: 30px;
-        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        border-bottom: 2px solid #e5e7eb;
     }
 
     .coach-title {
-        font-size: 32px;
+        font-size: 2rem;
         font-weight: 700;
-        margin-bottom: 10px;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .coach-subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin-top: 5px;
     }
 
     .effectiveness-score {
@@ -149,7 +153,7 @@
     }
 
     .actions-list li:before {
-        content: "→";
+        content: "â†’";
         position: absolute;
         left: 0;
         color: #667eea;
@@ -368,20 +372,29 @@
 {% block content %}
 <div id="coach-toast-container"></div>
 <div class="coach-container">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">AI Coach</li>
+        </ol>
+    </nav>
+
     <!-- Header -->
     <div class="coach-header">
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <h1 class="coach-title">
-                    <i class="fas fa-user-graduate me-2"></i>AI Coach
+                    <i class="fas fa-user-graduate text-primary me-2"></i>AI Coach
                 </h1>
-                <p class="mb-0" style="font-size: 16px; opacity: 0.9;">Proactive guidance to improve your project</p>
+                <p class="coach-subtitle mb-0">{{ board.name }} â€” Proactive guidance to improve your project</p>
             </div>
             <div class="text-end">
-                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-light">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-2"></i>Back to Board
                 </a>
-                <button onclick="generateSuggestions()" class="btn btn-generate ms-2">
+                <button onclick="generateSuggestions()" class="btn btn-primary ms-2">
                     <i class="fas fa-sync-alt me-2"></i>Refresh Suggestions
                 </button>
             </div>
@@ -389,6 +402,7 @@
     </div>
 
     <!-- Effectiveness Stats -->
+    {% if effectiveness.effectiveness_score or effectiveness.action_rate or effectiveness.helpful_rate or total_active %}
     <div class="stats-row">
         <div class="stat-card">
             <i class="fas fa-trophy" style="color: #fbbf24; font-size: 24px; margin-bottom: 10px;"></i>
@@ -411,6 +425,15 @@
             <div class="stat-label">Helpful Rate</div>
         </div>
     </div>
+    {% else %}
+    <div class="stats-row">
+        <div class="stat-card" style="flex: 1;">
+            <i class="fas fa-chart-line" style="color: #9ca3af; font-size: 24px; margin-bottom: 10px;"></i>
+            <span class="stat-value text-muted">No data yet</span>
+            <div class="stat-label">Interact with suggestions to see effectiveness metrics</div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Critical Suggestions -->
     {% if critical_suggestions %}
@@ -459,7 +482,7 @@
     {% if not total_active %}
     <div class="empty-state">
         <i class="fas fa-check-circle"></i>
-        <h3>All Looking Good! 🎉</h3>
+        <h3>All Looking Good! ðŸŽ‰</h3>
         <p class="text-muted">No coaching suggestions right now. Your project is running smoothly.</p>
         <button onclick="generateSuggestions()" class="btn btn-generate mt-3">
             <i class="fas fa-sync-alt me-2"></i>Generate New Suggestions
@@ -596,21 +619,13 @@ function goBack() {
     // Don't use browser back if coming from suggestion detail (prevents loop)
     if (document.referrer && document.referrer.includes('/coach/suggestion/')) {
         // Coming from suggestion detail, go directly to board
-        {% if is_demo_mode %}
-        window.location.href = '{% url "demo_board_detail" board.id %}';
-        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
-        {% endif %}
     } else if (document.referrer && document.referrer !== window.location.href) {
         // Normal back navigation
         window.history.back();
     } else {
         // Fallback to board detail if no history (demo-aware)
-        {% if is_demo_mode %}
-        window.location.href = '{% url "demo_board_detail" board.id %}';
-        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
-        {% endif %}
     }
 }
 </script>

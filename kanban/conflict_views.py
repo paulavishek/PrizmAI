@@ -12,6 +12,8 @@ from django.views.decorators.http import require_http_methods, require_POST
 import json
 
 from kanban.models import Board
+from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern
@@ -29,10 +31,8 @@ def conflict_dashboard(request):
     Optional board_id parameter to filter by specific board.
     """
     try:
-        # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Check if filtering by specific board
         board_filter_id = request.GET.get('board_id')
@@ -112,10 +112,8 @@ def conflict_detail(request, conflict_id):
     Detailed view of a specific conflict with resolution options.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
@@ -172,15 +170,14 @@ def conflict_detail(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def apply_resolution(request, conflict_id, resolution_id):
     """
     Apply a specific resolution to resolve a conflict.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -232,15 +229,14 @@ def apply_resolution(request, conflict_id, resolution_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def ignore_conflict(request, conflict_id):
     """
     Mark a conflict as ignored.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -270,6 +266,7 @@ def ignore_conflict(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def acknowledge_notification(request, notification_id):
     """
     Acknowledge a conflict notification.
@@ -298,15 +295,14 @@ def acknowledge_notification(request, notification_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def conflict_feedback(request, conflict_id):
     """
     Add feedback and effectiveness rating to a resolved conflict.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         conflict = get_object_or_404(
             ConflictDetection,
@@ -353,15 +349,14 @@ def conflict_feedback(request, conflict_id):
 
 @login_required
 @require_POST
+@demo_write_guard
 def trigger_detection_all(request):
     """
     Manually trigger conflict detection for all accessible boards.
     """
     try:
-        # Get all accessible boards
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get all accessible boards (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Trigger detection for each board
         count = 0
@@ -406,15 +401,14 @@ def trigger_detection_all(request):
 
 @login_required
 @require_POST
+@demo_write_guard
 def trigger_detection(request, board_id):
     """
     Manually trigger conflict detection for a specific board.
     """
     try:
-        # Get boards user has access to
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        accessible_boards = get_user_boards(request.user)
         
         board = get_object_or_404(
             Board,
@@ -456,10 +450,8 @@ def conflict_analytics(request):
     Analytics view showing conflict patterns and resolution effectiveness.
     """
     try:
-        # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to (demo-aware)
+        boards = get_user_boards(request.user)
         
         # Get resolution patterns
         patterns = ResolutionPattern.objects.filter(
@@ -584,9 +576,12 @@ def get_conflict_notifications(request):
     API endpoint to get user's unread conflict notifications.
     """
     try:
+        # RBAC: only show notifications for boards the user has access to
+        accessible_boards = get_user_boards(request.user)
         notifications = ConflictNotification.objects.filter(
             user=request.user,
-            acknowledged=False
+            acknowledged=False,
+            conflict__board__in=accessible_boards
         ).select_related('conflict__board').order_by('-sent_at')[:10]
         
         data = [{

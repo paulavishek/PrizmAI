@@ -1,42 +1,20 @@
 """
 Management command to initialize RBAC system
-Creates default roles for all organizations
+[DEPRECATED] The legacy Role-based RBAC system has been replaced with
+the new BoardMembership model (owner/member/viewer roles).
 """
 from django.core.management.base import BaseCommand
-from accounts.models import Organization
-from kanban.permission_models import Role
 
 
 class Command(BaseCommand):
-    help = 'Initialize RBAC system with default roles for all organizations'
-    
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '--org-id',
-            type=int,
-            help='Initialize roles for specific organization ID only'
-        )
-    
+    help = '[DEPRECATED] Legacy RBAC initialization — no longer needed'
+
     def handle(self, *args, **options):
-        org_id = options.get('org_id')
-        
-        if org_id:
-            try:
-                organizations = [Organization.objects.get(id=org_id)]
-            except Organization.DoesNotExist:
-                self.stdout.write(self.style.ERROR(f'Organization with ID {org_id} not found'))
-                return
-        else:
-            organizations = Organization.objects.all()
-        
-        total_orgs = 0
-        total_roles = 0
-        
-        for org in organizations:
-            self.stdout.write(f'\nProcessing organization: {org.name}')
-            
-            # Create default roles
-            roles = Role.create_default_roles(org)
+        self.stdout.write(self.style.WARNING(
+            'This command is deprecated. The legacy Role-based RBAC system '
+            'has been replaced with the new BoardMembership model '
+            '(owner/member/viewer roles). No action taken.'
+        ))
             
             self.stdout.write(self.style.SUCCESS(f'  ✓ Created {len(roles)} roles:'))
             for role in roles:

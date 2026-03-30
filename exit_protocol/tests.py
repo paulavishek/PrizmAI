@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Organization, UserProfile
-from kanban.models import Board, Column, Task
+from kanban.models import Board, BoardMembership, Column, Task
 
 
 class ExitProtocolTestBase(TestCase):
@@ -30,7 +30,7 @@ class ExitProtocolTestBase(TestCase):
             organization=self.org,
             created_by=self.user,
         )
-        self.board.members.add(self.user)
+        BoardMembership.objects.get_or_create(board=self.board, user=self.user, defaults={'role': 'member'})
 
         # Backdate creation for the 7-day minimum
         self.board.created_at = timezone.now() - timedelta(days=30)
