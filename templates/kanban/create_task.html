@@ -145,29 +145,12 @@
                                 {% endif %}
                             </div>
 
-                            <!-- Assigned To (promoted from Constraints section) -->
+                            <!-- Assigned To -->
                             <div class="mb-3">
                                 <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
                                     <i class="fas fa-user-check me-1"></i> Assigned To
                                 </label>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="flex-grow-1">
-                                        {{ form.assigned_to }}
-                                    </div>
-                                    <button type="button" id="suggest-assignee-btn" 
-                                            class="btn btn-sm btn-outline-info" 
-                                            data-board-id="{{ board.id }}"
-                                            title="AI-powered assignee suggestion based on skills, workload & performance">
-                                        <i class="fas fa-user-cog me-1"></i> AI Suggest
-                                    </button>
-                                </div>
-                                <div id="assignee-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-info" role="status">
-                                        <span class="visually-hidden">Analyzing team members...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted"><i class="fas fa-wand-magic-sparkles me-1"></i>Analyzing team skills, workload & performance...</span>
-                                </div>
-                                <div id="assignee-suggestion-result" class="d-none mt-2"></div>
+                                {{ form.assigned_to }}
                                 {% if form.assigned_to.errors %}
                                     <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
                                 {% endif %}
@@ -665,6 +648,30 @@
                                         </div>
                                         <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Smart Assignee Suggestion (uses all form context) -->
+                            <div class="card mb-3 border-info">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-user-shield text-info me-1"></i> AI Smart Assignee Recommendation</h6>
+                                            <small class="text-muted">AI analyzes all task context above to recommend the best assignee &mdash; verify your selection</small>
+                                        </div>
+                                        <button type="button" id="smart-suggest-assignee-btn" class="btn btn-sm btn-outline-info"
+                                                data-board-id="{{ board.id }}"
+                                                title="AI considers complexity, risk, skills, workload, deadline & priority to find the optimal assignee">
+                                            <i class="fas fa-brain me-1"></i> Smart Suggest
+                                        </button>
+                                    </div>
+                                    <div id="smart-assignee-ai-spinner" class="d-none text-center mt-2">
+                                        <div class="spinner-border spinner-border-sm text-info" role="status">
+                                            <span class="visually-hidden">Analyzing all task context...</span>
+                                        </div>
+                                        <span class="ms-2 text-muted"><i class="fas fa-brain me-1"></i>Deep-analyzing task context, team skills, workload & performance...</span>
+                                    </div>
+                                    <div id="smart-assignee-suggestion-result" class="d-none mt-2"></div>
                                 </div>
                             </div>
 

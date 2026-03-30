@@ -35,6 +35,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize AI assignee suggestion
     initAssigneeSuggestion();
+
+    // Initialize AI Smart Assignee suggestion (AI Analysis section)
+    initSmartAssigneeSuggestion();
 });
 
 /**
@@ -3583,6 +3586,360 @@ function escapeHtmlAttr(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+
+/**
+ * Initialize AI Smart Assignee Suggestion (AI Analysis section)
+ * Gathers ALL form context to make a comprehensive assignee recommendation.
+ * Attaches click handler to #smart-suggest-assignee-btn
+ */
+function initSmartAssigneeSuggestion() {
+    const smartBtn = document.getElementById('smart-suggest-assignee-btn');
+    if (!smartBtn) return;
+
+    smartBtn.addEventListener('click', function() {
+        const titleInput = document.getElementById('id_title');
+        if (!titleInput || !titleInput.value.trim()) {
+            alert('Please enter a task title first so AI can analyze the task.');
+            return;
+        }
+
+        const boardId = this.dataset.boardId;
+
+        // Gather ALL form fields for comprehensive analysis
+        const descriptionInput = document.getElementById('id_description');
+        const complexityInput = document.getElementById('id_complexity_score');
+        const workloadInput = document.getElementById('id_workload_impact');
+        const skillsInput = document.getElementById('id_required_skills');
+        const priorityInput = document.getElementById('id_priority');
+        const dueDateInput = document.getElementById('id_due_date');
+        const estimatedHoursInput = document.getElementById('id_estimated_hours');
+        const collaborationInput = document.getElementById('id_collaboration_required');
+        const dependenciesInput = document.getElementById('id_dependencies');
+        const riskLevelInput = document.getElementById('id_risk_level');
+        const riskLikelihoodInput = document.getElementById('id_risk_likelihood');
+        const riskImpactInput = document.getElementById('id_risk_impact');
+        const skillMatchInput = document.getElementById('id_skill_match_score');
+        const estimatedCostInput = document.getElementById('id_estimated_cost');
+        const hourlyRateInput = document.getElementById('id_hourly_rate');
+        const startDateInput = document.getElementById('id_start_date');
+        const lssRadio = document.querySelector('input[name="lss_classification"]:checked');
+
+        // Parse required_skills
+        let requiredSkills = [];
+        if (skillsInput && skillsInput.value) {
+            try { requiredSkills = JSON.parse(skillsInput.value); } catch (e) { /* ignore */ }
+        }
+
+        // Compute risk score
+        let riskScore = null;
+        if (riskLikelihoodInput && riskImpactInput) {
+            const likelihood = parseInt(riskLikelihoodInput.value) || 0;
+            const impact = parseInt(riskImpactInput.value) || 0;
+            if (likelihood > 0 && impact > 0) riskScore = likelihood * impact;
+        }
+
+        const taskData = {
+            title: titleInput.value.trim(),
+            description: descriptionInput ? descriptionInput.value : '',
+            complexity_score: complexityInput ? (parseInt(complexityInput.value) || null) : null,
+            workload_impact: workloadInput ? workloadInput.value : 'medium',
+            required_skills: requiredSkills,
+            board_id: boardId,
+            task_id: null,
+            priority: priorityInput ? priorityInput.value : null,
+            due_date: dueDateInput ? dueDateInput.value : null,
+            estimated_hours: estimatedHoursInput ? (parseFloat(estimatedHoursInput.value) || null) : null,
+            collaboration_required: collaborationInput ? collaborationInput.checked : false,
+            dependencies_count: dependenciesInput ? dependenciesInput.selectedOptions.length : 0,
+            risk_level: riskLevelInput ? riskLevelInput.value : null,
+            risk_score: riskScore,
+            skill_match_score: skillMatchInput ? (parseInt(skillMatchInput.value) || null) : null,
+            estimated_cost: estimatedCostInput ? (parseFloat(estimatedCostInput.value) || null) : null,
+            hourly_rate: hourlyRateInput ? (parseFloat(hourlyRateInput.value) || null) : null,
+            start_date: startDateInput ? startDateInput.value : null,
+            lss_classification: lssRadio ? lssRadio.value : null
+        };
+
+        const spinner = document.getElementById('smart-assignee-ai-spinner');
+        const resultDiv = document.getElementById('smart-assignee-suggestion-result');
+
+        if (spinner) spinner.classList.remove('d-none');
+        if (resultDiv) resultDiv.classList.add('d-none');
+        smartBtn.disabled = true;
+
+        fetch('/api/suggest-assignee/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(taskData)
+        })
+        .then(response => response.json().then(data => {
+            if (!response.ok) {
+                const err = new Error(data.error || 'Failed to get smart assignee suggestion');
+                err.details = data;
+                throw err;
+            }
+            return data;
+        }))
+        .then(data => {
+            if (spinner) spinner.classList.add('d-none');
+            smartBtn.disabled = false;
+            displaySmartAssigneeSuggestion(data);
+        })
+        .catch(error => {
+            console.error('Smart assignee suggestion error:', error);
+            if (spinner) spinner.classList.add('d-none');
+            smartBtn.disabled = false;
+            if (resultDiv) {
+                let errorMsg = error.message || 'Failed to get smart assignee suggestion.';
+                if (error.details && error.details.no_members) {
+                    errorMsg = 'No board members available. Please add members to the board first.';
+                } else if (error.details && error.details.quota_exceeded) {
+                    errorMsg = 'AI usage quota exceeded. Please try again later.';
+                }
+                resultDiv.innerHTML = `
+                    <div class="alert alert-warning alert-dismissible fade show py-2">
+                        <i class="fas fa-exclamation-triangle me-1"></i> ${errorMsg}
+                        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+                    </div>`;
+                resultDiv.classList.remove('d-none');
+            }
+        });
+    });
+}
+
+
+/**
+ * Display AI Smart Assignee suggestion results in the AI Analysis section.
+ * Shows comparison with manual selection if one was already made.
+ */
+function displaySmartAssigneeSuggestion(data) {
+    const resultDiv = document.getElementById('smart-assignee-suggestion-result');
+    if (!resultDiv) return;
+
+    const rec = data.recommendation || {};
+    const candidates = data.all_candidates || [];
+    const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+
+    const confidence = rec.confidence || 0;
+    const confidencePct = Math.round(confidence * 100);
+    const displayName = rec.recommended_display_name || rec.recommended_username || 'Unknown';
+    const userId = rec.recommended_user_id;
+    const reasoning = rec.reasoning || 'Based on comprehensive multi-factor analysis.';
+    const factors = rec.factors || [];
+    const alternatives = rec.alternatives || [];
+    const warnings = rec.warnings || [];
+    const explainability = rec.explainability || {};
+
+    let confColor = 'success', confText = 'High';
+    if (confidence < 0.5) { confColor = 'danger'; confText = 'Low'; }
+    else if (confidence < 0.75) { confColor = 'warning'; confText = 'Medium'; }
+
+    // Check what user has currently selected
+    const assigneeSelect = document.getElementById('id_assigned_to');
+    const currentAssigneeId = assigneeSelect ? assigneeSelect.value : '';
+    const currentAssigneeName = (assigneeSelect && assigneeSelect.selectedOptions.length > 0 && assigneeSelect.value)
+        ? assigneeSelect.selectedOptions[0].text : '';
+
+    let html = `<div class="card border-info shadow-sm">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="mb-0">
+                        <i class="fas fa-brain text-info me-1"></i> Smart Assignee Recommendation
+                    </h6>
+                    <span class="badge bg-${confColor}" title="AI Confidence: ${confidencePct}%">
+                        <i class="fas fa-chart-line me-1"></i>${confidencePct}% ${confText}
+                    </span>
+                </div>`;
+
+    // If user already picked someone, show comparison
+    if (currentAssigneeId && String(currentAssigneeId) !== String(userId)) {
+        html += `
+                <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:0.85rem;">
+                    <i class="fas fa-exchange-alt me-1"></i>
+                    You selected <strong>${escapeHtmlAttr(currentAssigneeName)}</strong>, but AI recommends
+                    <strong>${escapeHtmlAttr(displayName)}</strong> based on full task context analysis.
+                </div>`;
+    } else if (currentAssigneeId && String(currentAssigneeId) === String(userId)) {
+        html += `
+                <div class="alert alert-success py-2 px-3 mb-2" style="font-size:0.85rem;">
+                    <i class="fas fa-check-circle me-1"></i>
+                    Great choice! AI also recommends <strong>${escapeHtmlAttr(displayName)}</strong> &mdash; your selection matches the AI recommendation.
+                </div>`;
+    }
+
+    // Recommended person
+    html += `
+                <div class="d-flex align-items-center mb-2 p-2 bg-light rounded">
+                    <div class="me-2">
+                        <i class="fas fa-user-circle fa-2x text-info"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <strong>${escapeHtmlAttr(displayName)}</strong>
+                        <div class="small text-muted">${stripMarkdown(reasoning)}</div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-info ms-2"
+                            onclick="applySmartAssigneeSuggestion(${userId})">
+                        <i class="fas fa-check me-1"></i> Assign
+                    </button>
+                </div>`;
+
+    // Confidence meter
+    if (window.AIExplainability && window.AIExplainability.renderConfidenceMeter) {
+        html += window.AIExplainability.renderConfidenceMeter(
+            confidence, 'Match Confidence', explainability.reasoning || ''
+        );
+    }
+
+    // Factor breakdown
+    if (factors.length > 0) {
+        html += `
+                <div class="mt-2">
+                    <a class="small text-decoration-none" data-bs-toggle="collapse" href="#smart-assignee-factors-collapse" role="button">
+                        <i class="fas fa-wand-magic-sparkles text-primary me-1"></i>
+                        <strong class="text-primary">Why AI chose this person</strong>
+                        <i class="fas fa-chevron-down ms-1 small"></i>
+                    </a>
+                    <div class="collapse show mt-2" id="smart-assignee-factors-collapse">
+                        <div class="p-2 bg-light rounded border">`;
+
+        const sortedFactors = [...factors].sort((a, b) => (b.contribution || 0) - (a.contribution || 0));
+        sortedFactors.forEach((factor, index) => {
+            const contribution = factor.contribution || 0;
+            const desc = factor.description || '';
+            let barColor = '#6c757d';
+            if (contribution >= 30) barColor = '#0d6efd';
+            else if (contribution >= 15) barColor = '#0dcaf0';
+
+            html += `
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <span class="small fw-semibold">
+                                        <span class="badge bg-secondary me-1" style="font-size:0.65rem;">${index + 1}</span>
+                                        ${escapeHtmlAttr(factor.name || 'Factor')}
+                                    </span>
+                                    <span class="small fw-bold" style="color:${barColor};">${contribution}%</span>
+                                </div>
+                                <div class="small text-muted mb-1">${escapeHtmlAttr(desc)}</div>
+                                <div class="progress" style="height:4px;">
+                                    <div class="progress-bar" style="width:${Math.max(5, contribution)}%;background-color:${barColor};" role="progressbar"></div>
+                                </div>
+                            </div>`;
+        });
+
+        html += `
+                        </div>
+                    </div>
+                </div>`;
+    }
+
+    // Warnings
+    if (warnings.length > 0) {
+        html += `<div class="mt-2">`;
+        warnings.forEach(w => {
+            html += `<div class="small text-warning"><i class="fas fa-exclamation-triangle me-1"></i>${escapeHtmlAttr(w)}</div>`;
+        });
+        html += `</div>`;
+    }
+
+    // Alternatives
+    if (alternatives.length > 0) {
+        html += `
+                <div class="mt-2">
+                    <a class="small text-decoration-none" data-bs-toggle="collapse" href="#smart-assignee-alternatives-collapse" role="button">
+                        <i class="fas fa-users text-secondary me-1"></i>
+                        <strong class="text-secondary">Alternative candidates (${alternatives.length})</strong>
+                        <i class="fas fa-chevron-down ms-1 small"></i>
+                    </a>
+                    <div class="collapse mt-2" id="smart-assignee-alternatives-collapse">`;
+
+        alternatives.forEach(alt => {
+            const altName = alt.display_name || alt.username || 'Unknown';
+            const altScore = Math.round(alt.score || 0);
+            const altReason = alt.brief_reason || '';
+            html += `
+                        <div class="d-flex align-items-center p-2 mb-1 bg-light rounded border-start border-secondary border-2">
+                            <div class="me-2"><i class="fas fa-user text-secondary"></i></div>
+                            <div class="flex-grow-1">
+                                <div class="small">
+                                    <strong>${escapeHtmlAttr(altName)}</strong>
+                                    <span class="badge bg-secondary ms-1">${altScore}/100</span>
+                                </div>
+                                <div class="small text-muted">${escapeHtmlAttr(altReason)}</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                                    onclick="applySmartAssigneeSuggestion(${alt.user_id})" title="Assign ${escapeHtmlAttr(altName)}">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </div>`;
+        });
+
+        html += `
+                    </div>
+                </div>`;
+    }
+
+    // Explainability footer
+    if (explainability.data_quality) {
+        const dqBadge = explainability.data_quality === 'high' ? 'success' :
+                         explainability.data_quality === 'medium' ? 'warning' : 'secondary';
+        html += `
+                <div class="mt-2 pt-2 border-top">
+                    <span class="small text-muted">
+                        <i class="fas fa-database me-1"></i>Data Quality:
+                        <span class="badge bg-${dqBadge}" style="font-size:0.65rem;">${explainability.data_quality}</span>
+                    </span>`;
+        if (explainability.assumptions && explainability.assumptions.length > 0) {
+            html += `
+                    <div class="mt-1">
+                        <span class="small text-muted"><i class="fas fa-lightbulb me-1"></i>Assumptions:</span>
+                        <ul class="mb-0" style="font-size:0.75rem;padding-left:1.2rem;">`;
+            explainability.assumptions.forEach(a => {
+                html += `<li class="text-muted">${escapeHtmlAttr(a)}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+        html += `</div>`;
+    }
+
+    html += `
+            </div>
+        </div>`;
+
+    resultDiv.innerHTML = html;
+    resultDiv.classList.remove('d-none');
+}
+
+
+/**
+ * Apply the smart-suggested assignee to the form's assigned_to select
+ */
+function applySmartAssigneeSuggestion(userId) {
+    const assigneeSelect = document.getElementById('id_assigned_to');
+    if (assigneeSelect) {
+        const option = assigneeSelect.querySelector(`option[value="${userId}"]`);
+        if (option) {
+            assigneeSelect.value = userId;
+            const event = new Event('change', { bubbles: true });
+            assigneeSelect.dispatchEvent(event);
+        } else {
+            console.warn('User ID', userId, 'not found in assignee select options');
+            alert('Could not apply suggestion: user not found in the assignee list.');
+            return;
+        }
+    }
+
+    // Scroll to top briefly to show the change, then back
+    const assigneeField = document.getElementById('id_assigned_to');
+    if (assigneeField) {
+        assigneeField.focus();
+        assigneeField.classList.add('border-success');
+        setTimeout(() => assigneeField.classList.remove('border-success'), 3000);
+    }
 }
 
 
