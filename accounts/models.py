@@ -1,21 +1,27 @@
 import pytz
+import uuid
+from datetime import timedelta
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import EmailValidator, RegexValidator
+from django.utils import timezone
 
 COMMON_TIMEZONES = sorted(pytz.common_timezones)
 
 class Organization(models.Model):
     name = models.CharField(max_length=100)
     domain = models.CharField(
-        max_length=100, 
+        max_length=100,
+        blank=True,
+        default='',
         validators=[
             RegexValidator(
                 regex=r'^[a-zA-Z0-9]+([\-\.]{1}[a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$',
                 message='Enter a valid domain (e.g., example.com)'
             )
         ],
-        help_text="Domain used for email validation (e.g., example.com)"
+        help_text="Domain used for email validation (e.g., example.com). Optional for auto-created workspaces."
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_organizations')
@@ -206,3 +212,59 @@ class UserProfile(models.Model):
     def expert_skills(self):
         """Get list of expert-level skills"""
         return [skill.get('name', '') for skill in self.skills if skill.get('level') == 'Expert']
+
+
+class OrganizationInvitation(models.Model):
+    """Email-based invitation to join an organization/workspace."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_EXPIRED = 'expired'
+    STATUS_REVOKED = 'revoked'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ACCEPTED, 'Accepted'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_REVOKED, 'Revoked'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='invitations')
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_org_invitations')
+    email = models.EmailField()
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='accepted_org_invitations',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        """Return True if invitation is still usable."""
+        if self.status != self.STATUS_PENDING:
+            return False
+        if timezone.now() > self.expires_at:
+            self.status = self.STATUS_EXPIRED
+            self.save(update_fields=['status'])
+            return False
+        return True
+
+    def mark_accepted(self, user):
+        self.status = self.STATUS_ACCEPTED
+        self.accepted_at = timezone.now()
+        self.accepted_by = user
+        self.save(update_fields=['status', 'accepted_at', 'accepted_by'])
+
+    def __str__(self):
+        return f"OrgInvite: {self.email} → {self.organization.name} ({self.status})"

@@ -347,6 +347,7 @@ urlpatterns = [
     path('onboarding/commit/', onboarding_views.onboarding_commit, name='onboarding_commit'),
     path('onboarding/start-over/', onboarding_views.onboarding_start_over, name='onboarding_start_over'),
     path('onboarding/skip/', onboarding_views.onboarding_skip, name='onboarding_skip'),
+    path('onboarding/invite/', onboarding_views.onboarding_invite, name='onboarding_invite'),
     path('onboarding/demo/', onboarding_views.onboarding_explore_demo, name='onboarding_explore_demo'),
     path('onboarding/validate/', onboarding_views.onboarding_validate, name='onboarding_validate'),
     path('onboarding/regenerate-children/', onboarding_views.onboarding_regenerate_children, name='onboarding_regenerate_children'),

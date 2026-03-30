@@ -23,6 +23,9 @@ urlpatterns = [
     path('organization/remove-member/<int:profile_id>/', views.remove_member, name='remove_member'),
     path('organization/delete/', views.delete_organization, name='delete_organization'),
     
+    # Organization invitations
+    path('org-invite/<uuid:token>/', views.accept_org_invitation, name='accept_org_invitation'),
+    
     # Social login completion
     path('social-signup-complete/', views.social_signup_complete, name='social_signup_complete'),
     
