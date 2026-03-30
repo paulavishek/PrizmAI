@@ -637,6 +637,16 @@
         font-weight: 700;
     }
 
+    /* Phase bar labels: frappe-gantt positions x at bar centre, so use middle anchor
+       to keep the text properly centred inside the bar in all view modes. */
+    .gantt .bar-wrapper[data-id^="phase-"] .bar-label {
+        text-anchor: middle !important;
+        fill: rgba(255, 255, 255, 0.92) !important;
+        font-size: 12px;
+        font-weight: 700;
+        filter: none;
+    }
+
     .gantt .bar-label.outside-left,
     .gantt .bar-label.outside-right {
         fill: #334155 !important;
