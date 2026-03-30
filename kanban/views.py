@@ -3259,17 +3259,25 @@ def organization_boards(request):
         # EXCLUDE demo boards - demo environment is isolated
         demo_org_names = ['Demo - Acme Corporation']
         all_org_boards = Board.objects.filter(
-            organization=organization
+            organization=organization,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
         ).exclude(
             organization__name__in=demo_org_names
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         )
         
         # Determine which boards the user is a member of
         user_boards = Board.objects.filter(
             Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user))
+            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user)),
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
         ).exclude(
             organization__name__in=demo_org_names
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
         
         # Create a list to track which boards the user is a member of
