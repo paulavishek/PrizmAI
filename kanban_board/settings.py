@@ -170,11 +170,12 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
-            # Allow SQLite to wait up to 20 seconds for a write lock to
+            # Allow SQLite to wait up to 30 seconds for a write lock to
             # be released before raising "database is locked".  The
             # default is 5 s, which is too short when Spectra holds an
-            # atomic transaction open while waiting for the Gemini API.
-            'timeout': 20,
+            # atomic transaction open while waiting for the Gemini API,
+            # or when Celery Beat's DatabaseScheduler writes concurrently.
+            'timeout': 30,
         },
     }
 }
