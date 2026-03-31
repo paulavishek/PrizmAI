@@ -74,7 +74,7 @@
         <div class="dc-collapse-toggle d-flex align-items-center justify-content-between"
              data-bs-toggle="collapse" data-bs-target="#dc-action-body" aria-expanded="true">
             <h5 class="mb-0">
-                <span class="badge dc-badge-action me-2">{{ action_required|length }}</span>
+                <span class="badge dc-badge-action me-2" id="dc-action-badge">{{ action_required|length }}</span>
                 <i class="fas fa-circle-exclamation text-danger me-1"></i> Action Required
             </h5>
             <i class="fas fa-chevron-down text-muted"></i>
@@ -136,7 +136,7 @@
         <div class="dc-collapse-toggle collapsed d-flex align-items-center justify-content-between"
              data-bs-toggle="collapse" data-bs-target="#dc-awareness-body" aria-expanded="false">
             <h5 class="mb-0">
-                <span class="badge dc-badge-awareness me-2">{{ awareness|length }}</span>
+                <span class="badge dc-badge-awareness me-2" id="dc-awareness-badge">{{ awareness|length }}</span>
                 <i class="fas fa-info-circle text-info me-1"></i> Awareness
             </h5>
             <i class="fas fa-chevron-down text-muted"></i>
@@ -180,7 +180,7 @@
         <div class="dc-collapse-toggle collapsed d-flex align-items-center justify-content-between"
              data-bs-toggle="collapse" data-bs-target="#dc-quickwin-body" aria-expanded="false">
             <h5 class="mb-0">
-                <span class="badge dc-badge-quickwin me-2">{{ quick_wins|length }}</span>
+                <span class="badge dc-badge-quickwin me-2" id="dc-quickwin-badge">{{ quick_wins|length }}</span>
                 <i class="fas fa-bolt text-success me-1"></i> Quick Wins
             </h5>
             <i class="fas fa-chevron-down text-muted"></i>
@@ -321,9 +321,30 @@ document.addEventListener('DOMContentLoaded', function() {
     function fadeOutItem(itemId) {
         var el = document.getElementById('dc-item-' + itemId);
         if (el) {
+            // Determine which section this item belongs to
+            var section = el.closest('.collapse');
+            var sectionId = section ? section.id : '';
             el.style.transition = 'opacity .3s';
             el.style.opacity = '0';
-            setTimeout(function() { el.remove(); }, 300);
+            setTimeout(function() {
+                el.remove();
+                updateSectionCount(sectionId);
+            }, 300);
+        }
+    }
+
+    function updateSectionCount(sectionId) {
+        var badgeId = null;
+        if (sectionId === 'dc-action-body') badgeId = 'dc-action-badge';
+        else if (sectionId === 'dc-awareness-body') badgeId = 'dc-awareness-badge';
+        else if (sectionId === 'dc-quickwin-body') badgeId = 'dc-quickwin-badge';
+        if (badgeId) {
+            var badge = document.getElementById(badgeId);
+            var container = document.getElementById(sectionId);
+            if (badge && container) {
+                var remaining = container.querySelectorAll('.dc-card').length;
+                badge.textContent = remaining;
+            }
         }
     }
 
@@ -373,7 +394,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         el.style.opacity = '0';
                         setTimeout(function() { el.remove(); }, 300);
                     });
-                    setTimeout(function() { clearAllBtn.remove(); }, 350);
+                    setTimeout(function() {
+                        clearAllBtn.remove();
+                        updateSectionCount('dc-quickwin-body');
+                    }, 350);
                 }
             });
         });

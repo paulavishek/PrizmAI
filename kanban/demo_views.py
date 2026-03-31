@@ -1566,7 +1566,26 @@ def reset_demo_data(request):
                 pass
 
             # ============================================================
-            # STEP 6: Clean up orphaned webhook events (safety net)
+            # STEP 6a: Clear Decision Center items and briefings
+            # ============================================================
+            try:
+                from decision_center.models import (
+                    DecisionItem, DecisionCenterBriefing, DecisionCenterSettings
+                )
+                from django.core.cache import cache as dc_cache
+
+                # Delete all decision items for the current user
+                DecisionItem.objects.filter(created_for=request.user).delete()
+                # Delete briefings so they get regenerated fresh
+                DecisionCenterBriefing.objects.filter(user=request.user).delete()
+                # Invalidate widget cache for both demo and real modes
+                dc_cache.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache.delete(f'dc_widget_{request.user.id}_real')
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 6b: Clean up orphaned webhook events (safety net)
             # ============================================================
             try:
                 from webhooks.models import WebhookEvent
@@ -1593,6 +1612,33 @@ def reset_demo_data(request):
             # Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
+            except Exception:
+                pass
+
+            # Invalidate Decision Center widget cache after repopulation
+            try:
+                from django.core.cache import cache as dc_cache
+                dc_cache.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache.delete(f'dc_widget_{request.user.id}_real')
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 7b: Regenerate Decision Center items for current user
+            # ============================================================
+            # The collect_decision_items Celery task only runs daily.
+            # After a reset we must explicitly re-scan so the DC page
+            # and dashboard widget show consistent, fresh counts.
+            try:
+                from decision_center.tasks import (
+                    collect_for_user, generate_briefing_for_user,
+                )
+                collect_for_user(request.user)
+                generate_briefing_for_user(request.user)
+                # Final cache invalidation after items are created
+                from django.core.cache import cache as dc_cache2
+                dc_cache2.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache2.delete(f'dc_widget_{request.user.id}_real')
             except Exception:
                 pass
 
