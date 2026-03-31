@@ -1437,6 +1437,9 @@ def predict_deadline_api(request):
                 'collaboration_required': collaboration_required,
                 'dependencies_count': dependencies_count,
                 'risk_score': risk_score, 'risk_level': risk_level,
+                'estimated_hours': estimated_hours,
+                'estimated_cost': estimated_cost,
+                'hourly_rate': hourly_rate,
             }
             result = predict_deadline_task.delay(
                 task_data_for_celery, {}, board.id, request.user.id
@@ -5061,8 +5064,8 @@ def suggest_assignee_api(request):
             track_ai_request(
                 user=request.user,
                 feature='assignee_suggestion',
-                input_data={'title': title or task.title, 'board_id': board_id, 'task_id': task_id},
-                output_data={'recommended_user_id': ai_suggestion.get('recommended_user_id')},
+                request_type='suggest',
+                board_id=board_id,
                 success=True
             )
         except Exception as track_err:
@@ -5090,9 +5093,9 @@ def suggest_assignee_api(request):
             track_ai_request(
                 user=request.user,
                 feature='assignee_suggestion',
-                input_data={'error': str(e)},
-                output_data={},
-                success=False
+                request_type='suggest',
+                success=False,
+                error_message=str(e)
             )
         except Exception:
             pass

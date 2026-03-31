@@ -311,10 +311,81 @@ def predict_deadline_task(self, task_data, team_context, board_id, user_id):
         from kanban.utils.ai_utils import predict_realistic_deadline
         from api.ai_usage_utils import track_ai_request
         from django.contrib.auth.models import User
+        from kanban.models import Board, Task
 
         user = User.objects.get(id=user_id)
+        board = Board.objects.get(id=board_id)
 
         _send_status(task_id, 'Analyzing assignee velocity…', 20)
+
+        # Build team_context if it was not provided (async path passes {})
+        if not team_context:
+            from django.db.models import Avg
+            assigned_to = task_data.get('assigned_to', 'Unassigned')
+
+            completed_tasks = Task.objects.filter(column__board=board, progress=100)
+            team_avg_completion = 5
+            team_completed_count = 0
+            assignee_avg_completion = 5
+            assignee_velocity_hours = 8
+            assignee_current_tasks = 0
+            assignee_completed_count = 0
+
+            if completed_tasks.exists():
+                total_days = 0
+                count = 0
+                for t in completed_tasks:
+                    if t.updated_at and t.created_at:
+                        days = (t.updated_at - t.created_at).days
+                        if days > 0:
+                            total_days += days
+                            count += 1
+                if count > 0:
+                    team_avg_completion = total_days / count
+                    team_completed_count = count
+
+            if assigned_to and assigned_to != 'Unassigned':
+                try:
+                    assignee_user = User.objects.get(username=assigned_to)
+                    assignee_current_tasks = Task.objects.filter(
+                        column__board=board, assigned_to=assignee_user
+                    ).exclude(progress=100).count()
+
+                    assignee_completed_tasks = Task.objects.filter(
+                        column__board=board, assigned_to=assignee_user, progress=100
+                    )
+                    if assignee_completed_tasks.exists():
+                        a_total = 0
+                        a_count = 0
+                        for t in assignee_completed_tasks:
+                            if t.updated_at and t.created_at:
+                                days = (t.updated_at - t.created_at).days
+                                if days > 0:
+                                    a_total += days
+                                    a_count += 1
+                        if a_count > 0:
+                            assignee_avg_completion = a_total / a_count
+                            assignee_completed_count = a_count
+                            if assignee_avg_completion < team_avg_completion:
+                                velocity_boost = team_avg_completion / assignee_avg_completion
+                                assignee_velocity_hours = min(10, 8 * velocity_boost)
+                            else:
+                                velocity_reduction = assignee_avg_completion / team_avg_completion
+                                assignee_velocity_hours = max(4, 8 / velocity_reduction)
+                except User.DoesNotExist:
+                    pass
+
+            team_context = {
+                'assignee_avg_completion_days': round(assignee_avg_completion, 1),
+                'team_avg_completion_days': round(team_avg_completion, 1),
+                'team_completed_tasks_count': team_completed_count,
+                'assignee_current_tasks': assignee_current_tasks,
+                'assignee_completed_tasks_count': assignee_completed_count,
+                'assignee_velocity_hours_per_day': round(assignee_velocity_hours, 1),
+                'similar_tasks_avg_days': round(team_avg_completion, 1),
+                'upcoming_holidays': [],
+            }
+
         _send_status(task_id, 'Calculating team metrics…', 40)
         _send_status(task_id, 'Generating AI prediction…', 60)
 
