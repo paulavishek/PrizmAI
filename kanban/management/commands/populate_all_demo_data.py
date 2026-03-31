@@ -590,6 +590,33 @@ class Command(BaseCommand):
             pass
         self.stdout.write('   ✓ Cleared Commitment Protocol data')
 
+        # =====================================================================
+        # STEP 16: Clear Decision Center data
+        # =====================================================================
+        try:
+            from decision_center.models import (
+                DecisionItem, DecisionCenterBriefing
+            )
+            from django.core.cache import cache as dc_cache
+
+            # Delete all decision items for demo boards
+            DecisionItem.objects.filter(board__in=self.demo_boards).delete()
+            # Also delete any items created for demo users (board-less items)
+            DecisionItem.objects.filter(created_for__in=self.demo_users).delete()
+            # Delete briefings for demo users
+            DecisionCenterBriefing.objects.filter(user__in=self.demo_users).delete()
+            # Also clear items/briefings for ALL users tied to demo boards
+            DecisionItem.objects.filter(
+                board__is_official_demo_board=True
+            ).delete()
+            # Invalidate widget cache for all known users
+            for u in self.demo_users:
+                dc_cache.delete(f'dc_widget_{u.id}_demo')
+                dc_cache.delete(f'dc_widget_{u.id}_real')
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Decision Center data')
+
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
     # =========================================================================
