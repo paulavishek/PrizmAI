@@ -51,7 +51,7 @@
                 </div>
                 <div class="card-body">
                     {% if not demo_limit_reached %}
-                    <form method="post">
+                    <form method="post" id="create-board-form">
                         {% csrf_token %}
 
                         {% if selected_strategy %}
