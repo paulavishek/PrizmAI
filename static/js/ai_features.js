@@ -2847,6 +2847,28 @@ function createEpicWithChildren() {
     } else {
         requestData.title = titleInput ? titleInput.value.trim() : 'Epic';
         requestData.description = descInput ? descInput.value : '';
+
+        // Capture all form fields so the API doesn't lose user input
+        const priorityInput = document.getElementById('id_priority');
+        if (priorityInput && priorityInput.value) requestData.priority = priorityInput.value;
+
+        const startDateInput = document.getElementById('id_start_date');
+        if (startDateInput && startDateInput.value) requestData.start_date = startDateInput.value;
+
+        const dueDateInput = document.getElementById('id_due_date');
+        if (dueDateInput && dueDateInput.value) requestData.due_date = dueDateInput.value;
+
+        const assignedToInput = document.getElementById('id_assigned_to');
+        if (assignedToInput && assignedToInput.value) requestData.assigned_to = assignedToInput.value;
+
+        const estimatedHoursInput = document.getElementById('id_estimated_hours');
+        if (estimatedHoursInput && estimatedHoursInput.value) requestData.estimated_hours = parseFloat(estimatedHoursInput.value);
+
+        const complexityInput = document.getElementById('id_complexity_score');
+        if (complexityInput && complexityInput.value) requestData.complexity_score = parseInt(complexityInput.value);
+
+        const progressInput = document.getElementById('id_progress');
+        if (progressInput && progressInput.value) requestData.progress = parseInt(progressInput.value);
     }
 
     fetch('/api/create-epic-children/', {
