@@ -1424,6 +1424,12 @@ function initDeadlinePrediction() {
         const hourlyRateInput = document.getElementById('id_hourly_rate');
         const startDateInput = document.getElementById('id_start_date');
         
+        // Prefer AI complexity score from task breakdown analysis if available,
+        // so the user doesn't need to manually "Apply" the AI score first.
+        const userComplexity = complexityScoreInput ? parseInt(complexityScoreInput.value) || 5 : 5;
+        const aiBreakdownComplexity = window.currentTaskBreakdown ? window.currentTaskBreakdown.complexity_score : null;
+        const effectiveComplexity = aiBreakdownComplexity || userComplexity;
+
         const taskData = {
             title: titleInput.value.trim(),
             description: descriptionInput ? descriptionInput.value : '',
@@ -1433,8 +1439,8 @@ function initDeadlinePrediction() {
             task_id: taskId,
             // Start date for proper deadline calculation (deadline = start_date + estimated_days)
             start_date: startDateInput && startDateInput.value ? startDateInput.value : null,
-            // Enhanced prediction fields
-            complexity_score: complexityScoreInput ? parseInt(complexityScoreInput.value) || 5 : 5,
+            // Enhanced prediction fields — use AI complexity score when available
+            complexity_score: effectiveComplexity,
             workload_impact: workloadImpactSelect ? workloadImpactSelect.value || 'medium' : 'medium',
             skill_match_score: skillMatchScoreInput && skillMatchScoreInput.value ? parseInt(skillMatchScoreInput.value) : null,
             collaboration_required: collaborationRequiredCheckbox ? collaborationRequiredCheckbox.checked : false,
@@ -2432,7 +2438,7 @@ function displayTaskBreakdown(data) {
             </div>
             
             <p><strong>Breakdown Recommended:</strong> ${data.is_breakdown_recommended ? 'Yes' : 'No'}</p>
-            <p><strong>Analysis:</strong> ${data.reasoning}</p>
+            <p><strong>Analysis:</strong> ${formatReasoningAsBullets(data.reasoning)}</p>
 
             <!-- ── Explainability Panel ───────────────────────────── -->
             ${(data.factors_considered && data.factors_considered.length > 0) || (data.factors_missing && data.factors_missing.length > 0) ? `
@@ -2548,12 +2554,7 @@ function displayTaskBreakdown(data) {
         
         html += `
             <div class="mt-3">
-                <button type="button" class="btn btn-sm btn-success me-2" onclick="createSubtasksFromBreakdown()">
-                    Create as Separate Tasks
-                </button>
-                <button type="button" class="btn btn-sm btn-info" onclick="addBreakdownToDescription()">
-                    Add to Description
-                </button>
+                ${renderSmartBreakdownButtons(data)}
             </div>
         `;
     }
@@ -2565,6 +2566,97 @@ function displayTaskBreakdown(data) {
     
     // Store breakdown data for later use
     window.currentTaskBreakdown = data;
+}
+
+
+/**
+ * Render the appropriate action buttons based on task complexity/size.
+ *
+ * Thresholds:
+ *   complexity >= 8 AND estimated_hours > 16  →  recommend Epic
+ *   Otherwise                                 →  recommend Checklist
+ */
+function renderSmartBreakdownButtons(data) {
+    const complexity = data.complexity_score || 0;
+    // estimated_hours may come from the form, grab it from the input
+    const hoursInput = document.getElementById('id_estimated_hours');
+    const estimatedHours = hoursInput ? parseFloat(hoursInput.value) || 0 : 0;
+    const isEpicCandidate = complexity >= 8 && estimatedHours > 16;
+
+    // Check if we're on the create-task page (no saved task yet) or the task detail page
+    const isCreatePage = window.location.pathname.includes('/create-task');
+
+    if (isEpicCandidate) {
+        if (isCreatePage) {
+            // On create page for epic candidates: primary = save with checklist, secondary = epic
+            return `
+                <div class="alert alert-info py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-bolt me-1"></i>
+                    <strong>Large scope detected</strong> — complexity ${complexity}/10, ${estimatedHours}h estimated.
+                    Click <strong>Save with Checklist</strong> to create the task with sub-tasks tracked inside, or choose Epic to split into separate board cards.
+                </div>
+                <button type="button" class="btn btn-sm btn-success me-2" onclick="saveTaskWithChecklist()">
+                    <i class="fas fa-tasks me-1"></i>Save Task with Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning me-2" onclick="createEpicWithChildren()">
+                    <i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks
+                    <small class="d-block" style="font-size:0.75em;">(hides parent from board)</small>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        } else {
+            return `
+                <div class="alert alert-info py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-bolt me-1"></i>
+                    <strong>Large scope detected</strong> — this task has high complexity (${complexity}/10) and ${estimatedHours}h estimated.
+                    Creating it as an <strong>Epic</strong> keeps the board clean while letting team members own individual child tasks.
+                </div>
+                <button type="button" class="btn btn-sm btn-warning me-2" onclick="createEpicWithChildren()">
+                    <i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success me-2" onclick="createChecklistFromBreakdown()">
+                    <i class="fas fa-tasks me-1"></i>Add as Sub-task Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        }
+    } else {
+        if (isCreatePage) {
+            // On create page: primary = save with checklist
+            return `
+                <div class="alert alert-success py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-check-square me-1"></i>
+                    Click <strong>Save with Checklist</strong> to create this task with the AI sub-tasks tracked as a checklist inside the card.
+                </div>
+                <button type="button" class="btn btn-sm btn-success me-2" onclick="saveTaskWithChecklist()">
+                    <i class="fas fa-tasks me-1"></i>Save Task with Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        } else {
+            return `
+                <div class="alert alert-success py-2 mb-2" style="font-size:0.88em;">
+                    <i class="fas fa-check-square me-1"></i>
+                    AI sub-tasks will be saved as a <strong>checklist inside this card</strong>, keeping the board clean.
+                </div>
+                <button type="button" class="btn btn-sm btn-success me-2" onclick="createChecklistFromBreakdown()">
+                    <i class="fas fa-tasks me-1"></i>Add as Sub-task Checklist
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning me-2" onclick="createEpicWithChildren()">
+                    <i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addBreakdownToDescription()">
+                    <i class="fas fa-file-alt me-1"></i>Add to Description
+                </button>
+            `;
+        }
+    }
 }
 
 /**
@@ -2596,8 +2688,201 @@ function addBreakdownToDescription() {
     alert('Subtask breakdown added to description!');
 }
 
+
 /**
- * Create separate tasks from breakdown
+ * Save the task via the create-task form AND attach checklist items in one step.
+ * Works on the create-task page where no task_id exists yet.
+ * Stores the breakdown data as a hidden field so the server can create
+ * ChecklistItem records immediately after the task is saved.
+ */
+function saveTaskWithChecklist() {
+    const data = window.currentTaskBreakdown;
+    if (!data || !data.subtasks) {
+        alert('No subtask data available. Please generate a breakdown first.');
+        return;
+    }
+
+    const form = document.getElementById('task-create-form');
+    if (!form) {
+        alert('Task creation form not found. Please refresh and try again.');
+        return;
+    }
+
+    // Inject (or update) a hidden field with the AI breakdown JSON
+    let hiddenInput = document.getElementById('checklist_breakdown_data');
+    if (!hiddenInput) {
+        hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'checklist_breakdown_data';
+        hiddenInput.id = 'checklist_breakdown_data';
+        form.appendChild(hiddenInput);
+    }
+    hiddenInput.value = JSON.stringify(data.subtasks);
+
+    // Submit the form normally — the server will create the task + checklist items
+    form.submit();
+}
+
+
+/**
+ * Create checklist items from AI-generated breakdown (Method 1 — Checklist Approach)
+ * Items stay inside the parent card; no new board cards are created.
+ */
+function createChecklistFromBreakdown() {
+    const data = window.currentTaskBreakdown;
+    if (!data || !data.subtasks) {
+        alert('No subtask data available. Please generate a breakdown first.');
+        return;
+    }
+
+    // Determine the task id — we need a saved task
+    const taskIdInput = document.querySelector('input[name="task_id"]') ||
+                        document.querySelector('[data-task-id]');
+    let taskId = null;
+
+    // Method 1: data attribute on the page (task_detail)
+    const detailContainer = document.querySelector('[data-task-id]');
+    if (detailContainer) taskId = detailContainer.dataset.taskId;
+
+    // Method 2: hidden input
+    if (!taskId) {
+        const hiddenInput = document.querySelector('input[name="task_id"]');
+        if (hiddenInput) taskId = hiddenInput.value;
+    }
+
+    // Method 3: URL pattern  /tasks/<id>/
+    if (!taskId) {
+        const urlMatch = window.location.pathname.match(/\/tasks\/(\d+)/);
+        if (urlMatch) taskId = urlMatch[1];
+    }
+
+    if (!taskId) {
+        alert('Please save the task first before adding a checklist. The task needs to exist in the database.');
+        return;
+    }
+
+    if (!confirm(`This will add ${data.subtasks.length} checklist items to this task. Proceed?`)) return;
+
+    const btn = document.querySelector('button[onclick="createChecklistFromBreakdown()"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding…'; }
+
+    fetch('/api/create-checklist-items/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({ task_id: parseInt(taskId), subtasks: data.subtasks })
+    })
+    .then(r => { if (!r.ok) throw new Error('Network error'); return r.json(); })
+    .then(result => {
+        if (result.success) {
+            alert(`✅ Added ${result.created_count} checklist items! Reloading page…`);
+            window.location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    })
+    .catch(err => { console.error(err); alert('Failed to create checklist items.'); })
+    .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-tasks me-1"></i>Add as Sub-task Checklist'; } });
+}
+
+
+/**
+ * Create an Epic from the parent task and populate child tasks (Method 2 — Epic / Child Model)
+ * The parent task is converted to item_type='epic' (hidden from board).
+ * Child tasks appear as standard cards in the column.
+ */
+function createEpicWithChildren() {
+    const data = window.currentTaskBreakdown;
+    if (!data || !data.subtasks) {
+        alert('No subtask data available. Please generate a breakdown first.');
+        return;
+    }
+
+    const predictButton = document.getElementById('predict-deadline-btn');
+    const boardId = predictButton ? predictButton.dataset.boardId : null;
+    if (!boardId) {
+        alert('Board information not found. Please refresh and try again.');
+        return;
+    }
+
+    // Column from URL or form
+    let columnId = null;
+    const pathMatch = window.location.pathname.match(/\/columns\/(\d+)\/create-task/);
+    if (pathMatch) columnId = pathMatch[1];
+    if (!columnId) {
+        const colInput = document.querySelector('input[name="column"]') || document.querySelector('select[name="column"]');
+        if (colInput) columnId = colInput.value;
+    }
+
+    // Existing task id (if on detail page)
+    let taskId = null;
+    const detailEl = document.querySelector('[data-task-id]');
+    if (detailEl) taskId = detailEl.dataset.taskId;
+    if (!taskId) {
+        const urlMatch = window.location.pathname.match(/\/tasks\/(\d+)/);
+        if (urlMatch) taskId = urlMatch[1];
+    }
+
+    const titleInput = document.getElementById('id_title');
+    const descInput = document.getElementById('id_description');
+
+    const msg = taskId
+        ? `This will convert the current task into an Epic (hidden from the board) and create ${data.subtasks.length} child tasks as separate cards. Proceed?`
+        : `This will create an Epic plus ${data.subtasks.length} child tasks on the board. Proceed?`;
+
+    if (!confirm(msg)) return;
+
+    const btn = document.querySelector('button[onclick="createEpicWithChildren()"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating…'; }
+
+    const requestData = {
+        board_id: parseInt(boardId),
+        column_id: columnId ? parseInt(columnId) : null,
+        subtasks: data.subtasks,
+    };
+    if (taskId) {
+        requestData.task_id = parseInt(taskId);
+    } else {
+        requestData.title = titleInput ? titleInput.value.trim() : 'Epic';
+        requestData.description = descInput ? descInput.value : '';
+    }
+
+    fetch('/api/create-epic-children/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(r => { if (!r.ok) throw new Error('Network error'); return r.json(); })
+    .then(result => {
+        if (result.success) {
+            let message = `🎉 Epic "${result.epic_title}" created with ${result.created_count} child tasks!`;
+            if (result.errors && result.errors.length) {
+                message += `\n\n⚠️ Issues:\n${result.errors.join('\n')}`;
+            }
+            alert(message);
+            // Redirect to board to see the new child cards
+            const boardLink = document.querySelector('a[href*="/boards/"]');
+            if (boardLink) {
+                window.location.href = boardLink.href;
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    })
+    .catch(err => { console.error(err); alert('Failed to create Epic.'); })
+    .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks'; } });
+}
+
+
+/**
+ * Create separate tasks from breakdown (legacy — kept for backward compatibility)
  */
 function createSubtasksFromBreakdown() {
     const data = window.currentTaskBreakdown;
@@ -2812,6 +3097,37 @@ function getComplexityBadgeClass(score) {
     if (score >= 6) return 'warning';
     if (score >= 4) return 'info';
     return 'success';
+}
+
+/**
+ * Format AI reasoning text as bullet points.
+ * Splits on sentence-ending patterns like ". -", ". Factor:", or numbered items,
+ * and renders each as a list item for readability.
+ */
+function formatReasoningAsBullets(text) {
+    if (!text) return '';
+    // Split on patterns: ". - ", ". Factor", period followed by a capital factor keyword
+    // Also handle "- " at the start of segments (markdown-style bullets)
+    let segments = text
+        .replace(/\.\s*-\s+/g, '.\n- ')           // ". - Foo" => newline bullet
+        .replace(/\.\s+(?=[A-Z][a-z]+ (?:Level|Impact|Match|Required|Hours|Dependencies|Score|Workload))/g, '.\n- ')  // ". Risk Level" => newline bullet
+        .split('\n')
+        .map(s => s.replace(/^-\s*/, '').trim())
+        .filter(s => s.length > 0);
+
+    if (segments.length <= 1) {
+        // No meaningful split — return as-is
+        return text;
+    }
+
+    // First segment is the base analysis intro, rest are factor adjustments
+    let html = segments[0];
+    html += '<ul class="mt-2 mb-0" style="padding-left:1.2em;">';
+    for (let i = 1; i < segments.length; i++) {
+        html += `<li>${segments[i]}</li>`;
+    }
+    html += '</ul>';
+    return html;
 }
 
 /**

@@ -932,6 +932,13 @@
                                 {% endif %}
                                 {% endwith %}
                                 {% endif %}
+                                {% with cl=task.checklist_progress %}
+                                {% if cl %}
+                                <span class="card-checklist-badge" title="Checklist: {{ cl.completed }}/{{ cl.total }}" style="font-size:.7rem;color:{% if cl.completed == cl.total %}#198754{% else %}#6c757d{% endif %};">
+                                    <i class="fas fa-check-square"></i> {{ cl.completed }}/{{ cl.total }}
+                                </span>
+                                {% endif %}
+                                {% endwith %}
                             </div>
                             {% if task.assigned_to %}
                             <span class="card-avatar" title="{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}">

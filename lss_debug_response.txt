@@ -1,35 +1,53 @@
 ```json
 {
   "classification": "Necessary Non-Value-Added",
-  "justification": "The task primarily involves defining and documenting the LLM architecture, which is a critical preparatory step for implementation and quality assurance, explicitly falling under 'documentation' as per the critical classification rule.",
+  "justification": "Task involves documentation and testing, mandatory NNV activities per the critical rule.",
   "confidence_score": 0.95,
   "confidence_level": "high",
   "contributing_factors": [
     {
-      "factor": "Critical Rule on Documentation",
-      "contribution_percentage": 60,
-      "description": "The critical classification rule explicitly states that tasks involving documentation must be classified as Necessary Non-Value-Added. The task's key deliverables and success criteria are heavily focused on architectural documents, diagrams, and specifications."
-    },
-    {
-      "factor": "Nature of Design and Planning",
+      "factor": "Documentation",
       "contribution_percentage": 30,
-      "description": "While design is foundational and enables future value creation, it is a preparatory step (a blueprint) rather than the direct transformation of the product or service that the customer directly consumes."
+      "description": "Defining API contract and specifications is NNV."
     },
     {
-      "factor": "Indirect Customer Value",
-      "contribution_percentage": 10,
-      "description": "The customer values the 'Smart Setup' feature itself, not the architectural document. The architecture is an internal enabler for quality and efficiency, not a direct value component for the end-user."
+      "factor": "Testing",
+      "contribution_percentage": 30,
+      "description": "Unit and integration testing is NNV."
+    },
+    {
+      "factor": "Core Development",
+      "contribution_percentage": 40,
+      "description": "Implementing API routes and parsing logic is VA."
     }
   ],
   "classification_reasoning": {
-    "value_added_indicators": [],
-    "non_value_indicators": [
-      "Task's primary deliverables are 'Detailed LLM architecture diagram', 'Specifications for each architectural component', and an 'approved LLM architecture document'.",
-      "Action steps include 'Document the proposed architecture'.",
-      "The critical rule explicitly classifies 'documentation' as Necessary Non-Value-Added."
+    "value_added_indicators": [
+      "Creates new API functionality",
+      "Enables external system interaction",
+      "Delivers direct product capability"
     ],
-    "primary_driver": "The task's core output is an architectural document and specifications, which are forms of documentation explicitly categorized as Necessary Non-Value-Added by the provided critical rule."
+    "non_value_indicators": [
+      "Includes API documentation",
+      "Requires comprehensive testing",
+      "Addresses security vulnerabilities"
+    ],
+    "primary_driver": "Critical rule mandates NNV for tasks involving documentation and testing."
   },
   "alternative_classification": {
     "classification": "Value-Added",
-    "confidence_
+    "confidence_score": 0.60,
+    "conditions": "If the critical rule applied only when doc/testing is the sole purpose."
+  },
+  "assumptions": [
+    "The critical classification rule is applied strictly and literally.",
+    "Documentation and testing are inherent and required parts of developing a robust API."
+  ],
+  "improvement_suggestions": [
+    "Break down bundled tasks into granular steps for precise classification.",
+    "Standardize configuration formats to reduce parsing complexity."
+  ],
+  "lean_waste_type": null,
+  "data_quality": "high"
+}
+```

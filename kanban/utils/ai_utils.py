@@ -609,8 +609,8 @@ Classifications: Value-Added (directly transforms the product/service and delive
 
 CRITICAL CLASSIFICATION RULE: Tasks that involve testing, security, quality assurance, compliance, documentation, code review, audit, validation, verification, certification, legal/regulatory requirements, or any form of mandatory oversight MUST be classified as "Necessary Non-Value-Added". These are essential process steps. Only classify a task as "Waste/Eliminate" when it is provably redundant, duplicated effort, or a process step that can be eliminated without any loss of quality, value, or compliance.
 
-Return ONLY valid JSON with NO line breaks inside strings:
-{{"classification":"Value-Added|Necessary Non-Value-Added|Waste/Eliminate","justification":"Brief reason in one sentence","confidence_score":0.XX,"confidence_level":"high|medium|low","contributing_factors":[{{"factor":"Factor1","contribution_percentage":XX,"description":"Brief desc"}}],"classification_reasoning":{{"value_added_indicators":["indicator1"],"non_value_indicators":["indicator1"],"primary_driver":"Main reason"}},"alternative_classification":{{"classification":"Alternative","confidence_score":0.XX,"conditions":"When applies"}},"assumptions":["assumption1"],"improvement_suggestions":["suggestion1"],"lean_waste_type":null,"data_quality":"high|medium|low"}}"""
+IMPORTANT: Keep ALL string values SHORT (under 80 characters each). Do NOT use newlines or apostrophes inside strings. Return ONLY compact valid JSON:
+{{"classification":"Value-Added|Necessary Non-Value-Added|Waste/Eliminate","justification":"one sentence","confidence_score":0.XX,"confidence_level":"high|medium|low","contributing_factors":[{{"factor":"Name","contribution_percentage":XX,"description":"short desc"}}],"classification_reasoning":{{"value_added_indicators":["short indicator"],"non_value_indicators":["short indicator"],"primary_driver":"main reason"}},"alternative_classification":{{"classification":"Alt","confidence_score":0.XX,"conditions":"when"}},"assumptions":["short"],"improvement_suggestions":["short"],"lean_waste_type":null,"data_quality":"high|medium|low"}}"""
         
         response_text = generate_ai_content(prompt, task_type='lean_classification')
         if response_text:
@@ -719,26 +719,127 @@ Return ONLY valid JSON with NO line breaks inside strings:
                     
                     return result if 'classification' in result else None
                 
-                # Try extraction from truncated response first
+                # Strategy 0a: Complete truncated JSON by closing open structures
+                def complete_truncated_json(text):
+                    """Try to close truncated JSON strings/arrays/objects so it can be parsed."""
+                    # Track nesting of structures
+                    in_string = False
+                    escape_next = False
+                    stack = []  # track open { and [
+                    last_good = 0
+                    
+                    for i, ch in enumerate(text):
+                        if escape_next:
+                            escape_next = False
+                            continue
+                        if ch == '\\':
+                            escape_next = True
+                            continue
+                        if ch == '"' and not escape_next:
+                            in_string = not in_string
+                            continue
+                        if in_string:
+                            continue
+                        if ch == '{':
+                            stack.append('}')
+                        elif ch == '[':
+                            stack.append(']')
+                        elif ch in ('}', ']'):
+                            if stack and stack[-1] == ch:
+                                stack.pop()
+                        last_good = i
+                    
+                    # If we ended inside a string, close it
+                    repaired = text
+                    if in_string:
+                        repaired += '"'
+                    # Close any open arrays/objects
+                    # First, remove any trailing partial key-value pair (e.g. "key": "unfinished)
+                    # by trimming back to last complete value
+                    while stack:
+                        closer = stack.pop()
+                        repaired += closer
+                    
+                    return repaired
+                
+                try:
+                    completed = complete_truncated_json(response_text)
+                    parsed = json.loads(completed)
+                    logger.info(f"Recovered truncated JSON via structure completion: {list(parsed.keys())}")
+                    # Ensure all expected keys exist with defaults
+                    parsed.setdefault('contributing_factors', [])
+                    parsed.setdefault('classification_reasoning', {
+                        'value_added_indicators': [], 'non_value_indicators': [], 'primary_driver': 'Task analysis'
+                    })
+                    parsed.setdefault('alternative_classification', None)
+                    parsed.setdefault('assumptions', [])
+                    parsed.setdefault('improvement_suggestions', [])
+                    parsed.setdefault('lean_waste_type', None)
+                    return parsed
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Strategy 0a (complete truncated JSON) failed: {e}")
+                
+                # Try extraction from truncated response as fallback
                 extracted = extract_from_truncated_json(response_text)
                 if extracted and 'classification' in extracted:
                     logger.info(f"Extracted fields from truncated JSON: {list(extracted.keys())}")
-                    # Build a complete response with extracted data
+                    
+                    # Also try to extract contributing_factors via regex
+                    cf_matches = re.findall(
+                        r'\{\s*"factor"\s*:\s*"([^"]+)"\s*,\s*"contribution_percentage"\s*:\s*(\d+)\s*,\s*"description"\s*:\s*"([^"]+)"\s*\}',
+                        response_text
+                    )
+                    contributing_factors = [
+                        {"factor": m[0], "contribution_percentage": int(m[1]), "description": m[2]}
+                        for m in cf_matches
+                    ] if cf_matches else []
+                    
+                    # Extract value_added_indicators and non_value_indicators
+                    va_matches = re.findall(r'"value_added_indicators"\s*:\s*\[([^\]]*)\]', response_text)
+                    va_indicators = [s.strip().strip('"') for s in va_matches[0].split('",') if s.strip().strip('"')] if va_matches else []
+                    
+                    nv_matches = re.findall(r'"non_value_indicators"\s*:\s*\[([^\]]*)\]', response_text)
+                    nv_indicators = [s.strip().strip('"') for s in nv_matches[0].split('",') if s.strip().strip('"')] if nv_matches else []
+                    
+                    primary_match = re.search(r'"primary_driver"\s*:\s*"([^"]+)"', response_text)
+                    primary_driver = primary_match.group(1) if primary_match else (extracted.get('justification', 'Task analysis')[:100] if extracted.get('justification') else 'Task analysis')
+                    
+                    # Extract assumptions
+                    assumptions_match = re.findall(r'"assumptions"\s*:\s*\[([^\]]*)\]', response_text)
+                    assumptions = [s.strip().strip('"') for s in assumptions_match[0].split('",') if s.strip().strip('"')] if assumptions_match else []
+                    
+                    # Extract alternative_classification
+                    alt_class_match = re.search(r'"alternative_classification"\s*:\s*\{[^}]*"classification"\s*:\s*"([^"]+)"', response_text)
+                    alt_conf_match = re.search(r'"alternative_classification"\s*:\s*\{[^}]*"confidence_score"\s*:\s*([\d.]+)', response_text)
+                    alt_cond_match = re.search(r'"alternative_classification"\s*:\s*\{[^}]*"conditions"\s*:\s*"([^"]+)"', response_text)
+                    alternative = None
+                    if alt_class_match:
+                        alternative = {
+                            "classification": alt_class_match.group(1),
+                            "confidence_score": float(alt_conf_match.group(1)) if alt_conf_match else 0.1,
+                            "conditions": alt_cond_match.group(1) if alt_cond_match else ""
+                        }
+                    
+                    # Extract data_quality
+                    dq_match = re.search(r'"data_quality"\s*:\s*"(high|medium|low)"', response_text)
+                    
+                    # Build a complete response with all extracted data
                     return {
                         "classification": extracted.get('classification', 'Value-Added'),
                         "justification": extracted.get('justification', 'Classification based on task analysis.'),
                         "confidence_score": extracted.get('confidence_score', 0.7),
                         "confidence_level": extracted.get('confidence_level', 'medium'),
-                        "contributing_factors": [],
+                        "contributing_factors": contributing_factors,
                         "classification_reasoning": {
-                            "value_added_indicators": [],
-                            "non_value_indicators": [],
-                            "primary_driver": extracted.get('justification', 'Task analysis')[:100] if extracted.get('justification') else 'Task analysis'
+                            "value_added_indicators": va_indicators,
+                            "non_value_indicators": nv_indicators,
+                            "primary_driver": primary_driver
                         },
-                        "alternative_classification": None,
-                        "assumptions": [],
+                        "alternative_classification": alternative,
+                        "assumptions": assumptions,
                         "improvement_suggestions": [],
-                        "lean_waste_type": None
+                        "lean_waste_type": None,
+                        "data_quality": dq_match.group(1) if dq_match else "medium"
                     }
                 
                 # Aggressive cleanup strategy: Fix multi-line strings
@@ -1625,13 +1726,38 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 pess_match = re.search(r'"pessimistic_days"\s*:\s*(\d+)', response_text)
                 ai_response['pessimistic_days'] = int(pess_match.group(1)) if pess_match else ai_response['estimated_days_to_complete'] + 2
                 
-                # Default reasoning
-                ai_response['reasoning'] = f"Estimated based on task complexity ({complexity_score}/10)"
-                ai_response['risk_factors'] = ["Timeline based on complexity estimate"]
-                ai_response['confidence_score'] = 0.3
-                ai_response['contributing_factors'] = [{"name": "Task Complexity", "contribution_percentage": 80, "description": f"Primary driver at {complexity_score}/10"}]
-                ai_response['assumptions'] = ["No historical data available; estimate based on complexity alone"]
-                ai_response['data_quality'] = "low"
+                # Try to extract reasoning from the malformed JSON
+                reasoning_match = re.search(r'"reasoning"\s*:\s*"([^"]+)"', response_text)
+                ai_response['reasoning'] = reasoning_match.group(1) if reasoning_match else f"Estimated based on task complexity ({complexity_score}/10)"
+                
+                # Try to extract risk_factors
+                risk_factors_matches = re.findall(r'"risk_factors"\s*:\s*\[([^\]]*)\]', response_text)
+                if risk_factors_matches:
+                    ai_response['risk_factors'] = [s.strip().strip('"') for s in risk_factors_matches[0].split(',') if s.strip().strip('"')]
+                else:
+                    ai_response['risk_factors'] = ["Timeline based on complexity estimate"]
+                
+                # Try to extract confidence_score
+                conf_score_match = re.search(r'"confidence_score"\s*:\s*([\d.]+)', response_text)
+                ai_response['confidence_score'] = float(conf_score_match.group(1)) if conf_score_match else 0.3
+                
+                # Try to extract contributing_factors array
+                cf_matches = re.findall(r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"contribution_percentage"\s*:\s*(\d+)\s*,\s*"description"\s*:\s*"([^"]+)"\s*\}', response_text)
+                if cf_matches:
+                    ai_response['contributing_factors'] = [{"name": m[0], "contribution_percentage": int(m[1]), "description": m[2]} for m in cf_matches]
+                else:
+                    ai_response['contributing_factors'] = [{"name": "Task Complexity", "contribution_percentage": 80, "description": f"Primary driver at {complexity_score}/10"}]
+                
+                # Try to extract assumptions
+                assumptions_match = re.findall(r'"assumptions"\s*:\s*\[([^\]]*)\]', response_text)
+                if assumptions_match:
+                    ai_response['assumptions'] = [s.strip().strip('"') for s in assumptions_match[0].split(',') if s.strip().strip('"')]
+                else:
+                    ai_response['assumptions'] = ["No historical data available; estimate based on complexity alone"]
+                
+                # Try to extract data_quality
+                dq_match = re.search(r'"data_quality"\s*:\s*"(high|medium|low)"', response_text)
+                ai_response['data_quality'] = dq_match.group(1) if dq_match else "low"
                 
                 logger.info(f"Deadline prediction extracted via regex fallback: {ai_response['estimated_days_to_complete']} days")
             
