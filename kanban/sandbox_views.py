@@ -13,6 +13,7 @@ Endpoints:
 import logging
 
 from django.contrib.auth.decorators import login_required
+from django.db import models
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -1225,19 +1226,118 @@ def _leave_demo_org(user):
 
 
 def _purge_existing_sandbox(user):
-    """Delete any existing sandbox for the user (boards + DemoSandbox record)."""
-    from kanban.models import DemoSandbox, Board
+    """
+    Delete any existing sandbox for the user (boards + DemoSandbox record).
+
+    Also cleans up:
+    - Models with SET_NULL on Board FK (orphaned after board deletion)
+    - User-scoped data that isn't board-scoped (DC briefings, notifications, etc.)
+    """
+    from kanban.models import DemoSandbox, Board, Task
+
+    sandbox_boards = Board.objects.filter(
+        owner=user,
+        is_sandbox_copy=True,
+        is_official_demo_board=False,
+        is_seed_demo_data=False,
+    )
+    sandbox_board_ids = list(sandbox_boards.values_list('id', flat=True))
+
     try:
         sandbox = user.demo_sandbox
         # Restore assignments before deleting
         _restore_demo_task_assignments(sandbox)
-        # Delete sandbox boards (never official demo boards)
-        Board.objects.filter(
-            owner=user,
-            is_sandbox_copy=True,
-            is_official_demo_board=False,
-            is_seed_demo_data=False,
-        ).delete()
+    except Exception:
+        pass
+
+    if sandbox_board_ids:
+        sandbox_task_ids = list(
+            Task.objects.filter(column__board_id__in=sandbox_board_ids)
+            .values_list('id', flat=True)
+        )
+
+        # ── Models with SET_NULL on Board FK (won't cascade-delete) ──
+        try:
+            from ai_assistant.models import (
+                AIAssistantMessage, AIAssistantSession, AIAssistantAnalytics,
+            )
+            orphan_sessions = AIAssistantSession.objects.filter(board_id__in=sandbox_board_ids)
+            AIAssistantMessage.objects.filter(session__in=orphan_sessions).delete()
+            orphan_sessions.delete()
+            AIAssistantAnalytics.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            pass
+
+        try:
+            from kanban.models import CalendarEvent
+            CalendarEvent.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            pass
+
+        try:
+            from knowledge_graph.models import MemoryNode, MemoryConnection
+            orphan_nodes = MemoryNode.objects.filter(board_id__in=sandbox_board_ids)
+            orphan_node_ids = list(orphan_nodes.values_list('id', flat=True))
+            if orphan_node_ids:
+                MemoryConnection.objects.filter(
+                    models.Q(from_node_id__in=orphan_node_ids)
+                    | models.Q(to_node_id__in=orphan_node_ids)
+                ).delete()
+                orphan_nodes.delete()
+        except Exception:
+            pass
+
+        try:
+            from wiki.models import WikiLink
+            WikiLink.objects.filter(board_id__in=sandbox_board_ids).delete()
+            if sandbox_task_ids:
+                WikiLink.objects.filter(task_id__in=sandbox_task_ids).delete()
+        except Exception:
+            pass
+
+        # ── Now delete sandbox boards (cascades most other models) ──
+        sandbox_boards.delete()
+
+    # ── User-scoped data (not board-scoped, survives board deletion) ──
+    try:
+        from decision_center.models import DecisionItem, DecisionCenterBriefing
+        DecisionItem.objects.filter(created_for=user).delete()
+        DecisionCenterBriefing.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from django.core.cache import cache
+        cache.delete(f'dc_widget_{user.id}_demo')
+        cache.delete(f'dc_widget_{user.id}_real')
+    except Exception:
+        pass
+
+    try:
+        from messaging.models import Notification
+        Notification.objects.filter(recipient=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from ai_assistant.models import AIAssistantMessage, AIAssistantSession
+        # Also clean any user-owned sessions not tied to a board
+        user_sessions = AIAssistantSession.objects.filter(user=user)
+        AIAssistantMessage.objects.filter(session__in=user_sessions).delete()
+        user_sessions.delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.models import CalendarEvent
+        # Clean user-created calendar events (not board-scoped ones)
+        CalendarEvent.objects.filter(created_by=user, board__isnull=True).delete()
+    except Exception:
+        pass
+
+    # ── DemoSandbox record ──
+    try:
+        sandbox = user.demo_sandbox
         sandbox.delete()
     except Exception:
         pass
