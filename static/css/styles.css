@@ -479,16 +479,9 @@ body {
     background: var(--link-color);
 }
 
-/* Visual indicator for scrollable columns */
+/* Visual indicator for scrollable columns - removed ↕ arrow */
 .kanban-column.has-scroll .kanban-column-header::after {
-    content: '↕';
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 12px;
-    color: rgba(0, 123, 255, 0.8);
-    font-weight: bold;
+    display: none;
 }
 
 .kanban-column-tasks.drag-over {
