@@ -115,23 +115,27 @@
                     </div>
                     <div class="flex-grow-1">
                         <h5 class="mb-1">{{ user.username }}</h5>
-                        <p class="text-muted mb-2" style="font-size:0.875rem;">{{ user.email }}</p>
-                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <p class="text-muted mb-1" style="font-size:0.875rem;">{{ user.email }}</p>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
                             {% if profile.is_admin %}
                                 <span class="badge bg-danger">Admin</span>
                             {% else %}
                                 <span class="badge bg-secondary">Member</span>
                             {% endif %}
                             {% if profile.organization %}
-                                <span class="badge bg-info">{{ profile.organization.name }}</span>
-                            {% endif %}
-                            <span class="text-muted" style="font-size:0.8rem;"><i class="fas fa-briefcase me-1"></i>{{ profile.weekly_capacity_hours }}h/wk &bull; {{ profile.utilization_percentage|floatformat:0 }}% utilized</span>
-                            {% if profile.skills %}
-                                {% for skill in profile.skills %}
-                                    {% if skill.name %}<span class="badge bg-success">{{ skill.name }}</span>{% endif %}
-                                {% endfor %}
+                                <span class="badge bg-info text-dark">{{ profile.organization.name }}</span>
                             {% endif %}
                         </div>
+                        <div class="text-muted mb-2" style="font-size:0.8rem;">
+                            <i class="fas fa-briefcase me-1"></i>{{ profile.weekly_capacity_hours }}h/wk &bull; {{ profile.utilization_percentage|floatformat:0 }}% utilized
+                        </div>
+                        {% if profile.skills %}
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            {% for skill in profile.skills %}
+                                {% if skill.name %}<span class="badge" style="background-color:#e0f2fe;color:#0c4a6e;font-weight:500;">{{ skill.name }}</span>{% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
