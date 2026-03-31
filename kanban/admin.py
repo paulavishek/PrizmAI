@@ -7,7 +7,7 @@ from .models import (
     CalendarEvent,
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, Milestone, StrategicFollower,
-    UserFavorite,
+    UserFavorite, ChecklistItem,
 )
 from .automation_models import (
     BoardAutomation, ScheduledAutomation,
@@ -202,12 +202,20 @@ class TaskLabelAdmin(admin.ModelAdmin):
     list_filter = ('board',)
     search_fields = ('name', 'board__name')
 
+class ChecklistItemInline(admin.TabularInline):
+    model = ChecklistItem
+    extra = 0
+    fields = ('position', 'title', 'is_completed', 'priority', 'estimated_effort', 'source')
+    readonly_fields = ('source',)
+
+
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ('title', 'column', 'priority', 'due_date', 'assigned_to', 'created_by', 'parent_task')
-    list_filter = ('column', 'priority', 'due_date', 'created_at')
+    list_display = ('title', 'column', 'priority', 'item_type', 'due_date', 'assigned_to', 'created_by', 'parent_task')
+    list_filter = ('column', 'priority', 'item_type', 'due_date', 'created_at')
     search_fields = ('title', 'description')
     filter_horizontal = ('labels', 'related_tasks')
+    inlines = [ChecklistItemInline]
     
     fieldsets = (
         ('Basic Information', {

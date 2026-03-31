@@ -17,7 +17,7 @@ from django.utils import timezone
 # Setup logging
 logger = logging.getLogger(__name__)
 
-from kanban.models import Task, Comment, Board, Column, TaskActivity
+from kanban.models import Task, Comment, Board, Column, TaskActivity, ChecklistItem
 from kanban.decorators import demo_write_guard, demo_ai_guard
 from accounts.models import UserProfile
 from django.contrib.auth.models import User
@@ -2024,7 +2024,8 @@ def analyze_workflow_optimization_api(request):
 @demo_ai_guard
 def create_subtasks_api(request):
     """
-    API endpoint to create multiple tasks from AI-generated subtask breakdown
+    API endpoint to create multiple tasks from AI-generated subtask breakdown.
+    Supports optional parent_task_id to link created tasks to a parent.
     """
     try:
         data = json.loads(request.body)
@@ -2032,6 +2033,7 @@ def create_subtasks_api(request):
         column_id = data.get('column_id')
         subtasks = data.get('subtasks', [])
         original_task_title = data.get('original_task_title', '')
+        parent_task_id = data.get('parent_task_id')
         if not board_id or not subtasks:
             return JsonResponse({'error': 'Missing required fields (board_id, subtasks)'}, status=400)
               # Verify board exists
@@ -2050,6 +2052,14 @@ def create_subtasks_api(request):
         
         created_tasks = []
         errors = []
+
+        # Resolve optional parent task
+        parent_task_obj = None
+        if parent_task_id:
+            try:
+                parent_task_obj = Task.objects.get(id=parent_task_id)
+            except Task.DoesNotExist:
+                pass  # Proceed without parent if invalid
         
         for i, subtask_data in enumerate(subtasks):
             try:
@@ -2101,6 +2111,7 @@ def create_subtasks_api(request):
                     priority=priority,
                     due_date=due_date,
                     created_by=request.user,
+                    parent_task=parent_task_obj,
                     position=Task.objects.filter(column=column).count(),  # Add to end
                     is_seed_demo_data=False  # User-created, not seed data
                 )
@@ -2129,6 +2140,311 @@ def create_subtasks_api(request):
         return JsonResponse(response_data)
         
     except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Checklist API Endpoints ──────────────────────────────────────────────────
+
+@login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def create_checklist_from_breakdown(request):
+    """
+    Create ChecklistItem records from AI-generated subtask breakdown.
+    Items are linked to the parent task instead of creating separate board cards.
+    """
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        subtasks = data.get('subtasks', [])
+
+        if not task_id or not subtasks:
+            return JsonResponse({'error': 'Missing required fields (task_id, subtasks)'}, status=400)
+
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        created_items = []
+        errors = []
+        existing_count = task.checklist_items.count()
+
+        for i, subtask_data in enumerate(subtasks):
+            try:
+                title = subtask_data.get('title', '').strip()
+                if not title:
+                    errors.append(f"Item {i + 1}: Title is required")
+                    continue
+
+                description = subtask_data.get('description', '').strip()
+                estimated_effort = subtask_data.get('estimated_effort', '')
+                priority = subtask_data.get('priority', 'medium').lower()
+                if priority not in ('low', 'medium', 'high', 'urgent'):
+                    priority = 'medium'
+
+                item = ChecklistItem.objects.create(
+                    task=task,
+                    title=title,
+                    description=description,
+                    estimated_effort=estimated_effort,
+                    priority=priority,
+                    position=existing_count + i,
+                    source='ai_generated',
+                )
+                created_items.append({
+                    'id': item.id,
+                    'title': item.title,
+                    'priority': item.priority,
+                    'estimated_effort': item.estimated_effort,
+                })
+            except Exception as e:
+                errors.append(f"Item {i + 1}: {str(e)}")
+
+        response_data = {
+            'success': True,
+            'created_count': len(created_items),
+            'total_items': len(subtasks),
+            'items': created_items,
+            'checklist_progress': task.checklist_progress,
+        }
+        if errors:
+            response_data['errors'] = errors
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in create_checklist_from_breakdown: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["PATCH"])
+@demo_write_guard
+def toggle_checklist_item(request, item_id):
+    """Toggle completion status of a checklist item."""
+    try:
+        item = get_object_or_404(ChecklistItem, id=item_id)
+        board = item.task.column.board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        item.is_completed = not item.is_completed
+        if item.is_completed:
+            item.completed_at = timezone.now()
+            item.completed_by = request.user
+        else:
+            item.completed_at = None
+            item.completed_by = None
+        item.save()
+
+        return JsonResponse({
+            'success': True,
+            'item_id': item.id,
+            'is_completed': item.is_completed,
+            'checklist_progress': item.task.checklist_progress,
+        })
+    except Exception as e:
+        logger.error(f"Error in toggle_checklist_item: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+@demo_write_guard
+def delete_checklist_item(request, item_id):
+    """Delete a checklist item."""
+    try:
+        item = get_object_or_404(ChecklistItem, id=item_id)
+        board = item.task.column.board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        task = item.task
+        item.delete()
+        return JsonResponse({
+            'success': True,
+            'checklist_progress': task.checklist_progress,
+        })
+    except Exception as e:
+        logger.error(f"Error in delete_checklist_item: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def reorder_checklist_items(request):
+    """Reorder checklist items by updating their positions."""
+    try:
+        data = json.loads(request.body)
+        item_order = data.get('item_order', [])  # list of item IDs in new order
+        if not item_order:
+            return JsonResponse({'error': 'item_order is required'}, status=400)
+
+        for position, item_id in enumerate(item_order):
+            ChecklistItem.objects.filter(id=item_id).update(position=position)
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        logger.error(f"Error in reorder_checklist_items: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def add_checklist_item(request):
+    """Add a single manual checklist item to a task."""
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        title = data.get('title', '').strip()
+
+        if not task_id or not title:
+            return JsonResponse({'error': 'task_id and title are required'}, status=400)
+
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        item = ChecklistItem.objects.create(
+            task=task,
+            title=title,
+            position=task.checklist_items.count(),
+            source='manual',
+        )
+        return JsonResponse({
+            'success': True,
+            'item': {
+                'id': item.id,
+                'title': item.title,
+                'is_completed': False,
+                'source': 'manual',
+            },
+            'checklist_progress': task.checklist_progress,
+        })
+    except Exception as e:
+        logger.error(f"Error in add_checklist_item: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Epic API Endpoints ───────────────────────────────────────────────────────
+
+@login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def create_epic_with_children(request):
+    """
+    Convert an existing task into an Epic and create child tasks from
+    AI-generated subtask breakdown.  If no task_id is provided the Epic
+    is created from scratch using the supplied title/description.
+    """
+    try:
+        data = json.loads(request.body)
+        board_id = data.get('board_id')
+        column_id = data.get('column_id')
+        task_id = data.get('task_id')  # existing task to convert
+        subtasks = data.get('subtasks', [])
+        epic_title = data.get('title', '')
+        epic_description = data.get('description', '')
+
+        if not board_id or not subtasks:
+            return JsonResponse({'error': 'Missing required fields (board_id, subtasks)'}, status=400)
+
+        board = get_object_or_404(Board, id=board_id)
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        # Resolve target column for child tasks
+        if column_id:
+            column = get_object_or_404(Column, id=column_id, board=board)
+        else:
+            column = Column.objects.filter(board=board).order_by('position').first()
+            if not column:
+                return JsonResponse({'error': 'No columns found in board'}, status=400)
+
+        # Convert existing task or create new epic
+        if task_id:
+            epic_task = get_object_or_404(Task, id=task_id)
+            epic_task.item_type = 'epic'
+            epic_task.save(update_fields=['item_type'])
+        else:
+            if not epic_title:
+                return JsonResponse({'error': 'title is required when creating a new epic'}, status=400)
+            epic_task = Task.objects.create(
+                title=epic_title,
+                description=epic_description,
+                column=column,
+                item_type='epic',
+                created_by=request.user,
+                position=Task.objects.filter(column=column).count(),
+                is_seed_demo_data=False,
+            )
+
+        created_children = []
+        errors = []
+
+        for i, subtask_data in enumerate(subtasks):
+            try:
+                title = subtask_data.get('title', '').strip()
+                if not title:
+                    errors.append(f"Subtask {i + 1}: Title is required")
+                    continue
+
+                description = subtask_data.get('description', '').strip()
+                estimated_effort = subtask_data.get('estimated_effort', '')
+                priority = subtask_data.get('priority', 'medium').lower()
+                if priority not in ('low', 'medium', 'high', 'urgent'):
+                    priority = 'medium'
+
+                if estimated_effort:
+                    if description:
+                        description += f"\n\n**Estimated Effort:** {estimated_effort}"
+                    else:
+                        description = f"**Estimated Effort:** {estimated_effort}"
+
+                # Parse estimated effort for due_date
+                due_date = None
+                if estimated_effort:
+                    import re
+                    days_match = re.search(r'(\d+)', estimated_effort)
+                    if days_match and 'day' in estimated_effort.lower():
+                        due_date = timezone.now() + timedelta(days=int(days_match.group(1)))
+
+                child = Task.objects.create(
+                    title=title,
+                    description=description,
+                    column=column,
+                    priority=priority,
+                    due_date=due_date,
+                    parent_task=epic_task,
+                    created_by=request.user,
+                    position=Task.objects.filter(column=column).count(),
+                    is_seed_demo_data=False,
+                )
+                created_children.append({
+                    'id': child.id,
+                    'title': child.title,
+                    'priority': child.priority,
+                })
+            except Exception as e:
+                errors.append(f"Subtask {i + 1}: {str(e)}")
+
+        response_data = {
+            'success': True,
+            'epic_id': epic_task.id,
+            'epic_title': epic_task.title,
+            'created_count': len(created_children),
+            'total_subtasks': len(subtasks),
+            'created_children': created_children,
+        }
+        if errors:
+            response_data['errors'] = errors
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in create_epic_with_children: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
 

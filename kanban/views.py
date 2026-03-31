@@ -1683,6 +1683,11 @@ def board_detail(request, board_id):
     )
 
     # ── Annotate tasks with overdue / at-risk flags for card rendering ──
+    # Prefetch checklist items for checklist badge on cards
+    from django.db.models import Count, Q as _Q
+    tasks = tasks.select_related('assigned_to', 'assigned_to__profile', 'column').prefetch_related('labels', 'checklist_items')
+    tasks = list(tasks)  # evaluate once
+
     today = timezone.now()
     for t in tasks:
         t.is_overdue = (
@@ -1786,6 +1791,7 @@ def task_detail(request, task_id):
             'subtasks',
             'related_tasks',
             'dependencies',
+            'checklist_items',
             Prefetch('file_attachments', queryset=TaskFile.objects.filter(deleted_at__isnull=True).select_related('uploaded_by'))
         ),
         id=task_id
@@ -2151,6 +2157,30 @@ def create_task(request, board_id, column_id=None):
                 task.save()
                 # Save many-to-many relationships
                 form.save_m2m()
+                
+                # ── Create checklist items from AI breakdown (if provided) ──
+                checklist_json = request.POST.get('checklist_breakdown_data', '').strip()
+                if checklist_json:
+                    try:
+                        import json as _json
+                        from kanban.models import ChecklistItem
+                        subtask_list = _json.loads(checklist_json)
+                        if isinstance(subtask_list, list):
+                            for idx, st in enumerate(subtask_list):
+                                title = (st.get('title') or '').strip()
+                                if not title:
+                                    continue
+                                ChecklistItem.objects.create(
+                                    task=task,
+                                    title=title,
+                                    description=(st.get('description') or '').strip(),
+                                    position=idx,
+                                    estimated_effort=st.get('estimated_effort', ''),
+                                    priority=st.get('priority', 'medium'),
+                                    source='ai_generated',
+                                )
+                    except (ValueError, TypeError):
+                        pass  # malformed JSON — task still created, just skip checklist
                 
                 # Record activity (only for authenticated users)
                 if request.user.is_authenticated:
@@ -4992,7 +5022,7 @@ def task_quick_view(request, task_id):
         Task.objects.select_related(
             'column', 'column__board', 'assigned_to', 'assigned_to__profile',
             'created_by',
-        ).prefetch_related('labels', 'dependencies', 'subtasks'),
+        ).prefetch_related('labels', 'dependencies', 'subtasks', 'checklist_items'),
         id=task_id,
     )
     board = task.column.board

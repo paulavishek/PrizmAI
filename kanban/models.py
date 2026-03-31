@@ -1254,16 +1254,17 @@ class Task(models.Model):
         help_text="Timestamp when the task last entered its current column (used for WIP age calculation)"
     )
 
-    # Item Type (task vs milestone)
+    # Item Type (task vs milestone vs epic)
     ITEM_TYPE_CHOICES = [
         ('task', 'Task'),
         ('milestone', 'Milestone'),
+        ('epic', 'Epic'),
     ]
     item_type = models.CharField(
         max_length=20,
         choices=ITEM_TYPE_CHOICES,
         default='task',
-        help_text="Whether this item is a regular task or a milestone marker"
+        help_text="Whether this item is a regular task, a milestone marker, or an epic container"
     )
 
     MILESTONE_STATUS_CHOICES = [
@@ -1299,6 +1300,31 @@ class Task(models.Model):
     
     def __str__(self):
         return self.title
+
+    @property
+    def is_epic(self):
+        """Convenience check for epic item type."""
+        return self.item_type == 'epic'
+
+    @property
+    def checklist_progress(self):
+        """Return checklist completion dict {completed, total} or None if no items."""
+        items = self.checklist_items.all()
+        total = items.count()
+        if total == 0:
+            return None
+        completed = items.filter(is_completed=True).count()
+        return {'completed': completed, 'total': total}
+
+    @property
+    def checklist_percentage(self):
+        """Return checklist completion percentage (0-100) or None if no items."""
+        progress = self.checklist_progress
+        if progress is None:
+            return None
+        if progress['total'] == 0:
+            return 0
+        return int((progress['completed'] / progress['total']) * 100)
 
     @property
     def progress_status(self):
@@ -1456,6 +1482,44 @@ class Task(models.Model):
             return avg_duration / baseline
         
         return 1.0
+
+class ChecklistItem(models.Model):
+    """Individual checklist item within a task — used for AI-generated sub-task breakdowns."""
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('urgent', 'Urgent'),
+    ]
+    SOURCE_CHOICES = [
+        ('manual', 'Manual'),
+        ('ai_generated', 'AI Generated'),
+    ]
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='checklist_items')
+    title = models.CharField(max_length=300)
+    description = models.TextField(blank=True, null=True)
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    completed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, blank=True, null=True, related_name='completed_checklist_items'
+    )
+    position = models.IntegerField(default=0)
+    estimated_effort = models.CharField(max_length=50, blank=True, help_text="e.g. '2.5 hrs', '1 day'")
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position', 'created_at']
+        indexes = [
+            models.Index(fields=['task', 'position']),
+        ]
+
+    def __str__(self):
+        status = '✓' if self.is_completed else '○'
+        return f"[{status}] {self.title}"
+
 
 class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='comments')
