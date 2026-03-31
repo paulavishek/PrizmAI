@@ -1449,6 +1449,15 @@ def create_board(request):
                 board=board, user=request.user,
                 defaults={'role': 'owner', 'added_by': request.user}
             )
+
+            # Auto-add demo personas when creating a board in demo/sandbox mode
+            if demo_mode:
+                demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                for demo_user in User.objects.filter(username__in=demo_usernames):
+                    BoardMembership.objects.get_or_create(
+                        board=board, user=demo_user,
+                        defaults={'role': 'member'},
+                    )
             
             # Log board creation
             log_model_change('board.created', board, request.user, request)
