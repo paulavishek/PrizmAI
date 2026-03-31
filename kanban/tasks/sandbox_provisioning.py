@@ -160,6 +160,15 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception:
         pass
 
+    # Regenerate Decision Center items so the dashboard/DC page
+    # show fresh, accurate counts immediately after provisioning.
+    try:
+        from decision_center.tasks import collect_for_user, generate_briefing_for_user
+        collect_for_user(user)
+        generate_briefing_for_user(user)
+    except Exception:
+        pass
+
     redirect_url = '/dashboard/'
     _send_provision_status(user_id, 'Your workspace is ready!', 100)
     _send_provision_result(user_id, {
