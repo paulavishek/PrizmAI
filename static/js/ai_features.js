@@ -988,30 +988,10 @@ function predictTaskDeadline(taskData, callback) {
     if (aiSpinner) aiSpinner.classList.remove('d-none');
     if (predictButton) predictButton.disabled = true;
 
-    // Use progressive disclosure if the library is loaded
-    if (typeof triggerAITask === 'function') {
-        triggerAITask('/api/predict-deadline/', {
-            method: 'POST',
-            body: taskData,
-            onStatus: function(msg) {
-                var statusEl = document.getElementById('deadline-ai-status');
-                if (statusEl) statusEl.textContent = msg;
-            },
-            onResult: function(data) {
-                if (aiSpinner) aiSpinner.classList.add('d-none');
-                if (predictButton) predictButton.disabled = false;
-                if (callback) callback(null, data);
-            },
-            onError: function(msg) {
-                if (aiSpinner) aiSpinner.classList.add('d-none');
-                if (predictButton) predictButton.disabled = false;
-                if (callback) callback(new Error(msg), null);
-            },
-        });
-        return;
-    }
-
-    // Fallback: synchronous fetch (original behavior)
+    // Always use synchronous fetch for deadline prediction.
+    // The async Celery+WebSocket path causes frequent timeouts because
+    // the AI generation can take 60s+ and the WebSocket disconnects
+    // before the result arrives.  Synchronous fetch is more reliable.
     fetch('/api/predict-deadline/', {
         method: 'POST',
         headers: {
@@ -1489,6 +1469,9 @@ function initDeadlinePrediction() {
 function displayDeadlinePrediction(data) {
     const resultDiv = document.getElementById('deadline-prediction-result');
     if (!resultDiv) return;
+    
+    // Store deadline prediction globally so priority suggestion can use it
+    window.currentDeadlinePrediction = data;
     
     // Use AIExplainability module for enhanced visualization
     let html = `

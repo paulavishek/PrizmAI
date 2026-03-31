@@ -565,20 +565,17 @@ class PrioritySuggestionWidget {
     
     /**
      * Setup auto-triggers for suggestions
+     *
+     * DESIGN NOTE: Priority suggestion should NOT auto-fire on due-date change.
+     * Accurate priority requires AI Complexity Analysis and AI Deadline Prediction
+     * to have completed first. Auto-firing before those are available produces
+     * a decision based on incomplete data. The user should click "Suggest"
+     * manually after running complexity analysis and deadline prediction.
      */
     _setupAutoTriggers() {
-        // Auto-suggest when due date is set/changed — only if a value is actually present
-        const dueDateField = document.getElementById('id_due_date');
-        if (dueDateField) {
-            dueDateField.addEventListener('change', () => {
-                const hasDueDate = dueDateField.value && dueDateField.value.trim() !== '';
-                if (hasDueDate && !this.isVisible) {
-                    setTimeout(() => this._triggerSuggestion(), 500);
-                }
-            });
-        }
-        // Note: complexity-score changes no longer auto-trigger priority suggestion.
-        // Priority requires a due date to assess urgency accurately.
+        // No auto-triggers — priority suggestion should only fire on explicit
+        // user click ("Suggest" button) so that AI complexity score and AI
+        // deadline prediction are available as inputs.
     }
     
     /**
@@ -671,6 +668,20 @@ class PrioritySuggestionWidget {
                 data.complexity_risks_text = breakdown.risk_considerations
                     .map(r => typeof r === 'string' ? r : r.risk || '')
                     .join(' ');
+            }
+        }
+        
+        // Include AI Deadline Prediction results if available
+        if (window.currentDeadlinePrediction) {
+            const deadline = window.currentDeadlinePrediction;
+            if (deadline.recommended_deadline) {
+                data.ai_predicted_deadline = deadline.recommended_deadline;
+            }
+            if (deadline.estimated_days_to_complete) {
+                data.ai_predicted_days = deadline.estimated_days_to_complete;
+            }
+            if (deadline.confidence_level) {
+                data.deadline_confidence = deadline.confidence_level;
             }
         }
         
