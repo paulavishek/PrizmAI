@@ -622,6 +622,11 @@ def mission_detail(request, mission_id):
         raise Http404
 
     # --- RBAC: boards the current user can access under this mission ---
+    # Demo missions: show all boards/strategies (read-only browsing of demo data).
+    # Sandbox boards have strategy=None so board-membership lookups won't
+    # traverse back to the original demo hierarchy.
+    _is_demo_mission = getattr(mission, 'is_demo', False) or getattr(mission, 'is_seed_demo_data', False)
+
     user_accessible_board_ids = set(
         BoardMembership.objects.filter(
             user=request.user,
@@ -633,12 +638,14 @@ def mission_detail(request, mission_id):
         request.user.has_perm('prizmai.edit_mission', mission)
         or request.user.groups.filter(name='OrgAdmin').exists()
     )
-    if _is_admin_or_owner:
+    if _is_admin_or_owner or _is_demo_mission:
         user_accessible_board_ids = set(Board.objects.filter(
             strategy__mission=mission
         ).values_list('id', flat=True))
 
-    strategies = mission.strategies.filter(
+    strategies = mission.strategies.all().annotate(
+        board_count=Count('boards', distinct=True)
+    ).order_by('-created_at') if _is_demo_mission else mission.strategies.filter(
         boards__id__in=user_accessible_board_ids
     ).distinct().annotate(
         board_count=Count('boards', distinct=True)
