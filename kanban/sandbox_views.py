@@ -157,6 +157,25 @@ def _duplicate_board(template_board, user):
                 content=comment.content,
             )
 
+    # --- ChecklistItems ---
+    from kanban.models import ChecklistItem
+    for old_task in Task.objects.filter(column__board=template_board):
+        new_task = task_map.get(old_task.pk)
+        if new_task is None:
+            continue
+        for item in old_task.checklist_items.order_by('position'):
+            ChecklistItem.objects.create(
+                task=new_task,
+                title=item.title,
+                description=item.description,
+                is_completed=item.is_completed,
+                completed_at=item.completed_at,
+                position=item.position,
+                estimated_effort=item.estimated_effort,
+                priority=item.priority,
+                source=item.source,
+            )
+
     # --- Task-to-Task Relationships (parent_task, dependencies, related, milestones) ---
     for old_pk, new_task in task_map.items():
         old_task = Task.objects.get(pk=old_pk)

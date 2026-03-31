@@ -2372,7 +2372,9 @@ def create_epic_with_children(request):
         else:
             if not epic_title:
                 return JsonResponse({'error': 'title is required when creating a new epic'}, status=400)
-            epic_task = Task.objects.create(
+
+            # Gather optional form fields sent from the create-task page
+            epic_kwargs = dict(
                 title=epic_title,
                 description=epic_description,
                 column=column,
@@ -2381,6 +2383,59 @@ def create_epic_with_children(request):
                 position=Task.objects.filter(column=column).count(),
                 is_seed_demo_data=False,
             )
+
+            if data.get('priority'):
+                p = data['priority'].lower()
+                if p in ('low', 'medium', 'high', 'urgent'):
+                    epic_kwargs['priority'] = p
+
+            if data.get('start_date'):
+                try:
+                    from django.utils.dateparse import parse_date
+                    parsed = parse_date(data['start_date'])
+                    if parsed:
+                        epic_kwargs['start_date'] = parsed
+                except (ValueError, TypeError):
+                    pass
+
+            if data.get('due_date'):
+                try:
+                    from django.utils.dateparse import parse_datetime, parse_date as _pd
+                    parsed = parse_datetime(data['due_date']) or _pd(data['due_date'])
+                    if parsed:
+                        epic_kwargs['due_date'] = parsed
+                except (ValueError, TypeError):
+                    pass
+
+            if data.get('estimated_hours'):
+                try:
+                    epic_kwargs['estimated_hours'] = float(data['estimated_hours'])
+                except (ValueError, TypeError):
+                    pass
+
+            if data.get('complexity_score'):
+                try:
+                    epic_kwargs['complexity_score'] = int(data['complexity_score'])
+                except (ValueError, TypeError):
+                    pass
+
+            if data.get('progress') is not None:
+                try:
+                    epic_kwargs['progress'] = int(data['progress'])
+                except (ValueError, TypeError):
+                    pass
+
+            epic_task = Task.objects.create(**epic_kwargs)
+
+            # Handle assigned_to (user id)
+            if data.get('assigned_to'):
+                try:
+                    from django.contrib.auth.models import User
+                    assignee = User.objects.get(id=int(data['assigned_to']))
+                    epic_task.assigned_to = assignee
+                    epic_task.save(update_fields=['assigned_to'])
+                except (User.DoesNotExist, ValueError, TypeError):
+                    pass
 
         created_children = []
         errors = []

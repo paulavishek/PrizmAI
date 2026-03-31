@@ -83,7 +83,8 @@
         </ul>
 
         <!-- Single form wrapping all tabs (so Save always works) -->
-        <form method="post" class="task-form" id="taskDetailForm">
+        <!-- novalidate: browser validation can't focus required fields in hidden tabs; Django validates server-side -->
+        <form method="post" class="task-form" id="taskDetailForm" novalidate>
             {% csrf_token %}
             <input type="hidden" name="next" id="next-url" value="">
 
@@ -162,6 +163,20 @@
                             {{ form.labels }}
                             {% if form.labels.errors %}
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Phase Selection -->
+                        {% if form.phase %}
+                        <div class="mb-3">
+                            <label for="{{ form.phase.id_for_label }}" class="form-label">
+                                <i class="fas fa-layer-group text-primary me-1"></i> Sprint / Phase <span class="text-danger">*</span>
+                            </label>
+                            {{ form.phase }}
+                            <small class="form-text text-muted">Project phase for Gantt chart organization</small>
+                            {% if form.phase.errors %}
+                                <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
                             {% endif %}
                         </div>
                         {% endif %}
@@ -473,19 +488,6 @@
                             {% endif %}
                         </div>
 
-                        <!-- Phase Selection -->
-                        {% if form.phase %}
-                        <div class="mb-3">
-                            <label for="{{ form.phase.id_for_label }}" class="form-label">
-                                <i class="fas fa-layer-group text-primary me-1"></i> Phase
-                            </label>
-                            {{ form.phase }}
-                            <small class="form-text text-muted">Project phase for Gantt chart organization</small>
-                            {% if form.phase.errors %}
-                                <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
-                            {% endif %}
-                        </div>
-                        {% endif %}
                     </div><!-- /tab-relationships -->
 
                     <!-- ═══════ TAB 2: AI INSIGHTS ═══════ -->
