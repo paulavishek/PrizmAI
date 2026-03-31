@@ -2252,8 +2252,8 @@ function applyColumnRecommendations() {
         return;
     }
     
-    // Find the form
-    const form = document.querySelector('form[method="post"]') || document.querySelector('form');
+    // Find the board creation form specifically (not any form on the page)
+    const form = document.getElementById('create-board-form') || document.querySelector('form[method="post"]:not([action])');
     if (!form) {
         alert('Error: Could not find the form. Please refresh the page and try again.');
         return;
