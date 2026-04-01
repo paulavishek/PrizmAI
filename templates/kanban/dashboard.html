@@ -1,5 +1,6 @@
 ﻿{% extends 'base.html' %}
 {% load summary_filters %}
+{% load kanban_filters %}
 
 {% block title %}Dashboard - PrizmAI{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
@@ -1593,17 +1594,14 @@
                             <div class="board-card-grid" style="border-left:4px solid {% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' %};">
                                 <div class="d-flex align-items-start justify-content-between mb-2">
                                     <h6 class="board-card-title mb-0">{{ board.name }}</h6>
-                                    {% with status=board.get_current_scope_status %}
-                                    {% if status.scope_change_pct is not None %}
-                                        {% if status.scope_change_pct > 30 %}
-                                        <span class="board-health-dot bg-danger" title="At Risk"></span>
-                                        {% elif status.scope_change_pct > 15 %}
-                                        <span class="board-health-dot bg-warning" title="Caution"></span>
-                                        {% else %}
-                                        <span class="board-health-dot bg-success" title="Healthy"></span>
-                                        {% endif %}
+                                    {# Board health dot: holistic signal from schedule, risk, budget, scope, blockers #}
+                                    {% with health=board_health_map|get_item:board.id %}
+                                    {% if health.level == 'red' %}
+                                        <span class="board-health-dot bg-danger" title="{{ health.tooltip }}"></span>
+                                    {% elif health.level == 'amber' %}
+                                        <span class="board-health-dot bg-warning" title="{{ health.tooltip }}"></span>
                                     {% else %}
-                                        <span class="board-health-dot bg-success" title="Healthy"></span>
+                                        <span class="board-health-dot bg-success" title="{{ health.tooltip }}"></span>
                                     {% endif %}
                                     {% endwith %}
                                 </div>
