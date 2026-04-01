@@ -81,11 +81,19 @@ def dashboard(request):
     
     if demo_mode:
         # Single-tier demo: show user's sandbox copies, fall back to official demo boards
-        boards = Board.objects.filter(
+        sandbox_boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
-        ).distinct()
-        if not boards.exists():
+        )
+        # Also include boards the user created manually during demo
+        # (these aren't sandbox copies but should still appear in stats)
+        user_created_boards = Board.objects.filter(
+            created_by=request.user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+        )
+        boards = (sandbox_boards | user_created_boards).distinct()
+        if not sandbox_boards.exists():
             # Sandbox missing — auto-re-provision synchronously so the user
             # sees their sandbox immediately on this page load
             from kanban.models import DemoSandbox
@@ -98,21 +106,22 @@ def dashboard(request):
                 except Exception:
                     pass
                 # Re-check for sandbox boards after provisioning
-                boards = Board.objects.filter(
+                sandbox_boards = Board.objects.filter(
                     owner=request.user,
                     is_sandbox_copy=True,
-                ).distinct()
+                )
+                boards = (sandbox_boards | user_created_boards).distinct()
 
-            if not boards.exists():
+            if not sandbox_boards.exists():
                 # Still nothing — fall back to official demo boards as read-only
-                boards = Board.objects.filter(
+                boards = (Board.objects.filter(
                     is_official_demo_board=True,
-                ).distinct()
+                ) | user_created_boards).distinct()
         else:
             # Catch-up: if user has sandbox boards but no tasks assigned to them
             # (e.g. race condition on first entry, or re-entry timing), reassign now
             has_assigned = Task.objects.filter(
-                column__board__in=boards,
+                column__board__in=sandbox_boards,
                 assigned_to=request.user,
                 item_type='task',
             ).exclude(progress=100).exists()
@@ -322,9 +331,12 @@ def dashboard(request):
 
     # Missions the user has direct ownership of or demo missions
     if demo_mode:
-        # Single-tier demo: show official demo missions (the template hierarchy)
+        # Single-tier demo: show official demo missions + any user-created missions
+        # (user may create new missions or link boards to strategies while exploring)
         missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True)
+            Q(is_demo=True) | Q(is_seed_demo_data=True) |
+            Q(created_by=request.user) |
+            Q(strategies__boards__id__in=user_board_ids)
         ).distinct().select_related('organization_goal').prefetch_related(
             'strategies__boards'
         ).order_by('-created_at')
@@ -369,8 +381,10 @@ def dashboard(request):
     _board_med_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_MED_RISK_THRESHOLD', 0.10)
     _cache_ttl = getattr(django_settings, 'HEALTH_ROLLUP_CACHE_TTL', 120)
 
-    # --- Cache key scoped to user + demo mode (board set varies) ---
-    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}'
+    # --- Cache key scoped to user + demo mode + board set hash ---
+    # Include board count and IDs hash so cache invalidates when boards are added/removed
+    _board_ids_hash = hash(tuple(sorted(_board_ids)))
+    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}:b{_board_ids_hash}'
     _cached = cache.get(_cache_key) if _cache_ttl > 0 else None
 
     if _cached is not None:
@@ -872,6 +886,24 @@ def dashboard(request):
     # Velocity chart is meaningful only after at least one task has been completed.
     has_velocity_data = completed_count > 0
 
+    # ----------------------------------------------------------------
+    # Weekly velocity data (real tasks completed per week, last 7 weeks)
+    # ----------------------------------------------------------------
+    _velocity_weeks = []
+    if has_velocity_data:
+        _vel_now = timezone.now()
+        # Build 7 week buckets ending at the current week
+        for _w in range(6, -1, -1):
+            _week_end = _vel_now - timedelta(weeks=_w)
+            _week_start = _week_end - timedelta(weeks=1)
+            _week_count = Task.objects.filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                completed_at__gt=_week_start,
+                completed_at__lte=_week_end,
+            ).count()
+            _velocity_weeks.append(_week_count)
+
     _oldest_board_time = boards.order_by('created_at').values_list('created_at', flat=True).first()
     workspace_is_new = (
         _oldest_board_time is not None
@@ -1013,6 +1045,7 @@ def dashboard(request):
         'boards':       chart_boards,
         'spi_cpi':      spi_cpi_data,
         'risk_heatmap': risk_heatmap_data,
+        'velocity_weeks': _velocity_weeks,
     }
 
     # Pre-Mortem risk levels: latest analysis per board (single query)
