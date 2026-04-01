@@ -12,6 +12,7 @@ from .prizmAI_adapter import PrizmAIAdapter
 from .trello_adapter import TrelloAdapter
 from .jira_adapter import JiraAdapter
 from .asana_adapter import AsanaAdapter
+from .monday_adapter import MondayAdapter
 from .csv_adapter import CSVAdapter
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Adapter priority order (higher priority adapters are checked first)
 ADAPTER_PRIORITY: List[Type[BaseImportAdapter]] = [
     PrizmAIAdapter,  # Check native format first
+    MondayAdapter,   # Monday.com Excel exports
     TrelloAdapter,   # Trello has distinctive markers
     JiraAdapter,     # Jira has distinctive markers
     AsanaAdapter,    # Asana has distinctive markers
@@ -84,6 +86,8 @@ class AdapterFactory:
         'trello': TrelloAdapter,
         'jira': JiraAdapter,
         'asana': AsanaAdapter,
+        'monday': MondayAdapter,
+        'monday.com': MondayAdapter,
         'csv': CSVAdapter,
         'generic': CSVAdapter,
     }

@@ -3741,24 +3741,30 @@ def import_board(request):
     import_file = request.FILES['import_file']
     filename = import_file.name
     
-    # Check file extension - now supports JSON and CSV
-    valid_extensions = ['.json', '.csv', '.tsv']
+    # Check file extension - now supports JSON, CSV, Excel
+    valid_extensions = ['.json', '.csv', '.tsv', '.xlsx', '.xls']
     if not any(filename.lower().endswith(ext) for ext in valid_extensions):
-        messages.error(request, "Supported file formats: JSON, CSV, TSV")
+        messages.error(request, "Supported file formats: JSON, CSV, TSV, Excel (.xlsx)")
         return redirect('board_list')
     
     try:
         # Read file content
         file_content = import_file.read()
         
-        # Try to decode as text
-        try:
-            file_data = file_content.decode('utf-8')
-        except UnicodeDecodeError:
+        # For Excel files, pass raw bytes directly to the adapter
+        is_excel = filename.lower().endswith(('.xlsx', '.xls'))
+        
+        if is_excel:
+            file_data = file_content  # Keep as bytes for openpyxl
+        else:
+            # Try to decode as text
             try:
-                file_data = file_content.decode('utf-8-sig')
+                file_data = file_content.decode('utf-8')
             except UnicodeDecodeError:
-                file_data = file_content.decode('latin-1')
+                try:
+                    file_data = file_content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    file_data = file_content.decode('latin-1')
         
         # Import using the adapter system
         from kanban.utils.import_adapters import AdapterFactory, UserMatcher
@@ -3839,7 +3845,7 @@ def _create_board_from_import_result(result, user, organization, session):
         description=board_data.get('description', ''),
         organization=organization,
         created_by=user,
-        num_phases=board_data.get('num_phases', 0)
+        num_phases=board_data.get('num_phases', 0),
     )
     new_board.owner = user
     new_board.save(update_fields=['owner'])
