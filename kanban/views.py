@@ -87,10 +87,12 @@ def dashboard(request):
         )
         # Also include boards the user created manually during demo
         # (these aren't sandbox copies but should still appear in stats)
+        # Exclude imported boards — imports belong in My Workspace, not Demo.
         user_created_boards = Board.objects.filter(
             created_by=request.user,
             is_sandbox_copy=False,
             is_official_demo_board=False,
+            is_imported=False,
         )
         boards = (sandbox_boards | user_created_boards).distinct()
         if not sandbox_boards.exists():
@@ -160,6 +162,15 @@ def dashboard(request):
         )
         boards = (demo_boards | user_boards).distinct()
     
+    # Annotate task counts so the template can display them efficiently
+    # (Task has no direct FK to Board — it goes through Column)
+    boards = boards.annotate(
+        task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task'),
+        ),
+    )
+
     # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
     _now = timezone.now()
     _stats = Task.objects.filter(column__board__in=boards, item_type='task').aggregate(
@@ -1330,11 +1341,20 @@ def board_list(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
     if demo_mode:
-        # Single-tier demo: show only user's sandbox copies
-        boards = Board.objects.filter(
+        # Single-tier demo: show user's sandbox copies + boards created
+        # manually in demo mode (but NOT imported boards — those belong
+        # in My Workspace).
+        sandbox_boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
-        ).distinct()
+        )
+        user_created_boards = Board.objects.filter(
+            created_by=request.user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+            is_imported=False,
+        )
+        boards = (sandbox_boards | user_created_boards).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -1355,6 +1375,14 @@ def board_list(request):
             Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
+
+    # Annotate task counts so the template can display them efficiently
+    boards = boards.annotate(
+        task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task'),
+        ),
+    )
 
     # Compute summary metrics across all accessible boards
     task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
@@ -3908,6 +3936,7 @@ def _create_board_from_import_result(result, user, organization, session):
         organization=organization,
         created_by=user,
         num_phases=board_data.get('num_phases', 0),
+        is_imported=True,
     )
     new_board.owner = user
     new_board.save(update_fields=['owner'])
