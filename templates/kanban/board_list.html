@@ -265,10 +265,16 @@
                     {% csrf_token %}
                     <div class="mb-3">
                         <label for="import_file" class="form-label">Select File to Import</label>
-                        <input type="file" class="form-control" id="import_file" name="import_file" accept=".json,.csv,.tsv" required>
+                        <input type="file" class="form-control" id="import_file" name="import_file" accept=".json,.csv,.tsv,.xlsx,.xls" required>
                         <div class="form-text">Upload a file exported from another project management tool.</div>
                     </div>
                     
+                    {% if is_viewing_demo %}
+                    <div class="alert alert-warning py-2 mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Imported boards will appear in your <strong>My Workspace</strong>, not in the Demo Workspace.
+                    </div>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label">Supported Formats</label>
                         <div class="row g-2">
@@ -298,6 +304,16 @@
                                         <small class="d-flex align-items-center">
                                             <i class="fas fa-tasks text-warning me-2"></i>
                                             <span><strong>Asana</strong> - CSV or JSON</span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 bg-light">
+                                    <div class="card-body py-2 px-3">
+                                        <small class="d-flex align-items-center">
+                                            <i class="fas fa-calendar-alt text-danger me-2"></i>
+                                            <span><strong>Monday.com</strong> - Excel export</span>
                                         </small>
                                     </div>
                                 </div>
