@@ -129,15 +129,28 @@ def collect_for_user(user):
     except Exception:
         logger.exception("collect_for_user: conflicts failed for user %s", user.pk)
 
-    # 2. Unacknowledged high-risk Pre-Mortem analyses
+    # 2. Unacknowledged high-risk Pre-Mortem analyses (latest per board only)
     try:
         from kanban.premortem_models import (
             PreMortemAnalysis,
             PreMortemScenarioAcknowledgment,
         )
-        for pm in PreMortemAnalysis.objects.filter(
-            overall_risk_level='high', board__in=boards,
-        ).select_related('board'):
+        # Only consider the latest PreMortemAnalysis per board to avoid
+        # duplicate decision items when multiple analyses exist.
+        all_high_risk = (
+            PreMortemAnalysis.objects
+            .filter(overall_risk_level='high', board__in=boards)
+            .select_related('board')
+            .order_by('board_id', '-created_at')
+        )
+        seen_boards = set()
+        latest_per_board = []
+        for pm in all_high_risk:
+            if pm.board_id not in seen_boards:
+                seen_boards.add(pm.board_id)
+                latest_per_board.append(pm)
+
+        for pm in latest_per_board:
             total_scenarios = 5
             acked = PreMortemScenarioAcknowledgment.objects.filter(
                 pre_mortem=pm, acknowledged_by=user,
