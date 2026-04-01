@@ -684,6 +684,10 @@ class Board(models.Model):
         default=False,
         help_text="True if this board was created by sandbox provisioning (personal demo copy)."
     )
+    is_imported = models.BooleanField(
+        default=False,
+        help_text="True if this board was created via file import (Jira, Monday.com, Trello, etc.)."
+    )
     cloned_from = models.ForeignKey(
         'self', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='sandbox_clones',
