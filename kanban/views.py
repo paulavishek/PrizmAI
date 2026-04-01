@@ -164,6 +164,7 @@ def dashboard(request):
     
     # Annotate task counts so the template can display them efficiently
     # (Task has no direct FK to Board — it goes through Column)
+    _now = timezone.now()
     boards = boards.annotate(
         task_count=Count(
             'columns__tasks',
@@ -172,7 +173,6 @@ def dashboard(request):
     )
 
     # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
-    _now = timezone.now()
     _stats = Task.objects.filter(column__board__in=boards, item_type='task').aggregate(
         task_count=Count('id'),
         completed_count=Count('id', filter=Q(progress=100)),
@@ -885,6 +885,117 @@ def dashboard(request):
     }
 
     # ----------------------------------------------------------------
+    # Board health map — holistic per-board health for board card dots.
+    #
+    # Signals (triple-constraint + blockers + risk):
+    #   TIME:   schedule_status from _compute_board_health, SPI
+    #   BUDGET: ProjectBudget.get_status()
+    #   SCOPE:  scope creep percentage
+    #   RISK:   risk_level from _compute_board_health
+    #   BLOCKERS: active high/critical conflicts
+    #
+    # Output per board: { 'level': 'red'|'amber'|'green', 'reasons': [...] }
+    # ----------------------------------------------------------------
+    _spi_map = {b['board_id']: b.get('spi') for b in spi_cpi_data}
+    _sci_map = {b['id']: b.get('growth_pct', 0) for b in _sci_boards}
+
+    # Active conflict counts per board (single query)
+    from kanban.conflict_models import ConflictDetection
+    _conflict_qs = (
+        ConflictDetection.objects
+        .filter(
+            tasks__column__board_id__in=_board_ids,
+            status='active',
+            severity__in=['high', 'critical'],
+        )
+        .values('tasks__column__board_id', 'severity')
+        .annotate(cnt=Count('id', distinct=True))
+    )
+    _conflict_map = {}  # board_id -> {'high': n, 'critical': n}
+    for row in _conflict_qs:
+        bid = row['tasks__column__board_id']
+        _conflict_map.setdefault(bid, {'high': 0, 'critical': 0})
+        _conflict_map[bid][row['severity']] += row['cnt']
+
+    board_health_map = {}
+    for bid in _board_ids:
+        reasons_red = []
+        reasons_amber = []
+
+        bstats = _board_stats_map.get(bid, {})
+        schedule_status, risk_level = _compute_board_health(bstats)
+
+        # 1) Schedule (time constraint)
+        if schedule_status == 'late':
+            late = bstats.get('late_tasks', 0)
+            reasons_red.append(f'{late} overdue task{"s" if late != 1 else ""}')
+        elif schedule_status == 'at_risk':
+            at_risk = bstats.get('at_risk_tasks', 0)
+            reasons_amber.append(f'{at_risk} task{"s" if at_risk != 1 else ""} at risk')
+
+        # 2) Risk level
+        if risk_level == 'high':
+            hr = bstats.get('high_risk_tasks', 0)
+            reasons_red.append(f'{hr} high-risk task{"s" if hr != 1 else ""}')
+        elif risk_level == 'medium':
+            hr = bstats.get('high_risk_tasks', 0)
+            reasons_amber.append(f'{hr} high-risk task{"s" if hr != 1 else ""}')
+
+        # 3) SPI (schedule performance)
+        spi = _spi_map.get(bid)
+        if spi is not None:
+            if spi < 0.5:
+                reasons_red.append(f'SPI {spi:.2f} (severely behind)')
+            elif spi < 0.8:
+                reasons_amber.append(f'SPI {spi:.2f} (behind schedule)')
+
+        # 4) Budget
+        budget = _budget_map.get(bid)
+        if budget:
+            b_status = budget.get_status()
+            if b_status in ('over', 'critical'):
+                reasons_red.append(f'Budget {b_status}')
+            elif b_status == 'warning':
+                reasons_amber.append('Budget warning')
+
+        # 5) Scope creep
+        sci_pct = _sci_map.get(bid, 0)
+        if sci_pct > 30:
+            reasons_red.append(f'Scope +{sci_pct}%')
+        elif sci_pct > 15:
+            reasons_amber.append(f'Scope +{sci_pct}%')
+
+        # 6) Active blockers (conflicts)
+        conflicts = _conflict_map.get(bid, {})
+        crit_conflicts = conflicts.get('critical', 0)
+        high_conflicts = conflicts.get('high', 0)
+        if crit_conflicts:
+            reasons_red.append(f'{crit_conflicts} critical blocker{"s" if crit_conflicts != 1 else ""}')
+        elif high_conflicts:
+            reasons_amber.append(f'{high_conflicts} high blocker{"s" if high_conflicts != 1 else ""}')
+
+        # Determine level
+        if reasons_red:
+            level = 'red'
+            tooltip = 'At Risk — ' + '; '.join(reasons_red + reasons_amber)
+        elif reasons_amber:
+            level = 'amber'
+            tooltip = 'Caution — ' + '; '.join(reasons_amber)
+        else:
+            level = 'green'
+            tooltip = 'Healthy'
+
+        board_health_map[bid] = {'level': level, 'tooltip': tooltip}
+
+    # In demo mode, also map sandbox board IDs via _template_to_sandbox
+    if demo_mode:
+        for template_id, sandbox_id in _template_to_sandbox.items():
+            if sandbox_id in board_health_map:
+                continue  # already computed directly
+            if template_id in board_health_map:
+                board_health_map[sandbox_id] = board_health_map[template_id]
+
+    # ----------------------------------------------------------------
     # Data-readiness flags — used to conditionally hide empty widgets
     # ----------------------------------------------------------------
     # SPI only has meaning when there are tasks past their due date (SPI = EV/PV).
@@ -1211,6 +1322,7 @@ def dashboard(request):
         'spi_cpi_data':      spi_cpi_data,
         'risk_heatmap_data': risk_heatmap_data,
         'scope_creep_data':  scope_creep_data,
+        'board_health_map':  board_health_map,
         'has_schedule_data': has_schedule_data,
         'has_time_log_data': has_time_log_data,
         'has_velocity_data': has_velocity_data,
