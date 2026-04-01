@@ -7,7 +7,7 @@ from .models import (
     CalendarEvent,
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, Milestone, StrategicFollower,
-    UserFavorite,
+    UserFavorite, ChecklistItem,
 )
 from .automation_models import (
     BoardAutomation, ScheduledAutomation,
@@ -202,12 +202,20 @@ class TaskLabelAdmin(admin.ModelAdmin):
     list_filter = ('board',)
     search_fields = ('name', 'board__name')
 
+class ChecklistItemInline(admin.TabularInline):
+    model = ChecklistItem
+    extra = 0
+    fields = ('position', 'title', 'is_completed', 'priority', 'estimated_effort', 'source')
+    readonly_fields = ('source',)
+
+
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ('title', 'column', 'priority', 'due_date', 'assigned_to', 'created_by', 'parent_task')
-    list_filter = ('column', 'priority', 'due_date', 'created_at')
+    list_display = ('title', 'column', 'priority', 'item_type', 'due_date', 'assigned_to', 'created_by', 'parent_task')
+    list_filter = ('column', 'priority', 'item_type', 'due_date', 'created_at')
     search_fields = ('title', 'description')
     filter_horizontal = ('labels', 'related_tasks')
+    inlines = [ChecklistItemInline]
     
     fieldsets = (
         ('Basic Information', {
@@ -1229,4 +1237,31 @@ class UserCredibilityScoreAdmin(admin.ModelAdmin):
     list_display = ('user', 'score', 'tokens_remaining', 'total_bets', 'correct_bets', 'tokens_reset_date')
     search_fields = ('user__username',)
     readonly_fields = ('tokens_reset_date',)
+
+
+# ── Feature Guide ─────────────────────────────────────────────────────────
+
+from .feature_guide_models import FeatureGuide
+
+
+@admin.register(FeatureGuide)
+class FeatureGuideAdmin(admin.ModelAdmin):
+    list_display = ('feature_name', 'feature_key', 'is_active', 'order', 'updated_at')
+    list_filter = ('is_active',)
+    list_editable = ('is_active', 'order')
+    search_fields = ('feature_name', 'feature_key', 'brief_description')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        (None, {
+            'fields': ('feature_key', 'feature_name', 'is_active', 'order'),
+        }),
+        ('Content', {
+            'fields': ('brief_description', 'detailed_description'),
+            'description': 'Brief description appears in the popover. Detailed description appears in the modal (supports HTML).',
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
 

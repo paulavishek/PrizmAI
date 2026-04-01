@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static feature_guide_tags %}
 
 {% block title %}Commitment Protocols — {{ board.name }}{% endblock %}
 
@@ -48,7 +48,7 @@
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h2 class="mb-0">
-        <i class="bi bi-shield-check me-2 text-primary"></i>Living Commitment Protocols
+        <i class="bi bi-shield-check me-2 text-primary"></i>Living Commitment Protocols {% feature_help "commitments" %}
       </h2>
       <p class="text-muted mb-0">Anti-roadmap confidence tracking for <strong>{{ board.name }}</strong></p>
     </div>

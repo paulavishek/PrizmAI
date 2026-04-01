@@ -1,0 +1,152 @@
+{% extends "kanban/onboarding/base_onboarding.html" %}
+{% load static %}
+
+{% block title %}Invite Your Team — PrizmAI{% endblock %}
+
+{% block progress %}
+<div class="onboarding-progress text-center">
+    <span class="step done"><i class="bi bi-check-circle-fill"></i> Welcome</span>
+    <span class="step-divider">›</span>
+    <span class="step done"><i class="bi bi-check-circle-fill"></i> Goal</span>
+    <span class="step-divider">›</span>
+    <span class="step done"><i class="bi bi-check-circle-fill"></i> Review</span>
+    <span class="step-divider">›</span>
+    <span class="step active"><i class="bi bi-people-fill"></i> Team</span>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .success-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.25rem;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+    .success-icon i {
+        font-size: 1.75rem;
+        color: #fff;
+    }
+    .workspace-name-input {
+        font-size: 1.1rem;
+        font-weight: 600;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.65rem 1rem;
+        transition: border-color 0.2s;
+    }
+    .workspace-name-input:focus {
+        border-color: var(--prizm-primary);
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    }
+    .email-textarea {
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        padding: 0.75rem 1rem;
+        transition: border-color 0.2s;
+        resize: vertical;
+    }
+    .email-textarea:focus {
+        border-color: var(--prizm-primary);
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    }
+    .invite-section {
+        background: #f8fafc;
+        border-radius: 10px;
+        padding: 1.5rem;
+        border: 1px solid #e2e8f0;
+    }
+    .btn-skip {
+        color: #94a3b8;
+        text-decoration: none;
+        font-size: 0.9rem;
+        transition: color 0.2s;
+    }
+    .btn-skip:hover {
+        color: var(--prizm-primary);
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="onboarding-card" style="max-width: 640px;">
+    <!-- Success header -->
+    <div class="text-center mb-4">
+        <div class="success-icon">
+            <i class="bi bi-check-lg"></i>
+        </div>
+        <h2 class="fw-bold mb-2" style="color: #1e293b;">Your workspace is ready!</h2>
+        <p class="text-muted mb-0">Now invite your team to start collaborating.</p>
+    </div>
+
+    <form method="post" action="{% url 'onboarding_invite' %}" id="inviteForm">
+        {% csrf_token %}
+
+        <!-- Workspace name -->
+        <div class="mb-4">
+            <label for="workspaceName" class="form-label fw-semibold text-secondary" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                <i class="bi bi-building me-1"></i>Workspace Name
+            </label>
+            <input type="text"
+                   class="form-control workspace-name-input"
+                   id="workspaceName"
+                   name="workspace_name"
+                   value="{{ organization.name }}"
+                   maxlength="100"
+                   placeholder="My Workspace">
+            <div class="form-text">You can rename your workspace at any time.</div>
+        </div>
+
+        <!-- Invite section -->
+        <div class="invite-section mb-4">
+            <label for="inviteEmails" class="form-label fw-semibold mb-1" style="font-size: 0.95rem;">
+                <i class="bi bi-envelope-plus me-1 text-success"></i>Invite team members
+            </label>
+            <p class="text-muted mb-3" style="font-size: 0.85rem;">
+                Enter email addresses separated by commas, semicolons, or one per line. They'll receive an invitation link valid for 48 hours.
+            </p>
+            <textarea class="form-control email-textarea"
+                      id="inviteEmails"
+                      name="invite_emails"
+                      rows="4"
+                      placeholder="alice@company.com, bob@company.com&#10;charlie@company.com"></textarea>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="d-flex flex-column gap-2 align-items-center">
+            <button type="submit" name="action" value="invite" class="btn btn-prizm btn-lg w-100" id="sendInviteBtn">
+                <i class="bi bi-send me-1"></i>Send Invitations & Continue
+            </button>
+            <button type="submit" name="action" value="skip" class="btn-skip mt-1"
+                    formnovalidate>
+                Skip for now — I'll invite my team later
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Enable/disable invite button based on email input
+    const emailField = document.getElementById('inviteEmails');
+    const inviteBtn = document.getElementById('sendInviteBtn');
+
+    function updateButton() {
+        const hasEmails = emailField.value.trim().length > 0;
+        if (hasEmails) {
+            inviteBtn.innerHTML = '<i class="bi bi-send me-1"></i>Send Invitations & Continue';
+        } else {
+            inviteBtn.innerHTML = '<i class="bi bi-arrow-right me-1"></i>Continue to Dashboard';
+        }
+    }
+    emailField.addEventListener('input', updateButton);
+    updateButton();
+</script>
+{% endblock %}

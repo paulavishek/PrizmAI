@@ -1,5 +1,6 @@
 ﻿{% extends 'base.html' %}
 {% load summary_filters %}
+{% load kanban_filters %}
 
 {% block title %}Dashboard - PrizmAI{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
@@ -1302,7 +1303,7 @@
                 <div class="board-icon-circle"><i class="fas fa-laptop-code"></i></div>
                 <div>
                     <p class="board-label mb-0">Software Development</p>
-                    <p class="board-meta mb-0">{{ task_count|default:"30" }} tasks &middot; Kanban + Gantt + Calendar &middot; AI features enabled</p>
+                    <p class="board-meta mb-0">30 tasks &middot; Kanban + Gantt + Calendar &middot; AI features enabled</p>
                 </div>
             </div>
             {% if demo_board %}
@@ -1331,6 +1332,14 @@
             Make any changes you like &mdash; nothing here affects anyone else.
             Log out and back in and you&rsquo;ll find everything exactly as you left it.
             Use the Reset button any time for a fresh start.
+        </div>
+
+        <!-- RBAC info box -->
+        <div class="demo-sandbox-info mt-2" style="border-left:3px solid #f59e0b;background:#fffbeb;">
+            <i class="fas fa-users-cog me-1" style="color: #d97706;"></i>
+            <strong>Team &amp; RBAC features are available in your own workspace.</strong>
+            Member invitations, role-based access control (Owner / Member / Viewer), and team management
+            are enabled when you <a href="{% url 'onboarding_welcome' %}" class="fw-semibold">set up your own workspace</a>.
         </div>
 
         <!-- Rate limit note -->
@@ -1585,28 +1594,27 @@
                             <div class="board-card-grid" style="border-left:4px solid {% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' %};">
                                 <div class="d-flex align-items-start justify-content-between mb-2">
                                     <h6 class="board-card-title mb-0">{{ board.name }}</h6>
-                                    {% with status=board.get_current_scope_status %}
-                                    {% if status.scope_change_pct is not None %}
-                                        {% if status.scope_change_pct > 30 %}
-                                        <span class="board-health-dot bg-danger" title="At Risk"></span>
-                                        {% elif status.scope_change_pct > 15 %}
-                                        <span class="board-health-dot bg-warning" title="Caution"></span>
-                                        {% else %}
-                                        <span class="board-health-dot bg-success" title="Healthy"></span>
-                                        {% endif %}
+                                    {# Board health dot: holistic signal from schedule, risk, budget, scope, blockers #}
+                                    {% with health=board_health_map|get_item:board.id %}
+                                    {% if health.level == 'red' %}
+                                        <span class="board-health-dot bg-danger" title="{{ health.tooltip }}"></span>
+                                    {% elif health.level == 'amber' %}
+                                        <span class="board-health-dot bg-warning" title="{{ health.tooltip }}"></span>
                                     {% else %}
-                                        <span class="board-health-dot bg-success" title="Healthy"></span>
+                                        <span class="board-health-dot bg-success" title="{{ health.tooltip }}"></span>
                                     {% endif %}
                                     {% endwith %}
                                 </div>
                                 <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <small class="text-muted">{{ board.task_set.count }} tasks</small>
+                                    <small class="text-muted">{{ board.task_count }} tasks</small>
                                     {% if board.strategy %}
                                     <small class="text-muted" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;"><i class="fas fa-bullseye me-1"></i>{{ board.strategy.mission.name }}</small>
+                                    {% elif board.cloned_from.strategy %}
+                                    <small class="text-muted" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;"><i class="fas fa-bullseye me-1"></i>{{ board.cloned_from.strategy.mission.name }}</small>
                                     {% endif %}
                                 </div>
                                 <div class="board-card-progress">
-                                    {% with total=board.task_set.count done=board.completed_task_count %}
+                                    {% with total=board.task_count done=board.completed_task_count %}
                                     {% if total > 0 %}
                                     <div class="progress" style="height: 4px;">
                                         <div class="progress-bar {% if done == total %}bg-success{% elif done > 0 %}bg-primary{% else %}bg-secondary{% endif %}" 
@@ -2526,6 +2534,9 @@
                     <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary" style="font-size:0.72rem;"><i class="fas fa-columns me-1"></i>Open Boards</a>
                 </div>
             </div>
+            <div id="spi-offender-note" class="card-footer d-none py-1 px-2 text-center" style="background:#fff7ed;border-top:1px solid #fed7aa;">
+                <span style="font-size:0.68rem;color:#9a3412;"><i class="fas fa-arrow-down me-1"></i>Dragged by <a id="spi-offender-link" href="#" class="fw-semibold" style="color:#c2410c;text-decoration:underline;"></a></span>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -2549,6 +2560,9 @@
                     <p style="font-size:0.7rem;" class="mb-2">CPI measures cost efficiency. Enable time tracking on tasks to generate this metric.</p>
                     <a href="{% url 'time_tracking_dashboard' %}" class="btn btn-sm btn-outline-success" style="font-size:0.72rem;"><i class="fas fa-clock me-1"></i>Time Tracking</a>
                 </div>
+            </div>
+            <div id="cpi-offender-note" class="card-footer d-none py-1 px-2 text-center" style="background:#f0fdf4;border-top:1px solid #bbf7d0;">
+                <span style="font-size:0.68rem;color:#166534;"><i class="fas fa-arrow-down me-1"></i>Dragged by <a id="cpi-offender-link" href="#" class="fw-semibold" style="color:#15803d;text-decoration:underline;"></a></span>
             </div>
         </div>
     </div>
@@ -4180,19 +4194,16 @@
         }
         // --- Velocity sparkline (weekly task completions) ---
         var vCanvas = document.getElementById('velocityChart');
-        if (vCanvas && chartData.spi_cpi && chartData.spi_cpi.length) {
+        if (vCanvas && chartData.velocity_weeks && chartData.velocity_weeks.length) {
             var weekLabels = ['6w ago','5w ago','4w ago','3w ago','2w ago','Last week','This week'];
-            // Build a rough completion trend from spi_cpi completion percentages as a proxy sparkline
-            var avgCompletion = chartData.spi_cpi.reduce(function(a,b){ return a + b.completion_pct; }, 0) / chartData.spi_cpi.length;
-            // Show a flat sparkline at the current completion level (real time-series data can replace this later)
-            var sparkData = weekLabels.map(function(_, i){ return +(avgCompletion * (0.4 + i * 0.1)).toFixed(1); });
-            sparkData[6] = +avgCompletion.toFixed(1);
+            var sparkData = chartData.velocity_weeks;
+            var maxVal = Math.max.apply(null, sparkData);
             new Chart(vCanvas, {
                 type: 'line',
                 data: {
                     labels: weekLabels,
                     datasets: [{
-                        label: 'Avg Completion %',
+                        label: 'Tasks Completed',
                         data: sparkData,
                         borderColor: 'rgba(28,200,138,0.9)',
                         backgroundColor: 'rgba(28,200,138,0.12)',
@@ -4207,11 +4218,11 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
-                        tooltip: { callbacks: { label: function(ctx){ return 'Completion: ' + ctx.parsed.y + '%'; } } },
+                        tooltip: { callbacks: { label: function(ctx){ return ctx.parsed.y + ' tasks'; } } },
                     },
                     scales: {
                         x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444' } },
-                        y: { min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444', callback: function(v){ return v + '%'; } } },
+                        y: { min: 0, max: maxVal > 0 ? undefined : 10, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444', stepSize: 1 } },
                     },
                 },
             });
@@ -4265,6 +4276,24 @@
                 var spiEmpty = document.getElementById('spi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
                 if (spiEmpty) { spiEmpty.classList.remove('d-flex'); spiEmpty.classList.add('d-none'); }
+                // Show worst-offender board if SPI below threshold
+                if (avgSpi < 0.8 && spiVals.length >= 1) {
+                    var worstSpi = null;
+                    chartData.spi_cpi.forEach(function(b) {
+                        if (b.spi !== null && b.spi !== undefined) {
+                            if (worstSpi === null || b.spi < worstSpi.spi) worstSpi = b;
+                        }
+                    });
+                    if (worstSpi) {
+                        var spiNote = document.getElementById('spi-offender-note');
+                        var spiLink = document.getElementById('spi-offender-link');
+                        if (spiNote && spiLink) {
+                            spiLink.textContent = worstSpi.name + ' (SPI ' + worstSpi.spi.toFixed(2) + ')';
+                            spiLink.href = '/boards/' + worstSpi.board_id + '/';
+                            spiNote.classList.remove('d-none');
+                        }
+                    }
+                }
             } else {
                 var spiCanvas = document.getElementById('spiGauge');
                 if (spiCanvas) spiCanvas.style.display = 'none';
@@ -4276,6 +4305,24 @@
                 var cpiEmpty = document.getElementById('cpi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
                 if (cpiEmpty) { cpiEmpty.classList.remove('d-flex'); cpiEmpty.classList.add('d-none'); }
+                // Show worst-offender board if CPI below threshold
+                if (avgCpi < 0.8 && cpiVals.length >= 1) {
+                    var worstCpi = null;
+                    chartData.spi_cpi.forEach(function(b) {
+                        if (b.cpi !== null && b.cpi !== undefined) {
+                            if (worstCpi === null || b.cpi < worstCpi.cpi) worstCpi = b;
+                        }
+                    });
+                    if (worstCpi) {
+                        var cpiNote = document.getElementById('cpi-offender-note');
+                        var cpiLink = document.getElementById('cpi-offender-link');
+                        if (cpiNote && cpiLink) {
+                            cpiLink.textContent = worstCpi.name + ' (CPI ' + worstCpi.cpi.toFixed(2) + ')';
+                            cpiLink.href = '/boards/' + worstCpi.board_id + '/';
+                            cpiNote.classList.remove('d-none');
+                        }
+                    }
+                }
             } else {
                 var cpiCanvas = document.getElementById('cpiGauge');
                 if (cpiCanvas) cpiCanvas.style.display = 'none';

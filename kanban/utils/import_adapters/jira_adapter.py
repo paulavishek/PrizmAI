@@ -76,6 +76,26 @@ class JiraAdapter(BaseImportAdapter):
         'trivial': 'low',
     }
     
+    # Standard Jira workflow column ordering (lower = leftmost)
+    # Custom/unknown statuses will be placed after these
+    COLUMN_ORDER = {
+        'Backlog': 0,
+        'To Do': 10,
+        'Selected for Development': 15,
+        'In Progress': 20,
+        'In Development': 20,
+        'In Review': 30,
+        'Code Review': 30,
+        'Testing': 40,
+        'In QA': 40,
+        'QA': 40,
+        'Done': 50,
+        'Closed': 50,
+        'Resolved': 50,
+        'Complete': 50,
+        'Released': 55,
+    }
+    
     # Jira CSV column name patterns
     JIRA_CSV_PATTERNS = [
         'issue key', 'issue id', 'summary', 'issue type', 'status',
@@ -262,18 +282,36 @@ class JiraAdapter(BaseImportAdapter):
         elif fmt == 'csv':
             self._transform_csv(parsed_data['rows'], result)
         
+        # Extract project name from issue keys for a better board title
+        board_name = self._extract_project_name(result.tasks_data) or 'Imported from Jira'
+        
         # Set board metadata
         result.board_data = {
-            'name': 'Imported from Jira',
+            'name': board_name,
             'description': f'Imported {len(result.tasks_data)} issues from Jira',
         }
         
         return result
     
+    def _extract_project_name(self, tasks_data: List[Dict]) -> Optional[str]:
+        """Extract project name from Jira issue keys (e.g., KAN-14 -> KAN)."""
+        project_keys = set()
+        for task in tasks_data:
+            key = task.get('external_id', '')
+            if key and '-' in str(key):
+                project_keys.add(str(key).rsplit('-', 1)[0])
+        
+        if len(project_keys) == 1:
+            return f'{list(project_keys)[0]} Board'
+        elif project_keys:
+            return f'Imported from Jira ({", ".join(sorted(project_keys))})'
+        return None
+    
     def _transform_json(self, issues: List[Dict], result: ImportResult):
         """Transform Jira JSON issues"""
         columns_seen = {}
         labels_seen = {}
+        _custom_order_counter = 60  # Start after known statuses for unknown ones
         
         for idx, issue in enumerate(issues):
             fields = issue.get('fields', {})
@@ -284,8 +322,11 @@ class JiraAdapter(BaseImportAdapter):
             column_name = self.STATUS_TO_COLUMN.get(status_name.lower(), status_name)
             
             if column_name not in columns_seen:
+                order = self.COLUMN_ORDER.get(column_name, _custom_order_counter)
+                if column_name not in self.COLUMN_ORDER:
+                    _custom_order_counter += 1
                 columns_seen[column_name] = {
-                    'order': len(columns_seen),
+                    'order': order,
                     'temp_id': f'col_{len(columns_seen)}',
                 }
             
@@ -361,6 +402,7 @@ class JiraAdapter(BaseImportAdapter):
         """Transform Jira CSV rows"""
         columns_seen = {}
         labels_seen = {}
+        _custom_order_counter = 60  # Start after known statuses for unknown ones
         
         for idx, row in enumerate(rows):
             # Normalize keys to lowercase for easier access
@@ -376,8 +418,11 @@ class JiraAdapter(BaseImportAdapter):
             column_name = self.STATUS_TO_COLUMN.get(status.lower(), status)
             
             if column_name not in columns_seen:
+                order = self.COLUMN_ORDER.get(column_name, _custom_order_counter)
+                if column_name not in self.COLUMN_ORDER:
+                    _custom_order_counter += 1
                 columns_seen[column_name] = {
-                    'order': len(columns_seen),
+                    'order': order,
                     'temp_id': f'col_{len(columns_seen)}',
                 }
             

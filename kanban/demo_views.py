@@ -1337,6 +1337,49 @@ def _delete_user_board_safely(board):
     try:
         from wiki.models import WikiLink
         WikiLink.objects.filter(board=board).delete()
+        if task_ids:
+            WikiLink.objects.filter(task_id__in=task_ids).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.models import CalendarEvent
+        CalendarEvent.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from knowledge_graph.models import MemoryNode, MemoryConnection
+        from django.db.models import Q as _Q
+        orphan_nodes = MemoryNode.objects.filter(board=board)
+        orphan_ids = list(orphan_nodes.values_list('id', flat=True))
+        if orphan_ids:
+            MemoryConnection.objects.filter(
+                _Q(from_node_id__in=orphan_ids) | _Q(to_node_id__in=orphan_ids)
+            ).delete()
+            orphan_nodes.delete()
+    except Exception:
+        pass
+
+    try:
+        from decision_center.models import DecisionItem
+        DecisionItem.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from exit_protocol.models import (
+            HospiceDismissal, CemeteryEntry, ProjectOrgan, HospiceSession,
+            ProjectHealthSignal,
+        )
+        HospiceDismissal.objects.filter(board=board).delete()
+        try:
+            CemeteryEntry.objects.filter(board=board).delete()
+        except Exception:
+            pass
+        ProjectOrgan.objects.filter(source_board=board).delete()
+        HospiceSession.objects.filter(board=board).delete()
+        ProjectHealthSignal.objects.filter(board=board).delete()
     except Exception:
         pass
 
@@ -1420,11 +1463,15 @@ def reset_demo_data(request):
             official_board_names = ['Software Development']
             demo_boards = Board.objects.filter(is_official_demo_board=True)
 
-            # User-created boards: anything not official
-            user_boards = Board.objects.filter(is_official_demo_board=False)
+            # User-created boards: only boards owned by the current user
+            # (never touch other users' sandboxes or boards)
+            user_boards = Board.objects.filter(
+                is_official_demo_board=False,
+                owner=request.user,
+            )
 
             # ============================================================
-            # STEP 2: Delete all user-created boards with full cleanup
+            # STEP 2: Delete user-created boards with full cleanup
             # ============================================================
             # Also clean up DemoSandbox records so sandbox can be
             # re-provisioned cleanly after reset.
@@ -1433,6 +1480,53 @@ def reset_demo_data(request):
                 DemoSandbox.objects.filter(user=request.user).delete()
             except Exception:
                 pass
+
+            # Clean SET_NULL FK models before board deletion (they'd be orphaned)
+            user_board_ids = list(user_boards.values_list('id', flat=True))
+            user_task_ids_on_own_boards = list(
+                Task.objects.filter(column__board_id__in=user_board_ids)
+                .values_list('id', flat=True)
+            ) if user_board_ids else []
+
+            if user_board_ids:
+                try:
+                    from ai_assistant.models import (
+                        AIAssistantMessage, AIAssistantSession, AIAssistantAnalytics,
+                    )
+                    orphan_sessions = AIAssistantSession.objects.filter(board_id__in=user_board_ids)
+                    AIAssistantMessage.objects.filter(session__in=orphan_sessions).delete()
+                    orphan_sessions.delete()
+                    AIAssistantAnalytics.objects.filter(board_id__in=user_board_ids).delete()
+                except Exception:
+                    pass
+
+                try:
+                    from kanban.models import CalendarEvent
+                    CalendarEvent.objects.filter(board_id__in=user_board_ids).delete()
+                except Exception:
+                    pass
+
+                try:
+                    from knowledge_graph.models import MemoryNode, MemoryConnection
+                    from django.db.models import Q
+                    orphan_nodes = MemoryNode.objects.filter(board_id__in=user_board_ids)
+                    orphan_node_ids = list(orphan_nodes.values_list('id', flat=True))
+                    if orphan_node_ids:
+                        MemoryConnection.objects.filter(
+                            Q(from_node_id__in=orphan_node_ids)
+                            | Q(to_node_id__in=orphan_node_ids)
+                        ).delete()
+                        orphan_nodes.delete()
+                except Exception:
+                    pass
+
+                try:
+                    from wiki.models import WikiLink
+                    WikiLink.objects.filter(board_id__in=user_board_ids).delete()
+                    if user_task_ids_on_own_boards:
+                        WikiLink.objects.filter(task_id__in=user_task_ids_on_own_boards).delete()
+                except Exception:
+                    pass
 
             for board in list(user_boards):
                 try:
@@ -1566,7 +1660,58 @@ def reset_demo_data(request):
                 pass
 
             # ============================================================
-            # STEP 6: Clean up orphaned webhook events (safety net)
+            # STEP 5b: Clear user-created calendar events & memory nodes
+            # ============================================================
+            try:
+                from kanban.models import CalendarEvent
+                CalendarEvent.objects.filter(
+                    board__in=demo_boards
+                ).exclude(
+                    created_by__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                ).delete()
+                # Also clean user-created events without board association
+                CalendarEvent.objects.filter(created_by=request.user, board__isnull=True).delete()
+            except Exception:
+                pass
+
+            try:
+                from knowledge_graph.models import MemoryNode, MemoryConnection
+                from django.db.models import Q as _Q
+                user_memory_nodes = MemoryNode.objects.filter(
+                    board__in=demo_boards
+                ).exclude(
+                    created_by__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                )
+                node_ids = list(user_memory_nodes.values_list('id', flat=True))
+                if node_ids:
+                    MemoryConnection.objects.filter(
+                        _Q(from_node_id__in=node_ids) | _Q(to_node_id__in=node_ids)
+                    ).delete()
+                    user_memory_nodes.delete()
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 6a: Clear Decision Center items and briefings
+            # ============================================================
+            try:
+                from decision_center.models import (
+                    DecisionItem, DecisionCenterBriefing, DecisionCenterSettings
+                )
+                from django.core.cache import cache as dc_cache
+
+                # Delete all decision items for the current user
+                DecisionItem.objects.filter(created_for=request.user).delete()
+                # Delete briefings so they get regenerated fresh
+                DecisionCenterBriefing.objects.filter(user=request.user).delete()
+                # Invalidate widget cache for both demo and real modes
+                dc_cache.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache.delete(f'dc_widget_{request.user.id}_real')
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 6b: Clean up orphaned webhook events (safety net)
             # ============================================================
             try:
                 from webhooks.models import WebhookEvent
@@ -1593,6 +1738,33 @@ def reset_demo_data(request):
             # Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
+            except Exception:
+                pass
+
+            # Invalidate Decision Center widget cache after repopulation
+            try:
+                from django.core.cache import cache as dc_cache
+                dc_cache.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache.delete(f'dc_widget_{request.user.id}_real')
+            except Exception:
+                pass
+
+            # ============================================================
+            # STEP 7b: Regenerate Decision Center items for current user
+            # ============================================================
+            # The collect_decision_items Celery task only runs daily.
+            # After a reset we must explicitly re-scan so the DC page
+            # and dashboard widget show consistent, fresh counts.
+            try:
+                from decision_center.tasks import (
+                    collect_for_user, generate_briefing_for_user,
+                )
+                collect_for_user(request.user)
+                generate_briefing_for_user(request.user)
+                # Final cache invalidation after items are created
+                from django.core.cache import cache as dc_cache2
+                dc_cache2.delete(f'dc_widget_{request.user.id}_demo')
+                dc_cache2.delete(f'dc_widget_{request.user.id}_real')
             except Exception:
                 pass
 

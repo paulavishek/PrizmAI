@@ -144,6 +144,22 @@
         </div>
         {% endif %}
 
+        {# Checklist progress #}
+        {% with cl=task.checklist_progress %}
+        {% if cl %}
+        <div class="qv-section">
+            <div class="qv-section-header"><i class="fas fa-tasks me-1"></i> Checklist ({{ cl.completed }}/{{ cl.total }})</div>
+            <div class="progress mb-1" style="height:5px;">
+                <div class="progress-bar {% if cl.completed == cl.total %}bg-success{% else %}bg-info{% endif %}"
+                     style="width:{% widthratio cl.completed cl.total 100 %}%;"></div>
+            </div>
+            <small class="text-muted" style="font-size:.72rem;">
+                {% if cl.completed == cl.total %}All items completed{% else %}{{ cl.completed }} of {{ cl.total }} items done{% endif %}
+            </small>
+        </div>
+        {% endif %}
+        {% endwith %}
+
         {# Stakeholders #}
         {% if stakeholders %}
         <div class="qv-section">

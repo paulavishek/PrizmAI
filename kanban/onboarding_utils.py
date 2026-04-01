@@ -80,6 +80,20 @@ def commit_onboarding_workspace(user, preview):
 
     org = getattr(user, 'profile', None) and user.profile.organization
 
+    # Auto-create an Organization if the user doesn't have one yet
+    if not org:
+        from accounts.models import Organization
+        first_name = (user.first_name or user.username).strip()
+        org_name = f"{first_name}'s Workspace"
+        org = Organization.objects.create(
+            name=org_name,
+            created_by=user,
+        )
+        profile = user.profile
+        profile.organization = org
+        profile.save(update_fields=['organization'])
+        logger.info(f"Auto-created Organization '{org_name}' (#{org.pk}) for {user.username}")
+
     with transaction.atomic():
         # ── Organization Goal ──────────────────────────────────────────
         org_goal = OrganizationGoal.objects.create(

@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from .forms import LoginForm, RegistrationForm, UserProfileForm
-from .models import Organization, UserProfile, COMMON_TIMEZONES
+from .models import Organization, UserProfile, OrganizationInvitation, COMMON_TIMEZONES
 import json
 import logging
 
@@ -244,8 +244,10 @@ def profile_view(request):
 @login_required
 def organization_members(request):
     """
-    MVP Mode: Show all users since everyone shares the same space.
+    Organization members page — lists members, pending invitations, and invite form.
     """
+    import re
+
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
@@ -258,36 +260,212 @@ def organization_members(request):
             onboarding_version=2,
             onboarding_status='pending',
         )
-    
-    # MVP Mode: Show all users (including demo users)
-    members = UserProfile.objects.all()
-    
+
+    org = profile.organization
+
+    # If user has no org, show a prompt to set up their workspace
+    if not org:
+        return render(request, 'accounts/organization_members.html', {
+            'organization': None,
+            'members': [],
+            'pending_invitations': [],
+            'can_manage': False,
+        })
+
+    # Permission: only org creator or admin can manage invites
+    can_manage = (org.created_by == request.user or profile.is_admin)
+
+    # Handle invitation POST
+    if request.method == 'POST' and can_manage:
+        # Handle workspace rename
+        new_name = request.POST.get('workspace_name', '').strip()
+        if new_name and new_name != org.name:
+            org.name = new_name[:100]
+            org.save(update_fields=['name'])
+            messages.success(request, 'Workspace name updated.')
+
+        # Handle email invitations
+        raw = request.POST.get('invite_emails', '').strip()
+        if raw:
+            raw_emails = re.split(r'[,;\n]+', raw)
+            emails = list(dict.fromkeys(
+                e.strip().lower() for e in raw_emails if e.strip()
+            ))
+
+            sent_list, skipped_list = [], []
+            for email in emails:
+                if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+                    skipped_list.append(f"{email} (invalid format)")
+                    continue
+
+                if UserProfile.objects.filter(
+                    organization=org, user__email__iexact=email
+                ).exists():
+                    skipped_list.append(f"{email} (already a member)")
+                    continue
+
+                OrganizationInvitation.objects.filter(
+                    organization=org, email=email,
+                    status=OrganizationInvitation.STATUS_PENDING,
+                ).update(status=OrganizationInvitation.STATUS_REVOKED)
+
+                invitation = OrganizationInvitation.objects.create(
+                    organization=org,
+                    invited_by=request.user,
+                    email=email,
+                )
+
+                # Send invitation email
+                from django.core.mail import send_mail
+                from django.template.loader import render_to_string
+                from django.urls import reverse as url_reverse
+                accept_url = request.build_absolute_uri(
+                    url_reverse('accept_org_invitation', args=[invitation.token])
+                )
+                context = {
+                    'invitation': invitation,
+                    'organization': org,
+                    'invited_by': request.user,
+                    'accept_url': accept_url,
+                    'expires_hours': 48,
+                }
+                try:
+                    send_mail(
+                        subject=f"You're invited to join '{org.name}' on PrizmAI",
+                        message=render_to_string('kanban/email/org_invitation.txt', context),
+                        from_email=None,
+                        recipient_list=[email],
+                        html_message=render_to_string('kanban/email/org_invitation.html', context),
+                        fail_silently=False,
+                    )
+                    sent_list.append(email)
+                except Exception:
+                    sent_list.append(email)  # Invitation created even if email fails
+
+            if sent_list:
+                count = len(sent_list)
+                if count == 1:
+                    messages.success(request, f"Invitation sent to {sent_list[0]}.")
+                else:
+                    messages.success(request, f"Invitations sent to {count} addresses.")
+            for note in skipped_list:
+                messages.info(request, f"Skipped: {note}")
+
+        return redirect('organization_members')
+
+    # GET: show members + pending invitations
+    members = UserProfile.objects.filter(organization=org).select_related('user')
+    pending_invitations = OrganizationInvitation.objects.filter(
+        organization=org, status=OrganizationInvitation.STATUS_PENDING,
+    ).order_by('-created_at')
+
     return render(request, 'accounts/organization_members.html', {
-        'organization': None,  # No organization in MVP mode
-        'members': members
+        'organization': org,
+        'members': members,
+        'pending_invitations': pending_invitations,
+        'can_manage': can_manage,
     })
 
 @login_required
 def organization_settings(request):
-    """
-    MVP Mode: Organization settings are not available.
-    """
-    messages.info(request, 'Organization settings are not available in MVP mode.')
-    return redirect('dashboard')
+    """Organization settings — rename workspace."""
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return redirect('dashboard')
+
+    org = profile.organization
+    if not org:
+        messages.info(request, 'No workspace found. Set up your workspace first.')
+        return redirect('onboarding_welcome')
+
+    if request.method == 'POST':
+        can_manage = (org.created_by == request.user or profile.is_admin)
+        if can_manage:
+            new_name = request.POST.get('workspace_name', '').strip()
+            if new_name:
+                org.name = new_name[:100]
+                org.save(update_fields=['name'])
+                messages.success(request, 'Workspace name updated.')
+        return redirect('organization_settings')
+
+    return render(request, 'accounts/organization_settings.html', {
+        'organization': org,
+        'can_manage': (org.created_by == request.user or profile.is_admin),
+    })
 
 # Add this method to toggle admin status for a member
 @login_required
 def toggle_admin(request, profile_id):
-    """MVP Mode: Admin toggle is not available."""
-    messages.info(request, 'Admin management is not available in MVP mode.')
-    return redirect('dashboard')
+    """Toggle admin status for a member."""
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return redirect('dashboard')
+
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    # Only org creator can toggle admin
+    if org.created_by != request.user:
+        messages.error(request, "Only the workspace creator can manage admin roles.")
+        return redirect('organization_members')
+
+    target_profile = get_object_or_404(UserProfile, id=profile_id)
+
+    if target_profile.user == org.created_by:
+        messages.error(request, "Cannot change the workspace creator's role.")
+        return redirect('organization_members')
+
+    if target_profile.organization != org:
+        messages.error(request, "This user is not in your workspace.")
+        return redirect('organization_members')
+
+    target_profile.is_admin = not target_profile.is_admin
+    target_profile.save(update_fields=['is_admin'])
+
+    action = "promoted to Admin" if target_profile.is_admin else "demoted to Member"
+    messages.success(request, f"{target_profile.user.get_full_name() or target_profile.user.username} has been {action}."  )
+    return redirect('organization_members')
 
 # Add this method to remove a member from the organization
 @login_required
 def remove_member(request, profile_id):
-    """MVP Mode: Member removal is not available."""
-    messages.info(request, 'Member management is not available in MVP mode.')
-    return redirect('dashboard')
+    """Remove a member from the organization."""
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return redirect('dashboard')
+
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    can_manage = (org.created_by == request.user or profile.is_admin)
+    if not can_manage:
+        messages.error(request, "You don't have permission to remove members.")
+        return redirect('organization_members')
+
+    target_profile = get_object_or_404(UserProfile, id=profile_id)
+
+    # Cannot remove the org creator
+    if target_profile.user == org.created_by:
+        messages.error(request, "Cannot remove the workspace creator.")
+        return redirect('organization_members')
+
+    # Cannot remove yourself
+    if target_profile.user == request.user:
+        messages.error(request, "You cannot remove yourself.")
+        return redirect('organization_members')
+
+    # Unlink from org
+    if target_profile.organization == org:
+        target_profile.organization = None
+        target_profile.save(update_fields=['organization'])
+        messages.success(request, f"{target_profile.user.get_full_name() or target_profile.user.username} has been removed from the workspace.")
+
+    return redirect('organization_members')
 
 @login_required
 def delete_organization(request):
@@ -321,6 +499,64 @@ def social_signup_complete(request):
         )
         messages.success(request, 'Welcome! Your account is ready to use.')
         return redirect('onboarding_welcome')
+
+
+SESSION_ORG_INVITE_KEY = 'pending_org_invite_token'
+
+
+def accept_org_invitation(request, token):
+    """
+    Accept an organization invitation via token link.
+    - If logged in: join the organization immediately.
+    - If not logged in: save token in session, redirect to login.
+    """
+    invitation = get_object_or_404(OrganizationInvitation, token=token)
+
+    if not invitation.is_valid():
+        return render(request, 'accounts/org_invitation_invalid.html', {
+            'reason': invitation.get_status_display(),
+            'organization': invitation.organization,
+        })
+
+    if not request.user.is_authenticated:
+        request.session[SESSION_ORG_INVITE_KEY] = str(token)
+        messages.info(request, f"Please sign in to join '{invitation.organization.name}'.")
+        from django.urls import reverse
+        return redirect(f"{reverse('login')}?next={reverse('accept_org_invitation', args=[token])}")
+
+    user = request.user
+
+    # Ensure profile exists
+    try:
+        profile = user.profile
+    except UserProfile.DoesNotExist:
+        profile = UserProfile.objects.create(
+            user=user, organization=None, is_admin=False,
+            completed_wizard=True, has_seen_welcome=True,
+            onboarding_version=2, onboarding_status='pending',
+        )
+
+    # Link user to the organization
+    if not profile.organization or profile.organization != invitation.organization:
+        profile.organization = invitation.organization
+        profile.save(update_fields=['organization'])
+
+    # Grant viewer membership on all boards belonging to this organization
+    from kanban.models import Board, BoardMembership
+    org_boards = Board.objects.filter(
+        strategy__mission__organization_goal__organization=invitation.organization
+    ).distinct()
+    for board in org_boards:
+        BoardMembership.objects.get_or_create(
+            board=board, user=user,
+            defaults={'role': 'viewer', 'added_by': invitation.invited_by},
+        )
+
+    invitation.mark_accepted(user)
+    request.session.pop(SESSION_ORG_INVITE_KEY, None)
+
+    messages.success(request, f"Welcome! You've joined '{invitation.organization.name}'.")
+    return redirect('dashboard')
 
 
 @login_required

@@ -53,6 +53,9 @@
                 <button onclick="goBack()" class="btn btn-sm btn-outline-secondary" title="Back to board">
                     <i class="fas fa-arrow-left"></i>
                 </button>
+                {% if task.is_epic %}
+                <span class="badge bg-warning text-dark" style="font-size:0.8em;"><i class="fas fa-crown me-1"></i>Epic</span>
+                {% endif %}
                 <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-secondary" title="View on board">
                     <i class="fas fa-columns"></i>
                 </a>
@@ -80,7 +83,8 @@
         </ul>
 
         <!-- Single form wrapping all tabs (so Save always works) -->
-        <form method="post" class="task-form" id="taskDetailForm">
+        <!-- novalidate: browser validation can't focus required fields in hidden tabs; Django validates server-side -->
+        <form method="post" class="task-form" id="taskDetailForm" novalidate>
             {% csrf_token %}
             <input type="hidden" name="next" id="next-url" value="">
 
@@ -159,6 +163,20 @@
                             {{ form.labels }}
                             {% if form.labels.errors %}
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Phase Selection -->
+                        {% if form.phase %}
+                        <div class="mb-3">
+                            <label for="{{ form.phase.id_for_label }}" class="form-label">
+                                <i class="fas fa-layer-group text-primary me-1"></i> Sprint / Phase <span class="text-danger">*</span>
+                            </label>
+                            {{ form.phase }}
+                            <small class="form-text text-muted">Project phase for Gantt chart organization</small>
+                            {% if form.phase.errors %}
+                                <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
                             {% endif %}
                         </div>
                         {% endif %}
@@ -470,19 +488,6 @@
                             {% endif %}
                         </div>
 
-                        <!-- Phase Selection -->
-                        {% if form.phase %}
-                        <div class="mb-3">
-                            <label for="{{ form.phase.id_for_label }}" class="form-label">
-                                <i class="fas fa-layer-group text-primary me-1"></i> Phase
-                            </label>
-                            {{ form.phase }}
-                            <small class="form-text text-muted">Project phase for Gantt chart organization</small>
-                            {% if form.phase.errors %}
-                                <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
-                            {% endif %}
-                        </div>
-                        {% endif %}
                     </div><!-- /tab-relationships -->
 
                     <!-- ═══════ TAB 2: AI INSIGHTS ═══════ -->
@@ -1385,14 +1390,21 @@
                     <div class="p-2 bg-light rounded mb-2">
                         <div class="mb-2">
                             <small class="text-muted d-block mb-1"><strong><i class="fas fa-sitemap me-1"></i>Task Hierarchy</strong></small>
+                            {% if task.is_epic %}
+                            <small class="text-muted fst-italic">This is an <strong>Epic</strong> — it groups child tasks but does not appear on the board itself.</small>
+                            {% else %}
                             <small class="text-muted fst-italic">Parent-child relationships for task organization</small>
+                            {% endif %}
                         </div>
                         
                         {% if task.parent_task %}
                         <div class="mb-2">
                             <small class="text-muted">Parent Task:</small>
                             <div class="p-2 bg-white rounded border-start border-3 border-primary">
-                                <a href="{% url 'task_detail' task.parent_task.id %}" class="text-decoration-none"><strong>{{ task.parent_task.title }}</strong></a>
+                                <a href="{% url 'task_detail' task.parent_task.id %}" class="text-decoration-none">
+                                    <strong>{{ task.parent_task.title }}</strong>
+                                    {% if task.parent_task.is_epic %}<span class="badge bg-warning text-dark ms-1" style="font-size:0.7em;">Epic</span>{% endif %}
+                                </a>
                             </div>
                         </div>
                         {% else %}
@@ -1417,6 +1429,77 @@
                             <small class="text-muted d-block fst-italic">No subtasks. Create subtasks by selecting this task as a parent.</small>
                         </div>
                         {% endif %}
+                    </div>
+
+                    <!-- ✅ Checklist / Sub-task Items -->
+                    <div class="p-2 bg-light rounded mb-2" id="checklist-section" data-task-id="{{ task.id }}">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <small class="text-muted d-block mb-1"><strong><i class="fas fa-tasks me-1"></i>Checklist</strong></small>
+                                {% with cl=task.checklist_progress %}
+                                {% if cl %}
+                                <small class="text-muted fst-italic">{{ cl.completed }}/{{ cl.total }} completed</small>
+                                {% else %}
+                                <small class="text-muted fst-italic">No checklist items yet</small>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="toggleAddChecklistInput()" title="Add checklist item">
+                                <i class="fas fa-plus me-1"></i>Add
+                            </button>
+                        </div>
+
+                        {% with cl=task.checklist_progress %}
+                        {% if cl %}
+                        <div class="progress mb-2" style="height:6px;">
+                            <div class="progress-bar {% if cl.completed == cl.total %}bg-success{% else %}bg-info{% endif %}"
+                                 style="width:{% widthratio cl.completed cl.total 100 %}%;"></div>
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+
+                        <div id="checklist-items-list">
+                        {% for item in task.checklist_items.all %}
+                        <div class="d-flex align-items-start gap-2 p-2 bg-white rounded mb-1 checklist-item-row" data-item-id="{{ item.id }}">
+                            <input type="checkbox" class="form-check-input mt-1 checklist-toggle"
+                                   data-item-id="{{ item.id }}"
+                                   {% if item.is_completed %}checked{% endif %}
+                                   onchange="toggleChecklistItem({{ item.id }})"
+                                   style="cursor:pointer;">
+                            <div class="flex-grow-1 min-w-0">
+                                <small class="{% if item.is_completed %}text-decoration-line-through text-muted{% endif %}">
+                                    {{ item.title }}
+                                </small>
+                                {% if item.estimated_effort %}
+                                <small class="text-muted ms-1">({{ item.estimated_effort }})</small>
+                                {% endif %}
+                                {% if item.source == 'ai_generated' %}
+                                <span class="badge bg-info ms-1" style="font-size:0.6em;vertical-align:middle;">AI</span>
+                                {% endif %}
+                            </div>
+                            <span class="badge bg-{% if item.priority == 'high' or item.priority == 'urgent' %}danger{% elif item.priority == 'medium' %}warning text-dark{% else %}secondary{% endif %}" style="font-size:0.65em;">{{ item.priority }}</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" onclick="deleteChecklistItem({{ item.id }})" title="Remove">
+                                <i class="fas fa-times" style="font-size:0.75em;"></i>
+                            </button>
+                        </div>
+                        {% empty %}
+                        <small class="text-muted fst-italic d-block" id="checklist-empty-msg">Use the AI Analyze &amp; Break Down feature or the Add button to create checklist items.</small>
+                        {% endfor %}
+                        </div>
+
+                        <!-- Inline add form (hidden by default) -->
+                        <div id="add-checklist-form" class="d-none mt-2">
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="new-checklist-title" class="form-control" placeholder="New checklist item…"
+                                       onkeydown="if(event.key==='Enter'){addManualChecklistItem();event.preventDefault();}">
+                                <button class="btn btn-success" type="button" onclick="addManualChecklistItem()">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" onclick="toggleAddChecklistInput()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- 📎 Additional Information -->
@@ -4102,5 +4185,129 @@
         search.addEventListener('input', function() { renderList(search.value); });
     });
 })();
+</script>
+
+<!-- Checklist interaction JS -->
+<script>
+function getCsrf() { return document.querySelector('[name=csrfmiddlewaretoken]').value; }
+
+function toggleChecklistItem(itemId) {
+    fetch('/api/checklist-item/' + itemId + '/toggle/', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Update visual state
+            const row = document.querySelector('.checklist-item-row[data-item-id="' + itemId + '"]');
+            if (row) {
+                const label = row.querySelector('.flex-grow-1 small:first-child');
+                if (data.is_completed) {
+                    label.classList.add('text-decoration-line-through', 'text-muted');
+                } else {
+                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                }
+            }
+            // Update progress
+            updateChecklistProgress(data.checklist_progress);
+        }
+    })
+    .catch(err => console.error('Toggle failed:', err));
+}
+
+function deleteChecklistItem(itemId) {
+    if (!confirm('Remove this checklist item?')) return;
+    fetch('/api/checklist-item/' + itemId + '/delete/', {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': getCsrf() }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const row = document.querySelector('.checklist-item-row[data-item-id="' + itemId + '"]');
+            if (row) row.remove();
+            updateChecklistProgress(data.checklist_progress);
+            // Show empty message if no items remain
+            if (!document.querySelectorAll('.checklist-item-row').length) {
+                document.getElementById('checklist-items-list').innerHTML =
+                    '<small class="text-muted fst-italic d-block" id="checklist-empty-msg">Use the AI Analyze &amp; Break Down feature or the Add button to create checklist items.</small>';
+            }
+        }
+    })
+    .catch(err => console.error('Delete failed:', err));
+}
+
+function toggleAddChecklistInput() {
+    const form = document.getElementById('add-checklist-form');
+    form.classList.toggle('d-none');
+    if (!form.classList.contains('d-none')) {
+        document.getElementById('new-checklist-title').focus();
+    }
+}
+
+function addManualChecklistItem() {
+    const input = document.getElementById('new-checklist-title');
+    const title = input.value.trim();
+    if (!title) return;
+    const taskId = document.getElementById('checklist-section').dataset.taskId;
+
+    fetch('/api/checklist-items/add/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ task_id: parseInt(taskId), title: title })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Remove empty message if present
+            const emptyMsg = document.getElementById('checklist-empty-msg');
+            if (emptyMsg) emptyMsg.remove();
+            // Append new item
+            const list = document.getElementById('checklist-items-list');
+            const item = data.item;
+            const html = `
+                <div class="d-flex align-items-start gap-2 p-2 bg-white rounded mb-1 checklist-item-row" data-item-id="${item.id}">
+                    <input type="checkbox" class="form-check-input mt-1 checklist-toggle"
+                           data-item-id="${item.id}"
+                           onchange="toggleChecklistItem(${item.id})"
+                           style="cursor:pointer;">
+                    <div class="flex-grow-1 min-w-0">
+                        <small>${item.title}</small>
+                    </div>
+                    <span class="badge bg-warning text-dark" style="font-size:0.65em;">medium</span>
+                    <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" onclick="deleteChecklistItem(${item.id})" title="Remove">
+                        <i class="fas fa-times" style="font-size:0.75em;"></i>
+                    </button>
+                </div>`;
+            list.insertAdjacentHTML('beforeend', html);
+            input.value = '';
+            updateChecklistProgress(data.checklist_progress);
+        }
+    })
+    .catch(err => console.error('Add failed:', err));
+}
+
+function updateChecklistProgress(progress) {
+    // Update the header text and progress bar
+    const section = document.getElementById('checklist-section');
+    if (!section || !progress) return;
+    const infoText = section.querySelector('.text-muted.fst-italic');
+    if (infoText) infoText.textContent = progress.completed + '/' + progress.total + ' completed';
+    const bar = section.querySelector('.progress-bar');
+    if (bar) {
+        const pct = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
+        bar.style.width = pct + '%';
+        bar.className = 'progress-bar ' + (progress.completed === progress.total ? 'bg-success' : 'bg-info');
+    } else if (progress.total > 0) {
+        // Create progress bar if it didn't exist
+        const header = section.querySelector('.d-flex.justify-content-between');
+        if (header) {
+            const pct = Math.round((progress.completed / progress.total) * 100);
+            const barHtml = '<div class="progress mb-2" style="height:6px;"><div class="progress-bar bg-info" style="width:' + pct + '%;"></div></div>';
+            header.insertAdjacentHTML('afterend', barHtml);
+        }
+    }
+}
 </script>
 {% endblock %}

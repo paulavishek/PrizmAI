@@ -17,6 +17,7 @@ from .trello_adapter import TrelloAdapter
 from .jira_adapter import JiraAdapter
 from .asana_adapter import AsanaAdapter
 from .csv_adapter import CSVAdapter
+from .monday_adapter import MondayAdapter
 from .prizmAI_adapter import PrizmAIAdapter
 from .field_mapper import FieldMapper, UserMatcher
 
@@ -30,6 +31,7 @@ __all__ = [
     'JiraAdapter',
     'AsanaAdapter',
     'CSVAdapter',
+    'MondayAdapter',
     'PrizmAIAdapter',
     'FieldMapper',
     'UserMatcher',

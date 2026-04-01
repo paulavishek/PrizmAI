@@ -774,14 +774,24 @@ class TaskFlowChatbotService:
                 organization = None
             
             # Get user's boards (filtered by organization if available)
+            # Exclude sandbox copies and official demo boards to prevent
+            # demo data bleeding into the user's real workspace.
             if organization:
                 user_boards = Board.objects.filter(
                     Q(organization=organization) & 
-                    (Q(created_by=self.user) | Q(memberships__user=self.user))
+                    (Q(created_by=self.user) | Q(memberships__user=self.user)),
+                    is_sandbox_copy=False,
+                    is_official_demo_board=False,
+                ).exclude(
+                    created_by_session__startswith='spectra_demo_'
                 ).distinct()
             else:
                 user_boards = Board.objects.filter(
-                    Q(created_by=self.user) | Q(memberships__user=self.user)
+                    Q(created_by=self.user) | Q(memberships__user=self.user),
+                    is_sandbox_copy=False,
+                    is_official_demo_board=False,
+                ).exclude(
+                    created_by_session__startswith='spectra_demo_'
                 ).distinct()
             
             if not user_boards.exists():
@@ -1825,7 +1835,9 @@ class TaskFlowChatbotService:
             return Board.objects.filter(
                 base_filter &
                 Q(organization=organization) & 
-                (Q(created_by=self.user) | Q(memberships__user=self.user))
+                (Q(created_by=self.user) | Q(memberships__user=self.user)),
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
             ).exclude(
                 created_by_session__startswith='spectra_demo_'
             ).distinct()

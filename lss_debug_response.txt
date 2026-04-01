@@ -1,2 +1,53 @@
 ```json
-{"classification":"Value-Added","justification":"This task directly shapes the product/service by gathering customer requirements, defining scope, and planning the roadmap, ensuring the final output delivers customer value.","confidence_score":0.95,"confidence_level":"high","contributing_factors":[{"factor":"Customer Value Alignment","contribution_percentage":40,"description":"Directly translates customer needs and expectations into the product or service definition."},{"factor":"Product Shaping","contribution_percentage":30,"description":"Defines the scope and creates the project roadmap, fundamentally shaping what value will be delivered."},{"factor":"Foundational Step","contribution_percentage":20,"description":"Essential precursor to development, preventing rework and ensuring the right solution is built, thus enabling value creation."},{"factor":"Strategic Importance","contribution_percentage":10,"description":"High priority and moderate complexity underscore its critical role in successful project delivery."}],"classification_reasoning":{"value_added_indicators":["Directly defines customer needs and expectations","Shapes product/service scope","Creates a roadmap for delivering customer value"],"non_value_indicators":[],"primary_driver":"Direct contribution to defining and shaping the customer-facing product/service, ensuring it meets market needs and delivers value."},"alternative_classification":{"classification":"Necessary Non-Value-Added","confidence_score":0.15,"conditions":"If the primary focus of the task was solely on documenting pre-defined requirements for compliance or internal process adherence, rather than active discovery, definition, and strategic planning."},"assumptions":["The 'gathering requirements' aspect involves active discovery and understanding of customer needs, not just passive recording or formalizing existing mandates.","The 'project roadmap' creation is focused on delivering customer value and achieving strategic objectives, not solely internal resource allocation."],"improvement_suggestions":["Implement robust requirement validation processes to ensure accuracy, completeness, and alignment with customer needs.","Involve key stakeholders (including customers) early and continuously to refine requirements and scope, fostering shared understanding.","
+{
+  "classification": "Necessary Non-Value-Added",
+  "justification": "Task involves documentation and testing, mandatory NNV activities per the critical rule.",
+  "confidence_score": 0.95,
+  "confidence_level": "high",
+  "contributing_factors": [
+    {
+      "factor": "Documentation",
+      "contribution_percentage": 30,
+      "description": "Defining API contract and specifications is NNV."
+    },
+    {
+      "factor": "Testing",
+      "contribution_percentage": 30,
+      "description": "Unit and integration testing is NNV."
+    },
+    {
+      "factor": "Core Development",
+      "contribution_percentage": 40,
+      "description": "Implementing API routes and parsing logic is VA."
+    }
+  ],
+  "classification_reasoning": {
+    "value_added_indicators": [
+      "Creates new API functionality",
+      "Enables external system interaction",
+      "Delivers direct product capability"
+    ],
+    "non_value_indicators": [
+      "Includes API documentation",
+      "Requires comprehensive testing",
+      "Addresses security vulnerabilities"
+    ],
+    "primary_driver": "Critical rule mandates NNV for tasks involving documentation and testing."
+  },
+  "alternative_classification": {
+    "classification": "Value-Added",
+    "confidence_score": 0.60,
+    "conditions": "If the critical rule applied only when doc/testing is the sole purpose."
+  },
+  "assumptions": [
+    "The critical classification rule is applied strictly and literally.",
+    "Documentation and testing are inherent and required parts of developing a robust API."
+  ],
+  "improvement_suggestions": [
+    "Break down bundled tasks into granular steps for precise classification.",
+    "Standardize configuration formats to reduce parsing complexity."
+  ],
+  "lean_waste_type": null,
+  "data_quality": "high"
+}
+```

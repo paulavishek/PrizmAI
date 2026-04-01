@@ -178,6 +178,16 @@ urlpatterns = [
     path('api/generate-board-setup/', api_views.generate_board_setup_api, name='generate_board_setup_api'),
     path('api/suggest-task-breakdown/', api_views.suggest_task_breakdown_api, name='suggest_task_breakdown_api'),
     path('api/analyze-workflow-optimization/', api_views.analyze_workflow_optimization_api, name='analyze_workflow_optimization_api'),    path('api/create-subtasks/', api_views.create_subtasks_api, name='create_subtasks_api'),
+
+    # Checklist API Endpoints
+    path('api/create-checklist-items/', api_views.create_checklist_from_breakdown, name='create_checklist_from_breakdown'),
+    path('api/checklist-item/<int:item_id>/toggle/', api_views.toggle_checklist_item, name='toggle_checklist_item'),
+    path('api/checklist-item/<int:item_id>/delete/', api_views.delete_checklist_item, name='delete_checklist_item'),
+    path('api/checklist-items/reorder/', api_views.reorder_checklist_items, name='reorder_checklist_items'),
+    path('api/checklist-items/add/', api_views.add_checklist_item, name='add_checklist_item'),
+
+    # Epic API Endpoints
+    path('api/create-epic-children/', api_views.create_epic_with_children, name='create_epic_with_children'),
     
     # AI Semantic Search
     path('api/search-tasks-semantic/', api_views.search_tasks_semantic_api, name='search_tasks_semantic_api'),
@@ -347,6 +357,7 @@ urlpatterns = [
     path('onboarding/commit/', onboarding_views.onboarding_commit, name='onboarding_commit'),
     path('onboarding/start-over/', onboarding_views.onboarding_start_over, name='onboarding_start_over'),
     path('onboarding/skip/', onboarding_views.onboarding_skip, name='onboarding_skip'),
+    path('onboarding/invite/', onboarding_views.onboarding_invite, name='onboarding_invite'),
     path('onboarding/demo/', onboarding_views.onboarding_explore_demo, name='onboarding_explore_demo'),
     path('onboarding/validate/', onboarding_views.onboarding_validate, name='onboarding_validate'),
     path('onboarding/regenerate-children/', onboarding_views.onboarding_regenerate_children, name='onboarding_regenerate_children'),

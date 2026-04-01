@@ -388,6 +388,9 @@
                 <strong>You're in the demo workspace</strong>
                 <span class="sandbox-active-detail">
                     &mdash; You have full edit access. Changes here won't affect anyone else's data.
+                    <span class="d-block mt-1" style="font-size:0.82rem;opacity:0.85;">
+                        <i class="fas fa-lock me-1"></i>Member management &amp; RBAC are disabled in demo mode. Create your own workspace to invite team members and manage roles.
+                    </span>
                 </span>
             </div>
             <button type="button" class="sandbox-active-dismiss" onclick="this.closest('.sandbox-active-banner').classList.add('d-none')" aria-label="Dismiss notice">
@@ -429,6 +432,9 @@
     
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Feature Guide — contextual help popovers + modals -->
+    <script src="{% static 'js/feature_guide.js' %}"></script>
     
 
     

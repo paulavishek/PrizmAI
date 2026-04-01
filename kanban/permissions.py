@@ -166,6 +166,14 @@ def is_demo_board(user, board):
     return getattr(board, 'is_official_demo_board', False)
 
 
+@rules.predicate
+def is_demo_strategic_object(user, obj):
+    """True if the Goal/Mission/Strategy is part of the demo dataset.
+    Mirrors ``is_demo_board`` so sandbox users can view the hierarchy
+    that the dashboard already surfaces for them."""
+    return getattr(obj, 'is_demo', False) or getattr(obj, 'is_seed_demo_data', False)
+
+
 # ── Permission rules ─────────────────────────────────────────────────────────
 
 # Board permissions.
@@ -199,10 +207,10 @@ rules.add_perm('prizmai.edit_goal',
 # Only Org Admin can be Goal Owner — effectively Org Admin only.
 
 rules.add_perm('prizmai.view_strategy',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member)
+               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
 
 rules.add_perm('prizmai.view_mission',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member)
+               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
 
 rules.add_perm('prizmai.view_goal',
-               is_org_admin | is_record_owner | has_strategic_membership | is_descendant_board_member)
+               is_org_admin | is_record_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)

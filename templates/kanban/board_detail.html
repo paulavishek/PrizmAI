@@ -40,18 +40,31 @@
     }
     /* Collapsed column: shrink to header width only */
     .kanban-column.column-collapsed {
-        flex: 0 0 auto;
+        flex: 0 0 48px !important;
         min-width: 48px;
-        width: auto;
+        max-width: 48px;
+        width: 48px;
+        overflow: hidden;
     }
     .kanban-column.column-collapsed .kanban-column-header {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
         height: auto;
-        min-height: 120px;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
         justify-content: center;
         cursor: pointer;
+        padding: 10px 4px;
+    }
+    .kanban-column.column-collapsed .kanban-column-header .d-flex {
+        display: none !important;
+    }
+    .kanban-column.column-collapsed .kanban-column-header::before {
+        content: attr(data-column-name);
+        font-weight: bold;
+        font-size: 0.85rem;
     }
     .kanban-column-header {
         padding: 10px;
@@ -807,7 +820,7 @@
     {% with col_meta=column_meta|get_item:column.id %}
     <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
         {# -- Column Header (redesigned) -- #}
-        <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
+        <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}" data-column-name="{{ column.name }}">
             <div class="d-flex justify-content-between align-items-center w-100">
                 <div class="d-flex align-items-center gap-2">
                     <span class="column-name-text fw-bold">{{ column.name }}</span>
@@ -828,7 +841,7 @@
                     {% endif %}
                     <div class="dropdown" draggable="false">
                         <button type="button" class="btn btn-sm btn-link text-muted p-0"
-                                data-bs-toggle="dropdown" aria-expanded="false" title="Column options"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Column options"
                                 draggable="false"
                                 style="font-size:1rem;line-height:1;padding:4px 6px !important;">
                             <i class="fas fa-ellipsis-v"></i>
@@ -854,7 +867,7 @@
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <div class="dropdown-item pe-none" style="cursor:default;">
+                                <div class="dropdown-item" style="cursor:default;">
                                     <i class="fas fa-palette me-2 text-muted"></i>Color
                                     <div class="d-flex gap-1 mt-1">
                                         {% for color_val, color_label in column.COLOR_CHOICES %}
@@ -932,6 +945,13 @@
                                 {% endif %}
                                 {% endwith %}
                                 {% endif %}
+                                {% with cl=task.checklist_progress %}
+                                {% if cl %}
+                                <span class="card-checklist-badge" title="Checklist: {{ cl.completed }}/{{ cl.total }}" style="font-size:.7rem;color:{% if cl.completed == cl.total %}#198754{% else %}#6c757d{% endif %};">
+                                    <i class="fas fa-check-square"></i> {{ cl.completed }}/{{ cl.total }}
+                                </span>
+                                {% endif %}
+                                {% endwith %}
                             </div>
                             {% if task.assigned_to %}
                             <span class="card-avatar" title="{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}">
@@ -947,9 +967,9 @@
 
                     {# -- Hover action bar -- #}
                     <div class="card-hover-actions" onclick="event.stopPropagation();">
-                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status">? Status</button>
-                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign">+ Assign</button>
-                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail">? Open</a>
+                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status"><i class="fas fa-arrows-alt-h me-1"></i> Status</button>
+                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign"><i class="fas fa-user-plus me-1"></i> Assign</button>
+                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail"><i class="fas fa-external-link-alt me-1"></i> Open</a>
                     </div>
 
                     {# -- Inline status dropdown (hidden by default) -- #}
@@ -1670,61 +1690,8 @@
             });
         })();
 
-        // -- Collapse Column handler --
-        // Use direct per-button listeners (not document delegation) so the
-        // handler fires at the button level, before Bootstrap's document-level
-        // clearMenus handler can call stopImmediatePropagation and swallow it.
-        document.querySelectorAll('.collapse-column-btn').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                const colId = this.dataset.columnId;
-                const colEl = document.getElementById('column-' + colId);
-                if (!colEl) return;
-                const isCollapsed = colEl.classList.toggle('column-collapsed');
-                const tasksDiv = colEl.querySelector('.kanban-column-tasks');
-                const addBtn  = colEl.querySelector('.p-2');
-                if (tasksDiv) tasksDiv.classList.toggle('d-none', isCollapsed);
-                if (addBtn)  addBtn.classList.toggle('d-none', isCollapsed);
-                this.innerHTML = isCollapsed
-                    ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
-                    : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
-            });
-        });
-
-        // -- Column Color Picker handler --
-        document.querySelectorAll('.column-color-btn').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                const colId = this.dataset.columnId;
-                const color = this.dataset.color;
-                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-                const formData = new FormData();
-                formData.append('color', color);
-                fetch(`/columns/${colId}/update-color/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken },
-                    body: formData
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        const header = document.querySelector(`#column-${colId} .kanban-column-header`);
-                        if (header) {
-                            header.className = header.className.replace(/kanban-column-header--\w+/g, '');
-                            header.classList.add('kanban-column-header--' + color);
-                        }
-                        // Update selected indicator
-                        const parent = this.closest('.d-flex.gap-1');
-                        if (parent) {
-                            parent.querySelectorAll('.column-color-btn').forEach(b => {
-                                b.classList.remove('border-dark', 'border-2');
-                            });
-                            this.classList.add('border-dark', 'border-2');
-                        }
-                    }
-                });
-            });
-        });
+        // -- Collapse Column handler (MOVED to standalone script below) --
+        // -- Column Color Picker handler (MOVED to standalone script below) --
         
         // Set up column delete functionality
         const deleteColumnBtns = document.querySelectorAll('.delete-column-btn');
@@ -1835,6 +1802,103 @@
     
     </script>
 
+<!-- Collapse Column & Color Picker — standalone script with document-level delegation -->
+<script>
+(function() {
+    function getCSRF() {
+        var el = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (el) return el.value;
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    // -- Collapse Column (event delegation on document, capture phase) --
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.collapse-column-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        var colId = btn.dataset.columnId;
+        var colEl = document.getElementById('column-' + colId);
+        if (!colEl) return;
+
+        // Close the Bootstrap dropdown first
+        var ddToggle = btn.closest('.dropdown');
+        if (ddToggle) {
+            var triggerBtn = ddToggle.querySelector('[data-bs-toggle="dropdown"]');
+            if (triggerBtn) {
+                var inst = bootstrap.Dropdown.getOrCreateInstance(triggerBtn);
+                inst.hide();
+            }
+        }
+
+        var isCollapsed = colEl.classList.toggle('column-collapsed');
+        colEl.setAttribute('draggable', isCollapsed ? 'false' : 'true');
+        var tasksDiv = colEl.querySelector('.kanban-column-tasks');
+        var addBtn   = colEl.querySelector('.p-2');
+        if (tasksDiv) tasksDiv.classList.toggle('d-none', isCollapsed);
+        if (addBtn)  addBtn.classList.toggle('d-none', isCollapsed);
+        btn.innerHTML = isCollapsed
+            ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
+            : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+    }, true);  // <-- capture phase
+
+    // -- Click collapsed column header to expand --
+    document.addEventListener('click', function(e) {
+        var colEl = e.target.closest('.kanban-column.column-collapsed');
+        if (!colEl) return;
+        if (e.target.closest('.dropdown, button, a')) return;
+        colEl.classList.remove('column-collapsed');
+        colEl.setAttribute('draggable', 'true');
+        var tasksDiv = colEl.querySelector('.kanban-column-tasks');
+        var addBtn   = colEl.querySelector('.p-2');
+        if (tasksDiv) tasksDiv.classList.remove('d-none');
+        if (addBtn)  addBtn.classList.remove('d-none');
+        var collapseBtn = colEl.querySelector('.collapse-column-btn');
+        if (collapseBtn) collapseBtn.innerHTML = '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+    });
+
+    // -- Column Color Picker (event delegation on document, capture phase) --
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.column-color-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        var colId = btn.dataset.columnId;
+        var color = btn.dataset.color;
+        var csrf  = getCSRF();
+        var fd = new FormData();
+        fd.append('color', color);
+        fetch('/columns/' + colId + '/update-color/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            body: fd
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var header = document.querySelector('#column-' + colId + ' .kanban-column-header');
+                if (header) {
+                    header.className = header.className.replace(/kanban-column-header--\w+/g, '');
+                    header.classList.add('kanban-column-header--' + color);
+                }
+                // Update selected ring
+                var parent = btn.closest('.d-flex.gap-1');
+                if (parent) {
+                    parent.querySelectorAll('.column-color-btn').forEach(function(b) {
+                        b.classList.remove('border-dark', 'border-2');
+                    });
+                    btn.classList.add('border-dark', 'border-2');
+                }
+            }
+        })
+        .catch(function(err) { console.error('Color update failed:', err); });
+    }, true);  // <-- capture phase
+})();
+</script>
+
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 
 <!-- D�j� Vu Banner Script -->
@@ -1863,14 +1927,12 @@
     <div class="offcanvas-body">
         <!-- Section 1: Analyze -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? Analyze</div>
+            <div class="ai-panel-section-header"><i class="fas fa-chart-bar me-1"></i> Analyze</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}" title="View board analytics, charts, and AI insights" style="position:relative;">
                     <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-pie"></i></span>
                     <span class="tile-label">Analytics</span>
-                    {% if not board.project_type_confirmed %}
-                    <span style="position:absolute;top:2px;right:4px;font-size:.65rem;animation:sparkle-pulse 2s ease-in-out infinite;" title="Let Spectra analyse your board for smarter insights">&#10024;</span>
-                    {% endif %}
+
                 </a>
                 <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}" title="AI-powered burndown prediction and completion forecast">
                     <span class="tile-icon" style="color: #378ADD;"><i class="fas fa-chart-line"></i></span>
@@ -1893,7 +1955,7 @@
 
         <!-- Section 2: Plan -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? Plan</div>
+            <div class="ai-panel-section-header"><i class="fas fa-calendar-check me-1"></i> Plan</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}" title="Interactive Gantt chart with dependencies">
                     <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-gantt"></i></span>
@@ -1916,7 +1978,7 @@
 
         <!-- Section 3: AI Actions -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? AI Actions</div>
+            <div class="ai-panel-section-header"><i class="fas fa-robot me-1"></i> AI Actions</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}" title="Proactive AI coaching suggestions for your project">
                     <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-user-graduate"></i></span>
@@ -1959,7 +2021,7 @@
 
         <!-- Section 4: Board Settings -->
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header">?? Board Settings</div>
+            <div class="ai-panel-section-header"><i class="fas fa-cog me-1"></i> Board Settings</div>
             <div class="ai-panel-grid">
                 <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}" title="Configure automated workflows and rules">
                     <span class="tile-icon" style="color: #888780;"><i class="fas fa-bolt"></i></span>

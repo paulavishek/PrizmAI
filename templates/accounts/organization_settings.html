@@ -1,112 +1,71 @@
 ﻿{% extends 'base.html' %}
-{% load crispy_forms_tags %}
 
-{% block title %}Organization Settings - PrizmAI{% endblock %}
+{% block title %}Workspace Settings - PrizmAI{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">Organization Settings</h4>
-                <a href="{% url 'organization_members' %}" class="btn btn-light btn-sm">
-                    <i class="fas fa-users me-1"></i> Manage Members
-                </a>
-            </div>
-            <div class="card-body">
-                <div class="alert alert-info">
-                    <p>
-                        <i class="fas fa-info-circle me-2"></i> 
-                        <strong>Important:</strong> Changes to the domain will affect registration validation. You can only 
-                        change to a domain that doesn't conflict with existing user emails.
-                    </p>
-                </div>
-                
-                <form method="post">
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                    
-                    <div class="card mt-4 mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">Organization Information</h5>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>Created By:</strong> {{ organization.created_by.username }}</p>
-                            <p><strong>Created On:</strong> {{ organization.created_at|date:"M d, Y" }}</p>
-                            <p><strong>Total Members:</strong> {{ organization.members.count }}</p>
-                            <p><strong>Admins:</strong> {{ admin_count }}</p>
-                            
-                            <div class="alert alert-info mt-3 mb-0">
-                                <small>
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    <strong>Note:</strong> Organization membership is separate from individual board membership. 
-                                    Not all organization members are automatically added to every board. 
-                                    Board creators/admins control who can access specific boards.
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Save Changes</button>
-                    </div>
-                </form>
-            </div>
+<div class="container py-4">
+
+  <div class="d-flex align-items-center mb-4 gap-3">
+    <a href="{% url 'organization_members' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Members
+    </a>
+    <h2 class="mb-0 fw-bold">
+      <i class="fas fa-cog me-2 text-primary"></i>Workspace Settings
+    </h2>
+  </div>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      <!-- Rename Workspace -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-building me-2 text-primary"></i>Workspace Details
         </div>
-        
-        {% if request.user == organization.created_by %}
-        <div class="card shadow mt-4">
-            <div class="card-header bg-danger text-white">
-                <h4 class="mb-0">Danger Zone</h4>
+        <div class="card-body">
+          {% if can_manage %}
+          <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label for="workspaceName" class="form-label small fw-semibold">Workspace Name</label>
+              <input type="text" class="form-control" id="workspaceName" name="workspace_name"
+                     value="{{ organization.name }}" maxlength="100" required>
             </div>
-            <div class="card-body">
-                <p class="text-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>Warning:</strong> These actions are irreversible and can cause data loss.
-                </p>
-                
-                <div class="d-flex justify-content-between align-items-center mb-3 p-3 border rounded">
-                    <div>
-                        <h5 class="mb-1">Delete Organization</h5>
-                        <p class="mb-0 text-muted">Permanently delete this organization and all associated data.</p>
-                    </div>
-                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteOrganizationModal">
-                        Delete Organization
-                    </button>
-                </div>
-            </div>
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="fas fa-save me-1"></i>Save
+            </button>
+          </form>
+          {% else %}
+          <div class="mb-2">
+            <span class="text-muted small">Name</span>
+            <div class="fw-semibold">{{ organization.name }}</div>
+          </div>
+          <p class="text-muted small mb-0">Only admins and the workspace creator can change settings.</p>
+          {% endif %}
+
+          <hr class="my-3">
+
+          <div class="mb-2">
+            <span class="text-muted small">Created by</span>
+            <div>{{ organization.created_by.get_full_name|default:organization.created_by.username }}</div>
+          </div>
+          <div>
+            <span class="text-muted small">Created</span>
+            <div>{{ organization.created_at|date:"M d, Y" }}</div>
+          </div>
         </div>
-        
-        <!-- Delete Organization Modal -->
-        <div class="modal fade" id="deleteOrganizationModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Delete Organization</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p>Are you sure you want to delete the organization <strong>{{ organization.name }}</strong>?</p>
-                        <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
-                        <p>All data associated with this organization will be permanently deleted, including:</p>
-                        <ul>
-                            <li>All kanban boards and tasks</li>
-                            <li>User profiles associated with this organization</li>
-                            <li>All organization settings and permissions</li>
-                        </ul>
-                        <p>User accounts will remain but will no longer be part of any organization.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <form method="post" action="{% url 'delete_organization' %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-danger">I understand, delete this organization</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
+      </div>
+
     </div>
+  </div>
 </div>
 {% endblock %}

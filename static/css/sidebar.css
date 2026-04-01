@@ -731,6 +731,8 @@
 .prizm-main-wrapper {
     padding-top: var(--topbar-height);
     min-height: 100vh;
+    /* Reserve space for vertical scrollbar so it doesn't shift layout */
+    scrollbar-gutter: stable;
 }
 
 .prizm-main-content {

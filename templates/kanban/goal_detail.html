@@ -110,6 +110,7 @@
             </div>
             <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
                 <a href="{% url 'mission_detail' mission.id %}" class="btn btn-sm btn-primary">Open Mission</a>
+                {% if can_edit %}
                 <form method="post" action="{% url 'unlink_mission_from_goal' goal.id mission.id %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-outline-danger"
@@ -117,6 +118,7 @@
                         <i class="fas fa-unlink"></i>
                     </button>
                 </form>
+                {% endif %}
             </div>
         </div>
     </div>

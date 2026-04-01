@@ -81,11 +81,21 @@ def dashboard(request):
     
     if demo_mode:
         # Single-tier demo: show user's sandbox copies, fall back to official demo boards
-        boards = Board.objects.filter(
+        sandbox_boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
-        ).distinct()
-        if not boards.exists():
+        )
+        # Also include boards the user created manually during demo
+        # (these aren't sandbox copies but should still appear in stats)
+        # Exclude imported boards — imports belong in My Workspace, not Demo.
+        user_created_boards = Board.objects.filter(
+            created_by=request.user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+            is_imported=False,
+        )
+        boards = (sandbox_boards | user_created_boards).distinct()
+        if not sandbox_boards.exists():
             # Sandbox missing — auto-re-provision synchronously so the user
             # sees their sandbox immediately on this page load
             from kanban.models import DemoSandbox
@@ -98,21 +108,22 @@ def dashboard(request):
                 except Exception:
                     pass
                 # Re-check for sandbox boards after provisioning
-                boards = Board.objects.filter(
+                sandbox_boards = Board.objects.filter(
                     owner=request.user,
                     is_sandbox_copy=True,
-                ).distinct()
+                )
+                boards = (sandbox_boards | user_created_boards).distinct()
 
-            if not boards.exists():
+            if not sandbox_boards.exists():
                 # Still nothing — fall back to official demo boards as read-only
-                boards = Board.objects.filter(
+                boards = (Board.objects.filter(
                     is_official_demo_board=True,
-                ).distinct()
+                ) | user_created_boards).distinct()
         else:
             # Catch-up: if user has sandbox boards but no tasks assigned to them
             # (e.g. race condition on first entry, or re-entry timing), reassign now
             has_assigned = Task.objects.filter(
-                column__board__in=boards,
+                column__board__in=sandbox_boards,
                 assigned_to=request.user,
                 item_type='task',
             ).exclude(progress=100).exists()
@@ -151,8 +162,17 @@ def dashboard(request):
         )
         boards = (demo_boards | user_boards).distinct()
     
-    # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
+    # Annotate task counts so the template can display them efficiently
+    # (Task has no direct FK to Board — it goes through Column)
     _now = timezone.now()
+    boards = boards.annotate(
+        task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task'),
+        ),
+    )
+
+    # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
     _stats = Task.objects.filter(column__board__in=boards, item_type='task').aggregate(
         task_count=Count('id'),
         completed_count=Count('id', filter=Q(progress=100)),
@@ -322,9 +342,12 @@ def dashboard(request):
 
     # Missions the user has direct ownership of or demo missions
     if demo_mode:
-        # Single-tier demo: show official demo missions (the template hierarchy)
+        # Single-tier demo: show official demo missions + any user-created missions
+        # (user may create new missions or link boards to strategies while exploring)
         missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True)
+            Q(is_demo=True) | Q(is_seed_demo_data=True) |
+            Q(created_by=request.user) |
+            Q(strategies__boards__id__in=user_board_ids)
         ).distinct().select_related('organization_goal').prefetch_related(
             'strategies__boards'
         ).order_by('-created_at')
@@ -369,8 +392,10 @@ def dashboard(request):
     _board_med_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_MED_RISK_THRESHOLD', 0.10)
     _cache_ttl = getattr(django_settings, 'HEALTH_ROLLUP_CACHE_TTL', 120)
 
-    # --- Cache key scoped to user + demo mode (board set varies) ---
-    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}'
+    # --- Cache key scoped to user + demo mode + board set hash ---
+    # Include board count and IDs hash so cache invalidates when boards are added/removed
+    _board_ids_hash = hash(tuple(sorted(_board_ids)))
+    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}:b{_board_ids_hash}'
     _cached = cache.get(_cache_key) if _cache_ttl > 0 else None
 
     if _cached is not None:
@@ -677,6 +702,35 @@ def dashboard(request):
                 })
 
     # ----------------------------------------------------------------
+    # Include standalone boards (not linked to any strategy) in charts
+    # ----------------------------------------------------------------
+    _charted_board_ids = set()
+    for mission_item in mission_tree:
+        for strategy_item in mission_item['strategies']:
+            for board_item in strategy_item['boards']:
+                _bid = board_item['board'].id
+                # In demo mode, also mark the sandbox copy id as charted
+                _charted_board_ids.add(_bid)
+                if _bid in _template_to_sandbox:
+                    _charted_board_ids.add(_template_to_sandbox[_bid])
+
+    for _sb_board in boards:
+        if _sb_board.id not in _charted_board_ids:
+            _bstats = _board_stats_map.get(_sb_board.id, {})
+            total_t = _bstats.get('total_tasks', 0)
+            done_t = _bstats.get('done_tasks', 0)
+            high_risk_t = _bstats.get('high_risk_tasks', 0)
+            pct = round((done_t / total_t * 100), 1) if total_t else 0
+            chart_boards.append({
+                'name': _sb_board.name[:35],
+                'strategy': '',
+                'total': total_t,
+                'done': done_t,
+                'high_risk': high_risk_t,
+                'completion_pct': pct,
+            })
+
+    # ----------------------------------------------------------------
     # Total high-risk count across all accessible boards
     # ----------------------------------------------------------------
     total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
@@ -831,6 +885,117 @@ def dashboard(request):
     }
 
     # ----------------------------------------------------------------
+    # Board health map — holistic per-board health for board card dots.
+    #
+    # Signals (triple-constraint + blockers + risk):
+    #   TIME:   schedule_status from _compute_board_health, SPI
+    #   BUDGET: ProjectBudget.get_status()
+    #   SCOPE:  scope creep percentage
+    #   RISK:   risk_level from _compute_board_health
+    #   BLOCKERS: active high/critical conflicts
+    #
+    # Output per board: { 'level': 'red'|'amber'|'green', 'reasons': [...] }
+    # ----------------------------------------------------------------
+    _spi_map = {b['board_id']: b.get('spi') for b in spi_cpi_data}
+    _sci_map = {b['id']: b.get('growth_pct', 0) for b in _sci_boards}
+
+    # Active conflict counts per board (single query)
+    from kanban.conflict_models import ConflictDetection
+    _conflict_qs = (
+        ConflictDetection.objects
+        .filter(
+            tasks__column__board_id__in=_board_ids,
+            status='active',
+            severity__in=['high', 'critical'],
+        )
+        .values('tasks__column__board_id', 'severity')
+        .annotate(cnt=Count('id', distinct=True))
+    )
+    _conflict_map = {}  # board_id -> {'high': n, 'critical': n}
+    for row in _conflict_qs:
+        bid = row['tasks__column__board_id']
+        _conflict_map.setdefault(bid, {'high': 0, 'critical': 0})
+        _conflict_map[bid][row['severity']] += row['cnt']
+
+    board_health_map = {}
+    for bid in _board_ids:
+        reasons_red = []
+        reasons_amber = []
+
+        bstats = _board_stats_map.get(bid, {})
+        schedule_status, risk_level = _compute_board_health(bstats)
+
+        # 1) Schedule (time constraint)
+        if schedule_status == 'late':
+            late = bstats.get('late_tasks', 0)
+            reasons_red.append(f'{late} overdue task{"s" if late != 1 else ""}')
+        elif schedule_status == 'at_risk':
+            at_risk = bstats.get('at_risk_tasks', 0)
+            reasons_amber.append(f'{at_risk} task{"s" if at_risk != 1 else ""} at risk')
+
+        # 2) Risk level
+        if risk_level == 'high':
+            hr = bstats.get('high_risk_tasks', 0)
+            reasons_red.append(f'{hr} high-risk task{"s" if hr != 1 else ""}')
+        elif risk_level == 'medium':
+            hr = bstats.get('high_risk_tasks', 0)
+            reasons_amber.append(f'{hr} high-risk task{"s" if hr != 1 else ""}')
+
+        # 3) SPI (schedule performance)
+        spi = _spi_map.get(bid)
+        if spi is not None:
+            if spi < 0.5:
+                reasons_red.append(f'SPI {spi:.2f} (severely behind)')
+            elif spi < 0.8:
+                reasons_amber.append(f'SPI {spi:.2f} (behind schedule)')
+
+        # 4) Budget
+        budget = _budget_map.get(bid)
+        if budget:
+            b_status = budget.get_status()
+            if b_status in ('over', 'critical'):
+                reasons_red.append(f'Budget {b_status}')
+            elif b_status == 'warning':
+                reasons_amber.append('Budget warning')
+
+        # 5) Scope creep
+        sci_pct = _sci_map.get(bid, 0)
+        if sci_pct > 30:
+            reasons_red.append(f'Scope +{sci_pct}%')
+        elif sci_pct > 15:
+            reasons_amber.append(f'Scope +{sci_pct}%')
+
+        # 6) Active blockers (conflicts)
+        conflicts = _conflict_map.get(bid, {})
+        crit_conflicts = conflicts.get('critical', 0)
+        high_conflicts = conflicts.get('high', 0)
+        if crit_conflicts:
+            reasons_red.append(f'{crit_conflicts} critical blocker{"s" if crit_conflicts != 1 else ""}')
+        elif high_conflicts:
+            reasons_amber.append(f'{high_conflicts} high blocker{"s" if high_conflicts != 1 else ""}')
+
+        # Determine level
+        if reasons_red:
+            level = 'red'
+            tooltip = 'At Risk — ' + '; '.join(reasons_red + reasons_amber)
+        elif reasons_amber:
+            level = 'amber'
+            tooltip = 'Caution — ' + '; '.join(reasons_amber)
+        else:
+            level = 'green'
+            tooltip = 'Healthy'
+
+        board_health_map[bid] = {'level': level, 'tooltip': tooltip}
+
+    # In demo mode, also map sandbox board IDs via _template_to_sandbox
+    if demo_mode:
+        for template_id, sandbox_id in _template_to_sandbox.items():
+            if sandbox_id in board_health_map:
+                continue  # already computed directly
+            if template_id in board_health_map:
+                board_health_map[sandbox_id] = board_health_map[template_id]
+
+    # ----------------------------------------------------------------
     # Data-readiness flags — used to conditionally hide empty widgets
     # ----------------------------------------------------------------
     # SPI only has meaning when there are tasks past their due date (SPI = EV/PV).
@@ -842,6 +1007,24 @@ def dashboard(request):
 
     # Velocity chart is meaningful only after at least one task has been completed.
     has_velocity_data = completed_count > 0
+
+    # ----------------------------------------------------------------
+    # Weekly velocity data (real tasks completed per week, last 7 weeks)
+    # ----------------------------------------------------------------
+    _velocity_weeks = []
+    if has_velocity_data:
+        _vel_now = timezone.now()
+        # Build 7 week buckets ending at the current week
+        for _w in range(6, -1, -1):
+            _week_end = _vel_now - timedelta(weeks=_w)
+            _week_start = _week_end - timedelta(weeks=1)
+            _week_count = Task.objects.filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                completed_at__gt=_week_start,
+                completed_at__lte=_week_end,
+            ).count()
+            _velocity_weeks.append(_week_count)
 
     _oldest_board_time = boards.order_by('created_at').values_list('created_at', flat=True).first()
     workspace_is_new = (
@@ -984,6 +1167,7 @@ def dashboard(request):
         'boards':       chart_boards,
         'spi_cpi':      spi_cpi_data,
         'risk_heatmap': risk_heatmap_data,
+        'velocity_weeks': _velocity_weeks,
     }
 
     # Pre-Mortem risk levels: latest analysis per board (single query)
@@ -1138,6 +1322,7 @@ def dashboard(request):
         'spi_cpi_data':      spi_cpi_data,
         'risk_heatmap_data': risk_heatmap_data,
         'scope_creep_data':  scope_creep_data,
+        'board_health_map':  board_health_map,
         'has_schedule_data': has_schedule_data,
         'has_time_log_data': has_time_log_data,
         'has_velocity_data': has_velocity_data,
@@ -1268,11 +1453,20 @@ def board_list(request):
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
     if demo_mode:
-        # Single-tier demo: show only user's sandbox copies
-        boards = Board.objects.filter(
+        # Single-tier demo: show user's sandbox copies + boards created
+        # manually in demo mode (but NOT imported boards — those belong
+        # in My Workspace).
+        sandbox_boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
-        ).distinct()
+        )
+        user_created_boards = Board.objects.filter(
+            created_by=request.user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+            is_imported=False,
+        )
+        boards = (sandbox_boards | user_created_boards).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -1293,6 +1487,14 @@ def board_list(request):
             Q(created_by=request.user) | Q(memberships__user=request.user)
         )
         boards = (demo_boards | user_boards).distinct()
+
+    # Annotate task counts so the template can display them efficiently
+    boards = boards.annotate(
+        task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task'),
+        ),
+    )
 
     # Compute summary metrics across all accessible boards
     task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
@@ -1449,6 +1651,15 @@ def create_board(request):
                 board=board, user=request.user,
                 defaults={'role': 'owner', 'added_by': request.user}
             )
+
+            # Auto-add demo personas when creating a board in demo/sandbox mode
+            if demo_mode:
+                demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                for demo_user in User.objects.filter(username__in=demo_usernames):
+                    BoardMembership.objects.get_or_create(
+                        board=board, user=demo_user,
+                        defaults={'role': 'member'},
+                    )
             
             # Log board creation
             log_model_change('board.created', board, request.user, request)
@@ -1674,6 +1885,11 @@ def board_detail(request, board_id):
     )
 
     # ── Annotate tasks with overdue / at-risk flags for card rendering ──
+    # Prefetch checklist items for checklist badge on cards
+    from django.db.models import Count, Q as _Q
+    tasks = tasks.select_related('assigned_to', 'assigned_to__profile', 'column').prefetch_related('labels', 'checklist_items')
+    tasks = list(tasks)  # evaluate once
+
     today = timezone.now()
     for t in tasks:
         t.is_overdue = (
@@ -1777,6 +1993,7 @@ def task_detail(request, task_id):
             'subtasks',
             'related_tasks',
             'dependencies',
+            'checklist_items',
             Prefetch('file_attachments', queryset=TaskFile.objects.filter(deleted_at__isnull=True).select_related('uploaded_by'))
         ),
         id=task_id
@@ -2142,6 +2359,30 @@ def create_task(request, board_id, column_id=None):
                 task.save()
                 # Save many-to-many relationships
                 form.save_m2m()
+                
+                # ── Create checklist items from AI breakdown (if provided) ──
+                checklist_json = request.POST.get('checklist_breakdown_data', '').strip()
+                if checklist_json:
+                    try:
+                        import json as _json
+                        from kanban.models import ChecklistItem
+                        subtask_list = _json.loads(checklist_json)
+                        if isinstance(subtask_list, list):
+                            for idx, st in enumerate(subtask_list):
+                                title = (st.get('title') or '').strip()
+                                if not title:
+                                    continue
+                                ChecklistItem.objects.create(
+                                    task=task,
+                                    title=title,
+                                    description=(st.get('description') or '').strip(),
+                                    position=idx,
+                                    estimated_effort=st.get('estimated_effort', ''),
+                                    priority=st.get('priority', 'medium'),
+                                    source='ai_generated',
+                                )
+                    except (ValueError, TypeError):
+                        pass  # malformed JSON — task still created, just skip checklist
                 
                 # Record activity (only for authenticated users)
                 if request.user.is_authenticated:
@@ -3259,17 +3500,25 @@ def organization_boards(request):
         # EXCLUDE demo boards - demo environment is isolated
         demo_org_names = ['Demo - Acme Corporation']
         all_org_boards = Board.objects.filter(
-            organization=organization
+            organization=organization,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
         ).exclude(
             organization__name__in=demo_org_names
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         )
         
         # Determine which boards the user is a member of
         user_boards = Board.objects.filter(
             Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user))
+            (Q(created_by=request.user) | Q(owner=request.user) | Q(memberships__user=request.user)),
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
         ).exclude(
             organization__name__in=demo_org_names
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
         
         # Create a list to track which boards the user is a member of
@@ -3694,24 +3943,30 @@ def import_board(request):
     import_file = request.FILES['import_file']
     filename = import_file.name
     
-    # Check file extension - now supports JSON and CSV
-    valid_extensions = ['.json', '.csv', '.tsv']
+    # Check file extension - now supports JSON, CSV, Excel
+    valid_extensions = ['.json', '.csv', '.tsv', '.xlsx', '.xls']
     if not any(filename.lower().endswith(ext) for ext in valid_extensions):
-        messages.error(request, "Supported file formats: JSON, CSV, TSV")
+        messages.error(request, "Supported file formats: JSON, CSV, TSV, Excel (.xlsx)")
         return redirect('board_list')
     
     try:
         # Read file content
         file_content = import_file.read()
         
-        # Try to decode as text
-        try:
-            file_data = file_content.decode('utf-8')
-        except UnicodeDecodeError:
+        # For Excel files, pass raw bytes directly to the adapter
+        is_excel = filename.lower().endswith(('.xlsx', '.xls'))
+        
+        if is_excel:
+            file_data = file_content  # Keep as bytes for openpyxl
+        else:
+            # Try to decode as text
             try:
-                file_data = file_content.decode('utf-8-sig')
+                file_data = file_content.decode('utf-8')
             except UnicodeDecodeError:
-                file_data = file_content.decode('latin-1')
+                try:
+                    file_data = file_content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    file_data = file_content.decode('latin-1')
         
         # Import using the adapter system
         from kanban.utils.import_adapters import AdapterFactory, UserMatcher
@@ -3792,7 +4047,8 @@ def _create_board_from_import_result(result, user, organization, session):
         description=board_data.get('description', ''),
         organization=organization,
         created_by=user,
-        num_phases=board_data.get('num_phases', 0)
+        num_phases=board_data.get('num_phases', 0),
+        is_imported=True,
     )
     new_board.owner = user
     new_board.save(update_fields=['owner'])
@@ -4975,7 +5231,7 @@ def task_quick_view(request, task_id):
         Task.objects.select_related(
             'column', 'column__board', 'assigned_to', 'assigned_to__profile',
             'created_by',
-        ).prefetch_related('labels', 'dependencies', 'subtasks'),
+        ).prefetch_related('labels', 'dependencies', 'subtasks', 'checklist_items'),
         id=task_id,
     )
     board = task.column.board

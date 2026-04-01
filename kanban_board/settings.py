@@ -170,11 +170,12 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
-            # Allow SQLite to wait up to 20 seconds for a write lock to
+            # Allow SQLite to wait up to 30 seconds for a write lock to
             # be released before raising "database is locked".  The
             # default is 5 s, which is too short when Spectra holds an
-            # atomic transaction open while waiting for the Gemini API.
-            'timeout': 20,
+            # atomic transaction open while waiting for the Gemini API,
+            # or when Celery Beat's DatabaseScheduler writes concurrently.
+            'timeout': 30,
         },
     }
 }
@@ -263,8 +264,10 @@ if _email_host_user:
     EMAIL_HOST_USER = _email_host_user
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 else:
-    # No credentials configured — print to terminal (console backend)
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    # No credentials configured — save emails to files for easy review.
+    # Each email becomes a timestamped file in <project>/sent_emails/.
+    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+    EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
 
 # Default from email for system emails
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@prizmAI.com')
