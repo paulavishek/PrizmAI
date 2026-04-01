@@ -2534,6 +2534,9 @@
                     <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary" style="font-size:0.72rem;"><i class="fas fa-columns me-1"></i>Open Boards</a>
                 </div>
             </div>
+            <div id="spi-offender-note" class="card-footer d-none py-1 px-2 text-center" style="background:#fff7ed;border-top:1px solid #fed7aa;">
+                <span style="font-size:0.68rem;color:#9a3412;"><i class="fas fa-arrow-down me-1"></i>Dragged by <a id="spi-offender-link" href="#" class="fw-semibold" style="color:#c2410c;text-decoration:underline;"></a></span>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -2557,6 +2560,9 @@
                     <p style="font-size:0.7rem;" class="mb-2">CPI measures cost efficiency. Enable time tracking on tasks to generate this metric.</p>
                     <a href="{% url 'time_tracking_dashboard' %}" class="btn btn-sm btn-outline-success" style="font-size:0.72rem;"><i class="fas fa-clock me-1"></i>Time Tracking</a>
                 </div>
+            </div>
+            <div id="cpi-offender-note" class="card-footer d-none py-1 px-2 text-center" style="background:#f0fdf4;border-top:1px solid #bbf7d0;">
+                <span style="font-size:0.68rem;color:#166534;"><i class="fas fa-arrow-down me-1"></i>Dragged by <a id="cpi-offender-link" href="#" class="fw-semibold" style="color:#15803d;text-decoration:underline;"></a></span>
             </div>
         </div>
     </div>
@@ -4273,6 +4279,24 @@
                 var spiEmpty = document.getElementById('spi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
                 if (spiEmpty) { spiEmpty.classList.remove('d-flex'); spiEmpty.classList.add('d-none'); }
+                // Show worst-offender board if SPI below threshold
+                if (avgSpi < 0.8 && spiVals.length >= 1) {
+                    var worstSpi = null;
+                    chartData.spi_cpi.forEach(function(b) {
+                        if (b.spi !== null && b.spi !== undefined) {
+                            if (worstSpi === null || b.spi < worstSpi.spi) worstSpi = b;
+                        }
+                    });
+                    if (worstSpi) {
+                        var spiNote = document.getElementById('spi-offender-note');
+                        var spiLink = document.getElementById('spi-offender-link');
+                        if (spiNote && spiLink) {
+                            spiLink.textContent = worstSpi.name + ' (SPI ' + worstSpi.spi.toFixed(2) + ')';
+                            spiLink.href = '/boards/' + worstSpi.board_id + '/';
+                            spiNote.classList.remove('d-none');
+                        }
+                    }
+                }
             } else {
                 var spiCanvas = document.getElementById('spiGauge');
                 if (spiCanvas) spiCanvas.style.display = 'none';
@@ -4284,6 +4308,24 @@
                 var cpiEmpty = document.getElementById('cpi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
                 if (cpiEmpty) { cpiEmpty.classList.remove('d-flex'); cpiEmpty.classList.add('d-none'); }
+                // Show worst-offender board if CPI below threshold
+                if (avgCpi < 0.8 && cpiVals.length >= 1) {
+                    var worstCpi = null;
+                    chartData.spi_cpi.forEach(function(b) {
+                        if (b.cpi !== null && b.cpi !== undefined) {
+                            if (worstCpi === null || b.cpi < worstCpi.cpi) worstCpi = b;
+                        }
+                    });
+                    if (worstCpi) {
+                        var cpiNote = document.getElementById('cpi-offender-note');
+                        var cpiLink = document.getElementById('cpi-offender-link');
+                        if (cpiNote && cpiLink) {
+                            cpiLink.textContent = worstCpi.name + ' (CPI ' + worstCpi.cpi.toFixed(2) + ')';
+                            cpiLink.href = '/boards/' + worstCpi.board_id + '/';
+                            cpiNote.classList.remove('d-none');
+                        }
+                    }
+                }
             } else {
                 var cpiCanvas = document.getElementById('cpiGauge');
                 if (cpiCanvas) cpiCanvas.style.display = 'none';

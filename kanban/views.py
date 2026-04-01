@@ -677,6 +677,35 @@ def dashboard(request):
                 })
 
     # ----------------------------------------------------------------
+    # Include standalone boards (not linked to any strategy) in charts
+    # ----------------------------------------------------------------
+    _charted_board_ids = set()
+    for mission_item in mission_tree:
+        for strategy_item in mission_item['strategies']:
+            for board_item in strategy_item['boards']:
+                _bid = board_item['board'].id
+                # In demo mode, also mark the sandbox copy id as charted
+                _charted_board_ids.add(_bid)
+                if _bid in _template_to_sandbox:
+                    _charted_board_ids.add(_template_to_sandbox[_bid])
+
+    for _sb_board in boards:
+        if _sb_board.id not in _charted_board_ids:
+            _bstats = _board_stats_map.get(_sb_board.id, {})
+            total_t = _bstats.get('total_tasks', 0)
+            done_t = _bstats.get('done_tasks', 0)
+            high_risk_t = _bstats.get('high_risk_tasks', 0)
+            pct = round((done_t / total_t * 100), 1) if total_t else 0
+            chart_boards.append({
+                'name': _sb_board.name[:35],
+                'strategy': '',
+                'total': total_t,
+                'done': done_t,
+                'high_risk': high_risk_t,
+                'completion_pct': pct,
+            })
+
+    # ----------------------------------------------------------------
     # Total high-risk count across all accessible boards
     # ----------------------------------------------------------------
     total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
