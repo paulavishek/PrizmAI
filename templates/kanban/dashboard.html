@@ -4194,19 +4194,16 @@
         }
         // --- Velocity sparkline (weekly task completions) ---
         var vCanvas = document.getElementById('velocityChart');
-        if (vCanvas && chartData.spi_cpi && chartData.spi_cpi.length) {
+        if (vCanvas && chartData.velocity_weeks && chartData.velocity_weeks.length) {
             var weekLabels = ['6w ago','5w ago','4w ago','3w ago','2w ago','Last week','This week'];
-            // Build a rough completion trend from spi_cpi completion percentages as a proxy sparkline
-            var avgCompletion = chartData.spi_cpi.reduce(function(a,b){ return a + b.completion_pct; }, 0) / chartData.spi_cpi.length;
-            // Show a flat sparkline at the current completion level (real time-series data can replace this later)
-            var sparkData = weekLabels.map(function(_, i){ return +(avgCompletion * (0.4 + i * 0.1)).toFixed(1); });
-            sparkData[6] = +avgCompletion.toFixed(1);
+            var sparkData = chartData.velocity_weeks;
+            var maxVal = Math.max.apply(null, sparkData);
             new Chart(vCanvas, {
                 type: 'line',
                 data: {
                     labels: weekLabels,
                     datasets: [{
-                        label: 'Avg Completion %',
+                        label: 'Tasks Completed',
                         data: sparkData,
                         borderColor: 'rgba(28,200,138,0.9)',
                         backgroundColor: 'rgba(28,200,138,0.12)',
@@ -4221,11 +4218,11 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
-                        tooltip: { callbacks: { label: function(ctx){ return 'Completion: ' + ctx.parsed.y + '%'; } } },
+                        tooltip: { callbacks: { label: function(ctx){ return ctx.parsed.y + ' tasks'; } } },
                     },
                     scales: {
                         x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444' } },
-                        y: { min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444', callback: function(v){ return v + '%'; } } },
+                        y: { min: 0, max: maxVal > 0 ? undefined : 10, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444', stepSize: 1 } },
                     },
                 },
             });
