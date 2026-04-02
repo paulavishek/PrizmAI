@@ -1076,24 +1076,11 @@ def _duplicate_board(template_board, user):
         pass
 
     # --- Decision Center ---
-    try:
-        from decision_center.models import DecisionItem
-        for di in DecisionItem.objects.filter(board=template_board):
-            DecisionItem.objects.create(
-                created_for=di.created_for,
-                board=new_board,
-                item_type=di.item_type,
-                priority_level=di.priority_level,
-                title=di.title,
-                description=di.description,
-                suggested_action=di.suggested_action,
-                # Skip GenericFK (source_content_type/source_object_id) as source objects are board-local
-                context_data=di.context_data,
-                status=di.status,
-                resolved_at=di.resolved_at,
-            )
-    except Exception:
-        pass
+    # DecisionItems are NOT copied from the template.  ``collect_for_user()``
+    # (called right after sandbox provisioning) will regenerate them for the
+    # sandbox owner's board set, avoiding orphaned/duplicate items that were
+    # left with the wrong ``created_for`` user.
+    # See sandbox_provisioning.py → provision_sandbox_task.
 
     # --- Task Activities (keep demo activity history for realism) ---
     try:

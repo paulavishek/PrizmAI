@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .models import DecisionCenterBriefing, DecisionCenterSettings, DecisionItem
 from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 
 
 # ---------------------------------------------------------------------------
@@ -60,24 +61,17 @@ def decision_center_view(request):
     settings_obj = _get_settings(user)
 
     # Respect the user's current viewing mode — only show items relevant to
-    # their active workspace (demo boards vs real boards)
-    try:
-        is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
-    except Exception:
-        is_demo_mode = False
-    is_demo_account = '_demo' in user.username
-
-    pending = DecisionItem.objects.filter(created_for=user, status='pending')
-    if is_demo_mode or is_demo_account:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = pending.filter(
-            board__is_official_demo_board=False,
-            board__is_sandbox_copy=False,
+    # their active workspace (demo boards vs real boards).  Uses the
+    # canonical ``get_user_boards()`` so sandbox users see sandbox items
+    # (not template-board items, which caused duplicates).
+    user_boards = get_user_boards(user)
+    pending = (
+        DecisionItem.objects.filter(
+            created_for=user, status='pending', board__in=user_boards,
         ) | DecisionItem.objects.filter(
-            created_for=user, status='pending', board__isnull=True
+            created_for=user, status='pending', board__isnull=True,
         )
-        pending = pending.distinct()
+    ).distinct()
 
     action_required = list(pending.filter(priority_level='action_required'))
     awareness = list(pending.filter(priority_level='awareness')) if settings_obj.show_awareness_items else []
@@ -134,27 +128,21 @@ def decision_center_widget_data(request):
         is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
     except Exception:
         is_demo_mode = False
-    is_demo_account = '_demo' in user.username
-    effective_demo = is_demo_mode or is_demo_account
+    effective_demo = is_demo_mode or '_demo' in user.username
 
     cache_key = _widget_cache_key(user.id, demo_mode=effective_demo)
     data = cache.get(cache_key)
     if data is not None:
         return JsonResponse(data)
 
-    pending = DecisionItem.objects.filter(created_for=user, status='pending')
-    if effective_demo:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = (
-            pending.filter(
-                board__is_official_demo_board=False,
-                board__is_sandbox_copy=False,
-            )
-            | DecisionItem.objects.filter(
-                created_for=user, status='pending', board__isnull=True
-            )
-        ).distinct()
+    user_boards = get_user_boards(user)
+    pending = (
+        DecisionItem.objects.filter(
+            created_for=user, status='pending', board__in=user_boards,
+        ) | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True,
+        )
+    ).distinct()
 
     settings_obj = _get_settings(user)
     counts = {

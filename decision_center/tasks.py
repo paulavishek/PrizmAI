@@ -27,31 +27,14 @@ def _get_or_create_settings(user):
 
 def _user_boards(user):
     """Return the queryset of boards a user can access.
-    
-    Includes demo boards if the user is a demo account or is viewing demo.
+
+    Delegates to the canonical ``get_user_boards()`` helper so that demo
+    users see only their personal sandbox copies (never the immutable
+    official-demo template board).  This prevents ``collect_for_user``
+    from creating duplicate DecisionItems on both templates and sandboxes.
     """
-    from kanban.models import Board
-    from accounts.models import UserProfile
-
-    # Check if this is a demo account or user is viewing demo
-    is_demo_user = '_demo' in user.username
-    try:
-        profile = UserProfile.objects.get(user=user)
-        is_viewing_demo = getattr(profile, 'is_viewing_demo', False)
-    except UserProfile.DoesNotExist:
-        is_viewing_demo = False
-
-    if is_demo_user or is_viewing_demo:
-        # Include demo boards
-        return Board.objects.filter(
-            Q(created_by=user) | Q(memberships__user=user) | Q(is_official_demo_board=True),
-        ).distinct()
-
-    return Board.objects.filter(
-        Q(created_by=user) | Q(memberships__user=user),
-        is_official_demo_board=False,
-        is_sandbox_copy=False,
-    ).distinct()
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user)
 
 
 def _ensure_item(*, user, board, item_type, priority_level, title,
@@ -371,6 +354,25 @@ def collect_for_user(user):
     except Exception:
         logger.exception("collect_for_user: stale tasks failed for user %s", user.pk)
 
+    # ── Housekeeping: prune stale pending items ──────────────────────────
+    # Items left over from old sandbox boards, template boards, or deleted
+    # boards should not remain pending.  Remove any whose board is not in
+    # the user's current workspace.
+    try:
+        from decision_center.models import DecisionItem as DI
+        stale_qs = DI.objects.filter(
+            created_for=user, status='pending', board__isnull=False,
+        ).exclude(board__in=boards)
+        pruned = stale_qs.count()
+        if pruned:
+            stale_qs.delete()
+            logger.info(
+                "collect_for_user: pruned %d stale DecisionItems for user %s",
+                pruned, user.pk,
+            )
+    except Exception:
+        logger.exception("collect_for_user: prune failed for user %s", user.pk)
+
 
 def generate_briefing_for_user(user):
     """
@@ -386,23 +388,14 @@ def generate_briefing_for_user(user):
 
     pending = DecisionItem.objects.filter(created_for=user, status='pending')
 
-    is_demo_mode = getattr(
-        getattr(user, 'profile', None), 'is_viewing_demo', False
-    )
-    is_demo_account = '_demo' in user.username
-
-    if is_demo_mode or is_demo_account:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = (
-            pending.filter(
-                board__is_official_demo_board=False,
-                board__is_sandbox_copy=False,
-            )
-            | DecisionItem.objects.filter(
-                created_for=user, status='pending', board__isnull=True
-            )
-        ).distinct()
+    # Use the same canonical board set as the view and collect_for_user
+    user_boards = _user_boards(user)
+    pending = (
+        pending.filter(board__in=user_boards)
+        | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True
+        )
+    ).distinct()
 
     if not pending.exists():
         return
