@@ -59,6 +59,7 @@ def commit_onboarding_workspace(user, preview):
         BoardMembership,
         Column,
         Task,
+        Workspace,
     )
 
     data = preview.edited_data if preview.edited_data else preview.generated_data
@@ -95,15 +96,26 @@ def commit_onboarding_workspace(user, preview):
         logger.info(f"Auto-created Organization '{org_name}' (#{org.pk}) for {user.username}")
 
     with transaction.atomic():
+        # ── Workspace ──────────────────────────────────────────────────
+        goal_name = goal_data.get('name', 'My Organization Goal')[:200]
+        ws = Workspace.objects.create(
+            name=goal_name,
+            organization=org,
+            created_by=user,
+            is_demo=False,
+        )
+        logger.info(f"Created Workspace #{ws.pk} '{ws.name}' for {user.username}")
+
         # ── Organization Goal ──────────────────────────────────────────
         org_goal = OrganizationGoal.objects.create(
-            name=goal_data.get('name', 'My Organization Goal')[:200],
+            name=goal_name,
             description=goal_data.get('description', ''),
             target_metric=goal_data.get('target_metric', '')[:100] if goal_data.get('target_metric') else '',
             target_date=target_date,
             status='active',
             organization=org,
             created_by=user,
+            workspace=ws,
         )
         logger.info(f"Created OrganizationGoal #{org_goal.pk} for {user.username}")
 
@@ -115,6 +127,7 @@ def commit_onboarding_workspace(user, preview):
                 status='active',
                 organization_goal=org_goal,
                 created_by=user,
+                workspace=ws,
             )
 
             # ── Strategies ─────────────────────────────────────────────
@@ -125,6 +138,7 @@ def commit_onboarding_workspace(user, preview):
                     status='active',
                     mission=mission,
                     created_by=user,
+                    workspace=ws,
                 )
 
                 # ── Boards ─────────────────────────────────────────────
@@ -135,6 +149,7 @@ def commit_onboarding_workspace(user, preview):
                         strategy=strategy,
                         organization=org,
                         created_by=user,
+                        workspace=ws,
                     )
                     BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'member'})
                     # Auto-set task_prefix for readable task IDs
@@ -191,7 +206,9 @@ def commit_onboarding_workspace(user, preview):
 
         profile = user.profile
         profile.onboarding_status = 'completed'
-        profile.save(update_fields=['onboarding_status'])
+        profile.active_workspace = ws
+        profile.is_viewing_demo = False
+        profile.save(update_fields=['onboarding_status', 'active_workspace', 'is_viewing_demo'])
 
     logger.info(f"Onboarding workspace committed for {user.username} (Goal #{org_goal.pk})")
     return org_goal

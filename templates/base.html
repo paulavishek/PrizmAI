@@ -168,23 +168,19 @@
             <!-- Workspace Switcher — absolutely centered in topbar -->
             {% if user.is_authenticated %}
             <div class="topbar-workspace-switcher" style="position:absolute;left:50%;transform:translateX(-50%);">
-                {% if is_viewing_demo %}
-                <span class="tws-btn tws-btn-active" title="Currently active">
-                    <i class="fas fa-eye me-1"></i>Demo Workspace
+                {% if active_workspace %}
+                <span class="tws-btn tws-btn-active" title="Current workspace">
+                    {% if active_workspace.is_demo %}
+                    <i class="fas fa-flask me-1"></i>{{ active_workspace.name|truncatechars:24 }}
+                    {% else %}
+                    <i class="fas fa-briefcase me-1"></i>{{ active_workspace.name|truncatechars:24 }}
+                    {% endif %}
                 </span>
-                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-                    {% csrf_token %}
-                    <button type="submit" class="tws-btn">
-                        <i class="fas fa-briefcase me-1"></i>My Workspace
-                    </button>
-                </form>
+                {% elif is_viewing_demo %}
+                <span class="tws-btn tws-btn-active" title="Currently active">
+                    <i class="fas fa-flask me-1"></i>Demo Workspace
+                </span>
                 {% else %}
-                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
-                    {% csrf_token %}
-                    <button type="submit" class="tws-btn">
-                        <i class="fas fa-eye me-1"></i>Demo Workspace
-                    </button>
-                </form>
                 <span class="tws-btn tws-btn-active" title="Currently active">
                     <i class="fas fa-briefcase me-1"></i>My Workspace
                 </span>
@@ -237,6 +233,7 @@
                     <i class="fas fa-redo me-1"></i>Reset Demo
                 </button>
                 {% endif %}
+                {% if can_setup_workspace|default:False %}
                 {% if is_viewing_demo %}
                 <a href="{% url 'onboarding_welcome' %}?from=dashboard" class="tws-btn tws-btn-setup-muted"
                    style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
@@ -247,6 +244,7 @@
                    style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
                     <i class="fas fa-rocket me-1"></i>Set up my workspace
                 </a>
+                {% endif %}
                 {% endif %}
                 {% if user.is_authenticated and not is_demo_account %}
                 <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"

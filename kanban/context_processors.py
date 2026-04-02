@@ -50,10 +50,34 @@ def demo_context(request):
             try:
                 profile = request.user.profile
                 context['is_viewing_demo'] = getattr(profile, 'is_viewing_demo', False)
+                # Workspace context for the workspace switcher dropdown
+                active_ws = getattr(profile, 'active_workspace', None)
+                context['active_workspace'] = active_ws
+                if profile.organization:
+                    from kanban.models import Workspace
+                    context['user_workspaces'] = list(
+                        Workspace.objects.filter(
+                            organization=profile.organization,
+                            is_active=True,
+                        ).order_by('is_demo', '-created_at')
+                    )
+                    # Only org creator can create new workspaces
+                    context['can_setup_workspace'] = (
+                        profile.organization.created_by_id == request.user.id
+                    )
+                else:
+                    context['user_workspaces'] = []
+                    context['can_setup_workspace'] = True  # No org yet — can set up
             except Exception:
                 context['is_viewing_demo'] = False
+                context['active_workspace'] = None
+                context['user_workspaces'] = []
+                context['can_setup_workspace'] = False
         else:
             context['is_viewing_demo'] = False
+            context['active_workspace'] = None
+            context['user_workspaces'] = []
+            context['can_setup_workspace'] = False
         
         # User gets their standard quotas (not demo quotas)
         if request.user.is_authenticated:

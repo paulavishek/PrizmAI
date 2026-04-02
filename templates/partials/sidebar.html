@@ -12,6 +12,57 @@
         </button>
     </div>
 
+    <!-- Workspace Switcher Dropdown -->
+    {% if user.is_authenticated and user_workspaces %}
+    <div class="sidebar-workspace-switcher" id="workspaceSwitcher">
+        <button class="sidebar-ws-btn" type="button" id="wsDropdownToggle" 
+                title="Switch workspace" aria-expanded="false" aria-haspopup="true">
+            <span class="sidebar-ws-icon">
+                {% if active_workspace and active_workspace.is_demo %}
+                <i class="fas fa-flask"></i>
+                {% else %}
+                <i class="fas fa-briefcase"></i>
+                {% endif %}
+            </span>
+            <span class="sidebar-label sidebar-ws-name">
+                {% if active_workspace %}{{ active_workspace.name|truncatechars:22 }}{% else %}Select Workspace{% endif %}
+            </span>
+            <i class="fas fa-chevron-down sidebar-ws-arrow sidebar-label"></i>
+        </button>
+        <div class="sidebar-ws-dropdown" id="wsDropdownMenu" style="display:none;">
+            <div class="sidebar-ws-dropdown-header">
+                <small class="text-muted fw-semibold text-uppercase" style="font-size:0.65rem;letter-spacing:0.5px;">Switch Workspace</small>
+            </div>
+            {% for ws in user_workspaces %}
+            <form method="post" action="{% url 'switch_workspace' %}" class="d-inline w-100">
+                {% csrf_token %}
+                <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
+                <button type="submit" class="sidebar-ws-option {% if active_workspace.pk == ws.pk %}active{% endif %}">
+                    <span class="sidebar-ws-option-icon">
+                        {% if ws.is_demo %}
+                        <i class="fas fa-flask text-warning"></i>
+                        {% else %}
+                        <i class="fas fa-briefcase text-primary"></i>
+                        {% endif %}
+                    </span>
+                    <span class="sidebar-ws-option-name">{{ ws.name|truncatechars:28 }}</span>
+                    {% if active_workspace.pk == ws.pk %}
+                    <i class="fas fa-check text-success ms-auto" style="font-size:0.7rem;"></i>
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+            {% if can_setup_workspace|default:False %}
+            <div class="sidebar-ws-dropdown-divider"></div>
+            <a href="{% url 'onboarding_welcome' %}?from=sidebar" class="sidebar-ws-option sidebar-ws-create">
+                <i class="fas fa-plus me-2 text-muted"></i>
+                <span>Create New Workspace</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Primary Navigation -->
     <nav class="sidebar-nav">
         <ul class="sidebar-nav-list">

@@ -94,6 +94,34 @@
                 moreToggle.setAttribute('aria-expanded', expanded);
             });
         }
+
+        // Workspace Switcher dropdown toggle
+        var wsToggle = document.getElementById('wsDropdownToggle');
+        var wsMenu = document.getElementById('wsDropdownMenu');
+        if (wsToggle && wsMenu) {
+            wsToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var open = wsMenu.style.display !== 'block';
+                wsMenu.style.display = open ? 'block' : 'none';
+                wsToggle.setAttribute('aria-expanded', open);
+            });
+            // Close on outside click
+            document.addEventListener('click', function (e) {
+                if (!wsMenu.contains(e.target) && !wsToggle.contains(e.target)) {
+                    wsMenu.style.display = 'none';
+                    wsToggle.setAttribute('aria-expanded', 'false');
+                }
+            });
+            // Close on Escape
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && wsMenu.style.display === 'block') {
+                    wsMenu.style.display = 'none';
+                    wsToggle.setAttribute('aria-expanded', 'false');
+                    wsToggle.focus();
+                }
+            });
+        }
+        }
     }
 
     function closeMobileDrawer(sidebar, overlay) {

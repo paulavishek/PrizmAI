@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileR
 from django.contrib import messages
 from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.core.cache import cache
 from django.conf import settings as django_settings
 from datetime import timedelta
@@ -75,6 +75,7 @@ def dashboard(request):
     # MVP Mode: Get all boards the user has access to
     # Single-tier demo: when is_viewing_demo, show user's personal sandbox copies
     demo_mode = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(request, 'workspace', None)
     
     # Org Admins see all boards regardless of membership
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
@@ -135,6 +136,13 @@ def dashboard(request):
                     _reassign_demo_tasks_to_user(sandbox, request.user)
                 except DemoSandbox.DoesNotExist:
                     pass
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: only boards in the active workspace
+        boards = Board.objects.filter(
+            workspace=active_ws,
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -1389,6 +1397,14 @@ def toggle_demo_mode(request):
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
 
+        # Resolve demo workspace for this org (if any)
+        from kanban.models import Workspace
+        demo_ws = None
+        if profile.organization:
+            demo_ws = Workspace.objects.filter(
+                organization=profile.organization, is_demo=True, is_active=True,
+            ).first()
+
         # Ensure the dashboard onboarding guard won't redirect away.
         # Users who joined via board invitation have status='pending'
         # and no goals, which would send them to /onboarding/ instead
@@ -1403,11 +1419,12 @@ def toggle_demo_mode(request):
             _join_demo_org(request.user)
             _reassign_demo_tasks_to_user(existing, request.user)
             profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
             if _update_onboarding:
                 profile.onboarding_status = 'demo_exploring'
-                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
-            else:
-                profile.save(update_fields=['is_viewing_demo'])
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
             return redirect('dashboard')
         except DemoSandbox.DoesNotExist:
             pass
@@ -1420,11 +1437,12 @@ def toggle_demo_mode(request):
             # Redis/Celery unavailable — provision synchronously
             provision_sandbox_task(request.user.id)
             profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
             if _update_onboarding:
                 profile.onboarding_status = 'demo_exploring'
-                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
-            else:
-                profile.save(update_fields=['is_viewing_demo'])
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
             return redirect('dashboard')
 
         # If this is an AJAX request, return JSON for WebSocket streaming
@@ -1440,11 +1458,12 @@ def toggle_demo_mode(request):
 
         # Fallback for non-JS: redirect to dashboard (Celery will finish in background)
         profile.is_viewing_demo = True
+        profile.active_workspace = demo_ws
+        fields = ['is_viewing_demo', 'active_workspace']
         if _update_onboarding:
             profile.onboarding_status = 'demo_exploring'
-            profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
-        else:
-            profile.save(update_fields=['is_viewing_demo'])
+            fields.append('onboarding_status')
+        profile.save(update_fields=fields)
         return redirect('dashboard')
     else:
         # ── Leaving demo ───────────────────────────────────────────
@@ -1454,9 +1473,102 @@ def toggle_demo_mode(request):
         except DemoSandbox.DoesNotExist:
             pass
         _leave_demo_org(request.user)
+
+        # Resolve the user's default real workspace
+        from kanban.models import Workspace
+        real_ws = None
+        if profile.organization:
+            real_ws = Workspace.objects.filter(
+                organization=profile.organization,
+                is_demo=False, is_active=True,
+            ).order_by('-created_at').first()
+
         profile.is_viewing_demo = False
-        profile.save(update_fields=['is_viewing_demo'])
+        profile.active_workspace = real_ws
+        profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
         return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def switch_workspace(request):
+    """POST /switch-workspace/ — switch the user's active workspace.
+
+    Accepts ``workspace_id`` in POST data.  Updates both
+    ``profile.active_workspace`` and ``profile.is_viewing_demo`` for
+    backwards compatibility with all existing views.
+
+    If the target workspace is the demo workspace, enters demo mode
+    (provisions sandbox if needed).  If switching away from demo,
+    leaves demo mode properly.
+    """
+    from kanban.models import Workspace, DemoSandbox
+    from kanban.sandbox_views import (
+        _join_demo_org, _leave_demo_org,
+        _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+    )
+
+    workspace_id = request.POST.get('workspace_id')
+    if not workspace_id:
+        return redirect('dashboard')
+
+    profile = request.user.profile
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    try:
+        target_ws = Workspace.objects.get(
+            pk=workspace_id,
+            organization=org,
+            is_active=True,
+        )
+    except Workspace.DoesNotExist:
+        return redirect('dashboard')
+
+    was_demo = profile.is_viewing_demo
+
+    if target_ws.is_demo:
+        # Entering demo workspace — same logic as toggle_demo_mode
+        if not was_demo:
+            _update_onboarding = profile.onboarding_status in ('pending',)
+            try:
+                existing = request.user.demo_sandbox
+                _join_demo_org(request.user)
+                _reassign_demo_tasks_to_user(existing, request.user)
+            except DemoSandbox.DoesNotExist:
+                from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+                try:
+                    provision_sandbox_task(request.user.id)
+                except Exception:
+                    pass
+
+            profile.is_viewing_demo = True
+            profile.active_workspace = target_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+        else:
+            # Already in demo — just update active_workspace
+            profile.active_workspace = target_ws
+            profile.save(update_fields=['active_workspace'])
+    else:
+        # Switching to a real workspace
+        if was_demo:
+            try:
+                sandbox = request.user.demo_sandbox
+                _restore_demo_task_assignments(sandbox)
+            except DemoSandbox.DoesNotExist:
+                pass
+            _leave_demo_org(request.user)
+
+        profile.is_viewing_demo = False
+        profile.active_workspace = target_ws
+        profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
+
+    return redirect('dashboard')
 
 
 @login_required
@@ -1474,6 +1586,7 @@ def board_list(request):
     
     # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
     demo_mode = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(request, 'workspace', None)
 
     # Org Admins see all boards regardless of membership
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
@@ -1493,6 +1606,13 @@ def board_list(request):
             is_imported=False,
         )
         boards = (sandbox_boards | user_created_boards).distinct()
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: only boards in the active workspace
+        boards = Board.objects.filter(
+            workspace=active_ws,
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
