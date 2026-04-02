@@ -1055,9 +1055,41 @@ def dashboard(request):
                     briefing_pulse = first_line
             break
 
+    # Fallback pulse: when no mission AI summary exists, synthesise from
+    # the task statistics the dashboard already computed.
+    if not briefing_pulse and task_count > 0:
+        parts = []
+        if overdue_count:
+            parts.append(f"{overdue_count} overdue task{'s' if overdue_count != 1 else ''}")
+        if total_high_risk:
+            parts.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''}")
+        if completion_rate >= 80:
+            parts.append(f"{completion_rate:.0f}% complete — strong progress")
+        elif completed_count:
+            parts.append(f"{completion_rate:.0f}% complete")
+        board_count = boards.count()
+        briefing_pulse = (
+            f"{task_count} tasks across {board_count} board{'s' if board_count != 1 else ''}. "
+            + (', '.join(parts) + '.' if parts else 'All on track.')
+        )
+
     # Top risk item for the Key Risk panel — the single highest-priority
-    # risk task (critical before high, earliest due date, then unassigned first)
+    # risk task (critical before high, earliest due date, then unassigned first).
+    # Falls back to the most-overdue task when there are no high/critical tasks.
     _top_risk_task = high_risk_tasks_qs.first()  # already sorted: critical→due date
+    if not _top_risk_task and overdue_count > 0:
+        _top_risk_task = (
+            Task.objects
+            .filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                due_date__lt=timezone.now(),
+            )
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')
+            .first()
+        )
     briefing_top_risk = None
     if _top_risk_task:
         _tr_due = _top_risk_task.due_date
@@ -1081,7 +1113,7 @@ def dashboard(request):
             _tr_due_label = "No due date"
         briefing_top_risk = {
             'task':       _top_risk_task,
-            'risk_level': _top_risk_task.risk_level,
+            'risk_level': _top_risk_task.risk_level or ('high' if _tr_days < 0 else ''),
             'due_label':  _tr_due_label,
             'due_date':   _tr_due,
             'board_name': (_top_risk_task.column.board.name
@@ -1246,19 +1278,13 @@ def dashboard(request):
         dc_awareness_count = _dc_cached.get('awareness_count', 0)
         dc_quickwin_count = _dc_cached.get('quick_win_count', 0)
     else:
-        _dc_pending = DecisionItem.objects.filter(created_for=request.user, status='pending')
-        if _dc_effective_demo:
-            _dc_pending = _dc_pending.filter(board__is_official_demo_board=True)
-        else:
-            _dc_pending = (
-                _dc_pending.filter(
-                    board__is_official_demo_board=False,
-                    board__is_sandbox_copy=False,
-                )
-                | DecisionItem.objects.filter(
-                    created_for=request.user, status='pending', board__isnull=True
-                )
-            ).distinct()
+        _dc_pending = (
+            DecisionItem.objects.filter(
+                created_for=request.user, status='pending', board__in=boards,
+            ) | DecisionItem.objects.filter(
+                created_for=request.user, status='pending', board__isnull=True,
+            )
+        ).distinct()
         _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
         dc_action_count = _dc_pending.filter(priority_level='action_required').count()
         dc_awareness_count = (
