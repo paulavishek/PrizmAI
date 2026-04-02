@@ -403,13 +403,13 @@
                 {% if all_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if all_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page=1" data-modal="totalTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.previous_page_number }}" data-modal="totalTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ all_tasks.number }} of {{ all_tasks.paginator.num_pages }}</span></li>
                     {% if all_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.next_page_number }}" data-modal="totalTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?all_tasks_page={{ all_tasks.paginator.num_pages }}" data-modal="totalTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -465,13 +465,13 @@
                 {% if completed_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if completed_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page=1" data-modal="completedTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.previous_page_number }}" data-modal="completedTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ completed_tasks.number }} of {{ completed_tasks.paginator.num_pages }}</span></li>
                     {% if completed_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.next_page_number }}" data-modal="completedTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?completed_tasks_page={{ completed_tasks.paginator.num_pages }}" data-modal="completedTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -580,13 +580,13 @@
                 {% if overdue_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if overdue_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page=1" data-modal="overdueTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.previous_page_number }}" data-modal="overdueTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ overdue_tasks.number }} of {{ overdue_tasks.paginator.num_pages }}</span></li>
                     {% if overdue_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.next_page_number }}" data-modal="overdueTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?overdue_tasks_page={{ overdue_tasks.paginator.num_pages }}" data-modal="overdueTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -653,13 +653,13 @@
                 {% if due_soon_tasks.has_other_pages %}
                 <nav class="mt-3"><ul class="pagination justify-content-center">
                     {% if due_soon_tasks.has_previous %}
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page=1">First</a></li>
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.previous_page_number }}">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page=1" data-modal="dueSoonTasksModal">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.previous_page_number }}" data-modal="dueSoonTasksModal">Previous</a></li>
                     {% endif %}
                     <li class="page-item active"><span class="page-link">Page {{ due_soon_tasks.number }} of {{ due_soon_tasks.paginator.num_pages }}</span></li>
                     {% if due_soon_tasks.has_next %}
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.next_page_number }}">Next</a></li>
-                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.paginator.num_pages }}">Last</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.next_page_number }}" data-modal="dueSoonTasksModal">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?due_soon_tasks_page={{ due_soon_tasks.paginator.num_pages }}" data-modal="dueSoonTasksModal">Last</a></li>
                     {% endif %}
                 </ul></nav>
                 {% endif %}
@@ -688,5 +688,52 @@ function goBack() {
         window.location.href = '{% url "dashboard" %}';
     }
 }
+
+// Handle pagination clicks within modals via AJAX
+function handleModalPagination() {
+    const paginationLinks = document.querySelectorAll('.modal .pagination a.page-link');
+    paginationLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const url = this.getAttribute('href');
+            const modalId = this.getAttribute('data-modal');
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+
+            const modalBody = modal.querySelector('.modal-body');
+            const originalContent = modalBody.innerHTML;
+            modalBody.innerHTML = '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-3x text-primary"></i><p class="mt-3">Loading...</p></div>';
+
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newModal = doc.getElementById(modalId);
+                if (newModal) {
+                    const newModalBody = newModal.querySelector('.modal-body');
+                    const newModalFooter = newModal.querySelector('.modal-footer');
+                    if (newModalBody) {
+                        modal.querySelector('.modal-body').innerHTML = newModalBody.innerHTML;
+                    }
+                    if (newModalFooter) {
+                        modal.querySelector('.modal-footer').innerHTML = newModalFooter.innerHTML;
+                    }
+                    handleModalPagination();
+                } else {
+                    modalBody.innerHTML = originalContent;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading page:', error);
+                modalBody.innerHTML = '<div class="text-center py-5"><i class="fas fa-exclamation-triangle fa-3x text-danger"></i><p class="mt-3">Error loading content. Please try again.</p></div>';
+            });
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    handleModalPagination();
+});
 </script>
 {% endblock %}
