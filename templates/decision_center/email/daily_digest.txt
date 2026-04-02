@@ -1,4 +1,4 @@
-PrizmAI — Decision Center Daily Digest
+PrizmAI — Your Focus Today – Daily Digest
 =======================================
 
 Good morning{% if user_name %}, {{ user_name }}{% endif %}!
@@ -20,8 +20,8 @@ Estimated review time: {{ estimated_minutes }} minute{{ estimated_minutes|plural
 {% endif %}{% if show_quick_wins and quick_win_items %}--- QUICK WINS ---
 {% for item in quick_win_items %}• {{ item.title }}
 {% endfor %}
-{% endif %}Open your Decision Center: {{ decision_center_url }}
+{% endif %}Open Your Focus Today: {{ decision_center_url }}
 
 ---
-You're receiving this because daily digest emails are enabled in your Decision Center settings.
+You're receiving this because daily digest emails are enabled in your Focus Today settings.
 © 2026 PrizmAI

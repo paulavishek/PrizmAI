@@ -43,11 +43,15 @@ class ConflictDetectionService:
         if self.board:
             boards = [self.board]
         else:
-            # Only analyze active boards with recent activity
+            # Only analyze active boards with recent activity,
+            # excluding official demo templates and sandbox copies
+            # (sandbox conflicts are seeded during provisioning).
             from django.utils import timezone
             thirty_days_ago = timezone.now() - timedelta(days=30)
             boards = Board.objects.filter(
-                columns__tasks__updated_at__gte=thirty_days_ago
+                columns__tasks__updated_at__gte=thirty_days_ago,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
             ).distinct()
         
         for board in boards:
@@ -131,12 +135,17 @@ class ConflictDetectionService:
                         task1.start_date, task1_due,
                         task2.start_date, task2_due
                     ):
+                        user_display = user.get_full_name() or user.username
+                        conflict_title = f"Resource conflict: {user_display} overbooked"
+
                         # Check if this conflict already exists and is active
+                        # Use title match instead of M2M lookup so copied
+                        # conflicts with empty M2M are still detected.
                         existing = ConflictDetection.objects.filter(
                             board=board,
                             conflict_type='resource',
                             status='active',
-                            tasks__in=[task1, task2]
+                            title=conflict_title,
                         ).first()
                         
                         if existing:
@@ -152,7 +161,7 @@ class ConflictDetectionService:
                             conflict_type='resource',
                             severity=severity,
                             board=board,
-                            title=f"Resource conflict: {user.get_full_name() or user.username} overbooked",
+                            title=conflict_title,
                             description=f"{user.get_full_name() or user.username} is assigned to overlapping tasks: '{task1.title}' and '{task2.title}'",
                             conflict_data={
                                 'user_id': user.id,
@@ -215,15 +224,27 @@ class ConflictDetectionService:
         overdue_tasks = incomplete_tasks.filter(due_date__lt=now)
         if overdue_tasks.count() >= 3:  # Multiple overdue = schedule conflict
             for task in overdue_tasks[:5]:  # Limit to prevent spam
-                # Check if conflict already exists
+                # Check if an active schedule conflict already exists for this
+                # task on this board — prefer title match so copied conflicts
+                # with empty M2M are still detected as duplicates.
                 existing = ConflictDetection.objects.filter(
                     board=board,
                     conflict_type='schedule',
                     status='active',
-                    tasks=task
+                    title=f"Overdue task: {task.title}",
                 ).first()
                 
                 if existing:
+                    # Update severity / description on the existing record
+                    days_overdue = (now.date() - task.due_date.date() if hasattr(task.due_date, 'date') else now.date() - task.due_date).days
+                    new_sev = 'high' if days_overdue > 7 else 'medium' if days_overdue > 3 else 'low'
+                    ConflictDetection.objects.filter(pk=existing.pk).update(
+                        severity=new_sev,
+                        description=f"Task '{task.title}' is {days_overdue} days overdue (due: {task.due_date.strftime('%Y-%m-%d')})",
+                    )
+                    # Ensure M2M is linked (may have been empty from sandbox copy)
+                    if not existing.tasks.filter(pk=task.pk).exists():
+                        existing.tasks.add(task)
                     continue
                 
                 days_overdue = (now.date() - task.due_date.date() if hasattr(task.due_date, 'date') else now.date() - task.due_date).days

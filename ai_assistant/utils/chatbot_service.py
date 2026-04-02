@@ -3520,7 +3520,7 @@ class TaskFlowChatbotService:
             'conflict', 'coaching', 'coach', 'retrospective', 'retro',
             'automation', 'scheduled', 'gantt', 'calendar', 'triple constraint',
             'resource leveling', 'skill gap', 'stakeholder', 'briefing',
-            'action plan', 'daily briefing', 'decision center',
+            'action plan', 'daily briefing', 'decision center', 'focus today',
             'knowledge graph', 'memory', 'organizational memory',
         ]
         prompt_lower = prompt.lower()
@@ -3800,7 +3800,7 @@ class TaskFlowChatbotService:
                 ).order_by('-created_at')[:5]
                 if pending_items.exists():
                     found_data = True
-                    context += f"**🎯 Decision Center (Pending Items: {pending_items.count()}):**\n"
+                    context += f"**🎯 Focus Today (Pending Items: {pending_items.count()}):**\n"
                     for item in pending_items:
                         context += f"  • [{item.get_priority_level_display()}] {item.title} ({item.get_item_type_display()})\n"
                     context += "\n"
@@ -3841,7 +3841,7 @@ class TaskFlowChatbotService:
                 context += "Available features: Budget Tracking, Burndown Charts, Scope Creep Analysis, "
                 context += "Pre-Mortem Analysis, What-If Scenarios, Conflict Detection, AI Coaching, "
                 context += "Retrospectives, Automations, Stakeholder Management, Resource Leveling, "
-                context += "Decision Center, Knowledge Graph, Gantt Charts, Triple Constraint.\n"
+                context += "Focus Today, Knowledge Graph, Gantt Charts, Triple Constraint.\n"
 
             return context
 
@@ -3962,7 +3962,7 @@ Your role is to help project managers and team members with:
 - Meeting notes analysis and action item tracking
 - **Strategic Workflow**: Org Goals → Missions → Strategies → Boards hierarchy
 - **AI Tools on Boards**: Budget tracking, Burndown/Velocity charts, Scope Creep Analysis, Pre-Mortem risk scenarios, What-If simulations, Conflict detection, AI Coaching, Retrospectives, Automations (trigger & scheduled), Stakeholder management, Resource Leveling, Gantt charts & Triple Constraint
-- **Decision Center**: Pending decisions, risk assessments, briefings
+- **Focus Today (Decision Center)**: Pending decisions, risk assessments, briefings
 - **Knowledge Graph**: Organizational memory, lessons learned, patterns
 - **Analytics**: Team performance, engagement metrics, feedback
 - **Spectra Actions** (say "create a task", "send a message", etc.):
