@@ -89,6 +89,31 @@ def decision_center_view(request):
         for i in action_required + awareness + quick_wins
     )
 
+    # If the briefing's item count is stale (e.g. items were cleaned up since
+    # it was generated), patch it so the headline matches what we display.
+    actual_total = len(action_required) + len(awareness) + len(quick_wins)
+    if briefing:
+        stored_total = sum(briefing.item_counts.values()) if briefing.item_counts else 0
+        if stored_total != actual_total:
+            briefing.headline = f"You have {actual_total} item{'s' if actual_total != 1 else ''} in your decision queue today."
+            new_counts = {
+                'action_required': len(action_required),
+                'awareness': len(awareness),
+                'quick_win': len(quick_wins),
+            }
+            briefing.item_counts = new_counts
+            briefing.estimated_minutes = total_est
+            parts = []
+            if new_counts['action_required']:
+                parts.append(f"{new_counts['action_required']} decision{'s' if new_counts['action_required'] != 1 else ''} need your attention.")
+            if new_counts['awareness']:
+                parts.append(f"{new_counts['awareness']} awareness item{'s' if new_counts['awareness'] != 1 else ''}.")
+            if new_counts['quick_win']:
+                parts.append(f"{new_counts['quick_win']} quick win{'s' if new_counts['quick_win'] != 1 else ''}.")
+            parts.append(f"Estimated review time: {total_est} minutes.")
+            briefing.briefing = ' '.join(parts)
+            briefing.save()
+
     # Last resolved timestamp
     last_resolved = (
         DecisionItem.objects

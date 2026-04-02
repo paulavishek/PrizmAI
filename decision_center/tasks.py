@@ -92,12 +92,18 @@ def collect_for_user(user):
 
     # ACTION REQUIRED
 
-    # 1. Unresolved conflicts
+    # 1. Unresolved conflicts — deduplicate by (board, title) so that
+    #    duplicate ConflictDetection records don't spawn duplicate items.
     try:
         from kanban.conflict_models import ConflictDetection
+        seen_conflicts = set()  # (board_id, conflict_title)
         for conflict in ConflictDetection.objects.filter(
             status='active', board__in=boards,
-        ).select_related('board'):
+        ).select_related('board').order_by('-severity', '-detected_at'):
+            key = (conflict.board_id, conflict.title)
+            if key in seen_conflicts:
+                continue
+            seen_conflicts.add(key)
             _ensure_item(
                 user=user,
                 board=conflict.board,
@@ -755,7 +761,7 @@ def send_daily_digest_emails():
         }
 
         subject = (
-            f'PrizmAI Decision Center: {len(action_items)} action'
+            f'PrizmAI Focus Today: {len(action_items)} action'
             f'{"s" if len(action_items) != 1 else ""} required'
         )
         body_text = render_to_string(
