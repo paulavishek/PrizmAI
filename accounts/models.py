@@ -183,6 +183,17 @@ class UserProfile(models.Model):
         default=False,
         help_text="Whether user is currently viewing their personal demo sandbox"
     )
+    # Active workspace — determines which workspace's data the user sees.
+    # Kept in sync with is_viewing_demo: when active_workspace.is_demo=True,
+    # is_viewing_demo=True and vice versa.
+    active_workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='active_users',
+        null=True,
+        blank=True,
+        help_text="The workspace the user is currently viewing. Null = no workspace selected yet."
+    )
     is_demo_account = models.BooleanField(
         default=False,
         help_text="Permanent flag for demo login accounts (Alex, Sam, Jordan). Read-only, zero AI access."

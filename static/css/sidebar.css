@@ -1046,6 +1046,161 @@
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
+
+/* ============================================= */
+/* Workspace Switcher Dropdown                   */
+/* ============================================= */
+
+.sidebar-workspace-switcher {
+    position: relative;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--sidebar-border);
+    flex-shrink: 0;
+}
+
+.sidebar-ws-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 7px 10px;
+    color: var(--sidebar-text-active);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    text-align: left;
+    line-height: 1.3;
+}
+.sidebar-ws-btn:hover {
+    background: rgba(255,255,255,0.10);
+    border-color: rgba(255,255,255,0.15);
+}
+
+.sidebar-ws-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.sidebar-ws-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-ws-arrow {
+    font-size: 0.6rem;
+    opacity: 0.6;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.sidebar-ws-btn[aria-expanded="true"] .sidebar-ws-arrow {
+    transform: rotate(180deg);
+}
+
+/* Dropdown panel */
+.sidebar-ws-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 10px;
+    right: 10px;
+    background: #2a2f4e;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    z-index: 1060;
+    padding: 6px 0;
+    max-height: 320px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+
+.sidebar-ws-dropdown-header {
+    padding: 6px 14px 4px;
+}
+
+.sidebar-ws-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 14px;
+    background: none;
+    border: none;
+    color: var(--sidebar-text);
+    font-size: 0.8rem;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.12s;
+    text-align: left;
+}
+.sidebar-ws-option:hover {
+    background: rgba(255,255,255,0.07);
+    color: var(--sidebar-text-active);
+}
+.sidebar-ws-option.active {
+    background: rgba(255,255,255,0.10);
+    color: var(--sidebar-text-active);
+    font-weight: 600;
+}
+
+.sidebar-ws-option-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.sidebar-ws-option-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-ws-dropdown-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+    margin: 4px 10px;
+}
+
+.sidebar-ws-create {
+    color: var(--sidebar-text) !important;
+    opacity: 0.85;
+}
+.sidebar-ws-create:hover {
+    opacity: 1;
+    color: var(--sidebar-text-active) !important;
+}
+
+/* Collapsed state — show only icon */
+.prizm-sidebar.collapsed .sidebar-workspace-switcher {
+    padding: 8px 6px;
+}
+.prizm-sidebar.collapsed .sidebar-ws-btn {
+    justify-content: center;
+    padding: 7px;
+}
+.prizm-sidebar.collapsed .sidebar-ws-dropdown {
+    left: calc(var(--sidebar-collapsed-width) + 4px);
+    right: auto;
+    top: 0;
+    width: 220px;
+}
 .sidebar-fav-link {
     padding: 5px 18px !important;
     font-size: 0.82rem !important;

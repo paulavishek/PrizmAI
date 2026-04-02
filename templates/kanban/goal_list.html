@@ -34,7 +34,7 @@
     <i class="fas fa-info-circle fa-lg me-3 text-info"></i>
     <div>
         <strong>Organization Goals</strong> can only be created by <strong>Workspace Admins</strong>.
-        {% if request.user.profile.is_viewing_demo %}
+        {% if request.user.profile.is_viewing_demo and can_setup_workspace %}
         In demo mode, goal creation is disabled. <a href="{% url 'onboarding_welcome' %}?from=goals">Set up your own workspace</a> to create and manage goals.
         {% else %}
         Contact your workspace admin to create a new goal, or request admin access.
