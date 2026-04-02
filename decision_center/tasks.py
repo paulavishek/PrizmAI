@@ -26,15 +26,43 @@ def _get_or_create_settings(user):
 
 
 def _user_boards(user):
-    """Return the queryset of boards a user can access.
+    """Return the queryset of boards for the user's *current* workspace mode.
 
     Delegates to the canonical ``get_user_boards()`` helper so that demo
     users see only their personal sandbox copies (never the immutable
-    official-demo template board).  This prevents ``collect_for_user``
-    from creating duplicate DecisionItems on both templates and sandboxes.
+    official-demo template board).  Used by briefing generation and views
+    where results must match the active workspace.
     """
     from kanban.utils.demo_protection import get_user_boards
     return get_user_boards(user)
+
+
+def _all_user_boards(user):
+    """Return ALL boards the user can access across *both* workspace modes.
+
+    This includes real boards AND the user's own sandbox copies but never
+    immutable demo templates or other users' sandbox copies.  Used by
+    ``collect_for_user`` so that DecisionItems are pre-generated for every
+    board — the view filtering (which uses ``get_user_boards``) then shows
+    only the active workspace's items.
+    """
+    from kanban.models import Board
+    from django.db.models import Q
+
+    # Real boards: own or member, exclude demo/sandbox/spectra-generated
+    real_boards = Board.objects.filter(
+        Q(created_by=user) | Q(owner=user) | Q(memberships__user=user),
+        is_official_demo_board=False,
+        is_sandbox_copy=False,
+    ).exclude(created_by_session__startswith='spectra_demo_')
+
+    # Sandbox boards: only the user's own copies
+    sandbox_boards = Board.objects.filter(
+        owner=user,
+        is_sandbox_copy=True,
+    )
+
+    return (real_boards | sandbox_boards).distinct()
 
 
 def _ensure_item(*, user, board, item_type, priority_level, title,
@@ -84,7 +112,7 @@ def collect_for_user(user):
     now = timezone.now()
     today = now.date()
 
-    boards = _user_boards(user)
+    boards = _all_user_boards(user)
     if not boards.exists():
         return
 
@@ -462,7 +490,7 @@ def collect_decision_items():
     stats = {'users': 0, 'items_created': 0}
 
     for user in active_users.iterator():
-        boards = _user_boards(user)
+        boards = _all_user_boards(user)
         if not boards.exists():
             continue
 
@@ -509,26 +537,16 @@ def generate_decision_briefing():
         # Scope to demo or real boards — matching the view/widget logic
         try:
             user_obj = User.objects.get(pk=user_id)
-            is_demo_mode = getattr(
-                getattr(user_obj, 'profile', None), 'is_viewing_demo', False
-            )
-            is_demo_account = '_demo' in user_obj.username
+            user_boards = _user_boards(user_obj)
         except User.DoesNotExist:
-            is_demo_mode = False
-            is_demo_account = False
+            continue
 
-        if is_demo_mode or is_demo_account:
-            pending = pending.filter(board__is_official_demo_board=True)
-        else:
-            pending = (
-                pending.filter(
-                    board__is_official_demo_board=False,
-                    board__is_sandbox_copy=False,
-                )
-                | DecisionItem.objects.filter(
-                    created_for_id=user_id, status='pending', board__isnull=True
-                )
-            ).distinct()
+        pending = (
+            pending.filter(board__in=user_boards)
+            | DecisionItem.objects.filter(
+                created_for_id=user_id, status='pending', board__isnull=True
+            )
+        ).distinct()
 
         action_items = list(
             pending.filter(priority_level='action_required')
