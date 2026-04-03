@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileR
 from django.contrib import messages
 from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.core.cache import cache
 from django.conf import settings as django_settings
 from datetime import timedelta
@@ -75,6 +75,7 @@ def dashboard(request):
     # MVP Mode: Get all boards the user has access to
     # Single-tier demo: when is_viewing_demo, show user's personal sandbox copies
     demo_mode = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(request, 'workspace', None)
     
     # Org Admins see all boards regardless of membership
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
@@ -135,6 +136,13 @@ def dashboard(request):
                     _reassign_demo_tasks_to_user(sandbox, request.user)
                 except DemoSandbox.DoesNotExist:
                     pass
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: only boards in the active workspace
+        boards = Board.objects.filter(
+            workspace=active_ws,
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -1055,9 +1063,41 @@ def dashboard(request):
                     briefing_pulse = first_line
             break
 
+    # Fallback pulse: when no mission AI summary exists, synthesise from
+    # the task statistics the dashboard already computed.
+    if not briefing_pulse and task_count > 0:
+        parts = []
+        if overdue_count:
+            parts.append(f"{overdue_count} overdue task{'s' if overdue_count != 1 else ''}")
+        if total_high_risk:
+            parts.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''}")
+        if completion_rate >= 80:
+            parts.append(f"{completion_rate:.0f}% complete — strong progress")
+        elif completed_count:
+            parts.append(f"{completion_rate:.0f}% complete")
+        board_count = boards.count()
+        briefing_pulse = (
+            f"{task_count} tasks across {board_count} board{'s' if board_count != 1 else ''}. "
+            + (', '.join(parts) + '.' if parts else 'All on track.')
+        )
+
     # Top risk item for the Key Risk panel — the single highest-priority
-    # risk task (critical before high, earliest due date, then unassigned first)
+    # risk task (critical before high, earliest due date, then unassigned first).
+    # Falls back to the most-overdue task when there are no high/critical tasks.
     _top_risk_task = high_risk_tasks_qs.first()  # already sorted: critical→due date
+    if not _top_risk_task and overdue_count > 0:
+        _top_risk_task = (
+            Task.objects
+            .filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                due_date__lt=timezone.now(),
+            )
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')
+            .first()
+        )
     briefing_top_risk = None
     if _top_risk_task:
         _tr_due = _top_risk_task.due_date
@@ -1081,7 +1121,7 @@ def dashboard(request):
             _tr_due_label = "No due date"
         briefing_top_risk = {
             'task':       _top_risk_task,
-            'risk_level': _top_risk_task.risk_level,
+            'risk_level': _top_risk_task.risk_level or ('high' if _tr_days < 0 else ''),
             'due_label':  _tr_due_label,
             'due_date':   _tr_due,
             'board_name': (_top_risk_task.column.board.name
@@ -1246,19 +1286,13 @@ def dashboard(request):
         dc_awareness_count = _dc_cached.get('awareness_count', 0)
         dc_quickwin_count = _dc_cached.get('quick_win_count', 0)
     else:
-        _dc_pending = DecisionItem.objects.filter(created_for=request.user, status='pending')
-        if _dc_effective_demo:
-            _dc_pending = _dc_pending.filter(board__is_official_demo_board=True)
-        else:
-            _dc_pending = (
-                _dc_pending.filter(
-                    board__is_official_demo_board=False,
-                    board__is_sandbox_copy=False,
-                )
-                | DecisionItem.objects.filter(
-                    created_for=request.user, status='pending', board__isnull=True
-                )
-            ).distinct()
+        _dc_pending = (
+            DecisionItem.objects.filter(
+                created_for=request.user, status='pending', board__in=boards,
+            ) | DecisionItem.objects.filter(
+                created_for=request.user, status='pending', board__isnull=True,
+            )
+        ).distinct()
         _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
         dc_action_count = _dc_pending.filter(priority_level='action_required').count()
         dc_awareness_count = (
@@ -1363,6 +1397,14 @@ def toggle_demo_mode(request):
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
 
+        # Resolve demo workspace for this org (if any)
+        from kanban.models import Workspace
+        demo_ws = None
+        if profile.organization:
+            demo_ws = Workspace.objects.filter(
+                organization=profile.organization, is_demo=True, is_active=True,
+            ).first()
+
         # Ensure the dashboard onboarding guard won't redirect away.
         # Users who joined via board invitation have status='pending'
         # and no goals, which would send them to /onboarding/ instead
@@ -1377,11 +1419,12 @@ def toggle_demo_mode(request):
             _join_demo_org(request.user)
             _reassign_demo_tasks_to_user(existing, request.user)
             profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
             if _update_onboarding:
                 profile.onboarding_status = 'demo_exploring'
-                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
-            else:
-                profile.save(update_fields=['is_viewing_demo'])
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
             return redirect('dashboard')
         except DemoSandbox.DoesNotExist:
             pass
@@ -1394,11 +1437,12 @@ def toggle_demo_mode(request):
             # Redis/Celery unavailable — provision synchronously
             provision_sandbox_task(request.user.id)
             profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
             if _update_onboarding:
                 profile.onboarding_status = 'demo_exploring'
-                profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
-            else:
-                profile.save(update_fields=['is_viewing_demo'])
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
             return redirect('dashboard')
 
         # If this is an AJAX request, return JSON for WebSocket streaming
@@ -1414,11 +1458,12 @@ def toggle_demo_mode(request):
 
         # Fallback for non-JS: redirect to dashboard (Celery will finish in background)
         profile.is_viewing_demo = True
+        profile.active_workspace = demo_ws
+        fields = ['is_viewing_demo', 'active_workspace']
         if _update_onboarding:
             profile.onboarding_status = 'demo_exploring'
-            profile.save(update_fields=['is_viewing_demo', 'onboarding_status'])
-        else:
-            profile.save(update_fields=['is_viewing_demo'])
+            fields.append('onboarding_status')
+        profile.save(update_fields=fields)
         return redirect('dashboard')
     else:
         # ── Leaving demo ───────────────────────────────────────────
@@ -1428,9 +1473,175 @@ def toggle_demo_mode(request):
         except DemoSandbox.DoesNotExist:
             pass
         _leave_demo_org(request.user)
+
+        # Resolve the user's default real workspace
+        from kanban.models import Workspace
+        real_ws = None
+        if profile.organization:
+            real_ws = Workspace.objects.filter(
+                organization=profile.organization,
+                is_demo=False, is_active=True,
+            ).order_by('-created_at').first()
+
         profile.is_viewing_demo = False
-        profile.save(update_fields=['is_viewing_demo'])
+        profile.active_workspace = real_ws
+        profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
         return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def rename_workspace(request):
+    """POST /rename-workspace/ — rename the user's active workspace.
+
+    Only the org creator can rename workspaces.  Demo workspaces cannot
+    be renamed.  Accepts ``name`` in POST body.  Returns JSON for AJAX
+    callers or redirects for regular form submissions.
+    """
+    from kanban.models import Workspace
+
+    profile = request.user.profile
+    ws = getattr(profile, 'active_workspace', None)
+    if not ws or ws.is_demo:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Cannot rename this workspace'}, status=400)
+        return redirect('dashboard')
+
+    # Only org creator can rename
+    if ws.organization and ws.organization.created_by_id != request.user.id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Only the workspace creator can rename it'}, status=403)
+        return redirect('dashboard')
+
+    import re
+    new_name = request.POST.get('name', '').strip()
+    # Sanitize: allow letters, numbers, spaces, hyphens, apostrophes
+    new_name = re.sub(r'[^\w\s\-\']', '', new_name)[:60]
+    if not new_name:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Name cannot be empty'}, status=400)
+        return redirect('dashboard')
+
+    ws.name = new_name
+    ws.save(update_fields=['name'])
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'name': ws.name})
+    return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def switch_workspace(request):
+    """POST /switch-workspace/ — switch the user's active workspace.
+
+    Accepts ``workspace_id`` in POST data.  Updates both
+    ``profile.active_workspace`` and ``profile.is_viewing_demo`` for
+    backwards compatibility with all existing views.
+
+    If the target workspace is the demo workspace, enters demo mode
+    (provisions sandbox if needed).  If switching away from demo,
+    leaves demo mode properly.
+    """
+    from kanban.models import Workspace, DemoSandbox
+    from kanban.sandbox_views import (
+        _join_demo_org, _leave_demo_org,
+        _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+    )
+
+    workspace_id = request.POST.get('workspace_id')
+    if not workspace_id:
+        return redirect('dashboard')
+
+    profile = request.user.profile
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    try:
+        target_ws = Workspace.objects.get(
+            pk=workspace_id,
+            organization=org,
+            is_active=True,
+        )
+    except Workspace.DoesNotExist:
+        return redirect('dashboard')
+
+    was_demo = profile.is_viewing_demo
+
+    if target_ws.is_demo:
+        # Entering demo workspace — same logic as toggle_demo_mode
+        if not was_demo:
+            _update_onboarding = profile.onboarding_status in ('pending',)
+            try:
+                existing = request.user.demo_sandbox
+                _join_demo_org(request.user)
+                _reassign_demo_tasks_to_user(existing, request.user)
+            except DemoSandbox.DoesNotExist:
+                from kanban.tasks.sandbox_provisioning import provision_sandbox_task
+                try:
+                    provision_sandbox_task(request.user.id)
+                except Exception:
+                    pass
+
+            profile.is_viewing_demo = True
+            profile.active_workspace = target_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+        else:
+            # Already in demo — just update active_workspace
+            profile.active_workspace = target_ws
+            profile.save(update_fields=['active_workspace'])
+    else:
+        # Switching to a real workspace
+        if was_demo:
+            try:
+                sandbox = request.user.demo_sandbox
+                _restore_demo_task_assignments(sandbox)
+            except DemoSandbox.DoesNotExist:
+                pass
+            _leave_demo_org(request.user)
+
+        profile.is_viewing_demo = False
+        profile.active_workspace = target_ws
+        profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
+
+    return redirect('dashboard')
+
+
+@login_required
+def workspace_selection(request):
+    """GET /workspace-selection/ — Jira-style workspace picker shown when
+    a user has multiple real workspaces."""
+    from kanban.models import Workspace
+
+    profile = request.user.profile
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    real_workspaces = list(
+        Workspace.objects.filter(
+            organization=org, is_active=True, is_demo=False,
+        ).order_by('-updated_at')
+    )
+
+    # If 0 or 1 real workspaces, no need for selection — go to dashboard
+    if len(real_workspaces) <= 1:
+        return redirect('dashboard')
+
+    demo_ws = Workspace.objects.filter(
+        organization=org, is_active=True, is_demo=True,
+    ).first()
+
+    return render(request, 'kanban/workspace_selection.html', {
+        'real_workspaces': real_workspaces,
+        'demo_workspace': demo_ws,
+        'active_workspace': profile.active_workspace,
+    })
 
 
 @login_required
@@ -1448,6 +1659,7 @@ def board_list(request):
     
     # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
     demo_mode = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(request, 'workspace', None)
 
     # Org Admins see all boards regardless of membership
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
@@ -1467,6 +1679,13 @@ def board_list(request):
             is_imported=False,
         )
         boards = (sandbox_boards | user_created_boards).distinct()
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: only boards in the active workspace
+        boards = Board.objects.filter(
+            workspace=active_ws,
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).distinct()
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -1640,6 +1859,10 @@ def create_board(request):
             demo_mode = getattr(profile, 'is_viewing_demo', False)
             if demo_mode:
                 board.is_sandbox_copy = True
+
+            # Assign to the active workspace
+            if hasattr(request, 'workspace') and request.workspace:
+                board.workspace = request.workspace
 
             board.save()
             board.owner = request.user
@@ -4042,6 +4265,18 @@ def _create_board_from_import_result(result, user, organization, session):
     """
     # Create the board
     board_data = result.board_data
+    # Resolve workspace for the importing user
+    ws = None
+    try:
+        ws = user.profile.active_workspace
+        if ws and ws.is_demo:
+            ws = None  # Don't put imports into demo workspace
+        if not ws:
+            from kanban.workspace_utils import get_or_create_real_workspace
+            ws = get_or_create_real_workspace(user)
+    except Exception:
+        pass
+
     new_board = Board.objects.create(
         name=board_data.get('name', 'Imported Board'),
         description=board_data.get('description', ''),
@@ -4049,6 +4284,7 @@ def _create_board_from_import_result(result, user, organization, session):
         created_by=user,
         num_phases=board_data.get('num_phases', 0),
         is_imported=True,
+        workspace=ws,
     )
     new_board.owner = user
     new_board.save(update_fields=['owner'])
@@ -4366,7 +4602,8 @@ def wizard_create_board(request):
                 description=board_description,
                 organization=organization,
                 created_by=request.user,
-                owner=request.user
+                owner=request.user,
+                workspace=getattr(request, 'workspace', None),
             )
             from kanban.models import BoardMembership
             BoardMembership.objects.get_or_create(

@@ -365,6 +365,11 @@ urlpatterns = [
     # Demo mode toggle (v2)
     path('toggle-demo-mode/', views.toggle_demo_mode, name='toggle_demo_mode'),
 
+    # Workspace context switcher
+    path('switch-workspace/', views.switch_workspace, name='switch_workspace'),
+    path('rename-workspace/', views.rename_workspace, name='rename_workspace'),
+    path('workspace-selection/', views.workspace_selection, name='workspace_selection'),
+
     # -----------------------------------------------------------------------
     # Living Commitment Protocols (Anti-Roadmap)
     # -----------------------------------------------------------------------

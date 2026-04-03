@@ -45,6 +45,48 @@ from kanban.commitment_models import (
 
 
 # ---------------------------------------------------------------------------
+# WORKSPACE — the isolation boundary for multi-workspace support.
+# Each workspace contains its own Goal → Mission → Strategy → Board → Task
+# hierarchy.  Users switch between workspaces via a context switcher.
+# The demo sandbox is modelled as a special workspace with is_demo=True.
+# ---------------------------------------------------------------------------
+class Workspace(models.Model):
+    name = models.CharField(
+        max_length=200,
+        help_text="Display name of this workspace (e.g., 'Acme Corp Launch').",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='workspaces',
+        help_text="The organization this workspace belongs to.",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_workspaces',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_demo = models.BooleanField(
+        default=False,
+        help_text="True for the demo/sandbox workspace. Only one per organization.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Soft-delete flag. Inactive workspaces are hidden from the switcher.",
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Workspace'
+        verbose_name_plural = 'Workspaces'
+
+    def __str__(self):
+        return self.name
+
+
+# ---------------------------------------------------------------------------
 # ORGANIZATION GOAL — apex strategic layer
 # Sits above Mission.  Owned by an Organization.  One Goal → many Missions.
 # No access restrictions: all authenticated users can view and create these.
@@ -108,6 +150,16 @@ class OrganizationGoal(models.Model):
     # Demo support
     is_demo = models.BooleanField(default=False)
     is_seed_demo_data = models.BooleanField(default=False)
+
+    # Workspace isolation
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='goals',
+        null=True,
+        blank=True,
+        help_text="The workspace this goal belongs to.",
+    )
 
     # AI Summary (bubble-up from Mission summaries)
     ai_summary = models.TextField(
@@ -233,6 +285,14 @@ class Mission(models.Model):
 
     # Workspace FK stub — reserved for future Workspace layer (currently unused)
     # workspace = models.ForeignKey('Workspace', null=True, blank=True, ...)
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='missions',
+        null=True,
+        blank=True,
+        help_text="The workspace this mission belongs to.",
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -294,6 +354,16 @@ class Strategy(models.Model):
 
     # Demo support
     is_seed_demo_data = models.BooleanField(default=False)
+
+    # Workspace isolation
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='strategies',
+        null=True,
+        blank=True,
+        help_text="The workspace this strategy belongs to.",
+    )
 
     # AI Summary (bubble-up from boards)
     ai_summary = models.TextField(
@@ -664,6 +734,16 @@ class Board(models.Model):
     baseline_set_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name='baseline_boards',
                                        help_text="User who set the baseline")
+
+    # Workspace isolation (denormalized from strategy→mission→goal for query efficiency)
+    workspace = models.ForeignKey(
+        'Workspace',
+        on_delete=models.CASCADE,
+        related_name='boards',
+        null=True,
+        blank=True,
+        help_text="The workspace this board belongs to.",
+    )
     
     # Demo Mode Support
     is_official_demo_board = models.BooleanField(

@@ -26,32 +26,43 @@ def _get_or_create_settings(user):
 
 
 def _user_boards(user):
-    """Return the queryset of boards a user can access.
-    
-    Includes demo boards if the user is a demo account or is viewing demo.
+    """Return the queryset of boards for the user's *current* workspace mode.
+
+    Delegates to the canonical ``get_user_boards()`` helper so that demo
+    users see only their personal sandbox copies (never the immutable
+    official-demo template board).  Used by briefing generation and views
+    where results must match the active workspace.
+    """
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user)
+
+
+def _all_user_boards(user):
+    """Return ALL boards the user can access across *both* workspace modes.
+
+    This includes real boards AND the user's own sandbox copies but never
+    immutable demo templates or other users' sandbox copies.  Used by
+    ``collect_for_user`` so that DecisionItems are pre-generated for every
+    board — the view filtering (which uses ``get_user_boards``) then shows
+    only the active workspace's items.
     """
     from kanban.models import Board
-    from accounts.models import UserProfile
+    from django.db.models import Q
 
-    # Check if this is a demo account or user is viewing demo
-    is_demo_user = '_demo' in user.username
-    try:
-        profile = UserProfile.objects.get(user=user)
-        is_viewing_demo = getattr(profile, 'is_viewing_demo', False)
-    except UserProfile.DoesNotExist:
-        is_viewing_demo = False
-
-    if is_demo_user or is_viewing_demo:
-        # Include demo boards
-        return Board.objects.filter(
-            Q(created_by=user) | Q(memberships__user=user) | Q(is_official_demo_board=True),
-        ).distinct()
-
-    return Board.objects.filter(
-        Q(created_by=user) | Q(memberships__user=user),
+    # Real boards: own or member, exclude demo/sandbox/spectra-generated
+    real_boards = Board.objects.filter(
+        Q(created_by=user) | Q(owner=user) | Q(memberships__user=user),
         is_official_demo_board=False,
         is_sandbox_copy=False,
-    ).distinct()
+    ).exclude(created_by_session__startswith='spectra_demo_')
+
+    # Sandbox boards: only the user's own copies
+    sandbox_boards = Board.objects.filter(
+        owner=user,
+        is_sandbox_copy=True,
+    )
+
+    return (real_boards | sandbox_boards).distinct()
 
 
 def _ensure_item(*, user, board, item_type, priority_level, title,
@@ -101,7 +112,7 @@ def collect_for_user(user):
     now = timezone.now()
     today = now.date()
 
-    boards = _user_boards(user)
+    boards = _all_user_boards(user)
     if not boards.exists():
         return
 
@@ -109,12 +120,18 @@ def collect_for_user(user):
 
     # ACTION REQUIRED
 
-    # 1. Unresolved conflicts
+    # 1. Unresolved conflicts — deduplicate by (board, title) so that
+    #    duplicate ConflictDetection records don't spawn duplicate items.
     try:
         from kanban.conflict_models import ConflictDetection
+        seen_conflicts = set()  # (board_id, conflict_title)
         for conflict in ConflictDetection.objects.filter(
             status='active', board__in=boards,
-        ).select_related('board'):
+        ).select_related('board').order_by('-severity', '-detected_at'):
+            key = (conflict.board_id, conflict.title)
+            if key in seen_conflicts:
+                continue
+            seen_conflicts.add(key)
             _ensure_item(
                 user=user,
                 board=conflict.board,
@@ -371,6 +388,25 @@ def collect_for_user(user):
     except Exception:
         logger.exception("collect_for_user: stale tasks failed for user %s", user.pk)
 
+    # ── Housekeeping: prune stale pending items ──────────────────────────
+    # Items left over from old sandbox boards, template boards, or deleted
+    # boards should not remain pending.  Remove any whose board is not in
+    # the user's current workspace.
+    try:
+        from decision_center.models import DecisionItem as DI
+        stale_qs = DI.objects.filter(
+            created_for=user, status='pending', board__isnull=False,
+        ).exclude(board__in=boards)
+        pruned = stale_qs.count()
+        if pruned:
+            stale_qs.delete()
+            logger.info(
+                "collect_for_user: pruned %d stale DecisionItems for user %s",
+                pruned, user.pk,
+            )
+    except Exception:
+        logger.exception("collect_for_user: prune failed for user %s", user.pk)
+
 
 def generate_briefing_for_user(user):
     """
@@ -386,23 +422,14 @@ def generate_briefing_for_user(user):
 
     pending = DecisionItem.objects.filter(created_for=user, status='pending')
 
-    is_demo_mode = getattr(
-        getattr(user, 'profile', None), 'is_viewing_demo', False
-    )
-    is_demo_account = '_demo' in user.username
-
-    if is_demo_mode or is_demo_account:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = (
-            pending.filter(
-                board__is_official_demo_board=False,
-                board__is_sandbox_copy=False,
-            )
-            | DecisionItem.objects.filter(
-                created_for=user, status='pending', board__isnull=True
-            )
-        ).distinct()
+    # Use the same canonical board set as the view and collect_for_user
+    user_boards = _user_boards(user)
+    pending = (
+        pending.filter(board__in=user_boards)
+        | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True
+        )
+    ).distinct()
 
     if not pending.exists():
         return
@@ -463,7 +490,7 @@ def collect_decision_items():
     stats = {'users': 0, 'items_created': 0}
 
     for user in active_users.iterator():
-        boards = _user_boards(user)
+        boards = _all_user_boards(user)
         if not boards.exists():
             continue
 
@@ -510,26 +537,16 @@ def generate_decision_briefing():
         # Scope to demo or real boards — matching the view/widget logic
         try:
             user_obj = User.objects.get(pk=user_id)
-            is_demo_mode = getattr(
-                getattr(user_obj, 'profile', None), 'is_viewing_demo', False
-            )
-            is_demo_account = '_demo' in user_obj.username
+            user_boards = _user_boards(user_obj)
         except User.DoesNotExist:
-            is_demo_mode = False
-            is_demo_account = False
+            continue
 
-        if is_demo_mode or is_demo_account:
-            pending = pending.filter(board__is_official_demo_board=True)
-        else:
-            pending = (
-                pending.filter(
-                    board__is_official_demo_board=False,
-                    board__is_sandbox_copy=False,
-                )
-                | DecisionItem.objects.filter(
-                    created_for_id=user_id, status='pending', board__isnull=True
-                )
-            ).distinct()
+        pending = (
+            pending.filter(board__in=user_boards)
+            | DecisionItem.objects.filter(
+                created_for_id=user_id, status='pending', board__isnull=True
+            )
+        ).distinct()
 
         action_items = list(
             pending.filter(priority_level='action_required')
@@ -762,7 +779,7 @@ def send_daily_digest_emails():
         }
 
         subject = (
-            f'PrizmAI Decision Center: {len(action_items)} action'
+            f'PrizmAI Focus Today: {len(action_items)} action'
             f'{"s" if len(action_items) != 1 else ""} required'
         )
         body_text = render_to_string(

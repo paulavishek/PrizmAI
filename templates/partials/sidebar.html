@@ -12,6 +12,53 @@
         </button>
     </div>
 
+    <!-- Workspace Switcher Dropdown -->
+    {% if user.is_authenticated and real_workspaces %}
+    <div class="sidebar-workspace-switcher" id="workspaceSwitcher">
+        <button class="sidebar-ws-btn" type="button" id="wsDropdownToggle" 
+                title="Switch workspace" aria-expanded="false" aria-haspopup="true">
+            <span class="sidebar-ws-icon">
+                {% if active_workspace and active_workspace.is_demo %}
+                <i class="fas fa-flask"></i>
+                {% else %}
+                <i class="fas fa-briefcase"></i>
+                {% endif %}
+            </span>
+            <span class="sidebar-label sidebar-ws-name">
+                {% if active_workspace %}{{ active_workspace.name|truncatechars:22 }}{% else %}Select Workspace{% endif %}
+            </span>
+            <i class="fas fa-chevron-down sidebar-ws-arrow sidebar-label"></i>
+        </button>
+        <div class="sidebar-ws-dropdown" id="wsDropdownMenu" style="display:none;">
+            <div class="sidebar-ws-dropdown-header">
+                <small class="text-muted fw-semibold text-uppercase" style="font-size:0.65rem;letter-spacing:0.5px;">Your Workspaces</small>
+            </div>
+            {% for ws in real_workspaces %}
+            <form method="post" action="{% url 'switch_workspace' %}" class="d-inline w-100">
+                {% csrf_token %}
+                <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
+                <button type="submit" class="sidebar-ws-option {% if active_workspace.pk == ws.pk %}active{% endif %}">
+                    <span class="sidebar-ws-option-icon">
+                        <i class="fas fa-briefcase text-primary"></i>
+                    </span>
+                    <span class="sidebar-ws-option-name">{{ ws.name|truncatechars:28 }}</span>
+                    {% if active_workspace.pk == ws.pk %}
+                    <i class="fas fa-check text-success ms-auto" style="font-size:0.7rem;"></i>
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+            {% if can_setup_workspace|default:False %}
+            <div class="sidebar-ws-dropdown-divider"></div>
+            <a href="{% url 'onboarding_welcome' %}?from=sidebar" class="sidebar-ws-option sidebar-ws-create">
+                <i class="fas fa-plus me-2 text-muted"></i>
+                <span>Create New Workspace</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Primary Navigation -->
     <nav class="sidebar-nav">
         <ul class="sidebar-nav-list">
@@ -118,7 +165,7 @@
                     </a>
                 </li>
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'decision_center:decision_center' %}" class="sidebar-nav-link" title="Decision Center">
+                    <a href="{% url 'decision_center:decision_center' %}" class="sidebar-nav-link" title="Your Focus Today">
                         <i class="fas fa-bolt sidebar-nav-icon"></i>
                         <span class="sidebar-label">Decisions</span>
                         <span class="sidebar-badge sidebar-badge-warning" id="sidebar-dc-badge" style="display:none;">
@@ -157,15 +204,7 @@
                     </a>
                 </li>
                 {% if not is_viewing_demo %}
-                <li class="sidebar-nav-item">
-                    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline w-100">
-                        {% csrf_token %}
-                        <button type="submit" class="sidebar-nav-link w-100 border-0 bg-transparent text-start" title="Try Demo Mode">
-                            <i class="fas fa-play-circle sidebar-nav-icon"></i>
-                            <span class="sidebar-label">Try Demo Mode</span>
-                        </button>
-                    </form>
-                </li>
+                <!-- Demo access moved to topbar -->
                 {% endif %}
             </ul>
         </div>

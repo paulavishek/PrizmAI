@@ -118,6 +118,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'accounts.middleware.TimezoneMiddleware',  # Per-user timezone activation
+    'accounts.middleware.WorkspaceMiddleware',  # Resolve request.workspace from active_workspace
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',  # Content Security Policy

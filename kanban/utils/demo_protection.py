@@ -45,6 +45,9 @@ def allow_demo_writes():
 def get_user_boards(user):
     """Return a Board queryset scoped to the user's current workspace mode.
 
+    * **Workspace mode** (when ``profile.active_workspace`` is set):
+      returns boards belonging to that workspace.  Demo workspaces
+      additionally include the user's sandbox copies.
     * **Demo mode** (``profile.is_viewing_demo == True``):
       returns the user's personal sandbox copies; falls back to official
       demo boards if no sandbox exists yet.
@@ -61,6 +64,7 @@ def get_user_boards(user):
 
     profile = getattr(user, 'profile', None)
     is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
 
     if is_demo:
         sandbox_boards = Board.objects.filter(
@@ -72,7 +76,15 @@ def get_user_boards(user):
         # Fallback: official demo boards (read-only)
         return Board.objects.filter(is_official_demo_board=True).distinct()
 
-    # Real workspace — exclude every flavour of demo data
+    # Real workspace — prefer workspace-scoped filter if available
+    if active_ws and not active_ws.is_demo:
+        return Board.objects.filter(
+            workspace=active_ws,
+            is_official_demo_board=False,
+            is_sandbox_copy=False,
+        ).distinct()
+
+    # Fallback: exclude every flavour of demo data
     return Board.objects.filter(
         Q(created_by=user) | Q(memberships__user=user),
         is_official_demo_board=False,

@@ -1364,7 +1364,7 @@
                 <div class="d-flex align-items-center gap-3 flex-wrap">
                     <!-- Title — always visible -->
                     <h6 class="mb-0 fw-bold flex-shrink-0">
-                        <i class="fas fa-bolt text-warning me-1"></i> Decision Center
+                        <i class="fas fa-bolt text-warning me-1"></i> Your Focus Today
                     </h6>
                     <!-- Badges rendered server-side to prevent flash -->
                     {% if dc_total_count > 0 %}
@@ -1955,9 +1955,20 @@
             </div>
             </div>{# /hn-cards-grid #}
         {% else %}
-            {# Empty state #}
+            {# Empty state — depends on whether boards exist #}
             <div class="text-center py-5">
-                {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
+                {% if boards %}
+                {# User has boards but no goal hierarchy — manual workspace #}
+                <i class="fas fa-trophy fa-4x mb-3" style="opacity:0.3;color:#6366f1;"></i>
+                <p class="mb-2 fw-semibold">No Organization Goals yet</p>
+                <p class="text-muted small mb-4">
+                    You have <strong>{{ boards|length }} board{{ boards|length|pluralize }}</strong> in this workspace.
+                    Create an <strong>Organization Goal</strong> to organize your boards into a hierarchy.
+                </p>
+                <a href="{% url 'create_goal' %}" class="btn btn-primary">
+                    <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
+                </a>
+                {% elif onboarding_profile.onboarding_version == 2 and not demo_mode %}
                 <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
                 <p class="mb-2 fw-semibold">Your workspace is empty</p>
                 <p class="text-muted small mb-4">

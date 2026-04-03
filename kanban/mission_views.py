@@ -252,10 +252,20 @@ def goal_list(request):
     demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
     _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
+    # Determine if user is the org creator (only they can create goals)
+    org = getattr(profile, 'organization', None) if profile else None
+    _is_org_creator = org and org.created_by_id == request.user.id
+
+    # Workspace-scoped filtering (preferred) with demo/legacy fallback
+    active_ws = getattr(request, 'workspace', None)
+
     if demo_mode:
         goals = OrganizationGoal.objects.filter(
             Q(is_demo=True) | Q(is_seed_demo_data=True)
         )
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: show only goals belonging to this workspace
+        goals = OrganizationGoal.objects.filter(workspace=active_ws)
     elif _is_org_admin:
         goals = OrganizationGoal.objects.filter(
             is_demo=False, is_seed_demo_data=False,
@@ -274,7 +284,8 @@ def goal_list(request):
 
     return render(request, 'kanban/goal_list.html', {
         'goals': goals,
-        'can_create_goal': _is_org_admin,
+        'can_create_goal': _is_org_creator or (_is_org_admin and not org),
+        'can_setup_workspace': not org or _is_org_creator,
     })
 
 
@@ -383,8 +394,13 @@ def goal_detail(request, goal_id):
 @demo_write_guard
 def create_goal(request):
     """Create a new Organization Goal."""
-    if not request.user.groups.filter(name='OrgAdmin').exists():
-        messages.error(request, 'Only organization administrators can create goals.')
+    # Only the organization creator can create goals
+    profile = request.user.profile
+    org = getattr(profile, 'organization', None)
+    _is_org_creator = org and org.created_by_id == request.user.id
+
+    if not _is_org_creator:
+        messages.error(request, 'Only the workspace creator can create organization goals.')
         return redirect('goal_list')
 
     organizations = Organization.objects.all().order_by('name')
@@ -416,6 +432,7 @@ def create_goal(request):
             status=status,
             organization=organization,
             created_by=request.user,
+            workspace=getattr(request, 'workspace', None),
         )
 
         # Auto-generate proxy metrics in background
@@ -584,12 +601,16 @@ def mission_list(request):
         profile = None
 
     demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
+    active_ws = getattr(request, 'workspace', None)
 
     if demo_mode:
         # Sandbox: show official demo missions (the template hierarchy)
         missions = Mission.objects.filter(
             Q(is_demo=True) | Q(is_seed_demo_data=True)
         )
+    elif active_ws and not active_ws.is_demo:
+        # Workspace-scoped: only missions in the active workspace
+        missions = Mission.objects.filter(workspace=active_ws)
     elif request.user.groups.filter(name='OrgAdmin').exists():
         # Org Admin: all non-demo missions
         missions = Mission.objects.filter(
@@ -816,6 +837,7 @@ def create_mission(request):
             organization_goal=organization_goal,
             created_by=request.user,
             owner=request.user,
+            workspace=getattr(request, 'workspace', None),
         )
         messages.success(request, f'Mission "{mission.name}" created successfully!')
         return redirect('mission_detail', mission_id=mission.id)
@@ -930,6 +952,7 @@ def create_strategy(request, mission_id):
             status=status,
             mission=mission,
             created_by=request.user,
+            workspace=getattr(request, 'workspace', None),
         )
         messages.success(request, f'Strategy "{strategy.name}" created!')
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)

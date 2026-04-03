@@ -29,6 +29,20 @@
     </div>
 </div>
 
+{% if not can_create_goal %}
+<div class="alert alert-info border-0 mb-4 d-flex align-items-center" role="alert" style="background: linear-gradient(135deg, #e8f4fd, #f0f8ff);">
+    <i class="fas fa-info-circle fa-lg me-3 text-info"></i>
+    <div>
+        <strong>Organization Goals</strong> can only be created by <strong>Workspace Admins</strong>.
+        {% if request.user.profile.is_viewing_demo and can_setup_workspace %}
+        In demo mode, goal creation is disabled. <a href="{% url 'onboarding_welcome' %}?from=goals">Set up your own workspace</a> to create and manage goals.
+        {% else %}
+        Contact your workspace admin to create a new goal, or request admin access.
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Full hierarchy breadcrumb banner -->
 <div class="alert alert-light border mb-4 py-2" role="alert" style="background:linear-gradient(135deg,#fffbea,#fff);border-color:#ffe08a!important;">
     <small class="text-muted">

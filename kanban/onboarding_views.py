@@ -44,6 +44,23 @@ def _is_v2(profile):
     return profile.onboarding_version >= 2
 
 
+def _can_create_workspace(user):
+    """Return True if the user is allowed to create a new workspace/goal.
+
+    Rules:
+    - Users without an organization can always create (first-time setup).
+    - Only the organization creator can create additional workspaces.
+    - All other org members (admins, members) are blocked.
+    """
+    profile = getattr(user, 'profile', None)
+    if not profile:
+        return True
+    org = profile.organization
+    if not org:
+        return True  # No org yet — first-time user
+    return org.created_by_id == user.id
+
+
 # ---------------------------------------------------------------------------
 # Welcome
 # ---------------------------------------------------------------------------
@@ -59,6 +76,16 @@ def onboarding_welcome(request):
     Redirect to dashboard if already past onboarding.
     """
     profile = _get_profile(request)
+
+    # Guard: only org creators (or users without an org) can create workspaces
+    if not _can_create_workspace(request.user):
+        from django.contrib import messages
+        messages.info(
+            request,
+            'Only the workspace creator can set up new workspaces. '
+            'Contact your workspace admin if you need a new goal created.'
+        )
+        return redirect('dashboard')
 
     # Resume mid-flow states
     if profile.onboarding_status == 'goal_submitted':
@@ -82,6 +109,16 @@ def onboarding_goal_input(request):
     POST /onboarding/goal/ — validate, create preview, dispatch Celery task
     """
     profile = _get_profile(request)
+
+    # Guard: only org creators (or users without an org) can create workspaces
+    if not _can_create_workspace(request.user):
+        from django.contrib import messages
+        messages.info(
+            request,
+            'Only the workspace creator can create new goals. '
+            'Contact your workspace admin if you need a new goal created.'
+        )
+        return redirect('goal_list')
 
     if not _is_v2(profile):
         return redirect('dashboard')
@@ -432,6 +469,11 @@ def onboarding_skip(request):
 
     profile.onboarding_status = 'skipped'
     profile.save(update_fields=['onboarding_status', 'organization'])
+
+    # Create a real workspace so the user can start adding boards immediately
+    from kanban.workspace_utils import get_or_create_real_workspace
+    get_or_create_real_workspace(request.user)
+
     return redirect('dashboard')
 
 

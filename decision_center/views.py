@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .models import DecisionCenterBriefing, DecisionCenterSettings, DecisionItem
 from kanban.decorators import demo_write_guard
+from kanban.utils.demo_protection import get_user_boards
 
 
 # ---------------------------------------------------------------------------
@@ -60,24 +61,17 @@ def decision_center_view(request):
     settings_obj = _get_settings(user)
 
     # Respect the user's current viewing mode — only show items relevant to
-    # their active workspace (demo boards vs real boards)
-    try:
-        is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
-    except Exception:
-        is_demo_mode = False
-    is_demo_account = '_demo' in user.username
-
-    pending = DecisionItem.objects.filter(created_for=user, status='pending')
-    if is_demo_mode or is_demo_account:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = pending.filter(
-            board__is_official_demo_board=False,
-            board__is_sandbox_copy=False,
+    # their active workspace (demo boards vs real boards).  Uses the
+    # canonical ``get_user_boards()`` so sandbox users see sandbox items
+    # (not template-board items, which caused duplicates).
+    user_boards = get_user_boards(user)
+    pending = (
+        DecisionItem.objects.filter(
+            created_for=user, status='pending', board__in=user_boards,
         ) | DecisionItem.objects.filter(
-            created_for=user, status='pending', board__isnull=True
+            created_for=user, status='pending', board__isnull=True,
         )
-        pending = pending.distinct()
+    ).distinct()
 
     action_required = list(pending.filter(priority_level='action_required'))
     awareness = list(pending.filter(priority_level='awareness')) if settings_obj.show_awareness_items else []
@@ -94,6 +88,31 @@ def decision_center_view(request):
         i.estimated_minutes
         for i in action_required + awareness + quick_wins
     )
+
+    # If the briefing's item count is stale (e.g. items were cleaned up since
+    # it was generated), patch it so the headline matches what we display.
+    actual_total = len(action_required) + len(awareness) + len(quick_wins)
+    if briefing:
+        stored_total = sum(briefing.item_counts.values()) if briefing.item_counts else 0
+        if stored_total != actual_total:
+            briefing.headline = f"You have {actual_total} item{'s' if actual_total != 1 else ''} in your decision queue today."
+            new_counts = {
+                'action_required': len(action_required),
+                'awareness': len(awareness),
+                'quick_win': len(quick_wins),
+            }
+            briefing.item_counts = new_counts
+            briefing.estimated_minutes = total_est
+            parts = []
+            if new_counts['action_required']:
+                parts.append(f"{new_counts['action_required']} decision{'s' if new_counts['action_required'] != 1 else ''} need your attention.")
+            if new_counts['awareness']:
+                parts.append(f"{new_counts['awareness']} awareness item{'s' if new_counts['awareness'] != 1 else ''}.")
+            if new_counts['quick_win']:
+                parts.append(f"{new_counts['quick_win']} quick win{'s' if new_counts['quick_win'] != 1 else ''}.")
+            parts.append(f"Estimated review time: {total_est} minutes.")
+            briefing.briefing = ' '.join(parts)
+            briefing.save()
 
     # Last resolved timestamp
     last_resolved = (
@@ -134,27 +153,21 @@ def decision_center_widget_data(request):
         is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
     except Exception:
         is_demo_mode = False
-    is_demo_account = '_demo' in user.username
-    effective_demo = is_demo_mode or is_demo_account
+    effective_demo = is_demo_mode or '_demo' in user.username
 
     cache_key = _widget_cache_key(user.id, demo_mode=effective_demo)
     data = cache.get(cache_key)
     if data is not None:
         return JsonResponse(data)
 
-    pending = DecisionItem.objects.filter(created_for=user, status='pending')
-    if effective_demo:
-        pending = pending.filter(board__is_official_demo_board=True)
-    else:
-        pending = (
-            pending.filter(
-                board__is_official_demo_board=False,
-                board__is_sandbox_copy=False,
-            )
-            | DecisionItem.objects.filter(
-                created_for=user, status='pending', board__isnull=True
-            )
-        ).distinct()
+    user_boards = get_user_boards(user)
+    pending = (
+        DecisionItem.objects.filter(
+            created_for=user, status='pending', board__in=user_boards,
+        ) | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True,
+        )
+    ).distinct()
 
     settings_obj = _get_settings(user)
     counts = {
