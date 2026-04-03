@@ -165,23 +165,23 @@
                 <span class="tws-sandbox-badge" style="font-size:0.72rem;padding:3px 10px;margin-left:6px;">SANDBOX</span>
                 {% endif %}
             </div>
-            <!-- Workspace Switcher — absolutely centered in topbar -->
+            <!-- Workspace Indicator — absolutely centered in topbar -->
             {% if user.is_authenticated %}
             <div class="topbar-workspace-switcher" style="position:absolute;left:50%;transform:translateX(-50%);">
-                {% if active_workspace %}
+                {% if active_workspace and not active_workspace.is_demo %}
                 <span class="tws-btn tws-btn-active" title="Current workspace">
-                    {% if active_workspace.is_demo %}
-                    <i class="fas fa-flask me-1"></i>{{ active_workspace.name|truncatechars:24 }}
-                    {% else %}
                     <i class="fas fa-briefcase me-1"></i>{{ active_workspace.name|truncatechars:24 }}
-                    {% endif %}
+                </span>
+                {% elif active_workspace and active_workspace.is_demo %}
+                <span class="tws-btn tws-btn-active" title="Demo workspace" style="border-color:#f59e0b44;">
+                    <i class="fas fa-flask me-1 text-warning"></i>{{ active_workspace.name|truncatechars:24 }}
                 </span>
                 {% elif is_viewing_demo %}
-                <span class="tws-btn tws-btn-active" title="Currently active">
-                    <i class="fas fa-flask me-1"></i>Demo Workspace
+                <span class="tws-btn tws-btn-active" title="Demo workspace">
+                    <i class="fas fa-flask me-1 text-warning"></i>Demo Workspace
                 </span>
                 {% else %}
-                <span class="tws-btn tws-btn-active" title="Currently active">
+                <span class="tws-btn tws-btn-active" title="Current workspace">
                     <i class="fas fa-briefcase me-1"></i>My Workspace
                 </span>
                 {% endif %}
@@ -232,6 +232,29 @@
                         style="border:1.5px solid #d97706 !important;background:transparent !important;color:#d97706 !important;font-weight:600 !important;">
                     <i class="fas fa-redo me-1"></i>Reset Demo
                 </button>
+                {% endif %}
+                {% if demo_workspace %}
+                {% if is_viewing_demo and real_workspaces %}
+                <!-- In demo with real workspaces available — show "Back to My Workspace" -->
+                <form method="post" action="{% url 'switch_workspace' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="workspace_id" value="{{ real_workspaces.0.pk }}">
+                    <button type="submit" class="tws-btn" title="Return to your workspace"
+                            style="border:1px solid #6366f1;color:#6366f1;background:transparent;font-weight:600;font-size:0.78rem;">
+                        <i class="fas fa-briefcase me-1"></i>My Workspace
+                    </button>
+                </form>
+                {% elif not is_viewing_demo %}
+                <!-- Not in demo — show "Explore Demo" button -->
+                <form method="post" action="{% url 'switch_workspace' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="workspace_id" value="{{ demo_workspace.pk }}">
+                    <button type="submit" class="tws-btn" title="Explore the demo workspace"
+                            style="border:1px solid #f59e0b;color:#f59e0b;background:transparent;font-weight:500;font-size:0.78rem;opacity:0.85;">
+                        <i class="fas fa-flask me-1"></i>Demo
+                    </button>
+                </form>
+                {% endif %}
                 {% endif %}
                 {% if can_setup_workspace|default:False %}
                 {% if is_viewing_demo %}

@@ -55,28 +55,38 @@ def demo_context(request):
                 context['active_workspace'] = active_ws
                 if profile.organization:
                     from kanban.models import Workspace
-                    context['user_workspaces'] = list(
+                    all_ws = list(
                         Workspace.objects.filter(
                             organization=profile.organization,
                             is_active=True,
                         ).order_by('is_demo', '-created_at')
                     )
+                    context['user_workspaces'] = all_ws
+                    # Split real vs demo for templates
+                    context['real_workspaces'] = [w for w in all_ws if not w.is_demo]
+                    context['demo_workspace'] = next((w for w in all_ws if w.is_demo), None)
                     # Only org creator can create new workspaces
                     context['can_setup_workspace'] = (
                         profile.organization.created_by_id == request.user.id
                     )
                 else:
                     context['user_workspaces'] = []
+                    context['real_workspaces'] = []
+                    context['demo_workspace'] = None
                     context['can_setup_workspace'] = True  # No org yet — can set up
             except Exception:
                 context['is_viewing_demo'] = False
                 context['active_workspace'] = None
                 context['user_workspaces'] = []
+                context['real_workspaces'] = []
+                context['demo_workspace'] = None
                 context['can_setup_workspace'] = False
         else:
             context['is_viewing_demo'] = False
             context['active_workspace'] = None
             context['user_workspaces'] = []
+            context['real_workspaces'] = []
+            context['demo_workspace'] = None
             context['can_setup_workspace'] = False
         
         # User gets their standard quotas (not demo quotas)

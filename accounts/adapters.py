@@ -193,7 +193,8 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                     return '/onboarding/generating/'
                 if profile.onboarding_status == 'workspace_generated':
                     return '/onboarding/review/'
-            # completed, skipped, demo_exploring, or v1 → dashboard
-            return '/dashboard/'
+            # completed, skipped, demo_exploring, or v1 → workspace-aware redirect
+            from accounts.views import _resolve_post_login_redirect
+            return _resolve_post_login_redirect(request.user)
         except (AttributeError, UserProfile.DoesNotExist):
             return '/accounts/social-signup-complete/'
