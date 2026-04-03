@@ -169,9 +169,30 @@
             {% if user.is_authenticated %}
             <div class="topbar-workspace-switcher" style="position:absolute;left:50%;transform:translateX(-50%);">
                 {% if active_workspace and not active_workspace.is_demo %}
-                <span class="tws-btn tws-btn-active" title="Current workspace">
-                    <i class="fas fa-briefcase me-1"></i>{{ active_workspace.name|truncatechars:24 }}
+                <span class="tws-btn tws-btn-active tws-ws-display" id="ws-name-display" title="Current workspace">
+                    <i class="fas fa-briefcase me-1"></i><span id="ws-name-text">{{ active_workspace.name|truncatechars:24 }}</span>
                 </span>
+                {% if active_workspace.organization and active_workspace.organization.created_by_id == user.id %}
+                <button type="button" class="tws-ws-edit-btn" id="ws-edit-btn" title="Rename workspace"
+                        onclick="wsStartEdit()" style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 4px;font-size:0.72rem;margin-left:2px;">
+                    <i class="fas fa-pencil-alt"></i>
+                </button>
+                <form method="post" action="{% url 'rename_workspace' %}" class="d-inline" id="ws-rename-form"
+                      style="display:none!important;" onsubmit="return wsSubmitRename(event)">
+                    {% csrf_token %}
+                    <input type="text" name="name" id="ws-rename-input" value="{{ active_workspace.name }}"
+                           maxlength="60" class="form-control form-control-sm d-inline-block"
+                           style="width:180px;font-size:0.78rem;padding:2px 8px;"
+                           onkeydown="if(event.key==='Escape'){wsCancelEdit();}">
+                    <button type="submit" class="btn btn-sm btn-primary" style="font-size:0.7rem;padding:1px 8px;margin-left:2px;">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;padding:1px 8px;margin-left:1px;"
+                            onclick="wsCancelEdit()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </form>
+                {% endif %}
                 {% elif active_workspace and active_workspace.is_demo %}
                 <span class="tws-btn tws-btn-active" title="Demo workspace" style="border-color:#f59e0b44;">
                     <i class="fas fa-flask me-1 text-warning"></i>{{ active_workspace.name|truncatechars:24 }}
@@ -233,9 +254,8 @@
                     <i class="fas fa-redo me-1"></i>Reset Demo
                 </button>
                 {% endif %}
-                {% if demo_workspace %}
                 {% if is_viewing_demo and real_workspaces %}
-                <!-- In demo with real workspaces available — show "Back to My Workspace" -->
+                <!-- In demo — show "Back to My Workspace" -->
                 <form method="post" action="{% url 'switch_workspace' %}" class="d-inline">
                     {% csrf_token %}
                     <input type="hidden" name="workspace_id" value="{{ real_workspaces.0.pk }}">
@@ -245,16 +265,14 @@
                     </button>
                 </form>
                 {% elif not is_viewing_demo %}
-                <!-- Not in demo — show "Explore Demo" button -->
-                <form method="post" action="{% url 'switch_workspace' %}" class="d-inline">
+                <!-- Not in demo — show "Try Demo" button (uses toggle_demo_mode which handles provisioning) -->
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
                     {% csrf_token %}
-                    <input type="hidden" name="workspace_id" value="{{ demo_workspace.pk }}">
                     <button type="submit" class="tws-btn" title="Explore the demo workspace"
-                            style="border:1px solid #f59e0b;color:#f59e0b;background:transparent;font-weight:500;font-size:0.78rem;opacity:0.85;">
+                            style="border:1px solid #f59e0b;color:#f59e0b;background:transparent;font-weight:500;font-size:0.78rem;">
                         <i class="fas fa-flask me-1"></i>Demo
                     </button>
                 </form>
-                {% endif %}
                 {% endif %}
                 {% if can_setup_workspace|default:False %}
                 {% if is_viewing_demo %}
@@ -719,6 +737,44 @@
 <div id="task-drawer" class="task-drawer">
     <div id="task-drawer-body"></div>
 </div>
+<script>
+/* Workspace inline rename */
+function wsStartEdit(){
+    var d=document.getElementById('ws-name-display'),
+        b=document.getElementById('ws-edit-btn'),
+        f=document.getElementById('ws-rename-form'),
+        i=document.getElementById('ws-rename-input');
+    if(d)d.style.display='none';
+    if(b)b.style.display='none';
+    if(f){f.style.display='inline-flex';f.style.setProperty('display','inline-flex','important');}
+    if(i){i.focus();i.select();}
+}
+function wsCancelEdit(){
+    var d=document.getElementById('ws-name-display'),
+        b=document.getElementById('ws-edit-btn'),
+        f=document.getElementById('ws-rename-form');
+    if(d)d.style.display='';
+    if(b)b.style.display='';
+    if(f){f.style.display='none';f.style.setProperty('display','none','important');}
+}
+function wsSubmitRename(e){
+    e.preventDefault();
+    var f=document.getElementById('ws-rename-form'),
+        i=document.getElementById('ws-rename-input'),
+        t=document.getElementById('ws-name-text'),
+        name=i.value.trim();
+    if(!name)return false;
+    var fd=new FormData(f);
+    fetch(f.action,{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(function(r){return r.json();})
+    .then(function(d){
+        if(d.ok&&t){t.textContent=d.name;}
+        wsCancelEdit();
+    })
+    .catch(function(){wsCancelEdit();});
+    return false;
+}
+</script>
     {% block extra_js %}{% endblock %}
 {% if user.is_authenticated %}
 <script>

@@ -1491,6 +1491,47 @@ def toggle_demo_mode(request):
 
 @login_required
 @require_POST
+def rename_workspace(request):
+    """POST /rename-workspace/ — rename the user's active workspace.
+
+    Only the org creator can rename workspaces.  Demo workspaces cannot
+    be renamed.  Accepts ``name`` in POST body.  Returns JSON for AJAX
+    callers or redirects for regular form submissions.
+    """
+    from kanban.models import Workspace
+
+    profile = request.user.profile
+    ws = getattr(profile, 'active_workspace', None)
+    if not ws or ws.is_demo:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Cannot rename this workspace'}, status=400)
+        return redirect('dashboard')
+
+    # Only org creator can rename
+    if ws.organization and ws.organization.created_by_id != request.user.id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Only the workspace creator can rename it'}, status=403)
+        return redirect('dashboard')
+
+    import re
+    new_name = request.POST.get('name', '').strip()
+    # Sanitize: allow letters, numbers, spaces, hyphens, apostrophes
+    new_name = re.sub(r'[^\w\s\-\']', '', new_name)[:60]
+    if not new_name:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Name cannot be empty'}, status=400)
+        return redirect('dashboard')
+
+    ws.name = new_name
+    ws.save(update_fields=['name'])
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'name': ws.name})
+    return redirect('dashboard')
+
+
+@login_required
+@require_POST
 def switch_workspace(request):
     """POST /switch-workspace/ — switch the user's active workspace.
 

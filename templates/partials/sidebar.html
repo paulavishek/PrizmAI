@@ -204,15 +204,7 @@
                     </a>
                 </li>
                 {% if not is_viewing_demo %}
-                <li class="sidebar-nav-item">
-                    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline w-100">
-                        {% csrf_token %}
-                        <button type="submit" class="sidebar-nav-link w-100 border-0 bg-transparent text-start" title="Try Demo Mode">
-                            <i class="fas fa-play-circle sidebar-nav-icon"></i>
-                            <span class="sidebar-label">Try Demo Mode</span>
-                        </button>
-                    </form>
-                </li>
+                <!-- Demo access moved to topbar -->
                 {% endif %}
             </ul>
         </div>
