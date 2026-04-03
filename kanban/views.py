@@ -1274,6 +1274,10 @@ def dashboard(request):
         for bi in [si['boards']]
     ) + standalone_boards.count()
 
+    # RBAC: can this user create goals? (for Hierarchy Navigator empty-state buttons)
+    from kanban.permissions import can_user_create_goals
+    _can_create_goal = can_user_create_goals(request.user, request)
+
     # One-time onboarding banner (tasks are unassigned after AI workspace generation)
     show_assign_banner = request.session.pop('show_onboarding_assign_banner', False)
 
@@ -1346,6 +1350,8 @@ def dashboard(request):
         'goal_count': goal_count,
         'strategy_count': strategy_count,
         'hierarchy_board_count': hierarchy_board_count,
+        # RBAC: goal creation permission for Hierarchy Navigator
+        'can_create_goal': _can_create_goal,
         'chart_data': chart_data,  # Raw dict for json_script filter
         'chart_missions': chart_missions,
         'chart_strategies': chart_strategies,

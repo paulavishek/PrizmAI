@@ -23,6 +23,9 @@ from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
 from kanban.favorite_views import is_user_favorite as _is_fav
+from kanban.permissions import is_demo_context, can_user_create_goals, can_user_create_missions
+
+from kanban.utils.demo_protection import get_user_boards
 
 from .models import (
     OrganizationGoal, Mission, Strategy, Board, Task,
@@ -244,6 +247,7 @@ def _compute_health_score(board_ids):
 def goal_list(request):
     """Show Organization Goals scoped by RBAC board membership."""
     from accounts.models import UserProfile
+    from accounts.models import UserProfile
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
@@ -284,7 +288,7 @@ def goal_list(request):
 
     return render(request, 'kanban/goal_list.html', {
         'goals': goals,
-        'can_create_goal': _is_org_creator or (_is_org_admin and not org),
+        'can_create_goal': can_user_create_goals(request.user, request),
         'can_setup_workspace': not org or _is_org_creator,
     })
 
@@ -386,7 +390,7 @@ def goal_detail(request, goal_id):
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_goal', goal),
         'can_delete': request.user.has_perm('prizmai.edit_goal', goal),
-        'can_create_child': request.user.has_perm('prizmai.edit_goal', goal) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
+        'can_create_child': request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request),
     })
 
 
@@ -394,13 +398,10 @@ def goal_detail(request, goal_id):
 @demo_write_guard
 def create_goal(request):
     """Create a new Organization Goal."""
-    # Only the organization creator can create goals
-    profile = request.user.profile
-    org = getattr(profile, 'organization', None)
-    _is_org_creator = org and org.created_by_id == request.user.id
+    from kanban.permissions import can_user_create_goals
 
-    if not _is_org_creator:
-        messages.error(request, 'Only the workspace creator can create organization goals.')
+    if not can_user_create_goals(request.user, request):
+        messages.error(request, 'Only Workspace Admins can create organization goals.')
         return redirect('goal_list')
 
     organizations = Organization.objects.all().order_by('name')
@@ -631,6 +632,7 @@ def mission_list(request):
 
     return render(request, 'kanban/mission_list.html', {
         'missions': missions,
+        'can_create_mission': can_user_create_missions(request.user, request),
     })
 
 
@@ -798,7 +800,7 @@ def mission_detail(request, mission_id):
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
         'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
-        'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
+        'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
         # All goals for the "Link to Goal" sidebar widget — scoped to user's own goals
         'all_goals': OrganizationGoal.objects.filter(created_by=request.user).order_by('name'),
     })
@@ -808,6 +810,22 @@ def mission_detail(request, mission_id):
 @demo_write_guard
 def create_mission(request):
     """Create a new mission."""
+
+    # Permission check: Org Admin, org creator, or Goal owner can create missions.
+    # If a parent goal is specified (in POST), also check ownership of that goal.
+    parent_goal = None
+    if request.method == 'POST':
+        goal_id = request.POST.get('organization_goal_id', '').strip()
+        if goal_id:
+            try:
+                parent_goal = OrganizationGoal.objects.get(id=int(goal_id))
+            except (OrganizationGoal.DoesNotExist, ValueError):
+                pass
+
+    if not can_user_create_missions(request.user, request, parent_goal=parent_goal):
+        messages.error(request, 'You do not have permission to create missions. Only Workspace Admins and Goal Owners can create missions.')
+        return redirect('mission_list')
+
     all_goals = OrganizationGoal.objects.order_by('name')
 
     if request.method == 'POST':
@@ -823,8 +841,8 @@ def create_mission(request):
                 'all_goals': all_goals,
             })
 
-        organization_goal = None
-        if goal_id:
+        organization_goal = parent_goal  # Already resolved above
+        if not organization_goal and goal_id:
             try:
                 organization_goal = OrganizationGoal.objects.get(id=int(goal_id))
             except (OrganizationGoal.DoesNotExist, ValueError):
@@ -929,8 +947,7 @@ def create_strategy(request, mission_id):
     """Create a strategy under a mission."""
     mission = get_object_or_404(Mission, id=mission_id)
 
-    is_demo_viewer = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
-    if not is_demo_viewer and not request.user.has_perm('prizmai.edit_mission', mission):
+    if not is_demo_context(request) and not request.user.has_perm('prizmai.edit_mission', mission):
         messages.error(request, 'You do not have permission to create strategies under this mission.')
         return redirect('mission_detail', mission_id=mission.id)
 
@@ -971,8 +988,8 @@ def strategy_detail(request, mission_id, strategy_id):
 
     linked_boards = strategy.boards.all().order_by('-created_at')
 
-    # All boards (for "link existing board" dropdown) — no restriction
-    all_boards = Board.objects.exclude(strategy=strategy).order_by('name')
+    # All boards (for "link existing board" dropdown) — scoped to user's accessible boards
+    all_boards = get_user_boards(request.user).exclude(strategy=strategy).order_by('name')
 
     # --- Board IDs under this strategy ---
     board_ids = list(linked_boards.values_list('id', flat=True))
@@ -1068,7 +1085,7 @@ def strategy_detail(request, mission_id, strategy_id):
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy),
         'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy),
-        'can_create_child': request.user.has_perm('prizmai.edit_strategy', strategy) or getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False),
+        'can_create_child': request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request),
     })
 
 
@@ -1158,6 +1175,9 @@ def link_board_to_strategy(request, mission_id, strategy_id):
     if request.method == 'POST':
         board_id = request.POST.get('board_id')
         board = get_object_or_404(Board, id=board_id)
+        if not request.user.has_perm('prizmai.view_board', board):
+            messages.error(request, 'You do not have access to that board.')
+            return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
         board.strategy = strategy
         board.save(update_fields=['strategy'])
         messages.success(request, f'Board "{board.name}" linked to strategy "{strategy.name}".')

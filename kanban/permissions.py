@@ -9,6 +9,80 @@ Created in Phase 1 of the RBAC rollout.
 import rules
 
 
+# ── Demo context helper ──────────────────────────────────────────────────────
+
+def is_demo_context(request, board=None, workspace=None):
+    """
+    Returns True if the current request is within a Demo workspace.
+    In Demo mode, all RBAC checks should be bypassed.
+
+    Usage:
+        if is_demo_context(request, workspace=current_workspace):
+            return allow_action()
+    """
+    # Check if a workspace was passed directly
+    if workspace is not None:
+        return getattr(workspace, 'is_demo', False)
+
+    # Check if a board was passed — get its workspace
+    if board is not None:
+        board_ws = getattr(board, 'workspace', None)
+        if board_ws is not None:
+            return getattr(board_ws, 'is_demo', False)
+
+    # Try to get workspace from the request (set by WorkspaceMiddleware)
+    current_workspace = getattr(request, 'workspace', None)
+    if current_workspace is not None:
+        return getattr(current_workspace, 'is_demo', False)
+
+    # Fallback: check user profile flag
+    profile = getattr(request.user, 'profile', None)
+    if profile is not None:
+        return getattr(profile, 'is_viewing_demo', False)
+
+    return False
+
+
+def can_user_create_goals(user, request=None):
+    """Check if a user can create Organization Goals.
+    Allowed: Org Admin (group) OR organization creator.
+    If in demo context, always True.
+    """
+    if request and is_demo_context(request):
+        return True
+    # OrgAdmin Django Group
+    if user.groups.filter(name='OrgAdmin').exists():
+        return True
+    # Organization creator
+    profile = getattr(user, 'profile', None)
+    org = getattr(profile, 'organization', None) if profile else None
+    if org and org.created_by_id == user.id:
+        return True
+    return False
+
+
+def can_user_create_missions(user, request=None, parent_goal=None):
+    """Check if a user can create Missions.
+    Allowed: Org Admin, org creator, or owner/creator of the parent Goal.
+    If in demo context, always True.
+    """
+    if request and is_demo_context(request):
+        return True
+    if user.groups.filter(name='OrgAdmin').exists():
+        return True
+    profile = getattr(user, 'profile', None)
+    org = getattr(profile, 'organization', None) if profile else None
+    if org and org.created_by_id == user.id:
+        return True
+    # Owner or creator of the parent goal
+    if parent_goal:
+        if getattr(parent_goal, 'owner', None) == user:
+            return True
+        if getattr(parent_goal, 'created_by', None) == user:
+            return True
+    return False
+
+
 # ── Core predicates ──────────────────────────────────────────────────────────
 
 @rules.predicate
