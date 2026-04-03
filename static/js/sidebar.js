@@ -121,7 +121,6 @@
                 }
             });
         }
-        }
     }
 
     function closeMobileDrawer(sidebar, overlay) {

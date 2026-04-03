@@ -367,6 +367,7 @@ urlpatterns = [
 
     # Workspace context switcher
     path('switch-workspace/', views.switch_workspace, name='switch_workspace'),
+    path('workspace-selection/', views.workspace_selection, name='workspace_selection'),
 
     # -----------------------------------------------------------------------
     # Living Commitment Protocols (Anti-Roadmap)

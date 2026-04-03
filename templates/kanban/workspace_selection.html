@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Choose Workspace - PrizmAI{% endblock %}
+{% block page_title %}Choose Workspace{% endblock %}
+
+{% block content %}
+<div class="ws-select-page">
+    <div class="ws-select-header">
+        <h2 class="ws-select-title">Welcome back! Choose a workspace</h2>
+        <p class="ws-select-subtitle">Select a workspace to continue, or explore the demo.</p>
+    </div>
+
+    <!-- Real Workspaces Grid -->
+    <div class="ws-select-section">
+        <h5 class="ws-select-section-title">
+            <i class="fas fa-briefcase me-2"></i>Your Workspaces
+        </h5>
+        <div class="ws-select-grid">
+            {% for ws in real_workspaces %}
+            <form method="post" action="{% url 'switch_workspace' %}" class="ws-select-card-form">
+                {% csrf_token %}
+                <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
+                <button type="submit" class="ws-select-card {% if active_workspace and active_workspace.pk == ws.pk %}ws-select-card-active{% endif %}">
+                    <div class="ws-select-card-icon">
+                        <i class="fas fa-briefcase"></i>
+                    </div>
+                    <div class="ws-select-card-body">
+                        <h6 class="ws-select-card-name">{{ ws.name|truncatechars:40 }}</h6>
+                        <small class="ws-select-card-meta">
+                            Created {{ ws.created_at|timesince }} ago
+                        </small>
+                    </div>
+                    {% if active_workspace and active_workspace.pk == ws.pk %}
+                    <span class="ws-select-card-badge">Current</span>
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+
+            {% if can_setup_workspace|default:False %}
+            <a href="{% url 'onboarding_welcome' %}?from=workspace-selection" class="ws-select-card ws-select-card-create">
+                <div class="ws-select-card-icon ws-select-card-icon-create">
+                    <i class="fas fa-plus"></i>
+                </div>
+                <div class="ws-select-card-body">
+                    <h6 class="ws-select-card-name">Create New Workspace</h6>
+                    <small class="ws-select-card-meta">Start a new project workspace</small>
+                </div>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Demo Workspace -->
+    {% if demo_workspace %}
+    <div class="ws-select-section ws-select-demo-section">
+        <h5 class="ws-select-section-title">
+            <i class="fas fa-flask me-2 text-warning"></i>Demo Workspace
+        </h5>
+        <form method="post" action="{% url 'switch_workspace' %}">
+            {% csrf_token %}
+            <input type="hidden" name="workspace_id" value="{{ demo_workspace.pk }}">
+            <button type="submit" class="ws-select-demo-card">
+                <div class="ws-select-card-icon ws-select-demo-icon">
+                    <i class="fas fa-flask"></i>
+                </div>
+                <div class="ws-select-card-body">
+                    <h6 class="ws-select-card-name">{{ demo_workspace.name|truncatechars:40 }}</h6>
+                    <small class="ws-select-card-meta">Explore PrizmAI with sample data</small>
+                </div>
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.ws-select-page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 30px 20px;
+}
+.ws-select-header {
+    text-align: center;
+    margin-bottom: 36px;
+}
+.ws-select-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary, #1f2937);
+    margin-bottom: 6px;
+}
+.ws-select-subtitle {
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.92rem;
+    margin: 0;
+}
+.ws-select-section {
+    margin-bottom: 32px;
+}
+.ws-select-section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary, #6b7280);
+    margin-bottom: 14px;
+}
+.ws-select-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px;
+}
+.ws-select-card-form {
+    display: contents;
+}
+.ws-select-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    background: var(--card-bg, #fff);
+    border: 1.5px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    color: inherit;
+    text-align: left;
+    width: 100%;
+    font-family: inherit;
+    font-size: inherit;
+}
+.ws-select-card:hover {
+    border-color: #6366f1;
+    box-shadow: 0 2px 12px rgba(99,102,241,0.12);
+    transform: translateY(-1px);
+}
+.ws-select-card-active {
+    border-color: #6366f1;
+    background: rgba(99,102,241,0.04);
+}
+.ws-select-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #6366f1, #818cf8);
+    color: #fff;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.ws-select-card-icon-create {
+    background: linear-gradient(135deg, #d1d5db, #9ca3af);
+}
+.ws-select-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.ws-select-card-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 2px 0;
+    color: var(--text-primary, #1f2937);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ws-select-card-meta {
+    color: var(--text-secondary, #9ca3af);
+    font-size: 0.78rem;
+}
+.ws-select-card-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    background: #6366f1;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+.ws-select-card-create {
+    border-style: dashed;
+    opacity: 0.8;
+}
+.ws-select-card-create:hover {
+    opacity: 1;
+    border-color: #6366f1;
+}
+.ws-select-demo-section {
+    padding-top: 18px;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+}
+.ws-select-demo-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: var(--card-bg, #fff);
+    border: 1.5px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+    max-width: 360px;
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+}
+.ws-select-demo-card:hover {
+    border-color: #f59e0b;
+    box-shadow: 0 2px 10px rgba(245,158,11,0.10);
+}
+.ws-select-demo-icon {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+</style>
+{% endblock %}

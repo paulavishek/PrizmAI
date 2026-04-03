@@ -1572,6 +1572,38 @@ def switch_workspace(request):
 
 
 @login_required
+def workspace_selection(request):
+    """GET /workspace-selection/ — Jira-style workspace picker shown when
+    a user has multiple real workspaces."""
+    from kanban.models import Workspace
+
+    profile = request.user.profile
+    org = profile.organization
+    if not org:
+        return redirect('dashboard')
+
+    real_workspaces = list(
+        Workspace.objects.filter(
+            organization=org, is_active=True, is_demo=False,
+        ).order_by('-updated_at')
+    )
+
+    # If 0 or 1 real workspaces, no need for selection — go to dashboard
+    if len(real_workspaces) <= 1:
+        return redirect('dashboard')
+
+    demo_ws = Workspace.objects.filter(
+        organization=org, is_active=True, is_demo=True,
+    ).first()
+
+    return render(request, 'kanban/workspace_selection.html', {
+        'real_workspaces': real_workspaces,
+        'demo_workspace': demo_ws,
+        'active_workspace': profile.active_workspace,
+    })
+
+
+@login_required
 def board_list(request):
     # Ensure user has a profile (MVP mode: auto-create without organization)
     try:

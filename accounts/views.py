@@ -12,6 +12,59 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _resolve_post_login_redirect(user):
+    """Determine where to send a user after login based on workspace state.
+
+    Returns a URL string:
+      - '/workspace-selection/' if user has 2+ real workspaces
+      - '/dashboard/' otherwise (0 or 1 real workspaces)
+
+    Side-effect: when there are 0 real workspaces we ensure the active
+    workspace is set to the demo workspace. When there is exactly 1 real
+    workspace we ensure it's selected as active.
+    """
+    try:
+        profile = user.profile
+    except UserProfile.DoesNotExist:
+        return '/dashboard/'
+
+    org = profile.organization
+    if not org:
+        return '/dashboard/'
+
+    from kanban.models import Workspace
+
+    real_ws = list(
+        Workspace.objects.filter(
+            organization=org, is_active=True, is_demo=False,
+        ).order_by('-updated_at')
+    )
+    demo_ws = Workspace.objects.filter(
+        organization=org, is_active=True, is_demo=True,
+    ).first()
+
+    if len(real_ws) == 0:
+        # No personal workspaces — land on demo
+        if demo_ws and profile.active_workspace_id != demo_ws.pk:
+            profile.active_workspace = demo_ws
+            profile.is_viewing_demo = True
+            profile.save(update_fields=['active_workspace', 'is_viewing_demo'])
+        return '/dashboard/'
+
+    if len(real_ws) == 1:
+        # Exactly one — go straight there
+        ws = real_ws[0]
+        if profile.active_workspace_id != ws.pk or profile.is_viewing_demo:
+            profile.active_workspace = ws
+            profile.is_viewing_demo = False
+            profile.save(update_fields=['active_workspace', 'is_viewing_demo'])
+        return '/dashboard/'
+
+    # 2+ real workspaces — show the selection page
+    return '/workspace-selection/'
+
+
 def quick_demo_login(request, username):
     """
     Quick login for demo users with pre-set credentials.
@@ -93,7 +146,7 @@ def return_to_real_account(request):
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect(_resolve_post_login_redirect(request.user))
     
     next_url = request.GET.get('next', '')
 
@@ -109,7 +162,7 @@ def login_view(request):
                 # Honour the ?next= redirect (e.g. invitation accept link)
                 if next_url and next_url.startswith('/'):
                     return redirect(next_url)
-                return redirect('dashboard')
+                return redirect(_resolve_post_login_redirect(user))
     else:
         form = LoginForm()
     
