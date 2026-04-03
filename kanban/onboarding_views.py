@@ -467,6 +467,11 @@ def onboarding_skip(request):
         )
         profile.organization = org
 
+    # Ensure the org creator is in the OrgAdmin group
+    from django.contrib.auth.models import Group
+    org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+    request.user.groups.add(org_admin_group)
+
     profile.onboarding_status = 'skipped'
     profile.save(update_fields=['onboarding_status', 'organization'])
 

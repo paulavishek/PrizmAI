@@ -49,7 +49,8 @@ class BoardViewSet(viewsets.ModelViewSet):
         """Return boards accessible to the authenticated user"""
         user = self.request.user
         # OrgAdmins can see all non-demo boards
-        if user.groups.filter(name='OrgAdmin').exists():
+        from kanban.permissions import is_user_org_admin
+        if is_user_org_admin(user):
             return Board.objects.filter(
                 is_official_demo_board=False,
                 is_sandbox_copy=False,
@@ -112,7 +113,8 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         # Use demo-aware board queryset
         accessible_boards = get_user_boards(user)
-        if user.groups.filter(name='OrgAdmin').exists():
+        from kanban.permissions import is_user_org_admin
+        if is_user_org_admin(user):
             accessible_boards = Board.objects.filter(
                 is_official_demo_board=False,
                 is_sandbox_copy=False,

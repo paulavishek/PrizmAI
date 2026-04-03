@@ -14,6 +14,8 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.http import require_http_methods, require_POST
 
+from kanban.permissions import is_user_org_admin
+
 from kanban.models import Board, BoardMembership
 from kanban.access_request_models import AccessRequest
 from kanban.decorators import demo_write_guard
@@ -152,7 +154,7 @@ def review_access_request(request, request_id):
     is_authorized = (
         request.user == access_request.owner
         or request.user.is_superuser
-        or request.user.groups.filter(name='OrgAdmin').exists()
+        or is_user_org_admin(request.user)
     )
     if not is_authorized:
         return JsonResponse({'error': 'Not authorized'}, status=403)
@@ -235,7 +237,7 @@ def api_approve_access_request(request, request_id):
     is_authorized = (
         request.user == access_request.owner
         or request.user.is_superuser
-        or request.user.groups.filter(name='OrgAdmin').exists()
+        or is_user_org_admin(request.user)
     )
     if not is_authorized:
         return JsonResponse({'error': 'Not authorized'}, status=403)
@@ -280,7 +282,7 @@ def api_deny_access_request(request, request_id):
     is_authorized = (
         request.user == access_request.owner
         or request.user.is_superuser
-        or request.user.groups.filter(name='OrgAdmin').exists()
+        or is_user_org_admin(request.user)
     )
     if not is_authorized:
         return JsonResponse({'error': 'Not authorized'}, status=403)

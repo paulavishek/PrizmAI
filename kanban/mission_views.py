@@ -23,7 +23,7 @@ from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
 from kanban.favorite_views import is_user_favorite as _is_fav
-from kanban.permissions import is_demo_context, can_user_create_goals, can_user_create_missions
+from kanban.permissions import is_demo_context, can_user_create_goals, can_user_create_missions, is_user_org_admin
 
 from kanban.utils.demo_protection import get_user_boards
 
@@ -254,9 +254,8 @@ def goal_list(request):
         profile = None
 
     demo_mode = getattr(profile, 'is_viewing_demo', False) if profile else False
-    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
 
-    # Determine if user is the org creator (only they can create goals)
+    # Determine if user is the org creator (for workspace setup CTA)
     org = getattr(profile, 'organization', None) if profile else None
     _is_org_creator = org and org.created_by_id == request.user.id
 
@@ -270,7 +269,7 @@ def goal_list(request):
     elif active_ws and not active_ws.is_demo:
         # Workspace-scoped: show only goals belonging to this workspace
         goals = OrganizationGoal.objects.filter(workspace=active_ws)
-    elif _is_org_admin:
+    elif is_user_org_admin(request.user):
         goals = OrganizationGoal.objects.filter(
             is_demo=False, is_seed_demo_data=False,
         )
@@ -433,6 +432,7 @@ def create_goal(request):
             status=status,
             organization=organization,
             created_by=request.user,
+            owner=request.user,
             workspace=getattr(request, 'workspace', None),
         )
 
@@ -612,7 +612,7 @@ def mission_list(request):
     elif active_ws and not active_ws.is_demo:
         # Workspace-scoped: only missions in the active workspace
         missions = Mission.objects.filter(workspace=active_ws)
-    elif request.user.groups.filter(name='OrgAdmin').exists():
+    elif is_user_org_admin(request.user):
         # Org Admin: all non-demo missions
         missions = Mission.objects.filter(
             is_demo=False, is_seed_demo_data=False,
@@ -659,7 +659,7 @@ def mission_detail(request, mission_id):
     # Org admins / record owners see everything
     _is_admin_or_owner = (
         request.user.has_perm('prizmai.edit_mission', mission)
-        or request.user.groups.filter(name='OrgAdmin').exists()
+        or is_user_org_admin(request.user)
     )
     if _is_admin_or_owner or _is_demo_mission:
         user_accessible_board_ids = set(Board.objects.filter(
