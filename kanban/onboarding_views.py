@@ -469,6 +469,11 @@ def onboarding_skip(request):
 
     profile.onboarding_status = 'skipped'
     profile.save(update_fields=['onboarding_status', 'organization'])
+
+    # Create a real workspace so the user can start adding boards immediately
+    from kanban.workspace_utils import get_or_create_real_workspace
+    get_or_create_real_workspace(request.user)
+
     return redirect('dashboard')
 
 

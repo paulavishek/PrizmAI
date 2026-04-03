@@ -66,6 +66,13 @@ class WorkspaceMiddleware:
                 ws = profile.active_workspace
                 if ws and ws.is_active:
                     request.workspace = ws
+                elif profile.organization and not profile.is_viewing_demo:
+                    # User has an org but no active workspace — lazily create one.
+                    # This catches the "manual setup" and import-first paths.
+                    from kanban.workspace_utils import get_or_create_real_workspace
+                    ws = get_or_create_real_workspace(request.user)
+                    if ws:
+                        request.workspace = ws
             except Exception:
                 pass
 

@@ -1819,6 +1819,10 @@ def create_board(request):
             if demo_mode:
                 board.is_sandbox_copy = True
 
+            # Assign to the active workspace
+            if hasattr(request, 'workspace') and request.workspace:
+                board.workspace = request.workspace
+
             board.save()
             board.owner = request.user
             board.save(update_fields=['owner'])
@@ -4220,6 +4224,18 @@ def _create_board_from_import_result(result, user, organization, session):
     """
     # Create the board
     board_data = result.board_data
+    # Resolve workspace for the importing user
+    ws = None
+    try:
+        ws = user.profile.active_workspace
+        if ws and ws.is_demo:
+            ws = None  # Don't put imports into demo workspace
+        if not ws:
+            from kanban.workspace_utils import get_or_create_real_workspace
+            ws = get_or_create_real_workspace(user)
+    except Exception:
+        pass
+
     new_board = Board.objects.create(
         name=board_data.get('name', 'Imported Board'),
         description=board_data.get('description', ''),
@@ -4227,6 +4243,7 @@ def _create_board_from_import_result(result, user, organization, session):
         created_by=user,
         num_phases=board_data.get('num_phases', 0),
         is_imported=True,
+        workspace=ws,
     )
     new_board.owner = user
     new_board.save(update_fields=['owner'])
@@ -4544,7 +4561,8 @@ def wizard_create_board(request):
                 description=board_description,
                 organization=organization,
                 created_by=request.user,
-                owner=request.user
+                owner=request.user,
+                workspace=getattr(request, 'workspace', None),
             )
             from kanban.models import BoardMembership
             BoardMembership.objects.get_or_create(
