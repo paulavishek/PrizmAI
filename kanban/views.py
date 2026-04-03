@@ -78,7 +78,8 @@ def dashboard(request):
     active_ws = getattr(request, 'workspace', None)
     
     # Org Admins see all boards regardless of membership
-    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    from kanban.permissions import is_user_org_admin
+    _is_org_admin = is_user_org_admin(request.user)
     
     if demo_mode:
         # Single-tier demo: show user's sandbox copies, fall back to official demo boards
@@ -1668,7 +1669,8 @@ def board_list(request):
     active_ws = getattr(request, 'workspace', None)
 
     # Org Admins see all boards regardless of membership
-    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    from kanban.permissions import is_user_org_admin
+    _is_org_admin = is_user_org_admin(request.user)
 
     if demo_mode:
         # Single-tier demo: show user's sandbox copies + boards created
@@ -4163,6 +4165,22 @@ def import_board(request):
     except UserProfile.DoesNotExist:
         messages.error(request, "You must be part of an organization to import a board.")
         return redirect('create_organization')
+
+    # Auto-create an Organization if the user doesn't have one yet
+    if not organization:
+        from accounts.models import Organization as OrgModel
+        first_name = (request.user.first_name or request.user.username).strip()
+        org_name = f"{first_name}'s Workspace"
+        organization = OrgModel.objects.create(
+            name=org_name,
+            created_by=request.user,
+        )
+        profile.organization = organization
+        profile.save(update_fields=['organization'])
+        # Ensure the org creator is in the OrgAdmin group
+        from django.contrib.auth.models import Group
+        org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+        request.user.groups.add(org_admin_group)
     
     # Check if file was uploaded
     if 'import_file' not in request.FILES:

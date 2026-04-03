@@ -9,6 +9,37 @@ Created in Phase 1 of the RBAC rollout.
 import rules
 
 
+# ── Unified Org Admin helper ─────────────────────────────────────────────────
+
+def is_user_org_admin(user):
+    """
+    Canonical check for whether a user has Org Admin privileges.
+
+    A user is an Org Admin if ANY of the following is true:
+      1. They are in the 'OrgAdmin' Django Group
+      2. They are the creator of their organization (org.created_by)
+      3. They have been promoted to admin via the UI (profile.is_admin)
+
+    This function should be used everywhere instead of inline
+    ``user.groups.filter(name='OrgAdmin').exists()`` checks.
+    """
+    if not user or not user.is_authenticated:
+        return False
+    # 1. Django Group (canonical — set by migration, sync'd by toggle_admin)
+    if user.groups.filter(name='OrgAdmin').exists():
+        return True
+    # 2. Organization creator
+    profile = getattr(user, 'profile', None)
+    if profile:
+        org = getattr(profile, 'organization', None)
+        if org and org.created_by_id == user.id:
+            return True
+        # 3. UI-promoted admin
+        if getattr(profile, 'is_admin', False):
+            return True
+    return False
+
+
 # ── Demo context helper ──────────────────────────────────────────────────────
 
 def is_demo_context(request, board=None, workspace=None):
@@ -45,34 +76,22 @@ def is_demo_context(request, board=None, workspace=None):
 
 def can_user_create_goals(user, request=None):
     """Check if a user can create Organization Goals.
-    Allowed: Org Admin (group) OR organization creator.
+    Allowed: Org Admin (group, org creator, or UI-promoted admin).
     If in demo context, always True.
     """
     if request and is_demo_context(request):
         return True
-    # OrgAdmin Django Group
-    if user.groups.filter(name='OrgAdmin').exists():
-        return True
-    # Organization creator
-    profile = getattr(user, 'profile', None)
-    org = getattr(profile, 'organization', None) if profile else None
-    if org and org.created_by_id == user.id:
-        return True
-    return False
+    return is_user_org_admin(user)
 
 
 def can_user_create_missions(user, request=None, parent_goal=None):
     """Check if a user can create Missions.
-    Allowed: Org Admin, org creator, or owner/creator of the parent Goal.
-    If in demo context, always True.
+    Allowed: Org Admin, org creator, UI-promoted admin, or owner/creator of
+    the parent Goal.  If in demo context, always True.
     """
     if request and is_demo_context(request):
         return True
-    if user.groups.filter(name='OrgAdmin').exists():
-        return True
-    profile = getattr(user, 'profile', None)
-    org = getattr(profile, 'organization', None) if profile else None
-    if org and org.created_by_id == user.id:
+    if is_user_org_admin(user):
         return True
     # Owner or creator of the parent goal
     if parent_goal:
@@ -87,8 +106,9 @@ def can_user_create_missions(user, request=None, parent_goal=None):
 
 @rules.predicate
 def is_org_admin(user, obj=None):
-    """System-wide admin — the platform owner. Single Django Group."""
-    return user.groups.filter(name='OrgAdmin').exists()
+    """System-wide admin — the platform owner.
+    Checks OrgAdmin group, org.created_by, and profile.is_admin."""
+    return is_user_org_admin(user)
 
 
 @rules.predicate
@@ -101,7 +121,7 @@ def is_record_owner(user, obj):
         if created_by is not None:
             return created_by == user
         # Truly orphaned record — only Org Admin can act
-        return user.groups.filter(name='OrgAdmin').exists()
+        return is_user_org_admin(user)
     return owner == user
 
 

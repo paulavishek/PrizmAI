@@ -478,6 +478,14 @@ def toggle_admin(request, profile_id):
     target_profile.is_admin = not target_profile.is_admin
     target_profile.save(update_fields=['is_admin'])
 
+    # Keep OrgAdmin Django Group in sync with profile.is_admin
+    from django.contrib.auth.models import Group
+    org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+    if target_profile.is_admin:
+        target_profile.user.groups.add(org_admin_group)
+    else:
+        target_profile.user.groups.remove(org_admin_group)
+
     action = "promoted to Admin" if target_profile.is_admin else "demoted to Member"
     messages.success(request, f"{target_profile.user.get_full_name() or target_profile.user.username} has been {action}."  )
     return redirect('organization_members')

@@ -35,7 +35,8 @@ def messaging_hub(request):
     
     # MVP Mode: Get all boards the user has access to (demo-aware)
     user_boards = get_user_boards(request.user)
-    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    from kanban.permissions import is_user_org_admin
+    _is_org_admin = is_user_org_admin(request.user)
     if _is_org_admin and not getattr(profile, 'is_viewing_demo', False):
         user_boards = Board.objects.filter(is_sandbox_copy=False, is_official_demo_board=False).exclude(
             created_by_session__startswith='spectra_demo_'
@@ -72,7 +73,8 @@ def chat_room_list(request, board_id):
 
     # Strict board membership check — demo boards alone are not sufficient for chat access
     from kanban.models import BoardMembership
-    _is_org_admin = request.user.groups.filter(name='OrgAdmin').exists()
+    from kanban.permissions import is_user_org_admin as _check_org_admin
+    _is_org_admin = _check_org_admin(request.user)
     _has_membership = BoardMembership.objects.filter(user=request.user, board=board).exists()
     if not (_has_membership or board.created_by == request.user or _is_org_admin):
         raise Http404

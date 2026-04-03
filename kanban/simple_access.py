@@ -47,8 +47,9 @@ def can_access_board(user, board):
     if user.is_superuser:
         return True
 
-    # OrgAdmin group
-    if user.groups.filter(name='OrgAdmin').exists():
+    # OrgAdmin (group, org creator, or UI-promoted admin)
+    from kanban.permissions import is_user_org_admin
+    if is_user_org_admin(user):
         return True
 
     # Board creator / owner field
@@ -95,7 +96,8 @@ def can_manage_board(user, board):
     if not user or not user.is_authenticated:
         return False
 
-    if user.is_superuser or user.groups.filter(name='OrgAdmin').exists():
+    from kanban.permissions import is_user_org_admin
+    if user.is_superuser or is_user_org_admin(user):
         return True
     
     if board.created_by_id == user.id:
@@ -126,9 +128,10 @@ def can_modify_board_content(user, board):
     ).exists()
 
     # If user is the creator, owner, superuser, or OrgAdmin they can modify
+    from kanban.permissions import is_user_org_admin
     if (
         user.is_superuser
-        or user.groups.filter(name='OrgAdmin').exists()
+        or is_user_org_admin(user)
         or board.created_by_id == user.id
         or getattr(board, 'owner_id', None) == user.id
         or getattr(board, 'is_official_demo_board', False)
