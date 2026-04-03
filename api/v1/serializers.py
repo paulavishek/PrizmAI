@@ -148,6 +148,10 @@ class BoardSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         if hasattr(user, 'profile'):
             validated_data['organization'] = user.profile.organization
+        # Set workspace from request (populated by WorkspaceMiddleware)
+        request = self.context.get('request')
+        if request and hasattr(request, 'workspace') and request.workspace:
+            validated_data['workspace'] = request.workspace
         return super().create(validated_data)
 
 

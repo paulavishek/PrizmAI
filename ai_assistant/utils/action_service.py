@@ -218,11 +218,22 @@ class SpectraActionService:
                 organization = user.profile.organization
 
             with transaction.atomic():
+                # Resolve workspace
+                ws = None
+                if hasattr(user, 'profile') and user.profile:
+                    ws = user.profile.active_workspace
+                    if ws and ws.is_demo and not is_demo_mode:
+                        ws = None  # Don't put real boards into demo workspace
+                    if not ws and not is_demo_mode:
+                        from kanban.workspace_utils import get_or_create_real_workspace
+                        ws = get_or_create_real_workspace(user)
+
                 board = Board(
                     name=collected_data['name'],
                     description=collected_data.get('description', '') or '',
                     organization=organization,
                     created_by=user,
+                    workspace=ws,
                 )
                 # Tag the board so it shows up in demo workspace (and is
                 # excluded from the personal workspace).

@@ -432,6 +432,7 @@ def create_goal(request):
             status=status,
             organization=organization,
             created_by=request.user,
+            workspace=getattr(request, 'workspace', None),
         )
 
         # Auto-generate proxy metrics in background
@@ -836,6 +837,7 @@ def create_mission(request):
             organization_goal=organization_goal,
             created_by=request.user,
             owner=request.user,
+            workspace=getattr(request, 'workspace', None),
         )
         messages.success(request, f'Mission "{mission.name}" created successfully!')
         return redirect('mission_detail', mission_id=mission.id)
@@ -950,6 +952,7 @@ def create_strategy(request, mission_id):
             status=status,
             mission=mission,
             created_by=request.user,
+            workspace=getattr(request, 'workspace', None),
         )
         messages.success(request, f'Strategy "{strategy.name}" created!')
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
