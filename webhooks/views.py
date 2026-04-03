@@ -20,6 +20,11 @@ from webhooks.tasks import deliver_webhook
 def webhook_list(request, board_id):
     """List all webhooks for a board"""
     board = get_object_or_404(Board, id=board_id)
+
+    # Server-side RBAC: only board editors (Owner/Admin) can manage webhooks
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
     
     webhooks = Webhook.objects.filter(board=board).order_by('-created_at')
     
@@ -34,6 +39,11 @@ def webhook_list(request, board_id):
 def webhook_create(request, board_id):
     """Create a new webhook"""
     board = get_object_or_404(Board, id=board_id)
+
+    # Server-side RBAC: only board editors (Owner/Admin) can create webhooks
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
     
     if request.method == 'POST':
         form = WebhookForm(request.POST)
@@ -59,6 +69,10 @@ def webhook_detail(request, webhook_id):
     """View webhook details and delivery history"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
     
     # Get recent deliveries
     deliveries = webhook.deliveries.all()[:50]
@@ -87,6 +101,10 @@ def webhook_edit(request, webhook_id):
     """Edit an existing webhook"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
     
     if request.method == 'POST':
         form = WebhookForm(request.POST, instance=webhook)
@@ -111,6 +129,10 @@ def webhook_delete(request, webhook_id):
     """Delete a webhook"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
     
     webhook_name = webhook.name
     webhook.delete()
@@ -124,6 +146,9 @@ def webhook_toggle(request, webhook_id):
     """Toggle webhook active status"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     webhook.is_active = not webhook.is_active
     if webhook.is_active and webhook.status == 'failed':
@@ -144,6 +169,9 @@ def webhook_test(request, webhook_id):
     """Send a test webhook"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Create test payload
     test_data = {
@@ -181,6 +209,10 @@ def webhook_test(request, webhook_id):
 def webhook_events(request, board_id):
     """View recent webhook events for a board"""
     board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
     
     # Get recent events
     events = WebhookEvent.objects.filter(board=board).order_by('-created_at')[:100]

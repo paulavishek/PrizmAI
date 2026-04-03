@@ -154,9 +154,13 @@
                     Define your <strong>highest-level strategic ambition</strong> — the North Star that all Missions should be moving towards.<br>
                     <small>Example: "Increase Market Share in Asia by 15%" or "Achieve $10M ARR by Q4"</small>
                 </p>
+                {% if can_create_goal %}
                 <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
                     <i class="fas fa-plus fa-sm me-1"></i> Create Your First Goal
                 </a>
+                {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Organization Goals.</p>
+                {% endif %}
             </div>
         </div>
     </div>

@@ -1965,9 +1965,13 @@
                     You have <strong>{{ boards|length }} board{{ boards|length|pluralize }}</strong> in this workspace.
                     Create an <strong>Organization Goal</strong> to organize your boards into a hierarchy.
                 </p>
+                {% if can_create_goal %}
                 <a href="{% url 'create_goal' %}" class="btn btn-primary">
                     <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
                 </a>
+                {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Organization Goals.</p>
+                {% endif %}
                 {% elif onboarding_profile.onboarding_version == 2 and not demo_mode %}
                 <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
                 <p class="mb-2 fw-semibold">Your workspace is empty</p>
@@ -1975,6 +1979,7 @@
                     Let AI build a complete workspace from your organization's goal,
                     or create things manually.
                 </p>
+                {% if can_create_goal %}
                 <a href="{% url 'onboarding_goal' %}" class="btn btn-primary">
                     <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
                 </a>
@@ -1982,15 +1987,22 @@
                     <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
                 </a>
                 {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Organization Goals.</p>
+                {% endif %}
+                {% else %}
                 <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
                 <p class="mb-2 fw-semibold">No Organization Goals yet</p>
                 <p class="text-muted small mb-4">
                     Define an <strong>Organization Goal</strong> (your North Star),
                     then add Missions, Strategies and Boards underneath it.
                 </p>
+                {% if can_create_goal %}
                 <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
                     <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
                 </a>
+                {% else %}
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Organization Goals.</p>
+                {% endif %}
                 {% endif %}
             </div>
         {% endif %}
