@@ -269,3 +269,60 @@ def user_favorites(request):
         return {'user_favorites': favorites}
     except Exception:
         return {'user_favorites': []}
+
+
+def preset_features(request):
+    """
+    Inject feature-visibility flags into every template based on the
+    effective workspace preset (lean / professional / enterprise).
+
+    Priority order:
+      1. Demo accounts (persona accounts or is_viewing_demo) → always enterprise
+      2. Board-specific preset (from URL board_id kwarg) → BoardPreset.effective_preset()
+      3. Org-level global preset → WorkspacePreset.global_preset
+      4. Fallback → lean (safest default for unknown state)
+    """
+    from kanban.preset_models import build_feature_flags
+
+    if not request.user.is_authenticated:
+        return {'features': build_feature_flags('lean')}
+
+    # Demo accounts always see everything
+    is_demo = False
+    try:
+        profile = request.user.profile
+        is_demo = getattr(profile, 'is_demo_account', False) or \
+                  getattr(profile, 'is_viewing_demo', False)
+    except Exception:
+        pass
+
+    if is_demo:
+        return {'features': build_feature_flags('enterprise')}
+
+    # Try to resolve from a board-specific context
+    preset = None
+    board_id = None
+    if getattr(request, 'resolver_match', None) and request.resolver_match.kwargs:
+        board_id = request.resolver_match.kwargs.get('board_id') or \
+                   request.resolver_match.kwargs.get('pk')
+
+    if board_id:
+        try:
+            from kanban.preset_models import BoardPreset
+            bp = BoardPreset.objects.select_related(
+                'board__organization__workspace_preset'
+            ).get(board_id=board_id)
+            preset = bp.effective_preset()
+        except Exception:
+            pass
+
+    # Fall back to org-level global preset
+    if preset is None:
+        try:
+            org = request.user.profile.organization
+            if org is not None:
+                preset = org.workspace_preset.global_preset
+        except Exception:
+            pass
+
+    return {'features': build_feature_flags(preset or 'lean')}

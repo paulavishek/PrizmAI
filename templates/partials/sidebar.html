@@ -70,6 +70,7 @@
                     <span class="sidebar-label">Dashboard</span>
                 </a>
             </li>
+            {% if features.show_goals_nav %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'goal_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'goal_list' %}active{% endif %}"
@@ -78,6 +79,8 @@
                     <span class="sidebar-label">Goals</span>
                 </a>
             </li>
+            {% endif %}
+            {% if features.show_missions_nav %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'mission_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'mission_list' %}active{% endif %}"
@@ -86,6 +89,7 @@
                     <span class="sidebar-label">Missions</span>
                 </a>
             </li>
+            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'board_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
@@ -236,6 +240,7 @@
                     {% if user.profile.is_admin %}
                     <li><a class="dropdown-item" href="{% url 'organization_members' %}"><i class="fas fa-building me-2"></i>Organization</a></li>
                     <li><a class="dropdown-item" href="{% url 'manage_roles' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    <li><a class="dropdown-item" href="{% url 'workspace_preset_settings' %}"><i class="fas fa-sliders-h me-2"></i>Workspace Settings</a></li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}"><i class="fas fa-robot me-2"></i>AI Usage</a></li>

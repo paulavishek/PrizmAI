@@ -1006,3 +1006,27 @@ def trigger_commitment_signals_on_task_delete(sender, instance, **kwargs):
             'trigger_commitment_signals_on_task_delete: unexpected error',
             exc_info=True,
         )
+
+
+# ── Workspace Preset auto-creation ─────────────────────────────────
+
+@receiver(post_save, sender='accounts.Organization')
+def create_workspace_preset_for_org(sender, instance, created, **kwargs):
+    """Auto-create a WorkspacePreset when an Organization is created."""
+    if created:
+        from kanban.preset_models import WorkspacePreset
+        WorkspacePreset.objects.get_or_create(
+            organization=instance,
+            defaults={'global_preset': 'lean'},
+        )
+
+
+@receiver(post_save, sender='kanban.Board')
+def create_board_preset_for_board(sender, instance, created, **kwargs):
+    """Auto-create a BoardPreset when a Board is created (local_preset=None → inherits global)."""
+    if created:
+        from kanban.preset_models import BoardPreset
+        BoardPreset.objects.get_or_create(
+            board=instance,
+            defaults={'local_preset': None},
+        )
