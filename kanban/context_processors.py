@@ -65,9 +65,19 @@ def demo_context(request):
                     # Split real vs demo for templates
                     context['real_workspaces'] = [w for w in all_ws if not w.is_demo]
                     context['demo_workspace'] = next((w for w in all_ws if w.is_demo), None)
-                    # Only org creator can create new workspaces
-                    context['can_setup_workspace'] = (
+                    # Workspace setup permission:
+                    # - Org creator can always set up new workspaces
+                    # - Demo-exploring users who haven't created their own
+                    #   workspace yet should also be able to set up
+                    is_org_creator = (
                         profile.organization.created_by_id == request.user.id
+                    )
+                    is_demo_explorer_without_own_ws = (
+                        getattr(profile, 'is_viewing_demo', False)
+                        and profile.onboarding_status in ('demo_exploring', 'pending')
+                    )
+                    context['can_setup_workspace'] = (
+                        is_org_creator or is_demo_explorer_without_own_ws
                     )
                 else:
                     context['user_workspaces'] = []
