@@ -44,6 +44,18 @@ def commitment_dashboard(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
 
+    # Preset guard: Commitments require Enterprise
+    from kanban.preset_models import BoardPreset, build_feature_flags
+    from django.contrib import messages as _msgs
+    try:
+        bp = BoardPreset.objects.get(board=board)
+        flags = build_feature_flags(bp.effective_preset())
+    except BoardPreset.DoesNotExist:
+        flags = build_feature_flags('lean')
+    if not flags.get('show_commitments'):
+        _msgs.info(request, "Commitment Protocols are available in Enterprise mode. Upgrade your workspace to unlock them.")
+        return redirect('board_detail', board_id=board.id)
+
     commitments = (
         CommitmentProtocol.objects.filter(board=board)
         .select_related('board', 'created_by')

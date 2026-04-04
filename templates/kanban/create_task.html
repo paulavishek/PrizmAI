@@ -181,19 +181,18 @@
                         
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
                         <!-- ADVANCED OPTIONS (collapsed by default)                             -->
+                        <!-- Hidden entirely for Lean preset users                               -->
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
+                        {% if features.show_advanced_task_form %}
                         <div class="mb-4">
                             <div class="card border-secondary">
                                 <div class="card-header bg-light cursor-pointer d-flex justify-content-between align-items-center" 
                                      data-bs-toggle="collapse" data-bs-target="#advancedOptionsSection" 
                                      aria-expanded="false" aria-controls="advancedOptionsSection">
                                     <h6 class="mb-0">
-                                        <i class="fas fa-chevron-down me-2 collapse-icon"></i>
-                                        Show advanced options
+                                        <i class="fas fa-cog me-2 collapse-icon"></i>
+                                        Advanced options — <span class="fw-normal text-muted">optional, improves AI predictions</span>
                                     </h6>
-                                    <span class="badge bg-info">
-                                        <i class="fas fa-lightbulb me-1"></i>Affects AI predictions
-                                    </span>
                                 </div>
                                 <div id="advancedOptionsSection" class="collapse">
                                     <div class="card-body">
@@ -212,9 +211,13 @@
                             {% endif %}
                             
                             <!-- Constraints & Context -->
-                            <h6 class="border-bottom pb-2 mb-3 mt-3">
-                                <i class="fas fa-sliders-h text-secondary me-1"></i> Constraints & Context
+                            <h6 class="border-bottom pb-2 mb-3 mt-3 cursor-pointer"
+                                data-bs-toggle="collapse" data-bs-target="#advSubRiskComplexity"
+                                aria-expanded="true" aria-controls="advSubRiskComplexity">
+                                <i class="fas fa-chevron-down me-1 small collapse-icon"></i>
+                                <i class="fas fa-sliders-h text-secondary me-1"></i> Risk & Complexity
                             </h6>
+                            <div class="collapse show" id="advSubRiskComplexity">
                                         
                                         <!-- 🛡️ Risk Assessment Section -->
                                         <div class="mb-4">
@@ -297,6 +300,16 @@
                                         </div>
 
                                         <hr>
+
+                                        </div>{# /advSubRiskComplexity #}
+
+                                        <h6 class="border-bottom pb-2 mb-3 mt-3 cursor-pointer"
+                                            data-bs-toggle="collapse" data-bs-target="#advSubResourcesBudget"
+                                            aria-expanded="true" aria-controls="advSubResourcesBudget">
+                                            <i class="fas fa-chevron-down me-1 small collapse-icon"></i>
+                                            <i class="fas fa-box text-info me-1"></i> Resources & Budget
+                                        </h6>
+                                        <div class="collapse show" id="advSubResourcesBudget">
 
                                         <!-- 📦 Resource Information -->
                                         <div class="mb-4">
@@ -512,6 +525,8 @@
                                             </small>
                                         </div>
 
+                                        </div>{# /advSubResourcesBudget #}
+
                             <!-- AI Analysis -->
                             <h5 class="border-bottom pb-2 mb-3 mt-4">
                                 <span class="badge bg-info me-2">3</span>
@@ -679,6 +694,30 @@
                                 </div><!-- /.collapse -->
                             </div><!-- /.card (advanced options accordion) -->
                         </div>
+                        {% else %}
+                        {# ── Lean preset: simplified AI suggestion button ── #}
+                        <div class="mb-4">
+                            <div class="card border-info">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-wand-magic-sparkles text-info me-1"></i> Get AI Suggestions</h6>
+                                        <small class="text-muted">Let Spectra suggest a priority and break down this task.</small>
+                                    </div>
+                                    <button type="button" id="lean-ai-suggest-btn" class="btn btn-sm btn-outline-info"
+                                            data-board-id="{{ board.id }}" title="Get AI priority and complexity suggestions">
+                                        <i class="fas fa-magic me-1"></i> Suggest
+                                    </button>
+                                </div>
+                                <div id="lean-ai-spinner" class="d-none text-center pb-3">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted small">Analyzing task...</span>
+                                </div>
+                                <div id="lean-ai-result" class="d-none px-3 pb-3"></div>
+                            </div>
+                        </div>
+                        {% endif %}
                         
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
                         <!-- SECTION 4: FINAL REVIEW & CREATE                                    -->
@@ -953,4 +992,66 @@
     });
 })();
 </script>
+
+{% if not features.show_advanced_task_form %}
+<script>
+(function() {
+    var btn = document.getElementById('lean-ai-suggest-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+        var title = document.querySelector('[name="title"]');
+        var desc = document.querySelector('[name="description"]');
+        var taskTitle = title ? title.value.trim() : '';
+        var taskDesc = desc ? desc.value.trim() : '';
+        if (!taskTitle) {
+            alert('Please enter a task title first.');
+            return;
+        }
+        var spinner = document.getElementById('lean-ai-spinner');
+        var result = document.getElementById('lean-ai-result');
+        btn.disabled = true;
+        spinner.classList.remove('d-none');
+        result.classList.add('d-none');
+
+        var boardId = btn.getAttribute('data-board-id');
+        fetch('/api/v1/boards/' + boardId + '/tasks/ai-suggestions/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({title: taskTitle, description: taskDesc, mode: 'lean'})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            spinner.classList.add('d-none');
+            btn.disabled = false;
+            result.classList.remove('d-none');
+            if (data.error) {
+                result.innerHTML = '<div class="alert alert-warning py-2 mb-0"><small>' + data.error + '</small></div>';
+                return;
+            }
+            var html = '';
+            if (data.priority) {
+                html += '<div class="alert alert-info py-2 mb-2"><small><i class="fas fa-flag me-1"></i><strong>Suggested Priority:</strong> ' + data.priority + '</small>';
+                if (data.priority_reason) html += '<br><small class="text-muted">' + data.priority_reason + '</small>';
+                html += '</div>';
+            }
+            if (data.breakdown && data.breakdown.length) {
+                html += '<div class="alert alert-success py-2 mb-0"><small><i class="fas fa-sitemap me-1"></i><strong>Suggested subtasks:</strong></small><ul class="mb-0 mt-1">';
+                data.breakdown.forEach(function(s) { html += '<li><small>' + s + '</small></li>'; });
+                html += '</ul></div>';
+            }
+            result.innerHTML = html || '<div class="alert alert-secondary py-2 mb-0"><small>No suggestions available for this task.</small></div>';
+        })
+        .catch(function() {
+            spinner.classList.add('d-none');
+            btn.disabled = false;
+            result.classList.remove('d-none');
+            result.innerHTML = '<div class="alert alert-warning py-2 mb-0"><small>Unable to get suggestions right now. Try again later.</small></div>';
+        });
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

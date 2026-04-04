@@ -291,27 +291,66 @@
 {% else %}
 <!-- ═══════ Fallback: Classic 4 Charts ═══════ -->
 <div class="row mb-4">
+    {# Column Distribution — always visible, even for Lean users #}
     <div class="col-xl-6 col-lg-6">
         <div class="card shadow mb-4">
             <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Tasks by Column</h6></div>
             <div class="card-body"><div class="chart-container" style="position: relative; height: 300px;"><canvas id="columnChart"></canvas></div></div>
         </div>
     </div>
+    {# Priority chart — locked for Lean, visible otherwise #}
     <div class="col-xl-6 col-lg-6">
+        {% if features.show_full_analytics %}
         <div class="card shadow mb-4">
             <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Tasks by Priority</h6></div>
             <div class="card-body"><div class="chart-container" style="position: relative; height: 300px;"><canvas id="priorityChart"></canvas></div></div>
         </div>
+        {% else %}
+        <div class="card shadow mb-4 position-relative" style="overflow:hidden;">
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-muted">Tasks by Priority</h6></div>
+            <div class="card-body" style="filter:blur(6px) grayscale(70%); pointer-events:none; user-select:none;">
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <div style="display:flex; justify-content:center; align-items:center; height:100%; color:#ccc;">
+                        <i class="fas fa-chart-pie fa-4x"></i>
+                    </div>
+                </div>
+            </div>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; background:rgba(255,255,255,.15);">
+                <span class="badge bg-secondary mb-2" style="font-size:.85rem;"><i class="fas fa-lock me-1"></i> Professional</span>
+                <small class="text-muted">Upgrade your workspace to unlock</small>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 <div class="row mb-4">
+    {# User Workload — locked for Lean #}
     <div class="col-xl-6 col-lg-6">
+        {% if features.show_full_analytics %}
         <div class="card shadow mb-4">
             <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">User Workload</h6></div>
             <div class="card-body"><div class="chart-container" style="position: relative; height: 300px;"><canvas id="userChart"></canvas></div></div>
         </div>
+        {% else %}
+        <div class="card shadow mb-4 position-relative" style="overflow:hidden;">
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-muted">User Workload</h6></div>
+            <div class="card-body" style="filter:blur(6px) grayscale(70%); pointer-events:none; user-select:none;">
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <div style="display:flex; justify-content:center; align-items:center; height:100%; color:#ccc;">
+                        <i class="fas fa-chart-bar fa-4x"></i>
+                    </div>
+                </div>
+            </div>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; background:rgba(255,255,255,.15);">
+                <span class="badge bg-secondary mb-2" style="font-size:.85rem;"><i class="fas fa-lock me-1"></i> Professional</span>
+                <small class="text-muted">Upgrade your workspace to unlock</small>
+            </div>
+        </div>
+        {% endif %}
     </div>
+    {# Lean Six Sigma — locked for Lean #}
     <div class="col-xl-6 col-lg-6">
+        {% if features.show_full_analytics %}
         <div class="card shadow mb-4">
             <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Lean Six Sigma Analysis</h6></div>
             <div class="card-body">
@@ -334,6 +373,22 @@
                 {% endif %}
             </div>
         </div>
+        {% else %}
+        <div class="card shadow mb-4 position-relative" style="overflow:hidden;">
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-muted">Lean Six Sigma Analysis</h6></div>
+            <div class="card-body" style="filter:blur(6px) grayscale(70%); pointer-events:none; user-select:none;">
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <div style="display:flex; justify-content:center; align-items:center; height:100%; color:#ccc;">
+                        <i class="fas fa-chart-pie fa-4x"></i>
+                    </div>
+                </div>
+            </div>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; background:rgba(255,255,255,.15);">
+                <span class="badge bg-secondary mb-2" style="font-size:.85rem;"><i class="fas fa-lock me-1"></i> Professional</span>
+                <small class="text-muted">Upgrade your workspace to unlock</small>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}

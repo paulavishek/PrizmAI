@@ -370,6 +370,11 @@ urlpatterns = [
     path('rename-workspace/', views.rename_workspace, name='rename_workspace'),
     path('workspace-selection/', views.workspace_selection, name='workspace_selection'),
 
+    # Workspace preset settings (Org Admin)
+    path('settings/workspace/', views.workspace_preset_settings, name='workspace_preset_settings'),
+    # Board-level preset override (Board Owner / Org Admin) — AJAX endpoint
+    path('boards/<int:board_id>/preset/', views.board_preset_update, name='board_preset_update'),
+
     # -----------------------------------------------------------------------
     # Living Commitment Protocols (Anti-Roadmap)
     # -----------------------------------------------------------------------

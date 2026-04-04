@@ -43,6 +43,9 @@ from kanban.commitment_models import (
     UserCredibilityScore,
 )
 
+# Import Workspace Preset models
+from kanban.preset_models import WorkspacePreset, BoardPreset, build_feature_flags
+
 
 # ---------------------------------------------------------------------------
 # WORKSPACE — the isolation boundary for multi-workspace support.

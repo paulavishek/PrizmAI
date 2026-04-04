@@ -312,6 +312,7 @@ class SpectraConversationState(models.Model):
         ('collecting_event', 'Collecting event details'),
         ('collecting_retrospective', 'Collecting retrospective details'),
         ('collecting_task_update', 'Collecting task update details'),
+        ('collecting_preset', 'Collecting workspace preset preference'),
         ('awaiting_confirmation', 'Awaiting user confirmation'),
     ]
     PENDING_ACTION_CHOICES = [
