@@ -6,6 +6,7 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -72,6 +73,10 @@ def _send_invitation_email(request, invitation):
 def manage_board_members(request, board_id):
     """Display the board member management page (members + pending invitations)."""
     board = get_object_or_404(Board, id=board_id)
+
+    # Server-side RBAC: only users who can view this board may see the members page
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
 
     can_manage = _can_manage_invites(request.user, board)
 

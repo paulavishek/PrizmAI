@@ -29,7 +29,8 @@ def get_user_board_role(user, board):
         return None
 
     # Superuser / OrgAdmin → always owner-level
-    if user.is_superuser or user.groups.filter(name='OrgAdmin').exists():
+    from kanban.permissions import is_user_org_admin
+    if user.is_superuser or is_user_org_admin(user):
         return 'owner'
 
     # Board creator or explicit owner field

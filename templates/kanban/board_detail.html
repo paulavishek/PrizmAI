@@ -607,15 +607,6 @@
 
     <!-- -- Right: compact toolbar -- -->
     <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
-        <!-- Primary: Add Task (uses first To-Do column) -->
-        {% for col in columns %}{% if col.name|lower == 'to do' or col.name|lower == 'todo' or col.name|lower == 'backlog' or forloop.first %}
-        {% if forloop.first or col.name|lower == 'to do' or col.name|lower == 'todo' %}
-        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-prizm-primary">
-            <i class="fas fa-plus me-1"></i><span class="d-none d-md-inline">Add Task</span>
-        </a>
-        {% endif %}
-        {% endif %}{% endfor %}
-
         <!-- Reorder Columns -->
         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnReorderModal" title="Reorder Columns">
             <i class="fas fa-sort"></i><span class="d-none d-lg-inline ms-1">Reorder</span>
@@ -637,19 +628,22 @@
                 <i class="fas fa-ellipsis-v"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
+                {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}"><i class="fas fa-edit me-2"></i>Edit Board</a></li>
                 <li><a class="dropdown-item" href="{% url 'create_column' board.id %}"><i class="fas fa-columns me-2"></i>Add Column</a></li>
                 <li><a class="dropdown-item" href="{% url 'create_label' board.id %}"><i class="fas fa-tags me-2"></i>Manage Labels</a></li>
+                {% endif %}
+                {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
-                {% if can_manage_invites and not board.is_official_demo_board and not board.is_sandbox_copy %}
-                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-user-plus me-2 text-success"></i>Invite Members</a></li>
                 {% endif %}
-                {% if not board.is_sandbox_copy %}
-                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users me-2 text-info"></i>Manage Members</a></li>
+                {% if can_manage_members and not board.is_sandbox_copy %}
+                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users-cog me-2 text-info"></i>Manage Members</a></li>
                 {% endif %}
+                {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
+                {% endif %}
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
-                {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
+                {% if can_delete_board %}
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal"><i class="fas fa-trash-alt me-2"></i>Delete Board</a></li>
                 {% endif %}

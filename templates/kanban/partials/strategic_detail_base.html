@@ -108,7 +108,8 @@
 
             {# ---- Updates tab ---- #}
             <div class="tab-pane" id="tab-updates">
-                {# Post update form #}
+                {# Post update form — only shown to users with edit permission #}
+                {% if can_edit %}
                 <div class="card shadow-sm mb-3">
                     <div class="card-body py-3">
                         <form id="strategic-update-form" method="post"
@@ -136,6 +137,15 @@
                         </form>
                     </div>
                 </div>
+                {% else %}
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body py-3 text-center">
+                        <p class="text-muted small mb-0">
+                            <i class="fas fa-lock me-1"></i>Only the owner of this {{ level_name|title }} can post updates.
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
 
                 {# Update feed #}
                 {% block tab_updates %}

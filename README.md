@@ -68,7 +68,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### Enterprise & Collaboration
 
-- **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy, but never upward without an explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins.
+- **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy. Board members can view parent Strategy, Mission, and Goal names in read-only mode (upward visibility), but cannot edit parent levels without a separate explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins. A user becomes an Org Admin by creating an organisation during onboarding, by being promoted via the Member management page, or by being a Django superuser.
 - **Decision Center** — A unified morning review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
 - **Favorites Sidebar** — Star and reorder boards, goals, tasks, wiki pages, and other items for quick access from the sidebar
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
@@ -97,7 +97,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **RESTful API** — Token-authenticated REST API for third-party integrations and mobile clients
 - **Webhook Integration** — Event-driven automation with external applications
 - **Mobile PWA** — Progressive Web App with offline support and home-screen installation
-- **Board Import / Export** — Import and export boards in PrizmAI's JSON format
+- **Board Import / Export** — Import boards from Jira (CSV/JSON export) and Monday.com (Excel export), or use PrizmAI's own JSON format for full round-trip import/export. Imported boards are automatically assigned to the importer's workspace; an organisation and Org Admin role are created automatically if the user does not yet have one.
 - **Lean Six Sigma Classifications** — Built-in LSS task labels (Value-Added, NVA, Waste)
 
 **→ [Detailed feature documentation](FEATURES.md)**
@@ -445,7 +445,7 @@ Every board in PrizmAI has four possible roles. Think of it like a set of keys t
 
 | Role | What they can do | The analogy |
 |---|---|---|
-| **Org Admin** | Everything system-wide — create Goals, manage all users, override any permission. Only one user holds this role | Building owner with every key |
+| **Org Admin** | Everything system-wide — create Goals, manage all users, override any permission. Multiple users in an organisation can hold this role | Building owner with every key |
 | **Owner** | Full control of records they own — edit, delete, invite others. Access flows down automatically to all children in the hierarchy | Landlord with a master key |
 | **Member** | Day-to-day work — create and edit tasks, post updates, log time, comment, and upload files. Cannot delete boards or touch parent levels unless separately invited | Tenant with a room key |
 | **Viewer** | Read-only — see everything they are invited to but cannot create, edit, or delete anything | Guest with a visitor pass |
@@ -454,13 +454,17 @@ Every board in PrizmAI has four possible roles. Think of it like a set of keys t
 
 - **Board access is invitation-based.** You only see boards you have been explicitly added to by an Owner or Org Admin. There is no "everyone can see everything" mode.
 - **Roles apply per board.** You might be an Owner on one board and a Member on another, even within the same organisation. The only system-wide elevated role is Org Admin.
-- **Access flows down, never up.** Owning a Strategy gives automatic Owner access to all Boards beneath it. Owning a Mission gives access to all Strategies and Boards below. But being a Member of a Board does **not** grant any access to the Strategy above — you must be separately invited at that level.
-- **Strategic goals have their own protection.** Only Org Admin can create new Goals. Missions and Strategies can be created or edited by Org Admin and by Owners at those levels.
+- **Access flows down automatically.** Owning a Strategy gives automatic Owner access to all Boards beneath it. Owning a Mission gives access to all Strategies and Boards below.
+- **Upward visibility is read-only.** Board members can view the names and summary details of the parent Strategy, Mission, and Goal above their board. They cannot edit, delete, or create records at those levels without a separate invitation.
+- **Strategic goals have their own protection.** Only Org Admins can create new Goals. Missions can be created by Org Admins or by the owner/creator of the parent Goal. Strategies can be created by Org Admins or by owners at the Mission level or above.
+- **Org Admin is assigned automatically on org creation.** When a user completes onboarding (AI-assisted or manual) or imports a board without an existing organisation, PrizmAI creates an organisation for them and grants Org Admin access. Workspace creators can also promote existing Members to Org Admin via the Member management page.
+- **Board settings and webhooks are restricted.** The board settings menu (Edit Board, Manage Members, Add Column, Manage Labels, Stakeholders, Webhooks) and all webhook management endpoints are only accessible to users with Owner or Org Admin access to that board. Members and Viewers cannot access these controls.
 - **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Org Admins, keeping financial data private from the wider team.
+- **Workspace data isolation is enforced.** Board dropdowns and linking actions (such as linking a board to a Strategy) are always scoped to boards the user can access — cross-workspace or cross-organisation board access is blocked at the server level.
 
 ### Inviting people to a board
 
-From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Org Admins can also remove members or change their role at any time.
+From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Org Admins can also remove members or change their role at any time. The Member management page is itself permission-protected — only users who have access to the board can reach it.
 
 ---
 

@@ -332,13 +332,14 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             chat_room = ChatRoom.objects.get(id=self.room_id)
             board = chat_room.board
 
-            is_org_admin = self.user.groups.filter(name='OrgAdmin').exists()
+            from kanban.permissions import is_user_org_admin
+            _is_admin = is_user_org_admin(self.user)
             has_membership = BoardMembership.objects.filter(
                 board=board, user=self.user
             ).exists()
             is_demo = getattr(board, 'is_official_demo_board', False)
 
-            if not (is_org_admin or has_membership or is_demo):
+            if not (_is_admin or has_membership or is_demo):
                 return False
 
             # Auto-add to chat room members list so they appear in UI
@@ -630,11 +631,12 @@ class TaskCommentConsumer(AsyncWebsocketConsumer):
             task = Task.objects.get(id=self.task_id)
             board = task.column.board
 
-            is_org_admin = self.user.groups.filter(name='OrgAdmin').exists()
+            from kanban.permissions import is_user_org_admin
+            _is_admin = is_user_org_admin(self.user)
             is_demo = getattr(board, 'is_official_demo_board', False)
 
             return (
-                is_org_admin or
+                _is_admin or
                 is_demo or
                 task.assigned_to == self.user or
                 task.created_by == self.user or

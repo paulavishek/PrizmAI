@@ -95,6 +95,11 @@ def commit_onboarding_workspace(user, preview):
         profile.save(update_fields=['organization'])
         logger.info(f"Auto-created Organization '{org_name}' (#{org.pk}) for {user.username}")
 
+    # Ensure the org creator is in the OrgAdmin group
+    from django.contrib.auth.models import Group
+    org_admin_group, _ = Group.objects.get_or_create(name='OrgAdmin')
+    user.groups.add(org_admin_group)
+
     with transaction.atomic():
         # ── Workspace ──────────────────────────────────────────────────
         goal_name = goal_data.get('name', 'My Organization Goal')[:200]
@@ -151,7 +156,7 @@ def commit_onboarding_workspace(user, preview):
                         created_by=user,
                         workspace=ws,
                     )
-                    BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'member'})
+                    BoardMembership.objects.get_or_create(board=board, user=user, defaults={'role': 'owner'})
                     # Auto-set task_prefix for readable task IDs
                     board.task_prefix = board.get_default_prefix()
                     board.save(update_fields=['task_prefix'])
