@@ -18,18 +18,18 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 ### Project Management Core
 
 - **Visual Kanban Boards** — Drag-and-drop task management with AI-suggested column structures
-- **Gantt Charts** — Interactive timelines with milestone tracking and task dependency visualization
-- **Burndown Charts & Sprint Forecasting** — Real-time sprint progress with AI-powered completion predictions and confidence intervals
-- **Goal-Aware Analytics & Dynamic Charts** — Spectra classifies each board's project type (Product / Tech, Marketing / Campaign, Operations) and automatically promotes the metrics and charts most relevant to that type. Product boards surface cycle time, deployment rate, and bug density; marketing boards highlight campaign ROI and conversion metrics; operations boards foreground SLA adherence and throughput. Boards without a classification fall back to the standard four charts (column distribution, priority, user workload, Lean Six Sigma) and show a Spectra banner with one-click AI analysis or manual type selection. A subtle sparkle hint on the Analytics tile signals when a board has not yet been classified.
+- **Gantt Charts** — Interactive timelines with milestone tracking and task dependency visualization *(Professional mode and above)*
+- **Burndown Charts & Sprint Forecasting** — Real-time sprint progress with AI-powered completion predictions and confidence intervals *(Professional mode and above)*
+- **Goal-Aware Analytics & Dynamic Charts** — The column-distribution chart is always available. In Professional mode and above, Spectra classifies each board's project type (Product / Tech, Marketing / Campaign, Operations) and promotes the metrics and charts most relevant to that type — cycle time, deployment rate, campaign ROI, SLA adherence, and more. Boards without a classification fall back to the standard four charts (column distribution, priority, user workload, Lean Six Sigma); Lean users see the priority, user workload, and Lean Six Sigma cards as blurred preview tiles with an upgrade prompt, ensuring the analytics page always feels informative rather than empty. A subtle sparkle hint on the Analytics tile signals when a board has not yet been classified.
 - **Time Tracking & Timesheets** — Log hours, track team utilization, and manage labor costs
 - **Budget & ROI Tracking** — Multi-currency support, cost forecasting, and ROI analytics
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
-- **Board & Scheduled Automations** — Trigger-based rules and time-based recurring automation for repetitive workflows
+- **Board Automations** — Trigger-based rules for repetitive workflows *(Professional mode and above)*; scheduled recurring automations *(Enterprise mode)*
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
 
 ### Strategic Alignment
 
-- **Organizational Goal Hierarchy** — Connect work to strategy through a Goal → Mission → Strategy → Board → Task hierarchy
+- **Organizational Goal Hierarchy** — Connect work to strategy through a Goal → Mission → Strategy → Board → Task hierarchy *(Professional mode and above; navigation links hidden in Lean mode)*
 - **Triple Constraint Dashboard** — Visualize and analyze the Scope, Cost, and Time interplay for a project with AI-powered recommendations
 - **Mission & Strategy Management** — Define organizational missions and link strategies to projects and boards
 
@@ -43,7 +43,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
   - **Generate Retrospectives** — "Create a sprint retrospective for the last two weeks"
   - **Create Automations** — "Set up an automation that marks overdue tasks as urgent" (trigger-based and scheduled)
   
-  Spectra uses a **Tiered Agentic Architecture**: a lightweight Flash-Lite model routes intent cheaply, while Flash with Function Calling extracts structured parameters and executes actions — keeping AI costs low while enabling rich multi-step interactions.
+  Spectra uses a **Tiered Agentic Architecture**: a lightweight Flash-Lite model routes intent cheaply, while Flash with Function Calling extracts structured parameters and executes actions — keeping AI costs low while enabling rich multi-step interactions. When an Org Admin creates their first board, Spectra asks a single follow-up question about team size and automatically sets the workspace preset (Lean / Professional / Enterprise) before resetting to normal mode.
 - **AI Coach** — Proactive, personalized coaching with recommendations that learn from your feedback
 - **Explainable AI** — Every recommendation includes a transparent breakdown: confidence level, contributing factors, assumptions, limitations, and alternative perspectives
 - **Scope Creep Detection** — Automatic baseline tracking with alerts when scope expands beyond the original plan
@@ -69,6 +69,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 ### Enterprise & Collaboration
 
 - **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy. Board members can view parent Strategy, Mission, and Goal names in read-only mode (upward visibility), but cannot edit parent levels without a separate explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins. A user becomes an Org Admin by creating an organisation during onboarding, by being promoted via the Member management page, or by being a Django superuser.
+- **Workspace Preset System** — Three progressive complexity tiers — **Lean**, **Professional**, and **Enterprise** — let Org Admins tune the interface to match their team's size and needs. Lean surfaces a clean Kanban board, calendar, Spectra chat, and one analytics chart. Professional unlocks Gantt Charts, Burndown, Goals & Missions navigation, AI Retrospectives, Skill Gap Analysis, full Analytics, and trigger-based Automations. Enterprise adds Shadow Board, What-If Simulator, Pre-Mortem, Stress Test, Commitment Protocols, Scope Autopsy, Resource Optimization, Scheduled Automations, Exit Protocol, and Budget / ROI tools. Board Owners can further restrict individual boards to a lower tier, but can never exceed the org-wide ceiling. The global preset is configured in **Workspace Settings** (sidebar → profile menu → Workspace Settings, Org Admins only). New organisations default to Lean; existing organisations migrated to Enterprise.
 - **Decision Center** — A unified morning review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
 - **Favorites Sidebar** — Star and reorder boards, goals, tasks, wiki pages, and other items for quick access from the sidebar
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
@@ -203,7 +204,7 @@ If you want to start fresh (e.g., after a major project restructure, or during t
 
 ### Getting to the Stress Test
 
-- From any board, click **Stress Test** in the board navigation
+- From any board, click **Stress Test** in the board navigation *(Enterprise mode only)*
 - Or navigate directly to `/board/<board-id>/stress-test/`
 - The page links back to the **Pre-Mortem** feature — run Pre-Mortem first to identify failure scenarios before stress-testing your defences against them
 
@@ -329,8 +330,8 @@ You commit Branch A. The other branch is archived. Done.
 
 ### Getting to Shadow Board
 
-- From any board, open the **AI Tools** panel on the right side and click **Shadow Board**.
-- Or navigate directly to `/boards/<board-id>/shadow/`.
+- From any board, open the **AI Tools** panel on the right side and click **Shadow Board** *(Enterprise mode only)*
+- Or navigate directly to `/boards/<board-id>/shadow/` — you will be redirected to the Kanban view if your workspace is not on Enterprise mode
 - To promote a saved scenario, open the **What-If Analyzer** → click **Saved Scenarios** → click **Promote to Shadow Branch** next to any scenario.
 
 ### The Quantum Standup
@@ -428,8 +429,8 @@ The **Commitments dashboard** shows all protocols for a board at a glance — po
 
 ### Getting to Commitment Protocols
 
-- From any board, click the **Commitments** tab in the navigation bar at the top of the board
-- Or navigate directly to `/boards/<board-id>/commitments/`
+- From any board, click the **Commitments** tab in the navigation bar at the top of the board *(visible in Enterprise mode only — ask your Org Admin to upgrade the workspace preset if the tab is not shown)*
+- Or navigate directly to `/boards/<board-id>/commitments/` — if your workspace is not on Enterprise mode, you will be redirected to the Kanban view
 - A summary widget also appears on the **Triple Constraint Dashboard**
 - You can ask **Spectra** directly: *"What is the status of commitment #1?"*, *"Show me all at-risk commitments"*, or *"Place a bet of 5 tokens at 65% confidence on commitment #1"*
 
@@ -459,6 +460,7 @@ Every board in PrizmAI has four possible roles. Think of it like a set of keys t
 - **Strategic goals have their own protection.** Only Org Admins can create new Goals. Missions can be created by Org Admins or by the owner/creator of the parent Goal. Strategies can be created by Org Admins or by owners at the Mission level or above.
 - **Org Admin is assigned automatically on org creation.** When a user completes onboarding (AI-assisted or manual) or imports a board without an existing organisation, PrizmAI creates an organisation for them and grants Org Admin access. Workspace creators can also promote existing Members to Org Admin via the Member management page.
 - **Board settings and webhooks are restricted.** The board settings menu (Edit Board, Manage Members, Add Column, Manage Labels, Stakeholders, Webhooks) and all webhook management endpoints are only accessible to users with Owner or Org Admin access to that board. Members and Viewers cannot access these controls.
+- **Workspace Settings are restricted to Org Admins.** The Workspace Settings page (sidebar → profile menu → Workspace Settings) — where the global feature-tier preset is configured — is only accessible to users with the Org Admin role.
 - **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Org Admins, keeping financial data private from the wider team.
 - **Workspace data isolation is enforced.** Board dropdowns and linking actions (such as linking a board to a Strategy) are always scoped to boards the user can access — cross-workspace or cross-organisation board access is blocked at the server level.
 
@@ -499,6 +501,65 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 
 ---
 
+## Workspace Preset System
+
+> **In plain English:** PrizmAI can handle everything from a solo freelancer's task list to a multinational programme office — but showing every enterprise feature to a five-person startup is overwhelming. The Workspace Preset System solves this by letting an Org Admin choose a complexity tier, so new team members see exactly what they need and nothing they don't.
+
+### The three tiers
+
+| | Lean | Professional | Enterprise |
+|---|---|---|---|
+| **Best for** | Under 10 people | 10–50 people | 50+ people |
+| **Kanban Board** | ✅ | ✅ | ✅ |
+| **Calendar View** | ✅ | ✅ | ✅ |
+| **Spectra Chat (basic)** | ✅ | ✅ | ✅ |
+| **Column Distribution Chart** | ✅ | ✅ | ✅ |
+| **Gantt Chart** | — | ✅ | ✅ |
+| **Burndown & Sprint Forecasting** | — | ✅ | ✅ |
+| **Goals / Missions / Strategies** | — | ✅ | ✅ |
+| **AI Coach & Retrospectives** | — | ✅ | ✅ |
+| **Full Analytics (all 4 charts)** | — | ✅ | ✅ |
+| **Skill Gap Analysis** | — | ✅ | ✅ |
+| **Trigger-Based Automations** | — | ✅ | ✅ |
+| **Spectra Agentic Mode** | — | ✅ | ✅ |
+| **Shadow Board & What-If** | — | — | ✅ |
+| **Pre-Mortem & Stress Test** | — | — | ✅ |
+| **Commitment Protocols** | — | — | ✅ |
+| **Scope Autopsy & Exit Protocol** | — | — | ✅ |
+| **Budget & ROI Dashboard** | — | — | ✅ |
+| **Resource Optimization** | — | — | ✅ |
+| **Scheduled Automations** | — | — | ✅ |
+
+### How locked features look
+
+Locked features are never silently removed — they act as *passive upgrade advertisements* (the same pattern used by Linear, Notion, and Figma):
+
+- **Sidebar links** (Goals, Missions) — hidden entirely in Lean mode to keep navigation uncluttered
+- **Board view tabs** (Gantt, Commitments) — hidden in the tab bar; a direct URL redirect returns the user to the Kanban view with an info message
+- **Board panel tiles** (Shadow Board, Pre-Mortem, etc.) — visible as greyed-out locked tiles with a tooltip explaining which tier unlocks them
+- **Analytics charts** — the three advanced charts (Priority, User Workload, Lean Six Sigma) appear as blurred/greyed preview cards with a lock badge; the column-distribution chart always renders in full
+
+### Changing the workspace preset
+
+**Org Admins** can change the global preset from the sidebar → profile menu → **Workspace Settings**. The page shows the three tiers as selectable cards with a feature list for each.
+
+**Board Owners** can further restrict an individual board to a *lower* tier from the **Board Settings** section of the AI Tools panel on any board (the dropdown is only visible to board owners and Org Admins). The local override cannot exceed the global ceiling.
+
+### Spectra onboarding
+
+When an Org Admin creates their first board, Spectra automatically asks:
+
+> *"One more thing — how large is your team? I can set up the right feature level so your workspace feels just right from the start."*
+
+Three quick-reply options map the answer to a preset and save it immediately, with a plain-English confirmation of exactly which features were unlocked.
+
+### Defaults for existing vs new accounts
+
+- **New organisations** — default to **Lean** (promotes discovery; Spectra prompts on first board creation)
+- **Existing organisations** (created before this feature) — auto-migrated to **Enterprise** (no disruption to current users)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -516,7 +577,8 @@ cd PrizmAI
 
 # Create and activate a virtual environment
 python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+source venv/bin/activate       # Windows (Command Prompt): venv\Scripts\activate.bat
+                               # Windows (PowerShell):     venv\Scripts\Activate.ps1
 
 # Install dependencies
 pip install -r requirements.txt
