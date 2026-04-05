@@ -575,7 +575,7 @@ class ConversationFlowManager:
         if mode == 'awaiting_confirmation':
             return self._handle_awaiting_confirmation(user, board, message, state)
 
-        if mode in ('collecting_task', 'collecting_board', 'collecting_automation'):
+        if mode in ('collecting_task', 'collecting_board', 'collecting_automation', 'collecting_preset'):
             return self._handle_collecting(user, board, message, state)
 
         # FC-based collecting modes
@@ -1870,6 +1870,7 @@ class ConversationFlowManager:
                     'collecting_event': 'scheduling an event',
                     'collecting_retrospective': 'creating a retrospective',
                     'collecting_task_update': 'updating a task',
+                    'collecting_preset': 'setting up your workspace mode',
                 }.get(state.mode, 'something')
                 return (
                     f"I'm currently in the middle of **{flow_name}** for you. "
@@ -1880,6 +1881,8 @@ class ConversationFlowManager:
             return self._continue_task_flow(user, board, message, state)
         if state.mode == 'collecting_board':
             return self._continue_board_flow(user, board, message, state)
+        if state.mode == 'collecting_preset':
+            return self._continue_preset_flow(user, message, state)
         if state.mode == 'collecting_automation':
             # Distinguish template-based vs FC-based automation flows.
             # FC flow stores 'awaiting_board' or 'history'; template flow stores 'step'.
@@ -2198,8 +2201,6 @@ class ConversationFlowManager:
 
         result = action_service.create_board(user, create_data, is_demo_mode=is_demo)
 
-        state.reset()
-
         if result['success']:
             board_obj = result['board']
             url = result['url']
@@ -2217,18 +2218,113 @@ class ConversationFlowManager:
                     "personal workspace."
                 )
 
-            return (
+            success_msg = (
                 f"✅ **Board created successfully!**\n\n"
                 f"🗂️ **{board_obj.name}** is ready with columns: "
                 f"To Do → In Progress → Done.\n\n"
                 f"[Open board]({url}){env_note}"
             )
+
+            # Chain into preset selection if workspace preset was never manually configured
+            if not is_demo:
+                try:
+                    from kanban.preset_models import WorkspacePreset
+                    profile = getattr(user, 'profile', None)
+                    org = getattr(profile, 'organization', None) if profile else None
+                    if org:
+                        wp = WorkspacePreset.objects.filter(organization=org).first()
+                        # Only ask if preset is the auto-created default 'lean'
+                        # and user is an admin (can change it)
+                        if wp and wp.global_preset == 'lean' and getattr(profile, 'is_admin', False):
+                            state.mode = 'collecting_preset'
+                            state.pending_action = ''
+                            state.collected_data = {'board_id': board_obj.id}
+                            state.save()
+                            return (
+                                f"{success_msg}\n\n"
+                                "---\n\n"
+                                "🎛️ **One more thing** — how large is your team? "
+                                "I can set up the right feature level so your workspace "
+                                "feels just right from the start.\n\n"
+                                "• **Just me or a small team (under 10)**\n"
+                                "• **Growing team (10–50 people)**\n"
+                                "• **Large organisation (50+ people)**"
+                            )
+                except Exception:
+                    pass  # Don't block board creation on preset errors
+
+            state.reset()
+            return success_msg
         else:
+            state.reset()
             return (
                 f"Something went wrong while creating the board. Please try again, "
                 f"or create it manually.\n\n"
                 f"The error was: {result['error']}"
             )
+
+    # ── Preset selection after board creation ─────────────────────────
+
+    def _continue_preset_flow(self, user, message, state):
+        """
+        Handle the user's response to the team-size question.
+        Maps their answer to a workspace preset and saves it.
+        """
+        msg = message.lower().strip()
+
+        # Detect team-size intent from the response
+        preset = None
+        if any(kw in msg for kw in ['small', 'under 10', 'just me', 'solo', 'few', 'tiny', 'startup', 'lean']):
+            preset = 'lean'
+        elif any(kw in msg for kw in ['growing', '10-50', '10–50', 'medium', 'mid', 'professional', 'growth']):
+            preset = 'professional'
+        elif any(kw in msg for kw in ['large', '50+', '50 +', 'enterprise', 'big', 'org', 'heavyweight']):
+            preset = 'enterprise'
+        elif any(kw in msg for kw in ['skip', 'no', 'later', 'not now', 'cancel']):
+            state.reset()
+            return (
+                "No problem! Your workspace is set to **Lean** mode by default. "
+                "You can change it anytime in **Workspace Settings** from the sidebar menu."
+            )
+
+        if preset is None:
+            return (
+                "I didn't quite catch that. How large is your team?\n\n"
+                "• **Just me or a small team (under 10)** → Lean mode\n"
+                "• **Growing team (10–50 people)** → Professional mode\n"
+                "• **Large organisation (50+ people)** → Enterprise mode\n\n"
+                "You can also say **skip** to keep the default."
+            )
+
+        # Apply the preset
+        try:
+            from kanban.preset_models import WorkspacePreset, PRESET_CHOICES
+            profile = getattr(user, 'profile', None)
+            org = getattr(profile, 'organization', None) if profile else None
+            if org:
+                wp, _ = WorkspacePreset.objects.get_or_create(organization=org)
+                wp.global_preset = preset
+                wp.save()
+        except Exception:
+            state.reset()
+            return (
+                "I had trouble saving that setting, but no worries — "
+                "you can set it manually in **Workspace Settings** from the sidebar menu."
+            )
+
+        preset_label = dict(PRESET_CHOICES).get(preset, preset.title())
+        state.reset()
+
+        feature_summary = {
+            'lean': 'a clean Kanban board, Calendar, Spectra chat, and basic analytics',
+            'professional': 'Gantt Charts, AI Retrospectives, Goals & Missions, full Analytics, and trigger-based Automations',
+            'enterprise': 'everything — Shadow Board, What-If Simulator, Pre-Mortem, Stress Test, Commitment Protocols, and more',
+        }
+        return (
+            f"Got it — I've set your workspace to **{preset_label}** mode. "
+            f"You now have {feature_summary.get(preset, 'all features')} unlocked.\n\n"
+            "You can always change this later in **Workspace Settings** from the sidebar menu. 🎉"
+        )
 
     # ── Execute: Automation ───────────────────────────────────────────
 

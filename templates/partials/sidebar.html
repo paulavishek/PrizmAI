@@ -24,11 +24,58 @@
                 <i class="fas fa-briefcase"></i>
                 {% endif %}
             </span>
-            <span class="sidebar-label sidebar-ws-name">
+            <span class="sidebar-label sidebar-ws-name" id="wsNameLabel">
                 {% if active_workspace %}{{ active_workspace.name|truncatechars:22 }}{% else %}Select Workspace{% endif %}
             </span>
+            {% if can_rename_workspace and active_workspace and not active_workspace.is_demo %}
+            <i class="fas fa-pencil-alt sidebar-label sidebar-ws-edit" id="wsRenameBtn"
+               style="font-size:.55rem; color:var(--text-secondary,#9ca3af); cursor:pointer; margin-left:4px; opacity:.6;"
+               title="Rename workspace"
+               onclick="event.stopPropagation(); document.getElementById('wsRenameInput').classList.remove('d-none'); document.getElementById('wsRenameInput').querySelector('input').focus();"></i>
+            {% endif %}
             <i class="fas fa-chevron-down sidebar-ws-arrow sidebar-label"></i>
         </button>
+        {% if can_rename_workspace and active_workspace and not active_workspace.is_demo %}
+        <div class="d-none px-2 py-1" id="wsRenameInput" style="background:var(--sidebar-bg,#1e1b2e);">
+            <form id="wsRenameForm" class="d-flex gap-1 align-items-center">
+                {% csrf_token %}
+                <input type="text" name="name" class="form-control form-control-sm"
+                       value="{{ active_workspace.name }}"
+                       maxlength="60"
+                       style="font-size:.78rem; background:var(--card-bg,#fff); border-radius:4px;">
+                <button type="submit" class="btn btn-sm btn-primary" style="font-size:.7rem; padding:2px 8px;">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem; padding:2px 8px;"
+                        onclick="document.getElementById('wsRenameInput').classList.add('d-none');">
+                    <i class="fas fa-times"></i>
+                </button>
+            </form>
+            <script>
+            document.getElementById('wsRenameForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                var form = this;
+                var nameInput = form.querySelector('input[name=name]');
+                var fd = new FormData();
+                fd.append('name', nameInput.value);
+                fd.append('csrfmiddlewaretoken', form.querySelector('[name=csrfmiddlewaretoken]').value);
+                fetch('{% url "rename_workspace" %}', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.ok) {
+                        document.getElementById('wsNameLabel').textContent = data.name.length > 22 ? data.name.substring(0, 19) + '…' : data.name;
+                        document.getElementById('wsRenameInput').classList.add('d-none');
+                    } else {
+                        alert(data.error || 'Error renaming workspace');
+                    }
+                }).catch(function() { alert('Network error'); });
+            });
+            </script>
+        </div>
+        {% endif %}
         <div class="sidebar-ws-dropdown" id="wsDropdownMenu" style="display:none;">
             <div class="sidebar-ws-dropdown-header">
                 <small class="text-muted fw-semibold text-uppercase" style="font-size:0.65rem;letter-spacing:0.5px;">Your Workspaces</small>
@@ -70,6 +117,7 @@
                     <span class="sidebar-label">Dashboard</span>
                 </a>
             </li>
+            {% if features.show_goals_nav %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'goal_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'goal_list' %}active{% endif %}"
@@ -78,6 +126,8 @@
                     <span class="sidebar-label">Goals</span>
                 </a>
             </li>
+            {% endif %}
+            {% if features.show_missions_nav %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'mission_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'mission_list' %}active{% endif %}"
@@ -86,6 +136,7 @@
                     <span class="sidebar-label">Missions</span>
                 </a>
             </li>
+            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'board_list' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
@@ -236,6 +287,7 @@
                     {% if user.profile.is_admin %}
                     <li><a class="dropdown-item" href="{% url 'organization_members' %}"><i class="fas fa-building me-2"></i>Organization</a></li>
                     <li><a class="dropdown-item" href="{% url 'manage_roles' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    <li><a class="dropdown-item" href="{% url 'workspace_preset_settings' %}"><i class="fas fa-sliders-h me-2"></i>Workspace Settings</a></li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}"><i class="fas fa-robot me-2"></i>AI Usage</a></li>

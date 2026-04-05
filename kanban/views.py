@@ -1514,10 +1514,11 @@ def rename_workspace(request):
             return JsonResponse({'error': 'Cannot rename this workspace'}, status=400)
         return redirect('dashboard')
 
-    # Only org creator can rename
-    if ws.organization and ws.organization.created_by_id != request.user.id:
+    # Only org admin can rename
+    from kanban.permissions import is_user_org_admin
+    if not is_user_org_admin(request.user):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': 'Only the workspace creator can rename it'}, status=403)
+            return JsonResponse({'error': 'Only org admins can rename workspaces'}, status=403)
         return redirect('dashboard')
 
     import re
@@ -1531,6 +1532,11 @@ def rename_workspace(request):
 
     ws.name = new_name
     ws.save(update_fields=['name'])
+
+    # Keep organization name in sync
+    if ws.organization:
+        ws.organization.name = new_name[:100]
+        ws.organization.save(update_fields=['name'])
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'ok': True, 'name': ws.name})
@@ -2155,6 +2161,24 @@ def board_detail(request, board_id):
         .order_by('first_name', 'username')
     )
 
+    # Board preset context for board-level mode dropdown
+    board_preset_local = None
+    board_preset_global = 'lean'
+    board_preset_effective = 'lean'
+    try:
+        from kanban.preset_models import BoardPreset, PRESET_CHOICES as _BP_CHOICES, PRESET_ORDER as _BP_ORDER
+        bp_obj = BoardPreset.objects.select_related('board__organization__workspace_preset').get(board=board)
+        board_preset_local = bp_obj.local_preset  # None means "inherit"
+        board_preset_effective = bp_obj.effective_preset()
+        try:
+            if board.organization:
+                board_preset_global = board.organization.workspace_preset.global_preset
+        except Exception:
+            pass
+    except BoardPreset.DoesNotExist:
+        _BP_CHOICES = []
+        _BP_ORDER = ['lean', 'professional', 'enterprise']
+
     # Exit Protocol: inject hospice banner context
     hospice_risk_score = 0
     hospice_dismissed = False
@@ -2201,6 +2225,9 @@ def board_detail(request, board_id):
         'hospice_dismissed': hospice_dismissed,
         'hospice_session': hospice_session,
         'is_favorited': _is_fav(request.user, 'board', board.pk),
+        'board_preset_local': board_preset_local,
+        'board_preset_global': board_preset_global,
+        'board_preset_effective': board_preset_effective,
     })
 
 def task_detail(request, task_id):
@@ -3033,6 +3060,17 @@ def gantt_chart(request, board_id):
     if not request.user.is_authenticated:
         from django.contrib.auth.views import redirect_to_login
         return redirect_to_login(request.get_full_path())
+    
+    # Preset guard: Gantt requires Professional+
+    from kanban.preset_models import BoardPreset, build_feature_flags
+    try:
+        bp = BoardPreset.objects.get(board=board)
+        flags = build_feature_flags(bp.effective_preset())
+    except BoardPreset.DoesNotExist:
+        flags = build_feature_flags('lean')
+    if not flags.get('show_gantt'):
+        messages.info(request, "Gantt Chart is available in Professional mode. Upgrade your workspace to unlock it.")
+        return redirect('board_detail', board_id=board.id)
     
     # All restrictions removed - all authenticated users can view Gantt chart
     # RBAC: check view permission on the board
@@ -5721,3 +5759,103 @@ def task_update_fields(request, task_id):
             description='; '.join(changes),
         )
     return JsonResponse({'success': True, 'card': _card_json(task)})
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workspace Preset Settings
+# ═══════════════════════════════════════════════════════════════════════════
+
+@login_required
+def workspace_preset_settings(request):
+    """
+    GET  → render current workspace preset with radio buttons
+    POST → update the global preset (Org Admin only)
+    """
+    from kanban.preset_models import WorkspacePreset, PRESET_CHOICES, PRESET_ORDER
+    profile = request.user.profile
+    org = profile.organization
+
+    if org is None:
+        messages.warning(request, "You don't belong to an organization yet.")
+        return redirect('dashboard')
+
+    from kanban.permissions import is_user_org_admin
+    if not is_user_org_admin(request.user):
+        messages.error(request, "Only organization admins can change workspace settings.")
+        return redirect('dashboard')
+
+    preset_obj, _created = WorkspacePreset.objects.get_or_create(
+        organization=org,
+        defaults={'global_preset': 'lean'},
+    )
+
+    if request.method == 'POST':
+        new_preset = request.POST.get('global_preset', '').strip()
+        if new_preset in PRESET_ORDER:
+            preset_obj.global_preset = new_preset
+            preset_obj.save()
+            messages.success(
+                request,
+                f"Workspace mode updated to {dict(PRESET_CHOICES).get(new_preset, new_preset)}."
+            )
+        else:
+            messages.error(request, "Invalid preset selection.")
+        return redirect('workspace_preset_settings')
+
+    context = {
+        'preset_obj': preset_obj,
+        'preset_choices': PRESET_CHOICES,
+        'current_preset': preset_obj.global_preset,
+    }
+    return render(request, 'kanban/workspace_preset_settings.html', context)
+
+
+@login_required
+@require_POST
+def board_preset_update(request, board_id):
+    """
+    AJAX POST — update the local preset for a specific board.
+    Only Board Owners and Org Admins may do this.
+    The local preset cannot exceed the global ceiling.
+    """
+    from kanban.preset_models import BoardPreset, WorkspacePreset, PRESET_ORDER
+    board = get_object_or_404(Board, id=board_id)
+
+    # Permission check — use canonical helper that checks OrgAdmin group,
+    # org.created_by, AND profile.is_admin
+    from kanban.permissions import is_user_org_admin
+    is_owner = board.owner == request.user
+    if not is_owner and not is_user_org_admin(request.user):
+        return JsonResponse({'error': 'Permission denied. Only board owners and org admins can change this.'}, status=403)
+
+    new_preset = request.POST.get('local_preset', '').strip()
+
+    # Allow clearing (inherit global) by sending empty or 'inherit'
+    if new_preset in ('', 'inherit'):
+        bp, _ = BoardPreset.objects.get_or_create(board=board)
+        bp.local_preset = None
+        bp.save()
+        return JsonResponse({'success': True, 'effective': bp.effective_preset()})
+
+    if new_preset not in PRESET_ORDER:
+        return JsonResponse({'error': 'Invalid preset.'}, status=400)
+
+    # Enforce ceiling: local cannot exceed global
+    global_preset = 'lean'
+    try:
+        if board.organization:
+            global_preset = board.organization.workspace_preset.global_preset
+    except WorkspacePreset.DoesNotExist:
+        pass
+
+    global_idx = PRESET_ORDER.index(global_preset)
+    local_idx = PRESET_ORDER.index(new_preset)
+    if local_idx > global_idx:
+        return JsonResponse({
+            'error': f'Cannot set board to {new_preset}. Your organization is limited to {global_preset}.'
+        }, status=400)
+
+    bp, _ = BoardPreset.objects.get_or_create(board=board)
+    bp.local_preset = new_preset
+    bp.save()
+    return JsonResponse({'success': True, 'effective': bp.effective_preset()})

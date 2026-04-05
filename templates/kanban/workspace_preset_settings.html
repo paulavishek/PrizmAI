@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Workspace Settings — PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preset-card {
+        border: 2px solid var(--border-color, #dee2e6);
+        border-radius: 12px;
+        padding: 24px;
+        cursor: pointer;
+        transition: border-color .2s ease, box-shadow .2s ease;
+        position: relative;
+    }
+    .preset-card:hover {
+        border-color: var(--link-color, #0d6efd);
+    }
+    .preset-card.active {
+        border-color: #5046e5;
+        box-shadow: 0 0 0 3px rgba(80, 70, 229, .15);
+    }
+    .preset-card .preset-radio {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+    }
+    .preset-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: .75rem;
+        font-weight: 600;
+    }
+    .preset-badge-lean    { background: #dbeafe; color: #1e40af; }
+    .preset-badge-professional { background: #fef3c7; color: #92400e; }
+    .preset-badge-enterprise   { background: #ede9fe; color: #5b21b6; }
+    .feature-list {
+        list-style: none;
+        padding: 0;
+        margin: 12px 0 0;
+    }
+    .feature-list li {
+        padding: 3px 0;
+        font-size: .875rem;
+        color: var(--text-secondary, #6b7280);
+    }
+    .feature-list li i { width: 18px; text-align: center; margin-right: 6px; }
+    .feature-list li.included i { color: #16a34a; }
+    .feature-list li.locked i   { color: #9ca3af; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex align-items-center mb-4">
+        <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary me-3">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-sliders-h me-2" style="color:#5046e5;"></i>Workspace Settings</h4>
+            <small class="text-muted">Choose the default feature level for your organization</small>
+        </div>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="row g-3 mb-4">
+            {% for value, label in preset_choices %}
+            <div class="col-12">
+                <label class="preset-card d-block {% if current_preset == value %}active{% endif %}" 
+                       id="preset-card-{{ value }}">
+                    <input type="radio" name="global_preset" value="{{ value }}" 
+                           class="form-check-input preset-radio"
+                           {% if current_preset == value %}checked{% endif %}
+                           onchange="document.querySelectorAll('.preset-card').forEach(c=>c.classList.remove('active')); this.closest('.preset-card').classList.add('active');">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="preset-badge preset-badge-{{ value }} me-2">{{ label }}</span>
+                        {% if value == 'lean' %}
+                        <small class="text-muted">Best for teams under 10 people</small>
+                        {% elif value == 'professional' %}
+                        <small class="text-muted">Best for teams of 10–50 people</small>
+                        {% else %}
+                        <small class="text-muted">Full PrizmAI — large organizations</small>
+                        {% endif %}
+                    </div>
+                    <ul class="feature-list">
+                        {% if value == 'lean' %}
+                        <li class="included"><i class="fas fa-check"></i> Visual Kanban Board</li>
+                        <li class="included"><i class="fas fa-check"></i> Calendar View</li>
+                        <li class="included"><i class="fas fa-check"></i> Spectra Q&A (basic chat)</li>
+                        <li class="included"><i class="fas fa-check"></i> Basic Analytics (column distribution)</li>
+                        <li class="included"><i class="fas fa-check"></i> Simple Task Creation</li>
+                        <li class="locked"><i class="fas fa-lock"></i> Goal / Mission / Strategy hierarchy</li>
+                        <li class="locked"><i class="fas fa-lock"></i> Gantt Chart, Burndown, AI Coach</li>
+                        {% elif value == 'professional' %}
+                        <li class="included"><i class="fas fa-check"></i> Everything in Lean, plus:</li>
+                        <li class="included"><i class="fas fa-check"></i> Gantt Chart & Burndown Charts</li>
+                        <li class="included"><i class="fas fa-check"></i> Goal / Mission / Strategy hierarchy</li>
+                        <li class="included"><i class="fas fa-check"></i> AI Coach & Retrospectives</li>
+                        <li class="included"><i class="fas fa-check"></i> Full Analytics & Skill Gap Analysis</li>
+                        <li class="included"><i class="fas fa-check"></i> Automations (trigger-based)</li>
+                        <li class="locked"><i class="fas fa-lock"></i> Shadow Board, Stress Test, What-If</li>
+                        {% else %}
+                        <li class="included"><i class="fas fa-check"></i> Everything — no features hidden</li>
+                        <li class="included"><i class="fas fa-check"></i> Shadow Board & What-If Simulator</li>
+                        <li class="included"><i class="fas fa-check"></i> Pre-Mortem & Stress Test</li>
+                        <li class="included"><i class="fas fa-check"></i> Budget & ROI Dashboard</li>
+                        <li class="included"><i class="fas fa-check"></i> Exit Protocol & Scope Autopsy</li>
+                        <li class="included"><i class="fas fa-check"></i> Resource Optimization</li>
+                        <li class="included"><i class="fas fa-check"></i> Scheduled Automations</li>
+                        {% endif %}
+                    </ul>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="alert alert-secondary py-2 mb-4">
+            <small>
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>Note:</strong> Board Owners can restrict individual boards to a simpler mode, 
+                but cannot unlock features beyond what you set here.
+            </small>
+        </div>
+
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i> Save Settings
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

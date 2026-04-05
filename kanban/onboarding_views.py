@@ -49,6 +49,7 @@ def _can_create_workspace(user):
 
     Rules:
     - Users without an organization can always create (first-time setup).
+    - Demo-exploring users can create (they need to escape the demo).
     - Only the organization creator can create additional workspaces.
     - All other org members (admins, members) are blocked.
     """
@@ -58,6 +59,10 @@ def _can_create_workspace(user):
     org = profile.organization
     if not org:
         return True  # No org yet — first-time user
+    # Demo-exploring users should always be able to create their own workspace
+    if (getattr(profile, 'is_viewing_demo', False)
+            and profile.onboarding_status in ('demo_exploring', 'pending')):
+        return True
     return org.created_by_id == user.id
 
 
@@ -510,6 +515,11 @@ def onboarding_invite(request):
         if new_name and new_name != org.name:
             org.name = new_name[:100]
             org.save(update_fields=['name'])
+            # Keep the active workspace name in sync
+            from kanban.models import Workspace
+            Workspace.objects.filter(
+                organization=org, is_demo=False,
+            ).update(name=new_name[:200])
 
         if action == 'skip':
             return redirect('dashboard')
