@@ -524,16 +524,19 @@
     }
     /* Locked / greyed-out preset tiles */
     .ai-panel-tile.ai-tool-locked {
-        opacity: 0.40;
+        opacity: 0.38;
         cursor: not-allowed;
         position: relative;
+        filter: grayscale(40%);
     }
     .ai-panel-tile.ai-tool-locked:hover {
         background: transparent;
     }
     .ai-panel-tile .lock-badge {
-        font-size: .55rem;
-        color: var(--text-secondary);
+        font-size: .6rem;
+        color: #9ca3af;
+        margin-left: 2px;
+        vertical-align: middle;
     }
     .ai-panel-grid {
         display: grid;
@@ -628,6 +631,18 @@
             <i class="fas fa-exclamation-triangle me-1"></i>{{ active_scope_alerts|length }} alert{{ active_scope_alerts|length|pluralize }}
         </button>
         {% endif %}
+        {% if board.organization and not is_demo_board %}
+        <span class="badge border text-decoration-none preset-mode-badge"
+              id="presetBadge"
+              style="cursor:pointer; font-size:.7rem; font-weight:600; padding:4px 10px;
+                     {% if board_preset_effective == 'enterprise' %}background:#ede9fe; color:#6d28d9; border-color:#c4b5fd !important;
+                     {% elif board_preset_effective == 'professional' %}background:#dbeafe; color:#1d4ed8; border-color:#93c5fd !important;
+                     {% else %}background:#f0fdf4; color:#15803d; border-color:#86efac !important;{% endif %}"
+              data-bs-toggle="modal" data-bs-target="#boardModeModal"
+              title="Click to change workspace mode">
+            <i class="fas fa-layer-group me-1" style="font-size:.6rem;"></i>{{ board_preset_effective|default:"lean"|title }}
+        </span>
+        {% endif %}
     </div>
 
     <!-- -- Right: compact toolbar -- -->
@@ -668,6 +683,21 @@
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
                 {% endif %}
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
+                {% if board.organization and not is_demo_board %}
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardModeModal">
+                        <i class="fas fa-layer-group me-2 text-secondary"></i>Workspace Mode
+                        <span class="badge ms-2"
+                              style="font-size:.65rem;
+                                     {% if board_preset_effective == 'enterprise' %}background:#ede9fe; color:#6d28d9;
+                                     {% elif board_preset_effective == 'professional' %}background:#dbeafe; color:#1d4ed8;
+                                     {% else %}background:#f0fdf4; color:#15803d;{% endif %}">
+                            {{ board_preset_effective|default:"lean"|title }}
+                        </span>
+                    </a>
+                </li>
+                {% endif %}
                 {% if can_delete_board %}
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal"><i class="fas fa-trash-alt me-2"></i>Delete Board</a></li>
@@ -2173,35 +2203,6 @@
                 <span><i class="fas fa-cog me-1"></i> Board Settings</span>
             </div>
 
-            {# ── Board Mode Selector (visible to board owner / org admin, hidden in demo) ── #}
-            {% if can_edit_board and board.organization and not is_demo_board %}
-            <div class="px-3 pb-2">
-                <label class="form-label mb-1" style="font-size:.75rem; font-weight:600; color:var(--text-secondary,#6b7280);">
-                    <i class="fas fa-sliders-h me-1"></i> Board Mode
-                </label>
-                <select id="boardPresetSelect" class="form-select form-select-sm">
-                    <option value="inherit" {% if not board_preset_local %}selected{% endif %}>
-                        Inherit from workspace ({{ board_preset_global|title }})
-                    </option>
-                    <option value="lean"
-                        {% if board_preset_local == 'lean' %}selected{% endif %}>
-                        Lean / Startup
-                    </option>
-                    <option value="professional"
-                        {% if board_preset_local == 'professional' %}selected{% endif %}
-                        {% if board_preset_global == 'lean' %}disabled title="Exceeds workspace ceiling"{% endif %}>
-                        Professional / Growth
-                    </option>
-                    <option value="enterprise"
-                        {% if board_preset_local == 'enterprise' %}selected{% endif %}
-                        {% if board_preset_global != 'enterprise' %}disabled title="Exceeds workspace ceiling"{% endif %}>
-                        Enterprise / Heavyweight
-                    </option>
-                </select>
-                <div id="boardPresetStatus" class="mt-1" style="font-size:.7rem; color:var(--text-secondary,#9ca3af);"></div>
-            </div>
-            {% endif %}
-
             <div class="ai-panel-grid">
                 {% if features.show_automations %}
                 <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}" title="Configure automated workflows and rules">
@@ -2387,6 +2388,62 @@ function openResourceOptimization() {
     // Load data when modal opens
     loadResourceOptimization();
 }
+</script>
+
+{# ── Board Mode Modal ── #}
+{% if board.organization and not is_demo_board %}
+<div class="modal fade" id="boardModeModal" tabindex="-1" aria-labelledby="boardModeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="boardModeModalLabel">
+                    <i class="fas fa-layer-group me-1 text-secondary"></i> Workspace Mode
+                </h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted mb-2" style="font-size:.78rem;">
+                    Choose a mode for this board. Modes above the workspace ceiling are disabled.
+                </p>
+                <select id="boardPresetSelect" class="form-select form-select-sm" {% if not can_edit_board %}disabled{% endif %}>
+                    <option value="inherit" {% if not board_preset_local %}selected{% endif %}>
+                        Inherit from workspace ({{ board_preset_global|title }})
+                    </option>
+                    <option value="lean"
+                        {% if board_preset_local == 'lean' %}selected{% endif %}>
+                        Lean / Startup
+                    </option>
+                    <option value="professional"
+                        {% if board_preset_local == 'professional' %}selected{% endif %}
+                        {% if board_preset_global == 'lean' %}disabled title="Exceeds workspace ceiling"{% endif %}>
+                        Professional / Growth
+                    </option>
+                    <option value="enterprise"
+                        {% if board_preset_local == 'enterprise' %}selected{% endif %}
+                        {% if board_preset_global != 'enterprise' %}disabled title="Exceeds workspace ceiling"{% endif %}>
+                        Enterprise / Heavyweight
+                    </option>
+                </select>
+                <div id="boardPresetStatus" class="mt-1" style="font-size:.7rem; color:var(--text-secondary,#9ca3af);"></div>
+                {% if not can_edit_board %}
+                <p class="text-danger mt-2 mb-0" style="font-size:.72rem;">
+                    <i class="fas fa-info-circle me-1"></i> Only board owners and org admins can change this.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Initialize Bootstrap 5 tooltips for locked tiles ── #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function(el) {
+        new bootstrap.Tooltip(el, { trigger: 'hover', placement: 'top' });
+    });
+});
 </script>
 
 {% endblock content %}

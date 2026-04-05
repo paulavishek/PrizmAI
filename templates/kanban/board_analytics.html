@@ -307,12 +307,13 @@
         </div>
         {% else %}
         <div class="card shadow mb-4 position-relative" style="overflow:hidden;">
-            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-muted">Tasks by Priority</h6></div>
-            <div class="card-body" style="filter:blur(6px) grayscale(70%); pointer-events:none; user-select:none;">
-                <div class="chart-container" style="position: relative; height: 300px;">
-                    <div style="display:flex; justify-content:center; align-items:center; height:100%; color:#ccc;">
-                        <i class="fas fa-chart-pie fa-4x"></i>
-                    </div>
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Tasks by Priority</h6></div>
+            <div class="card-body" style="pointer-events:none; user-select:none; opacity:.15;">
+                <div class="chart-container" style="position: relative; height: 300px; display:flex; justify-content:center; align-items:center;">
+                    <svg viewBox="0 0 200 200" width="200" height="200">
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="#6366f1" stroke-width="30" stroke-dasharray="100 25 60 25 70 25" />
+                        <circle cx="100" cy="100" r="50" fill="var(--card-bg,#fff)" />
+                    </svg>
                 </div>
             </div>
             <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; background:rgba(255,255,255,.15);">
@@ -333,12 +334,15 @@
         </div>
         {% else %}
         <div class="card shadow mb-4 position-relative" style="overflow:hidden;">
-            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-muted">User Workload</h6></div>
-            <div class="card-body" style="filter:blur(6px) grayscale(70%); pointer-events:none; user-select:none;">
-                <div class="chart-container" style="position: relative; height: 300px;">
-                    <div style="display:flex; justify-content:center; align-items:center; height:100%; color:#ccc;">
-                        <i class="fas fa-chart-bar fa-4x"></i>
-                    </div>
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">User Workload</h6></div>
+            <div class="card-body" style="pointer-events:none; user-select:none; opacity:.15;">
+                <div class="chart-container" style="position: relative; height: 300px; display:flex; align-items:flex-end; justify-content:center; gap:18px; padding-bottom:20px;">
+                    <div style="width:36px; height:55%; background:#3b82f6; border-radius:4px 4px 0 0;"></div>
+                    <div style="width:36px; height:80%; background:#3b82f6; border-radius:4px 4px 0 0;"></div>
+                    <div style="width:36px; height:40%; background:#3b82f6; border-radius:4px 4px 0 0;"></div>
+                    <div style="width:36px; height:65%; background:#3b82f6; border-radius:4px 4px 0 0;"></div>
+                    <div style="width:36px; height:90%; background:#3b82f6; border-radius:4px 4px 0 0;"></div>
+                    <div style="width:36px; height:30%; background:#3b82f6; border-radius:4px 4px 0 0;"></div>
                 </div>
             </div>
             <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; background:rgba(255,255,255,.15);">
@@ -375,12 +379,13 @@
         </div>
         {% else %}
         <div class="card shadow mb-4 position-relative" style="overflow:hidden;">
-            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-muted">Lean Six Sigma Analysis</h6></div>
-            <div class="card-body" style="filter:blur(6px) grayscale(70%); pointer-events:none; user-select:none;">
-                <div class="chart-container" style="position: relative; height: 300px;">
-                    <div style="display:flex; justify-content:center; align-items:center; height:100%; color:#ccc;">
-                        <i class="fas fa-chart-pie fa-4x"></i>
-                    </div>
+            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Lean Six Sigma Analysis</h6></div>
+            <div class="card-body" style="pointer-events:none; user-select:none; opacity:.15;">
+                <div class="chart-container" style="position: relative; height: 300px; display:flex; justify-content:center; align-items:center;">
+                    <svg viewBox="0 0 200 200" width="200" height="200">
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="#10b981" stroke-width="30" stroke-dasharray="80 20 120 30" />
+                        <circle cx="100" cy="100" r="50" fill="var(--card-bg,#fff)" />
+                    </svg>
                 </div>
             </div>
             <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; background:rgba(255,255,255,.15);">

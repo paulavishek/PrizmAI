@@ -1514,10 +1514,11 @@ def rename_workspace(request):
             return JsonResponse({'error': 'Cannot rename this workspace'}, status=400)
         return redirect('dashboard')
 
-    # Only org creator can rename
-    if ws.organization and ws.organization.created_by_id != request.user.id:
+    # Only org admin can rename
+    from kanban.permissions import is_user_org_admin
+    if not is_user_org_admin(request.user):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': 'Only the workspace creator can rename it'}, status=403)
+            return JsonResponse({'error': 'Only org admins can rename workspaces'}, status=403)
         return redirect('dashboard')
 
     import re
@@ -1531,6 +1532,11 @@ def rename_workspace(request):
 
     ws.name = new_name
     ws.save(update_fields=['name'])
+
+    # Keep organization name in sync
+    if ws.organization:
+        ws.organization.name = new_name[:100]
+        ws.organization.save(update_fields=['name'])
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'ok': True, 'name': ws.name})
