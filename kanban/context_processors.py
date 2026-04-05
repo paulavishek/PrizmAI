@@ -79,6 +79,9 @@ def demo_context(request):
                     context['can_setup_workspace'] = (
                         is_org_creator or is_demo_explorer_without_own_ws
                     )
+                    # Org admins can rename the active workspace
+                    from kanban.permissions import is_user_org_admin
+                    context['can_rename_workspace'] = is_user_org_admin(request.user)
                 else:
                     context['user_workspaces'] = []
                     context['real_workspaces'] = []
