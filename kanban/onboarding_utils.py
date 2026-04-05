@@ -103,8 +103,10 @@ def commit_onboarding_workspace(user, preview):
     with transaction.atomic():
         # ── Workspace ──────────────────────────────────────────────────
         goal_name = goal_data.get('name', 'My Organization Goal')[:200]
+        # Use the organization name (user-provided) rather than the AI goal name
+        ws_name = org.name or goal_name
         ws = Workspace.objects.create(
-            name=goal_name,
+            name=ws_name[:200],
             organization=org,
             created_by=user,
             is_demo=False,

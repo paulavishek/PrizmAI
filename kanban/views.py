@@ -5773,7 +5773,8 @@ def workspace_preset_settings(request):
         messages.warning(request, "You don't belong to an organization yet.")
         return redirect('dashboard')
 
-    if not profile.is_admin and org.created_by != request.user:
+    from kanban.permissions import is_user_org_admin
+    if not is_user_org_admin(request.user):
         messages.error(request, "Only organization admins can change workspace settings.")
         return redirect('dashboard')
 
@@ -5814,11 +5815,11 @@ def board_preset_update(request, board_id):
     from kanban.preset_models import BoardPreset, WorkspacePreset, PRESET_ORDER
     board = get_object_or_404(Board, id=board_id)
 
-    # Permission check
-    profile = request.user.profile
+    # Permission check — use canonical helper that checks OrgAdmin group,
+    # org.created_by, AND profile.is_admin
+    from kanban.permissions import is_user_org_admin
     is_owner = board.owner == request.user
-    is_org_admin = (profile.is_admin and profile.organization == board.organization)
-    if not is_owner and not is_org_admin:
+    if not is_owner and not is_user_org_admin(request.user):
         return JsonResponse({'error': 'Permission denied. Only board owners and org admins can change this.'}, status=403)
 
     new_preset = request.POST.get('local_preset', '').strip()

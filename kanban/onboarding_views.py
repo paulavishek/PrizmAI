@@ -515,6 +515,11 @@ def onboarding_invite(request):
         if new_name and new_name != org.name:
             org.name = new_name[:100]
             org.save(update_fields=['name'])
+            # Keep the active workspace name in sync
+            from kanban.models import Workspace
+            Workspace.objects.filter(
+                organization=org, is_demo=False,
+            ).update(name=new_name[:200])
 
         if action == 'skip':
             return redirect('dashboard')
