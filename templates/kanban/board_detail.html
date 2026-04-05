@@ -2318,36 +2318,40 @@
     loadPanelState();
 
     // ── Board Preset dropdown (AJAX) ──
-    var presetSel = document.getElementById('boardPresetSelect');
-    var presetStatus = document.getElementById('boardPresetStatus');
-    if (presetSel) {
-        presetSel.addEventListener('change', function() {
-            var val = presetSel.value;
-            presetStatus.textContent = 'Saving…';
-            presetStatus.style.color = 'var(--text-secondary,#9ca3af)';
-            var fd = new FormData();
-            fd.append('local_preset', val);
-            fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-            fetch('/boards/' + boardId + '/preset/', {
-                method: 'POST',
-                body: fd,
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            }).then(function(r) { return r.json(); })
-              .then(function(data) {
-                if (data.success) {
-                    presetStatus.textContent = 'Saved — reloading…';
-                    presetStatus.style.color = '#16a34a';
-                    setTimeout(function() { location.reload(); }, 600);
-                } else {
-                    presetStatus.textContent = data.error || 'Error saving preset.';
+    // Wrapped in DOMContentLoaded because the #boardModeModal HTML is
+    // rendered after this script block in the template.
+    document.addEventListener('DOMContentLoaded', function() {
+        var presetSel = document.getElementById('boardPresetSelect');
+        var presetStatus = document.getElementById('boardPresetStatus');
+        if (presetSel) {
+            presetSel.addEventListener('change', function() {
+                var val = presetSel.value;
+                presetStatus.textContent = 'Saving…';
+                presetStatus.style.color = 'var(--text-secondary,#9ca3af)';
+                var fd = new FormData();
+                fd.append('local_preset', val);
+                fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                fetch('/boards/' + boardId + '/preset/', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.success) {
+                        presetStatus.textContent = 'Saved — reloading…';
+                        presetStatus.style.color = '#16a34a';
+                        setTimeout(function() { location.reload(); }, 600);
+                    } else {
+                        presetStatus.textContent = data.error || 'Error saving preset.';
+                        presetStatus.style.color = '#dc2626';
+                    }
+                }).catch(function() {
+                    presetStatus.textContent = 'Network error.';
                     presetStatus.style.color = '#dc2626';
-                }
-            }).catch(function() {
-                presetStatus.textContent = 'Network error.';
-                presetStatus.style.color = '#dc2626';
+                });
             });
-        });
-    }
+        }
+    });
 })();
 </script>
 

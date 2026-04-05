@@ -172,7 +172,7 @@
                 <span class="tws-btn tws-btn-active tws-ws-display" id="ws-name-display" title="Current workspace">
                     <i class="fas fa-briefcase me-1"></i><span id="ws-name-text">{{ active_workspace.name|truncatechars:24 }}</span>
                 </span>
-                {% if active_workspace.organization and active_workspace.organization.created_by_id == user.id %}
+                {% if can_rename_workspace %}
                 <button type="button" class="tws-ws-edit-btn" id="ws-edit-btn" title="Rename workspace"
                         onclick="wsStartEdit()" style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 4px;font-size:0.72rem;margin-left:2px;">
                     <i class="fas fa-pencil-alt"></i>
