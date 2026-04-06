@@ -837,15 +837,15 @@ AUTHENTICATION_BACKENDS = (
 )
 
 # Axes Configuration
-AXES_FAILURE_LIMIT = 5  # Number of failed login attempts before lockout
-AXES_COOLOFF_TIME = 1  # Hours to wait before allowing login again after lockout
+AXES_FAILURE_LIMIT = 7  # Number of failed login attempts before lockout
+AXES_COOLOFF_TIME = 0.5  # Hours (30 min) to wait before allowing login again after lockout
 AXES_LOCK_OUT_AT_FAILURE = True  # Lock out after failure limit
-AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]  # Lock by username and IP (replaces deprecated AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP)
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]  # Lock by username+IP combination (prevents cross-IP DoS)
 AXES_RESET_ON_SUCCESS = True  # Reset failed attempts on successful login
 AXES_ENABLE_ADMIN = True  # Enable axes in admin
 AXES_VERBOSE = True  # Verbose logging
-AXES_LOCKOUT_TEMPLATE = None  # Use default lockout handling
-AXES_LOCKOUT_URL = None  # Redirect URL after lockout (None = stay on same page)
+AXES_LOCKOUT_TEMPLATE = 'accounts/lockout.html'  # Styled lockout page with recovery options
+AXES_LOCKOUT_URL = None  # Redirect URL after lockout (None = use template)
 
 # Use cache for tracking attempts (faster than database)
 AXES_CACHE = 'default'
