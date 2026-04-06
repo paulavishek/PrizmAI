@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Account Temporarily Locked - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Override base container for full-bleed auth background */
+    main.container {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .auth-bg {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #e8eaf6 0%, #e3f2fd 50%, #f3e5f5 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+    }
+    .auth-card {
+        width: 100%;
+        max-width: 460px;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(0,0,0,0.08);
+        padding: 2.75rem 2.75rem 2.25rem;
+    }
+    .auth-brand {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .auth-brand-logo {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #4338ca;
+        letter-spacing: -0.5px;
+        text-decoration: none;
+    }
+    .auth-brand-logo .z-accent {
+        color: #ef4444;
+        font-style: italic;
+    }
+    .lockout-icon {
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+    .lockout-icon svg {
+        width: 64px;
+        height: 64px;
+        color: #f59e0b;
+    }
+    .lockout-heading {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #111827;
+        text-align: center;
+        margin-bottom: 0.75rem;
+    }
+    .lockout-message {
+        text-align: center;
+        color: #6b7280;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        margin-bottom: 1.75rem;
+    }
+    .lockout-message strong {
+        color: #374151;
+    }
+    .lockout-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .lockout-btn-primary {
+        width: 100%;
+        padding: 0.72rem;
+        border-radius: 6px;
+        border: none;
+        background-color: #5046e5;
+        color: #fff;
+        font-weight: 500;
+        font-size: 1rem;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color 0.15s;
+        display: block;
+    }
+    .lockout-btn-primary:hover {
+        background-color: #4338ca;
+        color: #fff;
+        text-decoration: none;
+    }
+    .lockout-btn-secondary {
+        width: 100%;
+        padding: 0.72rem;
+        border-radius: 6px;
+        border: 1.5px solid #d1d5db;
+        background: #fff;
+        color: #374151;
+        font-weight: 500;
+        font-size: 1rem;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+        display: block;
+    }
+    .lockout-btn-secondary:hover {
+        border-color: #9ca3af;
+        background: #f9fafb;
+        color: #111827;
+        text-decoration: none;
+    }
+    .lockout-footer {
+        text-align: center;
+        margin-top: 1.4rem;
+        font-size: 0.85rem;
+        color: #9ca3af;
+    }
+</style>
+{% endblock %}
+
+{% block navbar_unauthenticated %}{% endblock %}
+{% block unauthenticated_messages %}{% endblock %}
+
+{% block content %}
+<div class="auth-bg">
+    <div class="auth-card">
+
+        <!-- Brand -->
+        <div class="auth-brand">
+            <a href="{% url 'login' %}" class="auth-brand-logo">
+                <img src="{% static 'kanban/images/logo.svg' %}" alt="PrizmAI logo" width="32" height="32" class="me-1" style="vertical-align:middle;">Pri<span class="z-accent">z</span>mAI
+            </a>
+        </div>
+
+        <!-- Lock icon -->
+        <div class="lockout-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+        </div>
+
+        <h1 class="lockout-heading">Account temporarily locked</h1>
+
+        <p class="lockout-message">
+            For your security, this account has been temporarily locked due to
+            multiple unsuccessful login attempts.<br><br>
+            Please wait <strong>approximately 1 hour</strong> before trying again,
+            or reset your password to regain access immediately.
+        </p>
+
+        <div class="lockout-actions">
+            <a href="{% url 'password_reset' %}" class="lockout-btn-primary">
+                Reset your password
+            </a>
+            <a href="{% url 'login' %}" class="lockout-btn-secondary">
+                Back to login
+            </a>
+        </div>
+
+        <p class="lockout-footer">
+            If you didn't make these attempts, consider resetting your password to secure your account.
+        </p>
+
+    </div>
+</div>
+{% endblock %}

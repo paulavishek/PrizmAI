@@ -111,6 +111,12 @@ class RegistrationForm(UserCreationForm):
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control'}),
         }
+        # Override default error messages to prevent username enumeration
+        error_messages = {
+            'username': {
+                'unique': "This username is not available.",
+            }
+        }
     
     def __init__(self, *args, **kwargs):
         # Remove organization param if passed (for backward compatibility)
@@ -135,7 +141,7 @@ class RegistrationForm(UserCreationForm):
         
         # Check for duplicate email
         if User.objects.filter(email=email).exists():
-            raise ValidationError("A user with this email already exists.")
+            raise ValidationError("This email address is not available for registration.")
         
         return email
     
