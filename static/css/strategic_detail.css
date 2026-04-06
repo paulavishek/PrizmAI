@@ -107,6 +107,8 @@
 .risk-pill.medium .pill-dot { background: #f59e0b; }
 .risk-pill.high   { background: #fee2e2; color: #7f1d1d; }
 .risk-pill.high .pill-dot   { background: #ef4444; }
+.risk-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+.risk-pill.not_assessed .pill-dot  { background: #94a3b8; }
 
 /* Responsive: sidebar under on small screens */
 @media (max-width: 991.98px) {

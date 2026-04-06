@@ -1074,13 +1074,15 @@
         }
 
         if (result.status === 'clear' || (!result.flags || result.flags.length === 0)) {
-            // Green — all clear
+            // Green — all clear → auto-create workspace
             validationPanel.innerHTML =
                 '<div class="validation-card green">' +
                     '<i class="bi bi-check-circle me-1"></i>' +
-                    '<strong>Everything looks coherent.</strong> Your workspace is ready to create.' +
+                    '<strong>Everything looks coherent.</strong> Creating your workspace…' +
                 '</div>';
-            showPostValidationCreate();
+            // Auto-submit: populate hidden field and submit the form
+            document.getElementById('editedDataFieldValidated').value = JSON.stringify(workspaceData);
+            document.getElementById('commitFormValidated').submit();
             return;
         }
 
