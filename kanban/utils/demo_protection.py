@@ -94,6 +94,97 @@ def get_user_boards(user):
     ).distinct()
 
 
+# ── Centralised mission / goal querysets ─────────────────────────────────────
+
+def get_user_missions(user):
+    """Return a Mission queryset scoped to the user's current workspace mode.
+
+    Mirrors the logic of ``get_user_boards()`` for the mission layer:
+
+    * **Demo mode**: only demo/seed missions, plus any linked to the user's
+      sandbox boards.
+    * **Workspace mode**: missions belonging to the active workspace.
+    * **Real mode fallback**: user-created or board-linked missions,
+      explicitly excluding demo data.
+    """
+    from kanban.models import Mission, Board  # late imports
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        user_board_ids = list(
+            get_user_boards(user).values_list('id', flat=True)
+        )
+        return Mission.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True) |
+            Q(strategies__boards__id__in=user_board_ids)
+        ).distinct()
+
+    if active_ws and not active_ws.is_demo:
+        return Mission.objects.filter(
+            workspace=active_ws,
+        ).distinct()
+
+    return Mission.objects.filter(
+        Q(created_by=user) |
+        Q(strategies__boards__id__in=list(
+            get_user_boards(user).values_list('id', flat=True)
+        )),
+        is_demo=False,
+        is_seed_demo_data=False,
+    ).distinct()
+
+
+def get_user_goals(user):
+    """Return an OrganizationGoal queryset scoped to the user's workspace mode.
+
+    * **Demo mode**: only demo/seed goals.
+    * **Workspace mode**: goals in the active workspace.
+    * **Real mode fallback**: user-created goals, excluding demo data.
+    """
+    from kanban.models import OrganizationGoal  # late import
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        return OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        ).distinct()
+
+    if active_ws and not active_ws.is_demo:
+        return OrganizationGoal.objects.filter(
+            workspace=active_ws,
+        ).distinct()
+
+    return OrganizationGoal.objects.filter(
+        Q(created_by=user) |
+        Q(missions__strategies__boards__memberships__user=user),
+        is_demo=False,
+        is_seed_demo_data=False,
+    ).distinct()
+
+
+def get_demo_workspace():
+    """Return the demo Workspace instance (or None).
+
+    Always resolves from the demo Organization — never depends on
+    ``profile.organization`` which may be the user's real org.
+    """
+    from accounts.models import Organization
+    from kanban.models import Workspace
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return None
+    return Workspace.objects.filter(
+        organization=demo_org, is_demo=True, is_active=True,
+    ).first()
+
+
 # ── Demo-object detection ────────────────────────────────────────────────────
 
 def _safe_fk(instance, attr_name):

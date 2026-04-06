@@ -304,8 +304,10 @@ def goal_detail(request, goal_id):
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')
 
-    # Missions not yet linked (for the link dropdown) — scoped to user's own missions
-    all_missions = Mission.objects.filter(created_by=request.user).exclude(organization_goal=goal).order_by('name')
+    # Missions not yet linked (for the link dropdown) — scoped to user's
+    # workspace to prevent cross-workspace leakage.
+    from kanban.utils.demo_protection import get_user_missions
+    all_missions = get_user_missions(request.user).exclude(organization_goal=goal).order_by('name')
 
     # --- Board IDs under this goal ---
     goal_board_ids = list(Board.objects.filter(

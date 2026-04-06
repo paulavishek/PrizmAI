@@ -776,23 +776,10 @@ class TaskFlowChatbotService:
             # Get user's boards (filtered by organization if available)
             # Exclude sandbox copies and official demo boards to prevent
             # demo data bleeding into the user's real workspace.
-            if organization:
-                user_boards = Board.objects.filter(
-                    Q(organization=organization) & 
-                    (Q(created_by=self.user) | Q(memberships__user=self.user)),
-                    is_sandbox_copy=False,
-                    is_official_demo_board=False,
-                ).exclude(
-                    created_by_session__startswith='spectra_demo_'
-                ).distinct()
-            else:
-                user_boards = Board.objects.filter(
-                    Q(created_by=self.user) | Q(memberships__user=self.user),
-                    is_sandbox_copy=False,
-                    is_official_demo_board=False,
-                ).exclude(
-                    created_by_session__startswith='spectra_demo_'
-                ).distinct()
+            # Use the centralized workspace-scoped helper to guarantee
+            # demo / real isolation.
+            from kanban.utils.demo_protection import get_user_boards
+            user_boards = get_user_boards(self.user)
             
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
@@ -1821,11 +1808,11 @@ class TaskFlowChatbotService:
         
         # ── Workspace-aware filtering ───────────────────────────────
         if self.is_demo_mode:
-            # Demo workspace: only official demo boards + boards the user
-            # created via Spectra while exploring demo mode.
+            # Demo workspace: user's sandbox copies (personal copies of demo
+            # boards), plus any boards created via Spectra while in demo.
             return Board.objects.filter(
                 base_filter & (
-                    Q(is_official_demo_board=True)
+                    Q(owner=self.user, is_sandbox_copy=True)
                     | Q(created_by_session=f'spectra_demo_{self.user.id}')
                 )
             ).distinct()
@@ -3438,17 +3425,11 @@ class TaskFlowChatbotService:
             mission_ids = set(Strategy.objects.filter(id__in=strategy_ids).values_list('mission_id', flat=True))
             goal_ids = set(Mission.objects.filter(id__in=mission_ids).exclude(organization_goal__isnull=True).values_list('organization_goal_id', flat=True))
 
-            # Also fetch goals created by this user or in their org
-            try:
-                org = self.user.profile.organization
-            except Exception:
-                org = None
-            if org:
-                org_goals = OrganizationGoal.objects.filter(organization=org)
-            else:
-                org_goals = OrganizationGoal.objects.filter(
-                    Q(id__in=goal_ids) | Q(created_by=self.user)
-                )
+            # Fetch goals scoped to the user's active workspace/demo mode
+            from kanban.utils.demo_protection import get_user_goals
+            org_goals = get_user_goals(self.user).filter(
+                Q(id__in=goal_ids) | Q(created_by=self.user)
+            ).distinct()
 
             if not org_goals.exists():
                 context += "No Organization Goals defined yet.\n"

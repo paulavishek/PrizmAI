@@ -90,12 +90,24 @@ def dashboard(request):
         # Also include boards the user created manually during demo
         # (these aren't sandbox copies but should still appear in stats)
         # Exclude imported boards — imports belong in My Workspace, not Demo.
-        user_created_boards = Board.objects.filter(
-            created_by=request.user,
-            is_sandbox_copy=False,
-            is_official_demo_board=False,
-            is_imported=False,
-        )
+        # IMPORTANT: scope to demo workspace to prevent real workspace boards leaking in.
+        from accounts.models import Organization as _Org
+        _demo_org = _Org.objects.filter(is_demo=True).first()
+        _demo_ws = None
+        if _demo_org:
+            _demo_ws = Workspace.objects.filter(
+                organization=_demo_org, is_demo=True, is_active=True,
+            ).first()
+        if _demo_ws:
+            user_created_boards = Board.objects.filter(
+                created_by=request.user,
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+                is_imported=False,
+                workspace=_demo_ws,
+            )
+        else:
+            user_created_boards = Board.objects.none()
         boards = (sandbox_boards | user_created_boards).distinct()
         if not sandbox_boards.exists():
             # Sandbox missing — auto-re-provision synchronously so the user
@@ -138,12 +150,9 @@ def dashboard(request):
                 except DemoSandbox.DoesNotExist:
                     pass
     elif active_ws and not active_ws.is_demo:
-        # Workspace-scoped: only boards in the active workspace
-        boards = Board.objects.filter(
-            workspace=active_ws,
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).distinct()
+        # Workspace-scoped: delegate to the centralized helper.
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -152,24 +161,11 @@ def dashboard(request):
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()
-    elif profile.onboarding_version >= 2:
-        # v2 real mode: only the user's own boards (no demo boards,
-        # no boards created during demo exploration via Spectra,
-        # no sandbox copies).
-        boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user),
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).exclude(
-            created_by_session__startswith='spectra_demo_'
-        ).distinct()
     else:
-        # v1 legacy: demo + user boards mixed
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # v2 and v1: delegate to the centralized helper that handles all
+        # demo/sandbox/spectra exclusion in one place.
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
     
     # Annotate task counts so the template can display them efficiently
     # (Task has no direct FK to Board — it goes through Column)
@@ -349,34 +345,14 @@ def dashboard(request):
     # or it is a demo mission.
     user_board_ids = list(boards.values_list('id', flat=True))
 
-    # Missions the user has direct ownership of or demo missions
-    if demo_mode:
-        # Single-tier demo: show official demo missions + any user-created missions
-        # (user may create new missions or link boards to strategies while exploring)
-        missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True) |
-            Q(created_by=request.user) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    elif profile.onboarding_version >= 2:
-        # v2 real mode: only user's own missions (exclude demo)
-        missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).filter(is_demo=False, is_seed_demo_data=False
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    else:
-        missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(is_demo=True) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
+    # Missions the user has direct ownership of or demo missions.
+    # Use the centralized helper for the base queryset, then add prefetches.
+    from kanban.utils.demo_protection import get_user_missions as _get_user_missions
+    missions_qs = _get_user_missions(request.user).select_related(
+        'organization_goal'
+    ).prefetch_related(
+        'strategies__boards'
+    ).order_by('-created_at')
 
     # Build mission tree as a plain list (for easy template iteration)
     # Each mission dict holds: mission obj + list of strategy dicts
@@ -1404,13 +1380,11 @@ def toggle_demo_mode(request):
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
 
-        # Resolve demo workspace for this org (if any)
+        # Resolve demo workspace from the demo org directly — do NOT
+        # use profile.organization which may be the user's real org.
         from kanban.models import Workspace
-        demo_ws = None
-        if profile.organization:
-            demo_ws = Workspace.objects.filter(
-                organization=profile.organization, is_demo=True, is_active=True,
-            ).first()
+        from kanban.utils.demo_protection import get_demo_workspace
+        demo_ws = get_demo_workspace()
 
         # Ensure the dashboard onboarding guard won't redirect away.
         # Users who joined via board invitation have status='pending'
@@ -1480,6 +1454,9 @@ def toggle_demo_mode(request):
         except DemoSandbox.DoesNotExist:
             pass
         _leave_demo_org(request.user)
+
+        # Re-read profile after _leave_demo_org restored the real org
+        profile.refresh_from_db()
 
         # Resolve the user's default real workspace
         from kanban.models import Workspace
@@ -1567,17 +1544,36 @@ def switch_workspace(request):
         return redirect('dashboard')
 
     profile = request.user.profile
-    org = profile.organization
-    if not org:
-        return redirect('dashboard')
 
+    # Look up the workspace without restricting to the current org —
+    # the user's org might be the demo org right now, and the target
+    # workspace is in their real org (or vice-versa).  We verify access
+    # by checking the workspace belongs to any org the user is associated
+    # with (their real org, or the demo org, or one they created).
     try:
         target_ws = Workspace.objects.get(
             pk=workspace_id,
-            organization=org,
             is_active=True,
         )
     except Workspace.DoesNotExist:
+        return redirect('dashboard')
+
+    # Security check: user must have a legitimate connection to this workspace
+    _allowed_org_ids = set()
+    if profile.organization_id:
+        _allowed_org_ids.add(profile.organization_id)
+    # Include orgs the user created (covers the case where profile.organization
+    # was temporarily switched to the demo org)
+    from accounts.models import Organization as _Org
+    _allowed_org_ids.update(
+        _Org.objects.filter(created_by=request.user).values_list('id', flat=True)
+    )
+    # Include the demo org so users can switch into demo
+    _demo_org = _Org.objects.filter(is_demo=True).values_list('id', flat=True).first()
+    if _demo_org:
+        _allowed_org_ids.add(_demo_org)
+
+    if target_ws.organization_id not in _allowed_org_ids:
         return redirect('dashboard')
 
     was_demo = profile.is_viewing_demo
@@ -1617,6 +1613,7 @@ def switch_workspace(request):
             except DemoSandbox.DoesNotExist:
                 pass
             _leave_demo_org(request.user)
+            profile.refresh_from_db()
 
         profile.is_viewing_demo = False
         profile.active_workspace = target_ws
