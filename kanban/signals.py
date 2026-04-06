@@ -1017,7 +1017,7 @@ def create_workspace_preset_for_org(sender, instance, created, **kwargs):
         from kanban.preset_models import WorkspacePreset
         WorkspacePreset.objects.get_or_create(
             organization=instance,
-            defaults={'global_preset': 'lean'},
+            defaults={'global_preset': 'professional'},
         )
 
 

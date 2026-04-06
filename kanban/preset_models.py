@@ -34,7 +34,7 @@ class WorkspacePreset(models.Model):
     global_preset = models.CharField(
         max_length=20,
         choices=PRESET_CHOICES,
-        default='lean',
+        default='professional',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

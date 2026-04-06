@@ -404,6 +404,7 @@ def dashboard(request):
                 )),
                 no_due_date_tasks=Count('id', filter=Q(due_date__isnull=True)),
                 high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
+                risk_assessed_tasks=Count('id', filter=Q(risk_level__isnull=False)),
             )
         )
         # Also get total + done for completion %
@@ -433,6 +434,7 @@ def dashboard(request):
                 'at_risk_tasks': row['at_risk_tasks'],
                 'no_due_date_tasks': row['no_due_date_tasks'],
                 'high_risk_tasks': row['high_risk_tasks'],
+                'risk_assessed_tasks': row['risk_assessed_tasks'],
             }
         # Boards with only completed tasks (no active) still need total/done
         for bid, comp in _completion_map.items():
@@ -446,6 +448,7 @@ def dashboard(request):
                     'at_risk_tasks': 0,
                     'no_due_date_tasks': 0,
                     'high_risk_tasks': 0,
+                    'risk_assessed_tasks': 0,
                 }
 
         if _cache_ttl > 0:
@@ -473,8 +476,11 @@ def dashboard(request):
             schedule_status = 'on_track'
 
         # Risk Level: based on high/critical risk tasks as fraction of active tasks
-        if denom == 0:
-            risk_level = 'low'
+        assessed = bstats.get('risk_assessed_tasks', 0)
+        if denom == 0 and bstats.get('total_tasks', 0) == 0:
+            risk_level = 'not_assessed'
+        elif assessed == 0:
+            risk_level = 'not_assessed'
         elif high_risk / denom >= _board_high_risk_thresh:
             risk_level = 'high'
         elif high_risk / denom >= _board_med_risk_thresh:
@@ -494,7 +500,8 @@ def dashboard(request):
         """Return worst risk level from a list."""
         if 'high' in levels: return 'high'
         if 'medium' in levels: return 'medium'
-        return 'low'
+        if 'low' in levels: return 'low'
+        return 'not_assessed'
 
     # ── Sandbox board mapping ────────────────────────────────────────
     # In demo mode, the mission tree references template boards (via
@@ -550,7 +557,7 @@ def dashboard(request):
             s_schedules = [b['schedule_status'] for b in board_list]
             s_risks = [b['risk_level'] for b in board_list]
             s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'on_track'
-            s_risk = _worst_risk(*s_risks) if s_risks else 'low'
+            s_risk = _worst_risk(*s_risks) if s_risks else 'not_assessed'
             s_health = 'green'
             if s_schedule == 'late' or s_risk == 'high': s_health = 'red'
             elif s_schedule == 'at_risk' or s_risk == 'medium': s_health = 'amber'
@@ -576,7 +583,7 @@ def dashboard(request):
         m_schedules = [s['schedule_status'] for s in strategy_list]
         m_risks = [s['risk_level'] for s in strategy_list]
         m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'on_track'
-        m_risk = _worst_risk(*m_risks) if m_risks else 'low'
+        m_risk = _worst_risk(*m_risks) if m_risks else 'not_assessed'
         m_health = 'green'
         if m_schedule == 'late' or m_risk == 'high': m_health = 'red'
         elif m_schedule == 'at_risk' or m_risk == 'medium': m_health = 'amber'
@@ -637,7 +644,7 @@ def dashboard(request):
         g_schedules = [m['schedule_status'] for m in goal_entry['missions']]
         g_risks = [m['risk_level'] for m in goal_entry['missions']]
         goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'on_track'
-        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'low'
+        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'not_assessed'
         goal_entry['total_tasks'] = sum(m['total_tasks'] for m in goal_entry['missions'])
         goal_entry['done_tasks'] = sum(m['done_tasks'] for m in goal_entry['missions'])
         goal_entry['completion_pct'] = (

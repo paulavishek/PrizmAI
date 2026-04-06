@@ -970,6 +970,8 @@
     .risk-pill.medium .pill-dot  { background: #f59e0b; }
     .risk-pill.high    { background: #fee2e2; color: #7f1d1d; }
     .risk-pill.high .pill-dot    { background: #ef4444; }
+    .risk-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+    .risk-pill.not_assessed .pill-dot  { background: #94a3b8; }
 
     /* ================================================================
        HIERARCHY NAVIGATOR  (tabbed Goal / Mission / Strategy / Board)
@@ -1916,9 +1918,9 @@
                                     <span class="pill-dot"></span>
                                     {% if ge.schedule_status == 'late' %}Late{% elif ge.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
                                 </span>
-                                <span class="risk-pill {{ ge.risk_level|default:'low' }}">
+                                <span class="risk-pill {{ ge.risk_level|default:'not_assessed' }}">
                                     <span class="pill-dot"></span>
-                                    {% if ge.risk_level == 'high' %}High Risk{% elif ge.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                    {% if ge.risk_level == 'high' %}High Risk{% elif ge.risk_level == 'medium' %}Med Risk{% elif ge.risk_level == 'low' %}Low Risk{% else %}Not Assessed{% endif %}
                                 </span>
                                 <span class="badge bg-light text-dark border" style="font-size:0.66rem;">
                                     <i class="fas fa-bullseye text-primary me-1"></i>{{ ge.missions|length }} mission{{ ge.missions|length|pluralize }}
@@ -2047,7 +2049,7 @@
                                 </span>
                                 <span class="risk-pill {{ mi.risk_level }}">
                                     <span class="pill-dot"></span>
-                                    {% if mi.risk_level == 'high' %}High Risk{% elif mi.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                    {% if mi.risk_level == 'high' %}High Risk{% elif mi.risk_level == 'medium' %}Med Risk{% elif mi.risk_level == 'low' %}Low Risk{% else %}Not Assessed{% endif %}
                                 </span>
                                 <span class="badge bg-light text-dark border" style="font-size:0.66rem;">
                                     <i class="fas fa-chess-knight text-primary me-1"></i>{{ mi.strategy_count }} strateg{{ mi.strategy_count|pluralize:"y,ies" }}
@@ -2145,7 +2147,7 @@
                                 </span>
                                 <span class="risk-pill {{ si.risk_level }}">
                                     <span class="pill-dot"></span>
-                                    {% if si.risk_level == 'high' %}High Risk{% elif si.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                    {% if si.risk_level == 'high' %}High Risk{% elif si.risk_level == 'medium' %}Med Risk{% elif si.risk_level == 'low' %}Low Risk{% else %}Not Assessed{% endif %}
                                 </span>
                             </div>
                         </div>
@@ -2244,7 +2246,7 @@
                                 </span>
                                 <span class="risk-pill {{ bi.risk_level }}">
                                     <span class="pill-dot"></span>
-                                    {% if bi.risk_level == 'high' %}High Risk{% elif bi.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                                    {% if bi.risk_level == 'high' %}High Risk{% elif bi.risk_level == 'medium' %}Med Risk{% elif bi.risk_level == 'low' %}Low Risk{% else %}Not Assessed{% endif %}
                                 </span>
                                 {% if bi.high_risk_tasks %}
                                 <small class="text-danger" style="font-size:0.68rem;"><i class="fas fa-exclamation-triangle me-1"></i>{{ bi.high_risk_tasks }} risk</small>
