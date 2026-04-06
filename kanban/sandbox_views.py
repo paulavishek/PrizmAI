@@ -1222,12 +1222,30 @@ def _join_demo_org(user):
 
 
 def _leave_demo_org(user):
-    """Remove the user from the demo organization, restoring their original org."""
-    from accounts.models import UserProfile
+    """Remove the user from the demo organization, restoring their original org.
+
+    The original org is recovered by looking for the user's real (non-demo)
+    workspace or, failing that, an org created by the user.  This avoids
+    relying on a transient in-memory attribute that would be lost between
+    requests.
+    """
+    from accounts.models import UserProfile, Organization
+    from kanban.models import Workspace
 
     profile = user.profile
     if profile.organization and profile.organization.is_demo:
-        profile.organization = None
+        # Recover the user's real org from their non-demo workspace
+        real_ws = Workspace.objects.filter(
+            created_by=user, is_demo=False, is_active=True,
+        ).order_by('-created_at').first()
+        if real_ws and real_ws.organization:
+            profile.organization = real_ws.organization
+        else:
+            # Fallback: org the user created
+            real_org = Organization.objects.filter(
+                created_by=user, is_demo=False,
+            ).order_by('-id').first()
+            profile.organization = real_org  # may be None
         profile.save(update_fields=['organization'])
 
 
