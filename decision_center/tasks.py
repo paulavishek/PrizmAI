@@ -641,11 +641,23 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
         # Parse JSON from response
         # Strip markdown code fences if present
         text = text.strip()
-        if text.startswith('```'):
-            text = text.split('\n', 1)[-1]
-        if text.endswith('```'):
-            text = text.rsplit('```', 1)[0]
-        text = text.strip()
+        if '```json' in text:
+            text = text.split('```json')[1].split('```')[0].strip()
+        elif '```' in text:
+            # Remove opening fence (with optional language hint)
+            text = text.split('```', 1)[1]
+            if text.startswith(('\n', 'json')):
+                text = text.split('\n', 1)[-1]
+            if '```' in text:
+                text = text.rsplit('```', 1)[0]
+            text = text.strip()
+
+        # Isolate JSON object if surrounded by extra text
+        if not text.startswith('{'):
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1:
+                text = text[start:end + 1]
 
         data = json.loads(text)
         return (
