@@ -131,9 +131,35 @@
     const charHint = document.getElementById('charHint');
     const MIN_CHARS = 30;
 
+    // Patterns that indicate code/injection rather than a business goal
+    const SUSPICIOUS_PATTERNS = [
+        /<\s*script/i,
+        /on(?:error|load|click|mouseover)\s*=/i,
+        /javascript\s*:/i,
+        /<\s*(?:img|iframe|object|embed|svg)\b/i,
+        /;\s*(?:DROP|DELETE|INSERT|UPDATE|ALTER)\s/i,
+        /(?:UNION\s+SELECT|OR\s+'1'\s*=\s*'1)/i,
+        /(?:eval|exec|system|subprocess)\s*\(/i,
+    ];
+
+    function isSuspicious(text) {
+        return SUSPICIOUS_PATTERNS.some(function(p) { return p.test(text); });
+    }
+
     function updateState() {
-        const len = textarea.value.trim().length;
+        const val = textarea.value;
+        const len = val.trim().length;
         charCount.textContent = len + ' / 1000';
+
+        // Check for suspicious input
+        if (len > 0 && isSuspicious(val)) {
+            submitBtn.disabled = true;
+            charHint.innerHTML = '<i class="bi bi-shield-exclamation me-1"></i>This looks like code, not a business goal. Please enter a plain-text objective.';
+            charHint.classList.remove('text-success');
+            charHint.classList.add('text-danger');
+            return;
+        }
+
         if (len >= MIN_CHARS) {
             submitBtn.disabled = false;
             charHint.textContent = '✓ Looks good';
