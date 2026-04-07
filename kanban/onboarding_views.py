@@ -6,6 +6,7 @@ All views require @login_required.
 """
 import json
 import logging
+import re
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -64,6 +65,38 @@ def _can_create_workspace(user):
             and profile.onboarding_status in ('demo_exploring', 'pending')):
         return True
     return org.created_by_id == user.id
+
+
+# Patterns that indicate malicious or non-goal input
+_MALICIOUS_PATTERNS = [
+    # XSS / HTML injection
+    re.compile(r'<\s*script', re.IGNORECASE),
+    re.compile(r'on(?:error|load|click|mouseover|focus|blur)\s*=', re.IGNORECASE),
+    re.compile(r'javascript\s*:', re.IGNORECASE),
+    re.compile(r'<\s*(?:img|iframe|object|embed|svg|link|meta|base)\b[^>]*>', re.IGNORECASE),
+    re.compile(r'<\s*/?\s*(?:script|style|iframe|object|embed|applet|form)\b', re.IGNORECASE),
+    # SQL injection
+    re.compile(r"(?:'\s*;\s*DROP\s|--\s*SELECT|UNION\s+SELECT|OR\s+'1'\s*=\s*'1)", re.IGNORECASE),
+    re.compile(r";\s*(?:DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|EXEC)\s", re.IGNORECASE),
+    # Code injection / shell commands
+    re.compile(r'(?:__|import\s*\(|eval\s*\(|exec\s*\(|system\s*\(|subprocess)', re.IGNORECASE),
+    re.compile(r'\$\{.*\}', re.IGNORECASE),  # Template injection
+]
+
+
+def _detect_malicious_input(text: str) -> bool:
+    """Return True if the text contains patterns suggesting injection attacks."""
+    for pattern in _MALICIOUS_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+
+def _sanitize_goal_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace from goal text for safe storage."""
+    clean = re.sub(r'<[^>]+>', '', text)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +186,24 @@ def onboarding_goal_input(request):
             'prefill_goal': goal_text,
             'error': f'Please enter at least {MIN_GOAL_CHARS} characters.',
         })
+
+    # Reject input containing injection patterns (XSS, SQL, code injection)
+    if _detect_malicious_input(goal_text):
+        logger.warning(
+            "Malicious input detected in onboarding goal from user %s",
+            request.user.username,
+        )
+        return render(request, 'kanban/onboarding/goal_input.html', {
+            'prefill_goal': '',
+            'error': (
+                'Your input contains code or markup that cannot be used as '
+                'an organization goal. Please describe your business objective '
+                'in plain text.'
+            ),
+        })
+
+    # Sanitize: strip any residual HTML tags before storage & AI processing
+    goal_text = _sanitize_goal_text(goal_text)
 
     # Save goal text on profile
     profile.onboarding_goal_text = goal_text
