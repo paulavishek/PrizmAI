@@ -65,6 +65,20 @@ def demo_context(request):
                     # Split real vs demo for templates
                     context['real_workspaces'] = [w for w in all_ws if not w.is_demo]
                     context['demo_workspace'] = next((w for w in all_ws if w.is_demo), None)
+
+                    # When viewing demo, the user's org is temporarily the demo org
+                    # so real_workspaces will be empty.  Find their actual workspace
+                    # from their own (non-demo) org so the "My Workspace" button shows.
+                    if getattr(profile, 'is_viewing_demo', False) and not context['real_workspaces']:
+                        own_ws = list(
+                            Workspace.objects.filter(
+                                created_by=request.user,
+                                is_demo=False,
+                                is_active=True,
+                            ).order_by('-created_at')
+                        )
+                        if own_ws:
+                            context['real_workspaces'] = own_ws
                     # Workspace setup permission:
                     # - Org creator can always set up new workspaces
                     # - Demo-exploring users who haven't created their own
