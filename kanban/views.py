@@ -92,6 +92,7 @@ def dashboard(request):
         # Exclude imported boards — imports belong in My Workspace, not Demo.
         # IMPORTANT: scope to demo workspace to prevent real workspace boards leaking in.
         from accounts.models import Organization as _Org
+        from kanban.models import Workspace
         _demo_org = _Org.objects.filter(is_demo=True).first()
         _demo_ws = None
         if _demo_org:
@@ -113,9 +114,12 @@ def dashboard(request):
             # Sandbox missing — auto-re-provision synchronously so the user
             # sees their sandbox immediately on this page load
             from kanban.models import DemoSandbox
+            has_sandbox = False
             try:
-                request.user.demo_sandbox
-            except DemoSandbox.DoesNotExist:
+                has_sandbox = hasattr(request.user, 'demo_sandbox') and request.user.demo_sandbox is not None
+            except Exception:
+                pass
+            if not has_sandbox:
                 from kanban.tasks.sandbox_provisioning import provision_sandbox_task
                 try:
                     provision_sandbox_task(request.user.id)

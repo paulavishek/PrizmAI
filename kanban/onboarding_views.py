@@ -131,8 +131,13 @@ def onboarding_goal_input(request):
     if request.method == 'GET':
         # Pre-fill with previous goal text if resuming
         prefill = request.GET.get('goal', '') or (profile.onboarding_goal_text or '')
+        from_dashboard = request.GET.get('from') == 'dashboard'
+        # Also detect returning users who already have a workspace
+        from kanban.models import OrganizationGoal
+        has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
         return render(request, 'kanban/onboarding/goal_input.html', {
             'prefill_goal': prefill,
+            'from_dashboard': from_dashboard or has_workspace,
         })
 
     # POST — submit goal
@@ -227,8 +232,11 @@ def onboarding_generating(request):
                 return redirect('onboarding_review')
 
     profile = _get_profile(request)
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
     return render(request, 'kanban/onboarding/generating.html', {
         'goal_text': preview.goal_text,
+        'has_workspace': has_workspace,
     })
 
 
@@ -356,12 +364,16 @@ def onboarding_review(request):
     age = timezone.now() - preview.created_at
     is_stale = age > datetime.timedelta(hours=6)
 
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
+
     return render(request, 'kanban/onboarding/review.html', {
         'preview': preview,
         'data': data,
         'data_json': json.dumps(data),
         'is_stale': is_stale,
         'preview_age_hours': int(age.total_seconds() // 3600),
+        'has_workspace': has_workspace,
     })
 
 
