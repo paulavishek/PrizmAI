@@ -356,8 +356,8 @@
 <div class="welcome-split">
     <!-- ════════ LEFT PANEL: Content ════════ -->
     <div class="welcome-left">
-        <!-- Back link -->
-        {% if from_dashboard %}
+        <!-- Back link (shown for returning users who already have a workspace) -->
+        {% if from_dashboard or has_workspace %}
         <div class="mb-3">
             <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
                 <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
