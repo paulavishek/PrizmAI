@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
     name='kanban.tasks.generate_workspace_from_goal_task',
     queue='summaries',
     max_retries=1,
-    soft_time_limit=90,
-    time_limit=120,
+    soft_time_limit=270,   # 2 attempts × 120s API timeout + overhead
+    time_limit=300,
 )
 def generate_workspace_from_goal_task(self, user_id: int, goal_text: str):
     """
