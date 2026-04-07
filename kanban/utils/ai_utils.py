@@ -152,7 +152,7 @@ TASK_TOKEN_LIMITS = {
     'column_recommendations': 8192,      # Complex structure with full explainability (4-7 columns)
     'board_setup': 6144,                 # Full board configuration with explainability
     'task_summary': 8192,                # Comprehensive task summary with all aspects analyzed
-    'workspace_generation': 8192,        # Full workspace hierarchy: goal → missions → strategies → boards → tasks
+    'workspace_generation': 16384,       # Full workspace hierarchy: goal → missions → strategies → boards → tasks (extra budget for thinking tokens)
     'status_report': 4096,               # Status report with RAG reasoning + explainability metadata
     'board_summary': 4096,               # Board summary with confidence + data completeness
     'prizmbrief': 6144,                  # PrizmBrief slides (8-10 slides) + data sources slide
@@ -310,11 +310,14 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
         
         logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}, MaxTokens: {max_tokens}")
         
-        # Generate content with optimized settings (60s hard timeout prevents hangs)
+        # Scale timeout for large-output tasks (workspace_generation can take 60s+)
+        timeout = 120 if max_tokens >= 8192 else 60
+        
+        # Generate content with optimized settings
         response = model.generate_content(
             prompt,
             generation_config=generation_config,
-            request_options={"timeout": 60},
+            request_options={"timeout": timeout},
         )
         
         if response and response.text:
@@ -5344,64 +5347,177 @@ Return ONLY the JSON object below — no surrounding text, no ```json fences.
 }}
 """
 
+    # Retry once on failure (handles transient timeouts / truncated responses)
+    last_error = None
+    for attempt in range(2):
+        try:
+            response_text = generate_ai_content(
+                prompt,
+                task_type='workspace_generation',
+                use_cache=False,   # Each user's goal is unique
+            )
+            if not response_text:
+                logger.error("Empty response from Gemini for workspace generation (attempt %d)", attempt + 1)
+                last_error = 'empty_response'
+                continue
+
+            logger.info("Workspace generation raw response length: %d chars (attempt %d)",
+                        len(response_text), attempt + 1)
+
+            # Strip code-block fences if present
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+
+            response_text = response_text.strip()
+
+            # Isolate JSON object
+            if not response_text.startswith('{'):
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx + 1]
+
+            # Try to parse; if truncated, attempt bracket-repair
+            try:
+                data = json.loads(response_text)
+            except json.JSONDecodeError:
+                repaired = _repair_truncated_json(response_text)
+                if repaired:
+                    logger.warning("Workspace generation JSON was truncated — repaired successfully")
+                    data = repaired
+                else:
+                    logger.error("JSON parse error in workspace generation and repair failed (attempt %d)", attempt + 1)
+                    last_error = 'json_parse'
+                    continue
+
+            # Basic structural validation
+            if 'goal' not in data or 'missions' not in data:
+                logger.error("Workspace generation JSON missing top-level keys")
+                last_error = 'missing_keys'
+                continue
+            if not isinstance(data['missions'], list) or len(data['missions']) == 0:
+                logger.error("Workspace generation returned no missions")
+                last_error = 'no_missions'
+                continue
+
+            # Deep hierarchy validation — salvage complete missions if later ones are truncated
+            valid_missions = []
+            for mi, mission in enumerate(data['missions']):
+                if not isinstance(mission.get('strategies'), list) or len(mission['strategies']) == 0:
+                    logger.warning(f"Mission {mi} ('{mission.get('name', '?')}') has no strategies — skipping")
+                    continue
+                valid_strategies = []
+                for si, strategy in enumerate(mission['strategies']):
+                    if not isinstance(strategy.get('boards'), list) or len(strategy['boards']) == 0:
+                        logger.warning(f"Strategy {si} in Mission {mi} has no boards — skipping")
+                        continue
+                    valid_boards = []
+                    for bi, board in enumerate(strategy['boards']):
+                        if not isinstance(board.get('tasks'), list) or len(board['tasks']) == 0:
+                            logger.warning(f"Board {bi} in Strategy {si}/Mission {mi} has no tasks — skipping")
+                            continue
+                        if not isinstance(board.get('columns'), list) or len(board['columns']) == 0:
+                            board['columns'] = ['To Do', 'In Progress', 'Review', 'Done']
+                        valid_boards.append(board)
+                    if valid_boards:
+                        strategy['boards'] = valid_boards
+                        valid_strategies.append(strategy)
+                if valid_strategies:
+                    mission['strategies'] = valid_strategies
+                    valid_missions.append(mission)
+
+            if not valid_missions:
+                logger.error("No valid missions survived hierarchy validation (attempt %d)", attempt + 1)
+                last_error = 'all_missions_invalid'
+                continue
+
+            if len(valid_missions) < len(data['missions']):
+                logger.warning("Salvaged %d of %d missions (rest were truncated)",
+                               len(valid_missions), len(data['missions']))
+
+            data['missions'] = valid_missions
+            return data
+
+        except Exception as e:
+            logger.error(f"Error in generate_workspace_from_goal (attempt {attempt + 1}): {e}")
+            last_error = str(e)
+            continue
+
+    logger.error("Workspace generation failed after 2 attempts. Last error: %s", last_error)
+    return None
+
+
+def _repair_truncated_json(text: str) -> Optional[Dict]:
+    """Attempt to fix truncated JSON by closing open brackets/braces."""
+    # Count unmatched brackets
+    open_braces = 0
+    open_brackets = 0
+    in_string = False
+    escape = False
+
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            open_braces += 1
+        elif ch == '}':
+            open_braces -= 1
+        elif ch == '[':
+            open_brackets += 1
+        elif ch == ']':
+            open_brackets -= 1
+
+    if open_braces == 0 and open_brackets == 0:
+        return None  # Not a bracket issue
+
+    # Strip any trailing partial key/value (everything after last comma or colon)
+    import re
+    repaired = re.sub(r',\s*"[^"]*"?\s*:?\s*"?[^"{}\[\]]*$', '', text)
+    repaired = re.sub(r',\s*$', '', repaired)
+
+    # Close open brackets/braces
+    # Re-count after trimming
+    open_braces = 0
+    open_brackets = 0
+    in_string = False
+    escape = False
+    for ch in repaired:
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            open_braces += 1
+        elif ch == '}':
+            open_braces -= 1
+        elif ch == '[':
+            open_brackets += 1
+        elif ch == ']':
+            open_brackets -= 1
+
+    repaired += ']' * max(0, open_brackets) + '}' * max(0, open_braces)
+
     try:
-        response_text = generate_ai_content(
-            prompt,
-            task_type='workspace_generation',
-            use_cache=False,   # Each user's goal is unique
-        )
-        if not response_text:
-            logger.error("Empty response from Gemini for workspace generation")
-            return None
-
-        # Strip code-block fences if present
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].strip()
-
-        response_text = response_text.strip()
-
-        # Isolate JSON object
-        if not response_text.startswith('{'):
-            start_idx = response_text.find('{')
-            end_idx = response_text.rfind('}')
-            if start_idx != -1 and end_idx != -1:
-                response_text = response_text[start_idx:end_idx + 1]
-
-        data = json.loads(response_text)
-
-        # Basic structural validation
-        if 'goal' not in data or 'missions' not in data:
-            logger.error("Workspace generation JSON missing top-level keys")
-            return None
-        if not isinstance(data['missions'], list) or len(data['missions']) == 0:
-            logger.error("Workspace generation returned no missions")
-            return None
-
-        # Deep hierarchy validation — reject truncated responses
-        for mi, mission in enumerate(data['missions']):
-            if not isinstance(mission.get('strategies'), list) or len(mission['strategies']) == 0:
-                logger.error(f"Workspace generation truncated: Mission {mi} has no strategies")
-                return None
-            for si, strategy in enumerate(mission['strategies']):
-                if not isinstance(strategy.get('boards'), list) or len(strategy['boards']) == 0:
-                    logger.error(f"Workspace generation truncated: Strategy {si} in Mission {mi} has no boards")
-                    return None
-                for bi, board in enumerate(strategy['boards']):
-                    if not isinstance(board.get('tasks'), list) or len(board['tasks']) == 0:
-                        logger.error(f"Workspace generation truncated: Board {bi} in Strategy {si}/Mission {mi} has no tasks")
-                        return None
-                    if not isinstance(board.get('columns'), list) or len(board['columns']) == 0:
-                        board['columns'] = ['To Do', 'In Progress', 'Review', 'Done']
-
-        return data
-
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON parse error in workspace generation: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"Error in generate_workspace_from_goal: {e}")
+        return json.loads(repaired)
+    except json.JSONDecodeError:
         return None
 
 
