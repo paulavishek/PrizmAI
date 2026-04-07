@@ -1533,6 +1533,84 @@ def rename_workspace(request):
 
 @login_required
 @require_POST
+def delete_workspace(request):
+    """POST /delete-workspace/ — soft-delete a workspace.
+
+    Only the org creator can delete workspaces.  The currently active
+    workspace cannot be deleted — the user must switch to another first,
+    unless it's the only real workspace (then we just redirect to
+    onboarding).  Demo workspaces cannot be deleted this way.
+
+    Accepts ``workspace_id`` in POST body.
+    """
+    from kanban.models import Workspace
+    from kanban.permissions import is_user_org_admin
+
+    workspace_id = request.POST.get('workspace_id')
+    if not workspace_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Missing workspace_id'}, status=400)
+        return redirect('dashboard')
+
+    profile = request.user.profile
+
+    # Only org admins can delete
+    if not is_user_org_admin(request.user):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Only org admins can delete workspaces'}, status=403)
+        from django.contrib import messages
+        messages.error(request, 'Only workspace admins can delete workspaces.')
+        return redirect('dashboard')
+
+    try:
+        ws = Workspace.objects.get(pk=workspace_id, is_active=True)
+    except Workspace.DoesNotExist:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Workspace not found'}, status=404)
+        return redirect('dashboard')
+
+    # Cannot delete demo workspace
+    if ws.is_demo:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Cannot delete demo workspace'}, status=400)
+        return redirect('dashboard')
+
+    # Security: workspace must belong to user's organization
+    if not profile.organization or ws.organization_id != profile.organization_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        return redirect('dashboard')
+
+    # Soft-delete the workspace
+    ws.is_active = False
+    ws.save(update_fields=['is_active'])
+
+    from django.contrib import messages
+    messages.success(request, f'Workspace "{ws.name}" has been deleted.')
+
+    # If the deleted workspace was the active one, switch to another
+    if profile.active_workspace_id == ws.pk:
+        next_ws = Workspace.objects.filter(
+            organization=profile.organization,
+            is_active=True,
+            is_demo=False,
+        ).order_by('-created_at').first()
+        if next_ws:
+            profile.active_workspace = next_ws
+            profile.save(update_fields=['active_workspace'])
+        else:
+            # No workspaces left — clear active and redirect to onboarding
+            profile.active_workspace = None
+            profile.save(update_fields=['active_workspace'])
+            return redirect('onboarding_welcome')
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True})
+    return redirect('dashboard')
+
+
+@login_required
+@require_POST
 def switch_workspace(request):
     """POST /switch-workspace/ — switch the user's active workspace.
 

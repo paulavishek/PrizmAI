@@ -96,6 +96,7 @@ def demo_context(request):
                     # Org admins can rename the active workspace
                     from kanban.permissions import is_user_org_admin
                     context['can_rename_workspace'] = is_user_org_admin(request.user)
+                    context['can_delete_workspace'] = is_user_org_admin(request.user)
                 else:
                     context['user_workspaces'] = []
                     context['real_workspaces'] = []

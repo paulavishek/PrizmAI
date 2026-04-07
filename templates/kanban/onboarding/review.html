@@ -186,6 +186,15 @@
         </form>
     </div>
     {% endif %}
+    {% if duplicate_goal %}
+    <div class="alert mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#fef2f2; border:1px solid #fecaca; border-radius:0.75rem; color:#991b1b; font-size:0.875rem;">
+        <span><i class="bi bi-exclamation-triangle me-1"></i>You already have a workspace with the goal <strong>"{{ duplicate_goal.name }}"</strong>. Confirming will create a duplicate workspace. Consider <a href="{% url 'dashboard' %}" style="color:#991b1b; font-weight:600;">returning to your dashboard</a> or starting fresh with a different goal.</span>
+        <form method="post" action="{% url 'onboarding_start_over' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger" style="font-weight:600;">Start fresh with a new goal</button>
+        </form>
+    </div>
+    {% endif %}
     <div id="aiExplainabilityPanel" class="mb-4" style="display:none;">
         <div class="card border-0 shadow-sm" style="border-radius: 0.75rem; overflow: hidden;">
             <div class="card-header d-flex align-items-center gap-2 bg-white border-bottom py-2 px-3 collapse-toggle" data-bs-toggle="collapse" data-bs-target="#explainabilityBody" style="cursor:pointer;">
