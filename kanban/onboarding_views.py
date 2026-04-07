@@ -98,8 +98,14 @@ def onboarding_welcome(request):
     if profile.onboarding_status == 'workspace_generated':
         return redirect('onboarding_review')
 
-    from_dashboard = request.GET.get('from') == 'dashboard'
-    return render(request, 'kanban/onboarding/welcome.html', {'from_dashboard': from_dashboard})
+    from_dashboard = request.GET.get('from') in ('dashboard', 'sidebar')
+    # Detect returning users who already have a workspace
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
+    return render(request, 'kanban/onboarding/welcome.html', {
+        'from_dashboard': from_dashboard or has_workspace,
+        'has_workspace': has_workspace,
+    })
 
 
 # ---------------------------------------------------------------------------
