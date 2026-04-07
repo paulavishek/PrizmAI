@@ -160,6 +160,7 @@ def onboarding_goal_input(request):
     profile.save(update_fields=['onboarding_goal_text', 'onboarding_status'])
 
     # Create or replace preview
+    from django.utils import timezone as _tz
     preview, _created = OnboardingWorkspacePreview.objects.update_or_create(
         user=request.user,
         defaults={
@@ -168,6 +169,7 @@ def onboarding_goal_input(request):
             'edited_data': None,
             'status': 'generating',
             'error_message': None,
+            'created_at': _tz.now(),
         },
     )
 
@@ -367,7 +369,7 @@ def onboarding_review(request):
     data = preview.edited_data if preview.edited_data else preview.generated_data
 
     # Detect stale previews (generated >6 hours ago and never committed)
-    age = timezone.now() - preview.created_at
+    age = timezone.now() - preview.updated_at
     is_stale = age > datetime.timedelta(hours=6)
 
     from kanban.models import OrganizationGoal
