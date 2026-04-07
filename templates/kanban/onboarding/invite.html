@@ -63,13 +63,23 @@
         border: 1px solid #e2e8f0;
     }
     .btn-skip {
-        color: #94a3b8;
-        text-decoration: none;
-        font-size: 0.9rem;
-        transition: color 0.2s;
+        display: inline-block;
+        width: 100%;
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, var(--prizm-primary, #667eea), #5a67d8);
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
     }
     .btn-skip:hover {
-        color: var(--prizm-primary);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(102, 126, 234, 0.45);
+        color: #fff;
     }
 </style>
 {% endblock %}
@@ -120,12 +130,12 @@
 
         <!-- Action buttons -->
         <div class="d-flex flex-column gap-2 align-items-center">
-            <button type="submit" name="action" value="invite" class="btn btn-prizm btn-lg w-100" id="sendInviteBtn">
+            <button type="submit" name="action" value="invite" class="btn btn-prizm btn-lg w-100" id="sendInviteBtn" style="display:none;">
                 <i class="bi bi-send me-1"></i>Send Invitations & Continue
             </button>
-            <button type="submit" name="action" value="skip" class="btn-skip mt-1"
+            <button type="submit" name="action" value="skip" class="btn-skip mt-1" id="skipBtn"
                     formnovalidate>
-                Skip for now — I'll invite my team later
+                <i class="bi bi-arrow-right me-1"></i>Skip for now — I'll invite my team later
             </button>
         </div>
     </form>
@@ -134,19 +144,32 @@
 
 {% block extra_js %}
 <script>
-    // Enable/disable invite button based on email input
+    // Show invite button only when emails are entered; otherwise show skip button
     const emailField = document.getElementById('inviteEmails');
     const inviteBtn = document.getElementById('sendInviteBtn');
+    const skipBtn   = document.getElementById('skipBtn');
 
-    function updateButton() {
+    function updateButtons() {
         const hasEmails = emailField.value.trim().length > 0;
         if (hasEmails) {
-            inviteBtn.innerHTML = '<i class="bi bi-send me-1"></i>Send Invitations & Continue';
+            inviteBtn.style.display = '';
+            skipBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Skip — go to Dashboard without inviting';
+            skipBtn.style.background = 'transparent';
+            skipBtn.style.color = '#94a3b8';
+            skipBtn.style.boxShadow = 'none';
+            skipBtn.style.fontWeight = '500';
+            skipBtn.style.fontSize = '0.9rem';
         } else {
-            inviteBtn.innerHTML = '<i class="bi bi-arrow-right me-1"></i>Continue to Dashboard';
+            inviteBtn.style.display = 'none';
+            skipBtn.innerHTML = '<i class="bi bi-arrow-right me-1"></i>Skip for now — I\'ll invite my team later';
+            skipBtn.style.background = '';
+            skipBtn.style.color = '';
+            skipBtn.style.boxShadow = '';
+            skipBtn.style.fontWeight = '';
+            skipBtn.style.fontSize = '';
         }
     }
-    emailField.addEventListener('input', updateButton);
-    updateButton();
+    emailField.addEventListener('input', updateButtons);
+    updateButtons();
 </script>
 {% endblock %}
