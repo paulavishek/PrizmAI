@@ -177,6 +177,28 @@
                         onclick="wsStartEdit()" style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 4px;font-size:0.72rem;margin-left:2px;">
                     <i class="fas fa-pencil-alt"></i>
                 </button>
+                {% if can_delete_workspace and real_workspaces|length > 1 %}
+                <button type="button" class="tws-ws-edit-btn" id="ws-delete-btn" title="Delete this workspace"
+                        onclick="confirmDeleteWorkspaceTopbar()"
+                        style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 4px;font-size:0.72rem;margin-left:1px;transition:color 0.15s;"
+                        onmouseenter="this.style.color='#ef4444'" onmouseleave="this.style.color='var(--text-secondary,#6b7280)'">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                <script>
+                function confirmDeleteWorkspaceTopbar() {
+                    var wsName = document.getElementById('ws-name-text').textContent.trim();
+                    if (!confirm('Delete workspace "' + wsName + '"?\n\nThis will remove the workspace and all its boards, tasks, and data. This action cannot be undone.')) return;
+                    var fd = new FormData();
+                    fd.append('workspace_id', '{{ active_workspace.pk }}');
+                    var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+                    if (csrf) fd.append('csrfmiddlewaretoken', csrf.value);
+                    fetch('{% url "delete_workspace" %}', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) { if (data.ok) { window.location.href = '/dashboard/'; } else { alert(data.error || 'Failed to delete'); } })
+                        .catch(function() { alert('Network error'); });
+                }
+                </script>
+                {% endif %}
                 <form method="post" action="{% url 'rename_workspace' %}" class="d-inline" id="ws-rename-form"
                       style="display:none!important;" onsubmit="return wsSubmitRename(event)">
                     {% csrf_token %}
