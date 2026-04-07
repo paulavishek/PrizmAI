@@ -81,19 +81,29 @@
                 <small class="text-muted fw-semibold text-uppercase" style="font-size:0.65rem;letter-spacing:0.5px;">Your Workspaces</small>
             </div>
             {% for ws in real_workspaces %}
-            <form method="post" action="{% url 'switch_workspace' %}" class="d-inline w-100">
-                {% csrf_token %}
-                <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
-                <button type="submit" class="sidebar-ws-option {% if active_workspace.pk == ws.pk %}active{% endif %}">
-                    <span class="sidebar-ws-option-icon">
-                        <i class="fas fa-briefcase text-primary"></i>
-                    </span>
-                    <span class="sidebar-ws-option-name">{{ ws.name|truncatechars:28 }}</span>
-                    {% if active_workspace.pk == ws.pk %}
-                    <i class="fas fa-check text-success ms-auto" style="font-size:0.7rem;"></i>
-                    {% endif %}
+            <div class="d-flex align-items-center w-100 sidebar-ws-row">
+                <form method="post" action="{% url 'switch_workspace' %}" class="d-inline flex-grow-1" style="min-width:0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
+                    <button type="submit" class="sidebar-ws-option {% if active_workspace.pk == ws.pk %}active{% endif %}">
+                        <span class="sidebar-ws-option-icon">
+                            <i class="fas fa-briefcase text-primary"></i>
+                        </span>
+                        <span class="sidebar-ws-option-name">{{ ws.name|truncatechars:28 }}</span>
+                        {% if active_workspace.pk == ws.pk %}
+                        <i class="fas fa-check text-success ms-auto" style="font-size:0.7rem;"></i>
+                        {% endif %}
+                    </button>
+                </form>
+                {% if can_delete_workspace and real_workspaces|length > 1 %}
+                <button type="button" class="btn btn-link btn-sm sidebar-ws-delete-btn p-0 ms-1"
+                        title="Delete workspace"
+                        style="color:var(--text-secondary,#9ca3af); font-size:0.65rem; opacity:0; transition:opacity 0.15s; line-height:1; flex-shrink:0;"
+                        onclick="event.stopPropagation(); confirmDeleteWorkspace({{ ws.pk }}, '{{ ws.name|escapejs }}');">
+                    <i class="fas fa-trash-alt"></i>
                 </button>
-            </form>
+                {% endif %}
+            </div>
             {% endfor %}
             {% if can_setup_workspace|default:False %}
             <div class="sidebar-ws-dropdown-divider"></div>
@@ -104,6 +114,36 @@
             {% endif %}
         </div>
     </div>
+    {% if can_delete_workspace %}
+    <style>
+        .sidebar-ws-row:hover .sidebar-ws-delete-btn { opacity: 0.6 !important; }
+        .sidebar-ws-row .sidebar-ws-delete-btn:hover { opacity: 1 !important; color: #ef4444 !important; }
+    </style>
+    <script>
+    function confirmDeleteWorkspace(wsId, wsName) {
+        if (!confirm('Delete workspace "' + wsName + '"?\n\nThis will remove the workspace and all its boards, tasks, and data. This action cannot be undone.')) {
+            return;
+        }
+        var fd = new FormData();
+        fd.append('workspace_id', wsId);
+        fd.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        fetch('{% url "delete_workspace" %}', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to delete workspace');
+            }
+        }).catch(function() {
+            alert('Network error');
+        });
+    }
+    </script>
+    {% endif %}
     {% endif %}
 
     <!-- Primary Navigation -->

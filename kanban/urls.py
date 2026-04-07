@@ -368,6 +368,7 @@ urlpatterns = [
     # Workspace context switcher
     path('switch-workspace/', views.switch_workspace, name='switch_workspace'),
     path('rename-workspace/', views.rename_workspace, name='rename_workspace'),
+    path('delete-workspace/', views.delete_workspace, name='delete_workspace'),
     path('workspace-selection/', views.workspace_selection, name='workspace_selection'),
 
     # Workspace preset settings (Org Admin)

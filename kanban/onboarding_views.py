@@ -373,6 +373,17 @@ def onboarding_review(request):
     from kanban.models import OrganizationGoal
     has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
 
+    # Warn when the goal name matches an existing workspace goal
+    goal_name = ''
+    if data and 'goal' in data:
+        goal_name = (data['goal'].get('name', '') or '').strip()
+    duplicate_goal = None
+    if goal_name and has_workspace:
+        duplicate_goal = OrganizationGoal.objects.filter(
+            created_by=request.user,
+            name__iexact=goal_name,
+        ).first()
+
     return render(request, 'kanban/onboarding/review.html', {
         'preview': preview,
         'data': data,
@@ -380,6 +391,7 @@ def onboarding_review(request):
         'is_stale': is_stale,
         'preview_age_hours': int(age.total_seconds() // 3600),
         'has_workspace': has_workspace,
+        'duplicate_goal': duplicate_goal,
     })
 
 
