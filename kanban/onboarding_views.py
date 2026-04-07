@@ -265,7 +265,7 @@ def onboarding_status(request):
     """
     from django.utils import timezone
 
-    STALE_THRESHOLD_SECONDS = 120  # 2 minutes
+    STALE_THRESHOLD_SECONDS = 300  # 5 minutes
 
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
