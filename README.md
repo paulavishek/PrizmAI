@@ -476,11 +476,22 @@ PrizmAI's demo gives every visitor a private, fully editable sandbox the moment 
 
 ### How it works
 
-1. **Enter demo mode** — Click **Try Demo** (or the workspace switcher in the sidebar). PrizmAI deep-copies all demo template boards — columns, tasks, labels, comments, dependencies, and task relationships — into a private set of boards owned by you alone. Provisioning runs asynchronously in the background.
-2. **Experiment freely** — Your sandbox has full write access. Create tasks, delete columns, drag and drop, trigger automations — anything you like. Changes here have no effect on the shared demo templates or any other user.
+1. **Enter demo mode** — Click **Try Demo** (or the workspace switcher in the sidebar). PrizmAI deep-copies all demo template boards into a private set of boards owned by you alone. The copy includes columns, tasks, labels, comments, dependencies, budget data, analytics snapshots, and more. Provisioning runs asynchronously via Celery (with a synchronous fallback when Redis is unavailable).
+2. **Experiment freely** — Your sandbox has full write access. Create tasks, delete columns, drag and drop, trigger automations — anything you like. Changes here have no effect on the shared demo templates or any other user's sandbox.
 3. **Switch workspaces freely** — Use the workspace switcher in the sidebar to toggle between your **Demo Workspace** and **My Workspace** at any time. Your sandbox is preserved between switches — nothing is deleted when you leave demo mode.
 4. **Sandbox persists** — Your sandbox has no expiry. It stays around as long as your account exists, so you can return to your demo data whenever you like.
 5. **Reset** — Click **Reset my demo** to wipe your sandbox and re-provision a fresh copy from the templates at any time.
+
+### Data isolation guarantees
+
+Every user's sandbox is completely walled off:
+
+- **No cross-user leakage** — User A cannot see User B's sandbox boards, tasks, or data. Board memberships from the template are never carried over to sandboxes; only three synthetic demo personas (team members with `@demo.prizmai.local` emails) are added so that assigned-to fields, chat rooms, and team analytics work realistically.
+- **No demo-to-real leakage** — When you leave demo mode and return to your real workspace, no sandbox or template data appears in your dashboard, board list, API, messaging, analytics, AI assistant, wiki, or any other view.
+- **No real-to-demo leakage** — When you are in demo mode, your real workspace boards, missions, goals, and messages are invisible.
+- **Template immutability** — The master demo template boards are never modified by user actions. Each sandbox is an independent deep copy.
+
+All data-fetching views use centralized query helpers (`get_user_boards()`, `get_user_missions()`, `get_user_goals()`) as a single source of truth for demo-vs-real separation, and a self-healing middleware automatically repairs any state inconsistencies.
 
 ### The sandbox banner
 
@@ -491,13 +502,28 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 | Data | Copied? |
 |---|---|
 | Boards, columns, labels | Yes — full deep copy |
-| Tasks (titles, descriptions, priorities, dates) | Yes |
+| Tasks (titles, descriptions, priorities, dates, risk levels) | Yes |
 | Task comments | Yes (attributed to you) |
-| Task dependencies & related-task links | Yes |
-| Parent-child task relationships | Yes |
-| Board memberships from the template | No — you are the sole Owner |
+| Checklist items | Yes |
+| Task dependencies, related-task links, parent-child relationships | Yes |
+| Demo team members (3 synthetic personas) | Yes — added as Members for realistic team data |
+| Budget, task costs, time entries, ROI snapshots | Yes |
+| Burndown predictions, velocity snapshots, sprint milestones | Yes |
+| Scope tracking snapshots and scope creep alerts | Yes |
+| Skill profiles, skill gaps, and development plans | Yes |
+| Retrospectives, lessons learned, and action items | Yes |
+| Conflict detections and resolution patterns | Yes |
+| Stakeholders and engagement metrics | Yes |
+| Chat rooms and messages | Yes |
+| Commitment protocols (signals, bets, credibility scores) | Yes |
+| Decision Center items | Yes |
+| Wiki links and knowledge base entries | Yes |
+| AI coaching suggestions and PM metrics | Yes |
+| Real user memberships from the template | No — you are the sole real Owner |
 | Strategic context (Mission / Strategy links) | No — sandbox boards are standalone |
 | File attachments | No |
+
+> **→ [Full architecture reference](docs/DEMO_SANDBOX_ARCHITECTURE.md)** — detailed data model, lifecycle diagrams, issue history, and enterprise scalability analysis.
 
 ---
 

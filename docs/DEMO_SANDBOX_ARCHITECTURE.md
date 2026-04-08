@@ -100,9 +100,7 @@ These personas are identified by their `@demo.prizmai.local` email domain. This 
 |-------|------|---------|
 | `user` | OneToOneField(User) | Owner of the sandbox |
 | `created_at` | DateTimeField | When sandbox was provisioned |
-| `is_browsing` | BooleanField | True = read-only mode; False = full editing |
 | `last_reset_at` | DateTimeField | Timestamp of last reset |
-| `saved_board` | FK(Board) | Board marked to survive deletion |
 | `reassigned_tasks` | JSONField | Maps task IDs → original assignee IDs |
 
 #### Board Flags
@@ -262,8 +260,7 @@ is_viewing_demo?
 
 The `demo_context()` processor runs on every request and adds to the template context:
 - `is_viewing_demo` — boolean flag for template conditionals
-- `is_browsing` — read-only mode flag
-- `sandbox_expires_at` — expiry datetime
+- `sandbox_expires_at` — expiry datetime (legacy, no longer applicable)
 - `user_workspaces` — list scoped to current org
 - `real_workspaces` — non-demo workspaces (for "Back to My Workspace" button)
 - `demo_workspace` — the demo workspace instance
