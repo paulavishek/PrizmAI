@@ -1359,6 +1359,27 @@ def _purge_existing_sandbox(user):
     except Exception:
         pass
 
+    # ── Clean user-created tasks on official demo template boards ──
+    # Users may have accidentally created tasks on the template (e.g. via
+    # direct URL).  These are non-seed tasks that would otherwise be copied
+    # into every future sandbox, corrupting the demo baseline.
+    try:
+        template_boards = Board.objects.filter(is_official_demo_board=True)
+        user_tasks_on_template = Task.objects.filter(
+            column__board__in=template_boards,
+            is_seed_demo_data=False,
+            created_by=user,
+        )
+        if user_tasks_on_template.exists():
+            from kanban.models import Comment, TaskActivity, TaskFile
+            task_ids = list(user_tasks_on_template.values_list('id', flat=True))
+            Comment.objects.filter(task_id__in=task_ids).delete()
+            TaskActivity.objects.filter(task_id__in=task_ids).delete()
+            TaskFile.objects.filter(task_id__in=task_ids).delete()
+            user_tasks_on_template.delete()
+    except Exception:
+        pass
+
     # ── DemoSandbox record ──
     try:
         sandbox = user.demo_sandbox

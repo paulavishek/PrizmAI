@@ -1768,16 +1768,30 @@ def board_list(request):
         # Single-tier demo: show user's sandbox copies + boards created
         # manually in demo mode (but NOT imported boards — those belong
         # in My Workspace).
+        # IMPORTANT: scope user_created_boards to demo workspace to prevent
+        # real workspace boards from leaking into the demo view.
         sandbox_boards = Board.objects.filter(
             owner=request.user,
             is_sandbox_copy=True,
         )
-        user_created_boards = Board.objects.filter(
-            created_by=request.user,
-            is_sandbox_copy=False,
-            is_official_demo_board=False,
-            is_imported=False,
-        )
+        from accounts.models import Organization as _Org
+        from kanban.models import Workspace
+        _demo_org = _Org.objects.filter(is_demo=True).first()
+        _demo_ws = None
+        if _demo_org:
+            _demo_ws = Workspace.objects.filter(
+                organization=_demo_org, is_demo=True, is_active=True,
+            ).first()
+        if _demo_ws:
+            user_created_boards = Board.objects.filter(
+                created_by=request.user,
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+                is_imported=False,
+                workspace=_demo_ws,
+            )
+        else:
+            user_created_boards = Board.objects.none()
         boards = (sandbox_boards | user_created_boards).distinct()
     elif active_ws and not active_ws.is_demo:
         # Workspace-scoped: only boards in the active workspace
@@ -2632,6 +2646,16 @@ def create_task(request, board_id, column_id=None):
     from kanban.audit_utils import log_model_change
 
     board = get_object_or_404(Board, id=board_id)
+
+    # Prevent task creation on official demo template boards — redirect to sandbox copy
+    if getattr(board, 'is_official_demo_board', False) and request.user.is_authenticated:
+        sandbox_copy = Board.objects.filter(
+            cloned_from=board, owner=request.user, is_sandbox_copy=True
+        ).first()
+        if sandbox_copy:
+            return redirect('create_task', board_id=sandbox_copy.id)
+        messages.error(request, 'Cannot create tasks on the demo template. Please activate demo mode first.')
+        return redirect('dashboard')
 
     # RBAC: check edit permission on the board
     if not request.user.has_perm('prizmai.edit_board', board):
