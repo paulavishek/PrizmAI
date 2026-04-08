@@ -192,10 +192,15 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
     base = Board.objects.filter(is_archived=False)
 
     if is_demo_mode:
-        return base.filter(
-            Q(is_official_demo_board=True)
+        # Return user's sandbox copies (not templates) for demo isolation
+        sandbox_qs = base.filter(
+            Q(owner=user, is_sandbox_copy=True)
             | Q(created_by_session=f'spectra_demo_{user.id}')
         ).distinct()
+        if sandbox_qs.exists():
+            return sandbox_qs
+        # Fallback to templates if sandbox not provisioned yet
+        return base.filter(is_official_demo_board=True).distinct()
 
     # Personal workspace
     qs = base.filter(

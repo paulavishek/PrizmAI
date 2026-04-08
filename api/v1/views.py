@@ -48,17 +48,21 @@ class BoardViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return boards accessible to the authenticated user"""
         user = self.request.user
-        # OrgAdmins can see all non-demo boards
+        # OrgAdmins can see all non-demo boards in their organization
         from kanban.permissions import is_user_org_admin
         if is_user_org_admin(user):
-            return Board.objects.filter(
-                is_official_demo_board=False,
-                is_sandbox_copy=False,
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).select_related(
-                'organization', 'created_by'
-            ).prefetch_related('columns')
+            profile = getattr(user, 'profile', None)
+            org = getattr(profile, 'organization', None) if profile else None
+            if org and not getattr(org, 'is_demo', False):
+                return Board.objects.filter(
+                    organization=org,
+                    is_official_demo_board=False,
+                    is_sandbox_copy=False,
+                ).exclude(
+                    created_by_session__startswith='spectra_demo_'
+                ).select_related(
+                    'organization', 'created_by'
+                ).prefetch_related('columns')
         # Use demo-aware helper
         return get_user_boards(user).select_related('organization', 'created_by').prefetch_related('columns')
     
@@ -115,10 +119,14 @@ class TaskViewSet(viewsets.ModelViewSet):
         accessible_boards = get_user_boards(user)
         from kanban.permissions import is_user_org_admin
         if is_user_org_admin(user):
-            accessible_boards = Board.objects.filter(
-                is_official_demo_board=False,
-                is_sandbox_copy=False,
-            ).exclude(created_by_session__startswith='spectra_demo_')
+            profile = getattr(user, 'profile', None)
+            org = getattr(profile, 'organization', None) if profile else None
+            if org and not getattr(org, 'is_demo', False):
+                accessible_boards = Board.objects.filter(
+                    organization=org,
+                    is_official_demo_board=False,
+                    is_sandbox_copy=False,
+                ).exclude(created_by_session__startswith='spectra_demo_')
         queryset = Task.objects.filter(
             column__board__in=accessible_boards
         ).select_related(

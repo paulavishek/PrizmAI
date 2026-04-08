@@ -158,13 +158,20 @@ def dashboard(request):
         from kanban.utils.demo_protection import get_user_boards as _get_user_boards
         boards = _get_user_boards(request.user)
     elif _is_org_admin:
-        # Org Admin: see all non-demo boards, exclude sandbox copies
-        boards = Board.objects.filter(
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).exclude(
-            created_by_session__startswith='spectra_demo_'
-        ).distinct()
+        # Org Admin: see all non-demo boards in their organization
+        org = profile.organization
+        if org and not getattr(org, 'is_demo', False):
+            boards = Board.objects.filter(
+                organization=org,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).distinct()
+        else:
+            # Corrupted state (org missing or demo org) — use safe helper
+            from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+            boards = _get_user_boards(request.user)
     else:
         # v2 and v1: delegate to the centralized helper that handles all
         # demo/sandbox/spectra exclusion in one place.
@@ -1801,25 +1808,32 @@ def board_list(request):
             is_sandbox_copy=False,
         ).distinct()
     elif _is_org_admin:
-        # Org Admin: see all non-demo boards, exclude sandbox copies
-        boards = Board.objects.filter(
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).distinct()
+        # Org Admin: see all non-demo boards in their organization
+        org = profile.organization
+        if org and not getattr(org, 'is_demo', False):
+            boards = Board.objects.filter(
+                organization=org,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).distinct()
+        else:
+            from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+            boards = _get_user_boards(request.user)
     elif profile.onboarding_version >= 2:
         # v2 onboarding (AI-generated or scratch) — never show demo or sandbox boards
         boards = Board.objects.filter(
             Q(created_by=request.user) | Q(memberships__user=request.user),
             is_official_demo_board=False,
             is_sandbox_copy=False,
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
     else:
-        # v1 legacy — demo + user boards mixed
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # v1 legacy — use centralized helper for safe filtering
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
 
     # Annotate task counts so the template can display them efficiently
     boards = boards.annotate(
@@ -3764,6 +3778,11 @@ def move_task(request):
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
+    # Template boards must never receive real-user memberships
+    if getattr(board, 'is_official_demo_board', False):
+        messages.error(request, "Demo template boards cannot have members added.")
+        return redirect('dashboard')
+
     # Sandbox boards are private — no real-user additions allowed
     if board.is_sandbox_copy:
         messages.error(request, "Sandbox boards are private and cannot have additional members.")
@@ -3897,6 +3916,14 @@ def organization_boards(request):
     try:
         profile = request.user.profile
         organization = profile.organization
+
+        # Demo mode: redirect — org boards view shows real data only
+        if getattr(profile, 'is_viewing_demo', False):
+            return redirect('board_list')
+
+        # Guard against demo org leaking through (corrupted state)
+        if not organization or getattr(organization, 'is_demo', False):
+            return redirect('board_list')
         
         # Get all boards for this organization, even if user is not a member
         # EXCLUDE demo boards - demo environment is isolated
@@ -3938,6 +3965,16 @@ def organization_boards(request):
 def join_board(request, board_id):
     """Allow users to join boards they have access to"""
     board = get_object_or_404(Board, id=board_id)
+
+    # ── Guard: never join official demo template boards ──
+    if getattr(board, 'is_official_demo_board', False):
+        messages.error(request, 'Demo template boards cannot be joined directly.')
+        return redirect('dashboard')
+
+    # ── Guard: never join another user's sandbox copy ──
+    if getattr(board, 'is_sandbox_copy', False) and board.owner != request.user:
+        messages.error(request, 'You do not have access to this board.')
+        return redirect('dashboard')
     
     # Verify user belongs to the same organization as the board
     if board.organization:

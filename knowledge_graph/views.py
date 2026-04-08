@@ -374,7 +374,9 @@ def deja_vu_check(request, board_id):
     if cached is not None:
         return JsonResponse(cached)
 
-    archived_exists = Board.objects.filter(is_archived=True).exists()
+    # Check within user's accessible boards only (not global)
+    user_board_ids = _get_user_boards(request.user)
+    archived_exists = Board.objects.filter(id__in=user_board_ids, is_archived=True).exists()
     if not archived_exists:
         result = {'results': [], 'reason': 'no_archived_boards'}
         cache.set(cache_key, result, 86400)

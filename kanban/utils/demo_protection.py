@@ -84,6 +84,19 @@ def get_user_boards(user):
             is_sandbox_copy=False,
         ).distinct()
 
+    # Org admin fallback: scope to their organization (never return global)
+    from kanban.permissions import is_user_org_admin
+    if is_user_org_admin(user):
+        org = getattr(profile, 'organization', None)
+        if org and not getattr(org, 'is_demo', False):
+            return Board.objects.filter(
+                organization=org,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).distinct()
+
     # Fallback: exclude every flavour of demo data
     return Board.objects.filter(
         Q(created_by=user) | Q(memberships__user=user),
@@ -127,6 +140,18 @@ def get_user_missions(user):
             workspace=active_ws,
         ).distinct()
 
+    # Org admin fallback: scope to their organization
+    from kanban.permissions import is_user_org_admin
+    if is_user_org_admin(user):
+        org = getattr(profile, 'organization', None)
+        if org and not getattr(org, 'is_demo', False):
+            return Mission.objects.filter(
+                Q(workspace__organization=org) |
+                Q(strategies__boards__organization=org),
+                is_demo=False,
+                is_seed_demo_data=False,
+            ).distinct()
+
     return Mission.objects.filter(
         Q(created_by=user) |
         Q(strategies__boards__id__in=list(
@@ -159,6 +184,18 @@ def get_user_goals(user):
         return OrganizationGoal.objects.filter(
             workspace=active_ws,
         ).distinct()
+
+    # Org admin fallback: scope to their organization
+    from kanban.permissions import is_user_org_admin
+    if is_user_org_admin(user):
+        org = getattr(profile, 'organization', None)
+        if org and not getattr(org, 'is_demo', False):
+            return OrganizationGoal.objects.filter(
+                Q(workspace__organization=org) |
+                Q(missions__strategies__boards__organization=org),
+                is_demo=False,
+                is_seed_demo_data=False,
+            ).distinct()
 
     return OrganizationGoal.objects.filter(
         Q(created_by=user) |
