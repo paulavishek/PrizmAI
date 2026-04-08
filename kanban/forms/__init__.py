@@ -501,6 +501,30 @@ class TaskForm(forms.ModelForm):
                     'parent_task': f'Cannot set "{parent_task.title}" as parent - this would create a circular dependency.'
                 })
         
+        # Validate skill_match_score is in range 0-100
+        skill_match_score = cleaned_data.get('skill_match_score')
+        if skill_match_score is not None:
+            if skill_match_score < 0 or skill_match_score > 100:
+                self.add_error('skill_match_score', 'Skill match score must be between 0 and 100.')
+
+        # Validate start_date is not after due_date
+        start_date = cleaned_data.get('start_date')
+        due_date = cleaned_data.get('due_date')
+        if start_date and due_date:
+            # Normalize both to comparable types (due_date may be datetime, start_date may be date)
+            from datetime import date as date_type, datetime as datetime_type
+            start_comparable = start_date
+            due_comparable = due_date
+            if isinstance(start_date, datetime_type) and isinstance(due_date, datetime_type):
+                pass  # both datetime, directly comparable
+            elif isinstance(start_date, date_type) and isinstance(due_date, datetime_type):
+                start_comparable = timezone.make_aware(
+                    datetime_type.combine(start_date, datetime_type.min.time()),
+                    timezone.get_current_timezone()
+                ) if timezone.is_naive(datetime_type.combine(start_date, datetime_type.min.time())) else datetime_type.combine(start_date, datetime_type.min.time())
+            if start_comparable > due_comparable:
+                self.add_error('start_date', 'Start date cannot be after the due date.')
+
         # Auto-calculate risk score if both likelihood and impact are provided
         if risk_likelihood is not None and risk_impact is not None:
             risk_score = risk_likelihood * risk_impact

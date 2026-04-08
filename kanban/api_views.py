@@ -1584,6 +1584,17 @@ def predict_deadline_api(request):
             success=True,
             response_time_ms=response_time_ms
         )
+
+        # Flag if the recommended deadline is in the past
+        recommended_deadline = prediction.get('recommended_deadline')
+        if recommended_deadline:
+            from datetime import date as _date_type
+            try:
+                deadline_date = _date_type.fromisoformat(str(recommended_deadline)[:10])
+                if deadline_date < timezone.now().date():
+                    prediction['date_is_past'] = True
+            except (ValueError, TypeError):
+                pass
             
         return JsonResponse(prediction)
     except Exception as e:

@@ -32,6 +32,16 @@ from kanban.commitment_service import CommitmentService
 logger = logging.getLogger(__name__)
 
 
+def _check_board_access(request, board):
+    """Return a 403 response if the user cannot access this board, else None."""
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='commitment_view')
+        from django.shortcuts import render as _render
+        return _render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 1. Commitment Dashboard
 # ---------------------------------------------------------------------------
@@ -43,6 +53,11 @@ def commitment_dashboard(request, board_id):
     Shows portfolio confidence, commitment cards, and health summary.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    denied = _check_board_access(request, board)
+    if denied:
+        return denied
 
     # Preset guard: Commitments require Enterprise
     from kanban.preset_models import BoardPreset, build_feature_flags
@@ -102,6 +117,11 @@ def commitment_create(request, board_id):
     POST: Validate and create the CommitmentProtocol with a baseline snapshot.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    denied = _check_board_access(request, board)
+    if denied:
+        return denied
 
     if request.method == 'POST':
         try:
@@ -210,6 +230,12 @@ def commitment_detail(request, board_id, commitment_id):
     Overview / Betting Market / Signal History / Negotiations
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    denied = _check_board_access(request, board)
+    if denied:
+        return denied
+
     protocol = get_object_or_404(
         CommitmentProtocol.objects.select_related('board', 'created_by')
         .prefetch_related('signals', 'bets__bettor', 'negotiations', 'stakeholders'),
@@ -263,6 +289,11 @@ def commitment_place_bet(request, board_id, commitment_id):
     Returns JSON.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     protocol = get_object_or_404(CommitmentProtocol, id=commitment_id, board=board)
 
     if 'application/json' in (request.content_type or ''):
@@ -354,6 +385,11 @@ def commitment_signal_manual(request, board_id, commitment_id):
     Returns JSON with updated confidence and signal record.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     protocol = get_object_or_404(CommitmentProtocol, id=commitment_id, board=board)
 
     if 'application/json' in (request.content_type or ''):
@@ -410,6 +446,12 @@ def negotiation_session_detail(request, board_id, negotiation_id):
     Full view of a negotiation session with the AI message and 3 options.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    denied = _check_board_access(request, board)
+    if denied:
+        return denied
+
     session = get_object_or_404(
         NegotiationSession.objects.select_related('protocol'),
         id=negotiation_id,
@@ -441,6 +483,11 @@ def negotiation_resolve(request, board_id, negotiation_id):
     Creates a positive signal — renegotiation = fresh start.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     session = get_object_or_404(
         NegotiationSession,
         id=negotiation_id,
@@ -510,6 +557,11 @@ def negotiation_resolve(request, board_id, negotiation_id):
 def commitment_curve_api(request, board_id, commitment_id):
     """JSON endpoint returning confidence curve data for Chart.js."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     protocol = get_object_or_404(CommitmentProtocol, id=commitment_id, board=board)
     data = CommitmentService.get_confidence_curve_data(protocol)
     return JsonResponse({'curve': data})
@@ -523,6 +575,11 @@ def commitment_curve_api(request, board_id, commitment_id):
 def commitment_market_api(request, board_id, commitment_id):
     """JSON endpoint returning current market consensus data."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     protocol = get_object_or_404(CommitmentProtocol, id=commitment_id, board=board)
     market = CommitmentService.calculate_market_consensus(protocol)
     return JsonResponse(market)
@@ -538,6 +595,11 @@ def commitments_list_api(request, board_id):
     JSON endpoint used by the dashboard JS to refresh confidence values.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     protocols = CommitmentProtocol.objects.filter(board=board).values(
         'id', 'title', 'current_confidence', 'status', 'target_date',
     )

@@ -71,6 +71,14 @@ def automations_page(request, board_id):
     Rules | Templates | Audit Log | Usage
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='automations')
+        from django.shortcuts import render as _render
+        return _render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
     tab = request.GET.get('tab', 'rules')
 
     # ── Common context ──
@@ -280,6 +288,11 @@ def rule_update(request, board_id, rule_id):
 def rule_detail(request, board_id, rule_id):
     """Return a single rule's full data as JSON (for canvas load)."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
     return JsonResponse({
         'id': rule.id,
@@ -325,6 +338,11 @@ def rule_delete(request, board_id, rule_id):
 def rule_toggle(request, board_id, rule_id):
     """Toggle is_active on an AutomationRule. Returns JSON for PATCH, redirects for POST."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board edit permission
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
     rule.is_active = not rule.is_active
     rule.save(update_fields=['is_active'])
@@ -399,6 +417,10 @@ def template_use(request, board_id, template_id):
 def rule_create_form(request, board_id):
     """Create an AutomationRule from the traditional form (backward compat)."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board edit permission
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     name = request.POST.get('name', '').strip()
     trigger_type = request.POST.get('trigger_type', '')
