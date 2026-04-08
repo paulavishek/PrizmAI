@@ -677,7 +677,7 @@
                 <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
                 {% endif %}
                 {% if can_manage_members and not board.is_sandbox_copy %}
-                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users-cog me-2 text-info"></i>Manage Members</a></li>
+                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users-cog me-2 text-info"></i>Board Members</a></li>
                 {% endif %}
                 {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>

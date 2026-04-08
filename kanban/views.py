@@ -1309,16 +1309,6 @@ def dashboard(request):
                 is_official_demo_board=True
             ).first()
 
-    # Workspace member management permission
-    from kanban.permissions import is_user_org_admin
-    active_ws = getattr(request, 'workspace', None)
-    can_manage_ws_members = (
-        not demo_mode
-        and active_ws
-        and not getattr(active_ws, 'is_demo', False)
-        and (is_user_org_admin(request.user) or (active_ws and active_ws.created_by_id == request.user.pk))
-    )
-
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -1371,7 +1361,6 @@ def dashboard(request):
         'dc_awareness_count': dc_awareness_count,
         'dc_quickwin_count': dc_quickwin_count,
         'dc_total_count': dc_total_count,
-        'can_manage_ws_members': can_manage_ws_members,
         })
 
 

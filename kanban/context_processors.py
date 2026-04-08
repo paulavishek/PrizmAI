@@ -97,6 +97,13 @@ def demo_context(request):
                     from kanban.permissions import is_user_org_admin
                     context['can_rename_workspace'] = is_user_org_admin(request.user)
                     context['can_delete_workspace'] = is_user_org_admin(request.user)
+                    # Workspace member management permission
+                    context['can_manage_ws_members'] = (
+                        active_ws
+                        and not getattr(active_ws, 'is_demo', False)
+                        and not getattr(profile, 'is_viewing_demo', False)
+                        and (is_user_org_admin(request.user) or (active_ws and active_ws.created_by_id == request.user.id))
+                    )
                 else:
                     context['user_workspaces'] = []
                     context['real_workspaces'] = []
