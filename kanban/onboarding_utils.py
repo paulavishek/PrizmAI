@@ -211,6 +211,13 @@ def commit_onboarding_workspace(user, preview):
         preview.status = 'committed'
         preview.save(update_fields=['status', 'updated_at'])
 
+        # Create workspace-level membership for the creator as Owner
+        from kanban.models import WorkspaceMembership
+        WorkspaceMembership.objects.get_or_create(
+            workspace=ws, user=user,
+            defaults={'role': 'owner', 'added_by': user},
+        )
+
         profile = user.profile
         profile.onboarding_status = 'completed'
         profile.active_workspace = ws

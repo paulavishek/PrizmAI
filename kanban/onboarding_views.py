@@ -645,6 +645,27 @@ def onboarding_invite(request):
             )
 
             _send_org_invitation_email(request, invitation)
+
+            # Also create a workspace-level invitation so accepted users
+            # get WorkspaceMembership (with board sync) in addition to org access.
+            from kanban.models import WorkspaceInvitation, Workspace
+            active_ws = getattr(profile, 'active_workspace', None)
+            if not active_ws:
+                active_ws = Workspace.objects.filter(
+                    organization=org, is_demo=False, is_active=True,
+                ).first()
+            if active_ws:
+                WorkspaceInvitation.objects.filter(
+                    workspace=active_ws, email=email,
+                    status=WorkspaceInvitation.STATUS_PENDING,
+                ).update(status=WorkspaceInvitation.STATUS_REVOKED)
+                WorkspaceInvitation.objects.create(
+                    workspace=active_ws,
+                    invited_by=request.user,
+                    email=email,
+                    role='member',
+                )
+
             sent_list.append(email)
 
         from django.contrib import messages
