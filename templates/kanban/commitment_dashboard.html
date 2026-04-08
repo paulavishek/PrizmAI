@@ -36,6 +36,12 @@
     </ol>
   </nav>
 
+  <div class="mb-3">
+    <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
+      <i class="fas fa-arrow-left"></i> Back to Board
+    </a>
+  </div>
+
   <!-- View Mode Tabs -->
   <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
     <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>

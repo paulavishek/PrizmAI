@@ -50,9 +50,9 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="d-flex align-items-center gap-2">
                 {% include 'partials/favorite_toggle.html' with favorite_type='task' object_id=task.id is_favorited=is_favorited %}
-                <button onclick="goBack()" class="btn btn-sm btn-outline-secondary" title="Back to board">
+                <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm" title="Back to board">
                     <i class="fas fa-arrow-left"></i>
-                </button>
+                </a>
                 {% if task.is_epic %}
                 <span class="badge bg-warning text-dark" style="font-size:0.8em;"><i class="fas fa-crown me-1"></i>Epic</span>
                 {% endif %}

@@ -16,9 +16,9 @@
                             Create New Task
                         {% endif %}
                     </h6>
-                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                    <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
                         <i class="fas fa-arrow-left me-1"></i> Back
-                    </button>
+                    </a>
                 </div>
                 <div class="card-body">
                     <form method="post" class="task-form" id="task-create-form">
@@ -64,9 +64,9 @@
                                 <button type="button" class="btn btn-sm btn-success" onclick="confirmCreateDuplicate()">
                                     <i class="fas fa-check me-1"></i> Create Anyway
                                 </button>
-                                <button type="button" class="btn btn-sm btn-secondary" onclick="goBack()">
+                                <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-secondary">
                                     <i class="fas fa-times me-1"></i> Cancel
-                                </button>
+                                </a>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
@@ -725,9 +725,9 @@
                         <!-- Sticky footer bar (always visible) -->
                         <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid #E5E7EB;padding:12px 24px;z-index:100;margin-left:-24px;margin-right:-24px;">
                             <div class="d-flex justify-content-between align-items-center">
-                                <button onclick="goBack()" type="button" class="btn btn-outline-secondary">
+                                <a href="{% url 'board_detail' board.id %}" class="btn-prizm-cancel">
                                     <i class="fas fa-times me-1"></i> Cancel
-                                </button>
+                                </a>
                                 <button type="submit" class="btn btn-prizm-primary btn-lg">
                                     <i class="fas fa-check-circle me-1"></i> Create Task
                                 </button>
