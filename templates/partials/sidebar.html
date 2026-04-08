@@ -92,7 +92,7 @@
                     {% if active_workspace.pk == ws.pk %}
                     <i class="fas fa-check text-success" style="font-size:0.7rem;"></i>
                     {% endif %}
-                    {% if can_delete_workspace and real_workspaces|length > 1 %}
+                    {% if can_delete_workspace %}
                     <span class="sidebar-ws-delete-btn"
                           title="Delete workspace"
                           onclick="event.preventDefault(); event.stopPropagation(); confirmDeleteWorkspace({{ ws.pk }}, '{{ ws.name|escapejs }}');">
