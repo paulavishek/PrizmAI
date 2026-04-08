@@ -255,6 +255,10 @@ class SpectraActionService:
                 for i, col_name in enumerate(default_columns):
                     Column.objects.create(name=col_name, board=board, position=i)
 
+                # Auto-add workspace members to the new board
+                from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+                auto_add_workspace_members_to_board(board)
+
             # Audit trail (non-critical — outside the atomic block)
             try:
                 log_model_change('board.created', board, user)

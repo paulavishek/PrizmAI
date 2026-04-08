@@ -6,6 +6,7 @@ All views require @login_required.
 """
 import json
 import logging
+import re
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -66,6 +67,38 @@ def _can_create_workspace(user):
     return org.created_by_id == user.id
 
 
+# Patterns that indicate malicious or non-goal input
+_MALICIOUS_PATTERNS = [
+    # XSS / HTML injection
+    re.compile(r'<\s*script', re.IGNORECASE),
+    re.compile(r'on(?:error|load|click|mouseover|focus|blur)\s*=', re.IGNORECASE),
+    re.compile(r'javascript\s*:', re.IGNORECASE),
+    re.compile(r'<\s*(?:img|iframe|object|embed|svg|link|meta|base)\b[^>]*>', re.IGNORECASE),
+    re.compile(r'<\s*/?\s*(?:script|style|iframe|object|embed|applet|form)\b', re.IGNORECASE),
+    # SQL injection
+    re.compile(r"(?:'\s*;\s*DROP\s|--\s*SELECT|UNION\s+SELECT|OR\s+'1'\s*=\s*'1)", re.IGNORECASE),
+    re.compile(r";\s*(?:DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|EXEC)\s", re.IGNORECASE),
+    # Code injection / shell commands
+    re.compile(r'(?:__|import\s*\(|eval\s*\(|exec\s*\(|system\s*\(|subprocess)', re.IGNORECASE),
+    re.compile(r'\$\{.*\}', re.IGNORECASE),  # Template injection
+]
+
+
+def _detect_malicious_input(text: str) -> bool:
+    """Return True if the text contains patterns suggesting injection attacks."""
+    for pattern in _MALICIOUS_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+
+def _sanitize_goal_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace from goal text for safe storage."""
+    clean = re.sub(r'<[^>]+>', '', text)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
+
+
 # ---------------------------------------------------------------------------
 # Welcome
 # ---------------------------------------------------------------------------
@@ -98,8 +131,14 @@ def onboarding_welcome(request):
     if profile.onboarding_status == 'workspace_generated':
         return redirect('onboarding_review')
 
-    from_dashboard = request.GET.get('from') == 'dashboard'
-    return render(request, 'kanban/onboarding/welcome.html', {'from_dashboard': from_dashboard})
+    from_dashboard = request.GET.get('from') in ('dashboard', 'sidebar')
+    # Detect returning users who already have a workspace
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
+    return render(request, 'kanban/onboarding/welcome.html', {
+        'from_dashboard': from_dashboard or has_workspace,
+        'has_workspace': has_workspace,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +170,13 @@ def onboarding_goal_input(request):
     if request.method == 'GET':
         # Pre-fill with previous goal text if resuming
         prefill = request.GET.get('goal', '') or (profile.onboarding_goal_text or '')
+        from_dashboard = request.GET.get('from') == 'dashboard'
+        # Also detect returning users who already have a workspace
+        from kanban.models import OrganizationGoal
+        has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
         return render(request, 'kanban/onboarding/goal_input.html', {
             'prefill_goal': prefill,
+            'from_dashboard': from_dashboard or has_workspace,
         })
 
     # POST — submit goal
@@ -143,12 +187,31 @@ def onboarding_goal_input(request):
             'error': f'Please enter at least {MIN_GOAL_CHARS} characters.',
         })
 
+    # Reject input containing injection patterns (XSS, SQL, code injection)
+    if _detect_malicious_input(goal_text):
+        logger.warning(
+            "Malicious input detected in onboarding goal from user %s",
+            request.user.username,
+        )
+        return render(request, 'kanban/onboarding/goal_input.html', {
+            'prefill_goal': '',
+            'error': (
+                'Your input contains code or markup that cannot be used as '
+                'an organization goal. Please describe your business objective '
+                'in plain text.'
+            ),
+        })
+
+    # Sanitize: strip any residual HTML tags before storage & AI processing
+    goal_text = _sanitize_goal_text(goal_text)
+
     # Save goal text on profile
     profile.onboarding_goal_text = goal_text
     profile.onboarding_status = 'goal_submitted'
     profile.save(update_fields=['onboarding_goal_text', 'onboarding_status'])
 
     # Create or replace preview
+    from django.utils import timezone as _tz
     preview, _created = OnboardingWorkspacePreview.objects.update_or_create(
         user=request.user,
         defaults={
@@ -157,6 +220,7 @@ def onboarding_goal_input(request):
             'edited_data': None,
             'status': 'generating',
             'error_message': None,
+            'created_at': _tz.now(),
         },
     )
 
@@ -227,8 +291,11 @@ def onboarding_generating(request):
                 return redirect('onboarding_review')
 
     profile = _get_profile(request)
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
     return render(request, 'kanban/onboarding/generating.html', {
         'goal_text': preview.goal_text,
+        'has_workspace': has_workspace,
     })
 
 
@@ -249,7 +316,7 @@ def onboarding_status(request):
     """
     from django.utils import timezone
 
-    STALE_THRESHOLD_SECONDS = 120  # 2 minutes
+    STALE_THRESHOLD_SECONDS = 300  # 5 minutes
 
     try:
         preview = OnboardingWorkspacePreview.objects.get(user=request.user)
@@ -353,8 +420,22 @@ def onboarding_review(request):
     data = preview.edited_data if preview.edited_data else preview.generated_data
 
     # Detect stale previews (generated >6 hours ago and never committed)
-    age = timezone.now() - preview.created_at
+    age = timezone.now() - preview.updated_at
     is_stale = age > datetime.timedelta(hours=6)
+
+    from kanban.models import OrganizationGoal
+    has_workspace = OrganizationGoal.objects.filter(created_by=request.user).exists()
+
+    # Warn when the goal name matches an existing workspace goal
+    goal_name = ''
+    if data and 'goal' in data:
+        goal_name = (data['goal'].get('name', '') or '').strip()
+    duplicate_goal = None
+    if goal_name and has_workspace:
+        duplicate_goal = OrganizationGoal.objects.filter(
+            created_by=request.user,
+            name__iexact=goal_name,
+        ).first()
 
     return render(request, 'kanban/onboarding/review.html', {
         'preview': preview,
@@ -362,6 +443,8 @@ def onboarding_review(request):
         'data_json': json.dumps(data),
         'is_stale': is_stale,
         'preview_age_hours': int(age.total_seconds() // 3600),
+        'has_workspace': has_workspace,
+        'duplicate_goal': duplicate_goal,
     })
 
 
@@ -562,6 +645,27 @@ def onboarding_invite(request):
             )
 
             _send_org_invitation_email(request, invitation)
+
+            # Also create a workspace-level invitation so accepted users
+            # get WorkspaceMembership (with board sync) in addition to org access.
+            from kanban.models import WorkspaceInvitation, Workspace
+            active_ws = getattr(profile, 'active_workspace', None)
+            if not active_ws:
+                active_ws = Workspace.objects.filter(
+                    organization=org, is_demo=False, is_active=True,
+                ).first()
+            if active_ws:
+                WorkspaceInvitation.objects.filter(
+                    workspace=active_ws, email=email,
+                    status=WorkspaceInvitation.STATUS_PENDING,
+                ).update(status=WorkspaceInvitation.STATUS_REVOKED)
+                WorkspaceInvitation.objects.create(
+                    workspace=active_ws,
+                    invited_by=request.user,
+                    email=email,
+                    role='member',
+                )
+
             sent_list.append(email)
 
         from django.contrib import messages

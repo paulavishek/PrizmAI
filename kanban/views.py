@@ -90,20 +90,36 @@ def dashboard(request):
         # Also include boards the user created manually during demo
         # (these aren't sandbox copies but should still appear in stats)
         # Exclude imported boards — imports belong in My Workspace, not Demo.
-        user_created_boards = Board.objects.filter(
-            created_by=request.user,
-            is_sandbox_copy=False,
-            is_official_demo_board=False,
-            is_imported=False,
-        )
+        # IMPORTANT: scope to demo workspace to prevent real workspace boards leaking in.
+        from accounts.models import Organization as _Org
+        from kanban.models import Workspace
+        _demo_org = _Org.objects.filter(is_demo=True).first()
+        _demo_ws = None
+        if _demo_org:
+            _demo_ws = Workspace.objects.filter(
+                organization=_demo_org, is_demo=True, is_active=True,
+            ).first()
+        if _demo_ws:
+            user_created_boards = Board.objects.filter(
+                created_by=request.user,
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+                is_imported=False,
+                workspace=_demo_ws,
+            )
+        else:
+            user_created_boards = Board.objects.none()
         boards = (sandbox_boards | user_created_boards).distinct()
         if not sandbox_boards.exists():
             # Sandbox missing — auto-re-provision synchronously so the user
             # sees their sandbox immediately on this page load
             from kanban.models import DemoSandbox
+            has_sandbox = False
             try:
-                request.user.demo_sandbox
-            except DemoSandbox.DoesNotExist:
+                has_sandbox = hasattr(request.user, 'demo_sandbox') and request.user.demo_sandbox is not None
+            except Exception:
+                pass
+            if not has_sandbox:
                 from kanban.tasks.sandbox_provisioning import provision_sandbox_task
                 try:
                     provision_sandbox_task(request.user.id)
@@ -138,12 +154,9 @@ def dashboard(request):
                 except DemoSandbox.DoesNotExist:
                     pass
     elif active_ws and not active_ws.is_demo:
-        # Workspace-scoped: only boards in the active workspace
-        boards = Board.objects.filter(
-            workspace=active_ws,
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).distinct()
+        # Workspace-scoped: delegate to the centralized helper.
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
     elif _is_org_admin:
         # Org Admin: see all non-demo boards, exclude sandbox copies
         boards = Board.objects.filter(
@@ -152,24 +165,11 @@ def dashboard(request):
         ).exclude(
             created_by_session__startswith='spectra_demo_'
         ).distinct()
-    elif profile.onboarding_version >= 2:
-        # v2 real mode: only the user's own boards (no demo boards,
-        # no boards created during demo exploration via Spectra,
-        # no sandbox copies).
-        boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user),
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).exclude(
-            created_by_session__startswith='spectra_demo_'
-        ).distinct()
     else:
-        # v1 legacy: demo + user boards mixed
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user)
-        )
-        boards = (demo_boards | user_boards).distinct()
+        # v2 and v1: delegate to the centralized helper that handles all
+        # demo/sandbox/spectra exclusion in one place.
+        from kanban.utils.demo_protection import get_user_boards as _get_user_boards
+        boards = _get_user_boards(request.user)
     
     # Annotate task counts so the template can display them efficiently
     # (Task has no direct FK to Board — it goes through Column)
@@ -349,34 +349,14 @@ def dashboard(request):
     # or it is a demo mission.
     user_board_ids = list(boards.values_list('id', flat=True))
 
-    # Missions the user has direct ownership of or demo missions
-    if demo_mode:
-        # Single-tier demo: show official demo missions + any user-created missions
-        # (user may create new missions or link boards to strategies while exploring)
-        missions_qs = Mission.objects.filter(
-            Q(is_demo=True) | Q(is_seed_demo_data=True) |
-            Q(created_by=request.user) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    elif profile.onboarding_version >= 2:
-        # v2 real mode: only user's own missions (exclude demo)
-        missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).filter(is_demo=False, is_seed_demo_data=False
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
-    else:
-        missions_qs = Mission.objects.filter(
-            Q(created_by=request.user) |
-            Q(is_demo=True) |
-            Q(strategies__boards__id__in=user_board_ids)
-        ).distinct().select_related('organization_goal').prefetch_related(
-            'strategies__boards'
-        ).order_by('-created_at')
+    # Missions the user has direct ownership of or demo missions.
+    # Use the centralized helper for the base queryset, then add prefetches.
+    from kanban.utils.demo_protection import get_user_missions as _get_user_missions
+    missions_qs = _get_user_missions(request.user).select_related(
+        'organization_goal'
+    ).prefetch_related(
+        'strategies__boards'
+    ).order_by('-created_at')
 
     # Build mission tree as a plain list (for easy template iteration)
     # Each mission dict holds: mission obj + list of strategy dicts
@@ -428,6 +408,7 @@ def dashboard(request):
                 )),
                 no_due_date_tasks=Count('id', filter=Q(due_date__isnull=True)),
                 high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
+                risk_assessed_tasks=Count('id', filter=Q(risk_level__isnull=False)),
             )
         )
         # Also get total + done for completion %
@@ -457,6 +438,7 @@ def dashboard(request):
                 'at_risk_tasks': row['at_risk_tasks'],
                 'no_due_date_tasks': row['no_due_date_tasks'],
                 'high_risk_tasks': row['high_risk_tasks'],
+                'risk_assessed_tasks': row['risk_assessed_tasks'],
             }
         # Boards with only completed tasks (no active) still need total/done
         for bid, comp in _completion_map.items():
@@ -470,6 +452,7 @@ def dashboard(request):
                     'at_risk_tasks': 0,
                     'no_due_date_tasks': 0,
                     'high_risk_tasks': 0,
+                    'risk_assessed_tasks': 0,
                 }
 
         if _cache_ttl > 0:
@@ -497,8 +480,11 @@ def dashboard(request):
             schedule_status = 'on_track'
 
         # Risk Level: based on high/critical risk tasks as fraction of active tasks
-        if denom == 0:
-            risk_level = 'low'
+        assessed = bstats.get('risk_assessed_tasks', 0)
+        if denom == 0 and bstats.get('total_tasks', 0) == 0:
+            risk_level = 'not_assessed'
+        elif assessed == 0:
+            risk_level = 'not_assessed'
         elif high_risk / denom >= _board_high_risk_thresh:
             risk_level = 'high'
         elif high_risk / denom >= _board_med_risk_thresh:
@@ -518,7 +504,8 @@ def dashboard(request):
         """Return worst risk level from a list."""
         if 'high' in levels: return 'high'
         if 'medium' in levels: return 'medium'
-        return 'low'
+        if 'low' in levels: return 'low'
+        return 'not_assessed'
 
     # ── Sandbox board mapping ────────────────────────────────────────
     # In demo mode, the mission tree references template boards (via
@@ -574,7 +561,7 @@ def dashboard(request):
             s_schedules = [b['schedule_status'] for b in board_list]
             s_risks = [b['risk_level'] for b in board_list]
             s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'on_track'
-            s_risk = _worst_risk(*s_risks) if s_risks else 'low'
+            s_risk = _worst_risk(*s_risks) if s_risks else 'not_assessed'
             s_health = 'green'
             if s_schedule == 'late' or s_risk == 'high': s_health = 'red'
             elif s_schedule == 'at_risk' or s_risk == 'medium': s_health = 'amber'
@@ -600,7 +587,7 @@ def dashboard(request):
         m_schedules = [s['schedule_status'] for s in strategy_list]
         m_risks = [s['risk_level'] for s in strategy_list]
         m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'on_track'
-        m_risk = _worst_risk(*m_risks) if m_risks else 'low'
+        m_risk = _worst_risk(*m_risks) if m_risks else 'not_assessed'
         m_health = 'green'
         if m_schedule == 'late' or m_risk == 'high': m_health = 'red'
         elif m_schedule == 'at_risk' or m_risk == 'medium': m_health = 'amber'
@@ -661,7 +648,7 @@ def dashboard(request):
         g_schedules = [m['schedule_status'] for m in goal_entry['missions']]
         g_risks = [m['risk_level'] for m in goal_entry['missions']]
         goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'on_track'
-        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'low'
+        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'not_assessed'
         goal_entry['total_tasks'] = sum(m['total_tasks'] for m in goal_entry['missions'])
         goal_entry['done_tasks'] = sum(m['done_tasks'] for m in goal_entry['missions'])
         goal_entry['completion_pct'] = (
@@ -1404,13 +1391,11 @@ def toggle_demo_mode(request):
     if not profile.is_viewing_demo:
         # ── Entering demo ──────────────────────────────────────────
 
-        # Resolve demo workspace for this org (if any)
+        # Resolve demo workspace from the demo org directly — do NOT
+        # use profile.organization which may be the user's real org.
         from kanban.models import Workspace
-        demo_ws = None
-        if profile.organization:
-            demo_ws = Workspace.objects.filter(
-                organization=profile.organization, is_demo=True, is_active=True,
-            ).first()
+        from kanban.utils.demo_protection import get_demo_workspace
+        demo_ws = get_demo_workspace()
 
         # Ensure the dashboard onboarding guard won't redirect away.
         # Users who joined via board invitation have status='pending'
@@ -1481,6 +1466,9 @@ def toggle_demo_mode(request):
             pass
         _leave_demo_org(request.user)
 
+        # Re-read profile after _leave_demo_org restored the real org
+        profile.refresh_from_db()
+
         # Resolve the user's default real workspace
         from kanban.models import Workspace
         real_ws = None
@@ -1545,6 +1533,84 @@ def rename_workspace(request):
 
 @login_required
 @require_POST
+def delete_workspace(request):
+    """POST /delete-workspace/ — soft-delete a workspace.
+
+    Only the org creator can delete workspaces.  The currently active
+    workspace cannot be deleted — the user must switch to another first,
+    unless it's the only real workspace (then we just redirect to
+    onboarding).  Demo workspaces cannot be deleted this way.
+
+    Accepts ``workspace_id`` in POST body.
+    """
+    from kanban.models import Workspace
+    from kanban.permissions import is_user_org_admin
+
+    workspace_id = request.POST.get('workspace_id')
+    if not workspace_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Missing workspace_id'}, status=400)
+        return redirect('dashboard')
+
+    profile = request.user.profile
+
+    # Only org admins can delete
+    if not is_user_org_admin(request.user):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Only org admins can delete workspaces'}, status=403)
+        from django.contrib import messages
+        messages.error(request, 'Only workspace admins can delete workspaces.')
+        return redirect('dashboard')
+
+    try:
+        ws = Workspace.objects.get(pk=workspace_id, is_active=True)
+    except Workspace.DoesNotExist:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Workspace not found'}, status=404)
+        return redirect('dashboard')
+
+    # Cannot delete demo workspace
+    if ws.is_demo:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Cannot delete demo workspace'}, status=400)
+        return redirect('dashboard')
+
+    # Security: workspace must belong to user's organization
+    if not profile.organization or ws.organization_id != profile.organization_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        return redirect('dashboard')
+
+    # Soft-delete the workspace
+    ws.is_active = False
+    ws.save(update_fields=['is_active'])
+
+    from django.contrib import messages
+    messages.success(request, f'Workspace "{ws.name}" has been deleted.')
+
+    # If the deleted workspace was the active one, switch to another
+    if profile.active_workspace_id == ws.pk:
+        next_ws = Workspace.objects.filter(
+            organization=profile.organization,
+            is_active=True,
+            is_demo=False,
+        ).order_by('-created_at').first()
+        if next_ws:
+            profile.active_workspace = next_ws
+            profile.save(update_fields=['active_workspace'])
+        else:
+            # No workspaces left — clear active and redirect to onboarding
+            profile.active_workspace = None
+            profile.save(update_fields=['active_workspace'])
+            return redirect('onboarding_welcome')
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True})
+    return redirect('dashboard')
+
+
+@login_required
+@require_POST
 def switch_workspace(request):
     """POST /switch-workspace/ — switch the user's active workspace.
 
@@ -1567,17 +1633,36 @@ def switch_workspace(request):
         return redirect('dashboard')
 
     profile = request.user.profile
-    org = profile.organization
-    if not org:
-        return redirect('dashboard')
 
+    # Look up the workspace without restricting to the current org —
+    # the user's org might be the demo org right now, and the target
+    # workspace is in their real org (or vice-versa).  We verify access
+    # by checking the workspace belongs to any org the user is associated
+    # with (their real org, or the demo org, or one they created).
     try:
         target_ws = Workspace.objects.get(
             pk=workspace_id,
-            organization=org,
             is_active=True,
         )
     except Workspace.DoesNotExist:
+        return redirect('dashboard')
+
+    # Security check: user must have a legitimate connection to this workspace
+    _allowed_org_ids = set()
+    if profile.organization_id:
+        _allowed_org_ids.add(profile.organization_id)
+    # Include orgs the user created (covers the case where profile.organization
+    # was temporarily switched to the demo org)
+    from accounts.models import Organization as _Org
+    _allowed_org_ids.update(
+        _Org.objects.filter(created_by=request.user).values_list('id', flat=True)
+    )
+    # Include the demo org so users can switch into demo
+    _demo_org = _Org.objects.filter(is_demo=True).values_list('id', flat=True).first()
+    if _demo_org:
+        _allowed_org_ids.add(_demo_org)
+
+    if target_ws.organization_id not in _allowed_org_ids:
         return redirect('dashboard')
 
     was_demo = profile.is_viewing_demo
@@ -1617,6 +1702,7 @@ def switch_workspace(request):
             except DemoSandbox.DoesNotExist:
                 pass
             _leave_demo_org(request.user)
+            profile.refresh_from_db()
 
         profile.is_viewing_demo = False
         profile.active_workspace = target_ws
@@ -1898,6 +1984,10 @@ def create_board(request):
                         defaults={'role': 'member'},
                     )
             
+            # Auto-add workspace members to the new board
+            from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+            auto_add_workspace_members_to_board(board)
+
             # Log board creation
             log_model_change('board.created', board, request.user, request)
               # Check if there are recommended columns to create
@@ -4453,6 +4543,10 @@ def _create_board_from_import_result(result, user, organization, session):
                 )
                 new_task.labels.add(label)
     
+    # Auto-add workspace members to the imported board
+    from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+    auto_add_workspace_members_to_board(new_board)
+
     return new_board
 
 @login_required
@@ -4707,6 +4801,10 @@ def wizard_create_board(request):
                 for i, name in enumerate(default_columns):
                     Column.objects.create(name=name, board=board, position=i)
             
+            # Auto-add workspace members to the new board
+            from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+            auto_add_workspace_members_to_board(board)
+
             return JsonResponse({
                 'success': True,
                 'board_id': board.id,

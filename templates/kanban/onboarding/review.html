@@ -151,11 +151,17 @@
 
 {% block body %}
 <div style="max-width: 800px; width: 100%;">
-    <!-- Back to dashboard -->
+    <!-- Back navigation -->
     <div class="mb-3">
+        {% if has_workspace %}
         <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
             <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
         </a>
+        {% else %}
+        <a href="{% url 'onboarding_goal' %}" class="link-subtle" style="font-size: 0.85rem;">
+            <i class="bi bi-arrow-left me-1"></i>Back to Goal
+        </a>
+        {% endif %}
     </div>
     <div class="text-center mb-4">
         <h2 style="font-weight: 700; font-size: 1.5rem;">Here's your AI-generated workspace</h2>
@@ -177,6 +183,15 @@
         <form method="post" action="{% url 'onboarding_start_over' %}" class="d-inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-warning" style="font-weight:600;">Start fresh with a new goal</button>
+        </form>
+    </div>
+    {% endif %}
+    {% if duplicate_goal %}
+    <div class="alert mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#fef2f2; border:1px solid #fecaca; border-radius:0.75rem; color:#991b1b; font-size:0.875rem;">
+        <span><i class="bi bi-exclamation-triangle me-1"></i>You already have a workspace with the goal <strong>"{{ duplicate_goal.name }}"</strong>. Confirming will create a duplicate workspace. Consider <a href="{% url 'dashboard' %}" style="color:#991b1b; font-weight:600;">returning to your dashboard</a> or starting fresh with a different goal.</span>
+        <form method="post" action="{% url 'onboarding_start_over' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger" style="font-weight:600;">Start fresh with a new goal</button>
         </form>
     </div>
     {% endif %}
@@ -269,7 +284,7 @@
             {% csrf_token %}
             <input type="hidden" name="edited_data" id="editedDataFieldValidated" value="">
             <button type="submit" class="btn btn-prizm btn-lg">
-                <i class="bi bi-check-circle me-1"></i>Create my workspace
+                <i class="bi bi-check-circle me-1"></i>Create New Workspace
             </button>
         </form>
     </div>
@@ -1074,13 +1089,15 @@
         }
 
         if (result.status === 'clear' || (!result.flags || result.flags.length === 0)) {
-            // Green — all clear
+            // Green — all clear → auto-create workspace
             validationPanel.innerHTML =
                 '<div class="validation-card green">' +
                     '<i class="bi bi-check-circle me-1"></i>' +
-                    '<strong>Everything looks coherent.</strong> Your workspace is ready to create.' +
+                    '<strong>Everything looks coherent.</strong> Creating your workspace…' +
                 '</div>';
-            showPostValidationCreate();
+            // Auto-submit: populate hidden field and submit the form
+            document.getElementById('editedDataFieldValidated').value = JSON.stringify(workspaceData);
+            document.getElementById('commitFormValidated').submit();
             return;
         }
 

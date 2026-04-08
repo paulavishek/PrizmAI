@@ -173,10 +173,52 @@
                     <i class="fas fa-briefcase me-1"></i><span id="ws-name-text">{{ active_workspace.name|truncatechars:24 }}</span>
                 </span>
                 {% if can_rename_workspace %}
-                <button type="button" class="tws-ws-edit-btn" id="ws-edit-btn" title="Rename workspace"
-                        onclick="wsStartEdit()" style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 4px;font-size:0.72rem;margin-left:2px;">
-                    <i class="fas fa-pencil-alt"></i>
-                </button>
+                {# ── Workspace Settings gear dropdown ── #}
+                <div class="dropdown d-inline-block" id="ws-settings-dropdown">
+                    <button type="button" class="tws-ws-edit-btn" id="ws-settings-btn" title="Workspace settings"
+                            data-bs-toggle="dropdown" aria-expanded="false"
+                            style="background:none;border:none;color:var(--text-secondary,#6b7280);cursor:pointer;padding:2px 6px;font-size:0.75rem;margin-left:4px;transition:color 0.15s;"
+                            onmouseenter="this.style.color='#6366f1'" onmouseleave="this.style.color='var(--text-secondary,#6b7280)'">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:200px;font-size:0.82rem;">
+                        <li><h6 class="dropdown-header" style="font-size:0.7rem;"><i class="fas fa-briefcase me-1"></i>Workspace Settings</h6></li>
+                        <li>
+                            <button class="dropdown-item" onclick="wsStartEdit(); document.getElementById('ws-settings-dropdown').querySelector('.dropdown-menu').classList.remove('show');">
+                                <i class="fas fa-pencil-alt me-2 text-muted"></i>Rename Workspace
+                            </button>
+                        </li>
+                        {% if can_manage_ws_members %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'manage_workspace_members' %}">
+                                <i class="fas fa-users me-2 text-muted"></i>Manage Members
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_delete_workspace %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger" onclick="confirmDeleteWorkspaceTopbar()">
+                                <i class="fas fa-trash-alt me-2"></i>Delete Workspace
+                            </button>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <script>
+                function confirmDeleteWorkspaceTopbar() {
+                    var wsName = document.getElementById('ws-name-text').textContent.trim();
+                    if (!confirm('Delete workspace "' + wsName + '"?\n\nThis will remove the workspace and all its boards, tasks, and data. This action cannot be undone.')) return;
+                    var fd = new FormData();
+                    fd.append('workspace_id', '{{ active_workspace.pk }}');
+                    var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+                    if (csrf) fd.append('csrfmiddlewaretoken', csrf.value);
+                    fetch('{% url "delete_workspace" %}', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) { if (data.ok) { window.location.href = '/dashboard/'; } else { alert(data.error || 'Failed to delete'); } })
+                        .catch(function() { alert('Network error'); });
+                }
+                </script>
                 <form method="post" action="{% url 'rename_workspace' %}" class="d-inline" id="ws-rename-form"
                       style="display:none!important;" onsubmit="return wsSubmitRename(event)">
                     {% csrf_token %}
@@ -280,12 +322,12 @@
                    style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;font-size:0.82rem;font-weight:600;padding:6px 14px;border-radius:6px;box-shadow:0 2px 8px rgba(99,102,241,0.3);"
                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(99,102,241,0.4)';"
                    onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(99,102,241,0.3)';">
-                    <i class="fas fa-rocket me-1"></i>Create My Workspace
+                    <i class="fas fa-rocket me-1"></i>Create New Workspace
                 </a>
                 {% else %}
-                <a href="{% url 'onboarding_goal' %}" class="tws-btn tws-btn-setup-muted"
+                <a href="{% url 'onboarding_goal' %}?from=dashboard" class="tws-btn tws-btn-setup-muted"
                    style="background:transparent;border:1px solid var(--border-color, #d1d5db);color:var(--text-secondary, #6b7280);font-size:0.78rem;font-weight:500;opacity:0.85;">
-                    <i class="fas fa-rocket me-1"></i>Set up my workspace
+                    <i class="fas fa-rocket me-1"></i>Create New Workspace
                 </a>
                 {% endif %}
                 {% endif %}
@@ -743,7 +785,7 @@
 /* Workspace inline rename */
 function wsStartEdit(){
     var d=document.getElementById('ws-name-display'),
-        b=document.getElementById('ws-edit-btn'),
+        b=document.getElementById('ws-settings-dropdown'),
         f=document.getElementById('ws-rename-form'),
         i=document.getElementById('ws-rename-input');
     if(d)d.style.display='none';
@@ -753,7 +795,7 @@ function wsStartEdit(){
 }
 function wsCancelEdit(){
     var d=document.getElementById('ws-name-display'),
-        b=document.getElementById('ws-edit-btn'),
+        b=document.getElementById('ws-settings-dropdown'),
         f=document.getElementById('ws-rename-form');
     if(d)d.style.display='';
     if(b)b.style.display='';

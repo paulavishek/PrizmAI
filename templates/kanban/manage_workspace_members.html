@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Members — {{ workspace.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex align-items-center mb-4 gap-3">
+    <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+    </a>
+    <h2 class="mb-0 fw-bold">
+      <i class="fas fa-users-cog me-2 text-primary"></i>{{ workspace.name }} — Workspace Members
+    </h2>
+  </div>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="row g-4">
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- Current Members -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-user-check me-2 text-success"></i>Current Members
+          <span class="badge bg-secondary ms-2">{{ memberships.count }}</span>
+        </div>
+        <div class="card-body p-0">
+          {% if memberships %}
+          <div class="list-group list-group-flush">
+            {% for membership in memberships %}
+            <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+              <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white fw-bold"
+                  style="width:38px;height:38px;font-size:.9rem;">
+                  {{ membership.user.username|first|upper }}
+                </div>
+                <div>
+                  <div class="fw-semibold">
+                    {{ membership.user.get_full_name|default:membership.user.username }}
+                    {% if membership.user == workspace.created_by %}
+                      <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Creator</span>
+                    {% endif %}
+                  </div>
+                  <div class="text-muted small">{{ membership.user.email }}</div>
+                </div>
+              </div>
+
+              <div class="d-flex align-items-center gap-2">
+                {% if can_manage and membership.user != workspace.created_by %}
+                <!-- Role dropdown -->
+                <form method="post" action="{% url 'update_workspace_member_role' user_id=membership.user.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <select name="role" onchange="this.form.submit()" class="form-select form-select-sm"
+                    style="width:auto;font-size:.78rem;padding:.2rem 1.8rem .2rem .5rem;
+                    {% if membership.role == 'owner' %}background-color:#ffc107;color:#212529;border-color:#ffc107;
+                    {% elif membership.role == 'viewer' %}background-color:#6c757d;color:#fff;border-color:#6c757d;
+                    {% else %}background-color:#0d6efd;color:#fff;border-color:#0d6efd;{% endif %}
+                    border-radius:0.35rem;font-weight:600;">
+                    <option value="owner" {% if membership.role == 'owner' %}selected{% endif %}>Owner</option>
+                    <option value="member" {% if membership.role == 'member' %}selected{% endif %}>Member</option>
+                    <option value="viewer" {% if membership.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                  </select>
+                </form>
+
+                <!-- Remove button -->
+                <form method="post" action="{% url 'remove_workspace_member' user_id=membership.user.id %}"
+                  onsubmit="return confirm('Remove {{ membership.user.get_full_name|default:membership.user.username }} from all boards in this workspace?');"
+                  class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-danger btn-sm" title="Remove from workspace">
+                    <i class="fas fa-user-minus"></i>
+                  </button>
+                </form>
+                {% else %}
+                <!-- Read-only role badge for workspace creator -->
+                <span class="badge"
+                  style="font-size:.78rem;padding:.3rem .6rem;font-weight:600;
+                  {% if membership.role == 'owner' %}background-color:#ffc107;color:#212529;
+                  {% elif membership.role == 'viewer' %}background-color:#6c757d;color:#fff;
+                  {% else %}background-color:#0d6efd;color:#fff;{% endif %}">
+                  {{ membership.get_role_display }}
+                </span>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-4">
+            <i class="fas fa-user-plus fa-2x mb-2 d-block opacity-50"></i>
+            No members yet. Add your first team member!
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ════ Pending Invitations ════ -->
+      {% if pending_invitations %}
+      <div class="card shadow-sm border-0 mt-4">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-clock me-2 text-warning"></i>Pending Invitations
+          <span class="badge bg-warning text-dark ms-2">{{ pending_invitations.count }}</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="list-group list-group-flush">
+            {% for inv in pending_invitations %}
+            <div class="list-group-item d-flex align-items-center justify-content-between py-3 px-4">
+              <div>
+                <div class="fw-semibold">{{ inv.email }}</div>
+                <div class="text-muted small">
+                  Invited {{ inv.created_at|timesince }} ago as
+                  <span class="badge bg-light text-dark">{{ inv.get_role_display }}</span>
+                  {% if inv.expires_at %}
+                  · Expires {{ inv.expires_at|timeuntil }}
+                  {% endif %}
+                </div>
+              </div>
+              <form method="post" action="{% url 'revoke_workspace_invitation' invitation_id=inv.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Revoke invitation">
+                  <i class="fas fa-times me-1"></i>Revoke
+                </button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- Add Members Panel -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="col-lg-5">
+      <!-- Add existing org user -->
+      {% if org_users %}
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-user-plus me-2 text-primary"></i>Add Existing Team Member
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'add_workspace_member' %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Select User</label>
+              <select name="user_id" class="form-select" required>
+                <option value="">Choose a team member...</option>
+                {% for u in org_users %}
+                <option value="{{ u.id }}">
+                  {{ u.get_full_name|default:u.username }} ({{ u.email }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Role</label>
+              <select name="role" class="form-select">
+                <option value="member" selected>Member — Create &amp; edit tasks</option>
+                <option value="viewer">Viewer — Read-only access</option>
+                <option value="owner">Owner — Full control</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-plus me-1"></i>Add to Workspace
+            </button>
+          </form>
+          <p class="text-muted small mt-2 mb-0">
+            <i class="fas fa-info-circle me-1"></i>
+            They will be added to <strong>all boards</strong> in this workspace with the selected role.
+          </p>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Invite by email -->
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-envelope me-2 text-info"></i>Invite by Email
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'add_workspace_member' %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Email Addresses</label>
+              <textarea name="invite_emails" class="form-control" rows="3"
+                placeholder="Enter email addresses, separated by commas or new lines..."></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Role</label>
+              <select name="role" class="form-select">
+                <option value="member" selected>Member — Create &amp; edit tasks</option>
+                <option value="viewer">Viewer — Read-only access</option>
+                <option value="owner">Owner — Full control</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-info text-white w-100">
+              <i class="fas fa-paper-plane me-1"></i>Send Invitations
+            </button>
+          </form>
+          <p class="text-muted small mt-2 mb-0">
+            <i class="fas fa-info-circle me-1"></i>
+            Invitees will receive an email with a link to join this workspace.
+            Invitations expire after 48 hours.
+          </p>
+        </div>
+      </div>
+
+      <!-- Role guide -->
+      <div class="card shadow-sm border-0 mt-4">
+        <div class="card-header bg-transparent border-bottom fw-semibold">
+          <i class="fas fa-shield-alt me-2 text-secondary"></i>Role Guide
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-start gap-2 mb-2">
+            <span class="badge" style="background-color:#ffc107;color:#212529;min-width:60px;">Owner</span>
+            <small class="text-muted">Full control: create/edit/delete tasks, manage members, change board settings.</small>
+          </div>
+          <div class="d-flex align-items-start gap-2 mb-2">
+            <span class="badge" style="background-color:#0d6efd;color:#fff;min-width:60px;">Member</span>
+            <small class="text-muted">Can create, edit, and move tasks. Cannot manage members or delete boards.</small>
+          </div>
+          <div class="d-flex align-items-start gap-2">
+            <span class="badge" style="background-color:#6c757d;color:#fff;min-width:60px;">Viewer</span>
+            <small class="text-muted">Read-only access to boards and tasks. Cannot make any changes.</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

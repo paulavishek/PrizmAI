@@ -2534,6 +2534,117 @@ class BoardInvitation(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# WORKSPACE MEMBERSHIP — Workspace-level member management with RBAC
+# ---------------------------------------------------------------------------
+
+class WorkspaceMembership(models.Model):
+    """
+    Workspace-level membership with a single RBAC role that propagates
+    to all boards within the workspace (current and future).
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('member', 'Member'),
+        ('viewer', 'Viewer'),
+    ]
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='memberships'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='workspace_memberships'
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default='member',
+        help_text="Owner: full control. Member: create/edit tasks. Viewer: read-only.",
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    added_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='added_workspace_members',
+    )
+
+    class Meta:
+        unique_together = ('workspace', 'user')
+        ordering = ['workspace', '-added_at']
+        indexes = [
+            models.Index(fields=['workspace', 'user']),
+            models.Index(fields=['user', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.workspace.name} ({self.get_role_display()})"
+
+
+class WorkspaceInvitation(models.Model):
+    """Email-based invitation to join a workspace with a specific role."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_EXPIRED = 'expired'
+    STATUS_REVOKED = 'revoked'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ACCEPTED, 'Accepted'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_REVOKED, 'Revoked'),
+    ]
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='invitations',
+    )
+    invited_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_workspace_invitations',
+    )
+    email = models.EmailField()
+    role = models.CharField(
+        max_length=10,
+        choices=WorkspaceMembership.ROLE_CHOICES,
+        default='member',
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='accepted_workspace_invitations',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Workspace invite to {self.workspace.name} for {self.email} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        if self.status != self.STATUS_PENDING:
+            return False
+        if timezone.now() > self.expires_at:
+            self.status = self.STATUS_EXPIRED
+            self.save(update_fields=['status'])
+            return False
+        return True
+
+    def mark_accepted(self, user):
+        self.status = self.STATUS_ACCEPTED
+        self.accepted_at = timezone.now()
+        self.accepted_by = user
+        self.save()
+
+
+# ---------------------------------------------------------------------------
 # SHADOW BOARD MODELS — Parallel Universe Simulator
 # ---------------------------------------------------------------------------
 # Import at the end to ensure all dependencies are loaded

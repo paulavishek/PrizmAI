@@ -152,7 +152,11 @@ class BoardSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and hasattr(request, 'workspace') and request.workspace:
             validated_data['workspace'] = request.workspace
-        return super().create(validated_data)
+        board = super().create(validated_data)
+        # Auto-add workspace members to the new board
+        from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+        auto_add_workspace_members_to_board(board)
+        return board
 
 
 class BoardListSerializer(serializers.ModelSerializer):

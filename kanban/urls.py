@@ -18,6 +18,7 @@ from . import prizmbrief_views
 from . import onboarding_views
 from . import whatif_views
 from . import shadow_views
+from . import workspace_member_views
 from . import commitment_views
 from . import favorite_views
 from . import sandbox_views
@@ -129,6 +130,17 @@ urlpatterns = [
     path('boards/<int:board_id>/invite/', invitation_views.invite_to_board, name='invite_to_board'),
     path('invite/<uuid:token>/', invitation_views.accept_invitation, name='accept_board_invitation'),
     path('invitations/<int:invitation_id>/revoke/', invitation_views.revoke_invitation, name='revoke_board_invitation'),
+
+    # -----------------------------------------------------------------------
+    # Workspace-level member management
+    # -----------------------------------------------------------------------
+    path('workspace/members/', workspace_member_views.manage_workspace_members, name='manage_workspace_members'),
+    path('workspace/members/add/', workspace_member_views.add_workspace_member_view, name='add_workspace_member'),
+    path('workspace/members/<int:user_id>/remove/', workspace_member_views.remove_workspace_member_view, name='remove_workspace_member'),
+    path('workspace/members/<int:user_id>/role/', workspace_member_views.update_workspace_member_role_view, name='update_workspace_member_role'),
+    path('workspace/invite/<uuid:token>/', workspace_member_views.accept_workspace_invitation, name='accept_workspace_invitation'),
+    path('workspace/invitations/<int:invitation_id>/revoke/', workspace_member_views.revoke_workspace_invitation_view, name='revoke_workspace_invitation'),
+
     path('boards/<int:board_id>/delete/', views.delete_board, name='delete_board'),
     path('boards/<int:board_id>/join/', views.join_board, name='join_board'),
     path('boards/<int:board_id>/export/', views.export_board, name='export_board'),
@@ -368,6 +380,7 @@ urlpatterns = [
     # Workspace context switcher
     path('switch-workspace/', views.switch_workspace, name='switch_workspace'),
     path('rename-workspace/', views.rename_workspace, name='rename_workspace'),
+    path('delete-workspace/', views.delete_workspace, name='delete_workspace'),
     path('workspace-selection/', views.workspace_selection, name='workspace_selection'),
 
     # Workspace preset settings (Org Admin)

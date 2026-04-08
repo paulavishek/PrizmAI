@@ -64,6 +64,14 @@ class WorkspaceMiddleware:
             try:
                 profile = request.user.profile
                 ws = profile.active_workspace
+
+                # ── Consistency guard ──────────────────────────────────
+                # Detect and auto-repair state corruption where
+                # is_viewing_demo is True but active_workspace is None
+                # or belongs to the wrong workspace type.
+                self._heal_workspace_state(profile)
+
+                ws = profile.active_workspace  # re-read after potential heal
                 if ws and ws.is_active:
                     request.workspace = ws
                 elif profile.organization and not profile.is_viewing_demo:
@@ -78,3 +86,70 @@ class WorkspaceMiddleware:
 
         response = self.get_response(request)
         return response
+
+    @staticmethod
+    def _heal_workspace_state(profile):
+        """Detect and auto-repair demo/workspace state inconsistencies.
+
+        Known corruption patterns:
+          1. is_viewing_demo=True but active_workspace is None
+          2. is_viewing_demo=True but active_workspace.is_demo is False
+          3. is_viewing_demo=False but org is the demo org
+          4. is_viewing_demo=True but org is NOT the demo org (and no demo ws)
+        """
+        import logging
+        _log = logging.getLogger('accounts.middleware')
+
+        try:
+            is_demo = profile.is_viewing_demo
+            ws = profile.active_workspace
+            org = profile.organization
+
+            if is_demo and (ws is None or (ws and not ws.is_demo)):
+                # Pattern 1 & 2: in demo but workspace is wrong/missing
+                from kanban.utils.demo_protection import get_demo_workspace
+                demo_ws = get_demo_workspace()
+                if demo_ws:
+                    profile.active_workspace = demo_ws
+                    profile.save(update_fields=['active_workspace'])
+                    _log.warning(
+                        "Healed workspace state for user %s: set active_workspace to demo",
+                        profile.user_id,
+                    )
+                else:
+                    # No demo workspace exists — exit demo mode
+                    profile.is_viewing_demo = False
+                    profile.save(update_fields=['is_viewing_demo'])
+                    _log.warning(
+                        "Healed workspace state for user %s: exited demo (no demo ws)",
+                        profile.user_id,
+                    )
+
+            elif not is_demo and org and getattr(org, 'is_demo', False):
+                # Pattern 3: not in demo but org is still demo org
+                from kanban.models import Workspace
+                from accounts.models import Organization
+                real_ws = Workspace.objects.filter(
+                    created_by=profile.user, is_demo=False, is_active=True,
+                ).order_by('-created_at').first()
+                real_org = (
+                    real_ws.organization if real_ws and real_ws.organization
+                    else Organization.objects.filter(
+                        created_by=profile.user, is_demo=False,
+                    ).order_by('-id').first()
+                )
+                fields = []
+                if real_org:
+                    profile.organization = real_org
+                    fields.append('organization')
+                if real_ws:
+                    profile.active_workspace = real_ws
+                    fields.append('active_workspace')
+                if fields:
+                    profile.save(update_fields=fields)
+                    _log.warning(
+                        "Healed workspace state for user %s: restored real org/ws",
+                        profile.user_id,
+                    )
+        except Exception:
+            pass  # Never break requests

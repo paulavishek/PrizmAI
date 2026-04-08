@@ -65,6 +65,20 @@ def demo_context(request):
                     # Split real vs demo for templates
                     context['real_workspaces'] = [w for w in all_ws if not w.is_demo]
                     context['demo_workspace'] = next((w for w in all_ws if w.is_demo), None)
+
+                    # When viewing demo, the user's org is temporarily the demo org
+                    # so real_workspaces will be empty.  Find their actual workspace
+                    # from their own (non-demo) org so the "My Workspace" button shows.
+                    if getattr(profile, 'is_viewing_demo', False) and not context['real_workspaces']:
+                        own_ws = list(
+                            Workspace.objects.filter(
+                                created_by=request.user,
+                                is_demo=False,
+                                is_active=True,
+                            ).order_by('-created_at')
+                        )
+                        if own_ws:
+                            context['real_workspaces'] = own_ws
                     # Workspace setup permission:
                     # - Org creator can always set up new workspaces
                     # - Demo-exploring users who haven't created their own
@@ -82,6 +96,14 @@ def demo_context(request):
                     # Org admins can rename the active workspace
                     from kanban.permissions import is_user_org_admin
                     context['can_rename_workspace'] = is_user_org_admin(request.user)
+                    context['can_delete_workspace'] = is_user_org_admin(request.user)
+                    # Workspace member management permission
+                    context['can_manage_ws_members'] = (
+                        active_ws
+                        and not getattr(active_ws, 'is_demo', False)
+                        and not getattr(profile, 'is_viewing_demo', False)
+                        and (is_user_org_admin(request.user) or (active_ws and active_ws.created_by_id == request.user.id))
+                    )
                 else:
                     context['user_workspaces'] = []
                     context['real_workspaces'] = []

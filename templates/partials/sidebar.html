@@ -84,13 +84,20 @@
             <form method="post" action="{% url 'switch_workspace' %}" class="d-inline w-100">
                 {% csrf_token %}
                 <input type="hidden" name="workspace_id" value="{{ ws.pk }}">
-                <button type="submit" class="sidebar-ws-option {% if active_workspace.pk == ws.pk %}active{% endif %}">
+                <button type="submit" class="sidebar-ws-option sidebar-ws-row {% if active_workspace.pk == ws.pk %}active{% endif %}">
                     <span class="sidebar-ws-option-icon">
                         <i class="fas fa-briefcase text-primary"></i>
                     </span>
                     <span class="sidebar-ws-option-name">{{ ws.name|truncatechars:28 }}</span>
                     {% if active_workspace.pk == ws.pk %}
-                    <i class="fas fa-check text-success ms-auto" style="font-size:0.7rem;"></i>
+                    <i class="fas fa-check text-success" style="font-size:0.7rem;"></i>
+                    {% endif %}
+                    {% if can_delete_workspace %}
+                    <span class="sidebar-ws-delete-btn"
+                          title="Delete workspace"
+                          onclick="event.preventDefault(); event.stopPropagation(); confirmDeleteWorkspace({{ ws.pk }}, '{{ ws.name|escapejs }}');">
+                        <i class="fas fa-trash-alt"></i>
+                    </span>
                     {% endif %}
                 </button>
             </form>
@@ -104,6 +111,49 @@
             {% endif %}
         </div>
     </div>
+    {% if can_delete_workspace %}
+    <style>
+        .sidebar-ws-row .sidebar-ws-delete-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.62rem;
+            color: var(--text-secondary, #9ca3af);
+            opacity: 0;
+            transition: opacity 0.15s, color 0.15s;
+            margin-left: auto;
+            padding: 2px 4px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .sidebar-ws-row:hover .sidebar-ws-delete-btn { opacity: 0.65; }
+        .sidebar-ws-row .sidebar-ws-delete-btn:hover { opacity: 1; color: #ef4444; background: rgba(239,68,68,0.1); }
+    </style>
+    <script>
+    function confirmDeleteWorkspace(wsId, wsName) {
+        if (!confirm('Delete workspace "' + wsName + '"?\n\nThis will remove the workspace and all its boards, tasks, and data. This action cannot be undone.')) {
+            return;
+        }
+        var fd = new FormData();
+        fd.append('workspace_id', wsId);
+        fd.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        fetch('{% url "delete_workspace" %}', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to delete workspace');
+            }
+        }).catch(function() {
+            alert('Network error');
+        });
+    }
+    </script>
+    {% endif %}
     {% endif %}
 
     <!-- Primary Navigation -->

@@ -16,11 +16,17 @@
 
 {% block body %}
 <div class="onboarding-card" style="position: relative;">
-    <!-- Back to dashboard -->
+    <!-- Back navigation -->
     <div class="mb-3">
+        {% if from_dashboard %}
         <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
             <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
         </a>
+        {% else %}
+        <a href="{% url 'onboarding_welcome' %}" class="link-subtle" style="font-size: 0.85rem;">
+            <i class="bi bi-arrow-left me-1"></i>Back to Welcome
+        </a>
+        {% endif %}
     </div>
     <h2 class="mb-1" style="font-weight: 700; font-size: 1.5rem;">What is your organization's goal?</h2>
     <p class="mb-4" style="color: #64748b;">
@@ -125,9 +131,35 @@
     const charHint = document.getElementById('charHint');
     const MIN_CHARS = 30;
 
+    // Patterns that indicate code/injection rather than a business goal
+    const SUSPICIOUS_PATTERNS = [
+        /<\s*script/i,
+        /on(?:error|load|click|mouseover)\s*=/i,
+        /javascript\s*:/i,
+        /<\s*(?:img|iframe|object|embed|svg)\b/i,
+        /;\s*(?:DROP|DELETE|INSERT|UPDATE|ALTER)\s/i,
+        /(?:UNION\s+SELECT|OR\s+'1'\s*=\s*'1)/i,
+        /(?:eval|exec|system|subprocess)\s*\(/i,
+    ];
+
+    function isSuspicious(text) {
+        return SUSPICIOUS_PATTERNS.some(function(p) { return p.test(text); });
+    }
+
     function updateState() {
-        const len = textarea.value.trim().length;
+        const val = textarea.value;
+        const len = val.trim().length;
         charCount.textContent = len + ' / 1000';
+
+        // Check for suspicious input
+        if (len > 0 && isSuspicious(val)) {
+            submitBtn.disabled = true;
+            charHint.innerHTML = '<i class="bi bi-shield-exclamation me-1"></i>This looks like code, not a business goal. Please enter a plain-text objective.';
+            charHint.classList.remove('text-success');
+            charHint.classList.add('text-danger');
+            return;
+        }
+
         if (len >= MIN_CHARS) {
             submitBtn.disabled = false;
             charHint.textContent = '✓ Looks good';

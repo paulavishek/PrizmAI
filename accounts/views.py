@@ -613,6 +613,23 @@ def accept_org_invitation(request, token):
             defaults={'role': 'viewer', 'added_by': invitation.invited_by},
         )
 
+    # Also process any pending WorkspaceInvitation for this email + org
+    from kanban.models import WorkspaceInvitation
+    from kanban.workspace_member_utils import add_workspace_member
+    ws_invitations = WorkspaceInvitation.objects.filter(
+        workspace__organization=invitation.organization,
+        email__iexact=user.email,
+        status=WorkspaceInvitation.STATUS_PENDING,
+    )
+    for ws_inv in ws_invitations:
+        if ws_inv.is_valid():
+            add_workspace_member(ws_inv.workspace, user, ws_inv.role, added_by=ws_inv.invited_by)
+            ws_inv.mark_accepted(user)
+            # Set active workspace if user doesn't have one
+            if not profile.active_workspace:
+                profile.active_workspace = ws_inv.workspace
+                profile.save(update_fields=['active_workspace'])
+
     invitation.mark_accepted(user)
     request.session.pop(SESSION_ORG_INVITE_KEY, None)
 

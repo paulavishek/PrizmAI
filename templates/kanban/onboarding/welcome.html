@@ -356,8 +356,8 @@
 <div class="welcome-split">
     <!-- ════════ LEFT PANEL: Content ════════ -->
     <div class="welcome-left">
-        <!-- Back link -->
-        {% if from_dashboard %}
+        <!-- Back link (shown for returning users who already have a workspace) -->
+        {% if from_dashboard or has_workspace %}
         <div class="mb-3">
             <a href="{% url 'dashboard' %}" class="link-subtle" style="font-size: 0.85rem;">
                 <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
@@ -484,8 +484,15 @@
                 <circle r="3" fill="#60a5fa" opacity="0.8">
                     <animateMotion dur="3.5s" repeatCount="indefinite" path="M180,35 C250,55 280,130 270,190"/>
                 </circle>
+                <!-- Mission → Strategy particle -->
+                <circle r="2.5" fill="#38bdf8" opacity="0.8">
+                    <animateMotion dur="2.8s" repeatCount="indefinite" path="M130,130 C170,150 230,160 260,190"/>
+                </circle>
                 <circle r="2.5" fill="#34d399" opacity="0.8">
                     <animateMotion dur="3s" repeatCount="indefinite" path="M95,130 C60,170 40,230 60,280"/>
+                </circle>
+                <circle r="2.5" fill="#22d3ee" opacity="0.8">
+                    <animateMotion dur="3.2s" repeatCount="indefinite" path="M260,215 C200,240 120,260 75,280"/>
                 </circle>
                 <circle r="2.5" fill="#fbbf24" opacity="0.8">
                     <animateMotion dur="2.8s" repeatCount="indefinite" path="M75,305 C100,340 150,360 180,375"/>
