@@ -1309,6 +1309,16 @@ def dashboard(request):
                 is_official_demo_board=True
             ).first()
 
+    # Workspace member management permission
+    from kanban.permissions import is_user_org_admin
+    active_ws = getattr(request, 'workspace', None)
+    can_manage_ws_members = (
+        not demo_mode
+        and active_ws
+        and not getattr(active_ws, 'is_demo', False)
+        and (is_user_org_admin(request.user) or (active_ws and active_ws.created_by_id == request.user.pk))
+    )
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -1361,6 +1371,7 @@ def dashboard(request):
         'dc_awareness_count': dc_awareness_count,
         'dc_quickwin_count': dc_quickwin_count,
         'dc_total_count': dc_total_count,
+        'can_manage_ws_members': can_manage_ws_members,
         })
 
 
@@ -1984,6 +1995,10 @@ def create_board(request):
                         defaults={'role': 'member'},
                     )
             
+            # Auto-add workspace members to the new board
+            from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+            auto_add_workspace_members_to_board(board)
+
             # Log board creation
             log_model_change('board.created', board, request.user, request)
               # Check if there are recommended columns to create
@@ -4539,6 +4554,10 @@ def _create_board_from_import_result(result, user, organization, session):
                 )
                 new_task.labels.add(label)
     
+    # Auto-add workspace members to the imported board
+    from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+    auto_add_workspace_members_to_board(new_board)
+
     return new_board
 
 @login_required
@@ -4793,6 +4812,10 @@ def wizard_create_board(request):
                 for i, name in enumerate(default_columns):
                     Column.objects.create(name=name, board=board, position=i)
             
+            # Auto-add workspace members to the new board
+            from kanban.workspace_member_utils import auto_add_workspace_members_to_board
+            auto_add_workspace_members_to_board(board)
+
             return JsonResponse({
                 'success': True,
                 'board_id': board.id,

@@ -8,6 +8,7 @@ from .models import (
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, Milestone, StrategicFollower,
     UserFavorite, ChecklistItem,
+    WorkspaceMembership, WorkspaceInvitation,
 )
 from .automation_models import (
     BoardAutomation, ScheduledAutomation,
@@ -179,6 +180,22 @@ class BoardInvitationAdmin(admin.ModelAdmin):
     list_display = ('email', 'board', 'invited_by', 'status', 'created_at', 'expires_at', 'accepted_by')
     list_filter = ('status', 'created_at')
     search_fields = ('email', 'board__name', 'invited_by__username')
+    readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
+
+
+@admin.register(WorkspaceMembership)
+class WorkspaceMembershipAdmin(admin.ModelAdmin):
+    list_display = ('user', 'workspace', 'role', 'added_at', 'added_by')
+    list_filter = ('role', 'added_at')
+    search_fields = ('user__username', 'user__email', 'workspace__name')
+    readonly_fields = ('added_at',)
+
+
+@admin.register(WorkspaceInvitation)
+class WorkspaceInvitationAdmin(admin.ModelAdmin):
+    list_display = ('email', 'workspace', 'role', 'invited_by', 'status', 'created_at', 'expires_at', 'accepted_by')
+    list_filter = ('status', 'role', 'created_at')
+    search_fields = ('email', 'workspace__name', 'invited_by__username')
     readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
 
 
