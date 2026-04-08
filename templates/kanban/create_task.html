@@ -940,6 +940,60 @@
 
         updateEstimatedCost();
     });
+
+    // Client-side date cross-validation: start_date must not be after due_date
+    (function() {
+        var startDateInput = document.getElementById('id_start_date');
+        var dueDateInput = document.getElementById('id_due_date');
+
+        function validateDateRange() {
+            if (!startDateInput || !dueDateInput) return;
+            var startVal = startDateInput.value;
+            var dueVal = dueDateInput.value;
+            if (!startVal || !dueVal) return;
+            // due_date is datetime-local (YYYY-MM-DDTHH:MM), start_date is date (YYYY-MM-DD)
+            var startDate = new Date(startVal);
+            var dueDate = new Date(dueVal);
+            var existingFeedback = startDateInput.parentNode.querySelector('.date-range-feedback');
+            if (startDate > dueDate) {
+                startDateInput.classList.add('is-invalid');
+                if (!existingFeedback) {
+                    var fb = document.createElement('div');
+                    fb.className = 'invalid-feedback d-block date-range-feedback';
+                    fb.textContent = 'Start date cannot be after the due date.';
+                    startDateInput.parentNode.appendChild(fb);
+                }
+            } else {
+                startDateInput.classList.remove('is-invalid');
+                if (existingFeedback) existingFeedback.remove();
+            }
+        }
+
+        if (startDateInput) startDateInput.addEventListener('change', validateDateRange);
+        if (dueDateInput) dueDateInput.addEventListener('change', validateDateRange);
+    })();
+
+    // Client-side skill_match_score range validation (0-100)
+    (function() {
+        var skillInput = document.getElementById('id_skill_match_score');
+        if (!skillInput) return;
+        skillInput.addEventListener('change', function() {
+            var val = parseInt(skillInput.value);
+            var existingFeedback = skillInput.parentNode.querySelector('.skill-range-feedback');
+            if (!isNaN(val) && (val < 0 || val > 100)) {
+                skillInput.classList.add('is-invalid');
+                if (!existingFeedback) {
+                    var fb = document.createElement('div');
+                    fb.className = 'invalid-feedback d-block skill-range-feedback';
+                    fb.textContent = 'Skill match score must be between 0 and 100.';
+                    skillInput.parentNode.appendChild(fb);
+                }
+            } else {
+                skillInput.classList.remove('is-invalid');
+                if (existingFeedback) existingFeedback.remove();
+            }
+        });
+    })();
 </script>
 <script>
 // P3-08: Auto-select last option in Sprint/Phase dropdown if nothing is pre-selected

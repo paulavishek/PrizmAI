@@ -81,9 +81,10 @@ class ShadowBoardListView(ListView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
         
-        # Check user is board member
-        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
-            self.permission_denied()
+        # RBAC: check board access
+        if not self.request.user.has_perm('prizmai.view_board', board):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
         
         # Return active, committed, and recently archived branches (last 7 days)
         cutoff_date = timezone.now() - timedelta(days=7)
@@ -174,8 +175,8 @@ class CreateBranchView(CreateView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
+        # RBAC: check board access
+        if not self.request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = form.save(commit=False)
@@ -297,8 +298,9 @@ class BranchDetailView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
-            self.permission_denied()
+        if not self.request.user.has_perm('prizmai.view_board', board):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
 
         return ShadowBranch.objects.filter(board=board).select_related(
             'board', 'created_by', 'source_scenario'
@@ -353,8 +355,8 @@ class CommitBranchView(DetailView):
         board = get_object_or_404(Board, id=board_id)
         branch = self.get_object()
 
-        # Check user is board member or admin
-        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
+        # RBAC: check board edit permission
+        if not self.request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Check for confirmation (supports both JSON body and form POST)
@@ -415,8 +417,9 @@ class CommitBranchView(DetailView):
         board_id = self.kwargs.get('board_id')
         board = get_object_or_404(Board, id=board_id)
 
-        if not board.memberships.filter(user=self.request.user).exists() and self.request.user != board.created_by:
-            self.permission_denied()
+        if not self.request.user.has_perm('prizmai.view_board', board):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
 
         return get_object_or_404(
             ShadowBranch,
@@ -450,8 +453,8 @@ def merge_conflict_check(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.view_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a_id = request.GET.get('branch_a')
@@ -543,8 +546,8 @@ def promote_scenario_to_branch(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         # Handle both form-encoded and JSON data
@@ -619,8 +622,8 @@ def get_branch_snapshots(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.view_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -659,8 +662,8 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        # Check user is board member
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.view_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch_a = get_object_or_404(ShadowBranch, id=branch_a_id, board=board)
@@ -725,7 +728,8 @@ def delete_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -760,7 +764,8 @@ def link_scenario_to_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -808,7 +813,8 @@ def restore_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
@@ -836,7 +842,8 @@ def toggle_star_branch(request, board_id, branch_id):
     try:
         board = get_object_or_404(Board, id=board_id)
 
-        if not board.memberships.filter(user=request.user).exists() and request.user != board.created_by:
+        # RBAC: check board access
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)

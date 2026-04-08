@@ -281,6 +281,10 @@ def bury_project(request, board_id):
 def dismiss_hospice_banner(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     HospiceDismissal.objects.update_or_create(
         board=board,
         user=request.user,
@@ -485,6 +489,11 @@ def transplant_organ(request, organ_id):
 @demo_write_guard
 def reject_organ(request, organ_id):
     organ = get_object_or_404(ProjectOrgan, id=organ_id)
+
+    # RBAC: check board access via the organ's source board
+    if organ.source_board and not request.user.has_perm('prizmai.edit_board', organ.source_board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     organ.status = 'rejected'
     organ.save(update_fields=['status'])
     return JsonResponse({'rejected': True})

@@ -266,6 +266,12 @@ def prizmbrief_setup(request, board_id):
 
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='prizmbrief')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
     # ── Shared context bits for the form ──────────────────────────────────────
     form_context = {
         'board':            board,

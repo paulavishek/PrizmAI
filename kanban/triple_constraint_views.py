@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 def set_project_deadline(request, board_id):
     """Save the board's project deadline (Time constraint) and redirect back."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board edit permission
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
     if request.method == 'POST':
         raw = request.POST.get('project_deadline', '').strip()
         if raw:
@@ -47,7 +54,11 @@ def triple_constraint_dashboard(request, board_id):
     Triggers AI analysis on POST with action=ai_analyze.
     """
     board = get_object_or_404(Board, id=board_id)
-
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
     # ── Scope ──────────────────────────────────────────────────────────────────
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None

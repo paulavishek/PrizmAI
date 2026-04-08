@@ -2070,18 +2070,25 @@ def board_detail(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board
+    # Check if this is an official demo template board
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
-    # Auto-add user to demo boards - ensures they appear in AI Resource Optimization
-    if is_demo_board:
-        from kanban.models import BoardMembership
-        BoardMembership.objects.get_or_create(
-            board=board, user=request.user,
-            defaults={'role': 'member', 'added_by': request.user}
+    # If user navigates to an official demo template board, redirect to their
+    # personal sandbox copy instead of polluting the template with memberships.
+    if is_demo_board and request.user.is_authenticated:
+        sandbox_copy = Board.objects.filter(
+            cloned_from=board, owner=request.user, is_sandbox_copy=True
+        ).first()
+        if sandbox_copy:
+            return redirect('board_detail', board_id=sandbox_copy.id)
+        # No sandbox copy exists — redirect to dashboard with guidance
+        messages.info(
+            request,
+            'Activate demo mode from the dashboard to access demo boards.'
         )
+        return redirect('dashboard')
     
-    # RBAC: check view permission (demo boards pass via is_demo_board predicate)
+    # RBAC: check view permission
     if not request.user.has_perm('prizmai.view_board', board):
         from kanban.simple_access import get_spectra_denial_context
         ctx = get_spectra_denial_context(request.user, board, trigger='board_view')
@@ -2348,6 +2355,12 @@ def task_detail(request, task_id):
     )
     board = task.column.board
 
+    # RBAC: check view permission on the parent board
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='task_view')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
     # Milestones have their own dedicated detail page
     if task.item_type == 'milestone':
         next_url = request.GET.get('next', '')
@@ -2376,6 +2389,9 @@ def task_detail(request, task_id):
                 task.save()
                 # Save many-to-many relationships (dependencies, labels, related_tasks)
                 form.save_m2m()
+
+            # Save budget/cost fields to TaskCost model
+            form._save_task_cost(task)
             
             # --- Detect which AI-relevant fields changed ---
             ai_field_labels = {
@@ -2707,6 +2723,9 @@ def create_task(request, board_id, column_id=None):
                 task.save()
                 # Save many-to-many relationships
                 form.save_m2m()
+
+                # Save budget/cost fields to TaskCost model
+                form._save_task_cost(task)
                 
                 # ── Create checklist items from AI breakdown (if provided) ──
                 checklist_json = request.POST.get('checklist_breakdown_data', '').strip()
@@ -5633,6 +5652,10 @@ def task_quick_view(request, task_id):
     )
     board = task.column.board
 
+    # RBAC: check view permission on the parent board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     # Overdue / at-risk flags
     now = timezone.now()
     is_overdue = (
@@ -5724,6 +5747,12 @@ def _card_json(task):
 def task_update_status(request, task_id):
     """Inline status change from the quick-view drawer or card hover bar."""
     task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    # RBAC: check edit permission on the parent board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     new_column_id = request.POST.get('column_id')
     if not new_column_id:
         return JsonResponse({'error': 'column_id required'}, status=400)
@@ -5751,6 +5780,12 @@ def task_update_status(request, task_id):
 def task_update_assignee(request, task_id):
     """Inline assignee change from the quick-view drawer or card hover bar."""
     task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    # RBAC: check edit permission on the parent board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     assignee_id = request.POST.get('assignee_id')
 
     if assignee_id:
@@ -5811,6 +5846,12 @@ def task_update_fields(request, task_id):
     from django.utils import timezone as _tz
 
     task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    # RBAC: check edit permission on the parent board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     changes = []
 
     if 'priority' in request.POST:
