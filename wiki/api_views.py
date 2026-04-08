@@ -478,8 +478,14 @@ def get_meeting_analysis_details(request, analysis_id):
     API endpoint to get detailed meeting analysis information
     """
     try:
-        # Get analysis - allow access without org restriction
+        # Get analysis and verify org access
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
+        
+        # RBAC: Verify user belongs to the same org as the wiki page
+        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        page_org = getattr(analysis.wiki_page, 'organization', None)
+        if user_org and page_org and user_org != page_org:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Get created tasks
         created_tasks = []
@@ -528,8 +534,14 @@ def mark_analysis_reviewed(request, analysis_id):
     Mark an analysis as reviewed by user, optionally with notes
     """
     try:
-        # Get analysis - allow access without org restriction
+        # Get analysis and verify org access
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
+        
+        # RBAC: Verify user belongs to the same org as the wiki page
+        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        page_org = getattr(analysis.wiki_page, 'organization', None)
+        if user_org and page_org and user_org != page_org:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         data = json.loads(request.body)
         user_notes = data.get('user_notes', '')

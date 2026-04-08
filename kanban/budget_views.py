@@ -144,6 +144,9 @@ def task_cost_edit(request, task_id):
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
     
     try:
         task_cost = TaskCost.objects.get(task=task)
@@ -1745,6 +1748,12 @@ def create_split_time_entries(request):
                     task = Task.objects.get(id=task_id)
                 except Task.DoesNotExist:
                     errors.append(f"Entry {i+1}: Task not found")
+                    continue
+
+                # RBAC: verify user has edit permission on the task's board
+                board = task.column.board
+                if not request.user.has_perm('prizmai.edit_board', board):
+                    errors.append(f"Entry {i+1}: Permission denied for this task's board")
                     continue
                 
                 # Validate hours

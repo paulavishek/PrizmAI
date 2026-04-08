@@ -3375,13 +3375,8 @@ def board_calendar(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
 
-    # Membership guard — only board owner/members may view this calendar
-    from kanban.models import BoardMembership
-    if not (board.created_by == request.user or
-            board.owner == request.user or
-            BoardMembership.objects.filter(board=board, user=request.user).exists()):
-        from django.http import HttpResponseForbidden
-        return HttpResponseForbidden("You are not a member of this board.")
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
 
     # ---------------------------------------------------------------------------
     # Assignee colour palette — distinct from priority colours
@@ -3509,6 +3504,9 @@ def add_gantt_milestone(request, board_id):
 
     board = get_object_or_404(Board, id=board_id)
 
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
@@ -3596,6 +3594,11 @@ def delete_gantt_milestone(request, board_id, task_id):
         return JsonResponse({'error': 'POST required'}, status=405)
 
     task = get_object_or_404(Task, id=task_id, item_type='milestone', column__board_id=board_id)
+    board = task.column.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     task.delete()
 
     # AJAX callers (Gantt JS) expect JSON; regular form submissions get a redirect
@@ -3622,6 +3625,14 @@ def milestone_detail(request, milestone_id):
         item_type='milestone'
     )
     board = milestone.column.board
+
+    if request.method == 'POST':
+        if not request.user.has_perm('prizmai.edit_board', board):
+            raise Http404
+    else:
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
+
     next_url = request.GET.get('next', '')
 
     if request.method == 'POST':
@@ -4210,6 +4221,9 @@ def update_task_progress(request, task_id):
         try:
             task = get_object_or_404(Task, id=task_id)
             board = task.column.board
+
+            if not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             data = json.loads(request.body)
             direction = data.get('direction')
@@ -4688,12 +4702,7 @@ def link_board_to_strategy_dashboard(request, board_id):
 
     board = get_object_or_404(Board, id=board_id)
 
-    # Access check: user must be the board creator or a member
-    from kanban.models import BoardMembership
-    if not (board.created_by == request.user or
-            board.owner == request.user or
-            board.is_official_demo_board or
-            BoardMembership.objects.filter(board=board, user=request.user).exists()):
+    if not request.user.has_perm('prizmai.edit_board', board):
         return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     strategy_id = request.POST.get('strategy_id', '').strip()

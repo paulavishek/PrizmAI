@@ -12,7 +12,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import HttpResponseBadRequest, JsonResponse, HttpResponse
+from django.http import Http404, HttpResponseBadRequest, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -317,9 +317,15 @@ def organ_bank(request, board_id):
 
 @login_required
 def organ_library(request):
-    organs = ProjectOrgan.objects.filter(
-        status='available'
-    ).order_by('-reusability_score')
+    # RBAC: scope organs to user's organization
+    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    if user_org:
+        organs = ProjectOrgan.objects.filter(
+            status='available',
+            source_board__organization=user_org,
+        ).order_by('-reusability_score')
+    else:
+        organs = ProjectOrgan.objects.none()
 
     # Filters
     organ_type = request.GET.get('organ_type')
@@ -505,7 +511,12 @@ def reject_organ(request, organ_id):
 
 @login_required
 def cemetery(request):
-    entries = CemeteryEntry.objects.all().order_by('-buried_at')
+    # RBAC: scope entries to user's organization
+    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    if user_org:
+        entries = CemeteryEntry.objects.filter(board__organization=user_org).order_by('-buried_at')
+    else:
+        entries = CemeteryEntry.objects.none()
 
     # Search
     q = request.GET.get('q', '').strip()
@@ -543,6 +554,12 @@ def cemetery(request):
 def autopsy_report(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
+    # RBAC: verify user belongs to the same org as the board
+    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    board_org = getattr(entry.board, 'organization', None)
+    if user_org and board_org and user_org != board_org:
+        raise Http404
+
     # Get related organ transplants
     transplants = OrganTransplant.objects.filter(
         organ__source_board=entry.board
@@ -559,6 +576,12 @@ def autopsy_report(request, entry_id):
 @demo_write_guard
 def update_lessons(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
+
+    # RBAC: verify user belongs to the same org as the board
+    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    board_org = getattr(entry.board, 'organization', None)
+    if user_org and board_org and user_org != board_org:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -624,6 +647,12 @@ def update_lessons(request, entry_id):
 @demo_write_guard
 def resurrect_project(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
+
+    # RBAC: verify user belongs to the same org as the board
+    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    board_org = getattr(entry.board, 'organization', None)
+    if user_org and board_org and user_org != board_org:
+        raise Http404
 
     if entry.is_resurrected:
         return HttpResponseBadRequest("This project has already been resurrected.")
@@ -730,6 +759,12 @@ def export_autopsy_pdf(request, entry_id):
     from reportlab.lib.enums import TA_CENTER
 
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
+
+    # RBAC: verify user belongs to the same org as the board
+    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    board_org = getattr(entry.board, 'organization', None)
+    if user_org and board_org and user_org != board_org:
+        raise Http404
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
