@@ -65,13 +65,19 @@ def _duplicate_board(template_board, user):
     # Fresh owner membership for the real user
     BoardMembership.objects.create(board=new_board, user=user, role='owner')
 
-    # Copy demo persona memberships so assignees resolve correctly
+    # Copy ONLY demo persona memberships so assignees resolve correctly.
+    # Real users must NEVER be copied — each user's sandbox is private.
+    # Demo personas are identified by their @demo.prizmai.local email.
     for membership in template_board.memberships.select_related('user').all():
-        if membership.user != user:
-            BoardMembership.objects.get_or_create(
-                board=new_board, user=membership.user,
-                defaults={'role': 'member'},
-            )
+        if membership.user == user:
+            continue  # already owner
+        member_email = getattr(membership.user, 'email', '') or ''
+        if '@demo.prizmai.local' not in member_email:
+            continue  # skip real users — sandbox isolation
+        BoardMembership.objects.get_or_create(
+            board=new_board, user=membership.user,
+            defaults={'role': 'member'},
+        )
 
     # --- TaskLabels (board FK) ---
     label_map = {}  # old label pk → new label instance

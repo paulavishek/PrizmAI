@@ -270,9 +270,19 @@ def goal_list(request):
         # Workspace-scoped: show only goals belonging to this workspace
         goals = OrganizationGoal.objects.filter(workspace=active_ws)
     elif is_user_org_admin(request.user):
-        goals = OrganizationGoal.objects.filter(
-            is_demo=False, is_seed_demo_data=False,
-        )
+        # Org Admin: scope to their organization (never return global)
+        _admin_org = getattr(profile, 'organization', None) if profile else None
+        if _admin_org and not getattr(_admin_org, 'is_demo', False):
+            goals = OrganizationGoal.objects.filter(
+                Q(workspace__organization=_admin_org) |
+                Q(missions__strategies__boards__organization=_admin_org),
+                is_demo=False, is_seed_demo_data=False,
+            )
+        else:
+            goals = OrganizationGoal.objects.filter(
+                is_demo=False, is_seed_demo_data=False,
+                created_by=request.user,
+            )
     else:
         # RBAC: goals the user created OR goals that are ancestors of
         # boards the user is a member of (Upward Visibility Rule).
@@ -615,10 +625,19 @@ def mission_list(request):
         # Workspace-scoped: only missions in the active workspace
         missions = Mission.objects.filter(workspace=active_ws)
     elif is_user_org_admin(request.user):
-        # Org Admin: all non-demo missions
-        missions = Mission.objects.filter(
-            is_demo=False, is_seed_demo_data=False,
-        )
+        # Org Admin: scope to their organization (never return global)
+        _admin_org = getattr(profile, 'organization', None) if profile else None
+        if _admin_org and not getattr(_admin_org, 'is_demo', False):
+            missions = Mission.objects.filter(
+                Q(workspace__organization=_admin_org) |
+                Q(strategies__boards__organization=_admin_org),
+                is_demo=False, is_seed_demo_data=False,
+            )
+        else:
+            missions = Mission.objects.filter(
+                is_demo=False, is_seed_demo_data=False,
+                created_by=request.user,
+            )
     else:
         # RBAC: missions the user created OR missions whose strategies
         # contain boards the user is a member of (Upward Visibility Rule).

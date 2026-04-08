@@ -141,21 +141,20 @@ class WikiLinkForm(forms.ModelForm):
         from kanban.models import Board, Task
         from django.db.models import Q
         
-        # MVP Mode: Get all accessible boards (demo boards + user's boards)
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        
+        # Use centralized helper for demo/workspace-aware board scoping
         if user:
-            user_boards = Board.objects.filter(
-                Q(created_by=user) | Q(memberships__user=user)
-            )
-            accessible_boards = (demo_boards | user_boards).distinct()
+            from kanban.utils.demo_protection import get_user_boards
+            accessible_boards = get_user_boards(user)
         elif organization:
             # Fallback to organization-based filtering if no user
-            accessible_boards = Board.objects.filter(organization=organization)
-            accessible_boards = (demo_boards | accessible_boards).distinct()
+            accessible_boards = Board.objects.filter(
+                organization=organization,
+                is_official_demo_board=False,
+                is_sandbox_copy=False,
+            )
         else:
-            # If no user or organization, show demo boards
-            accessible_boards = demo_boards
+            # If no user or organization, empty queryset
+            accessible_boards = Board.objects.none()
         
         # Filter tasks and boards to accessible boards
         self.fields['task'].queryset = Task.objects.filter(column__board__in=accessible_boards)
