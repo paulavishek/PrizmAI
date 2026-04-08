@@ -267,6 +267,12 @@
         </ol>
     </nav>
 
+    <div class="mb-3">
+        <a href="{% url 'coach_dashboard' board.id %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to AI Coach
+        </a>
+    </div>
+
     <!-- Suggestion Header -->
     <div class="suggestion-header">
         <span class="severity-badge severity-{{ suggestion.severity }}">

@@ -13,9 +13,9 @@
                         <i class="bi bi-chat-dots"></i>
                         {% if is_update %}Edit{% else %}Record{% endif %} Engagement - {{ stakeholder.name }}
                     </h5>
-                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                    <a href="{% url 'board_detail' stakeholder.board.id %}" class="btn-prizm-back btn-sm">
                         <i class="bi bi-arrow-left"></i> Back
-                    </button>
+                    </a>
                 </div>
                 <div class="card-body">
                     <form method="post" class="needs-validation" novalidate>

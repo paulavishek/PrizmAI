@@ -399,9 +399,9 @@
 {% block content %}
 <div class="ai-usage-container">
     <!-- Back Button -->
-    <button onclick="goBack()" class="btn btn-outline-secondary back-to-dashboard">
+    <a href="{% url 'dashboard' %}" class="btn-prizm-back back-to-dashboard">
         <i class="fas fa-arrow-left me-1"></i> Back
-    </button>
+    </a>
     
     <!-- Page Header -->
     <div class="page-header">

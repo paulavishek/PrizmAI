@@ -11,9 +11,9 @@
         <div class="d-sm-flex align-items-center justify-content-between mb-4">
             <h1 class="h3 mb-0 text-gray-800">Your Boards</h1>
             <div>
-                <button onclick="goBack()" class="btn btn-outline-secondary shadow-sm me-2">
+                <a href="{% url 'dashboard' %}" class="btn-prizm-back shadow-sm me-2">
                     <i class="fas fa-arrow-left fa-sm me-1"></i> Back
-                </button>
+                </a>
                 <button class="btn btn-outline-success shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#importBoardModal">
                     <i class="fas fa-file-import fa-sm me-1"></i> Import Board
                 </button>

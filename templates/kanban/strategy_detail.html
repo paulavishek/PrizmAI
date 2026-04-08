@@ -11,6 +11,12 @@
 <li class="breadcrumb-item active">{{ strategy.name|truncatechars:40 }}</li>
 {% endblock %}
 
+{% block back_button %}
+<a href="{% url 'mission_detail' mission.id %}" class="btn-prizm-back">
+    <i class="fas fa-arrow-left"></i> Back to Mission
+</a>
+{% endblock %}
+
 {% block header_icon %}<i class="fas fa-lightbulb text-success me-2"></i>{% endblock %}
 
 {% block header_subtitle %}

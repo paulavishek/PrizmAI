@@ -18,6 +18,15 @@
     </ol>
 </nav>
 
+{# --- Back button --- #}
+<div class="mb-3">
+    {% block back_button %}
+    <a href="{% url 'dashboard' %}" class="btn-prizm-back">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+    {% endblock %}
+</div>
+
 {# --- Header card --- #}
 <div class="card shadow-sm mb-4 strategic-header {{ header_class }}">
     <div class="card-body">

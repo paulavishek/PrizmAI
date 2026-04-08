@@ -66,9 +66,9 @@
             <p class="text-muted mb-0">{{ board.name }}</p>
         </div>
         <div class="btn-group">
-            <button onclick="goBack()" class="btn btn-outline-secondary">
+            <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back">
                 <i class="fas fa-arrow-left me-1"></i>Back
-            </button>
+            </a>
             <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
                 <i class="fas fa-chart-pie me-1"></i>Analytics
             </a>

@@ -414,9 +414,9 @@ kbd {
         {% endif %}
     </div>
     <div class="btn-group">
-        <button onclick="goBack()" class="btn btn-outline-secondary">
+        <a href="{% url 'demo_dashboard' %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left me-1"></i> Back
-        </button>
+        </a>
         <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
             <i class="fas fa-chart-pie me-1"></i> Analytics
         </a>

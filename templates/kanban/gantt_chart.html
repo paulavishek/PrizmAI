@@ -1674,6 +1674,11 @@
 
 {% block content %}
 <div class="container-fluid">
+    <div class="mb-2">
+        <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
+            <i class="fas fa-arrow-left"></i> Back to Board
+        </a>
+    </div>
     <div class="row mb-2">
         <div class="col">
             <h1 style="font-size:20px;font-weight:500;margin-bottom:0;">

@@ -819,6 +819,34 @@ function wsSubmitRename(e){
     return false;
 }
 </script>
+<script>
+/**
+ * Smart back navigation that avoids loops.
+ * @param {string} fallbackUrl - Explicit URL to navigate to when history would loop.
+ */
+function prizmGoBack(fallbackUrl) {
+    var current = window.location.href;
+    var referrer = document.referrer;
+    // If referrer is the same page (loop) or empty or different host, use fallback
+    if (!referrer || referrer === current || !referrer.includes(window.location.host)) {
+        window.location.href = fallbackUrl || '/dashboard/';
+        return;
+    }
+    // Use history back but set a fallback timer in case it doesn't work
+    var navigated = false;
+    window.addEventListener('popstate', function() { navigated = true; }, { once: true });
+    window.history.back();
+    setTimeout(function() {
+        if (!navigated && window.location.href === current) {
+            window.location.href = fallbackUrl || '/dashboard/';
+        }
+    }, 300);
+}
+/* Legacy alias for existing goBack() calls — uses dashboard as default fallback */
+function goBack() {
+    prizmGoBack('/dashboard/');
+}
+</script>
     {% block extra_js %}{% endblock %}
 {% if user.is_authenticated %}
 <script>

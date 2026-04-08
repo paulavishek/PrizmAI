@@ -21,9 +21,9 @@
 
 {% block content %}
 <div class="mb-4">
-    <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
+    <a href="{% url 'messaging:messaging_hub' %}" class="btn-prizm-back btn-sm">
         <i class="fas fa-arrow-left me-1"></i> Back
-    </button>
+    </a>
 </div>
 
 <div class="form-container">
