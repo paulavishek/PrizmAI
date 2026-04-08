@@ -2292,6 +2292,13 @@ def reorder_checklist_items(request):
         if not item_order:
             return JsonResponse({'error': 'item_order is required'}, status=400)
 
+        # RBAC: verify user has edit permission on the board via first item
+        first_item = ChecklistItem.objects.select_related('task__column__board').filter(id=item_order[0]).first()
+        if first_item:
+            board = first_item.task.column.board
+            if not request.user.has_perm('prizmai.edit_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+
         for position, item_id in enumerate(item_order):
             ChecklistItem.objects.filter(id=item_id).update(position=position)
 
@@ -3202,6 +3209,9 @@ def update_task_dates_api(request):
         # Require authentication
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
+
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # Update dates
         if start_date:
@@ -3256,8 +3266,8 @@ def reschedule_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         board = task.column.board
 
-        # Permission check: only board creator or members can reschedule
-        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
+        # Permission check: use standard RBAC
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         data = json.loads(request.body)
@@ -3358,8 +3368,8 @@ def update_task_fields_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         board = task.column.board
 
-        # Verify the requesting user is a board member or creator
-        if request.user != board.created_by and not board.memberships.filter(user=request.user).exists():
+        # Verify the requesting user has edit permission on the board
+        if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         data = json.loads(request.body)
@@ -4265,9 +4275,8 @@ def get_team_skill_profile_api(request, board_id):
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Require authentication
-        if not request.user.is_authenticated:
-            return JsonResponse({'error': 'Authentication required'}, status=401)
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.utils.skill_analysis import build_team_skill_profile, update_team_skill_profile_model
         
@@ -4584,9 +4593,8 @@ def get_skill_gaps_list_api(request, board_id):
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Require authentication
-        if not request.user.is_authenticated:
-            return JsonResponse({'error': 'Authentication required'}, status=401)
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.models import SkillGap
         
@@ -4631,9 +4639,8 @@ def get_development_plans_api(request, board_id):
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Require authentication
-        if not request.user.is_authenticated:
-            return JsonResponse({'error': 'Authentication required'}, status=401)
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         
         from kanban.models import SkillDevelopmentPlan
         
@@ -4931,7 +4938,8 @@ def delete_phase(request, board_id, phase_number):
     """
     board = get_object_or_404(Board, id=board_id)
 
-    # All restrictions removed - all authenticated users have full access
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
     # Validate phase number
     if not hasattr(board, 'num_phases') or board.num_phases == 0:
@@ -4995,7 +5003,8 @@ def add_phase(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
 
-    # All restrictions removed - all authenticated users have full access
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
     # Validate max phases (reasonable limit)
     max_phases = 10
