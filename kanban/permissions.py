@@ -106,9 +106,39 @@ def can_user_create_missions(user, request=None, parent_goal=None):
 
 @rules.predicate
 def is_org_admin(user, obj=None):
-    """System-wide admin — the platform owner.
-    Checks OrgAdmin group, org.created_by, and profile.is_admin."""
-    return is_user_org_admin(user)
+    """Org admin scoped to the object's organization.
+    Only grants access if the user is an org admin AND belongs to the
+    same organization as the object being checked."""
+    if not is_user_org_admin(user):
+        return False
+    if obj is None:
+        return True  # No object to scope against (e.g., generic admin checks)
+
+    # Resolve the object's organization
+    obj_org_id = getattr(obj, 'organization_id', None)
+
+    if obj_org_id is None:
+        # Try traversal for objects without a direct organization FK
+        try:
+            # Strategy → mission → goal → organization
+            if hasattr(obj, 'mission') and obj.mission:
+                goal = getattr(obj.mission, 'organization_goal', None)
+                if goal:
+                    obj_org_id = getattr(goal, 'organization_id', None)
+            # Mission → goal → organization
+            elif hasattr(obj, 'organization_goal') and obj.organization_goal:
+                obj_org_id = getattr(obj.organization_goal, 'organization_id', None)
+        except Exception:
+            pass
+
+    if obj_org_id is None:
+        # Cannot determine org — deny to be safe
+        return False
+
+    try:
+        return user.profile.organization_id == obj_org_id
+    except Exception:
+        return False
 
 
 @rules.predicate

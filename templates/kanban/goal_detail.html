@@ -6,6 +6,12 @@
 <li class="breadcrumb-item active">{{ goal.name|truncatechars:40 }}</li>
 {% endblock %}
 
+{% block back_button %}
+<a href="{% url 'goal_list' %}" class="btn-prizm-back">
+    <i class="fas fa-arrow-left"></i> Back to Goals
+</a>
+{% endblock %}
+
 {% block header_icon %}<i class="fas fa-trophy text-warning me-2"></i>{% endblock %}
 
 {% block header_subtitle %}

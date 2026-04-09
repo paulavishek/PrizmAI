@@ -38,9 +38,15 @@ def messaging_hub(request):
     from kanban.permissions import is_user_org_admin
     _is_org_admin = is_user_org_admin(request.user)
     if _is_org_admin and not getattr(profile, 'is_viewing_demo', False):
-        user_boards = Board.objects.filter(is_sandbox_copy=False, is_official_demo_board=False).exclude(
-            created_by_session__startswith='spectra_demo_'
-        )
+        org = getattr(profile, 'organization', None)
+        if org and not getattr(org, 'is_demo', False):
+            user_boards = Board.objects.filter(
+                organization=org,
+                is_sandbox_copy=False,
+                is_official_demo_board=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            )
     
     # Calculate unread messages per board
     boards_with_unread = []
@@ -427,24 +433,8 @@ def get_unread_message_count(request):
     - Boards user is a member of
     """
     # Get boards scoped to the user's current workspace (demo vs real)
-    try:
-        demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
-    except Exception:
-        demo_mode = False
-
-    if demo_mode:
-        accessible_boards = Board.objects.filter(
-            Q(is_official_demo_board=True)
-            | Q(created_by_session=f'spectra_demo_{request.user.id}')
-        ).distinct()
-    else:
-        accessible_boards = Board.objects.filter(
-            Q(created_by=request.user) | Q(memberships__user=request.user),
-            is_official_demo_board=False,
-            is_sandbox_copy=False,
-        ).exclude(
-            created_by_session__startswith='spectra_demo_'
-        ).distinct()
+    # Use centralized helper to prevent cross-workspace leakage
+    accessible_boards = get_user_boards(request.user)
     
     # Get chat rooms from accessible boards where user is a member
     user_chat_rooms = ChatRoom.objects.filter(

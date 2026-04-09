@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 def whatif_dashboard(request, board_id):
     """Render the What-If Scenario Analyzer page with current board state."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     engine = WhatIfEngine(board)
     baseline = engine._capture_baseline()
 
@@ -56,6 +61,10 @@ def whatif_simulate(request, board_id):
     """Run a what-if simulation and return JSON results."""
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
@@ -84,6 +93,10 @@ def whatif_simulate(request, board_id):
 def whatif_save(request, board_id):
     """Persist a what-if scenario for later comparison."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:
         body = json.loads(request.body)
@@ -133,6 +146,10 @@ def whatif_history(request, board_id):
     """Return saved scenarios for a board as JSON."""
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     scenarios = WhatIfScenario.objects.filter(board=board).order_by('-is_starred', '-created_at')[:20]
     data = []
     for s in scenarios:
@@ -159,6 +176,12 @@ def whatif_history(request, board_id):
 @demo_write_guard
 def whatif_delete(request, board_id, scenario_id):
     """Delete a saved what-if scenario."""
+    board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board access
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     scenario = get_object_or_404(
         WhatIfScenario, id=scenario_id, board_id=board_id,
     )

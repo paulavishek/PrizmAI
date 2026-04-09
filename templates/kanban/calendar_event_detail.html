@@ -12,6 +12,12 @@
         </ol>
     </nav>
 
+    <div class="mb-3">
+        <a href="{% url 'unified_calendar' %}" class="btn-prizm-back">
+            <i class="fas fa-arrow-left"></i> Back to Calendar
+        </a>
+    </div>
+
     <div class="card shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center"
              style="background:{{ event.get_event_type_color }}10; border-left:4px solid {{ event.get_event_type_color }};">

@@ -1,51 +1,48 @@
 ```json
 {
   "classification": "Necessary Non-Value-Added",
-  "justification": "Task involves documentation and testing, mandatory NNV activities per the critical rule.",
+  "justification": "Fixes critical XSS vulnerability & edge cases, vital for quality, security, compliance.",
   "confidence_score": 0.95,
   "confidence_level": "high",
   "contributing_factors": [
     {
-      "factor": "Documentation",
-      "contribution_percentage": 30,
-      "description": "Defining API contract and specifications is NNV."
+      "factor": "Security Vulnerability Fix",
+      "contribution_percentage": 50,
+      "description": "Fixing XSS vulnerability ensures product security and integrity."
     },
     {
-      "factor": "Testing",
+      "factor": "Edge Case Handling",
       "contribution_percentage": 30,
-      "description": "Unit and integration testing is NNV."
+      "description": "Ensures system robustness and prevents future issues."
     },
     {
-      "factor": "Core Development",
-      "contribution_percentage": 40,
-      "description": "Implementing API routes and parsing logic is VA."
+      "factor": "High Risk/Complexity Mitigation",
+      "contribution_percentage": 20,
+      "description": "Addressing high-risk, complex issues is necessary for system stability."
     }
   ],
   "classification_reasoning": {
-    "value_added_indicators": [
-      "Creates new API functionality",
-      "Enables external system interaction",
-      "Delivers direct product capability"
-    ],
+    "value_added_indicators": [],
     "non_value_indicators": [
-      "Includes API documentation",
-      "Requires comprehensive testing",
-      "Addresses security vulnerabilities"
+      "Security fix",
+      "Quality assurance",
+      "Compliance",
+      "Risk mitigation"
     ],
-    "primary_driver": "Critical rule mandates NNV for tasks involving documentation and testing."
+    "primary_driver": "Security & Quality Assurance"
   },
   "alternative_classification": {
     "classification": "Value-Added",
-    "confidence_score": 0.60,
-    "conditions": "If the critical rule applied only when doc/testing is the sole purpose."
+    "confidence_score": 0.10,
+    "conditions": "If it were a new security feature, not a fix for a vulnerability."
   },
   "assumptions": [
-    "The critical classification rule is applied strictly and literally.",
-    "Documentation and testing are inherent and required parts of developing a robust API."
+    "Task is to fix/mitigate the XSS vulnerability and unicode edge case."
   ],
   "improvement_suggestions": [
-    "Break down bundled tasks into granular steps for precise classification.",
-    "Standardize configuration formats to reduce parsing complexity."
+    "Implement robust input validation earlier in dev cycle.",
+    "Conduct proactive security reviews and penetration testing.",
+    "Automate edge case testing to catch issues sooner."
   ],
   "lean_waste_type": null,
   "data_quality": "high"

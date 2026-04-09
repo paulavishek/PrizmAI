@@ -1320,3 +1320,126 @@ body {
 }
 
 /* End Feature Guide styles */
+
+/* ======================================== */
+/* BACK & CANCEL BUTTON STYLES             */
+/* ======================================== */
+
+/* Prominent back button — replaces generic btn-outline-secondary */
+.btn-prizm-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 18px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #4f46e5;
+    background: rgba(79, 70, 229, 0.08);
+    border: 1.5px solid rgba(79, 70, 229, 0.25);
+    border-radius: 8px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.btn-prizm-back:hover,
+.btn-prizm-back:focus {
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border-color: #4f46e5;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.btn-prizm-back:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+
+.btn-prizm-back i,
+.btn-prizm-back .fa,
+.btn-prizm-back .fas,
+.btn-prizm-back .bi {
+    font-size: 0.8em;
+    transition: transform 0.2s ease;
+}
+
+.btn-prizm-back:hover i,
+.btn-prizm-back:hover .fa,
+.btn-prizm-back:hover .fas,
+.btn-prizm-back:hover .bi {
+    transform: translateX(-2px);
+}
+
+/* Dark mode support */
+[data-bs-theme="dark"] .btn-prizm-back {
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+[data-bs-theme="dark"] .btn-prizm-back:hover,
+[data-bs-theme="dark"] .btn-prizm-back:focus {
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border-color: #6366f1;
+}
+
+/* Cancel button — consistent styling */
+.btn-prizm-cancel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 18px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary, #6b7280);
+    background: var(--bg-secondary, #ffffff);
+    border: 1.5px solid var(--border-color, #dee2e6);
+    border-radius: 8px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.btn-prizm-cancel:hover,
+.btn-prizm-cancel:focus {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.06);
+    border-color: rgba(220, 38, 38, 0.3);
+    text-decoration: none;
+}
+
+.btn-prizm-cancel:active {
+    transform: scale(0.98);
+}
+
+/* Small variant */
+.btn-prizm-back.btn-sm {
+    padding: 4px 12px;
+    font-size: 0.8125rem;
+}
+
+/* Also improve existing btn-outline-secondary when used as back */
+a.btn.btn-outline-secondary[href]:not(.dropdown-toggle):hover,
+button.btn.btn-outline-secondary[onclick*="goBack"]:hover,
+button.btn.btn-outline-secondary[onclick*="Back"]:hover,
+button.btn.btn-secondary[onclick*="goBack"]:hover {
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border-color: #4f46e5;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    transform: translateY(-1px);
+}
+
+[data-bs-theme="dark"] a.btn.btn-outline-secondary[href]:not(.dropdown-toggle):hover,
+[data-bs-theme="dark"] button.btn.btn-outline-secondary[onclick*="goBack"]:hover,
+[data-bs-theme="dark"] button.btn.btn-outline-secondary[onclick*="Back"]:hover,
+[data-bs-theme="dark"] button.btn.btn-secondary[onclick*="goBack"]:hover {
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border-color: #6366f1;
+}

@@ -680,8 +680,8 @@ def wiki_page_history(request, slug):
     if not org:
         org = Organization.objects.filter(name='Demo - Acme Corporation').first()
     
-    # Try to get page from user's org first, then from any org (for demo pages)
-    page = WikiPage.objects.filter(slug=slug).first()
+    # Get page scoped to user's organization
+    page = WikiPage.objects.filter(slug=slug, organization=org).first()
     if not page:
         return redirect('wiki:page_list')
     
@@ -703,8 +703,8 @@ def wiki_page_restore(request, slug, version_number):
     if not org:
         org = Organization.objects.filter(name='Demo - Acme Corporation').first()
     
-    # Try to get page by slug (works for both user's org and demo pages)
-    page = WikiPage.objects.filter(slug=slug).first()
+    # Get page scoped to user's organization
+    page = WikiPage.objects.filter(slug=slug, organization=org).first()
     if not page:
         messages.error(request, 'Page not found')
         return redirect('wiki:page_list')

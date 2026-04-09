@@ -38,6 +38,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize AI Smart Assignee suggestion (AI Analysis section)
     initSmartAssigneeSuggestion();
+
+    // Restore AI results from sessionStorage after form validation round-trips
+    try {
+        var savedBreakdown = sessionStorage.getItem('prizmai_taskBreakdown');
+        if (savedBreakdown) {
+            var breakdownData = JSON.parse(savedBreakdown);
+            if (breakdownData && document.getElementById('task-breakdown-result')) {
+                displayTaskBreakdown(breakdownData);
+            }
+        }
+        var savedDeadline = sessionStorage.getItem('prizmai_deadlinePrediction');
+        if (savedDeadline) {
+            var deadlineData = JSON.parse(savedDeadline);
+            if (deadlineData && document.getElementById('deadline-prediction-result')) {
+                displayDeadlinePrediction(deadlineData);
+            }
+        }
+    } catch(e) { /* sessionStorage unavailable or data corrupt — ignore */ }
+
+    // Clear AI sessionStorage on successful form submission
+    var taskForm = document.querySelector('form');
+    if (taskForm) {
+        taskForm.addEventListener('submit', function() {
+            try {
+                sessionStorage.removeItem('prizmai_taskBreakdown');
+                sessionStorage.removeItem('prizmai_deadlinePrediction');
+            } catch(e) {}
+        });
+    }
 });
 
 /**
@@ -1480,7 +1509,20 @@ function displayDeadlinePrediction(data) {
     window.currentDeadlinePrediction = data;
     
     // Use AIExplainability module for enhanced visualization
-    let html = `
+    let html = '';
+
+    // Warn if the recommended deadline is in the past
+    if (data.date_is_past) {
+        html += `
+            <div class="alert alert-danger mb-3">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                <strong>Warning:</strong> The AI-recommended deadline (<strong>${formatDate(data.recommended_deadline)}</strong>) is in the past.
+                This usually means the task requires more lead time than is available. Consider reducing scope, adding resources, or choosing a later start date.
+            </div>
+        `;
+    }
+
+    html += `
         <div class="alert alert-success mb-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -1688,6 +1730,9 @@ function displayDeadlinePrediction(data) {
     
     resultDiv.innerHTML = html;
     resultDiv.classList.remove('d-none');
+
+    // Persist to sessionStorage so data survives form validation round-trips
+    try { sessionStorage.setItem('prizmai_deadlinePrediction', JSON.stringify(data)); } catch(e) {}
 }
 
 /**
@@ -2566,6 +2611,9 @@ function displayTaskBreakdown(data) {
     
     // Store breakdown data for later use
     window.currentTaskBreakdown = data;
+
+    // Persist to sessionStorage so data survives form validation round-trips
+    try { sessionStorage.setItem('prizmai_taskBreakdown', JSON.stringify(data)); } catch(e) {}
 }
 
 

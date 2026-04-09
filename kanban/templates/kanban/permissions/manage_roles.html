@@ -15,9 +15,9 @@
             <p class="text-muted mb-0">{{ organization.name }}</p>
         </div>
         <div class="d-flex gap-2">
-            <button onclick="goBack()" class="btn btn-outline-secondary">
+            <a href="{% url 'dashboard' %}" class="btn-prizm-back">
                 <i class="fas fa-arrow-left me-1"></i> Back
-            </button>
+            </a>
             <button class="btn btn-prizm-primary" data-bs-toggle="modal" data-bs-target="#createRoleModal">
                 <i class="fas fa-plus me-1"></i> Create New Role
             </button>
