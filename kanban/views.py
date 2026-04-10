@@ -2288,9 +2288,12 @@ def board_detail(request, board_id):
     )
 
     # Board preset context for board-level mode dropdown
+    # Demo workspace boards and sandbox copies always get enterprise (all features unlocked)
+    _is_demo_board = getattr(board, 'is_sandbox_copy', False) or \
+                     (getattr(board.organization, 'is_demo', False) if board.organization else False)
     board_preset_local = None
-    board_preset_global = 'lean'
-    board_preset_effective = 'lean'
+    board_preset_global = 'enterprise' if _is_demo_board else 'lean'
+    board_preset_effective = 'enterprise' if _is_demo_board else 'lean'
     try:
         from kanban.preset_models import BoardPreset, PRESET_CHOICES as _BP_CHOICES, PRESET_ORDER as _BP_ORDER
         bp_obj = BoardPreset.objects.select_related('board__organization__workspace_preset').get(board=board)
@@ -3210,15 +3213,19 @@ def gantt_chart(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # Preset guard: Gantt requires Professional+
-    from kanban.preset_models import BoardPreset, build_feature_flags
-    try:
-        bp = BoardPreset.objects.get(board=board)
-        flags = build_feature_flags(bp.effective_preset())
-    except BoardPreset.DoesNotExist:
-        flags = build_feature_flags('lean')
-    if not flags.get('show_gantt'):
-        messages.info(request, "Gantt Chart is available in Professional mode. Upgrade your workspace to unlock it.")
-        return redirect('board_detail', board_id=board.id)
+    # Demo workspace boards and sandbox copies bypass all preset restrictions
+    _is_demo_board = getattr(board, 'is_sandbox_copy', False) or \
+                     (getattr(board.organization, 'is_demo', False) if board.organization else False)
+    if not _is_demo_board:
+        from kanban.preset_models import BoardPreset, build_feature_flags
+        try:
+            bp = BoardPreset.objects.get(board=board)
+            flags = build_feature_flags(bp.effective_preset())
+        except BoardPreset.DoesNotExist:
+            flags = build_feature_flags('lean')
+        if not flags.get('show_gantt'):
+            messages.info(request, "Gantt Chart is available in Professional mode. Upgrade your workspace to unlock it.")
+            return redirect('board_detail', board_id=board.id)
     
     # All restrictions removed - all authenticated users can view Gantt chart
     # RBAC: check view permission on the board
