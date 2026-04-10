@@ -599,6 +599,10 @@ def summarize_board_analytics_api(request, board_id):
         # Get the board
         board = get_object_or_404(Board, id=board_id)
         
+        # RBAC: verify user has access to this board
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         # Check AI quota for authenticated users
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
