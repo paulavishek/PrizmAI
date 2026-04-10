@@ -659,7 +659,13 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
             if start != -1 and end != -1:
                 text = text[start:end + 1]
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # AI sometimes returns Python-style single-quoted dicts;
+            # attempt to fix common deviations before giving up.
+            import ast
+            data = ast.literal_eval(text)
         return (
             str(data.get('headline', ''))[:300],
             str(data.get('briefing', '')),
