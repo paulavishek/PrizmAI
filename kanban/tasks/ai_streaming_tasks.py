@@ -75,7 +75,6 @@ def _send_error(task_id, message):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.run_premortem',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -182,7 +181,6 @@ def run_premortem_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.summarize_board_analytics',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -310,7 +308,6 @@ def summarize_board_analytics_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.predict_deadline',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -440,7 +437,6 @@ def predict_deadline_task(self, task_data, team_context, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.analyze_workflow',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -556,7 +552,6 @@ def analyze_workflow_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.send_ai_message',
-    queue='ai_tasks',
     time_limit=180,
     soft_time_limit=150,
 )
