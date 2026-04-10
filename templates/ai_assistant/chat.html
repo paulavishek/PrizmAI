@@ -1166,7 +1166,7 @@
         setTimeout(() => { if (input) input.focus(); }, 300);
     }
 
-    function submitNewSession() {
+    function submitNewSession(forceCreate) {
         const input = document.getElementById('newSessionTitleInput');
         const today = new Date();
         const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1182,10 +1182,16 @@
                 'Content-Type': 'application/json',
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
             },
-            body: JSON.stringify({title: title})
+            body: JSON.stringify({title: title, force: !!forceCreate})
         })
         .then(r => r.json())
         .then(data => {
+            if (data.status === 'duplicate_warning') {
+                if (confirm(data.message)) {
+                    submitNewSession(true);
+                }
+                return;
+            }
             if (data.session_id) {
                 window.location.href = `/assistant/chat/?session=${data.session_id}`;
             }
@@ -1376,7 +1382,7 @@
         });
     }
     
-    function saveTitleRename() {
+    function saveTitleRename(forceRename) {
         const newTitle = chatTitleEdit.value.trim();
         const oldTitle = chatTitleText.textContent;
         
@@ -1404,7 +1410,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
-                body: JSON.stringify({ title: newTitle })
+                body: JSON.stringify({ title: newTitle, force: !!forceRename })
             })
             .then(response => {
                 console.log('[Rename] Response status:', response.status);
@@ -1412,6 +1418,15 @@
             })
             .then(data => {
                 console.log('[Rename] Response data:', data);
+                if (data.duplicate_warning) {
+                    // Ask user to confirm duplicate title
+                    if (confirm(data.message)) {
+                        saveTitleRename(true);
+                    } else {
+                        chatTitleText.textContent = oldTitle;
+                    }
+                    return;
+                }
                 if (data.success) {
                     console.log('[Rename] Success! Reloading sessions...');
                     // Reload sessions list to show updated name
@@ -1477,7 +1492,8 @@
                     },
                     body: JSON.stringify({
                         title: 'Quick Query: ' + (queryToSend.substring(0, 30) + (queryToSend.length > 30 ? '...' : '')),
-                        description: 'Auto-created session for quick query from wiki'
+                        description: 'Auto-created session for quick query from wiki',
+                        force: true
                     })
                 })
                 .then(r => r.json())

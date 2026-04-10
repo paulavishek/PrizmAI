@@ -290,13 +290,15 @@ def _check_duplicate_board(name, user):
 
 _TITLE_RE = re.compile(
     r"""(?:called|named|titled)\s+['\u2018\u201c"]+(.+?)['\u2019\u201d"]+"""
-    r"""|(?:called|named|titled)\s+(.+?)(?:\s+with\b|\s+due\b|\s+assign|\s*$)""",
+    r"""|(?:called|named|titled)\s+(.+?)(?:\s+with\b|\s+due\b|\s+assign|\s*$)"""
+    r"""|(?:create|add|make|need)\s+(?:a\s+)?(?:[\w-]+\s+)*task(?:\s+to)?[:\s]+(?!called\b|named\b|titled\b)['\u2018\u201c"]*(.+?)['\u2019\u201d"]*(?:\s+with\b|\s+due\b|\s+on\s+board\b|\s+assign|\s*$)""",
     re.IGNORECASE,
 )
 
 _PRIORITY_RE = re.compile(
     r'\b(low|medium|high|urgent|critical)[\s-]*priority\b'
-    r'|\bpriority[\s:-]*(low|medium|high|urgent|critical)\b',
+    r'|\bpriority[\s:-]*(low|medium|high|urgent|critical)\b'
+    r'|\b(low|medium|high|urgent|critical)[\s-]+(?:priority\s+)?task\b',
     re.IGNORECASE,
 )
 
@@ -324,12 +326,12 @@ def _extract_task_fields(message):
 
     m = _TITLE_RE.search(message)
     if m:
-        title = (m.group(1) or m.group(2) or '').strip().strip("'\"\u2018\u2019\u201c\u201d")
+        title = (m.group(1) or m.group(2) or m.group(3) or '').strip().strip("'\"\u2018\u2019\u201c\u201d")
         result['title'] = title.rstrip('.,;:!?')
 
     m = _PRIORITY_RE.search(message)
     if m:
-        result['priority'] = (m.group(1) or m.group(2)).lower()
+        result['priority'] = (m.group(1) or m.group(2) or m.group(3)).lower()
 
     m = _DUE_DATE_RE.search(message)
     if m:
@@ -404,7 +406,7 @@ def _looks_like_question(text):
 def _user_board_names(user):
     """Return a list of board names the user can access (demo-aware)."""
     from kanban.utils.demo_protection import get_user_boards
-    boards = get_user_boards(user).values_list('name', flat=True)[:20]
+    boards = get_user_boards(user).order_by('name').values_list('name', flat=True)[:20]
     return list(boards)
 
 
@@ -415,7 +417,7 @@ def _user_board_names_for_env(user, is_demo_mode):
         boards = Board.objects.filter(
             owner=user,
             is_sandbox_copy=True,
-        ).distinct().values_list('name', flat=True)[:20]
+        ).distinct().order_by('name').values_list('name', flat=True)[:20]
     else:
         boards = Board.objects.filter(
             Q(created_by=user) | Q(memberships__user=user),
@@ -423,8 +425,90 @@ def _user_board_names_for_env(user, is_demo_mode):
             is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
-        ).distinct().values_list('name', flat=True)[:20]
+        ).distinct().order_by('name').values_list('name', flat=True)[:20]
     return list(boards)
+
+
+def _get_ordered_boards_for_user(user, is_demo_mode=False):
+    """
+    Return a consistently-ordered list of Board objects the user can access.
+    Always sorted by name so numbered selection is stable.
+    """
+    from kanban.models import Board
+    if is_demo_mode:
+        return list(
+            Board.objects.filter(
+                Q(owner=user, is_sandbox_copy=True)
+                | Q(is_official_demo_board=True)
+                | Q(created_by_session=f'spectra_demo_{user.id}'),
+                is_archived=False,
+            ).distinct().order_by('name')[:20]
+        )
+    else:
+        return list(
+            Board.objects.filter(
+                Q(created_by=user) | Q(memberships__user=user),
+                is_archived=False,
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).exclude(
+                is_official_demo_board=True,
+            ).distinct().order_by('name')[:20]
+        )
+
+
+def _format_board_list_numbered(boards):
+    """Format a list of Board objects as a numbered list string."""
+    if not boards:
+        return ''
+    lines = [f"{i + 1}. **{b.name}**" for i, b in enumerate(boards)]
+    return '\n'.join(lines)
+
+
+def _resolve_board_from_input(user_input, ordered_boards):
+    """
+    Resolve a Board from user input: accepts a number (1-based index into
+    ordered_boards) OR a board name (exact / fuzzy match).
+    Returns the matched Board or None.
+    """
+    msg = user_input.strip()
+    msg_lower = msg.lower()
+
+    # 1. Try as a number first
+    try:
+        num = int(msg)
+        if 1 <= num <= len(ordered_boards):
+            return ordered_boards[num - 1]
+    except (ValueError, TypeError):
+        pass
+
+    # 2. Word-form numbers
+    _word_nums = {
+        'one': 1, 'first': 1, 'two': 2, 'second': 2, 'three': 3, 'third': 3,
+        'four': 4, 'fourth': 4, 'five': 5, 'fifth': 5, 'six': 6, 'seventh': 7,
+        'eight': 8, 'nine': 9, 'ten': 10,
+    }
+    if msg_lower in _word_nums:
+        idx = _word_nums[msg_lower]
+        if 1 <= idx <= len(ordered_boards):
+            return ordered_boards[idx - 1]
+
+    # 3. Exact name match
+    for b in ordered_boards:
+        if b.name.lower() == msg_lower:
+            return b
+
+    # 4. Board name contained in message
+    for b in ordered_boards:
+        if b.name.lower() in msg_lower:
+            return b
+
+    # 5. Message contained in board name (fuzzy)
+    for b in ordered_boards:
+        if msg_lower in b.name.lower():
+            return b
+
+    return None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -642,20 +726,30 @@ class ConversationFlowManager:
             if len(user_boards) == 1:
                 board = user_boards[0]
             else:
-                boards = _user_board_names_for_env(user, is_demo)
-                if boards:
-                    board_list = ', '.join(f'**{b}**' for b in boards)
+                ordered = _get_ordered_boards_for_user(user, is_demo)
+                if ordered:
+                    board_list = _format_board_list_numbered(ordered)
                     state.mode = 'collecting_task'
                     state.pending_action = 'create_task'
+                    # Pre-extract fields so they survive the board-selection round-trip
+                    extracted = _extract_task_fields(message)
                     state.collected_data = {
                         'step': -1,
                         'original_message': message,
+                        **{k: v for k, v in extracted.items() if v},
                     }
                     state.save()
+                    # Show what we already captured so user knows their input wasn't lost
+                    captured = ''
+                    if extracted.get('title'):
+                        captured = f" I'll create **{extracted['title']}**"
+                        if extracted.get('priority'):
+                            captured += f" (Priority: **{extracted['priority'].title()}**)"
+                        captured += ' —'
                     return (
-                        "I'd love to help you create a task! But I need to know which board "
-                        f"it belongs to. Please select a board from the dropdown above first.\n\n"
-                        f"Your boards: {board_list}"
+                        f"I'd love to help you create a task!{captured} But I need to know which board "
+                        f"it belongs to. Pick a number or type the board name:\n\n"
+                        f"{board_list}"
                     )
                 # No boards in this environment
                 if is_demo:
@@ -781,31 +875,16 @@ class ConversationFlowManager:
             )
 
         if step == -1:
-            # Awaiting board selection
-            from kanban.utils.demo_protection import get_user_boards
-            user_boards = list(
-                get_user_boards(user).filter(is_archived=False)
-            )
-            # Try to match the user's reply to a board name
-            selected = None
-            msg_lower = msg.lower()
-            for b in user_boards:
-                if b.name.lower() == msg_lower or b.name.lower() in msg_lower:
-                    selected = b
-                    break
-            if selected is None:
-                # Fuzzy: check if any board name is contained in the message
-                for b in user_boards:
-                    if msg_lower in b.name.lower():
-                        selected = b
-                        break
+            # Awaiting board selection — use consistent ordered list + number matching
+            is_demo = getattr(self, '_is_demo_mode', False)
+            ordered_boards = _get_ordered_boards_for_user(user, is_demo)
+            selected = _resolve_board_from_input(msg, ordered_boards)
 
             if selected is None:
-                boards = [b.name for b in user_boards]
-                board_list = ', '.join(f'**{b}**' for b in boards)
+                board_list = _format_board_list_numbered(ordered_boards)
                 return (
                     f"I couldn't find a board matching **\"{msg}\"**. "
-                    f"Please pick one of these: {board_list}"
+                    f"Pick a number or type the board name:\n\n{board_list}"
                 )
 
             board = selected
@@ -1136,9 +1215,10 @@ class ConversationFlowManager:
             if len(user_boards) == 1:
                 board = user_boards[0]
             else:
-                boards = _user_board_names(user)
-                if boards:
-                    board_list = ', '.join(f'**{b}**' for b in boards)
+                is_demo = getattr(self, '_is_demo_mode', False)
+                ordered = _get_ordered_boards_for_user(user, is_demo)
+                if ordered:
+                    board_list = _format_board_list_numbered(ordered)
                     # Enter collecting_automation at step -1 (awaiting board)
                     state.mode = 'collecting_automation'
                     state.pending_action = 'activate_automation'
@@ -1146,8 +1226,8 @@ class ConversationFlowManager:
                     state.save()
                     return (
                         "I can set up automations, but I need a board to work with. "
-                        f"Please select a board from the dropdown above first.\n\n"
-                        f"Your boards: {board_list}"
+                        f"Pick a number or type the board name:\n\n"
+                        f"{board_list}"
                     )
                 return (
                     "I can set up automations, but you don't have any boards yet. "
@@ -1196,31 +1276,15 @@ class ConversationFlowManager:
         msg = message.strip()
 
         if step == -1:
-            # Awaiting board selection
-            from kanban.utils.demo_protection import get_user_boards
-            user_boards = list(
-                get_user_boards(user).filter(
-                    is_archived=False,
-                )
-            )
-            selected = None
-            msg_lower = msg.lower()
-            for b in user_boards:
-                if b.name.lower() == msg_lower or b.name.lower() in msg_lower:
-                    selected = b
-                    break
+            # Awaiting board selection — use consistent ordered list + number matching
+            is_demo = getattr(self, '_is_demo_mode', False)
+            ordered_boards = _get_ordered_boards_for_user(user, is_demo)
+            selected = _resolve_board_from_input(msg, ordered_boards)
             if selected is None:
-                for b in user_boards:
-                    if msg_lower in b.name.lower():
-                        selected = b
-                        break
-
-            if selected is None:
-                boards = [b.name for b in user_boards]
-                board_list = ', '.join(f'**{b}**' for b in boards)
+                board_list = _format_board_list_numbered(ordered_boards)
                 return (
                     f"I couldn't find a board matching **\"{msg}\"**. "
-                    f"Please pick one of these: {board_list}"
+                    f"Pick a number or type the board name:\n\n{board_list}"
                 )
 
             board = selected
@@ -1425,9 +1489,10 @@ class ConversationFlowManager:
             if board is None:
                 board = self._auto_select_board(user)
             if board is None:
-                boards = _user_board_names(user)
-                if boards:
-                    board_list = ', '.join(f'**{b}**' for b in boards)
+                is_demo = getattr(self, '_is_demo_mode', False)
+                ordered = _get_ordered_boards_for_user(user, is_demo)
+                if ordered:
+                    board_list = _format_board_list_numbered(ordered)
                     state.mode = meta['mode']
                     state.pending_action = meta['pending']
                     state.collected_data = {
@@ -1437,8 +1502,8 @@ class ConversationFlowManager:
                     state.save()
                     return (
                         f"I'd love to help with **{meta['label']}**, but I need a board. "
-                        f"Please select one from the dropdown above.\n\n"
-                        f"Your boards: {board_list}"
+                        f"Pick a number or type the board name:\n\n"
+                        f"{board_list}"
                     )
                 return (
                     f"I'd love to help with **{meta['label']}**, but you don't have any boards yet. "
@@ -1564,11 +1629,12 @@ class ConversationFlowManager:
         if data.get('awaiting_board'):
             board = self._resolve_board_from_reply(user, message)
             if board is None:
-                boards = _user_board_names(user)
-                board_list = ', '.join(f'**{b}**' for b in boards) if boards else 'None'
+                is_demo = getattr(self, '_is_demo_mode', False)
+                ordered = _get_ordered_boards_for_user(user, is_demo)
+                board_list = _format_board_list_numbered(ordered) if ordered else 'None'
                 return (
                     f"I couldn't find a board matching **\"{message}\"**. "
-                    f"Choose one of: {board_list}"
+                    f"Pick a number or type the board name:\n\n{board_list}"
                 )
             data.pop('awaiting_board', None)
             original = data.pop('original_message', message)
@@ -1651,23 +1717,11 @@ class ConversationFlowManager:
         )
         return boards[0] if len(boards) == 1 else None
 
-    @staticmethod
-    def _resolve_board_from_reply(user, message):
-        """Try to match a user reply to one of their boards."""
-        from kanban.utils.demo_protection import get_user_boards
-        user_boards = list(
-            get_user_boards(user).filter(
-                is_archived=False,
-            )
-        )
-        msg_lower = message.lower().strip()
-        for b in user_boards:
-            if b.name.lower() == msg_lower or b.name.lower() in msg_lower:
-                return b
-        for b in user_boards:
-            if msg_lower in b.name.lower():
-                return b
-        return None
+    def _resolve_board_from_reply(self, user, message):
+        """Try to match a user reply to one of their boards (number or name)."""
+        is_demo = getattr(self, '_is_demo_mode', False)
+        ordered_boards = _get_ordered_boards_for_user(user, is_demo)
+        return _resolve_board_from_input(message, ordered_boards)
 
     @staticmethod
     def _pending_to_intent(pending_action):
@@ -1821,7 +1875,34 @@ class ConversationFlowManager:
         # First check if user wants to cancel mid-flow
         intent = detect_action_intent(message)
         if intent == 'cancel_action':
-            return self._handle_cancellation(state)
+            # If we stashed a pending intent from the previous turn
+            # (user said something like "Update X" while creating a task,
+            # got warned, then said "cancel"), auto-switch to that intent.
+            stashed_intent = (state.collected_data or {}).get('_stashed_switch_intent')
+            stashed_msg = (state.collected_data or {}).get('_stashed_switch_message', '')
+            state.reset()
+
+            if stashed_intent and stashed_msg:
+                if stashed_intent == 'create_task':
+                    return self._start_task_flow(user, board, stashed_msg, state)
+                if stashed_intent == 'create_board':
+                    return self._start_board_flow(user, stashed_msg, state)
+                if stashed_intent == 'activate_automation':
+                    return self._start_automation_flow(user, board, stashed_msg, state)
+                if stashed_intent in self._FC_INTENT_META:
+                    return self._start_fc_flow(user, board, stashed_msg, state, stashed_intent)
+
+            return "No problem! I've cancelled that. Feel free to ask me anything. \U0001f60a"
+
+        # If user says "continue" after an intent-switch warning, clear the
+        # stashed intent and let the flow proceed as normal.
+        if intent == 'confirm_action' and (state.collected_data or {}).get('_stashed_switch_intent'):
+            data = state.collected_data or {}
+            data.pop('_stashed_switch_intent', None)
+            data.pop('_stashed_switch_message', None)
+            state.collected_data = data
+            state.save()
+            # Don't return — fall through to the normal flow handler below
 
         # If regex found nothing but the message looks like a command (not a
         # short single-word reply like "Sam", "skip", or "1"), ask the AI
@@ -1865,7 +1946,8 @@ class ConversationFlowManager:
                 if intent in self._FC_INTENT_META:
                     return self._start_fc_flow(user, board, message, state, intent)
             else:
-                # Different action intent — warn the user
+                # Different action intent — warn the user and stash the
+                # new intent so we can auto-switch if they say "cancel".
                 flow_name = {
                     'collecting_task': 'creating a task',
                     'collecting_board': 'creating a board',
@@ -1877,6 +1959,11 @@ class ConversationFlowManager:
                     'collecting_task_update': 'updating a task',
                     'collecting_preset': 'setting up your workspace mode',
                 }.get(state.mode, 'something')
+                data = state.collected_data or {}
+                data['_stashed_switch_intent'] = intent
+                data['_stashed_switch_message'] = message
+                state.collected_data = data
+                state.save()
                 return (
                     f"I'm currently in the middle of **{flow_name}** for you. "
                     "Would you like to **continue** with that, or should I **cancel** it and start fresh?"

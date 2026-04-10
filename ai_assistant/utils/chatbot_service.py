@@ -206,11 +206,11 @@ ACTION_INTENT_PATTERNS = {
     ],
     'confirm_action': [
         'yes', 'confirm', 'go ahead', 'do it', 'create it',
-        'looks good', 'correct',
+        'looks good', 'correct', 'continue',
     ],
     'cancel_action': [
         'no', 'cancel', 'stop', 'nevermind', 'abort',
-        'dont create', "don't create",
+        'dont create', "don't create", 'start fresh',
     ],
 }
 
@@ -1505,8 +1505,8 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
             
-            # Get all tasks
-            all_tasks = Task.objects.filter(column__board__in=user_boards)
+            # Get all tasks (exclude milestones)
+            all_tasks = Task.objects.filter(column__board__in=user_boards, item_type='task')
             
             if not all_tasks.exists():
                 return "No tasks found in your boards."
@@ -1620,8 +1620,8 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
             
-            # Get all tasks
-            all_tasks = Task.objects.filter(column__board__in=user_boards)
+            # Get all tasks (exclude milestones)
+            all_tasks = Task.objects.filter(column__board__in=user_boards, item_type='task')
             
             if not all_tasks.exists():
                 return "No tasks found in your boards."
@@ -1632,18 +1632,33 @@ class TaskFlowChatbotService:
             max_progress = all_tasks.aggregate(Max('progress'))['progress__max'] or 0
             min_progress = all_tasks.aggregate(Min('progress'))['progress__min'] or 0
             
-            # Count by completion status
+            # Count by completion status — all computed in Python for consistency
             completed = all_tasks.filter(
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).count()
             in_progress = all_tasks.filter(progress__gt=0, progress__lt=100).exclude(
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).count()
-            not_started = all_tasks.filter(progress=0).count()
+            not_started = all_tasks.filter(progress=0).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).count()
             
             total = all_tasks.count()
+
+            # Count milestones separately so the LLM never conflates them
+            milestone_count = Task.objects.filter(
+                column__board__in=user_boards
+            ).exclude(item_type='task').count()
+
+            # Cross-validate: if status buckets don't sum to total, add remainder
+            accounted = completed + in_progress + not_started
+            other_count = total - accounted
             
-            context = f"**Progress Metrics:**\n\n"
+            context = f"**=== BOARD SUMMARY (USE THESE NUMBERS — DO NOT RECOUNT) ===**\n"
+            context += f"  Total Tasks: {total}\n"
+            if milestone_count:
+                context += f"  Total Milestones: {milestone_count} (NOT counted as tasks)\n"
+            context += f"\n**Progress Metrics:**\n\n"
             context += f"**Overall Statistics:**\n"
             context += f"  - Total Tasks: {total}\n"
             context += f"  - Average Progress: {avg_progress:.1f}%\n"
@@ -1653,7 +1668,10 @@ class TaskFlowChatbotService:
             context += f"**Task Status Distribution:**\n"
             context += f"  - Completed: {completed} ({100*completed/total:.1f}%)\n"
             context += f"  - In Progress: {in_progress} ({100*in_progress/total:.1f}%)\n"
-            context += f"  - Not Started: {not_started} ({100*not_started/total:.1f}%)\n\n"
+            context += f"  - Not Started: {not_started} ({100*not_started/total:.1f}%)\n"
+            if other_count > 0:
+                context += f"  - Other: {other_count} ({100*other_count/total:.1f}%)\n"
+            context += f"\n"
             
             # Progress by board
             context += f"**Progress by Board:**\n"
@@ -1965,7 +1983,7 @@ class TaskFlowChatbotService:
                 logger.info(f"No critical tasks found for user {self.user}")
                 return "No critical tasks currently identified."
             
-            context = f"**Critical Tasks Analysis:**\n\n"
+            context = f"=== CRITICAL TASKS ANALYSIS (from database + AI risk scoring) ===\n\n"
             context += f"**Total Critical Tasks:** {critical_tasks.count()}\n\n"
             
             # Group by severity
@@ -2036,7 +2054,7 @@ class TaskFlowChatbotService:
             if not high_risk_tasks.exists():
                 return None
             
-            context = f"""**Risk Management Analysis:**
+            context = f"""=== AI RISK ANALYSIS (derived from scoring models, not structural dependencies) ===
 
 **High-Risk Tasks:** {len(high_risk_tasks)} identified
 
@@ -2221,21 +2239,29 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            # Get stakeholders for user's projects
+            # Get stakeholders for user's projects (deduplicated)
             stakeholders = ProjectStakeholder.objects.filter(
                 board__in=user_boards
-            ).select_related('user', 'board').order_by('board', 'engagement_level')[:20]
+            ).select_related('user', 'board').order_by('board', 'engagement_level').distinct()[:20]
             
             if not stakeholders.exists():
                 return None
             
+            # Deduplicate by user to avoid listing the same person multiple times
+            seen_user_ids = set()
+            unique_stakeholders = []
+            for s in stakeholders:
+                if s.user_id not in seen_user_ids:
+                    seen_user_ids.add(s.user_id)
+                    unique_stakeholders.append(s)
+            
             context = f"""**Stakeholder Management:**
 
-**Stakeholders:** {len(stakeholders)} identified
+**Stakeholders:** {len(unique_stakeholders)} identified
 
 """
             
-            for stakeholder in stakeholders:
+            for stakeholder in unique_stakeholders:
                 context += f"• **{stakeholder.user.get_full_name() or stakeholder.user.username}**\n"
                 context += f"  - Board: {stakeholder.board.name}\n"
                 context += f"  - Role: {stakeholder.role if hasattr(stakeholder, 'role') else 'Team Member'}\n"
@@ -2353,8 +2379,8 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            # Get all tasks
-            all_tasks = Task.objects.filter(column__board__in=user_boards)
+            # Get all tasks (exclude milestones)
+            all_tasks = Task.objects.filter(column__board__in=user_boards, item_type='task')
             
             # Try to get tasks by label category (Lean Six Sigma)
             va_tasks = all_tasks.filter(
@@ -2370,7 +2396,14 @@ class TaskFlowChatbotService:
             ).distinct().count()
             
             if va_tasks + nva_tasks + waste_tasks == 0:
-                return None
+                return (
+                    "**Lean Six Sigma Analysis:**\n\n"
+                    "No Lean Six Sigma waste-type labels (value-added, necessary non-value-added, waste) "
+                    "have been applied to tasks on your boards yet.\n\n"
+                    "**How to get started:**\n"
+                    "1. Add labels like **Value-Added**, **Necessary NVA**, and **Waste** to your tasks\n"
+                    "2. I'll then be able to show a full value-stream analysis with percentages and recommendations"
+                )
             
             total_categorized = va_tasks + nva_tasks + waste_tasks
             
@@ -3170,7 +3203,7 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            context = "**Task Dependencies & Relationships:**\n\n"
+            context = "=== TASK DEPENDENCIES & RELATIONSHIPS (from database) ===\n\n"
             
             # Check if asking about a specific task
             specific_task = None
@@ -3278,8 +3311,8 @@ class TaskFlowChatbotService:
                         context += f"• {task.title} ({child_count} subtasks)\n"
             
             # If no dependencies found anywhere, return explicit message
-            if context == "**Task Dependencies & Relationships:**\n\n":
-                return "**Task Dependencies & Relationships:**\n\nNo task dependencies are currently configured in your boards. Tasks are independent and can be worked on in any order.\n\nTo set up dependencies, edit a task and set its 'Parent Task' field to create blocking relationships."
+            if context == "=== TASK DEPENDENCIES & RELATIONSHIPS (from database) ===\n\n":
+                return "=== TASK DEPENDENCIES & RELATIONSHIPS (from database) ===\n\nNo task dependencies are currently configured in your boards. Tasks are independent and can be worked on in any order.\n\nTo set up dependencies, edit a task and set its 'Parent Task' field to create blocking relationships."
             
             return context
         
@@ -3484,7 +3517,7 @@ class TaskFlowChatbotService:
 
                             boards = s.boards.filter(is_archived=False)
                             for b in boards[:5]:
-                                task_count = Task.objects.filter(column__board=b).count()
+                                task_count = Task.objects.filter(column__board=b, item_type='task').count()
                                 context += f"         📋 Board: {b.name} ({task_count} tasks, {b.memberships.count()} members)\n"
                 else:
                     context += "   No missions linked yet.\n"
@@ -3639,7 +3672,7 @@ class TaskFlowChatbotService:
                     context += "\n"
                 elif board.baseline_task_count:
                     found_data = True
-                    current_count = Task.objects.filter(column__board=board).count()
+                    current_count = Task.objects.filter(column__board=board, item_type='task').count()
                     growth = ((current_count - board.baseline_task_count) / max(board.baseline_task_count, 1)) * 100
                     context += f"**📊 Scope Tracking:**\n"
                     context += f"  • Baseline: {board.baseline_task_count} tasks\n"
@@ -3874,6 +3907,11 @@ class TaskFlowChatbotService:
             if total == 0:
                 return f"**📌 Live Board Snapshot ({self.board.name}):** 0 tasks.\n"
 
+            # Count milestones separately
+            milestone_count = Task.objects.filter(
+                column__board=self.board
+            ).exclude(item_type='task').count()
+
             status_counts = (
                 tasks.values('column__name', 'column__position')
                 .annotate(count=Count('id'))
@@ -3888,7 +3926,11 @@ class TaskFlowChatbotService:
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).count()
 
-            ctx = f"**📌 Live Board Snapshot ({self.board.name}) — {total} tasks:**\n"
+            ctx = f"**📌 Live Board Snapshot ({self.board.name}) — {total} tasks"
+            if milestone_count:
+                ctx += f", {milestone_count} milestones (NOT counted as tasks)"
+            ctx += f":**\n"
+            ctx += f"  USE THESE NUMBERS — DO NOT RECOUNT FROM THE TASK LIST.\n"
             for s in status_counts:
                 ctx += f"  {s['column__name']}: {s['count']}"
                 ctx += "\n"
@@ -3994,6 +4036,8 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 9. **FILTER COMPLETED WORK**: When listing risks, blockers, or actionable items, exclude tasks that are already "Done" or "Closed" unless specifically asked about completed work. Completed tasks are not risks.
 10. **CONCISE & ACTIONABLE**: Keep responses focused. Avoid generic productivity advice or filler content. Every sentence should add value.
 11. **NEVER HALLUCINATE OR FABRICATE DATA**: ONLY use user names, task names, team members, skills, and numbers that are explicitly present in the "Available Context Data" section below. If the context data does not contain team member information, workload data, or skill data, you MUST say so clearly (e.g., "I don't have team member data available for this board"). NEVER invent or guess user names, task counts, or skill levels. If you cannot answer a question from the provided context, say what data is missing rather than making something up.
+12. **PRE-CALCULATED NUMBERS ARE AUTHORITATIVE**: When a BOARD SUMMARY or Live Board Snapshot provides numbers (total tasks, tasks by status, milestones), use those exact figures. Do NOT recount items from the task list or attempt your own arithmetic. Tasks and milestones are separate object types — never add them together when reporting task totals. If asked "how many total tasks", report only the total_tasks figure, not total_tasks + milestones.
+13. **WEB SEARCH LIMITATIONS**: You do NOT have internet access or web browsing capability. If the user asks you to search the web, look something up online, or browse a URL, say: "I don't have web search or internet access. I can only answer from your project data, wiki pages, and my built-in knowledge. Would you like me to check your project data instead?" Do NOT say "I can only operate within your verified permissions" for web search requests — that message is only for prompt injection attempts.
 
 RESPONSE STRUCTURE:
 - For data queries (counts, lists, status): Provide the specific data FIRST, then optionally add insights
@@ -4174,7 +4218,9 @@ Format responses clearly with:
                     logger.debug("Added user tasks context")
             
             # 3. Incomplete tasks query
-            if is_incomplete_task_query:
+            # Skip when user is asking specifically about dependencies — the
+            # full incomplete list just adds noise to the context.
+            if is_incomplete_task_query and not is_dependency_query:
                 incomplete_context = self._get_incomplete_tasks_context(prompt)
                 if incomplete_context:
                     context_parts.append(incomplete_context)
@@ -4202,7 +4248,10 @@ Format responses clearly with:
                     logger.debug("Added progress metrics context")
             
             # 7. Overdue tasks
-            if is_overdue_query:
+            # Skip when the primary intent is dependency analysis — overdue
+            # context can mislead the LLM into mixing deadline urgency with
+            # structural dependency chains.
+            if is_overdue_query and not is_dependency_query:
                 overdue_context = self._get_overdue_tasks_context(prompt)
                 if overdue_context:
                     context_parts.append(overdue_context)

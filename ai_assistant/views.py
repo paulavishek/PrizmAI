@@ -136,6 +136,24 @@ def create_session(request):
     try:
         data = json.loads(request.body)
         
+        # Check for duplicate title (warn, don't block)
+        title = data.get('title', '').strip()
+        force = data.get('force', False)
+        if title and not force:
+            existing = AIAssistantSession.objects.filter(
+                user=request.user, title__iexact=title
+            ).first()
+            if existing:
+                return JsonResponse({
+                    'status': 'duplicate_warning',
+                    'message': (
+                        f'A chat session titled "{existing.title}" already exists '
+                        f'(created {existing.created_at.strftime("%b %d, %Y")}). '
+                        'Create another with the same name?'
+                    ),
+                    'existing_session_id': existing.id,
+                })
+
         form = AISessionForm(data)
         if form.is_valid():
             session = form.save(commit=False)
@@ -707,6 +725,22 @@ def rename_session(request, session_id):
         if not new_title:
             return JsonResponse({'success': False, 'error': 'Title cannot be empty'}, status=400)
         
+        # Check for duplicate title (warn, don't block)
+        force = data.get('force', False)
+        if not force:
+            existing = AIAssistantSession.objects.filter(
+                user=request.user, title__iexact=new_title
+            ).exclude(id=session_id).first()
+            if existing:
+                return JsonResponse({
+                    'success': False,
+                    'duplicate_warning': True,
+                    'message': (
+                        f'A chat session titled "{existing.title}" already exists. '
+                        'Rename anyway?'
+                    ),
+                })
+
         session.title = new_title
         session.save()
         
