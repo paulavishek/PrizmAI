@@ -64,6 +64,14 @@ from kanban.tasks.commitment_tasks import (
     generate_ai_reasoning_task,
 )
 
+from kanban.tasks.ai_streaming_tasks import (
+    run_premortem_task,
+    summarize_board_analytics_task,
+    predict_deadline_task,
+    analyze_workflow_task,
+    send_ai_message_task,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -102,4 +110,10 @@ __all__ = [
     'reset_weekly_tokens',
     'auto_detect_signals_for_board',
     'generate_ai_reasoning_task',
+    # AI streaming tasks
+    'run_premortem_task',
+    'summarize_board_analytics_task',
+    'predict_deadline_task',
+    'analyze_workflow_task',
+    'send_ai_message_task',
 ]
