@@ -1260,10 +1260,13 @@ def _purge_existing_sandbox(user):
     Delete any existing sandbox for the user (boards + DemoSandbox record).
 
     Also cleans up:
+    - Sandbox-copy boards (is_sandbox_copy=True)
+    - User-created boards in the demo workspace (manually created during demo)
     - Models with SET_NULL on Board FK (orphaned after board deletion)
     - User-scoped data that isn't board-scoped (DC briefings, notifications, etc.)
     """
-    from kanban.models import DemoSandbox, Board, Task
+    from kanban.models import DemoSandbox, Board, Task, Workspace
+    from accounts.models import Organization
 
     sandbox_boards = Board.objects.filter(
         owner=user,
@@ -1271,7 +1274,26 @@ def _purge_existing_sandbox(user):
         is_official_demo_board=False,
         is_seed_demo_data=False,
     )
-    sandbox_board_ids = list(sandbox_boards.values_list('id', flat=True))
+
+    # Also find boards the user created manually in the demo workspace
+    # (these have is_sandbox_copy=False and wouldn't be caught above)
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_ws = None
+    if demo_org:
+        demo_ws = Workspace.objects.filter(
+            organization=demo_org, is_demo=True, is_active=True,
+        ).first()
+    user_created_demo_boards = Board.objects.none()
+    if demo_ws:
+        user_created_demo_boards = Board.objects.filter(
+            created_by=user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+            workspace=demo_ws,
+        )
+
+    all_boards_to_delete = (sandbox_boards | user_created_demo_boards).distinct()
+    sandbox_board_ids = list(all_boards_to_delete.values_list('id', flat=True))
 
     try:
         sandbox = user.demo_sandbox
@@ -1325,8 +1347,8 @@ def _purge_existing_sandbox(user):
         except Exception:
             pass
 
-        # ── Now delete sandbox boards (cascades most other models) ──
-        sandbox_boards.delete()
+        # ── Now delete sandbox boards + user-created demo boards (cascades most other models) ──
+        all_boards_to_delete.delete()
 
     # ── User-scoped data (not board-scoped, survives board deletion) ──
     try:
