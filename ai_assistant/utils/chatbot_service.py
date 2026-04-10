@@ -1683,10 +1683,14 @@ class TaskFlowChatbotService:
             if not self._is_overdue_query(prompt):
                 return None
             
-            # Get user's boards
-            user_boards = self._get_user_boards()
-            if not user_boards.exists():
-                return "You don't have access to any boards yet."
+            # Scope to active board when set, otherwise fall back to all user boards
+            if self.board:
+                board_filter = {'column__board': self.board}
+            else:
+                user_boards = self._get_user_boards()
+                if not user_boards.exists():
+                    return "You don't have access to any boards yet."
+                board_filter = {'column__board__in': user_boards}
             
             from django.utils import timezone
             from datetime import timedelta
@@ -1696,7 +1700,7 @@ class TaskFlowChatbotService:
             
             # Get all tasks with due dates
             tasks_with_dates = Task.objects.filter(
-                column__board__in=user_boards,
+                **board_filter,
                 due_date__isnull=False
             ).select_related('assigned_to', 'column', 'column__board').order_by('due_date')
             
@@ -2608,20 +2612,26 @@ class TaskFlowChatbotService:
             # ── Collect published wiki pages ──────────────────────────────
             prompt_words = prompt.lower().split()
 
-            # Base queryset: all published pages the user can see in their org
-            wiki_pages = WikiPage.objects.filter(
-                organization=org,
-                is_published=True
-            ).select_related('category', 'created_by')
+            # RBAC: scope wiki pages to boards the user has access to
+            user_boards = self._get_user_boards()
+            board_linked_page_ids = WikiLink.objects.filter(
+                board__in=user_boards, link_type='board'
+            ).values_list('wiki_page_id', flat=True)
 
-            # Also include pages linked directly to the active board (regardless of org)
+            # Published pages linked to user's boards, plus org-level pages without a board link
+            wiki_pages = WikiPage.objects.filter(
+                Q(organization=org, is_published=True, id__in=board_linked_page_ids) |
+                Q(organization=org, is_published=True, wikilink__isnull=True)
+            ).select_related('category', 'created_by').distinct()
+
+            # Also include pages linked directly to the active board
             if self.board:
-                board_linked_page_ids = WikiLink.objects.filter(
+                active_board_page_ids = WikiLink.objects.filter(
                     board=self.board, link_type='board'
                 ).values_list('wiki_page_id', flat=True)
                 wiki_pages = (
                     wiki_pages | WikiPage.objects.filter(
-                        id__in=board_linked_page_ids, is_published=True
+                        id__in=active_board_page_ids, is_published=True
                     ).select_related('category', 'created_by')
                 ).distinct()
 
@@ -2829,10 +2839,16 @@ class TaskFlowChatbotService:
             if not org:
                 return None
 
+            # RBAC: scope documentation summary to user's accessible boards
+            user_boards = self._get_user_boards()
+            board_linked_page_ids = WikiLink.objects.filter(
+                board__in=user_boards, link_type='board'
+            ).values_list('wiki_page_id', flat=True)
+
             pages_qs = WikiPage.objects.filter(
-                organization=org,
-                is_published=True,
-            ).select_related('category', 'created_by').order_by('-updated_at')
+                Q(organization=org, is_published=True, id__in=board_linked_page_ids) |
+                Q(organization=org, is_published=True, wikilink__isnull=True)
+            ).select_related('category', 'created_by').order_by('-updated_at').distinct()
 
             # Also include pages linked to the current board
             if self.board:
@@ -2919,10 +2935,11 @@ class TaskFlowChatbotService:
             
             context = "**🎤 Meeting & Discussion Context:**\n\n"
             
-            # Get all organization meetings (knowledge should be shared across org)
-            # More permissive than filtering by user - shows all org meetings
+            # RBAC: scope meetings to boards the user has access to
+            user_boards = self._get_user_boards()
             meetings = MeetingNotes.objects.filter(
-                organization=org
+                Q(organization=org, related_board__in=user_boards) |
+                Q(organization=org, related_board__isnull=True)
             ).select_related('created_by', 'related_board').prefetch_related('attendees').order_by('-date')
             
             logger.info(f"Meeting query by {self.user.username} in org '{org.name}'")

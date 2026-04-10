@@ -1057,6 +1057,7 @@
             triggerAITask('{% url "ai_assistant:send_message" %}', {
                 method: 'POST',
                 body: payload,
+                timeoutMs: 150000,
                 statusSelector: '#chat-ai-status',
                 onResult: function(data) {
                     typing.remove();

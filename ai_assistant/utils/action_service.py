@@ -529,6 +529,11 @@ class SpectraActionService:
         from kanban.models import CalendarEvent
 
         try:
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
+                return {'success': False, 'error': "You don't have access to this board."}
+
             title = collected_data.get('title', 'Untitled Event')
 
             # Parse start datetime

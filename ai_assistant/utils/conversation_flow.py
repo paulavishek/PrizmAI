@@ -1588,6 +1588,11 @@ class ConversationFlowManager:
             from kanban.models import Board
             try:
                 board = Board.objects.get(id=data['board_id'])
+                # Re-validate access at continuation time (TOCTOU protection)
+                from ai_assistant.utils.rbac_utils import can_spectra_read_board
+                if not can_spectra_read_board(user, board):
+                    state.reset()
+                    return "Your access to that board has changed. Please start over."
             except Board.DoesNotExist:
                 state.reset()
                 return "The board no longer exists. Please try again."
@@ -2299,9 +2304,16 @@ class ConversationFlowManager:
         # Apply the preset
         try:
             from kanban.preset_models import WorkspacePreset, PRESET_CHOICES
+            from kanban.permissions import is_user_org_admin
             profile = getattr(user, 'profile', None)
             org = getattr(profile, 'organization', None) if profile else None
             if org:
+                if not is_user_org_admin(user):
+                    state.reset()
+                    return (
+                        "Only organization admins can change workspace presets. "
+                        "You can ask your org admin to update this in **Workspace Settings**."
+                    )
                 wp, _ = WorkspacePreset.objects.get_or_create(organization=org)
                 wp.global_preset = preset
                 wp.save()

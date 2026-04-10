@@ -1121,6 +1121,9 @@ def accept_recommendation(request, recommendation_id):
     """Accept a task recommendation"""
     try:
         rec = get_object_or_404(AITaskRecommendation, id=recommendation_id)
+        # RBAC: verify user has write access to the recommendation's board
+        if rec.board and not request.user.has_perm('prizmai.edit_board', rec.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         rec.status = 'accepted'
         rec.save()
         
@@ -1138,6 +1141,9 @@ def reject_recommendation(request, recommendation_id):
     """Reject a task recommendation"""
     try:
         rec = get_object_or_404(AITaskRecommendation, id=recommendation_id)
+        # RBAC: verify user has write access to the recommendation's board
+        if rec.board and not request.user.has_perm('prizmai.edit_board', rec.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         rec.status = 'rejected'
         rec.save()
         
@@ -1200,8 +1206,13 @@ def knowledge_base_view(request):
     """View and manage project knowledge base"""
     board_id = request.GET.get('board_id')
     
-    # Get knowledge base entries
-    kb_qs = ProjectKnowledgeBase.objects.filter(is_active=True)
+    # RBAC: scope KB entries to boards the user has access to
+    from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+    is_demo_mode = getattr(request.user, 'profile', None) and getattr(request.user.profile, 'is_viewing_demo', False)
+    org = getattr(request.user.profile, 'organization', None) if hasattr(request.user, 'profile') else None
+    accessible_boards = get_accessible_boards_for_spectra(request.user, is_demo_mode, org)
+    
+    kb_qs = ProjectKnowledgeBase.objects.filter(is_active=True, board__in=accessible_boards)
     
     if board_id:
         kb_qs = kb_qs.filter(board_id=board_id)
@@ -1220,7 +1231,13 @@ def knowledge_base_view(request):
 def refresh_knowledge_base(request):
     """Refresh knowledge base from project data"""
     try:
-        board_id = request.GET.get('board_id')
+        board_id = request.POST.get('board_id') or request.GET.get('board_id')
+        
+        # RBAC: verify user has access to the specified board
+        if board_id:
+            board = get_object_or_404(Board, id=board_id)
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # This would trigger KB indexing/refresh logic
         # For now, just return success

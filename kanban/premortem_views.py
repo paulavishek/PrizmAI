@@ -308,6 +308,10 @@ def run_premortem(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: verify user has access to this board
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
     # Verify readiness
     readiness = board_premortem_ready(board)
     if not readiness['ready']:
