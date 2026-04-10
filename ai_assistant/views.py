@@ -344,6 +344,7 @@ def send_message(request):
 
             return JsonResponse({
                 'status': 'success',
+                'sync': True,
                 'message_id': assistant_message.id,
                 'response': flow_response,
                 'source': 'spectra_action',

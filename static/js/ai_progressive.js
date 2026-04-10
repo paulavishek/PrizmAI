@@ -95,6 +95,11 @@
         return res.json();
       })
       .then(function (data) {
+        // Server handled the request synchronously (e.g. Spectra action flow)
+        if (data.sync) {
+          _handleResult(data);
+          return;
+        }
         if (!data.task_id) {
           throw new Error('No task_id received from server');
         }

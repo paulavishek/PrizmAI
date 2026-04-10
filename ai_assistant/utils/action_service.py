@@ -448,7 +448,7 @@ class SpectraActionService:
             # Resolve task by name using fuzzy matching
             task_name = collected_data.get('task_name', '')
             board_tasks = list(Task.objects.filter(
-                column__board=board, is_archived=False,
+                column__board=board,
             ).select_related('column'))
 
             matched = self._fuzzy_match_task(task_name, board_tasks)
@@ -830,7 +830,7 @@ class SpectraActionService:
 
             # Resolve the task
             tasks = list(Task.objects.filter(
-                column__board=board, is_archived=False,
+                column__board=board,
             ).select_related('column', 'assigned_to'))
 
             matched = self._fuzzy_match_task(task_name, tasks)
@@ -866,7 +866,7 @@ class SpectraActionService:
                 insight = ''
                 if val_lower in ('done', 'complete', 'completed', 'finished'):
                     remaining = Task.objects.filter(
-                        column__board=board, is_archived=False,
+                        column__board=board,
                     ).exclude(column=target_col).count()
                     if remaining > 0:
                         insight = f"\n\n💡 **{remaining} tasks** remaining on this board."

@@ -363,7 +363,7 @@ class TaskFlowChatbotService:
                 # ---------------------------------------------------------------
                 
                 # Get LIVE tasks — always fresh from DB
-                tasks = Task.objects.filter(column__board=self.board).select_related(
+                tasks = Task.objects.filter(column__board=self.board, item_type='task').select_related(
                     'assigned_to', 'created_by', 'column', 'parent_task'
                 ).prefetch_related('labels', 'subtasks', 'dependencies')
                 
@@ -444,7 +444,7 @@ class TaskFlowChatbotService:
                 if boards:
                     context += f"**User's Projects ({boards.count()} boards):**\n"
                     for board in boards:
-                        task_count = Task.objects.filter(column__board=board).count()
+                        task_count = Task.objects.filter(column__board=board, item_type='task').count()
                         context += f"- {board.name} ({task_count} tasks)\n"
             
             return context
@@ -786,7 +786,7 @@ class TaskFlowChatbotService:
             
             # Get aggregate data
             total_tasks = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).count()
             
             # Get total unique users across all boards - use set to avoid duplicate issues
@@ -825,14 +825,14 @@ class TaskFlowChatbotService:
             
             # Get tasks by status
             tasks_by_status = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).values('column__name').annotate(
                 count=Count('id')
             ).order_by('column__name')
             
             # Get tasks by board
             tasks_by_board = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).values('column__board__name').annotate(
                 count=Count('id')
             ).order_by('-count')
@@ -1020,7 +1020,8 @@ class TaskFlowChatbotService:
                 """Get detailed stats for a single user"""
                 user_tasks = Task.objects.filter(
                     column__board__in=user_boards,
-                    assigned_to=user
+                    assigned_to=user,
+                    item_type='task'
                 ).select_related('column', 'column__board')
                 
                 total_tasks = user_tasks.count()
@@ -1283,7 +1284,8 @@ class TaskFlowChatbotService:
             # Get tasks assigned to current user
             user_tasks = Task.objects.filter(
                 column__board__in=user_boards,
-                assigned_to=self.user
+                assigned_to=self.user,
+                item_type='task'
             ).select_related('column', 'column__board').order_by('column__name', '-priority')
             
             if not user_tasks.exists():
@@ -1346,7 +1348,7 @@ class TaskFlowChatbotService:
             
             # Get all incomplete tasks (exclude Done and Closed statuses)
             incomplete_tasks = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).exclude(
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).select_related('assigned_to', 'column', 'column__board').order_by(
@@ -1358,7 +1360,7 @@ class TaskFlowChatbotService:
             
             # Count completed tasks for comparison
             completed_tasks = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).filter(
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).count()
@@ -1428,7 +1430,7 @@ class TaskFlowChatbotService:
             # Collect metrics for each board
             board_stats = []
             for board in user_boards:
-                tasks = Task.objects.filter(column__board=board)
+                tasks = Task.objects.filter(column__board=board, item_type='task')
                 task_count = tasks.count()
                 
                 # Count completed vs incomplete
@@ -3173,7 +3175,7 @@ class TaskFlowChatbotService:
             # Check if asking about a specific task
             specific_task = None
             for board in user_boards:
-                tasks = Task.objects.filter(column__board=board)
+                tasks = Task.objects.filter(column__board=board, item_type='task')
                 for task in tasks:
                     if task.title.lower() in prompt.lower():
                         specific_task = task
@@ -3867,7 +3869,7 @@ class TaskFlowChatbotService:
             from django.db.models import Count
             from django.utils import timezone
 
-            tasks = Task.objects.filter(column__board=self.board)
+            tasks = Task.objects.filter(column__board=self.board, item_type='task')
             total = tasks.count()
             if total == 0:
                 return f"**📌 Live Board Snapshot ({self.board.name}):** 0 tasks.\n"
@@ -3978,7 +3980,7 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
 5. **WORKSPACE AWARENESS**: The user is currently in the **{workspace_env}**. You MUST only reference data from this environment:
-   - In "Demo Workspace": Only discuss demo boards, demo tasks, and demo data. If the user asks a **question** about something that only exists in their personal workspace, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards." Do NOT use this message when the user is making an action request (e.g. sending a message to someone) — instead, politely explain the issue (e.g. the person is not a known team member).
+   - In "Demo Workspace": Discuss demo boards, demo tasks, wiki pages, goals/missions/strategies, meeting notes, coding standards, knowledge resources, and any other data provided in the Available Context Data section — all of this IS demo data. If the user explicitly asks about their personal boards by name and those boards are not in the context, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards." Do NOT use this message for general questions about wiki, goals, strategies, documentation, coding practices, web search, sprint planning, or any topic where context data is provided. Do NOT use this message when the user is making an action request (e.g. sending a message to someone) — instead, politely explain the issue (e.g. the person is not a known team member).
    - In "My Workspace": Only discuss the user's personal boards and tasks. If the user asks about demo content, say: "I can only see your personal workspace data right now. Switch to Demo Workspace to explore the demo boards."
    - When creating boards or tasks, they stay in the current environment — demo artifacts don't leak into My Workspace and vice versa.
 5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" — you already know the user is {user_name} and the board context
