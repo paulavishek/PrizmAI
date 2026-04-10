@@ -667,7 +667,7 @@ def go_to_first_unread_room(request):
             return redirect('messaging:chat_room_detail', room_id=room.id)
     
     # No unread messages found, go to messaging hub
-    return redirect('messaging:hub')
+    return redirect('messaging:messaging_hub')
 
 
 # ===== FILE MANAGEMENT VIEWS FOR CHAT ROOMS =====
