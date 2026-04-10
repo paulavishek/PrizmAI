@@ -1357,7 +1357,7 @@ class ConversationFlowManager:
             'mode': 'collecting_event',
             'pending': 'schedule_event',
             'label': 'scheduling an event',
-            'needs_board': False,
+            'needs_board': True,
         },
         'create_retrospective': {
             'mode': 'collecting_retrospective',
@@ -2168,7 +2168,6 @@ class ConversationFlowManager:
                     open_count = TaskModel.objects.filter(
                         assigned_to=task.assigned_to,
                         column__board=board,
-                        is_archived=False,
                     ).exclude(
                         column__position=board.columns.count() - 1,
                     ).count()
@@ -2392,7 +2391,7 @@ class ConversationFlowManager:
                 state.reset()
                 return "The board no longer exists. Please try again."
 
-        if board is None and pending not in ('schedule_event',):
+        if board is None:
             state.reset()
             return (
                 "I need a board for this action. "
