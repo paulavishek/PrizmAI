@@ -239,6 +239,7 @@ def dashboard(request):
     # Overdue Tasks
     overdue_tasks_list = Task.objects.filter(
         column__board__in=boards,
+        item_type='task',
         due_date__lt=timezone.now()
     ).exclude(
         progress=100

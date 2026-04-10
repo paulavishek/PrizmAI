@@ -1698,9 +1698,10 @@ class TaskFlowChatbotService:
             today = timezone.now().date()
             week_from_now = today + timedelta(days=7)
             
-            # Get all tasks with due dates
+            # Get all tasks with due dates (exclude milestones and other non-task items)
             tasks_with_dates = Task.objects.filter(
                 **board_filter,
+                item_type='task',
                 due_date__isnull=False
             ).select_related('assigned_to', 'column', 'column__board').order_by('due_date')
             
@@ -1709,16 +1710,16 @@ class TaskFlowChatbotService:
             
             # Categorize tasks
             overdue = tasks_with_dates.filter(due_date__lt=today).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed') | Q(progress=100)
             )
             due_today = tasks_with_dates.filter(due_date=today).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed') | Q(progress=100)
             )
             due_soon = tasks_with_dates.filter(
                 due_date__gt=today,
                 due_date__lte=week_from_now
             ).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed') | Q(progress=100)
             )
             
             context = f"**Task Deadlines Analysis:**\n\n"
