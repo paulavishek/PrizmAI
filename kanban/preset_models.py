@@ -75,10 +75,22 @@ class BoardPreset(models.Model):
         Return the effective preset for this board, respecting the rule
         that the local override can never exceed the global ceiling.
 
+        Demo workspace boards always return 'enterprise' (all features unlocked).
+
         Falls back to 'lean' when:
           - The board has no organization
           - The organization has no WorkspacePreset record
         """
+        # Demo workspace boards bypass presets — full feature access
+        try:
+            board = self.board
+            if getattr(board, 'is_sandbox_copy', False):
+                return 'enterprise'
+            if board.organization and board.organization.is_demo:
+                return 'enterprise'
+        except Exception:
+            pass
+
         # Resolve the global ceiling
         global_preset = 'lean'  # safe default
         try:
