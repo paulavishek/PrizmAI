@@ -655,16 +655,20 @@ class ConversationFlowManager:
         self._is_demo_mode = is_demo_mode
         mode = state.mode
 
-        # ── Already in a flow ────────────────────────────────────────────
-        if mode == 'awaiting_confirmation':
-            return self._handle_awaiting_confirmation(user, board, message, state)
+        # --- V1.0 QUERY-ONLY MODE: reset any stale collecting/confirmation
+        # modes left over from before the action tools were disabled.  Return
+        # the query-only fallback so the user knows actions are coming in v2.0.
+        from ai_assistant.utils.chatbot_service import (
+            QUERY_ONLY_FALLBACK, _V1_DISABLED_INTENTS,
+        )
 
-        if mode in ('collecting_task', 'collecting_board', 'collecting_automation', 'collecting_preset'):
-            return self._handle_collecting(user, board, message, state)
-
-        # FC-based collecting modes
-        if mode in self._FC_NEW_MODES:
-            return self._handle_collecting(user, board, message, state)
+        if mode != 'normal':
+            # Reset stale state to normal so it doesn't keep blocking
+            state.mode = 'normal'
+            state.pending_action = ''
+            state.collected_data = {}
+            state.save()
+            return QUERY_ONLY_FALLBACK
 
         # ── Normal mode — detect new action intent ───────────────────────
         # Tier 1: Try AI classification first, fall back to regex
@@ -676,16 +680,21 @@ class ConversationFlowManager:
         classification = classify_intent_with_ai(message, gemini_client=client)
         intent = classification['intent']
 
-        if intent == 'create_task':
-            return self._start_task_flow(user, board, message, state)
-        if intent == 'create_board':
-            return self._start_board_flow(user, message, state)
-        if intent == 'activate_automation':
-            return self._start_automation_flow(user, board, message, state)
+        # V1.0: all action intents return the query-only fallback
+        if intent in _V1_DISABLED_INTENTS:
+            return QUERY_ONLY_FALLBACK
 
-        # FC-based intents
-        if intent in self._FC_INTENT_META:
-            return self._start_fc_flow(user, board, message, state, intent)
+        # --- V2.0 ACTION FLOWS — DISABLED FOR V1.0 SHIP ---
+        # Uncomment these when action capabilities are re-enabled in v2.0.
+        # if intent == 'create_task':
+        #     return self._start_task_flow(user, board, message, state)
+        # if intent == 'create_board':
+        #     return self._start_board_flow(user, message, state)
+        # if intent == 'activate_automation':
+        #     return self._start_automation_flow(user, board, message, state)
+        # if intent in self._FC_INTENT_META:
+        #     return self._start_fc_flow(user, board, message, state, intent)
+        # --- END V2.0 ACTION FLOWS ---
 
         # Not an action intent — caller should fall through to normal Q&A
         return None

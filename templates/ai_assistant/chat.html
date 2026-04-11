@@ -604,31 +604,31 @@
         <div class="chat-messages" id="chat-messages">
             <div id="spectra-welcome" style="text-align: center; color: #999; margin: auto; max-width: 600px;">
                 <div style="font-size: 40px; margin-bottom: 10px;">🤖</div>
-                <p id="welcome-message" style="margin-bottom: 18px;">Hello, I'm <strong style="color:#667eea;">Spectra</strong>. {% if is_viewing_demo %}You're in your <strong>Sandbox</strong>. I've analyzed {{ active_boards_count }} board{{ active_boards_count|pluralize }}. Feel free to experiment — this is your private copy! What can I help with?{% elif active_boards_count > 0 %}I've analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I help with?{% else %}You have no active boards in your workspace yet. I can help you create one, or ask me anything!{% endif %}</p>
+                <p id="welcome-message" style="margin-bottom: 18px;">Hello, I'm <strong style="color:#667eea;">Spectra</strong>. {% if is_viewing_demo %}You're in your <strong>Sandbox</strong>. I've analyzed {{ active_boards_count }} board{{ active_boards_count|pluralize }}. Feel free to experiment — this is your private copy! What can I help with?{% elif active_boards_count > 0 %}I've analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I help with?{% else %}You have no active boards in your workspace yet. Ask me anything about your workspace!{% endif %}</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin: 0 auto 16px auto; max-width: 520px;">
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
                         <div style="font-size: 15px; margin-bottom: 4px;">💬 <strong style="color:#444;">Ask Anything</strong></div>
                         <div style="font-size: 12px; color: #888;">Project status, risks, tasks, resources, strategy</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">📋 <strong style="color:#444;">Create Tasks & Boards</strong></div>
-                        <div style="font-size: 12px; color: #888;">"Create a high-priority task called…"</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">� <strong style="color:#444;">Reports & Insights</strong></div>
+                        <div style="font-size: 12px; color: #888;">Overdue tasks, workload, sprint health</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">✉️ <strong style="color:#444;">Send Messages</strong></div>
-                        <div style="font-size: 12px; color: #888;">"Send Alex the meeting summary…"</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">🎯 <strong style="color:#444;">Goals & Strategy</strong></div>
+                        <div style="font-size: 12px; color: #888;">Mission, OKRs, strategic alignment</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">⏱️ <strong style="color:#444;">Log Time</strong></div>
-                        <div style="font-size: 12px; color: #888;">"Log 2 hours on the API task…"</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">⚠️ <strong style="color:#444;">Risks & Blockers</strong></div>
+                        <div style="font-size: 12px; color: #888;">Identify risks, dependencies, bottlenecks</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">📅 <strong style="color:#444;">Schedule Events</strong></div>
-                        <div style="font-size: 12px; color: #888;">"Schedule a standup tomorrow at 10 AM…"</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">👥 <strong style="color:#444;">Team & Resources</strong></div>
+                        <div style="font-size: 12px; color: #888;">Who's working on what, capacity</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">⚡ <strong style="color:#444;">Automate & Retrospect</strong></div>
-                        <div style="font-size: 12px; color: #888;">Automations, retrospectives, and more</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">📚 <strong style="color:#444;">Wiki & Docs</strong></div>
+                        <div style="font-size: 12px; color: #888;">Search your project documentation</div>
                     </div>
                 </div>
                 <p style="font-size: 12px; color: #bbb;">Try clicking a suggestion below, or type anything to get started.</p>
@@ -639,12 +639,12 @@
         <div class="chat-input-area">
             <!-- Quick-action suggestion chips -->
             <div id="spectra-suggestions" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 10px 0;">
-                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📋 Create a task</button>
-                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📅 Schedule a meeting</button>
-                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">⏱️ Log time on a task</button>
-                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">✉️ Send a message</button>
-                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📊 What's overdue?</button>
-                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">🗂️ Create a board</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">� What's overdue?</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">⚠️ Show me risks</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">👥 Who's overloaded?</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">🎯 How are our goals tracking?</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📋 Summarize this board</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">🔍 What needs attention?</button>
             </div>
             <!-- Active file badge (shown when a file is attached to this session) -->
             <div id="active-file-badge" style="display:none; padding: 4px 12px; background:#e8f4fd; border-radius:6px 6px 0 0; border:1px solid #bee5eb; border-bottom:none; font-size:0.82rem; color:#0c5460; display:none; align-items:center; gap:6px;">
@@ -672,6 +672,9 @@
             </div>
             <!-- Upload progress indicator -->
             <div id="spectra-upload-status" style="display:none; font-size:0.8rem; padding:2px 8px;" class="text-muted"></div>
+            <div style="text-align: center; padding: 4px 0 2px 0;">
+                <small style="color: #b0b0b0; font-size: 11px;">Spectra v1.0 — Query &amp; Insights · Actions coming in v2.0</small>
+            </div>
         </div>
         {% else %}
         <!-- No Session State - Prompt user to create a new chat -->
@@ -679,7 +682,7 @@
             <div style="font-size: 80px; margin-bottom: 20px;">🤖</div>
             <h2 style="color: #333; margin-bottom: 15px;">Welcome to Spectra</h2>
             <p style="color: #666; max-width: 540px; margin-bottom: 20px;">
-                Your AI project assistant — ask questions, get insights, <strong>and take action</strong>, all in one conversation.
+                Your AI project assistant — ask questions, get insights, and explore your project data.
             </p>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 560px; margin-bottom: 24px; text-align: left;">
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
@@ -687,24 +690,24 @@
                     <div style="font-size: 11px; color: #888;">Status, risks, workload</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">📋 <strong style="color:#444;">Create</strong></div>
-                    <div style="font-size: 11px; color: #888;">Tasks, boards, automations</div>
+                    <div style="font-size: 14px;">� <strong style="color:#444;">Reports</strong></div>
+                    <div style="font-size: 11px; color: #888;">Overdue, sprint health, trends</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">✉️ <strong style="color:#444;">Message</strong></div>
-                    <div style="font-size: 11px; color: #888;">Send messages to teammates</div>
+                    <div style="font-size: 14px;">🎯 <strong style="color:#444;">Goals</strong></div>
+                    <div style="font-size: 11px; color: #888;">OKRs, strategy, alignment</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">⏱️ <strong style="color:#444;">Log Time</strong></div>
-                    <div style="font-size: 11px; color: #888;">Track hours on tasks</div>
+                    <div style="font-size: 14px;">⚠️ <strong style="color:#444;">Risks</strong></div>
+                    <div style="font-size: 11px; color: #888;">Blockers, dependencies</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">📅 <strong style="color:#444;">Schedule</strong></div>
-                    <div style="font-size: 11px; color: #888;">Events and meetings</div>
+                    <div style="font-size: 14px;">👥 <strong style="color:#444;">Team</strong></div>
+                    <div style="font-size: 11px; color: #888;">Capacity, assignments</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">📊 <strong style="color:#444;">Retrospect</strong></div>
-                    <div style="font-size: 11px; color: #888;">AI-powered sprint reviews</div>
+                    <div style="font-size: 14px;">📚 <strong style="color:#444;">Docs</strong></div>
+                    <div style="font-size: 11px; color: #888;">Wiki and documentation</div>
                 </div>
             </div>
             <button class="btn btn-primary btn-lg" onclick="createNewSession()">
@@ -1012,7 +1015,12 @@
     }
 
     // Send message
+    let _sendInProgress = false;
+
     function sendMessage() {
+        // Prevent duplicate submissions from double-click or Enter+click overlap
+        if (_sendInProgress) return;
+
         // Check if there's an active session
         if (!sessionId) {
             alert('Please create a new chat session first by clicking "New Chat".');
@@ -1024,6 +1032,8 @@
         
         if (!message) return;
         
+        _sendInProgress = true;
+        document.getElementById('send-btn').disabled = true;
         input.value = '';
         addMessageToUI('user', message);
         
@@ -1060,6 +1070,8 @@
                 timeoutMs: 150000,
                 statusSelector: '#chat-ai-status',
                 onResult: function(data) {
+                    _sendInProgress = false;
+                    document.getElementById('send-btn').disabled = false;
                     typing.remove();
                     if (data.response) {
                         addMessageToUI('assistant', data.response, data.source);
@@ -1074,6 +1086,8 @@
                     }
                 },
                 onError: function(msg) {
+                    _sendInProgress = false;
+                    document.getElementById('send-btn').disabled = false;
                     typing.remove();
                     addMessageToUI('assistant', 'Error: ' + msg);
                 },
@@ -1104,6 +1118,8 @@
             return r.json();
         })
         .then(data => {
+            _sendInProgress = false;
+            document.getElementById('send-btn').disabled = false;
             typing.remove();
             
             if (data._spectra_denied) {
@@ -1143,6 +1159,8 @@
             }
         })
         .catch(err => {
+            _sendInProgress = false;
+            document.getElementById('send-btn').disabled = false;
             typing.remove();
             addMessageToUI('assistant', `Error: ${err.message}`);
         });
