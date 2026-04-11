@@ -35,15 +35,15 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### AI Intelligence (Google Gemini)
 
-- **Spectra — AI Project Assistant** — Natural language queries with RAG technology and web search, scoped to your project data. Beyond Q&A, Spectra can **take action** directly from the chat:
-  - **Create Tasks & Boards** — "Create a high-priority task called API integration due next Friday"
-  - **Send Messages** — "Tell Alex the deployment is ready" — Spectra drafts and sends team messages
-  - **Log Time** — "Log 3 hours on the database migration task" — time entries without leaving the chat
-  - **Schedule Events** — "Schedule a standup tomorrow at 10 AM with the backend team"
-  - **Generate Retrospectives** — "Create a sprint retrospective for the last two weeks"
-  - **Create Automations** — "Set up an automation that marks overdue tasks as urgent" (trigger-based and scheduled)
+- **Spectra — AI Project Assistant** — Natural language queries with RAG technology and web search, scoped to your project data. Spectra operates in **read-only Q&A mode (v1.0)** — ask questions about tasks, deadlines, risks, team workload, strategic goals, wiki content, and more. Spectra enforces full RBAC, meaning it only surfaces data from boards you have explicit access to, and respects sandbox isolation in the Demo Workspace.
+  - **Board Analysis** — "What tasks are overdue?" · "Summarize this board" · "Who's overloaded?"
+  - **Strategic Hierarchy** — "How are our goals tracking?" · "Show the mission hierarchy" · "What's our OKR progress?"
+  - **Risk & Dependency Insight** — "What are the current blockers?" · "Which dependencies are at risk?"
+  - **Cross-Board Reporting** — "Compare workload across all my boards" · "What needs attention?"
+  - **Document Analysis** — Attach PDF, DOCX, or TXT files and ask questions about their content
+  - **Web Search** — Supplemental web context for research and strategic queries (when enabled)
   
-  Spectra uses a **Tiered Agentic Architecture**: a lightweight Flash-Lite model routes intent cheaply, while Flash with Function Calling extracts structured parameters and executes actions — keeping AI costs low while enabling rich multi-step interactions. When an Org Admin creates their first board, Spectra asks a single follow-up question about team size and automatically sets the workspace preset (Lean / Professional / Enterprise) before resetting to normal mode.
+  Spectra uses a **Tiered AI Architecture**: a lightweight Flash-Lite model handles most queries cheaply, upgrading to Flash for complex analysis — keeping AI costs low while delivering rich project insights. Action capabilities (creating tasks, sending messages, logging time, scheduling events, and more) are code-complete and will ship in **Spectra v2.0**.
 - **AI Coach** — Proactive, personalized coaching with recommendations that learn from your feedback
 - **Explainable AI** — Every recommendation includes a transparent breakdown: confidence level, contributing factors, assumptions, limitations, and alternative perspectives
 - **Scope Creep Detection** — Automatic baseline tracking with alerts when scope expands beyond the original plan
@@ -547,7 +547,7 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 | **Full Analytics (all 4 charts)** | — | ✅ | ✅ |
 | **Skill Gap Analysis** | — | ✅ | ✅ |
 | **Trigger-Based Automations** | — | ✅ | ✅ |
-| **Spectra Agentic Mode** | — | ✅ | ✅ |
+| **Spectra Agentic Mode** | — | _v2.0_ | _v2.0_ |
 | **Shadow Board & What-If** | — | — | ✅ |
 | **Pre-Mortem & Stress Test** | — | — | ✅ |
 | **Commitment Protocols** | — | — | ✅ |
