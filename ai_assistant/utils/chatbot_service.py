@@ -132,6 +132,24 @@ def classify_spectra_query(prompt: str) -> dict:
 # Action intent detection for Conversational Spectra
 # ---------------------------------------------------------------------------
 
+# ── V1.0 Query-Only Mode ─────────────────────────────────────────────────
+# Spectra v1.0 operates in read-only mode.  All action capabilities are
+# disabled and will be restored in v2.0.
+QUERY_ONLY_FALLBACK = (
+    "I can read and report on your project data, but I can't create, "
+    "update, or delete anything in v1.0. Action commands — like creating "
+    "tasks, logging time, and sending messages — are arriving in "
+    "Spectra v2.0 \U0001F680 In the meantime, feel free to ask me anything about "
+    "your board, team workload, risks, or project progress."
+)
+
+# Set of action intents that are disabled in v1.0 (returns QUERY_ONLY_FALLBACK).
+_V1_DISABLED_INTENTS = frozenset({
+    'create_task', 'create_board', 'send_message', 'log_time',
+    'schedule_event', 'create_retrospective', 'create_automation',
+    'activate_automation', 'update_task',
+})
+
 ACTION_INTENT_PATTERNS = {
     'create_task': [
         'create a task', 'add a task', 'new task', 'make a task',
@@ -308,6 +326,18 @@ class TaskFlowChatbotService:
             context = "**PrizmAI Project Context:**\n\n"
             
             if self.board:
+                # ── RBAC gate: verify user can read this board ─────────
+                # Prevents data leakage if the board object was set without
+                # prior RBAC validation (e.g. stale session, direct ID).
+                from ai_assistant.utils.rbac_utils import can_spectra_read_board
+                if not can_spectra_read_board(self.user, self.board):
+                    logger.warning(
+                        "RBAC denial in get_taskflow_context: user=%s board=%s",
+                        self.user.id, self.board.id,
+                    )
+                    context += "No board data available — you don't have access to this board.\n"
+                    return context
+
                 # Skip archived boards
                 if self.board.is_archived:
                     context += f"⚠️ Board '{self.board.name}' is archived.\n"
@@ -774,12 +804,9 @@ class TaskFlowChatbotService:
                 organization = None
             
             # Get user's boards (filtered by organization if available)
-            # Exclude sandbox copies and official demo boards to prevent
-            # demo data bleeding into the user's real workspace.
-            # Use the centralized workspace-scoped helper to guarantee
-            # demo / real isolation.
-            from kanban.utils.demo_protection import get_user_boards
-            user_boards = get_user_boards(self.user)
+            # Use the service's own workspace-aware board filter to guarantee
+            # demo/real isolation and RBAC consistency.
+            user_boards = self._get_user_boards(organization=organization)
             
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
@@ -1918,28 +1945,33 @@ class TaskFlowChatbotService:
             context += f"**Total Organizations:** {orgs.count()}\n\n"
             
             for org in orgs:
-                # Get detailed metrics
-                boards_count = Board.objects.filter(organization=org).count()
-                members_count = org.members.count()
-                
-                # Get user-accessible boards in this org
-                from kanban.utils.demo_protection import get_user_boards
-                user_boards_in_org = get_user_boards(self.user).filter(
-                    organization=org
+                # Get user-accessible boards in this org (RBAC-scoped)
+                user_boards_in_org = self._get_user_boards(organization=org)
+
+                # Only show counts the user can legitimately see:
+                # board count → user's own accessible boards (not org-wide total)
+                # member count → members on those accessible boards only
+                accessible_board_count = user_boards_in_org.count()
+
+                from django.contrib.auth import get_user_model
+                User_model = get_user_model()
+                accessible_member_ids = set(
+                    User_model.objects.filter(
+                        board_memberships__board__in=user_boards_in_org
+                    ).values_list('id', flat=True)
                 )
+                accessible_members_count = len(accessible_member_ids)
                 
                 context += f"**{org.name}**\n"
                 if org.domain:
                     context += f"  - Domain: {org.domain}\n"
-                context += f"  - Total Boards: {boards_count}\n"
-                if user_boards_in_org.count() != boards_count:
-                    context += f"  - Your Boards: {user_boards_in_org.count()}\n"
-                context += f"  - Members: {members_count}\n"
+                context += f"  - Your Boards: {accessible_board_count}\n"
+                context += f"  - Team Members (on your boards): {accessible_members_count}\n"
                 context += f"  - Created: {org.created_at.strftime('%Y-%m-%d')}\n"
                 context += f"  - Created by: {org.created_by.get_full_name() or org.created_by.username}\n"
                 
                 # List board names if manageable
-                if user_boards_in_org.count() > 0 and user_boards_in_org.count() <= 5:
+                if accessible_board_count > 0 and accessible_board_count <= 5:
                     board_names = [b.name for b in user_boards_in_org]
                     context += f"  - Board Names: {', '.join(board_names)}\n"
                 
@@ -3454,6 +3486,7 @@ class TaskFlowChatbotService:
             'organization goal', 'org goal', 'workflow', 'strategic',
             'objective', 'vision', 'target metric', 'missions',
             'linked boards', 'goal progress', 'mission progress',
+            'okr', 'key result', 'alignment',
         ]
         prompt_lower = prompt.lower()
         return any(kw in prompt_lower for kw in keywords)
@@ -3515,7 +3548,7 @@ class TaskFlowChatbotService:
                             if s.description:
                                 context += f"         Approach: {s.description[:150]}\n"
 
-                            boards = s.boards.filter(is_archived=False)
+                            boards = s.boards.filter(is_archived=False, id__in=user_boards)
                             for b in boards[:5]:
                                 task_count = Task.objects.filter(column__board=b, item_type='task').count()
                                 context += f"         📋 Board: {b.name} ({task_count} tasks, {b.memberships.count()} members)\n"
@@ -3938,6 +3971,20 @@ class TaskFlowChatbotService:
                 ctx += f"  ⚠️ Overdue: {overdue}\n"
             if unassigned:
                 ctx += f"  📋 Unassigned: {unassigned}\n"
+
+            # Compact hierarchy breadcrumb (if board is linked to a strategy)
+            if self.board.strategy_id:
+                strategy = self.board.strategy
+                mission = strategy.mission if strategy else None
+                goal = mission.organization_goal if mission else None
+                crumbs = []
+                if goal:
+                    crumbs.append(f"Goal: {goal.name}")
+                if mission:
+                    crumbs.append(f"Mission: {mission.name}")
+                crumbs.append(f"Strategy: {strategy.name}")
+                ctx += f"  🏗️ Hierarchy: {' → '.join(crumbs)} → {self.board.name}\n"
+
             ctx += "\n"
             return ctx
 
@@ -4008,13 +4055,9 @@ Your role is to help project managers and team members with:
 - **Focus Today (Decision Center)**: Pending decisions, risk assessments, briefings
 - **Knowledge Graph**: Organizational memory, lessons learned, patterns
 - **Analytics**: Team performance, engagement metrics, feedback
-- **Spectra Actions** (say "create a task", "send a message", etc.):
-  • Create tasks, boards, and automation rules
-  • Send messages to board members
-  • Log time entries on tasks
-  • Schedule calendar events and meetings
-  • Generate AI-powered retrospectives
-  • Create custom trigger-based or scheduled automations
+- **Spectra Actions** — Coming in v2.0:
+  • Action commands (create tasks, send messages, log time, etc.) are disabled in v1.0.
+  • If the user asks you to perform any action, politely decline and mention Spectra v2.0.
 
 CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 1. **ALWAYS USE PROVIDED CONTEXT DATA**: When project data is provided in the "Available Context Data" section, you MUST use it to answer questions directly and specifically
@@ -4069,7 +4112,11 @@ Format responses clearly with:
 - Bullet points for lists
 - **Bold** for emphasis and headers
 - Specific numbers and metrics
-- Actionable recommendations"""
+- Actionable recommendations
+
+IMPORTANT — READ-ONLY MODE (v1.0):
+You are operating in read-only mode. You can answer questions about project data, board status, task details, team workload, risks, milestones, wiki pages, meeting transcripts, and the organizational hierarchy (Goals, Missions, Strategies). You cannot create, update, or delete any data. If a user asks you to create a task, log time, send a message, create a board, schedule an event, or take any other write action, politely decline and explain that action commands are coming in Spectra v2.0. Never attempt to call a write tool. Never invent or guess at data not present in your context.
+When answering questions about organizational goals, missions, or strategies, use the data in the organizational_hierarchy section of your context. If that section is empty, tell the user that no goals have been configured in their workspace yet."""
     
     def get_response(self, prompt, use_cache=True, file_context=None):
         """
@@ -4094,9 +4141,35 @@ Format responses clearly with:
             # ── RBAC gate: verify user can read the active board ───────
             # If the user does not have access, return a denial response
             # immediately without building any context (prevents data leakage).
-            if self.board and self.user and not self.is_demo_mode:
-                from ai_assistant.utils.rbac_utils import can_spectra_read_board
-                if not can_spectra_read_board(self.user, self.board):
+            #
+            # My Workspace → standard RBAC check via can_spectra_read_board.
+            # Demo Workspace → sandbox isolation check: the board must belong
+            #   to THIS user's sandbox (owner=user & is_sandbox_copy) or be
+            #   an official demo board.  This prevents Demo User A from seeing
+            #   Demo User B's sandbox data.
+            if self.board and self.user:
+                _access_denied = False
+                if self.is_demo_mode:
+                    # Sandbox isolation: board must be user's own sandbox copy
+                    # or an official demo board
+                    if not (
+                        getattr(self.board, 'is_official_demo_board', False)
+                        or (
+                            getattr(self.board, 'is_sandbox_copy', False)
+                            and self.board.owner_id == self.user.id
+                        )
+                        or (
+                            getattr(self.board, 'created_by_session', '')
+                            == f'spectra_demo_{self.user.id}'
+                        )
+                    ):
+                        _access_denied = True
+                else:
+                    from ai_assistant.utils.rbac_utils import can_spectra_read_board
+                    if not can_spectra_read_board(self.user, self.board):
+                        _access_denied = True
+
+                if _access_denied:
                     from kanban.simple_access import get_spectra_denial_context
                     denial = get_spectra_denial_context(self.user, self.board)
                     denial_msg = denial.get('message', (

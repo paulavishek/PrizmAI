@@ -288,8 +288,21 @@ def send_message(request):
             session.board = board
             session.save()
         elif session.board_id:
-            # Restore board from session when not explicitly provided
-            board = session.board
+            # Restore board from session when not explicitly provided.
+            # Re-validate access: the user's role may have changed since
+            # the board was first saved on this session (stale-session fix).
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if can_spectra_read_board(request.user, session.board):
+                board = session.board
+            else:
+                # Access revoked — clear the stale board reference
+                logger.warning(
+                    "RBAC: clearing stale session board %s for user %s",
+                    session.board_id, request.user.id,
+                )
+                session.board = None
+                session.save()
+                board = None
         
         # Save user message
         user_message = AIAssistantMessage.objects.create(

@@ -406,23 +406,20 @@ def get_action_tools():
         )
 
         # Bundle all declarations into a single Tool
+        # --- V2.0 ACTION TOOLS — DISABLED FOR V1.0 SHIP ---
+        # Uncomment these when action capabilities are re-enabled in v2.0.
+        # Action tools removed: create_task, create_board, send_message,
+        # log_time, schedule_event, create_retrospective, create_automation,
+        # create_scheduled_automation, update_task, place_commitment_bet
+        # --- END V2.0 ACTION TOOLS ---
         _cached_tools = [
             Tool(function_declarations=[
-                create_task,
-                create_board,
-                send_message,
-                log_time,
-                schedule_event,
-                create_retrospective,
-                create_automation,
-                create_scheduled_automation,
-                update_task,
+                # Read-only tools only (v1.0)
                 get_commitment_status,
                 list_at_risk_commitments,
-                place_commitment_bet,
             ])
         ]
-        logger.info("Spectra action tool schemas loaded (%d functions)", 12)
+        logger.info("Spectra read-only tool schemas loaded (%d functions, v1.0)", 2)
         return _cached_tools
 
     except ImportError:

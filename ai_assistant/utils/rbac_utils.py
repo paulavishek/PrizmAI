@@ -186,23 +186,42 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
 
     Mirrors the logic in ``chatbot_service._get_user_boards`` but uses the
     canonical ``can_access_board`` semantics so RBAC stays consistent.
+
+    Workspace scoping guarantees:
+    - Demo mode → only the current user's sandbox copies (``is_sandbox_copy=True``
+      AND ``owner=user``) within a demo workspace.  Other users' sandboxes are
+      never included.
+    - Personal mode → only non-demo boards in the user's active workspace /
+      organisation.  Sandbox copies and official demo boards are excluded.
+    - Organisation filter prevents cross-org data leakage when multiple orgs
+      share the same database.
     """
     from kanban.models import Board
 
     base = Board.objects.filter(is_archived=False)
 
     if is_demo_mode:
-        # Return user's sandbox copies (not templates) for demo isolation
+        # Demo workspace — only this user's personal sandbox copies.
+        # The ``workspace__is_demo=True`` guard ensures we never pull boards
+        # from the user's real workspace even if ``is_sandbox_copy`` is True.
         sandbox_qs = base.filter(
             Q(owner=user, is_sandbox_copy=True)
             | Q(created_by_session=f'spectra_demo_{user.id}')
-        ).distinct()
+        ).filter(
+            Q(workspace__is_demo=True) | Q(workspace__isnull=True)
+        )
+        if organization:
+            sandbox_qs = sandbox_qs.filter(organization=organization)
+        sandbox_qs = sandbox_qs.distinct()
         if sandbox_qs.exists():
             return sandbox_qs
         # Fallback to templates if sandbox not provisioned yet
-        return base.filter(is_official_demo_board=True).distinct()
+        fallback = base.filter(is_official_demo_board=True)
+        if organization:
+            fallback = fallback.filter(organization=organization)
+        return fallback.distinct()
 
-    # Personal workspace
+    # Personal workspace — only non-demo boards the user has explicit access to.
     qs = base.filter(
         Q(created_by=user)
         | Q(owner=user)
@@ -214,14 +233,19 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
     else:
         try:
             if hasattr(user, 'profile') and user.profile.organization_id:
-                qs = qs | base.filter(organization_id=user.profile.organization_id)
+                qs = qs.filter(organization_id=user.profile.organization_id)
         except Exception:
             pass
 
-    return qs.exclude(
+    # Exclude demo artefacts from the personal workspace
+    return qs.filter(
+        Q(workspace__is_demo=False) | Q(workspace__isnull=True)
+    ).exclude(
         created_by_session__startswith='spectra_demo_'
     ).exclude(
         is_official_demo_board=True
+    ).exclude(
+        is_sandbox_copy=True
     ).distinct()
 
 
