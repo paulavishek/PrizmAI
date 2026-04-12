@@ -1,0 +1,112 @@
+[
+  {
+    "status": "success",
+    "response": "The 'Requirements Analysis & Planning' task has no Lean Six Sigma label applied to it. The `lss_classification` field is empty for this task.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 31,
+    "question": "What Lean Six Sigma label is applied to the 'Requirements Analysis & Planning' task?",
+    "section": "Kanban Board Overview",
+    "elapsed_seconds": 4.52,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "No tasks on the \"Software Development\" board are currently classified with the 'Waste/Eliminate' Lean Six Sigma label. The `lss_classification` field is empty for all tasks.\n\nTo utilize this feature, you'll need to classify tasks using the Lean Six Sigma classification option within the task editor. Once classifications are applied, I can provide a detailed value-stream analysis.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 32,
+    "question": "Which tasks are classified as 'Waste/Eliminate'?",
+    "section": "Kanban Board Overview",
+    "elapsed_seconds": 3.74,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The scope creep indicator of **+3.5%** on the \"Software Development\" board means that the project's scope has increased by 3.5% since the baseline was set on March 28, 2026.\n\nThis is calculated by comparing the current number of tasks (30) to the baseline number of tasks (29). The AI tool has identified this as a **[Medium Priority]** coaching suggestion, indicating that this scope increase may impact your project timeline and resources.\n\nSpecifically, the \"Scope Tracking\" data shows:\n*   **Baseline:** 29 tasks\n*   **Current:** 30 tasks\n*   **Scope Change:** +3.4% (Note: The coaching suggestion mentions +24% twice, which seems to be a discrepancy. The board snapshot indicates +3.4%.)\n\nThis suggests that one new task has been added to the board since the baseline was established. It's important to monitor this trend to ensure it doesn't lead to significant delays or budget overruns.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 33,
+    "question": "What is the scope creep indicator (Scope +3.5%) on the Software Development board telling me?",
+    "section": "Kanban Board Overview",
+    "elapsed_seconds": 3.45,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "Here are all the tasks assigned to Jordan Taylor on the \"Software Development\" board:\n\n*   **[To Do] Real-time Collaboration**\n    *   Priority: High, Progress: 0%\n    *   Description: WebSocket-based real-time editing and presence features\n    *   Due: 2026-06-15\n    *   Risk: medium\n    *   Comments: 1\n    *   Dependencies: User Management API\n*   **[To Do] Data Caching Layer**\n    *   Priority: Medium, Progress: 0%\n    *   Description: Redis-based caching for improved performance\n    *   Due: 2026-06-20\n    *   Risk: low\n    *   Comments: 1\n    *   Dependencies: Real-time Collaboration\n*   **[To Do] Integration Testing Suite**\n    *   Priority: Medium, Progress: 0%\n    *   Description: End-to-end integration tests for all core features\n    *   Due: 2026-07-01\n    *   Risk: low\n    *   Comments: 1\n    *   Dependencies: API Rate Limiting\n*   **[To Do] UI/UX Polish**\n    *   Priority: Medium, Progress: 0%\n    *   Description: Final UI polish and mobile responsive improvements\n    *   Due: 2026-07-29\n    *   Risk: low\n    *   Comments: 1\n    *   Dependencies: Security Audit & Fixes\n*   **[To Do] Load Testing & Optimization**\n    *   Priority: Medium, Progress: 0%\n    *   Description: Conduct load tests and fix performance bottlenecks\n    *   Due: 2026-08-01\n    *   Risk: low\n    *   Comments: 1\n    *   Dependencies: Security Audit & Fixes\n*   **[To Do] Accessibility Compliance**\n    *   Priority: Medium, Progress: 0%\n    *   Description: WCAG 2.1 AA compliance updates and testing\n    *   Due: 2026-08-17\n    *   Risk: low\n    *   Comments: 1\n    *   Dependencies: Error Tracking & Monitoring\n*   **[To Do] Final Documentation**\n    *   Priority: Low, Progress: 0%\n    *   Description: Complete user guides and API documentation\n    *   Due: 2026-08-21\n    *   Risk: low\n    *   Comments: 1\n    *   Dependencies: Accessibility Compliance\n*   **[In Progress] Project Documentation Setup**\n    *   Priority: Medium, Progress: 10%\n    *   Description: Set up documentation site with API reference and dev guides\n    *   Due: 2026-04-29\n    *   Risk: medium\n    *   Dependencies: Authentication Testing Suite\n*   **[Done] Authentication Testing Suite**\n    *   Priority: High, Progress: 100%\n    *   Description: Comprehensive test coverage for auth system with security tests\n    *   Due: 2026-04-17\n    *   Risk: medium\n    *   Dependencies: Database Schema & Migrations\n*   **[Done] System Architecture Design**\n    *   Priority: High, Progress: 100%\n    *   Description: Design microservices architecture and define API contracts\n    *   Due: 2026-03-14\n    *   Risk: medium\n    *   Comments: 3\n    *   Dependencies: Development Environment Setup\n\nJordan Taylor has 10 tasks assigned, with 7 in the \"To Do\" column, 1 in \"In Progress\", and 2 marked as \"Done\". None of Jordan Taylor's tasks are currently overdue.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 34,
+    "question": "List all tasks assigned to Jordan Taylor.",
+    "section": "Kanban Board Overview",
+    "elapsed_seconds": 4.55,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The full description of the 'Authentication System' task is: \"Build secure login with JWT tokens and session management\".\n\nThis task is currently in the 'In Review' column, has a priority of 'Urgent', is assigned to Sam Rivera, and is 80% complete. It has a due date of 2026-03-26, which is **OVERDUE by 17 days**. The risk level is 'low', and it has 3 comments. It has a dependency on 'Security Architecture Patterns'.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 35,
+    "question": "What is the full description of the 'Authentication System' task?",
+    "section": "Task Details & Intelligence",
+    "elapsed_seconds": 2.56,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The 'User Registration Flow' task has **3** comments.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 36,
+    "question": "How many comments are on the 'User Registration Flow' task?",
+    "section": "Task Details & Intelligence",
+    "elapsed_seconds": 3.26,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The blocking dependencies for the 'API Rate Limiting' task are:\n\n*   **Data Caching Layer**: This task is in the 'To Do' state, assigned to Jordan Taylor, with a due date of 2026-06-20.\n*   **Real-time Collaboration**: This task is in the 'To Do' state, assigned to Jordan Taylor, with a due date of 2026-06-15.\n*   **User Management API**: This task is in the 'In Progress' state, is unassigned, has a high risk, and is due on 2026-06-05. This is identified as the **biggest bottleneck** on the board.\n*   **File Upload System**: This task is in the 'In Review' state, assigned to testuser1, with a due date of 2026-05-26.\n*   **Dashboard UI Development**: This task is in the 'Done' state.\n\nThe 'User Management API' task is currently the most critical blocker as it is unassigned and has a high risk, directly impacting the progress of 'API Rate Limiting' and subsequent tasks.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 37,
+    "question": "What are the blocking dependencies for the 'API Rate Limiting' task?",
+    "section": "Task Details & Intelligence",
+    "elapsed_seconds": 3.17,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The 'Database Schema & Migrations' task has a **medium** risk score.\n\nThis is because:\n*   It is currently in the 'In Progress' column and is **OVERDUE** by 1 day, having been due on 2026-04-11.\n*   It is assigned to 'Unassigned', indicating a potential lack of ownership or focus.\n*   It has a stated dependency on 'User Registration Flow', which is also overdue.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 38,
+    "question": "What is the risk score for the 'Database Schema & Migrations' task and why?",
+    "section": "Task Details & Intelligence",
+    "elapsed_seconds": 2.91,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The following tasks are past their due date:\n\n*   **Authentication System**\n    *   Due: 2026-03-26 (17 days overdue)\n    *   Assigned: Sam Rivera\n    *   Status: In Review\n    *   Priority: Urgent\n\n*   **User Registration Flow**\n    *   Due: 2026-04-02 (10 days overdue)\n    *   Assigned: Alex Chen\n    *   Status: In Progress\n    *   Priority: Urgent\n\n*   **Database Schema & Migrations**\n    *   Due: 2026-04-11 (1 day overdue)\n    *   Assigned: Unassigned\n    *   Status: In Progress\n    *   Priority: Urgent\n\nAdditionally, the milestone **Core Authentication Ready** is also overdue, with a due date of 2026-04-03.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 39,
+    "question": "Which tasks are past their due date?",
+    "section": "Task Details & Intelligence",
+    "elapsed_seconds": 3.02,
+    "is_action_question": false
+  },
+  {
+    "status": "success",
+    "response": "The 'File Upload System' task is at **80%** complete.\n\nIt is currently in the 'In Review' column and is not on track because its due date was 2026-05-26, which is **OVERDUE** by 17 days.",
+    "source": "gemini",
+    "http_status": 200,
+    "question_num": 40,
+    "question": "What progress percentage is the 'File Upload System' at, and is it on track?",
+    "section": "Task Details & Intelligence",
+    "elapsed_seconds": 2.47,
+    "is_action_question": false
+  }
+]
