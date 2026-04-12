@@ -2,7 +2,7 @@
 
 > Last updated: April 12, 2026  
 > Applies to: PrizmAI v1.0 ship configuration  
-> Author: Build session with Claude (Phases 0–6)
+> Author: Build session with Claude (Phases 0–7)
 
 ---
 
@@ -19,7 +19,8 @@ Spectra is PrizmAI's AI project assistant, powered by Google Gemini 2.5 Flash-Li
 | Component | Role |
 |-----------|------|
 | `ai_assistant/utils/ai_clients.py` | Google Gemini client with smart routing (defaults to Flash-Lite, upgrades to Flash for complex queries) |
-| `ai_assistant/utils/chatbot_service.py` | Main service (~4600 lines). Context building, prompt assembly, Gemini call, response formatting |
+| `ai_assistant/utils/chatbot_service.py` | Main service (~4700 lines). Context building, prompt assembly, Gemini call, response formatting |
+| `ai_assistant/utils/spectra_data_fetchers.py` | **VDF layer** (Phase 7). Centralised verified data fetchers — single source of truth for all board/task data queries |
 | `ai_assistant/utils/conversation_flow.py` | State machine for multi-turn action flows (disabled in v1.0) |
 | `ai_assistant/utils/spectra_tools.py` | Gemini function-calling tool schemas (action tools commented out) |
 | `ai_assistant/utils/rbac_utils.py` | Centralized RBAC permission checks for Spectra |
@@ -61,11 +62,13 @@ Always-on:
 - Attached document context
 - Session memory (multi-turn)
 - Documentation summary (compact wiki index — lists all published wiki pages)
-- Live board snapshot (task counts, status distribution, milestone names/dates, hierarchy breadcrumb)
+- Live board snapshot (VDF-backed: column distribution, milestone names/dates with dual-condition completion, overdue/unassigned counts, hierarchy breadcrumb)
 - Knowledge base, feedback learning, user preferences
 
 Conditional (keyword-triggered):
-- Wiki, meetings, risks, resources, dependencies (M2M + parent_task), deadlines, budget, time tracking, conflict, automation, calendar, scope creep, stakeholder, commitment protocols, board features, strategic workflow (Goal → Mission → Strategy → Board, with fallback to workspace-scoped goals), general project fallback, web search
+- Wiki, meetings, risks, resources, dependencies (VDF-backed: M2M forward + reverse blocking graph), deadlines, budget, time tracking, conflict, automation, calendar, scope creep, stakeholder, commitment protocols, board features, strategic workflow (Goal → Mission → Strategy → Board, with fallback to workspace-scoped goals), full task list (always appended when board is set — dispatch gate removed in Phase 7), web search
+
+> **Phase 7 change**: The `get_taskflow_context()` dispatch gate (`if is_project_query and not context_parts`) was removed. The full VDF task list is now **always** appended when a board is active, regardless of which other contexts matched first.
 
 ---
 
@@ -194,6 +197,9 @@ The `MODE_CHOICES` and `PENDING_ACTION_CHOICES` on `SpectraConversationState` st
 ### 6.7 Data Scoping Edge Case — Profile Organization Mismatch
 During testing, we observed that `testuser1`'s profile organization (id=1) didn't match the organizations on their boards (id=8). This is a dev environment data inconsistency. The stricter RBAC filtering correctly returns 0 personal boards for such users. In production, this would only occur if a user's profile organization was changed after boards were created.
 
+### 6.8 VDF Layer Does Not Cache
+`spectra_data_fetchers.py` functions hit the database on every call. For boards with many tasks this means multiple ORM queries per Spectra request (live snapshot + user info + dependency graph can each call `fetch_board_tasks`). Consider caching with a short TTL (e.g. 30 s) keyed by `(board_id, last_task_updated_at)` if query latency becomes noticeable under load.
+
 ---
 
 ## 7. Phase 6 Bug Fixes (April 12, 2026)
@@ -257,6 +263,93 @@ Phase 6 addressed data accuracy issues discovered during a 23-question Spectra t
 
 ---
 
+## 7A. Phase 7 — Spectra Accuracy Overhaul (April 12, 2026)
+
+A 16-question testing session on the Software Development demo board (board id=78) exposed 7 data accuracy bugs. All of them were caused by the context-building layer delivering wrong or incomplete data to Gemini — the AI model itself was not at fault.
+
+Root causes fell into four categories:
+1. **Column vs progress confusion** — several context methods used the `progress` integer field to classify task status instead of `task.column.name`.
+2. **Milestone status ignored** — the `milestone_status` field was never read; column name was used instead, so milestones in non-done columns were reported as not-done regardless of their actual milestone_status.
+3. **Dispatch gate blocking the full task list** — the `if is_project_query and not context_parts` condition prevented `get_taskflow_context()` from running when any other context matched first, so Gemini often received only partial data.
+4. **Missing reverse M2M query** — the `dependent_tasks` reverse relation was never queried; only forward dependencies were visible, making blocking counts always wrong.
+
+### 7A.0 Verified Data Fetcher (VDF) Layer — New File
+
+- **New file**: `ai_assistant/utils/spectra_data_fetchers.py`
+- Single source of truth for all Spectra data queries. Every context method that previously ran its own inline ORM query now calls a VDF function.
+- Design rules enforced by the layer:
+  - Task status = `task.column.name` (never `task.status` or progress buckets)
+  - Milestone completion = `milestone_status == 'completed'` **OR** column name in done-set (dual condition)
+  - Overdue = `due_date < today AND NOT is_complete` (excludes completed milestones, items in done columns)
+  - Priority = `task.get_priority_display()` (human-readable label, not raw DB value)
+  - All queries are **board-scoped** when `self.board` is set
+- `DONE_COLUMN_NAMES` frozenset: `{'done', 'completed', 'complete', 'closed', 'finished', 'resolved'}`
+- Public API:
+
+| Function | Returns |
+|----------|---------|
+| `fetch_task_dict(task)` | 20+-field normalised dict: `column_name`, `priority_label`, `assigned_to_display`, `is_complete`, `is_overdue`, `overdue_days`, `milestone_status`, `parent_task_title`, `dependency_titles`, `subtask_count`, `updated_at`, … |
+| `fetch_board_tasks(board, filters=None)` | All task dicts for a board; optional `filters` dict |
+| `fetch_milestones(board)` | Milestone dicts only, dual-condition completion |
+| `fetch_column_distribution(board)` | `[(col_name, count), …]` ordered by column position |
+| `fetch_dependency_graph(board)` | `{task_id: {blocking:[], blocked_by:[], blocking_count:N}}` — includes reverse M2M |
+| `fetch_assignee_workload(board)` | `{display_name: {task_count, task_titles, display_name, column_breakdown, overdue_count}}` — ALL task titles, never truncated |
+| `fetch_overdue_tasks(board)` | Convenience wrapper — overdue task dicts |
+| `fetch_tasks_for_user_on_board(board, username)` | Convenience wrapper — filter by assignee username |
+
+- **New management command**: `verify_spectra_vdfs --board-id=N [--section=all|tasks|milestones|columns|dependencies|workload]` — prints VDF output as ASCII for comparison against the UI.
+- **New management command**: `regression_test_spectra --board-id=N --username=USER [--question=N] [--verbose]` — sends 16 accuracy-test questions to Spectra and runs 51 assertion checks against VDF ground truth. Baseline: 50/51 pass (98%). The 1 soft failure is a non-critical LLM response omission — data was present in context; Gemini chose not to repeat the assignee name in the free-form response.
+
+### 7A.1 Bug 1 + Bug 6 — Milestone Status Wrong
+
+- **Symptoms**: "Foundation Architecture Complete" milestone showed status "To Do" (Bug 1). Done milestones were flagged overdue (Bug 6).
+- **Root cause**: `_get_live_project_snapshot_context()` used only `ms.column.name` to determine done/not-done. Because Foundation's column is "To Do" (the milestone predates column drag), its real `milestone_status = 'completed'` was ignored. Overdue check was `due < today` with no exclusion for completed milestones.
+- **Fix**: Replaced milestone loop with `fetch_milestones(board)`. VDF uses dual-condition: `milestone_status == 'completed'` OR column name in `DONE_COLUMN_NAMES`. Overdue flag excludes completed items.
+- **Regression**: Q3 — "Foundation Architecture Complete" now reports **Done**.
+
+### 7A.2 Bug 2 + Bug 4 — Column Confusion ("In Progress" vs "In Review")
+
+- **Symptoms**: Authentication System reported "In Progress" (Bug 2). "In Review" column returned wrong tasks (Bug 4).
+- **Root cause**: `_get_progress_metrics_context()` classified tasks using `0 < progress < 100` → bucket "In Progress", regardless of actual column. Authentication System had `progress=80` in column "In Review".
+- **Fix**: Replaced progress-based status buckets in `_get_progress_metrics_context()` with `fetch_column_distribution(board)`. Status is now column-name based end-to-end.
+- **Regression**: Q4 — Authentication System now shows **In Review**. Q6 — "In Review" column returns exactly 2 tasks.
+
+### 7A.3 Bug 3 — Wrong Priority ("High" vs "Urgent" for User Registration Flow)
+
+- **Symptoms**: Priority reported as "High"; actual DB value is `priority='urgent'`.
+- **Root cause**: `get_taskflow_context()` (the correct method, which calls `get_priority_display()`) was blocked by the dispatch gate when other context methods fired first. Those contexts rendered raw DB values or stale label strings.
+- **Fix**: (1) Dispatch gate removed (see 7A.6). (2) `get_taskflow_context()` refactored to use `fetch_board_tasks()`, ensuring `priority_label` always uses `get_priority_display()`.
+- **Regression**: Q5 — Priority now correctly shows **Urgent**.
+
+### 7A.4 Bug 5 — Assignee Tasks Include Wrong People's Work
+
+- **Symptoms**: Asked about Sam Rivera's tasks; Gemini returned tasks belonging to other team members.
+- **Root cause**: `_get_user_info_context()` queried cross-board (all user boards) and listed only the top-5 overdue + top-5 due-soon task titles per person — incomplete, ambiguous, cross-board. Gemini guessed and mixed up assignees. `get_taskflow_context()` (board-scoped, all tasks) was blocked by the dispatch gate.
+- **Fix**: (1) When `self.board` is set, `get_user_stats()` now calls `fetch_board_tasks(self.board, filters={'assigned_to_username': ...})` — board-scoped, all task titles listed. (2) `_board_workload` dict pre-computed via `fetch_assignee_workload(self.board)`, keyed by username. (3) `_get_task_distribution_context()` uses `fetch_assignee_workload(self.board)` when board is set. (4) Dispatch gate removed.
+- **Regression**: Q7 — Sam Rivera's tasks: all 9 correct, all titles listed, no other people's tasks mixed in.
+
+### 7A.5 Bug 7 — Dependency Blocking Count Wrong
+
+- **Symptoms**: Asked which tasks block the most others; Gemini returned incorrect or zero counts.
+- **Root cause**: `_get_dependency_context()` never queried the `dependent_tasks` reverse relation. Only forward queries existed (`task.dependencies.all()` = what this task depends on). Reverse blocking counts were therefore always 0.
+- **Fix**: `fetch_dependency_graph(board)` builds both directions: `blocked_by` (forward) and `blocking` (reverse via `dependent_tasks`) + `blocking_count`. `_get_dependency_context()` now renders a "Top Blocking Tasks" section sorted by `blocking_count` descending.
+- **Regression**: Q9 — File Upload System blocks 2, User Management API blocks 2.
+
+### 7A.6 Dispatch Gate Removed
+
+- **Root cause (architectural)**: `if is_project_query and not context_parts` meant `get_taskflow_context()` was skipped whenever any other context had already matched. For compound queries (e.g. "Show Sam Rivera's tasks" triggers both `_is_user_info_query` and `is_project_query`), Gemini received the user-info context (partial titles) but **not** the full task list. This was the systemic root cause of Bugs 3 and 5.
+- **Fix**: Changed gate condition to unconditional `if is_project_query`. Full VDF task list always appended when board is active.
+- **Effect**: Slight token increase for compound queries (~1 extra context block). Accuracy improvement is significant.
+- **File**: `chatbot_service.py` ~line 4512
+
+### 7A.7 Pre-existing Bug — `timezone` Not Imported
+
+- **Problem**: `get_user_feedback_learning_context()` used `timezone.now()` but had no `from django.utils import timezone` import, causing `NameError` on every Spectra request. Silently swallowed by the outer try/except, but recorded as an error in logs.
+- **Fix**: Added `from django.utils import timezone`.
+- **File**: `chatbot_service.py` ~line 515
+
+---
+
 ## 8. Suggestions for Future Improvement
 
 ### 8.1 v2.0 Action Re-enablement Checklist
@@ -279,6 +372,8 @@ Chat is now synchronous (Phase 6). Consider implementing Server-Sent Events or W
 
 ### 8.5 Context Window Management
 The 23+ context modules can collectively exceed the Gemini context window for boards with many tasks. Consider implementing a token budget system that prioritizes the most relevant context modules and truncates or omits lower-priority ones.
+
+> **Phase 7 note**: The dispatch gate removal means `get_taskflow_context()` always runs for project queries, which increases token usage for large boards. If token budget becomes a concern, consider capping `fetch_board_tasks()` at N=100 tasks and summarising the rest.
 
 ### 8.6 Automated RBAC Tests
 Write integration tests that verify:
@@ -308,7 +403,8 @@ Wiki pages are linked to the original demo board (id=1) via `WikiLink(board=1)`.
 
 | File | Phase | Changes |
 |------|-------|---------|
-| `ai_assistant/utils/chatbot_service.py` | 0, 1, 3, 6 | RBAC gates, sandbox check, system prompt read-only instruction, `QUERY_ONLY_FALLBACK`, `_V1_DISABLED_INTENTS`, hierarchy breadcrumb, strategic keywords, board drill-down RBAC, milestone names/dates in snapshot, M2M dependency support, goals fallback, wiki related-name fix, org fallback fix, system prompt rule #13 clarification |
+| `ai_assistant/utils/chatbot_service.py` | 0, 1, 3, 6, 7 | RBAC gates, sandbox check, system prompt read-only instruction, `QUERY_ONLY_FALLBACK`, `_V1_DISABLED_INTENTS`, hierarchy breadcrumb, strategic keywords, board drill-down RBAC, milestone names/dates in snapshot, M2M dependency support, goals fallback, wiki related-name fix, org fallback fix, system prompt rule #13 clarification; **Phase 7**: VDF integration for 6 context methods, dispatch gate removed, `timezone` import fix |
+| `ai_assistant/utils/spectra_data_fetchers.py` | 7 | **NEW** — VDF layer: `fetch_task_dict`, `fetch_board_tasks`, `fetch_milestones`, `fetch_column_distribution`, `fetch_dependency_graph`, `fetch_assignee_workload`, `fetch_overdue_tasks`, `fetch_tasks_for_user_on_board` |
 | `ai_assistant/utils/conversation_flow.py` | 1 | `handle_message()` blocks all action intents, resets stale modes |
 | `ai_assistant/utils/spectra_tools.py` | 1 | 10 action tool schemas commented out, 2 read-only tools remain |
 | `ai_assistant/utils/rbac_utils.py` | 0, 6 | Cross-workspace fix, workspace guards, sandbox exclusion, removed org filter on sandbox boards |
@@ -322,6 +418,9 @@ Wiki pages are linked to the original demo board (id=1) via `WikiLink(board=1)`.
 | File | Purpose |
 |------|---------|
 | `ai_assistant/management/commands/reset_stale_spectra_states.py` | One-time cleanup: reset stuck conversation states to normal mode |
+| `ai_assistant/utils/spectra_data_fetchers.py` | VDF layer — centralised verified data fetchers for all Spectra context methods |
+| `ai_assistant/management/commands/verify_spectra_vdfs.py` | Print VDF output for a board (ASCII) for manual comparison against the UI |
+| `ai_assistant/management/commands/regression_test_spectra.py` | 16-question accuracy regression test suite with 51 assertion checks |
 
 ---
 
@@ -334,15 +433,23 @@ python manage.py reset_stale_spectra_states --apply
 # 2. Collect static files (if CSS/JS changed)
 python manage.py collectstatic --noinput
 
-# 3. Verify imports
-python -c "import django; django.setup(); from ai_assistant.utils.chatbot_service import QUERY_ONLY_FALLBACK; print('OK')"
+# 3. Verify core imports
+python -c "import django; django.setup(); from ai_assistant.utils.chatbot_service import QUERY_ONLY_FALLBACK; print('chatbot_service OK')"
+python -c "import django; django.setup(); from ai_assistant.utils.spectra_data_fetchers import fetch_board_tasks; print('VDF layer OK')"
 
-# 4. Smoke test — confirm action request returns fallback
+# 4. Verify VDF output against a board (compare against UI)
+python manage.py verify_spectra_vdfs --board-id=<BOARD_ID> --section=all
+
+# 5. Accuracy regression test (requires Gemini API key active)
+python manage.py regression_test_spectra --board-id=<BOARD_ID> --username=<USER>
+# Expected: 50/51 checks passed (Q15 soft failure is a non-critical LLM omission)
+
+# 6. Smoke test — confirm action request returns fallback
 # (manually or via the test script)
 
-# 5. Verify Phase 6 fixes
+# 7. Verify Phase 6 fixes
 python _tmp_verify_spectra_fixes.py
-# Expected: all 5 categories show ✅ PASS
+# Expected: all 5 categories show PASS
 ```
 
 ---
@@ -354,10 +461,13 @@ Summary of what each always-on and conditional context module provides:
 | Module | Trigger | Data Provided |
 |--------|---------|---------------|
 | **Doc summary** (0c) | Always | One-line index of all published wiki pages |
-| **Live snapshot** (0d) | Always | Task counts by status, milestone names/dates, overdue/unassigned counts, hierarchy breadcrumb |
+| **Live snapshot** (0d) | Always | Column distribution (VDF-backed), milestone names/dates with dual-condition completion, overdue/unassigned counts, hierarchy breadcrumb |
 | **Wiki** (1) | `_is_wiki_query` keywords | Full wiki page content (top 5 by relevance) |
 | **Meetings** (2) | `_is_meeting_query` keywords | Meeting notes with summaries, dates, action items |
 | **Organization** (3) | `_is_organization_query` | Org structure, member counts (RBAC-scoped) |
-| **Dependencies** (8) | `_is_dependency_query` | M2M dependencies + parent_task chains, bottleneck analysis |
+| **User info** (4) | `_is_user_info_query` | VDF-backed: board-scoped assignee workload, all task titles per person, overdue/due-soon lists |
+| **Task distribution** (5) | `_is_task_distribution_query` | VDF-backed: board-scoped workload with all task titles; cross-board ORM fallback when no board set |
+| **Progress metrics** (6) | `_is_progress_query` | VDF-backed: `fetch_column_distribution()` counts (never progress-field buckets), average progress stats |
+| **Dependencies** (8) | `_is_dependency_query` | VDF-backed: M2M forward + reverse blocking graph (`dependent_tasks`), top-blocking-tasks list sorted by blocking_count descending |
 | **Strategic workflow** (15c) | `_is_strategic_workflow_query` | Goal → Mission → Strategy → Board hierarchy (with fallback to workspace goals) |
-| **Taskflow** (16) | `_is_project_query` fallback | All tasks with status, assignee, due dates, M2M dependencies |
+| **Taskflow** (16) | `_is_project_query` — **always runs when board is set** | VDF-backed: all tasks with column-based status, `get_priority_display()` labels, assignee, due dates, M2M dependencies — dispatch gate removed in Phase 7 |
