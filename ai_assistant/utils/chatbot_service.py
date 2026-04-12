@@ -411,6 +411,11 @@ class TaskFlowChatbotService:
                         context += f"- [{t['column_name']}] {t['title']}\n"
                         context += f"  • Priority: {t['priority_label']}, Assigned: {t['assigned_to_display']}, Progress: {t['progress']}%\n"
 
+                        # Include description if present (for task-detail queries)
+                        if t.get('description'):
+                            desc = t['description'][:200]
+                            context += f"  • Description: {desc}\n"
+
                         if t['due_date_date']:
                             if t['is_overdue']:
                                 context += f"  • Due: {t['due_date_date']} ⚠️ OVERDUE by {t['overdue_days']} days\n"
@@ -422,6 +427,10 @@ class TaskFlowChatbotService:
                             if t['ai_risk_score']:
                                 risk_info += f" (Score: {t['ai_risk_score']}/100)"
                             context += f"  • {risk_info}\n"
+
+                        # Include comment count if available
+                        if t.get('comment_count'):
+                            context += f"  • Comments: {t['comment_count']}\n"
 
                         if t['parent_task_title']:
                             context += f"  • Depends on: {t['parent_task_title']}\n"
@@ -2439,7 +2448,8 @@ class TaskFlowChatbotService:
     def _get_lean_context(self, prompt):
         """
         Get Lean Six Sigma data
-        Includes value-added vs waste analysis, efficiency metrics
+        Includes value-added vs waste analysis, efficiency metrics.
+        Uses the actual lss_classification field on tasks (not labels).
         """
         try:
             if not self._is_lean_query(prompt):
@@ -2453,27 +2463,21 @@ class TaskFlowChatbotService:
             # Get all tasks (exclude milestones)
             all_tasks = Task.objects.filter(column__board__in=user_boards, item_type='task')
             
-            # Try to get tasks by label category (Lean Six Sigma)
-            va_tasks = all_tasks.filter(
-                labels__name__icontains='value-added'
-            ).distinct().count()
-            
-            nva_tasks = all_tasks.filter(
-                labels__name__icontains='necessary'
-            ).distinct().count()
-            
-            waste_tasks = all_tasks.filter(
-                labels__name__icontains='waste'
-            ).distinct().count()
+            # Use the actual lss_classification model field (not labels)
+            va_tasks = all_tasks.filter(lss_classification='value_added').count()
+            nva_tasks = all_tasks.filter(lss_classification='necessary_nva').count()
+            waste_tasks = all_tasks.filter(lss_classification='waste').count()
             
             if va_tasks + nva_tasks + waste_tasks == 0:
                 return (
                     "**Lean Six Sigma Analysis:**\n\n"
-                    "No Lean Six Sigma waste-type labels (value-added, necessary non-value-added, waste) "
-                    "have been applied to tasks on your boards yet.\n\n"
+                    "No Lean Six Sigma classifications have been applied to tasks on your boards yet. "
+                    "The `lss_classification` field is empty for all tasks.\n\n"
                     "**How to get started:**\n"
-                    "1. Add labels like **Value-Added**, **Necessary NVA**, and **Waste** to your tasks\n"
-                    "2. I'll then be able to show a full value-stream analysis with percentages and recommendations"
+                    "1. Classify tasks as **Value-Added**, **Necessary NVA**, or **Waste/Eliminate** "
+                    "using the Lean Six Sigma classification feature in the task editor\n"
+                    "2. Once classifications are set, I can provide a full value-stream analysis with "
+                    "percentages and recommendations"
                 )
             
             total_categorized = va_tasks + nva_tasks + waste_tasks
@@ -2490,6 +2494,16 @@ class TaskFlowChatbotService:
 2. Review Necessary NVA tasks for optimization opportunities
 3. Prioritize elimination of waste tasks ({waste_tasks} identified)
 """
+            
+            # List individual task classifications if there are few enough
+            if total_categorized <= 20:
+                classified_tasks = all_tasks.filter(
+                    lss_classification__isnull=False
+                ).exclude(lss_classification='').select_related('column')
+                if classified_tasks.exists():
+                    context += "\n**Task-level Classifications:**\n"
+                    for t in classified_tasks:
+                        context += f"- {t.title}: {t.get_lss_classification_display()}\n"
             
             return context
         
@@ -4514,9 +4528,12 @@ When answering questions about organizational goals, missions, or strategies, us
                     logger.debug("Added board features context")
             
             # 16. General project context — ALWAYS include when board is set.
-            #     Specialized contexts add extra detail but the full task list
-            #     must always be present so Spectra can cross-reference accurately.
-            if is_project_query:
+            #     The full task list must always be present so Spectra can
+            #     cross-reference accurately. Previously gated on is_project_query
+            #     which caused missing context for prompts without trigger keywords
+            #     (e.g. "progress", "percentage", "on track" were not in the list).
+            #     Phase 8 fix: unconditional when self.board is set.
+            if self.board:
                 taskflow_context = self.get_taskflow_context(use_cache)
                 if taskflow_context:
                     context_parts.append(taskflow_context)

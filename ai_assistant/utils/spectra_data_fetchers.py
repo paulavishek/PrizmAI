@@ -97,6 +97,12 @@ def fetch_task_dict(task):
     except Exception:
         subtask_count = 0
 
+    # Comment count
+    try:
+        comment_count = task.comments.count() if hasattr(task, 'comments') else 0
+    except Exception:
+        comment_count = 0
+
     return {
         'id': task.id,
         'board_id': task.column.board_id if task.column_id else None,
@@ -116,6 +122,7 @@ def fetch_task_dict(task):
         'overdue_days': overdue_days,
         'progress': task.progress,
         'description': task.description or '',
+        'comment_count': comment_count,
         'parent_task_id': task.parent_task_id,
         'parent_task_title': parent_task_title,
         'dependency_titles': dependency_titles,
