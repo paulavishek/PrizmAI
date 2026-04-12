@@ -178,7 +178,13 @@ class UserSession(models.Model):
             delta = self.last_activity - self.session_start
         
         self.duration_minutes = int(delta.total_seconds() / 60)
-        self.save(update_fields=['duration_minutes'])
+        try:
+            self.save(update_fields=['duration_minutes'])
+        except Exception:
+            # Row may have been deleted or never committed; refresh and retry
+            if self.pk and type(self).objects.filter(pk=self.pk).exists():
+                self.save(update_fields=['duration_minutes'])
+            # else: silently skip — stale session object
     
     def end_session(self, reason='logout', exit_page=''):
         """End the session and calculate final metrics"""
