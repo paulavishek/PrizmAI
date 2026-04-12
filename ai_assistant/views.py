@@ -317,6 +317,33 @@ def send_message(request):
         if hasattr(request.user, 'profile'):
             is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
 
+        # ── Auto-select board when none is set ───────────────────────
+        # In demo mode, the chat UI has no board selector.  If the session
+        # doesn't have a board yet, pick the user's first sandbox board so
+        # Spectra has context for questions like "How many tasks on this board?"
+        if not board and is_demo_mode:
+            from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+            user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+            demo_boards = get_accessible_boards_for_spectra(
+                request.user, is_demo_mode=True, organization=user_org,
+            )
+            if demo_boards.exists():
+                board = demo_boards.first()
+                session.board = board
+                session.save()
+                logger.info("Auto-selected demo board %s for user %s", board.id, request.user.id)
+        elif not board and not is_demo_mode:
+            # Personal workspace: auto-select the first accessible board
+            from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+            user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+            personal_boards = get_accessible_boards_for_spectra(
+                request.user, is_demo_mode=False, organization=user_org,
+            )
+            if personal_boards.exists():
+                board = personal_boards.first()
+                session.board = board
+                session.save()
+
         # ── Conversational Spectra: check conversation state ─────────
         from ai_assistant.utils.conversation_flow import (
             ConversationFlowManager, get_or_create_state,
@@ -392,18 +419,15 @@ def send_message(request):
             })
         # ── End Conversational Spectra ───────────────────────────────
         
-        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
-        if request.headers.get('X-Request-Async'):
-            from kanban.tasks.ai_streaming_tasks import send_ai_message_task
-            result = send_ai_message_task.delay(
-                message_text, session.id, request.user.id,
-                board_id=board.id if board else None,
-                refresh_data=refresh_data,
-                file_context=file_context,
-            )
-            return JsonResponse({'task_id': result.id, 'status': 'queued'})
-
-        # Get response from chatbot service
+        # ── Process chat messages synchronously ──────────────────────
+        # Spectra chat messages are fast (2-5s Gemini calls) and do not
+        # benefit from Celery task queuing.  Processing synchronously
+        # avoids timeouts caused by the worker being busy with scheduled
+        # tasks (pool=solo queues all tasks sequentially).
+        # The async Celery path is still used for heavy AI features
+        # (Pre-Mortem, Board Analytics, etc.) via their own endpoints.
+        # Return ``sync: true`` so triggerAITask renders the result
+        # immediately without opening a WebSocket.
         # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(
             user=request.user, board=board, session_id=session.id,
@@ -500,6 +524,7 @@ def send_message(request):
         
         return JsonResponse({
             'status': 'success',
+            'sync': True,
             'message_id': assistant_message.id,
             'response': response['response'],
             'source': response.get('source', 'gemini'),

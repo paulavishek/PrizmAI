@@ -204,15 +204,15 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
         # Demo workspace — only this user's personal sandbox copies.
         # The ``workspace__is_demo=True`` guard ensures we never pull boards
         # from the user's real workspace even if ``is_sandbox_copy`` is True.
+        # NOTE: Do NOT filter sandbox copies by organization — sandbox boards
+        # are created without an org reference (org=None) so applying the
+        # user's org would incorrectly return 0 boards.
         sandbox_qs = base.filter(
             Q(owner=user, is_sandbox_copy=True)
             | Q(created_by_session=f'spectra_demo_{user.id}')
         ).filter(
             Q(workspace__is_demo=True) | Q(workspace__isnull=True)
-        )
-        if organization:
-            sandbox_qs = sandbox_qs.filter(organization=organization)
-        sandbox_qs = sandbox_qs.distinct()
+        ).distinct()
         if sandbox_qs.exists():
             return sandbox_qs
         # Fallback to templates if sandbox not provisioned yet
