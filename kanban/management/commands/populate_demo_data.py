@@ -772,6 +772,13 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'   ⚠️  AI Assistant demo data skipped: {e}'))
 
+        # Populate Requirements Analysis demo data
+        self.stdout.write(self.style.SUCCESS('\n📋 Creating Requirements Analysis demo data...\n'))
+        try:
+            call_command('populate_demo_requirements')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️  Requirements demo data skipped: {e}'))
+
         # Find naturally overdue tasks and create Decision Center items
         self.stdout.write(self.style.SUCCESS('\n⏰ Creating Decision Center items for overdue tasks...\n'))
         self.create_overdue_and_decision_items(software_board, alex)

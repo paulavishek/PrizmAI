@@ -146,6 +146,7 @@ def build_feature_flags(preset):
         'show_missions_nav': False,
         'show_full_analytics': False,
         'spectra_agentic': False,
+        'show_requirements': False,
         # Meta — useful for template logic
         'preset_name': 'lean',
     }
@@ -165,6 +166,7 @@ def build_feature_flags(preset):
         'show_missions_nav': True,
         'show_full_analytics': True,
         'spectra_agentic': True,
+        'show_requirements': True,
         'preset_name': 'professional',
     }
 

@@ -357,6 +357,17 @@ class Command(BaseCommand):
                 ResourceDemandForecast.objects.filter(board__in=demo_boards).delete()
 
                 # 8. Delete task-related data
+                self.stdout.write('  Deleting requirements data...')
+                try:
+                    from requirements.models import RequirementComment, RequirementHistory, Requirement, ProjectObjective, RequirementCategory
+                    RequirementComment.objects.filter(requirement__board__in=demo_boards).delete()
+                    RequirementHistory.objects.filter(requirement__board__in=demo_boards).delete()
+                    Requirement.objects.filter(board__in=demo_boards).delete()
+                    ProjectObjective.objects.filter(board__in=demo_boards).delete()
+                    RequirementCategory.objects.filter(board__in=demo_boards).delete()
+                except ImportError:
+                    pass
+
                 self.stdout.write('  Deleting task files...')
                 TaskFile.objects.filter(task__column__board__in=demo_boards).delete()
                 

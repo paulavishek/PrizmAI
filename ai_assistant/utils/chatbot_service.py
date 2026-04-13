@@ -3696,6 +3696,81 @@ class TaskFlowChatbotService:
         prompt_lower = prompt.lower()
         return any(kw in prompt_lower for kw in keywords)
 
+    def _is_requirement_query(self, prompt):
+        """Detect queries about requirements, traceability, or requirement analysis."""
+        keywords = [
+            'requirement', 'requirements', 'req-', 'traceability',
+            'acceptance criteria', 'coverage', 'functional requirement',
+            'non-functional', 'non functional', 'business requirement',
+            'user requirement', 'technical requirement', 'requirement analysis',
+            'requirement status', 'requirement priority', 'requirement coverage',
+            'project objective', 'objectives', 'traceability matrix',
+        ]
+        prompt_lower = prompt.lower()
+        return any(kw in prompt_lower for kw in keywords)
+
+    def _get_requirements_context(self, prompt):
+        """
+        Get pre-computed requirements analysis context for Spectra.
+        Uses VDF functions from requirements.spectra_data.
+        """
+        try:
+            from requirements.spectra_data import (
+                get_requirements_context_for_board,
+                get_requirement_detail_for_spectra,
+                get_requirements_by_status,
+            )
+            import re
+
+            boards_to_check = []
+            if self.board:
+                boards_to_check = [self.board]
+            else:
+                user_boards = self._get_user_boards()
+                if user_boards.exists():
+                    boards_to_check = list(user_boards[:3])
+
+            if not boards_to_check:
+                return None
+
+            prompt_lower = prompt.lower()
+            context_parts = []
+
+            for board in boards_to_check:
+                # Check if user asks about a specific requirement
+                req_match = re.search(r'req-\d+', prompt_lower)
+                if req_match:
+                    detail = get_requirement_detail_for_spectra(
+                        board, req_match.group(0).upper()
+                    )
+                    if detail:
+                        context_parts.append(
+                            f"REQUIREMENT DETAIL ({detail['identifier']}):\n"
+                            f"Title: {detail['title']}\n"
+                            f"Type: {detail['type']} | Priority: {detail['priority']} | Status: {detail['status']}\n"
+                            f"Category: {detail['category'] or 'None'}\n"
+                            f"Description: {detail['description'][:500]}\n"
+                            f"Acceptance Criteria: {detail['acceptance_criteria'][:300]}\n"
+                            f"Linked Tasks: {len(detail['linked_tasks'])}\n"
+                            f"Objectives: {', '.join(detail['objectives']) if detail['objectives'] else 'None'}\n"
+                        )
+                        continue
+
+                # General requirements context
+                ctx = get_requirements_context_for_board(board)
+                if ctx and ctx['summary']['total'] > 0:
+                    context_parts.append(ctx['full_narrative'])
+
+            if context_parts:
+                return "REQUIREMENTS ANALYSIS DATA:\n" + "\n".join(context_parts)
+            return None
+        except ImportError:
+            logger.debug("Requirements app not installed, skipping context")
+            return None
+        except Exception as e:
+            logger.warning(f"Error getting requirements context: {e}")
+            return None
+
     def _get_board_features_context(self, prompt):
         """
         Provide live data from all board-level features (AI Tools, analytics,
@@ -4341,6 +4416,7 @@ When answering questions about organizational goals, missions, or strategies, us
             is_deadline_projection_query = self._is_deadline_projection_query(prompt)
             is_strategic_workflow_query = self._is_strategic_workflow_query(prompt)
             is_board_features_query = self._is_board_features_query(prompt)
+            is_requirement_query = self._is_requirement_query(prompt)
             
             # Build context in priority order
             context_parts = []
@@ -4526,6 +4602,13 @@ When answering questions about organizational goals, missions, or strategies, us
                 if board_features_ctx:
                     context_parts.append(board_features_ctx)
                     logger.debug("Added board features context")
+            
+            # 15e. Requirements analysis context
+            if is_requirement_query:
+                req_context = self._get_requirements_context(prompt)
+                if req_context:
+                    context_parts.append(req_context)
+                    logger.debug("Added requirements analysis context")
             
             # 16. General project context — ALWAYS include when board is set.
             #     The full task list must always be present so Spectra can

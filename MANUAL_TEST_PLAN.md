@@ -294,6 +294,40 @@ Login as **testuser1** (owner of own boards).
 | 2 | View AI coaching suggestions | Suggestions displayed | ☐ |
 | 3 | View PM metrics | Metrics render | ☐ |
 
+### Test 2.14 — Requirements Analysis
+
+| # | Step | Expected | Pass? |
+|---|------|----------|-------|
+| 1 | Open a board → click "Requirements" tab | Requirements dashboard loads with stats cards (Total, Draft, In Review, Approved, Implemented, Coverage %) | ☐ |
+| 2 | Click "New Requirement" → fill form → save | Requirement created with auto-generated identifier (REQ-001) | ☐ |
+| 3 | Click "Add Category" → create "Functional" | Category created, appears in filter dropdown | ☐ |
+| 4 | Click on a requirement row | Detail page shows description, acceptance criteria, metadata sidebar, status/history/comments tabs | ☐ |
+| 5 | Update requirement status via sidebar form | Status changes, history entry created with timestamp | ☐ |
+| 6 | Add a comment on requirement detail page | Comment appears in Comments tab with author and timestamp | ☐ |
+| 7 | Link a task to requirement via sidebar "Link a task" dropdown | Task appears in Linked Tasks section | ☐ |
+| 8 | Open Traceability Matrix | Matrix shows objectives × requirements and requirements × tasks grids with green/grey dots | ☐ |
+| 9 | Click "Export CSV" | CSV downloads with all requirements and their metadata | ☐ |
+| 10 | Filter requirements by status/type/priority/category | Table updates to show only matching requirements | ☐ |
+| 11 | Create a child requirement (set parent) | Hierarchy shows on parent detail page under Sub-Requirements | ☐ |
+| 12 | Delete a requirement (via detail page) | Requirement removed, redirects to dashboard | ☐ |
+
+### Test 2.14b — Requirements × Spectra AI
+
+| # | Step | Expected | Pass? |
+|---|------|----------|-------|
+| 1 | Ask Spectra: "What are the requirements for this board?" | Spectra returns summary with counts, status breakdown, and coverage % | ☐ |
+| 2 | Ask Spectra: "Show me REQ-001" | Spectra returns detail for that specific requirement | ☐ |
+| 3 | Ask Spectra: "What's our requirement coverage?" | Spectra returns coverage stats by priority and overall | ☐ |
+| 4 | Ask Spectra: "Which requirements don't have tasks?" | Spectra identifies uncovered requirements from traceability data | ☐ |
+
+### Test 2.14c — Requirements Feature Flag
+
+| # | Step | Expected | Pass? |
+|---|------|----------|-------|
+| 1 | Set workspace preset to Lean → open board | Requirements tab NOT visible in board nav tabs | ☐ |
+| 2 | Set workspace preset to Professional → open board | Requirements tab visible in board nav tabs | ☐ |
+| 3 | Try direct URL `/requirements/board/N/` in Lean mode | Feature accessible (URL not gated, but tab hidden) | ☐ |
+
 ---
 
 ## Edge Cases & Regression

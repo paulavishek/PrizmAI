@@ -412,14 +412,35 @@ def get_action_tools():
         # log_time, schedule_event, create_retrospective, create_automation,
         # create_scheduled_automation, update_task, place_commitment_bet
         # --- END V2.0 ACTION TOOLS ---
+
+        # ── Read-only: Requirements Analysis ─────────────────────────────
+        get_requirements_summary = FunctionDeclaration(
+            name='get_requirements_summary',
+            description=(
+                'Get a summary of all requirements for a board, including status breakdown, '
+                'coverage statistics, and traceability data.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'board_id': {
+                        'type': 'integer',
+                        'description': 'The board ID to get requirements summary for.',
+                    },
+                },
+                'required': ['board_id'],
+            },
+        )
+
         _cached_tools = [
             Tool(function_declarations=[
                 # Read-only tools only (v1.0)
                 get_commitment_status,
                 list_at_risk_commitments,
+                get_requirements_summary,
             ])
         ]
-        logger.info("Spectra read-only tool schemas loaded (%d functions, v1.0)", 2)
+        logger.info("Spectra read-only tool schemas loaded (%d functions, v1.0)", 3)
         return _cached_tools
 
     except ImportError:
@@ -445,6 +466,8 @@ FUNCTION_TO_ACTION = {
     'get_commitment_status': 'get_commitment_status',
     'list_at_risk_commitments': 'list_at_risk_commitments',
     'place_commitment_bet': 'place_commitment_bet',
+    # Requirements Analysis — read-only
+    'get_requirements_summary': 'get_requirements_summary',
 }
 
 # ── Mapping from AI router intents to collecting modes ───────────────────

@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     'knowledge_graph',  # Knowledge Graph Project Memory system
     'decision_center',  # Decision Batch Dashboard — unified decision queue
     'exit_protocol',  # Exit Protocol — Project Hospice, Organ Transplant, Cemetery
+    'requirements',  # Requirement Analysis — lifecycle tracking, traceability, AI gap analysis
 ]
 
 MIDDLEWARE = [

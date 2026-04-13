@@ -26,6 +26,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
 - **Board Automations** — Trigger-based rules for repetitive workflows *(Professional mode and above)*; scheduled recurring automations *(Enterprise mode)*
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
+- **Requirements Analysis** — Full lifecycle requirement management with traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. Spectra AI can answer questions about requirement status, coverage gaps, and traceability. *(Professional mode and above)*
 
 ### Strategic Alignment
 
