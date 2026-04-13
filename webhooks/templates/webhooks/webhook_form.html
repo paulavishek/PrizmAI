@@ -23,25 +23,29 @@
                         </div>
                         {% endif %}
                         
+                        <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
+                        
                         <div class="mb-3">
                             <label for="{{ form.name.id_for_label }}" class="form-label">
-                                Webhook Name <span class="text-danger">*</span>
+                                Webhook Name <span class="required-asterisk">*</span>
                             </label>
                             {{ form.name|add_class:"form-control" }}
                             {% if form.name.errors %}
                             <div class="text-danger">{{ form.name.errors }}</div>
                             {% endif %}
+                            <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Webhook name is required.</div>
                             <small class="form-text text-muted">{{ form.name.help_text }}</small>
                         </div>
                         
                         <div class="mb-3">
                             <label for="{{ form.url.id_for_label }}" class="form-label">
-                                Webhook URL <span class="text-danger">*</span>
+                                Webhook URL <span class="required-asterisk">*</span>
                             </label>
                             {{ form.url|add_class:"form-control" }}
                             {% if form.url.errors %}
                             <div class="text-danger">{{ form.url.errors }}</div>
                             {% endif %}
+                            <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Webhook URL is required.</div>
                             <small class="form-text text-muted">{{ form.url.help_text }}</small>
                         </div>
                         

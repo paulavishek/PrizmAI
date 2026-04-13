@@ -70,6 +70,7 @@ class CustomPasswordChangeForm(PasswordChangeForm):
     )
 
 class OrganizationForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Organization
         fields = ['name', 'domain']
@@ -285,6 +286,7 @@ class OrganizationSettingsForm(forms.ModelForm):
     A form for admins to update organization settings.
     Domain changes require careful validation to not break existing accounts.
     """
+    required_css_class = 'required'
     class Meta:
         model = Organization
         fields = ['name', 'domain']

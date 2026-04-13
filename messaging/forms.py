@@ -25,6 +25,7 @@ class TaskThreadCommentForm(forms.ModelForm):
 
 class ChatRoomForm(forms.ModelForm):
     """Form for creating/editing chat rooms"""
+    required_css_class = 'required'
     members = forms.ModelMultipleChoiceField(
         queryset=User.objects.all(),
         widget=forms.CheckboxSelectMultiple,

@@ -36,9 +36,12 @@
                 </div>
                 {% endif %}
 
+                <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
+
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Title <span class="text-danger">*</span></label>
+                    <label class="form-label fw-bold">Title <span class="required-asterisk">*</span></label>
                     <input type="text" name="title" value="{{ form.title.value|default:'' }}" class="form-control" required maxlength="255">
+                    <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Requirement title is required.</div>
                 </div>
 
                 <div class="mb-3">
@@ -48,20 +51,22 @@
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
-                        <label class="form-label fw-bold">Type <span class="text-danger">*</span></label>
+                        <label class="form-label fw-bold">Type <span class="required-asterisk">*</span></label>
                         <select name="type" class="form-select" required>
                             {% for val, label in form.fields.type.choices %}
                             <option value="{{ val }}" {% if form.type.value == val %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
+                        <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Type is required.</div>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label fw-bold">Priority <span class="text-danger">*</span></label>
+                        <label class="form-label fw-bold">Priority <span class="required-asterisk">*</span></label>
                         <select name="priority" class="form-select" required>
                             {% for val, label in form.fields.priority.choices %}
                             <option value="{{ val }}" {% if form.priority.value == val %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
+                        <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Priority is required.</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold">Status</label>

@@ -36,12 +36,13 @@
                         {% csrf_token %}
                         <div class="mb-3">
                             <label for="invite_emails" class="form-label small text-muted mb-1">
-                                Email address(es) — separate multiple addresses with commas, semicolons, or new lines
+                                Email address(es) <span class="required-asterisk">*</span> — separate multiple addresses with commas, semicolons, or new lines
                             </label>
                             <textarea id="invite_emails" name="invite_emails" rows="3"
                                       class="form-control font-monospace"
                                       placeholder="alice@example.com, bob@example.com&#10;carol@example.com"
                                       required></textarea>
+                            <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Please enter at least one email address.</div>
                         </div>
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-paper-plane me-1"></i> Send Invitation(s)

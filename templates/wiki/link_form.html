@@ -45,10 +45,12 @@
         
         <form method="post" class="link-form-section">
             {% csrf_token %}
-            
+            <p class="required-fields-hint">* indicates a required field</p>
+
             <div class="mb-3">
-                {{ form.link_type.label_tag }}
+                <label class="form-label" for="{{ form.link_type.id_for_label }}">{{ form.link_type.label }} <span class="required-asterisk">*</span></label>
                 {{ form.link_type|add_class:"form-control" }}
+                <div class="field-validation-msg">Link type is required.</div>
                 {{ form.link_type.errors }}
             </div>
             

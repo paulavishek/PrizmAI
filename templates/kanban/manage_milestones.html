@@ -239,10 +239,12 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <p class="required-fields-hint">* indicates a required field</p>
                     <div class="mb-3">
-                        <label for="name" class="form-label">Milestone Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="name" name="name" required 
+                        <label for="name" class="form-label">Milestone Name <span class="required-asterisk">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required
                                placeholder="e.g., Sprint 1 End, MVP Release">
+                        <div class="field-validation-msg">Milestone name is required.</div>
                     </div>
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
@@ -250,8 +252,9 @@
                                   placeholder="Describe what this milestone represents..."></textarea>
                     </div>
                     <div class="mb-3">
-                        <label for="target_date" class="form-label">Target Date <span class="text-danger">*</span></label>
+                        <label for="target_date" class="form-label">Target Date <span class="required-asterisk">*</span></label>
                         <input type="date" class="form-control" id="target_date" name="target_date" required>
+                        <div class="field-validation-msg">Target date is required.</div>
                     </div>
                     <div class="mb-3">
                         <label for="target_tasks" class="form-label">Target Tasks Completed</label>

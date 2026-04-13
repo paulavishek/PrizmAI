@@ -7,6 +7,7 @@ from webhooks.models import Webhook
 
 class WebhookForm(forms.ModelForm):
     """Form for creating/editing webhooks"""
+    required_css_class = 'required'
     
     EVENT_CHOICES = [
         ('task.created', 'Task Created'),

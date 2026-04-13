@@ -1245,6 +1245,61 @@ body {
     color: #6c8db0;
 }
 
+/* ======================================== */
+/* REQUIRED FIELD INDICATORS & VALIDATION  */
+/* ======================================== */
+
+/* Asterisk styling for required fields */
+.required-asterisk {
+    color: #dc3545;
+    font-weight: 700;
+    margin-left: 2px;
+}
+
+/* Crispy forms: auto-asterisk for required fields via required_css_class */
+.required label::after,
+.required .form-label::after {
+    content: ' *';
+    color: #dc3545;
+    font-weight: 700;
+}
+
+/* Don't add asterisk to checkbox/radio labels within required containers */
+.required .form-check-label::after {
+    content: none;
+}
+
+/* Validation warning message styling */
+.field-validation-msg {
+    display: none;
+    font-size: 0.8125rem;
+    color: #dc3545;
+    margin-top: 0.25rem;
+}
+
+.field-validation-msg i {
+    margin-right: 4px;
+}
+
+/* Show validation message when field is invalid after user interaction */
+.was-validated .form-control:invalid ~ .field-validation-msg,
+.was-validated .form-select:invalid ~ .field-validation-msg,
+.form-control.is-invalid ~ .field-validation-msg,
+.form-select.is-invalid ~ .field-validation-msg {
+    display: block;
+}
+
+/* Required field hint at the top of forms */
+.required-fields-hint {
+    font-size: 0.8125rem;
+    color: #6c757d;
+    margin-bottom: 1rem;
+}
+
+.required-fields-hint .required-asterisk {
+    font-size: 0.9rem;
+}
+
 /* End feature card styles */
 
 

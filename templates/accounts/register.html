@@ -250,23 +250,25 @@
             {% csrf_token %}
 
             <div class="mb-3">
-                <label for="id_username" class="auth-label">Username</label>
+                <label for="id_username" class="auth-label">Username <span class="required-asterisk">*</span></label>
                 {{ form.username }}
                 {% for error in form.username.errors %}
                     <div class="field-error">{{ error }}</div>
                 {% endfor %}
+                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Username is required.</div>
             </div>
 
             <div class="mb-3">
-                <label for="id_email" class="auth-label">Email</label>
+                <label for="id_email" class="auth-label">Email <span class="required-asterisk">*</span></label>
                 {{ form.email }}
                 {% for error in form.email.errors %}
                     <div class="field-error">{{ error }}</div>
                 {% endfor %}
+                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Email address is required.</div>
             </div>
 
             <div class="mb-3">
-                <label for="password1-field" class="auth-label">Password</label>
+                <label for="password1-field" class="auth-label">Password <span class="required-asterisk">*</span></label>
                 <div class="auth-input-group">
                     <input type="password" class="auth-input" name="password1" id="password1-field" placeholder="Create a password" required>
                     <button class="pw-toggle-btn" type="button" id="toggle-password1" title="Show/Hide Password">
@@ -276,10 +278,11 @@
                 {% for error in form.password1.errors %}
                     <div class="field-error">{{ error }}</div>
                 {% endfor %}
+                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Password is required.</div>
             </div>
 
             <div class="mb-3">
-                <label for="password2-field" class="auth-label">Confirm Password</label>
+                <label for="password2-field" class="auth-label">Confirm Password <span class="required-asterisk">*</span></label>
                 <div class="auth-input-group">
                     <input type="password" class="auth-input" name="password2" id="password2-field" placeholder="Confirm your password" required>
                     <button class="pw-toggle-btn" type="button" id="toggle-password2" title="Show/Hide Password">
@@ -289,6 +292,7 @@
                 {% for error in form.password2.errors %}
                     <div class="field-error">{{ error }}</div>
                 {% endfor %}
+                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Please confirm your password.</div>
             </div>
 
             {% if form.non_field_errors %}

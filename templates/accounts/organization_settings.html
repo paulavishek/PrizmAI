@@ -36,9 +36,10 @@
           <form method="post">
             {% csrf_token %}
             <div class="mb-3">
-              <label for="workspaceName" class="form-label small fw-semibold">Workspace Name</label>
+              <label for="workspaceName" class="form-label small fw-semibold">Workspace Name <span class="required-asterisk">*</span></label>
               <input type="text" class="form-control" id="workspaceName" name="workspace_name"
                      value="{{ organization.name }}" maxlength="100" required>
+              <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Workspace name is required.</div>
             </div>
             <button type="submit" class="btn btn-primary btn-sm">
               <i class="fas fa-save me-1"></i>Save
