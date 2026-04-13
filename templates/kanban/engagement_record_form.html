@@ -21,6 +21,8 @@
                     <form method="post" class="needs-validation" novalidate>
                         {% csrf_token %}
                         
+                        <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
+                        
                         <!-- Engagement Details -->
                         <div class="row mb-3">
                             <label class="col-md-12 text-muted small mb-2">Engagement Details</label>
@@ -28,14 +30,14 @@
                         
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="{{ form.date.id_for_label }}" class="form-label">Date <span class="text-danger">*</span></label>
+                                <label for="{{ form.date.id_for_label }}" class="form-label">Date <span class="required-asterisk">*</span></label>
                                 {{ form.date }}
                                 {% if form.date.errors %}
                                 <div class="invalid-feedback d-block">{{ form.date.errors }}</div>
                                 {% endif %}
                             </div>
                             <div class="col-md-6">
-                                <label for="{{ form.communication_channel.id_for_label }}" class="form-label">Communication Channel <span class="text-danger">*</span></label>
+                                <label for="{{ form.communication_channel.id_for_label }}" class="form-label">Communication Channel <span class="required-asterisk">*</span></label>
                                 {{ form.communication_channel }}
                                 {% if form.communication_channel.errors %}
                                 <div class="invalid-feedback d-block">{{ form.communication_channel.errors }}</div>
@@ -45,7 +47,7 @@
                         
                         <div class="row mb-3">
                             <div class="col-md-12">
-                                <label for="{{ form.description.id_for_label }}" class="form-label">Description <span class="text-danger">*</span></label>
+                                <label for="{{ form.description.id_for_label }}" class="form-label">Description <span class="required-asterisk">*</span></label>
                                 {{ form.description }}
                                 <small class="form-text text-muted">What did you discuss or accomplish?</small>
                                 {% if form.description.errors %}
@@ -69,7 +71,7 @@
                         
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="{{ form.engagement_sentiment.id_for_label }}" class="form-label">Engagement Sentiment <span class="text-danger">*</span></label>
+                                <label for="{{ form.engagement_sentiment.id_for_label }}" class="form-label">Engagement Sentiment <span class="required-asterisk">*</span></label>
                                 {{ form.engagement_sentiment }}
                                 <small class="form-text text-muted">How was the stakeholder's response?</small>
                             </div>

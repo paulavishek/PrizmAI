@@ -30,12 +30,14 @@
                 </p>
                 <form method="post">
                     {% csrf_token %}
+                    <p class="required-fields-hint">* indicates a required field</p>
 
                     <div class="mb-3">
-                        <label for="name" class="form-label fw-semibold">Goal Name <span class="text-danger">*</span></label>
+                        <label for="name" class="form-label fw-semibold">Goal Name <span class="required-asterisk">*</span></label>
                         <input type="text" class="form-control" id="name" name="name"
                                placeholder="e.g., Increase Market Share in Asia by 15%"
                                value="{{ post.name|default:'' }}" required>
+                        <div class="field-validation-msg">Goal name is required.</div>
                         <div class="form-text">Use a clear, outcome-oriented statement.</div>
                     </div>
 

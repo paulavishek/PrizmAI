@@ -125,14 +125,16 @@
             <!-- Basic Information -->
             <div class="form-section">
                 <h5 class="mb-3">Page Details</h5>
+                <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                 
                 <div class="mb-3">
-                    {{ form.title.label_tag }}
+                    <label for="{{ form.title.id_for_label }}" class="form-label">Title <span class="required-asterisk">*</span></label>
                     {{ form.title|add_class:"form-control form-control-lg" }}
                     {% if form.title.help_text %}
                         <small class="help-text">{{ form.title.help_text|safe }}</small>
                     {% endif %}
                     {{ form.title.errors }}
+                    <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Page title is required.</div>
                 </div>
                 
                 <div class="row">
@@ -154,6 +156,7 @@
             <!-- Page Content -->
             <div class="form-section">
                 <h5 class="mb-3">Content</h5>
+                <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                 
                 <ul class="nav nav-tabs mb-3" role="tablist">
                     <li class="nav-item" role="presentation">

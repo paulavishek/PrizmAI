@@ -9,6 +9,7 @@ from .models import (
 
 
 class RequirementForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Requirement
         fields = [
@@ -46,6 +47,7 @@ class RequirementForm(forms.ModelForm):
 
 
 class RequirementCategoryForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = RequirementCategory
         fields = ['name', 'description']
@@ -56,6 +58,7 @@ class RequirementCategoryForm(forms.ModelForm):
 
 
 class ProjectObjectiveForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = ProjectObjective
         fields = ['title', 'description']

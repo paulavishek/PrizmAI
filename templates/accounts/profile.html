@@ -173,9 +173,10 @@
                     </div>
 
                     <!-- Remaining form fields (excluding profile_picture which is rendered above) -->
+                    <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                     {% for field in form %}
                         {% if field.html_name != 'profile_picture' %}
-                        <div class="mb-3">
+                        <div class="mb-3 {% if field.field.required %}required{% endif %}">
                             {{ field.label_tag }}
                             {{ field }}
                             {% if field.help_text %}
@@ -184,6 +185,9 @@
                             {% for error in field.errors %}
                                 <div class="invalid-feedback d-block">{{ error }}</div>
                             {% endfor %}
+                            {% if field.field.required %}
+                            <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> This field is required.</div>
+                            {% endif %}
                         </div>
                         {% endif %}
                     {% endfor %}

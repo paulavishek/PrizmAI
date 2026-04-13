@@ -12,6 +12,7 @@ from .stakeholder_models import (
 
 class ProjectStakeholderForm(forms.ModelForm):
     """Form for creating and updating project stakeholders"""
+    required_css_class = 'required'
     
     class Meta:
         model = ProjectStakeholder
@@ -67,6 +68,7 @@ class ProjectStakeholderForm(forms.ModelForm):
 
 class StakeholderTaskInvolvementForm(forms.ModelForm):
     """Form for recording stakeholder involvement in tasks"""
+    required_css_class = 'required'
     
     class Meta:
         model = StakeholderTaskInvolvement
@@ -99,6 +101,7 @@ class StakeholderTaskInvolvementForm(forms.ModelForm):
 
 class StakeholderEngagementRecordForm(forms.ModelForm):
     """Form for recording stakeholder engagement activities"""
+    required_css_class = 'required'
     
     class Meta:
         model = StakeholderEngagementRecord
@@ -148,6 +151,7 @@ class StakeholderEngagementRecordForm(forms.ModelForm):
 
 class StakeholderTagForm(forms.ModelForm):
     """Form for creating and updating stakeholder tags"""
+    required_css_class = 'required'
     
     class Meta:
         model = StakeholderTag

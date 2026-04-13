@@ -35,6 +35,7 @@ class LocalDateTimeInput(forms.DateTimeInput):
 
 
 class BoardForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Board
         fields = ['name', 'description', 'num_phases']
@@ -54,6 +55,7 @@ class BoardForm(forms.ModelForm):
         }
 
 class ColumnForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Column
         fields = ['name']
@@ -62,6 +64,7 @@ class ColumnForm(forms.ModelForm):
         }
 
 class TaskLabelForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = TaskLabel
         fields = ['name', 'color', 'category']

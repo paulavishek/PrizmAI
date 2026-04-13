@@ -32,10 +32,11 @@
                 </div>
                 <form method="post">
                     {% csrf_token %}
+                    <p class="required-fields-hint">* indicates a required field</p>
                     <div class="mb-3">
-                        <label for="id_name" class="form-label fw-semibold">Strategy Name <span class="text-danger">*</span></label>
+                        <label for="id_name" class="form-label fw-semibold">Strategy Name <span class="required-asterisk">*</span></label>
                         {{ form.name }}
-                    </div>
+                        <div class="field-validation-msg">Strategy name is required.</div>
                     <div class="mb-3">
                         <label for="id_description" class="form-label fw-semibold">Solution Description</label>
                         {{ form.description }}
@@ -58,7 +59,7 @@
                     </div>
 
                     <hr>
-                    <h6 class="fw-semibold mb-3">Change Reason <span class="text-danger">*</span></h6>
+                    <h6 class="fw-semibold mb-3">Change Reason <span class="required-asterisk">*</span></h6>
                     <div class="mb-3">
                         {% for radio in form.change_reason %}
                         <div class="form-check">

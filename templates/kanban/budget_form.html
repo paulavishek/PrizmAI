@@ -24,26 +24,30 @@
                         </div>
                         {% endif %}
                         
+                        <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
+                        
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="{{ form.allocated_budget.id_for_label }}" class="form-label">
-                                    Allocated Budget *
+                                    Allocated Budget <span class="required-asterisk">*</span>
                                 </label>
                                 {{ form.allocated_budget }}
                                 {% if form.allocated_budget.errors %}
                                 <div class="text-danger">{{ form.allocated_budget.errors }}</div>
                                 {% endif %}
+                                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Please enter the allocated budget.</div>
                                 <small class="form-text text-muted">{{ form.allocated_budget.help_text }}</small>
                             </div>
                             
                             <div class="col-md-6 mb-3">
                                 <label for="{{ form.currency.id_for_label }}" class="form-label">
-                                    Currency *
+                                    Currency <span class="required-asterisk">*</span>
                                 </label>
                                 {{ form.currency }}
                                 {% if form.currency.errors %}
                                 <div class="text-danger">{{ form.currency.errors }}</div>
                                 {% endif %}
+                                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Please select a currency.</div>
                             </div>
                         </div>
                         
