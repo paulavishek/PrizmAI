@@ -352,8 +352,16 @@ def _call_gemini_for_autopsy(board_snapshot, events, past_scope_notes, project_c
         'response_mime_type': 'application/json',
     }
 
-    response = model.generate_content(user_prompt, generation_config=generation_config)
-    raw = response.text.strip()
+    from kanban_board.ai_cache import get_cached_ai_response
+
+    full_prompt = f"{system_prompt}\n---\n{user_prompt}"
+    raw = get_cached_ai_response(
+        prompt=full_prompt,
+        model_call=lambda: model.generate_content(user_prompt, generation_config=generation_config),
+        operation='scope_autopsy',
+    )
+    if not raw:
+        raise RuntimeError('AI scope autopsy returned no response')
 
     # Strip markdown fences if accidentally returned
     if '```json' in raw:

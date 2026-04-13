@@ -8,6 +8,7 @@ import logging
 
 import google.generativeai as genai
 from django.conf import settings
+from kanban_board.ai_cache import get_cached_ai_response
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +136,14 @@ Respond with ONLY valid JSON in the following exact schema (no markdown fences, 
             'max_output_tokens': 8192,  # Large schema needs ample room
         }
 
-        response = model.generate_content(prompt, generation_config=generation_config)
-        raw = response.text.strip()
+        raw = get_cached_ai_response(
+            prompt=prompt,
+            model_call=lambda: model.generate_content(prompt, generation_config=generation_config),
+            operation='triple_constraint',
+            context_id=f"board_{board.id}",
+        )
+        if not raw:
+            return _error_response('AI analysis unavailable. Please try again.')
 
         # Strip markdown fences if present
         if raw.startswith('```'):

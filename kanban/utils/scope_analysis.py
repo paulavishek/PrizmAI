@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.db.models import Q, Sum
 import google.generativeai as genai
 from django.conf import settings
+from kanban_board.ai_cache import get_cached_ai_response
 
 
 def analyze_scope_changes_with_ai(snapshot, baseline_snapshot):
@@ -113,12 +114,18 @@ Format your response as JSON:
             'max_output_tokens': 2048,  # Adequate for scope analysis JSON
         }
         
-        # Generate analysis
-        response = model.generate_content(prompt, generation_config=generation_config)
+        # Generate analysis with caching
+        response_text = get_cached_ai_response(
+            prompt=prompt,
+            model_call=lambda: model.generate_content(prompt, generation_config=generation_config),
+            operation='scope_analysis',
+            context_id=f"board_{board.id}",
+        )
+        if not response_text:
+            return generate_rule_based_analysis(scope_pct, complexity_pct, task_change, complexity_change)
         
         # Parse response
         import json
-        response_text = response.text.strip()
         
         # Remove markdown code blocks if present
         if response_text.startswith('```json'):

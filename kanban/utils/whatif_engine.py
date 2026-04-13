@@ -19,6 +19,7 @@ from django.db.models import Sum, Avg
 from kanban.models import Board, Task
 from kanban.budget_models import ProjectBudget
 from kanban.burndown_models import BurndownPrediction, TeamVelocitySnapshot
+from kanban_board.ai_cache import get_cached_ai_response
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,15 @@ class WhatIfEngine:
                 'top_k': 40,
                 'max_output_tokens': 4096,
             }
-            response = model.generate_content(prompt, generation_config=config)
-            raw = response.text.strip()
+
+            raw = get_cached_ai_response(
+                prompt=prompt,
+                model_call=lambda: model.generate_content(prompt, generation_config=config),
+                operation='whatif_analysis',
+                context_id=f"board_{self.board.id}",
+            )
+            if not raw:
+                return {'error': 'AI analysis unavailable. Please try again.'}
 
             # Strip markdown fences
             if raw.startswith('```'):
