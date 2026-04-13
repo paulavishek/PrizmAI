@@ -2760,6 +2760,8 @@
                 applyCustomStyling();
                 drawCustomDependencyLines();
                 refreshSplitView();
+                // Keep today visible after view mode change
+                scrollToToday();
                 return;
             } catch (e) {
                 console.warn('Error changing view mode, reinitializing chart:', e);
@@ -3000,6 +3002,9 @@
 
         // Draw today line on top of everything
         drawTodayLine();
+
+        // Auto-scroll so today's date is visible in the viewport
+        scrollToToday();
     }
 
     // ============================================
@@ -3170,6 +3175,49 @@
         group.appendChild(text);
 
         ganttSvg.appendChild(group);
+    }
+
+    // ============================================
+    // SCROLL-TO-TODAY — centre the timeline on today's date after render
+    // ============================================
+    function scrollToToday() {
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        if (!timelinePanel || !ganttChart) return;
+
+        const ganttStart = ganttChart.gantt_start;
+        if (!ganttStart) return;
+        const columnWidth = (ganttChart.options && ganttChart.options.column_width) || 38;
+        const step = (ganttChart.options && ganttChart.options.step) || 24;
+
+        const today = new Date();
+        const hoursDiff = (today - ganttStart) / (1000 * 60 * 60);
+        const todayX = (hoursDiff / step) * columnWidth;
+
+        // Scroll so today is roughly one-third from the left edge of the viewport
+        const viewportWidth = timelinePanel.clientWidth;
+        const targetScroll = Math.max(0, todayX - viewportWidth / 3);
+        timelinePanel.scrollLeft = targetScroll;
+    }
+
+    // ============================================
+    // SCROLL-TO-TASK — centre the timeline on a specific task's bar
+    // ============================================
+    function scrollToTaskBar(taskId) {
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        if (!timelinePanel) return;
+
+        const barWrapper = document.querySelector(`.bar-wrapper[data-id="${taskId}"]`);
+        if (!barWrapper) return;
+        const bar = barWrapper.querySelector('.bar');
+        if (!bar) return;
+
+        const barX = parseFloat(bar.getAttribute('x') || 0);
+        const barW = parseFloat(bar.getAttribute('width') || 0);
+        const barCenter = barX + barW / 2;
+
+        const viewportWidth = timelinePanel.clientWidth;
+        const targetScroll = Math.max(0, barCenter - viewportWidth / 2);
+        timelinePanel.scrollLeft = targetScroll;
     }
 
     // ============================================
@@ -3916,6 +3964,9 @@
         document.getElementById('drawer-assignee').value = task.assigned_to_id ? String(task.assigned_to_id) : '';
         document.getElementById('drawer-start-date').value = task.start || '';
         document.getElementById('drawer-due-date').value = task.end || '';
+
+        // Scroll timeline so the selected task's bar is visible
+        scrollToTaskBar(taskId);
     }
 
     function closeTriageDrawer() {
@@ -5130,6 +5181,9 @@
         requestAnimationFrame(() => {
             drawCustomDependencyLines();
         });
+
+        // Auto-scroll so today's date is visible in the viewport
+        scrollToToday();
     }
 
     // Apply custom styling for phases
