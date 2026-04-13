@@ -7,6 +7,7 @@ from django.conf import settings
 from typing import List, Dict
 import json
 import time
+from kanban_board.ai_cache import ai_cache_manager
 
 
 class AIConflictResolutionEngine:
@@ -48,8 +49,28 @@ class AIConflictResolutionEngine:
         prompt = self._build_conflict_resolution_prompt(conflict)
         
         try:
+            # Check cache first
+            cache_context = f"conflict_{conflict.id}"
+            cached = ai_cache_manager.get(prompt, 'conflict_suggestion', cache_context)
+            if cached is not None:
+                suggestions = self._parse_ai_suggestions(cached, conflict)
+                if user:
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    track_ai_request(
+                        user=user,
+                        feature='conflict_resolution',
+                        request_type='suggest',
+                        board_id=conflict.board.id if conflict.board else None,
+                        success=True,
+                        response_time_ms=response_time_ms
+                    )
+                return suggestions
+
             # Generate AI response with proper config
             response = self.model.generate_content(prompt, generation_config=self.generation_config)
+            
+            # Cache the raw response text
+            ai_cache_manager.set(prompt, response.text, 'conflict_suggestion', cache_context)
             
             # Parse suggestions
             suggestions = self._parse_ai_suggestions(response.text, conflict)
@@ -377,14 +398,20 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
 """
         
         try:
-            response = self.model.generate_content(prompt, generation_config=self.generation_config)
+            # Check cache first
+            cache_context = f"enhance_conflict_{conflict.id}"
+            cached_text = ai_cache_manager.get(prompt, 'conflict_suggestion', cache_context)
+            if cached_text is None:
+                response = self.model.generate_content(prompt, generation_config=self.generation_config)
+                cached_text = response.text
+                ai_cache_manager.set(prompt, cached_text, 'conflict_suggestion', cache_context)
             
             # Parse and apply enhancements
-            json_start = response.text.find('{')
-            json_end = response.text.rfind('}') + 1
+            json_start = cached_text.find('{')
+            json_end = cached_text.rfind('}') + 1
             
             if json_start >= 0 and json_end > json_start:
-                json_str = response.text[json_start:json_end]
+                json_str = cached_text[json_start:json_end]
                 data = json.loads(json_str)
                 
                 for enhancement in data.get('enhancements', []):

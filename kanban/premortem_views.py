@@ -211,6 +211,7 @@ def _call_gemini(system_prompt, user_prompt):
     Raises on failure.
     """
     import google.generativeai as genai
+    from kanban_board.ai_cache import get_cached_ai_response
 
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model = genai.GenerativeModel(
@@ -225,8 +226,15 @@ def _call_gemini(system_prompt, user_prompt):
         'max_output_tokens': 4096,
     }
 
-    response = model.generate_content(user_prompt, generation_config=generation_config)
-    raw = response.text.strip()
+    # Use combined prompt as cache key (system + user)
+    full_prompt = f"{system_prompt}\n---\n{user_prompt}"
+    raw = get_cached_ai_response(
+        prompt=full_prompt,
+        model_call=lambda: model.generate_content(user_prompt, generation_config=generation_config),
+        operation='premortem',
+    )
+    if not raw:
+        raise RuntimeError('AI pre-mortem analysis returned no response')
 
     # Strip markdown fences if accidentally returned
     if raw.startswith('```'):

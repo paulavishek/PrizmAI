@@ -216,10 +216,13 @@ def stress_test_dashboard(request, board_id):
 @demo_ai_guard
 def run_stress_test(request, board_id):
     """Run a new Red Team AI stress test session."""
+    from kanban_board.ai_cache import get_cached_ai_response
+
     board = get_object_or_404(Board, id=board_id)
     board_data = build_board_stress_test_data(board, request.user)
 
     start_time = time.time()
+    user_prompt = build_stress_test_user_prompt(board_data)
 
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -227,16 +230,22 @@ def run_stress_test(request, board_id):
             'gemini-2.5-flash',
             system_instruction=STRESS_TEST_SYSTEM_PROMPT,
         )
-        response = model.generate_content(
-            build_stress_test_user_prompt(board_data),
-            generation_config=genai.GenerationConfig(
-                temperature=0.4,
-                max_output_tokens=16384,
-                response_mime_type="application/json",
-            ),
+        gen_config = genai.GenerationConfig(
+            temperature=0.4,
+            max_output_tokens=16384,
+            response_mime_type="application/json",
         )
 
-        raw = response.text.strip()
+        full_prompt = f"{STRESS_TEST_SYSTEM_PROMPT}\n---\n{user_prompt}"
+        raw = get_cached_ai_response(
+            prompt=full_prompt,
+            model_call=lambda: model.generate_content(user_prompt, generation_config=gen_config),
+            operation='stress_test',
+            context_id=f"board_{board.id}",
+        )
+        if not raw:
+            raise RuntimeError('AI stress test returned no response')
+
         logger.info("Stress Test raw response length: %d chars", len(raw))
         result = _parse_gemini_json(raw)
 
