@@ -153,6 +153,13 @@ def requirement_detail(request, board_id, pk):
     role = _get_user_role(membership, board, request.user)
     can_edit = role.lower() in ('owner', 'admin', 'member')
 
+    # Available tasks for linking (exclude already linked ones)
+    from kanban.models import Task
+    already_linked_ids = requirement.linked_tasks.values_list('id', flat=True)
+    available_tasks = Task.objects.filter(
+        column__board=board
+    ).exclude(id__in=already_linked_ids).order_by('title')[:50]
+
     context = {
         'board': board,
         'requirement': requirement,
@@ -164,6 +171,8 @@ def requirement_detail(request, board_id, pk):
         'comments': comments,
         'comment_form': comment_form,
         'can_edit': can_edit,
+        'status_choices': Requirement.STATUS_CHOICES,
+        'available_tasks': available_tasks,
     }
     return render(request, 'requirements/requirement_detail.html', context)
 
@@ -352,10 +361,31 @@ def traceability_matrix(request, board_id):
         return redirect('board_list')
 
     objectives = ProjectObjective.objects.filter(board=board)
-    requirements = Requirement.objects.filter(board=board).prefetch_related(
+    requirements = list(Requirement.objects.filter(board=board).prefetch_related(
         'objectives', 'linked_tasks', 'linked_strategies',
-    )
-    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to')
+    ))
+    tasks = list(Task.objects.filter(column__board=board).select_related('column', 'assigned_to'))
+
+    # Build objectives × requirements matrix
+    obj_matrix = []
+    for obj in objectives:
+        obj_req_ids = set(obj.requirements.values_list('id', flat=True))
+        links = [req.id in obj_req_ids for req in requirements]
+        obj_matrix.append({'objective': obj, 'links': links})
+
+    # Build requirements × tasks matrix
+    task_matrix = []
+    covered_count = 0
+    for req in requirements:
+        req_task_ids = set(req.linked_tasks.values_list('id', flat=True))
+        links = [t.id in req_task_ids for t in tasks]
+        task_matrix.append({'requirement': req, 'links': links})
+        if any(links):
+            covered_count += 1
+
+    total = len(requirements)
+    uncovered_count = total - covered_count
+    coverage_pct = round((covered_count / total) * 100) if total > 0 else 0
 
     role = _get_user_role(membership, board, request.user)
     can_edit = role.lower() in ('owner', 'admin', 'member')
@@ -365,6 +395,11 @@ def traceability_matrix(request, board_id):
         'objectives': objectives,
         'requirements': requirements,
         'tasks': tasks,
+        'obj_matrix': obj_matrix,
+        'task_matrix': task_matrix,
+        'covered_count': covered_count,
+        'uncovered_count': uncovered_count,
+        'coverage_pct': coverage_pct,
         'can_edit': can_edit,
     }
     return render(request, 'requirements/traceability_matrix.html', context)
