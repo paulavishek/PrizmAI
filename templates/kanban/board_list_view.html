@@ -1,0 +1,500 @@
+{% extends 'base.html' %}
+{% load static kanban_filters %}
+
+{% block title %}{{ board.name }} - List View{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ============================================
+       LIST VIEW STYLES
+       ============================================ */
+
+    .list-view-container {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .list-view-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .list-view-header h2 {
+        margin: 0;
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    /* ── Filter Bar ────────────────────────────── */
+    .list-filter-bar {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+    }
+    .list-filter-bar .form-select,
+    .list-filter-bar .form-control {
+        font-size: .8125rem;
+        border-radius: 6px;
+    }
+    .list-filter-bar label {
+        font-size: .75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: #64748b;
+        margin-bottom: 4px;
+    }
+
+    /* ── Group Header ──────────────────────────── */
+    .list-group-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        background: #f1f5f9;
+        border-radius: 8px;
+        margin-bottom: 2px;
+        cursor: pointer;
+        user-select: none;
+        transition: background .15s;
+    }
+    .list-group-header:hover { background: #e2e8f0; }
+    .list-group-header .group-color-dot {
+        width: 12px; height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .list-group-header .group-label {
+        font-weight: 600;
+        font-size: .9rem;
+        color: #1e293b;
+    }
+    .list-group-header .group-count {
+        font-size: .75rem;
+        color: #64748b;
+        background: #fff;
+        padding: 2px 8px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+    .list-group-header .chevron {
+        margin-left: auto;
+        transition: transform .2s;
+        color: #94a3b8;
+    }
+    .list-group-header.collapsed .chevron { transform: rotate(-90deg); }
+
+    /* ── Task Table ─────────────────────────────── */
+    .list-task-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-bottom: 16px;
+    }
+    .list-task-table th {
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: #64748b;
+        padding: 8px 12px;
+        border-bottom: 2px solid #e2e8f0;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        z-index: 1;
+    }
+    .list-task-table th a {
+        color: #64748b;
+        text-decoration: none;
+    }
+    .list-task-table th a:hover { color: #334155; }
+    .list-task-table th .sort-icon { font-size: .6rem; margin-left: 3px; }
+    .list-task-table td {
+        padding: 10px 12px;
+        font-size: .8125rem;
+        color: #334155;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+    .list-task-table tbody tr {
+        transition: background .12s;
+    }
+    .list-task-table tbody tr:hover {
+        background: #f8fafc;
+    }
+    .list-task-table tbody tr:last-child td { border-bottom: none; }
+
+    /* Task title link */
+    .task-title-link {
+        color: #1e293b;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .task-title-link:hover { color: #3b82f6; text-decoration: underline; }
+
+    /* Priority badges */
+    .priority-dot {
+        display: inline-block;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    .priority-urgent { background: #dc3545; }
+    .priority-high   { background: #fd7e14; }
+    .priority-medium { background: #ffc107; }
+    .priority-low    { background: #198754; }
+
+    /* Progress bar (compact) */
+    .list-progress-bar {
+        width: 80px;
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 6px;
+    }
+    .list-progress-bar .fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width .3s;
+    }
+
+    /* Labels */
+    .task-label-chip {
+        display: inline-block;
+        font-size: .65rem;
+        padding: 2px 7px;
+        border-radius: 4px;
+        margin-right: 3px;
+        margin-bottom: 2px;
+        color: #fff;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    /* Overdue highlight */
+    .due-overdue { color: #dc3545; font-weight: 600; }
+    .due-soon { color: #f59e0b; }
+
+    /* Assignee avatar */
+    .list-avatar {
+        width: 24px; height: 24px;
+        border-radius: 50%;
+        background: #6366f1;
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .65rem;
+        font-weight: 600;
+        margin-right: 5px;
+        flex-shrink: 0;
+    }
+
+    /* Empty state */
+    .list-empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #94a3b8;
+    }
+    .list-empty-state i { font-size: 3rem; margin-bottom: 16px; }
+
+    /* Summary bar */
+    .list-summary-bar {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+    .summary-chip {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px 16px;
+        min-width: 120px;
+        text-align: center;
+    }
+    .summary-chip .chip-value {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .summary-chip .chip-label {
+        font-size: .7rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <div class="mb-2">
+        <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
+            <i class="fas fa-arrow-left"></i> Back to Board
+        </a>
+    </div>
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-2">
+        <div>
+            <h1 style="font-size:20px;font-weight:500;margin-bottom:0;" class="mb-0">
+                <i class="fas fa-list me-2 text-primary"></i>{{ board.name }}
+            </h1>
+            <p class="text-muted mb-0">List View — all tasks in a sortable table</p>
+        </div>
+    </div>
+
+    <!-- View Mode Tabs -->
+    <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        {% if features.show_gantt %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+        {% endif %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+        {% if features.show_commitments %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
+        {% endif %}
+    </ul>
+
+    <!-- Summary Chips -->
+    <div class="list-summary-bar">
+        <div class="summary-chip">
+            <div class="chip-value">{{ total_count }}</div>
+            <div class="chip-label">Total Tasks</div>
+        </div>
+        {% for group in grouped_tasks %}
+        <div class="summary-chip">
+            <div class="chip-value">{{ group.count }}</div>
+            <div class="chip-label">{{ group.label }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="list-filter-bar">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label>Search</label>
+                <input type="text" name="search" class="form-control form-control-sm" placeholder="Search tasks…" value="{{ search_query }}">
+            </div>
+            <div class="col-md-2">
+                <label>Status</label>
+                <select name="column" class="form-select form-select-sm">
+                    <option value="">All Columns</option>
+                    {% for col in columns %}
+                    <option value="{{ col.id }}" {% if column_filter == col.id|stringformat:"d" %}selected{% endif %}>{{ col.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label>Priority</label>
+                <select name="priority" class="form-select form-select-sm">
+                    <option value="">All Priorities</option>
+                    {% for value, display in priority_choices %}
+                    <option value="{{ value }}" {% if priority_filter == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label>Assignee</label>
+                <select name="assignee" class="form-select form-select-sm">
+                    <option value="">All Assignees</option>
+                    <option value="unassigned" {% if assignee_filter == "unassigned" %}selected{% endif %}>Unassigned</option>
+                    {% for user in assignees %}
+                    <option value="{{ user.id }}" {% if assignee_filter == user.id|stringformat:"d" %}selected{% endif %}>{{ user.get_full_name|default:user.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label>Group</label>
+                <select name="group" class="form-select form-select-sm">
+                    <option value="column" {% if group_by == "column" %}selected{% endif %}>Status</option>
+                    <option value="priority" {% if group_by == "priority" %}selected{% endif %}>Priority</option>
+                    <option value="assignee" {% if group_by == "assignee" %}selected{% endif %}>Assignee</option>
+                    <option value="none" {% if group_by == "none" %}selected{% endif %}>None</option>
+                </select>
+            </div>
+            <!-- Preserve sort state -->
+            <input type="hidden" name="sort" value="{{ sort_by }}">
+            <input type="hidden" name="dir" value="{{ sort_dir }}">
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-filter me-1"></i>Apply</button>
+                <a href="{% url 'board_list_view' board.id %}" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- List View Content -->
+    <div class="list-view-container">
+        {% if total_count == 0 %}
+        <div class="list-empty-state">
+            <i class="fas fa-inbox d-block"></i>
+            <h5>No tasks found</h5>
+            <p>{% if search_query or column_filter or priority_filter or assignee_filter %}Try adjusting your filters.{% else %}Create tasks on the Kanban board to see them here.{% endif %}</p>
+        </div>
+        {% else %}
+
+        {% for group in grouped_tasks %}
+        <!-- Group: {{ group.label }} -->
+        <div class="list-group-section mb-3">
+            {% if group_by != "none" %}
+            <div class="list-group-header" data-bs-toggle="collapse" data-bs-target="#group-{{ forloop.counter }}" aria-expanded="true">
+                {% if group.color %}
+                <span class="group-color-dot" style="background:{{ group.color }};"></span>
+                {% endif %}
+                <span class="group-label">{{ group.label }}</span>
+                <span class="group-count">{{ group.count }} task{{ group.count|pluralize }}</span>
+                <i class="fas fa-chevron-down chevron"></i>
+            </div>
+            {% endif %}
+
+            <div id="group-{{ forloop.counter }}" class="collapse show">
+                {% if group.tasks %}
+                <table class="list-task-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 35%;">
+                                {% with sort_field="title" %}
+                                <a href="?sort=title&dir={% if sort_by == 'title' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&column={{ column_filter }}&priority={{ priority_filter }}&assignee={{ assignee_filter }}&group={{ group_by }}">
+                                    Title
+                                    {% if sort_by == "title" %}<i class="fas fa-sort-{{ sort_dir|default:'asc' }} sort-icon"></i>{% endif %}
+                                </a>
+                                {% endwith %}
+                            </th>
+                            <th style="width: 10%;">
+                                <a href="?sort=column&dir={% if sort_by == 'column' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&column={{ column_filter }}&priority={{ priority_filter }}&assignee={{ assignee_filter }}&group={{ group_by }}">
+                                    Status
+                                    {% if sort_by == "column" %}<i class="fas fa-sort-{{ sort_dir|default:'asc' }} sort-icon"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 10%;">
+                                <a href="?sort=priority&dir={% if sort_by == 'priority' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&column={{ column_filter }}&priority={{ priority_filter }}&assignee={{ assignee_filter }}&group={{ group_by }}">
+                                    Priority
+                                    {% if sort_by == "priority" %}<i class="fas fa-sort-{{ sort_dir|default:'asc' }} sort-icon"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 14%;">
+                                <a href="?sort=assignee&dir={% if sort_by == 'assignee' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&column={{ column_filter }}&priority={{ priority_filter }}&assignee={{ assignee_filter }}&group={{ group_by }}">
+                                    Assignee
+                                    {% if sort_by == "assignee" %}<i class="fas fa-sort-{{ sort_dir|default:'asc' }} sort-icon"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 11%;">
+                                <a href="?sort=due_date&dir={% if sort_by == 'due_date' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&column={{ column_filter }}&priority={{ priority_filter }}&assignee={{ assignee_filter }}&group={{ group_by }}">
+                                    Due Date
+                                    {% if sort_by == "due_date" %}<i class="fas fa-sort-{{ sort_dir|default:'asc' }} sort-icon"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 10%;">
+                                <a href="?sort=progress&dir={% if sort_by == 'progress' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&column={{ column_filter }}&priority={{ priority_filter }}&assignee={{ assignee_filter }}&group={{ group_by }}">
+                                    Progress
+                                    {% if sort_by == "progress" %}<i class="fas fa-sort-{{ sort_dir|default:'asc' }} sort-icon"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width: 10%;">Labels</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in group.tasks %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'task_detail' task.id %}" class="task-title-link">{{ task.title }}</a>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border" style="font-size:.7rem;">{{ task.column.name }}</span>
+                            </td>
+                            <td>
+                                {% if task.priority %}
+                                <span class="priority-dot priority-{{ task.priority }}"></span>{{ task.get_priority_display }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.assigned_to %}
+                                <span class="list-avatar">{{ task.assigned_to.username|make_list|first|upper }}</span>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
+                                {% else %}
+                                <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.due_date %}
+                                    {% now "Y-m-d" as today_str %}
+                                    {% with due=task.due_date|date:"Y-m-d" %}
+                                    <span class="{% if due < today_str and task.progress < 100 %}due-overdue{% endif %}">
+                                        {{ task.due_date|date:"M d, Y" }}
+                                    </span>
+                                    {% endwith %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="list-progress-bar">
+                                        <div class="fill" style="width:{{ task.progress }}%;background:{% if task.progress == 100 %}#22c55e{% elif task.progress >= 50 %}#3b82f6{% elif task.progress > 0 %}#f59e0b{% else %}#e2e8f0{% endif %};"></div>
+                                    </div>
+                                    <span style="font-size:.75rem;">{{ task.progress }}%</span>
+                                </div>
+                            </td>
+                            <td>
+                                {% for label in task.labels.all %}
+                                <span class="task-label-chip" style="background:{{ label.color|default:'#6366f1' }};">{{ label.name }}</span>
+                                {% empty %}
+                                <span class="text-muted">—</span>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="text-center text-muted py-3" style="font-size:.85rem;">
+                    <i class="fas fa-check-circle me-1"></i>No tasks in this group
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Toggle group collapse chevron animation
+document.querySelectorAll('.list-group-header').forEach(function(header) {
+    var target = document.querySelector(header.getAttribute('data-bs-target'));
+    if (target) {
+        target.addEventListener('hidden.bs.collapse', function() {
+            header.classList.add('collapsed');
+        });
+        target.addEventListener('shown.bs.collapse', function() {
+            header.classList.remove('collapsed');
+        });
+    }
+});
+</script>
+{% endblock %}
