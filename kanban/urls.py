@@ -100,6 +100,7 @@ urlpatterns = [
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
     path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
+    path('boards/<int:board_id>/list/', views.board_list_view, name='board_list_view'),
 
     # -----------------------------------------------------------------------
     # Unified Cross-Board Calendar

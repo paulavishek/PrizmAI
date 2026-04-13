@@ -1783,7 +1783,114 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             stats['tasks'] += board_tasks
             self.stdout.write(f'   ✅ {board.name}: {board_tasks} tasks created')
 
+        # Create and assign labels for marketing and bug boards
+        self._create_extra_board_labels()
+
         return stats
+
+    def _create_extra_board_labels(self):
+        """Create domain-specific + Lean labels for Marketing & Bug Tracking boards and assign to tasks."""
+        import random as _rng
+
+        MARKETING_LABELS = [
+            {'name': 'Content', 'color': '#6366f1'},
+            {'name': 'Paid Ads', 'color': '#f59e0b'},
+            {'name': 'SEO', 'color': '#10b981'},
+            {'name': 'Email', 'color': '#3b82f6'},
+            {'name': 'Social Media', 'color': '#ec4899'},
+            {'name': 'Analytics', 'color': '#8b5cf6'},
+            {'name': 'Strategy', 'color': '#14b8a6'},
+            {'name': 'Design', 'color': '#f97316'},
+        ]
+        BUG_LABELS = [
+            {'name': 'Frontend', 'color': '#3b82f6'},
+            {'name': 'Backend', 'color': '#6366f1'},
+            {'name': 'API', 'color': '#14b8a6'},
+            {'name': 'Security', 'color': '#dc3545'},
+            {'name': 'Performance', 'color': '#f59e0b'},
+            {'name': 'UX', 'color': '#ec4899'},
+            {'name': 'Database', 'color': '#8b5cf6'},
+            {'name': 'Regression', 'color': '#f97316'},
+        ]
+        LEAN_LABELS = [
+            {'name': 'Value-Added', 'color': '#28a745', 'category': 'lean'},
+            {'name': 'Necessary NVA', 'color': '#ffc107', 'category': 'lean'},
+            {'name': 'Waste/Eliminate', 'color': '#dc3545', 'category': 'lean'},
+            {'name': 'Kaizen (Improvement)', 'color': '#28a745', 'category': 'lean'},
+            {'name': 'Poka-yoke (Error-Proofing)', 'color': '#6f42c1', 'category': 'lean'},
+        ]
+
+        KEYWORD_MAPS = {
+            'marketing': {
+                'Content': ['blog', 'content', 'case study', 'white paper', 'video', 'webinar'],
+                'Paid Ads': ['ad', 'paid', 'campaign', 'launch', 'bid'],
+                'SEO': ['seo', 'keyword', 'search', 'organic', 'rank'],
+                'Email': ['email', 'nurture', 'drip', 'newsletter'],
+                'Social Media': ['social', 'linkedin', 'twitter', 'meta', 'community'],
+                'Analytics': ['analytics', 'tracking', 'utm', 'dashboard', 'report', 'kpi', 'metric'],
+                'Strategy': ['strategy', 'research', 'persona', 'audience', 'planning', 'budget', 'review'],
+                'Design': ['design', 'wireframe', 'creative', 'landing page', 'brand', 'visual'],
+            },
+            'bug': {
+                'Frontend': ['ui', 'frontend', 'css', 'layout', 'display', 'visual', 'render', 'responsive', 'button', 'modal'],
+                'Backend': ['backend', 'server', 'logic', 'process', 'service', 'handler', 'upload'],
+                'API': ['api', 'endpoint', 'request', 'response', 'rest', 'webhook'],
+                'Security': ['security', 'auth', 'permission', 'xss', 'injection', 'csrf', 'session', 'password', 'token'],
+                'Performance': ['performance', 'slow', 'memory', 'leak', 'timeout', 'latency', 'load', 'cache', 'optimization'],
+                'UX': ['ux', 'usability', 'accessibility', 'user experience', 'navigation', 'confus', 'overflow', 'truncat'],
+                'Database': ['database', 'query', 'migration', 'index', 'data', 'sql'],
+                'Regression': ['regression', 'broke', 'used to work', 'revert', 'intermittent', 'flak'],
+            },
+        }
+
+        for board, custom_labels, board_type in [
+            (self.marketing_board, MARKETING_LABELS, 'marketing'),
+            (self.bug_board, BUG_LABELS, 'bug'),
+        ]:
+            if not board:
+                continue
+
+            all_labels = []
+            for lbl in custom_labels + LEAN_LABELS:
+                obj, _ = TaskLabel.objects.get_or_create(
+                    board=board, name=lbl['name'],
+                    defaults={'color': lbl['color'], 'category': lbl.get('category', '')},
+                )
+                all_labels.append(obj)
+
+            custom_objs = [l for l in all_labels if l.name not in [x['name'] for x in LEAN_LABELS]]
+            lean_objs = [l for l in all_labels if l.name in [x['name'] for x in LEAN_LABELS]]
+            kw_map = KEYWORD_MAPS.get(board_type, {})
+
+            for task in Task.objects.filter(column__board=board, item_type='task'):
+                if task.labels.exists():
+                    continue
+                title_lower = task.title.lower()
+                desc_lower = (task.description or '').lower()
+                matching = []
+                for label_name, keywords in kw_map.items():
+                    if any(kw in title_lower or kw in desc_lower for kw in keywords):
+                        obj = next((l for l in custom_objs if l.name == label_name), None)
+                        if obj:
+                            matching.append(obj)
+                if not matching:
+                    matching = _rng.sample(custom_objs, min(2, len(custom_objs)))
+                for lbl in matching[:3]:
+                    task.labels.add(lbl)
+                # Lean label
+                r = _rng.random()
+                va = next((l for l in lean_objs if l.name == 'Value-Added'), None)
+                nnva = next((l for l in lean_objs if l.name == 'Necessary NVA'), None)
+                waste = next((l for l in lean_objs if l.name == 'Waste/Eliminate'), None)
+                if r < 0.5 and va:
+                    task.labels.add(va)
+                elif r < 0.8 and nnva:
+                    task.labels.add(nnva)
+                elif waste:
+                    task.labels.add(waste)
+
+            self.stdout.write(f'   🏷️  Labels assigned for {board.name}')
+
 
     def _marketing_tasks(self):
         alex = self.alex

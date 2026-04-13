@@ -3505,6 +3505,128 @@ def board_calendar(request, board_id):
     return render(request, 'kanban/calendar_view.html', context)
 
 
+@login_required
+def board_list_view(request, board_id):
+    """
+    List view: flat table of all tasks with sortable columns, inline filters,
+    and grouping by column (status). Provides a dense, spreadsheet-like
+    overview that complements the Kanban, Gantt, and Calendar views.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+
+    # Base queryset — tasks only (no milestones)
+    tasks = (
+        Task.objects
+        .filter(column__board=board, item_type='task')
+        .select_related('column', 'assigned_to', 'created_by')
+        .prefetch_related('labels')
+    )
+
+    # ── Filters ──────────────────────────────────────────────────────
+    search_query = request.GET.get('search', '').strip()
+    column_filter = request.GET.get('column', '')
+    priority_filter = request.GET.get('priority', '')
+    assignee_filter = request.GET.get('assignee', '')
+    label_filter = request.GET.get('label', '')
+
+    if search_query:
+        tasks = tasks.filter(
+            Q(title__icontains=search_query) | Q(description__icontains=search_query)
+        )
+    if column_filter:
+        tasks = tasks.filter(column_id=column_filter)
+    if priority_filter:
+        tasks = tasks.filter(priority=priority_filter)
+    if assignee_filter:
+        if assignee_filter == 'unassigned':
+            tasks = tasks.filter(assigned_to__isnull=True)
+        else:
+            tasks = tasks.filter(assigned_to_id=assignee_filter)
+    if label_filter:
+        tasks = tasks.filter(labels__id=label_filter)
+
+    # ── Sorting ──────────────────────────────────────────────────────
+    sort_by = request.GET.get('sort', 'column')
+    sort_dir = request.GET.get('dir', 'asc')
+    sort_prefix = '' if sort_dir == 'asc' else '-'
+
+    sort_map = {
+        'title': 'title',
+        'column': 'column__position',
+        'priority': 'priority',
+        'assignee': 'assigned_to__username',
+        'due_date': 'due_date',
+        'progress': 'progress',
+        'created': 'created_at',
+    }
+    order_field = sort_map.get(sort_by, 'column__position')
+    tasks = tasks.order_by(f'{sort_prefix}{order_field}', 'position')
+
+    # ── Grouping (default: group by column/status) ───────────────────
+    group_by = request.GET.get('group', 'column')
+    columns = board.columns.order_by('position')
+
+    if group_by == 'column':
+        grouped_tasks = []
+        for col in columns:
+            col_tasks = [t for t in tasks if t.column_id == col.id]
+            if col_tasks or not (search_query or column_filter or priority_filter or assignee_filter or label_filter):
+                grouped_tasks.append({'label': col.name, 'color': col.color, 'tasks': col_tasks, 'count': len(col_tasks)})
+    elif group_by == 'priority':
+        grouped_tasks = []
+        for value, display in Task.PRIORITY_CHOICES:
+            p_tasks = [t for t in tasks if t.priority == value]
+            if p_tasks:
+                grouped_tasks.append({'label': display, 'color': None, 'tasks': p_tasks, 'count': len(p_tasks)})
+        # Tasks with no priority
+        no_p = [t for t in tasks if not t.priority]
+        if no_p:
+            grouped_tasks.append({'label': 'No Priority', 'color': None, 'tasks': no_p, 'count': len(no_p)})
+    elif group_by == 'assignee':
+        from itertools import groupby as _groupby
+        grouped_tasks = []
+        all_tasks = list(tasks)
+        assigned = sorted([t for t in all_tasks if t.assigned_to], key=lambda t: t.assigned_to.username)
+        for username, grp in _groupby(assigned, key=lambda t: t.assigned_to.username):
+            g_tasks = list(grp)
+            grouped_tasks.append({'label': username, 'color': None, 'tasks': g_tasks, 'count': len(g_tasks)})
+        unassigned = [t for t in all_tasks if not t.assigned_to]
+        if unassigned:
+            grouped_tasks.append({'label': 'Unassigned', 'color': None, 'tasks': unassigned, 'count': len(unassigned)})
+    else:
+        grouped_tasks = [{'label': 'All Tasks', 'color': None, 'tasks': list(tasks), 'count': tasks.count()}]
+
+    # ── Filter dropdown data ─────────────────────────────────────────
+    assignees = User.objects.filter(
+        assigned_tasks__column__board=board
+    ).distinct().order_by('username')
+
+    labels = TaskLabel.objects.filter(board=board).order_by('name')
+
+    context = {
+        'board': board,
+        'grouped_tasks': grouped_tasks,
+        'columns': columns,
+        'assignees': assignees,
+        'labels': labels,
+        'priority_choices': Task.PRIORITY_CHOICES,
+        'total_count': sum(g['count'] for g in grouped_tasks),
+        # Current filter/sort state (for preserving form values)
+        'search_query': search_query,
+        'column_filter': column_filter,
+        'priority_filter': priority_filter,
+        'assignee_filter': assignee_filter,
+        'label_filter': label_filter,
+        'sort_by': sort_by,
+        'sort_dir': sort_dir,
+        'group_by': group_by,
+    }
+    return render(request, 'kanban/board_list_view.html', context)
+
+
 def add_gantt_milestone(request, board_id):
     """Create a new milestone (stored as a Task with item_type='milestone') from the Gantt chart."""
     if not request.user.is_authenticated:

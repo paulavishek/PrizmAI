@@ -680,6 +680,14 @@ function dragStart(e) {
     e.dataTransfer.setData('text/plain', e.target.id);
     e.dataTransfer.effectAllowed = 'move';
     
+    // Record original column and position so we can detect no-op drops
+    const originColumn = e.target.closest('.kanban-column, [data-column-id]');
+    if (originColumn) {
+        draggedElement._origColumnId = originColumn.dataset.columnId;
+        const siblings = Array.from(originColumn.querySelectorAll('.kanban-task, .kanban-task-v2'));
+        draggedElement._origIndex = siblings.indexOf(e.target);
+    }
+    
     // Add dragging class for styling
     e.target.classList.add('dragging');
     
@@ -801,8 +809,12 @@ function drop(e) {
             taskElement.style.transform = '';
             taskElement.style.transition = '';
         }, 200);
-          // Update task position in backend
-        updateTaskPosition(taskId, columnId, insertIndex);
+          // Only call backend if column or position actually changed
+        const sameColumn = taskElement._origColumnId === columnId;
+        const samePosition = taskElement._origIndex === insertIndex;
+        if (!sameColumn || !samePosition) {
+            updateTaskPosition(taskId, columnId, insertIndex);
+        }
         
         // Update column scrolling immediately for visual feedback
         setTimeout(() => {
