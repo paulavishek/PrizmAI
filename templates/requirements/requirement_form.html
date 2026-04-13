@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit{% else %}New{% endif %} Requirement — {{ board.name }} | PrizmAI{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3" style="max-width:800px;">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:.85rem;">
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'requirements:dashboard' board.id %}">Requirements</a></li>
+            <li class="breadcrumb-item active">{% if form.instance.pk %}Edit {{ form.instance.identifier }}{% else %}New Requirement{% endif %}</li>
+        </ol>
+    </nav>
+
+    <h4 class="mb-3">
+        <i class="fas fa-clipboard-list me-2 text-primary"></i>
+        {% if form.instance.pk %}Edit {{ form.instance.identifier }}{% else %}New Requirement{% endif %}
+    </h4>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.errors %}
+                <div class="alert alert-danger py-2" style="font-size:.85rem;">
+                    <strong>Please correct the errors below:</strong>
+                    <ul class="mb-0 mt-1">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                        <li>{{ field|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Title <span class="text-danger">*</span></label>
+                    <input type="text" name="title" value="{{ form.title.value|default:'' }}" class="form-control" required maxlength="255">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Description</label>
+                    <textarea name="description" class="form-control" rows="4">{{ form.description.value|default:'' }}</textarea>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Type <span class="text-danger">*</span></label>
+                        <select name="type" class="form-select" required>
+                            {% for val, label in form.fields.type.choices %}
+                            <option value="{{ val }}" {% if form.type.value == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Priority <span class="text-danger">*</span></label>
+                        <select name="priority" class="form-select" required>
+                            {% for val, label in form.fields.priority.choices %}
+                            <option value="{{ val }}" {% if form.priority.value == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Status</label>
+                        <select name="status" class="form-select">
+                            {% for val, label in form.fields.status.choices %}
+                            <option value="{{ val }}" {% if form.status.value == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Category</label>
+                        <select name="category" class="form-select">
+                            <option value="">— None —</option>
+                            {% for val, label in form.fields.category.choices %}
+                                {% if val %}
+                                <option value="{{ val }}" {% if form.category.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Parent Requirement</label>
+                        <select name="parent" class="form-select">
+                            <option value="">— None —</option>
+                            {% for val, label in form.fields.parent.choices %}
+                                {% if val %}
+                                <option value="{{ val }}" {% if form.parent.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Acceptance Criteria</label>
+                    <textarea name="acceptance_criteria" class="form-control" rows="3">{{ form.acceptance_criteria.value|default:'' }}</textarea>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Reviewer</label>
+                        <select name="reviewer" class="form-select">
+                            <option value="">— None —</option>
+                            {% for val, label in form.fields.reviewer.choices %}
+                                {% if val %}
+                                <option value="{{ val }}" {% if form.reviewer.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>{% if form.instance.pk %}Save Changes{% else %}Create Requirement{% endif %}
+                    </button>
+                    <a href="{% url 'requirements:dashboard' board.id %}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

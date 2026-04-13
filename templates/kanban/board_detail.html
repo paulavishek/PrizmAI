@@ -723,6 +723,9 @@
     {% if features.show_commitments %}
     <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
     {% endif %}
+    {% if features.show_requirements %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'requirements:dashboard' board.id %}"><i class="fas fa-clipboard-list me-1"></i>Requirements</a></li>
+    {% endif %}
 </ul>
 
 <!-- AI Resource Optimization moved to AI Tools panel -->

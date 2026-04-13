@@ -304,6 +304,14 @@
                         <span class="sidebar-label">Project Cemetery</span>
                     </a>
                 </li>
+                {% if features.show_requirements and board %}
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'requirements:dashboard' board.id %}" class="sidebar-nav-link {% if 'requirements' in request.path %}active{% endif %}" title="Requirements">
+                        <i class="fas fa-clipboard-list sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Requirements</span>
+                    </a>
+                </li>
+                {% endif %}
                 {% if not is_viewing_demo %}
                 <!-- Demo access moved to topbar -->
                 {% endif %}

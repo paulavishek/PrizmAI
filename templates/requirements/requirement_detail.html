@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ requirement.identifier }} — {{ requirement.title }} | PrizmAI{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:.85rem;">
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'requirements:dashboard' board.id %}">Requirements</a></li>
+            <li class="breadcrumb-item active">{{ requirement.identifier }}</li>
+        </ol>
+    </nav>
+
+    <div class="row g-4">
+        <!-- Main Content -->
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h4 class="mb-1">
+                        <code class="me-2">{{ requirement.identifier }}</code>
+                        {{ requirement.title }}
+                    </h4>
+                    <div class="d-flex gap-2 align-items-center">
+                        {% if requirement.status == 'draft' %}
+                        <span class="badge bg-warning text-dark">Draft</span>
+                        {% elif requirement.status == 'in_review' %}
+                        <span class="badge bg-info">In Review</span>
+                        {% elif requirement.status == 'approved' %}
+                        <span class="badge bg-success">Approved</span>
+                        {% elif requirement.status == 'rejected' %}
+                        <span class="badge bg-danger">Rejected</span>
+                        {% elif requirement.status == 'implemented' %}
+                        <span class="badge" style="background:#6f42c1;color:#fff;">Implemented</span>
+                        {% elif requirement.status == 'verified' %}
+                        <span class="badge bg-dark">Verified</span>
+                        {% endif %}
+                        <span class="badge bg-secondary">{{ requirement.get_type_display }}</span>
+                        {% if requirement.priority == 'critical' %}
+                        <span class="badge bg-danger">Critical</span>
+                        {% elif requirement.priority == 'high' %}
+                        <span class="badge bg-warning text-dark">High</span>
+                        {% elif requirement.priority == 'medium' %}
+                        <span class="badge bg-primary">Medium</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Low</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if can_edit %}
+                <div class="d-flex gap-2">
+                    <a href="{% url 'requirements:requirement_update' board.id requirement.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-edit me-1"></i>Edit
+                    </a>
+                    <form method="post" action="{% url 'requirements:requirement_delete' board.id requirement.pk %}" onsubmit="return confirm('Delete this requirement?');">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>Delete</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#detail-tab">Details</a></li>
+                <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#history-tab">History <span class="badge bg-secondary">{{ history.count }}</span></a></li>
+                <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#comments-tab">Comments <span class="badge bg-secondary">{{ comments.count }}</span></a></li>
+            </ul>
+            <div class="tab-content">
+                <!-- Details Tab -->
+                <div class="tab-pane fade show active" id="detail-tab">
+                    {% if requirement.description %}
+                    <div class="card mb-3">
+                        <div class="card-header py-2"><strong>Description</strong></div>
+                        <div class="card-body" style="white-space:pre-wrap;font-size:.9rem;">{{ requirement.description }}</div>
+                    </div>
+                    {% endif %}
+
+                    {% if requirement.acceptance_criteria %}
+                    <div class="card mb-3">
+                        <div class="card-header py-2"><strong>Acceptance Criteria</strong></div>
+                        <div class="card-body" style="white-space:pre-wrap;font-size:.9rem;">{{ requirement.acceptance_criteria }}</div>
+                    </div>
+                    {% endif %}
+
+                    {% if requirement.parent %}
+                    <div class="card mb-3">
+                        <div class="card-header py-2"><strong>Parent Requirement</strong></div>
+                        <div class="card-body py-2">
+                            <a href="{% url 'requirements:requirement_detail' board.id requirement.parent.pk %}">
+                                <code>{{ requirement.parent.identifier }}</code> {{ requirement.parent.title }}
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if children %}
+                    <div class="card mb-3">
+                        <div class="card-header py-2"><strong>Sub-Requirements</strong></div>
+                        <ul class="list-group list-group-flush">
+                            {% for child in children %}
+                            <li class="list-group-item py-2">
+                                <a href="{% url 'requirements:requirement_detail' board.id child.pk %}">
+                                    <code>{{ child.identifier }}</code> {{ child.title }}
+                                </a>
+                                {% if child.status == 'approved' %}
+                                <span class="badge bg-success ms-1">Approved</span>
+                                {% elif child.status == 'implemented' %}
+                                <span class="badge" style="background:#6f42c1;color:#fff;">Implemented</span>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- History Tab -->
+                <div class="tab-pane fade" id="history-tab">
+                    {% if history %}
+                    <div class="timeline-simple">
+                        {% for entry in history %}
+                        <div class="card mb-2">
+                            <div class="card-body py-2 px-3" style="font-size:.85rem;">
+                                <div class="d-flex justify-content-between">
+                                    <span>
+                                        <strong>{{ entry.changed_by.get_full_name|default:entry.changed_by.username }}</strong>
+                                        changed status from <span class="badge bg-secondary">{{ entry.get_old_status_display }}</span>
+                                        to <span class="badge bg-primary">{{ entry.get_new_status_display }}</span>
+                                    </span>
+                                    <small class="text-muted">{{ entry.changed_at|timesince }} ago</small>
+                                </div>
+                                {% if entry.notes %}<p class="text-muted mb-0 mt-1">{{ entry.notes }}</p>{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center py-3">No status changes yet.</p>
+                    {% endif %}
+                </div>
+
+                <!-- Comments Tab -->
+                <div class="tab-pane fade" id="comments-tab">
+                    {% if can_edit %}
+                    <form method="post" action="{% url 'requirements:add_comment' board.id requirement.pk %}" class="mb-3">
+                        {% csrf_token %}
+                        <div class="input-group">
+                            <textarea name="content" class="form-control form-control-sm" rows="2" placeholder="Add a comment..." required></textarea>
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </form>
+                    {% endif %}
+                    {% for comment in comments %}
+                    <div class="card mb-2">
+                        <div class="card-body py-2 px-3" style="font-size:.85rem;">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ comment.author.get_full_name|default:comment.author.username }}</strong>
+                                <small class="text-muted">{{ comment.created_at|timesince }} ago</small>
+                            </div>
+                            <div style="white-space:pre-wrap;" class="mt-1">{{ comment.content }}</div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted text-center py-3">No comments yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <!-- Status Update -->
+            {% if can_edit %}
+            <div class="card mb-3">
+                <div class="card-header py-2"><strong>Update Status</strong></div>
+                <div class="card-body py-2">
+                    <form method="post" action="{% url 'requirements:status_update' board.id requirement.pk %}">
+                        {% csrf_token %}
+                        <select name="status" class="form-select form-select-sm mb-2">
+                            {% for val, label in status_choices %}
+                            <option value="{{ val }}" {% if requirement.status == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="notes" class="form-control form-control-sm mb-2" placeholder="Notes (optional)">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Update Status</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Metadata -->
+            <div class="card mb-3">
+                <div class="card-header py-2"><strong>Details</strong></div>
+                <ul class="list-group list-group-flush" style="font-size:.85rem;">
+                    <li class="list-group-item d-flex justify-content-between py-2">
+                        <span class="text-muted">Category</span>
+                        <span>{{ requirement.category.name|default:"—" }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-2">
+                        <span class="text-muted">Created by</span>
+                        <span>{{ requirement.created_by.get_full_name|default:requirement.created_by.username }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-2">
+                        <span class="text-muted">Reviewer</span>
+                        <span>{{ requirement.reviewer.get_full_name|default:"—" }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-2">
+                        <span class="text-muted">Created</span>
+                        <span>{{ requirement.created_at|date:"M d, Y" }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-2">
+                        <span class="text-muted">Updated</span>
+                        <span>{{ requirement.updated_at|date:"M d, Y" }}</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Linked Objectives -->
+            <div class="card mb-3">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <strong>Objectives</strong>
+                    <span class="badge bg-primary">{{ requirement.objectives.count }}</span>
+                </div>
+                <ul class="list-group list-group-flush" style="font-size:.85rem;">
+                    {% for obj in requirement.objectives.all %}
+                    <li class="list-group-item py-2">{{ obj.title }}</li>
+                    {% empty %}
+                    <li class="list-group-item py-2 text-muted text-center">No linked objectives</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Linked Tasks -->
+            <div class="card mb-3">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <strong>Linked Tasks</strong>
+                    <span class="badge bg-primary">{{ requirement.linked_tasks.count }}</span>
+                </div>
+                <ul class="list-group list-group-flush" style="font-size:.85rem;">
+                    {% for task in requirement.linked_tasks.all %}
+                    <li class="list-group-item py-2 d-flex justify-content-between align-items-center">
+                        <a href="{% url 'board_detail' board.id %}">{{ task.title|truncatewords:8 }}</a>
+                        <span class="badge bg-secondary">{{ task.column.name }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item py-2 text-muted text-center">No linked tasks</li>
+                    {% endfor %}
+                </ul>
+                {% if can_edit %}
+                <div class="card-footer py-2">
+                    <form method="post" action="{% url 'requirements:link_task' board.id requirement.pk %}" class="d-flex gap-2">
+                        {% csrf_token %}
+                        <select name="task_id" class="form-select form-select-sm" required>
+                            <option value="">Link a task...</option>
+                            {% for task in available_tasks %}
+                            <option value="{{ task.id }}">{{ task.title|truncatewords:6 }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fas fa-link"></i></button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Related Requirements -->
+            {% if requirement.related_requirements.count > 0 %}
+            <div class="card mb-3">
+                <div class="card-header py-2"><strong>Related Requirements</strong></div>
+                <ul class="list-group list-group-flush" style="font-size:.85rem;">
+                    {% for rel in requirement.related_requirements.all %}
+                    <li class="list-group-item py-2">
+                        <a href="{% url 'requirements:requirement_detail' board.id rel.pk %}">
+                            <code>{{ rel.identifier }}</code> {{ rel.title|truncatewords:6 }}
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

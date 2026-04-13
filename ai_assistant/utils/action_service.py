@@ -1210,3 +1210,36 @@ class SpectraActionService:
             logger.exception('Spectra place_commitment_bet failed: %s', exc)
             return {'success': False, 'error': str(exc)}
 
+    # ── Requirements Analysis ────────────────────────────────────────────────
+
+    def get_requirements_summary(self, user, board, collected_data):
+        """
+        Return a pre-computed summary of all requirements on a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.spectra_data import get_requirements_context_for_board
+
+            ctx = get_requirements_context_for_board(board)
+            summary = ctx.get('summary', {})
+
+            if summary.get('total', 0) == 0:
+                return {
+                    'success': True,
+                    'message': f"📋 **{board.name}** has no requirements defined yet.",
+                }
+
+            return {
+                'success': True,
+                'message': ctx.get('full_narrative', 'No data available.'),
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra get_requirements_summary failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
