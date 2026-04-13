@@ -85,7 +85,7 @@ class Command(BaseCommand):
         # SELF-HEALING: Ensure demo organization exists before proceeding
         # =====================================================================
         try:
-            self.demo_org = Organization.objects.get(is_demo=True, name='Demo - Acme Corporation')
+            self.demo_org = Organization.objects.get(is_demo=True)
             self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
         except Organization.DoesNotExist:
             self.stdout.write(self.style.WARNING(
@@ -162,7 +162,14 @@ class Command(BaseCommand):
                     self.stdout.write('   Creating tasks directly...')
                     # Fallback: tasks are created by the existing command
 
-            # 2. Wiki Demo Data
+            # 2. Populate Marketing Campaign & Bug Tracking boards
+            self.stdout.write(self.style.NOTICE('\n📋 PHASE 1b: Creating Marketing & Bug Tracking Tasks...'))
+            extra_stats = self.create_extra_board_tasks()
+            self.stdout.write(self.style.SUCCESS(
+                f'   ✅ Extra boards: {extra_stats["boards"]} boards, {extra_stats["tasks"]} tasks'
+            ))
+
+            # 3. Wiki Demo Data
             self.stdout.write(self.style.NOTICE('\n📚 PHASE 2: Creating Wiki Demo Data...'))
             wiki_stats = self.create_wiki_demo_data()
             self.stdout.write(self.style.SUCCESS(
@@ -1708,6 +1715,155 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             'entries': entries_created,
             'users': len(users_with_entries)
         }
+
+    def create_extra_board_tasks(self):
+        """
+        Populate Marketing Campaign and Bug Tracking demo boards with 30 tasks each.
+        Idempotent — skips boards that already have tasks.
+        """
+        today = date.today()
+        creator = self.alex or User.objects.filter(is_superuser=True).first()
+        stats = {'boards': 0, 'tasks': 0}
+
+        # Refresh board references
+        self.marketing_board = Board.objects.filter(
+            organization=self.demo_org, is_official_demo_board=True,
+            name__icontains='marketing',
+        ).first()
+        self.bug_board = Board.objects.filter(
+            organization=self.demo_org, is_official_demo_board=True,
+            name__icontains='bug',
+        ).first()
+
+        for board, tasks_data in [
+            (self.marketing_board, self._marketing_tasks()),
+            (self.bug_board, self._bug_tracking_tasks()),
+        ]:
+            if board is None:
+                self.stdout.write(f'   ⚠️ Board not found, skipping')
+                continue
+            existing = Task.objects.filter(column__board=board).count()
+            if existing >= 25:
+                self.stdout.write(f'   [EXISTS] {board.name} already has {existing} tasks')
+                stats['boards'] += 1
+                stats['tasks'] += existing
+                continue
+
+            cols = {c.name: c for c in board.columns.all()}
+            col_list = list(cols.values())
+            if not col_list:
+                self.stdout.write(f'   ⚠️ {board.name} has no columns')
+                continue
+
+            board.num_phases = 3
+            board.save(update_fields=['num_phases'])
+
+            board_tasks = 0
+            for td in tasks_data:
+                col = cols.get(td['column'], col_list[0])
+                offset_start = td.get('start_offset', -30)
+                offset_due = td.get('due_offset', 0)
+                Task.objects.create(
+                    column=col,
+                    title=td['title'],
+                    description=td.get('description', ''),
+                    priority=td.get('priority', 'medium'),
+                    complexity_score=td.get('complexity', 3),
+                    assigned_to=td.get('assignee', creator),
+                    created_by=creator,
+                    progress=td.get('progress', 0),
+                    start_date=today + timedelta(days=offset_start),
+                    due_date=today + timedelta(days=offset_due),
+                    phase=td.get('phase', 'Phase 1'),
+                    is_seed_demo_data=True,
+                )
+                board_tasks += 1
+
+            stats['boards'] += 1
+            stats['tasks'] += board_tasks
+            self.stdout.write(f'   ✅ {board.name}: {board_tasks} tasks created')
+
+        return stats
+
+    def _marketing_tasks(self):
+        alex = self.alex
+        sam = self.sam
+        jordan = self.jordan
+        return [
+            # Phase 1: Strategy & Planning (10 tasks)
+            {'title': 'Market Research & Competitive Analysis', 'description': 'Analyze competitors, identify market gaps, evaluate positioning opportunities across digital channels.', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 100, 'column': 'Done', 'phase': 'Phase 1', 'start_offset': -40, 'due_offset': -35},
+            {'title': 'Define Target Audience Personas', 'description': 'Create detailed buyer personas for enterprise, SMB, and individual user segments with pain points and goals.', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 100, 'column': 'Done', 'phase': 'Phase 1', 'start_offset': -38, 'due_offset': -33},
+            {'title': 'Campaign Strategy & Budget Allocation', 'description': 'Define overall campaign strategy, set KPIs, allocate budget across channels (paid, organic, events).', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 100, 'column': 'Done', 'phase': 'Phase 1', 'start_offset': -35, 'due_offset': -30},
+            {'title': 'Brand Messaging & Value Proposition', 'description': 'Craft core messaging framework, taglines, and elevator pitches for each audience segment.', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 100, 'column': 'Done', 'phase': 'Phase 1', 'start_offset': -33, 'due_offset': -28},
+            {'title': 'Content Calendar Development', 'description': 'Plan 90-day content calendar covering blog posts, social media, webinars, and case studies.', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 100, 'column': 'Done', 'phase': 'Phase 1', 'start_offset': -30, 'due_offset': -25},
+            {'title': 'SEO Keyword Strategy', 'description': 'Research high-value keywords, map to content pillars, set up rank tracking dashboards.', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 80, 'column': 'Review', 'phase': 'Phase 1', 'start_offset': -28, 'due_offset': -22},
+            {'title': 'Landing Page Wireframes', 'description': 'Design wireframes for campaign landing pages with A/B test variants for headlines and CTAs.', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 70, 'column': 'In Progress', 'phase': 'Phase 1', 'start_offset': -25, 'due_offset': -18},
+            {'title': 'Email Nurture Sequence Design', 'description': 'Map out 6-email drip campaign for each persona with personalization tokens and triggers.', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': 'In Progress', 'phase': 'Phase 1', 'start_offset': -22, 'due_offset': -15},
+            {'title': 'Social Media Ad Creative Brief', 'description': 'Prepare creative briefs for LinkedIn, Twitter/X, and Meta ad campaigns with targeting specs.', 'priority': 'medium', 'complexity': 3, 'assignee': sam, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 1', 'start_offset': -20, 'due_offset': -12},
+            {'title': 'Campaign Analytics Setup', 'description': 'Configure UTM parameters, conversion tracking, attribution model, and reporting dashboards.', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 1', 'start_offset': -18, 'due_offset': -10},
+            # Phase 2: Execution & Content (10 tasks)
+            {'title': 'Blog Series: AI in Project Management', 'description': 'Write 5-part thought leadership blog series on AI-powered PM with SEO optimization.', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 40, 'column': 'In Progress', 'phase': 'Phase 2', 'start_offset': -15, 'due_offset': -5},
+            {'title': 'Product Demo Video Production', 'description': 'Script, record, and edit 3-minute product demo video showcasing key features and AI capabilities.', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 30, 'column': 'In Progress', 'phase': 'Phase 2', 'start_offset': -12, 'due_offset': 0},
+            {'title': 'Customer Case Study Development', 'description': 'Interview 3 beta customers, write detailed case studies with metrics and testimonials.', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': -10, 'due_offset': 3},
+            {'title': 'Landing Page Development & Testing', 'description': 'Build responsive landing pages, integrate forms, set up A/B tests for conversion optimization.', 'priority': 'urgent', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': -8, 'due_offset': 5},
+            {'title': 'Email Campaign Setup & Automation', 'description': 'Build email sequences in marketing automation platform, test deliverability, configure triggers.', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': -5, 'due_offset': 8},
+            {'title': 'Paid Ad Campaign Launch', 'description': 'Launch LinkedIn and Google Ads campaigns with initial bid strategy and audience targeting.', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': -3, 'due_offset': 10},
+            {'title': 'Webinar Planning & Speaker Prep', 'description': 'Plan product launch webinar: speaker prep, slide deck, rehearsal, registration page.', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': 0, 'due_offset': 12},
+            {'title': 'Social Media Content Batch Creation', 'description': 'Create 30 days of social posts across platforms with graphics, hashtags, and scheduling.', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': 2, 'due_offset': 14},
+            {'title': 'Press Release & Media Outreach', 'description': 'Draft press release for product launch, build media list, pitch to tech journalists.', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': 5, 'due_offset': 16},
+            {'title': 'Partner Co-Marketing Campaign', 'description': 'Coordinate joint campaign with integration partners: co-branded content, cross-promotion.', 'priority': 'low', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 2', 'start_offset': 7, 'due_offset': 18},
+            # Phase 3: Optimization & Scale (10 tasks)
+            {'title': 'Campaign Performance Analysis', 'description': 'Weekly analysis of campaign metrics: CTR, CPC, conversion rates, ROAS across all channels.', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 10, 'due_offset': 22},
+            {'title': 'A/B Test Results & Optimization', 'description': 'Analyze landing page and email A/B test results, implement winning variants, plan next tests.', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 12, 'due_offset': 24},
+            {'title': 'Retargeting Campaign Setup', 'description': 'Set up retargeting pixels, create lookalike audiences, build retargeting ad sequences.', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 14, 'due_offset': 26},
+            {'title': 'Lead Scoring Model Refinement', 'description': 'Refine lead scoring based on campaign data, adjust MQL/SQL thresholds, sync with sales.', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 16, 'due_offset': 28},
+            {'title': 'Influencer Partnership Program', 'description': 'Identify and recruit 5 industry influencers for product reviews and sponsored content.', 'priority': 'low', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 18, 'due_offset': 30},
+            {'title': 'Content Repurposing Strategy', 'description': 'Convert top blog posts into infographics, short videos, podcasts, and LinkedIn carousels.', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 20, 'due_offset': 32},
+            {'title': 'Community Building & Engagement', 'description': 'Launch Discord/Slack community, seed discussions, establish community guidelines and moderation.', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 22, 'due_offset': 34},
+            {'title': 'Post-Launch Webinar Series', 'description': 'Plan 4-part webinar series covering advanced use cases, customer stories, and best practices.', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 24, 'due_offset': 36},
+            {'title': 'Campaign ROI Report & Recommendations', 'description': 'Compile comprehensive campaign report with ROI analysis, learnings, and Q2 recommendations.', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 26, 'due_offset': 38},
+            {'title': 'Marketing Automation Optimization', 'description': 'Review and optimize all automation workflows, clean up underperforming sequences, add new triggers.', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'Backlog', 'phase': 'Phase 3', 'start_offset': 28, 'due_offset': 40},
+        ]
+
+    def _bug_tracking_tasks(self):
+        alex = self.alex
+        sam = self.sam
+        jordan = self.jordan
+        return [
+            # Phase 1: Critical & High Priority (10 tasks)
+            {'title': 'Login Page Crashes on Safari iOS 17', 'description': 'Users report blank white screen on Safari iOS 17. Console shows TypeError in auth module. Affects ~12% of mobile users.', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': 'Resolved', 'phase': 'Phase 1', 'start_offset': -40, 'due_offset': -37},
+            {'title': 'Data Loss on Concurrent Board Edit', 'description': 'When two users edit the same task simultaneously, the second save overwrites the first without conflict resolution.', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': 'Resolved', 'phase': 'Phase 1', 'start_offset': -38, 'due_offset': -34},
+            {'title': 'API Rate Limiter Returns 500 Instead of 429', 'description': 'Rate limit exceeded requests return HTTP 500 instead of proper 429 with Retry-After header.', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 100, 'column': 'Resolved', 'phase': 'Phase 1', 'start_offset': -36, 'due_offset': -32},
+            {'title': 'Memory Leak in WebSocket Connection Pool', 'description': 'Long-running browser sessions cause memory growth of ~50 MB/hour due to unreleased WebSocket handlers.', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': 'Resolved', 'phase': 'Phase 1', 'start_offset': -34, 'due_offset': -30},
+            {'title': 'CSRF Token Mismatch After Session Timeout', 'description': 'Users get 403 errors after returning from idle. CSRF token in cookie doesn\'t match the one in the form.', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 100, 'column': 'Resolved', 'phase': 'Phase 1', 'start_offset': -32, 'due_offset': -28},
+            {'title': 'Notification Badge Shows Wrong Count', 'description': 'Unread notification count includes dismissed items. Badge shows "12" when only 3 are unread.', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 80, 'column': 'In Progress', 'phase': 'Phase 1', 'start_offset': -30, 'due_offset': -25},
+            {'title': 'File Upload Fails for Names with Unicode', 'description': 'Uploading files with Japanese/Korean characters in filename causes 500 error. Path encoding issue.', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 70, 'column': 'In Progress', 'phase': 'Phase 1', 'start_offset': -28, 'due_offset': -22},
+            {'title': 'Gantt Chart Overlapping Task Bars', 'description': 'Tasks with identical start/end dates render on top of each other instead of stacking vertically.', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 50, 'column': 'In Progress', 'phase': 'Phase 1', 'start_offset': -25, 'due_offset': -18},
+            {'title': 'Dark Mode Color Contrast Failures', 'description': 'Several UI elements fail WCAG AA contrast ratio in dark mode: sidebar labels, input borders, muted text.', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 1', 'start_offset': -22, 'due_offset': -15},
+            {'title': 'Search Indexing Delay of 30+ Minutes', 'description': 'Newly created tasks don\'t appear in search results for 30+ minutes. Index refresh interval too long.', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 1', 'start_offset': -20, 'due_offset': -12},
+            # Phase 2: Medium Priority (10 tasks)
+            {'title': 'Drag-and-Drop Fails on Touch Devices', 'description': 'Kanban card drag-and-drop doesn\'t work on iPad/Android tablets. Touch events not properly handled.', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 30, 'column': 'In Progress', 'phase': 'Phase 2', 'start_offset': -15, 'due_offset': -5},
+            {'title': 'Email Notifications Sent in Wrong Timezone', 'description': 'Scheduled notification emails use UTC instead of user\'s configured timezone. Due dates appear wrong.', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 2', 'start_offset': -12, 'due_offset': 0},
+            {'title': 'Board Export CSV Missing Task Descriptions', 'description': 'CSV export includes all columns except task description. Field omitted from serializer.', 'priority': 'medium', 'complexity': 2, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 2', 'start_offset': -10, 'due_offset': 3},
+            {'title': 'Infinite Scroll Loads Duplicate Tasks', 'description': 'Scrolling board list view shows duplicate tasks when new items are created during pagination.', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'New', 'phase': 'Phase 2', 'start_offset': -8, 'due_offset': 5},
+            {'title': 'Profile Image Upload Crops Incorrectly', 'description': 'Avatar crop tool doesn\'t preserve aspect ratio on non-square images. Faces get squished.', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 2', 'start_offset': -5, 'due_offset': 8},
+            {'title': 'Automation Rule Triggers Twice on Rapid Edit', 'description': 'Editing a task field twice within 1 second triggers the automation rule twice, creating duplicate actions.', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 2', 'start_offset': -3, 'due_offset': 10},
+            {'title': 'Calendar Event Duration Off by 1 Hour DST', 'description': 'Events created near DST transition show duration 1 hour shorter/longer than configured.', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 2', 'start_offset': 0, 'due_offset': 12},
+            {'title': 'Markdown Renderer XSS in Task Description', 'description': 'Crafted markdown with nested HTML bypasses sanitizer. Script tags execute in description preview.', 'priority': 'urgent', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 2', 'start_offset': 2, 'due_offset': 5},
+            {'title': 'Board Favorite Toggle Requires Page Refresh', 'description': 'Clicking the star icon toggles favorite in DB but the star icon doesn\'t update until page reload.', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 2', 'start_offset': 5, 'due_offset': 16},
+            {'title': 'Bulk Task Delete Ignores Permission Check', 'description': 'Members can bulk-delete tasks they shouldn\'t be able to. Individual delete works; bulk bypasses RBAC.', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 2', 'start_offset': 7, 'due_offset': 14},
+            # Phase 3: Low Priority & Polish (10 tasks)
+            {'title': 'Tooltip Flickers on Fast Mouse Movement', 'description': 'Task card tooltips rapidly show/hide when moving mouse between adjacent cards. Needs debounce.', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 10, 'due_offset': 22},
+            {'title': 'Keyboard Shortcut Help Modal Outdated', 'description': 'Command palette (Ctrl+K) shows shortcuts that no longer exist + missing new shortcuts.', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 12, 'due_offset': 24},
+            {'title': 'Slow Page Load on Boards with 200+ Tasks', 'description': 'Board detail page takes 8+ seconds to render with 200 tasks. Need lazy loading or virtual scroll.', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 3', 'start_offset': 14, 'due_offset': 26},
+            {'title': 'Comment Timestamp Shows "NaN" for Old Tasks', 'description': 'Comments created before timezone migration show "NaN minutes ago" instead of formatted date.', 'priority': 'medium', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 16, 'due_offset': 28},
+            {'title': 'PDF Export Truncates Long Task Titles', 'description': 'Analytics PDF export cuts off task titles at 50 chars without ellipsis. Layout breaks on 2-line titles.', 'priority': 'medium', 'complexity': 3, 'assignee': sam, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 18, 'due_offset': 30},
+            {'title': 'Stale Cache After Board Member Role Change', 'description': 'Changing a user\'s role from viewer to member doesn\'t invalidate permission cache. User still blocked until cache expires.', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 3', 'start_offset': 20, 'due_offset': 28},
+            {'title': 'Missing Alt Text on Dashboard Charts', 'description': 'Chart.js canvas elements have no aria-label or alt text. Screen readers skip analytics entirely.', 'priority': 'medium', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 22, 'due_offset': 34},
+            {'title': 'Webhook Retry Backoff Capped Too Low', 'description': 'Max retry delay is 60 seconds when it should be exponential up to 1 hour. Hammers failing endpoints.', 'priority': 'medium', 'complexity': 3, 'assignee': sam, 'progress': 0, 'column': 'Triaged', 'phase': 'Phase 3', 'start_offset': 24, 'due_offset': 34},
+            {'title': 'Tab Title Doesn\'t Update on Navigation', 'description': 'Browser tab always shows "PrizmAI" regardless of which page is active. Should show board/page name.', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 26, 'due_offset': 38},
+            {'title': 'API Docs Missing Rate Limit Headers', 'description': 'Swagger/OpenAPI spec doesn\'t document X-RateLimit-Remaining and X-RateLimit-Reset response headers.', 'priority': 'low', 'complexity': 2, 'assignee': sam, 'progress': 0, 'column': 'New', 'phase': 'Phase 3', 'start_offset': 28, 'due_offset': 40},
+        ]
 
     def seed_demo_organization_goal(self):
         """

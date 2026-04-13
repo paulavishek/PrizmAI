@@ -136,6 +136,24 @@ def create_session(request):
     try:
         data = json.loads(request.body)
         
+        # Check for duplicate title (warn, don't block)
+        title = data.get('title', '').strip()
+        force = data.get('force', False)
+        if title and not force:
+            existing = AIAssistantSession.objects.filter(
+                user=request.user, title__iexact=title
+            ).first()
+            if existing:
+                return JsonResponse({
+                    'status': 'duplicate_warning',
+                    'message': (
+                        f'A chat session titled "{existing.title}" already exists '
+                        f'(created {existing.created_at.strftime("%b %d, %Y")}). '
+                        'Create another with the same name?'
+                    ),
+                    'existing_session_id': existing.id,
+                })
+
         form = AISessionForm(data)
         if form.is_valid():
             session = form.save(commit=False)
@@ -270,8 +288,21 @@ def send_message(request):
             session.board = board
             session.save()
         elif session.board_id:
-            # Restore board from session when not explicitly provided
-            board = session.board
+            # Restore board from session when not explicitly provided.
+            # Re-validate access: the user's role may have changed since
+            # the board was first saved on this session (stale-session fix).
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if can_spectra_read_board(request.user, session.board):
+                board = session.board
+            else:
+                # Access revoked — clear the stale board reference
+                logger.warning(
+                    "RBAC: clearing stale session board %s for user %s",
+                    session.board_id, request.user.id,
+                )
+                session.board = None
+                session.save()
+                board = None
         
         # Save user message
         user_message = AIAssistantMessage.objects.create(
@@ -285,6 +316,33 @@ def send_message(request):
         is_demo_mode = False
         if hasattr(request.user, 'profile'):
             is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
+
+        # ── Auto-select board when none is set ───────────────────────
+        # In demo mode, the chat UI has no board selector.  If the session
+        # doesn't have a board yet, pick the user's first sandbox board so
+        # Spectra has context for questions like "How many tasks on this board?"
+        if not board and is_demo_mode:
+            from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+            user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+            demo_boards = get_accessible_boards_for_spectra(
+                request.user, is_demo_mode=True, organization=user_org,
+            )
+            if demo_boards.exists():
+                board = demo_boards.first()
+                session.board = board
+                session.save()
+                logger.info("Auto-selected demo board %s for user %s", board.id, request.user.id)
+        elif not board and not is_demo_mode:
+            # Personal workspace: auto-select the first accessible board
+            from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+            user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+            personal_boards = get_accessible_boards_for_spectra(
+                request.user, is_demo_mode=False, organization=user_org,
+            )
+            if personal_boards.exists():
+                board = personal_boards.first()
+                session.board = board
+                session.save()
 
         # ── Conversational Spectra: check conversation state ─────────
         from ai_assistant.utils.conversation_flow import (
@@ -344,6 +402,7 @@ def send_message(request):
 
             return JsonResponse({
                 'status': 'success',
+                'sync': True,
                 'message_id': assistant_message.id,
                 'response': flow_response,
                 'source': 'spectra_action',
@@ -360,18 +419,15 @@ def send_message(request):
             })
         # ── End Conversational Spectra ───────────────────────────────
         
-        # Async mode: enqueue Celery task and return task_id for WebSocket streaming
-        if request.headers.get('X-Request-Async'):
-            from kanban.tasks.ai_streaming_tasks import send_ai_message_task
-            result = send_ai_message_task.delay(
-                message_text, session.id, request.user.id,
-                board_id=board.id if board else None,
-                refresh_data=refresh_data,
-                file_context=file_context,
-            )
-            return JsonResponse({'task_id': result.id, 'status': 'queued'})
-
-        # Get response from chatbot service
+        # ── Process chat messages synchronously ──────────────────────
+        # Spectra chat messages are fast (2-5s Gemini calls) and do not
+        # benefit from Celery task queuing.  Processing synchronously
+        # avoids timeouts caused by the worker being busy with scheduled
+        # tasks (pool=solo queues all tasks sequentially).
+        # The async Celery path is still used for heavy AI features
+        # (Pre-Mortem, Board Analytics, etc.) via their own endpoints.
+        # Return ``sync: true`` so triggerAITask renders the result
+        # immediately without opening a WebSocket.
         # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(
             user=request.user, board=board, session_id=session.id,
@@ -468,6 +524,7 @@ def send_message(request):
         
         return JsonResponse({
             'status': 'success',
+            'sync': True,
             'message_id': assistant_message.id,
             'response': response['response'],
             'source': response.get('source', 'gemini'),
@@ -706,6 +763,22 @@ def rename_session(request, session_id):
         if not new_title:
             return JsonResponse({'success': False, 'error': 'Title cannot be empty'}, status=400)
         
+        # Check for duplicate title (warn, don't block)
+        force = data.get('force', False)
+        if not force:
+            existing = AIAssistantSession.objects.filter(
+                user=request.user, title__iexact=new_title
+            ).exclude(id=session_id).first()
+            if existing:
+                return JsonResponse({
+                    'success': False,
+                    'duplicate_warning': True,
+                    'message': (
+                        f'A chat session titled "{existing.title}" already exists. '
+                        'Rename anyway?'
+                    ),
+                })
+
         session.title = new_title
         session.save()
         
@@ -1121,6 +1194,9 @@ def accept_recommendation(request, recommendation_id):
     """Accept a task recommendation"""
     try:
         rec = get_object_or_404(AITaskRecommendation, id=recommendation_id)
+        # RBAC: verify user has write access to the recommendation's board
+        if rec.board and not request.user.has_perm('prizmai.edit_board', rec.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         rec.status = 'accepted'
         rec.save()
         
@@ -1138,6 +1214,9 @@ def reject_recommendation(request, recommendation_id):
     """Reject a task recommendation"""
     try:
         rec = get_object_or_404(AITaskRecommendation, id=recommendation_id)
+        # RBAC: verify user has write access to the recommendation's board
+        if rec.board and not request.user.has_perm('prizmai.edit_board', rec.board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
         rec.status = 'rejected'
         rec.save()
         
@@ -1200,8 +1279,13 @@ def knowledge_base_view(request):
     """View and manage project knowledge base"""
     board_id = request.GET.get('board_id')
     
-    # Get knowledge base entries
-    kb_qs = ProjectKnowledgeBase.objects.filter(is_active=True)
+    # RBAC: scope KB entries to boards the user has access to
+    from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+    is_demo_mode = getattr(request.user, 'profile', None) and getattr(request.user.profile, 'is_viewing_demo', False)
+    org = getattr(request.user.profile, 'organization', None) if hasattr(request.user, 'profile') else None
+    accessible_boards = get_accessible_boards_for_spectra(request.user, is_demo_mode, org)
+    
+    kb_qs = ProjectKnowledgeBase.objects.filter(is_active=True, board__in=accessible_boards)
     
     if board_id:
         kb_qs = kb_qs.filter(board_id=board_id)
@@ -1220,7 +1304,13 @@ def knowledge_base_view(request):
 def refresh_knowledge_base(request):
     """Refresh knowledge base from project data"""
     try:
-        board_id = request.GET.get('board_id')
+        board_id = request.POST.get('board_id') or request.GET.get('board_id')
+        
+        # RBAC: verify user has access to the specified board
+        if board_id:
+            board = get_object_or_404(Board, id=board_id)
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
         
         # This would trigger KB indexing/refresh logic
         # For now, just return success

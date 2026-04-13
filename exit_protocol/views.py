@@ -511,12 +511,10 @@ def reject_organ(request, organ_id):
 
 @login_required
 def cemetery(request):
-    # RBAC: scope entries to user's organization
-    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
-    if user_org:
-        entries = CemeteryEntry.objects.filter(board__organization=user_org).order_by('-buried_at')
-    else:
-        entries = CemeteryEntry.objects.none()
+    # RBAC: scope entries to user's boards (workspace-aware)
+    from kanban.utils.demo_protection import get_user_boards
+    user_boards = get_user_boards(request.user)
+    entries = CemeteryEntry.objects.filter(board__in=user_boards).order_by('-buried_at')
 
     # Search
     q = request.GET.get('q', '').strip()
@@ -554,10 +552,9 @@ def cemetery(request):
 def autopsy_report(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
-    # RBAC: verify user belongs to the same org as the board
-    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
-    board_org = getattr(entry.board, 'organization', None)
-    if user_org and board_org and user_org != board_org:
+    # RBAC: verify user has access to this board (workspace-scoped)
+    from kanban.utils.demo_protection import get_user_boards
+    if entry.board_id not in get_user_boards(request.user).values_list('id', flat=True):
         raise Http404
 
     # Get related organ transplants
@@ -577,10 +574,9 @@ def autopsy_report(request, entry_id):
 def update_lessons(request, entry_id):
     entry = get_object_or_404(CemeteryEntry, id=entry_id)
 
-    # RBAC: verify user belongs to the same org as the board
-    user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
-    board_org = getattr(entry.board, 'organization', None)
-    if user_org and board_org and user_org != board_org:
+    # RBAC: verify user has access to this board (workspace-scoped)
+    from kanban.utils.demo_protection import get_user_boards
+    if entry.board_id not in get_user_boards(request.user).values_list('id', flat=True):
         return JsonResponse({'error': 'Permission denied'}, status=403)
 
     try:

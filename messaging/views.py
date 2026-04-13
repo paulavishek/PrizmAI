@@ -87,6 +87,14 @@ def chat_room_list(request, board_id):
     
     chat_rooms = board.chat_rooms.all()
     
+    # Auto-add authorized user to all board chat rooms so member counts
+    # are correct before the user opens any individual room.
+    is_demo = getattr(board, 'is_official_demo_board', False)
+    if _has_membership or board.created_by == request.user or is_demo:
+        for room in chat_rooms:
+            if not room.members.filter(id=request.user.id).exists():
+                room.members.add(request.user)
+
     # Add unread count for each chat room
     chat_rooms_with_unread = []
     total_unread_in_board = 0
@@ -114,6 +122,18 @@ def chat_room_detail(request, room_id):
 
     if not request.user.has_perm('prizmai.view_board', chat_room.board):
         raise Http404
+
+    # Auto-add authorized user to chat room members so they appear in the
+    # member list on first page load (not only after the WebSocket connects).
+    from kanban.models import BoardMembership
+    board = chat_room.board
+    has_membership = BoardMembership.objects.filter(
+        board=board, user=request.user
+    ).exists()
+    is_demo = getattr(board, 'is_official_demo_board', False)
+    if has_membership or board.created_by == request.user or is_demo:
+        if not chat_room.members.filter(id=request.user.id).exists():
+            chat_room.members.add(request.user)
 
     # Mark all notifications related to this chat room as read
     Notification.objects.filter(
@@ -667,7 +687,7 @@ def go_to_first_unread_room(request):
             return redirect('messaging:chat_room_detail', room_id=room.id)
     
     # No unread messages found, go to messaging hub
-    return redirect('messaging:hub')
+    return redirect('messaging:messaging_hub')
 
 
 # ===== FILE MANAGEMENT VIEWS FOR CHAT ROOMS =====

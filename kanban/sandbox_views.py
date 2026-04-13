@@ -1259,11 +1259,23 @@ def _purge_existing_sandbox(user):
     """
     Delete any existing sandbox for the user (boards + DemoSandbox record).
 
-    Also cleans up:
+    Comprehensive cleanup of ALL user-generated artifacts across every feature:
+    - Sandbox-copy boards (is_sandbox_copy=True)
+    - User-created boards in the demo workspace (manually created during demo)
+    - Exit Protocol: HospiceSession, CemeteryEntry, ProjectOrgan, OrganTransplant, etc.
     - Models with SET_NULL on Board FK (orphaned after board deletion)
-    - User-scoped data that isn't board-scoped (DC briefings, notifications, etc.)
+    - User-scoped data: DC briefings/settings, notifications, AI sessions, Spectra state
+    - GenericForeignKey models: UserFavorite, StrategicFollower, StrategicUpdate
+    - Commitment protocol: UserCredibilityScore
+    - Knowledge graph: MemoryNode, MemoryConnection, OrganizationalMemoryQuery
+    - Wiki: user-created WikiPages
+    - Analytics: UserSession, AI request logs
+    - Onboarding: OnboardingWorkspacePreview
+    - User-created tasks on official demo template boards
+    - Exit protocol entries on official demo template boards
     """
-    from kanban.models import DemoSandbox, Board, Task
+    from kanban.models import DemoSandbox, Board, Task, Workspace
+    from accounts.models import Organization
 
     sandbox_boards = Board.objects.filter(
         owner=user,
@@ -1271,7 +1283,26 @@ def _purge_existing_sandbox(user):
         is_official_demo_board=False,
         is_seed_demo_data=False,
     )
-    sandbox_board_ids = list(sandbox_boards.values_list('id', flat=True))
+
+    # Also find boards the user created manually in the demo workspace
+    # (these have is_sandbox_copy=False and wouldn't be caught above)
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_ws = None
+    if demo_org:
+        demo_ws = Workspace.objects.filter(
+            organization=demo_org, is_demo=True, is_active=True,
+        ).first()
+    user_created_demo_boards = Board.objects.none()
+    if demo_ws:
+        user_created_demo_boards = Board.objects.filter(
+            created_by=user,
+            is_sandbox_copy=False,
+            is_official_demo_board=False,
+            workspace=demo_ws,
+        )
+
+    all_boards_to_delete = (sandbox_boards | user_created_demo_boards).distinct()
+    sandbox_board_ids = list(all_boards_to_delete.values_list('id', flat=True))
 
     try:
         sandbox = user.demo_sandbox
@@ -1325,14 +1356,39 @@ def _purge_existing_sandbox(user):
         except Exception:
             pass
 
-        # ── Now delete sandbox boards (cascades most other models) ──
-        sandbox_boards.delete()
+        # ── Exit Protocol models (belt-and-suspenders, also cascade from board) ──
+        try:
+            from exit_protocol.models import (
+                CemeteryEntry, HospiceSession, ProjectOrgan,
+                OrganTransplant, ProjectHealthSignal, HospiceDismissal,
+            )
+            # OrganTransplant references both source and target boards
+            OrganTransplant.objects.filter(
+                models.Q(organ__source_board_id__in=sandbox_board_ids)
+                | models.Q(target_board_id__in=sandbox_board_ids)
+            ).delete()
+            ProjectOrgan.objects.filter(source_board_id__in=sandbox_board_ids).delete()
+            CemeteryEntry.objects.filter(board_id__in=sandbox_board_ids).delete()
+            HospiceSession.objects.filter(board_id__in=sandbox_board_ids).delete()
+            ProjectHealthSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
+            HospiceDismissal.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            pass
+
+        # ── Now delete sandbox boards + user-created demo boards (cascades most other models) ──
+        all_boards_to_delete.delete()
 
     # ── User-scoped data (not board-scoped, survives board deletion) ──
     try:
         from decision_center.models import DecisionItem, DecisionCenterBriefing
         DecisionItem.objects.filter(created_for=user).delete()
         DecisionCenterBriefing.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from decision_center.models import DecisionCenterSettings
+        DecisionCenterSettings.objects.filter(user=user).delete()
     except Exception:
         pass
 
@@ -1359,9 +1415,76 @@ def _purge_existing_sandbox(user):
         pass
 
     try:
+        from ai_assistant.models import SpectraConversationState
+        SpectraConversationState.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
         from kanban.models import CalendarEvent
         # Clean user-created calendar events (not board-scoped ones)
         CalendarEvent.objects.filter(created_by=user, board__isnull=True).delete()
+    except Exception:
+        pass
+
+    # ── GenericForeignKey models (orphaned references after board/task deletion) ──
+    try:
+        from kanban.models import UserFavorite
+        UserFavorite.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.models import StrategicFollower
+        StrategicFollower.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.models import StrategicUpdate
+        StrategicUpdate.objects.filter(author=user).delete()
+    except Exception:
+        pass
+
+    # ── Commitment / Prediction market user data ──
+    try:
+        from kanban.commitment_models import UserCredibilityScore
+        UserCredibilityScore.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    # ── Knowledge graph query logs ──
+    try:
+        from knowledge_graph.models import OrganizationalMemoryQuery
+        OrganizationalMemoryQuery.objects.filter(asked_by=user).delete()
+    except Exception:
+        pass
+
+    # ── Wiki pages / categories created by user in demo ──
+    try:
+        from wiki.models import WikiPage
+        WikiPage.objects.filter(created_by=user).delete()
+    except Exception:
+        pass
+
+    # ── Analytics session data ──
+    try:
+        from analytics.models import UserSession
+        UserSession.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    # ── AI usage logs ──
+    try:
+        from api.ai_usage_models import AIRequestLog
+        AIRequestLog.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    # ── Onboarding preview data ──
+    try:
+        from kanban.onboarding_models import OnboardingWorkspacePreview
+        OnboardingWorkspacePreview.objects.filter(user=user).delete()
     except Exception:
         pass
 
@@ -1383,6 +1506,32 @@ def _purge_existing_sandbox(user):
             TaskActivity.objects.filter(task_id__in=task_ids).delete()
             TaskFile.objects.filter(task_id__in=task_ids).delete()
             user_tasks_on_template.delete()
+    except Exception:
+        pass
+
+    # ── Exit protocol entries on official demo boards (created by user) ──
+    # These aren't caught by the board-scoped cleanup above because official
+    # demo boards are never deleted.
+    try:
+        from exit_protocol.models import (
+            CemeteryEntry, HospiceSession, ProjectOrgan,
+            OrganTransplant, ProjectHealthSignal, HospiceDismissal,
+        )
+        template_boards = Board.objects.filter(is_official_demo_board=True)
+        template_ids = list(template_boards.values_list('id', flat=True))
+        if template_ids:
+            # Clean hospice sessions initiated by this user on template boards
+            user_hospice = HospiceSession.objects.filter(
+                board_id__in=template_ids, initiated_by=user,
+            )
+            hospice_ids = list(user_hospice.values_list('id', flat=True))
+            if hospice_ids:
+                CemeteryEntry.objects.filter(hospice_session_id__in=hospice_ids).delete()
+                ProjectOrgan.objects.filter(hospice_session_id__in=hospice_ids).delete()
+                user_hospice.delete()
+            HospiceDismissal.objects.filter(
+                board_id__in=template_ids, user=user,
+            ).delete()
     except Exception:
         pass
 

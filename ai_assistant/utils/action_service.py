@@ -77,14 +77,44 @@ class SpectraActionService:
 
         Returns ``(user_obj, None)`` on success, or
         ``(None, member_names_list)`` on failure.
+        The member_names_list is formatted as a numbered list for easy selection.
         """
         name_lower = name.lower().strip()
         if not name_lower:
             return None, []
+
+        # Detect group names — these can't resolve to a single user
+        _GROUP_NAMES = {
+            'board_members', 'board members', 'team', 'everyone',
+            'all', 'all members', 'the team', 'whole team',
+        }
+        if name_lower in _GROUP_NAMES:
+            candidates = list(get_user_model().objects.filter(board_memberships__board=board))
+            if board.created_by and board.created_by not in candidates:
+                candidates.append(board.created_by)
+            candidates.sort(key=lambda u: (u.get_full_name() or u.username).lower())
+            member_names = [
+                f"{i + 1}. {u.get_full_name() or u.username}"
+                for i, u in enumerate(candidates)
+            ]
+            return None, member_names
+
         candidates = list(get_user_model().objects.filter(board_memberships__board=board))
         if board.created_by and board.created_by not in candidates:
             candidates.append(board.created_by)
 
+        # Sort candidates consistently by display name for stable numbering
+        candidates.sort(key=lambda u: (u.get_full_name() or u.username).lower())
+
+        # Try number-based selection (1-based index)
+        try:
+            num = int(name_lower)
+            if 1 <= num <= len(candidates):
+                return candidates[num - 1], None
+        except (ValueError, TypeError):
+            pass
+
+        # Exact match: username, full name, first name, or last name
         for u in candidates:
             full = u.get_full_name().lower()
             if (
@@ -95,8 +125,15 @@ class SpectraActionService:
             ):
                 return u, None
 
+        # Partial match: name starts with input or input starts with name
+        for u in candidates:
+            full = u.get_full_name().lower()
+            if full.startswith(name_lower) or u.first_name.lower().startswith(name_lower):
+                return u, None
+
         member_names = [
-            u.get_full_name() or u.username for u in candidates
+            f"{i + 1}. {u.get_full_name() or u.username}"
+            for i, u in enumerate(candidates)
         ]
         return None, member_names
 
@@ -448,7 +485,7 @@ class SpectraActionService:
             # Resolve task by name using fuzzy matching
             task_name = collected_data.get('task_name', '')
             board_tasks = list(Task.objects.filter(
-                column__board=board, is_archived=False,
+                column__board=board,
             ).select_related('column'))
 
             matched = self._fuzzy_match_task(task_name, board_tasks)
@@ -529,6 +566,11 @@ class SpectraActionService:
         from kanban.models import CalendarEvent
 
         try:
+            if not self._user_can_modify_board(user, board):
+                if self._user_has_board_access(user, board):
+                    return {'success': False, 'error': self._viewer_denial_message(board)}
+                return {'success': False, 'error': "You don't have access to this board."}
+
             title = collected_data.get('title', 'Untitled Event')
 
             # Parse start datetime
@@ -825,7 +867,7 @@ class SpectraActionService:
 
             # Resolve the task
             tasks = list(Task.objects.filter(
-                column__board=board, is_archived=False,
+                column__board=board,
             ).select_related('column', 'assigned_to'))
 
             matched = self._fuzzy_match_task(task_name, tasks)
@@ -861,7 +903,7 @@ class SpectraActionService:
                 insight = ''
                 if val_lower in ('done', 'complete', 'completed', 'finished'):
                     remaining = Task.objects.filter(
-                        column__board=board, is_archived=False,
+                        column__board=board,
                     ).exclude(column=target_col).count()
                     if remaining > 0:
                         insight = f"\n\n💡 **{remaining} tasks** remaining on this board."
@@ -973,16 +1015,40 @@ class SpectraActionService:
         if len(substr) > 1 and len(substr) <= 5:
             return substr  # disambiguation
 
-        # Word overlap scoring
-        query_words = set(query_lower.split())
+        # Reverse substring: task title contained in query
+        rev_substr = [t for t in tasks if t.title.lower() in query_lower]
+        if len(rev_substr) == 1:
+            return rev_substr[0]
+
+        # Word overlap scoring with stemming for gerund forms
+        # Strip common verb suffixes: "reviewing" → "review", "updating" → "updat"
+        def _stem(word):
+            w = word.lower()
+            for suffix in ('ing', 'tion', 'ed', 'ment', 'ness', 'ity'):
+                if w.endswith(suffix) and len(w) - len(suffix) >= 3:
+                    return w[:-len(suffix)]
+            return w
+
+        # Remove filler words from query
+        _filler = {'the', 'a', 'an', 'on', 'for', 'to', 'of', 'my', 'our',
+                    'i', 'we', 'am', 'was', 'is', 'are', 'been', 'worked',
+                    'working', 'today', 'yesterday'}
+        query_words = {w for w in query_lower.split() if w not in _filler}
+        query_stems = {_stem(w) for w in query_words}
+
         scored = []
         for t in tasks:
             title_words = set(t.title.lower().split())
+            title_stems = {_stem(w) for w in title_words}
             if not query_words:
                 continue
-            overlap = len(query_words & title_words) / len(query_words)
-            if overlap >= 0.5:
-                scored.append((overlap, t))
+            # Score using both exact word overlap and stem overlap
+            exact_overlap = len(query_words & title_words)
+            stem_overlap = len(query_stems & title_stems)
+            best_overlap = max(exact_overlap, stem_overlap)
+            score = best_overlap / max(len(query_words), 1)
+            if score >= 0.4:
+                scored.append((score, t))
         scored.sort(key=lambda x: -x[0])
         if scored:
             if len(scored) == 1 or (len(scored) > 1 and scored[0][0] > scored[1][0]):

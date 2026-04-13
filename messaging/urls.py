@@ -6,7 +6,7 @@ app_name = 'messaging'
 
 urlpatterns = [
     # Messaging Hub
-    path('', views.messaging_hub, name='hub'),
+    path('', views.messaging_hub, name='messaging_hub'),
     
     # Chat Rooms
     path('board/<int:board_id>/rooms/', views.chat_room_list, name='chat_room_list'),

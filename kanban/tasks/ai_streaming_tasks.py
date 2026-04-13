@@ -75,7 +75,6 @@ def _send_error(task_id, message):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.run_premortem',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -94,9 +93,15 @@ def run_premortem_task(self, board_id, user_id):
         )
         from api.ai_usage_utils import track_ai_request
         from django.contrib.auth.models import User
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
 
         user = User.objects.get(id=user_id)
         board = Board.objects.get(id=board_id)
+
+        # Re-validate board access at execution time (TOCTOU protection)
+        if not can_spectra_read_board(user, board):
+            _send_error(task_id, 'You no longer have access to this board.')
+            return {'error': 'Access denied'}
 
         _send_status(task_id, 'Collecting board snapshot…', 10)
         snapshot = _collect_board_snapshot(board)
@@ -176,7 +181,6 @@ def run_premortem_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.summarize_board_analytics',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -193,9 +197,15 @@ def summarize_board_analytics_task(self, board_id, user_id):
         from django.db.models import Count
         from django.utils import timezone
         from datetime import timedelta
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
 
         user = User.objects.get(id=user_id)
         board = Board.objects.get(id=board_id)
+
+        # Re-validate board access at execution time (TOCTOU protection)
+        if not can_spectra_read_board(user, board):
+            _send_error(task_id, 'You no longer have access to this board.')
+            return {'error': 'Access denied'}
 
         _send_status(task_id, 'Gathering board metrics…', 10)
 
@@ -298,7 +308,6 @@ def summarize_board_analytics_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.predict_deadline',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -312,9 +321,15 @@ def predict_deadline_task(self, task_data, team_context, board_id, user_id):
         from api.ai_usage_utils import track_ai_request
         from django.contrib.auth.models import User
         from kanban.models import Board, Task
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
 
         user = User.objects.get(id=user_id)
         board = Board.objects.get(id=board_id)
+
+        # Re-validate board access at execution time (TOCTOU protection)
+        if not can_spectra_read_board(user, board):
+            _send_error(task_id, 'You no longer have access to this board.')
+            return {'error': 'Access denied'}
 
         _send_status(task_id, 'Analyzing assignee velocity…', 20)
 
@@ -422,7 +437,6 @@ def predict_deadline_task(self, task_data, team_context, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.analyze_workflow',
-    queue='ai_tasks',
     time_limit=120,
     soft_time_limit=90,
 )
@@ -438,9 +452,15 @@ def analyze_workflow_task(self, board_id, user_id):
         from django.contrib.auth.models import User
         from django.db.models import Count
         from django.utils import timezone
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
 
         user = User.objects.get(id=user_id)
         board = Board.objects.get(id=board_id)
+
+        # Re-validate board access at execution time (TOCTOU protection)
+        if not can_spectra_read_board(user, board):
+            _send_error(task_id, 'You no longer have access to this board.')
+            return {'error': 'Access denied'}
 
         _send_status(task_id, 'Collecting workflow data…', 10)
 
@@ -532,9 +552,8 @@ def analyze_workflow_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.send_ai_message',
-    queue='ai_tasks',
-    time_limit=120,
-    soft_time_limit=90,
+    time_limit=180,
+    soft_time_limit=150,
 )
 def send_ai_message_task(self, message_text, session_id, user_id, board_id=None,
                           refresh_data=False, file_context=None):
@@ -552,6 +571,7 @@ def send_ai_message_task(self, message_text, session_id, user_id, board_id=None,
         )
         from ai_assistant.utils.chatbot_service import TaskFlowChatbotService
         from api.ai_usage_utils import track_ai_request, check_ai_quota
+        from ai_assistant.utils.rbac_utils import can_spectra_read_board
 
         user = User.objects.get(id=user_id)
         session = AIAssistantSession.objects.get(id=session_id, user=user)
@@ -559,6 +579,10 @@ def send_ai_message_task(self, message_text, session_id, user_id, board_id=None,
         board = None
         if board_id:
             board = Board.objects.get(id=board_id)
+            # Re-validate board access at execution time (TOCTOU protection)
+            if not can_spectra_read_board(user, board):
+                _send_error(task_id, 'You no longer have access to this board.')
+                return {'error': 'Access denied'}
 
         _send_status(task_id, 'Processing your question…', 20)
 

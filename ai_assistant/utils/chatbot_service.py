@@ -132,6 +132,24 @@ def classify_spectra_query(prompt: str) -> dict:
 # Action intent detection for Conversational Spectra
 # ---------------------------------------------------------------------------
 
+# ── V1.0 Query-Only Mode ─────────────────────────────────────────────────
+# Spectra v1.0 operates in read-only mode.  All action capabilities are
+# disabled and will be restored in v2.0.
+QUERY_ONLY_FALLBACK = (
+    "I can read and report on your project data, but I can't create, "
+    "update, or delete anything in v1.0. Action commands — like creating "
+    "tasks, logging time, and sending messages — are arriving in "
+    "Spectra v2.0 \U0001F680 In the meantime, feel free to ask me anything about "
+    "your board, team workload, risks, or project progress."
+)
+
+# Set of action intents that are disabled in v1.0 (returns QUERY_ONLY_FALLBACK).
+_V1_DISABLED_INTENTS = frozenset({
+    'create_task', 'create_board', 'send_message', 'log_time',
+    'schedule_event', 'create_retrospective', 'create_automation',
+    'activate_automation', 'update_task',
+})
+
 ACTION_INTENT_PATTERNS = {
     'create_task': [
         'create a task', 'add a task', 'new task', 'make a task',
@@ -206,11 +224,11 @@ ACTION_INTENT_PATTERNS = {
     ],
     'confirm_action': [
         'yes', 'confirm', 'go ahead', 'do it', 'create it',
-        'looks good', 'correct',
+        'looks good', 'correct', 'continue',
     ],
     'cancel_action': [
         'no', 'cancel', 'stop', 'nevermind', 'abort',
-        'dont create', "don't create",
+        'dont create', "don't create", 'start fresh',
     ],
 }
 
@@ -308,6 +326,18 @@ class TaskFlowChatbotService:
             context = "**PrizmAI Project Context:**\n\n"
             
             if self.board:
+                # ── RBAC gate: verify user can read this board ─────────
+                # Prevents data leakage if the board object was set without
+                # prior RBAC validation (e.g. stale session, direct ID).
+                from ai_assistant.utils.rbac_utils import can_spectra_read_board
+                if not can_spectra_read_board(self.user, self.board):
+                    logger.warning(
+                        "RBAC denial in get_taskflow_context: user=%s board=%s",
+                        self.user.id, self.board.id,
+                    )
+                    context += "No board data available — you don't have access to this board.\n"
+                    return context
+
                 # Skip archived boards
                 if self.board.is_archived:
                     context += f"⚠️ Board '{self.board.name}' is archived.\n"
@@ -362,53 +392,55 @@ class TaskFlowChatbotService:
                     logger.warning(f"Could not build strategic hierarchy context: {hierarchy_err}")
                 # ---------------------------------------------------------------
                 
-                # Get LIVE tasks — always fresh from DB
-                tasks = Task.objects.filter(column__board=self.board).select_related(
-                    'assigned_to', 'created_by', 'column', 'parent_task'
-                ).prefetch_related('labels', 'subtasks', 'dependencies')
-                
-                if tasks.exists():
-                    context += f"\n**Tasks Summary ({tasks.count()} total):**\n"
-                    
-                    # Group by status (column name)
-                    from django.db.models import Count
-                    status_counts = tasks.values('column__name').annotate(count=Count('id')).order_by('column__position')
-                    for status in status_counts:
-                        context += f"  - {status['column__name']}: {status['count']}\n"
-                    
+                # Get LIVE tasks via VDF — always fresh, column-based status
+                from ai_assistant.utils.spectra_data_fetchers import (
+                    fetch_board_tasks, fetch_column_distribution,
+                )
+                task_dicts = fetch_board_tasks(self.board, filters={'item_type': 'task'})
+                col_dist = fetch_column_distribution(self.board)
+
+                if task_dicts:
+                    context += f"\n**Tasks Summary ({len(task_dicts)} total):**\n"
+
+                    for col_name, count in col_dist:
+                        context += f"  - {col_name}: {count}\n"
+
                     # Show ALL tasks for accurate answering (up to 50)
                     context += f"\n**All Tasks:**\n"
-                    for task in tasks[:50]:
-                        status = task.column.name if task.column else 'Unknown'
-                        priority = task.get_priority_display() if hasattr(task, 'get_priority_display') else task.priority
-                        assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
-                        
-                        context += f"- [{status}] {task.title}\n"
-                        context += f"  • Priority: {priority}, Assigned: {assignee}, Progress: {task.progress}%\n"
-                        
-                        if task.due_date:
-                            from django.utils import timezone
-                            due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
-                            today = timezone.now().date()
-                            if due < today:
-                                days_overdue = (today - due).days
-                                context += f"  • Due: {due} ⚠️ OVERDUE by {days_overdue} days\n"
+                    for t in task_dicts[:50]:
+                        context += f"- [{t['column_name']}] {t['title']}\n"
+                        context += f"  • Priority: {t['priority_label']}, Assigned: {t['assigned_to_display']}, Progress: {t['progress']}%\n"
+
+                        # Include description if present (for task-detail queries)
+                        if t.get('description'):
+                            desc = t['description'][:200]
+                            context += f"  • Description: {desc}\n"
+
+                        if t['due_date_date']:
+                            if t['is_overdue']:
+                                context += f"  • Due: {t['due_date_date']} ⚠️ OVERDUE by {t['overdue_days']} days\n"
                             else:
-                                context += f"  • Due: {due}\n"
-                        
-                        if task.risk_level or task.ai_risk_score:
-                            risk_info = f"Risk: {task.risk_level or 'Unknown'}"
-                            if task.ai_risk_score:
-                                risk_info += f" (Score: {task.ai_risk_score}/100)"
+                                context += f"  • Due: {t['due_date_date']}\n"
+
+                        if t['risk_level'] or t['ai_risk_score']:
+                            risk_info = f"Risk: {t['risk_level'] or 'Unknown'}"
+                            if t['ai_risk_score']:
+                                risk_info += f" (Score: {t['ai_risk_score']}/100)"
                             context += f"  • {risk_info}\n"
-                        
-                        if task.parent_task:
-                            context += f"  • Depends on: {task.parent_task.title}\n"
-                        if task.subtasks.exists():
-                            context += f"  • Has {task.subtasks.count()} subtask(s)\n"
-                    
-                    if tasks.count() > 50:
-                        context += f"  ... and {tasks.count() - 50} more tasks\n"
+
+                        # Include comment count if available
+                        if t.get('comment_count'):
+                            context += f"  • Comments: {t['comment_count']}\n"
+
+                        if t['parent_task_title']:
+                            context += f"  • Depends on: {t['parent_task_title']}\n"
+                        if t['dependency_titles']:
+                            context += f"  • Dependencies: {', '.join(t['dependency_titles'][:5])}\n"
+                        if t['subtask_count']:
+                            context += f"  • Has {t['subtask_count']} subtask(s)\n"
+
+                    if len(task_dicts) > 50:
+                        context += f"  ... and {len(task_dicts) - 50} more tasks\n"
                 
                 # Get team members with skills
                 members = get_user_model().objects.filter(board_memberships__board=self.board).select_related('profile')
@@ -444,7 +476,7 @@ class TaskFlowChatbotService:
                 if boards:
                     context += f"**User's Projects ({boards.count()} boards):**\n"
                     for board in boards:
-                        task_count = Task.objects.filter(column__board=board).count()
+                        task_count = Task.objects.filter(column__board=board, item_type='task').count()
                         context += f"- {board.name} ({task_count} tasks)\n"
             
             return context
@@ -499,6 +531,7 @@ class TaskFlowChatbotService:
         try:
             from ai_assistant.models import AIAssistantMessage, AIAssistantAnalytics
             from django.db.models import Count, Q, Avg
+            from django.utils import timezone
             
             if not self.user:
                 return ""
@@ -774,19 +807,16 @@ class TaskFlowChatbotService:
                 organization = None
             
             # Get user's boards (filtered by organization if available)
-            # Exclude sandbox copies and official demo boards to prevent
-            # demo data bleeding into the user's real workspace.
-            # Use the centralized workspace-scoped helper to guarantee
-            # demo / real isolation.
-            from kanban.utils.demo_protection import get_user_boards
-            user_boards = get_user_boards(self.user)
+            # Use the service's own workspace-aware board filter to guarantee
+            # demo/real isolation and RBAC consistency.
+            user_boards = self._get_user_boards(organization=organization)
             
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
             
             # Get aggregate data
             total_tasks = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).count()
             
             # Get total unique users across all boards - use set to avoid duplicate issues
@@ -825,14 +855,14 @@ class TaskFlowChatbotService:
             
             # Get tasks by status
             tasks_by_status = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).values('column__name').annotate(
                 count=Count('id')
             ).order_by('column__name')
             
             # Get tasks by board
             tasks_by_board = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).values('column__board__name').annotate(
                 count=Count('id')
             ).order_by('-count')
@@ -1015,45 +1045,79 @@ class TaskFlowChatbotService:
 
 """
             
-            # Build detailed user information
+            # ── VDF-backed per-user stats (board-scoped when possible) ──
+            from ai_assistant.utils.spectra_data_fetchers import (
+                fetch_assignee_workload, fetch_board_tasks, DONE_COLUMN_NAMES,
+            )
+
+            # Pre-compute board-scoped workload when a board is active
+            _board_workload = {}  # username → workload dict
+            if self.board:
+                raw_workload = fetch_assignee_workload(self.board)
+                # Re-key by username for lookup
+                for _display, wl_data in raw_workload.items():
+                    if wl_data.get('username'):
+                        _board_workload[wl_data['username']] = wl_data
+
             def get_user_stats(user):
-                """Get detailed stats for a single user"""
-                user_tasks = Task.objects.filter(
-                    column__board__in=user_boards,
-                    assigned_to=user
-                ).select_related('column', 'column__board')
-                
-                total_tasks = user_tasks.count()
-                completed_tasks = user_tasks.filter(progress=100).count()
-                in_progress = user_tasks.filter(progress__gt=0, progress__lt=100).count()
-                not_started = user_tasks.filter(progress=0).count()
-                
-                # Overdue tasks
-                overdue_tasks = user_tasks.filter(
-                    due_date__lt=today,
-                    progress__lt=100
+                """Get detailed stats using VDF data when board is set."""
+                username = user.username
+
+                if self.board and username in _board_workload:
+                    wl = _board_workload[username]
+                    user_task_dicts = fetch_board_tasks(
+                        self.board,
+                        filters={'assigned_to_username': username, 'item_type': 'task'},
+                    )
+                else:
+                    # Fallback: cross-board stats when no board is active
+                    user_task_dicts = []
+                    for b in user_boards:
+                        user_task_dicts.extend(
+                            fetch_board_tasks(b, filters={'assigned_to_username': username, 'item_type': 'task'})
+                        )
+
+                total_tasks = len(user_task_dicts)
+                completed_tasks = sum(1 for t in user_task_dicts if t['is_complete'])
+                in_progress = sum(
+                    1 for t in user_task_dicts
+                    if not t['is_complete'] and t['column_name'].lower() not in DONE_COLUMN_NAMES
+                    and t['progress'] > 0
                 )
-                overdue_count = overdue_tasks.count()
-                overdue_list = list(overdue_tasks[:5])  # Top 5 overdue
-                
-                # Tasks due soon (within 7 days)
-                due_soon_tasks = user_tasks.filter(
-                    due_date__gte=today,
-                    due_date__lte=next_week,
-                    progress__lt=100
+                not_started = sum(
+                    1 for t in user_task_dicts
+                    if not t['is_complete'] and t['progress'] == 0
+                    and t['column_name'].lower() not in DONE_COLUMN_NAMES
                 )
-                due_soon_count = due_soon_tasks.count()
-                due_soon_list = list(due_soon_tasks.order_by('due_date')[:5])
-                
-                # High priority tasks
-                high_priority = user_tasks.filter(priority__in=['high', 'urgent', 'critical'])
-                high_priority_count = high_priority.count()
-                
-                # Recent activity - tasks updated in last 7 days
-                recent_updated = user_tasks.filter(
-                    updated_at__gte=timezone.now() - timedelta(days=7)
-                ).count()
-                
+
+                overdue_list = [t for t in user_task_dicts if t['is_overdue']]
+                overdue_count = len(overdue_list)
+                # sort by due_date ascending, keep first 5
+                overdue_list.sort(key=lambda t: t['due_date_date'] or today)
+
+                due_soon_list = [
+                    t for t in user_task_dicts
+                    if not t['is_complete'] and t['due_date_date']
+                    and today <= t['due_date_date'] <= next_week
+                ]
+                due_soon_count = len(due_soon_list)
+                due_soon_list.sort(key=lambda t: t['due_date_date'] or today)
+
+                high_priority_count = sum(
+                    1 for t in user_task_dicts
+                    if t['priority_value'] in ('high', 'urgent', 'critical')
+                )
+                recent_updated = sum(
+                    1 for t in user_task_dicts
+                    if t.get('updated_at') and t['updated_at'] >= timezone.now() - timedelta(days=7)
+                )
+
+                # Expose ALL task titles + column so Spectra never guesses
+                all_task_details = [
+                    f"\"{t['title']}\" [{t['column_name']}] (P:{t['priority_label']}, {t['progress']}%)"
+                    for t in user_task_dicts
+                ]
+
                 return {
                     'total': total_tasks,
                     'completed': completed_tasks,
@@ -1064,7 +1128,8 @@ class TaskFlowChatbotService:
                     'due_soon_count': due_soon_count,
                     'due_soon_list': due_soon_list,
                     'high_priority_count': high_priority_count,
-                    'recent_updated': recent_updated
+                    'recent_updated': recent_updated,
+                    'all_task_details': all_task_details,
                 }
             
             # Demo Users Section
@@ -1078,15 +1143,20 @@ class TaskFlowChatbotService:
                     context += f"  • Total Tasks: {stats['total']}\n"
                     context += f"  • Completed: {stats['completed']} | In Progress: {stats['in_progress']} | Not Started: {stats['not_started']}\n"
                     
+                    if stats['all_task_details']:
+                        context += f"  • 📋 All assigned tasks:\n"
+                        for detail in stats['all_task_details']:
+                            context += f"      - {detail}\n"
+                    
                     if stats['overdue_count'] > 0:
                         context += f"  • ⚠️ Overdue Tasks: {stats['overdue_count']}\n"
-                        for task in stats['overdue_list']:
-                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                        for task in stats['overdue_list'][:5]:
+                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
                     
                     if stats['due_soon_count'] > 0:
                         context += f"  • 📅 Due Soon (next 7 days): {stats['due_soon_count']}\n"
-                        for task in stats['due_soon_list']:
-                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                        for task in stats['due_soon_list'][:5]:
+                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
                     
                     if stats['high_priority_count'] > 0:
                         context += f"  • 🔴 High Priority Tasks: {stats['high_priority_count']}\n"
@@ -1104,15 +1174,20 @@ class TaskFlowChatbotService:
                     context += f"  • Total Tasks: {stats['total']}\n"
                     context += f"  • Completed: {stats['completed']} | In Progress: {stats['in_progress']} | Not Started: {stats['not_started']}\n"
                     
+                    if stats['all_task_details']:
+                        context += f"  • 📋 All assigned tasks:\n"
+                        for detail in stats['all_task_details']:
+                            context += f"      - {detail}\n"
+                    
                     if stats['overdue_count'] > 0:
                         context += f"  • ⚠️ Overdue Tasks: {stats['overdue_count']}\n"
-                        for task in stats['overdue_list']:
-                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                        for task in stats['overdue_list'][:5]:
+                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
                     
                     if stats['due_soon_count'] > 0:
                         context += f"  • 📅 Due Soon (next 7 days): {stats['due_soon_count']}\n"
-                        for task in stats['due_soon_list']:
-                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                        for task in stats['due_soon_list'][:5]:
+                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
                     
                     if stats['high_priority_count'] > 0:
                         context += f"  • 🔴 High Priority Tasks: {stats['high_priority_count']}\n"
@@ -1283,7 +1358,8 @@ class TaskFlowChatbotService:
             # Get tasks assigned to current user
             user_tasks = Task.objects.filter(
                 column__board__in=user_boards,
-                assigned_to=self.user
+                assigned_to=self.user,
+                item_type='task'
             ).select_related('column', 'column__board').order_by('column__name', '-priority')
             
             if not user_tasks.exists():
@@ -1346,7 +1422,7 @@ class TaskFlowChatbotService:
             
             # Get all incomplete tasks (exclude Done and Closed statuses)
             incomplete_tasks = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).exclude(
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).select_related('assigned_to', 'column', 'column__board').order_by(
@@ -1358,7 +1434,7 @@ class TaskFlowChatbotService:
             
             # Count completed tasks for comparison
             completed_tasks = Task.objects.filter(
-                column__board__in=user_boards
+                column__board__in=user_boards, item_type='task'
             ).filter(
                 Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).count()
@@ -1428,7 +1504,7 @@ class TaskFlowChatbotService:
             # Collect metrics for each board
             board_stats = []
             for board in user_boards:
-                tasks = Task.objects.filter(column__board=board)
+                tasks = Task.objects.filter(column__board=board, item_type='task')
                 task_count = tasks.count()
                 
                 # Count completed vs incomplete
@@ -1489,10 +1565,8 @@ class TaskFlowChatbotService:
     
     def _get_task_distribution_context(self, prompt):
         """
-        Get task distribution by assignee
-        Handles questions like: "Show task distribution", "Who has most tasks?", etc.
-        
-        ALWAYS retrieves and calculates actual task distribution
+        Get task distribution by assignee.
+        When a board is active, uses VDF for board-scoped data with actual task titles.
         """
         try:
             if not self._is_task_distribution_query(prompt):
@@ -1502,112 +1576,112 @@ class TaskFlowChatbotService:
             user_boards = self._get_user_boards()
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
-            
-            # Get all tasks
-            all_tasks = Task.objects.filter(column__board__in=user_boards)
-            
-            if not all_tasks.exists():
-                return "No tasks found in your boards."
-            
-            # Count tasks by assignee
-            from django.db.models import Count
-            task_distribution = all_tasks.values(
-                'assigned_to__first_name',
-                'assigned_to__last_name',
-                'assigned_to__username'
-            ).annotate(
-                task_count=Count('id')
-            ).order_by('-task_count')
-            
-            # Count unassigned tasks
-            unassigned_count = all_tasks.filter(assigned_to__isnull=True).count()
-            
-            context = f"**Task Distribution by Assignee:**\n\n"
-            context += f"**Total Tasks:** {all_tasks.count()}\n"
-            context += f"**Assigned:** {all_tasks.count() - unassigned_count}\n"
-            context += f"**Unassigned:** {unassigned_count}\n\n"
-            
-            if task_distribution:
-                context += "**Tasks per Team Member:**\n"
-                for i, assignee in enumerate(task_distribution, 1):
-                    first_name = assignee['assigned_to__first_name'] or ''
-                    last_name = assignee['assigned_to__last_name'] or ''
-                    username = assignee['assigned_to__username']
-                    
-                    if first_name or last_name:
-                        name = f"{first_name} {last_name}".strip()
-                    else:
-                        name = username or 'Unassigned'
-                    
-                    task_count = assignee['task_count']
-                    percentage = 100 * task_count / all_tasks.count()
-                    
-                    context += f"{i}. **{name}**: {task_count} tasks ({percentage:.1f}%)\n"
-            
-            # Per-board breakdown for each team member
-            context += "\n**Per-Board Breakdown:**\n"
-            for board in user_boards:
-                board_tasks = all_tasks.filter(column__board=board)
-                if not board_tasks.exists():
-                    continue
-                board_distribution = board_tasks.values(
-                    'assigned_to__first_name',
-                    'assigned_to__last_name',
-                    'assigned_to__username'
+
+            from ai_assistant.utils.spectra_data_fetchers import (
+                fetch_assignee_workload, fetch_board_tasks,
+            )
+
+            # ── Board-scoped distribution (preferred when board is set) ──
+            if self.board:
+                workload = fetch_assignee_workload(self.board)
+                task_dicts = fetch_board_tasks(self.board, filters={'item_type': 'task'})
+                total = len(task_dicts)
+                unassigned = [t for t in task_dicts if t['assigned_to_username'] is None]
+                unassigned_count = len(unassigned)
+
+                context = f"**Task Distribution by Assignee (Board: {self.board.name}):**\n\n"
+                context += f"**Total Tasks:** {total}\n"
+                context += f"**Assigned:** {total - unassigned_count}\n"
+                context += f"**Unassigned:** {unassigned_count}\n\n"
+
+                if workload:
+                    # Sort by task count desc
+                    sorted_members = sorted(workload.items(), key=lambda x: x[1]['task_count'], reverse=True)
+                    context += "**Tasks per Team Member:**\n"
+                    for i, (username, wl) in enumerate(sorted_members, 1):
+                        pct = (100 * wl['task_count'] / total) if total else 0
+                        context += f"{i}. **{wl['display_name']}**: {wl['task_count']} tasks ({pct:.1f}%)\n"
+                        # Include every task title for accuracy
+                        for title in wl['task_titles']:
+                            context += f"      - {title}\n"
+                        if wl.get('column_breakdown'):
+                            cols = ', '.join(f"{col}: {cnt}" for col, cnt in wl['column_breakdown'].items())
+                            context += f"      Columns: {cols}\n"
+
+                if unassigned:
+                    context += f"\n**Unassigned Tasks ({unassigned_count}):**\n"
+                    for t in unassigned:
+                        context += f"  - {t['title']} [{t['column_name']}]\n"
+            else:
+                # ── Cross-board fallback ──
+                all_tasks = Task.objects.filter(column__board__in=user_boards, item_type='task')
+                if not all_tasks.exists():
+                    return "No tasks found in your boards."
+
+                from django.db.models import Count
+                task_distribution = all_tasks.values(
+                    'assigned_to__first_name', 'assigned_to__last_name', 'assigned_to__username'
                 ).annotate(task_count=Count('id')).order_by('-task_count')
-                
-                if board_distribution:
-                    context += f"\n  **{board.name}** ({board_tasks.count()} tasks):\n"
-                    for assignee in board_distribution:
+                unassigned_count = all_tasks.filter(assigned_to__isnull=True).count()
+
+                context = f"**Task Distribution by Assignee:**\n\n"
+                context += f"**Total Tasks:** {all_tasks.count()}\n"
+                context += f"**Assigned:** {all_tasks.count() - unassigned_count}\n"
+                context += f"**Unassigned:** {unassigned_count}\n\n"
+
+                if task_distribution:
+                    context += "**Tasks per Team Member:**\n"
+                    for i, assignee in enumerate(task_distribution, 1):
                         first_name = assignee['assigned_to__first_name'] or ''
                         last_name = assignee['assigned_to__last_name'] or ''
                         username = assignee['assigned_to__username']
                         name = f"{first_name} {last_name}".strip() if (first_name or last_name) else (username or 'Unassigned')
-                        context += f"    • {name}: {assignee['task_count']} tasks\n"
-            
+                        task_count = assignee['task_count']
+                        pct = 100 * task_count / all_tasks.count()
+                        context += f"{i}. **{name}**: {task_count} tasks ({pct:.1f}%)\n"
+
+                # Per-board breakdown
+                context += "\n**Per-Board Breakdown:**\n"
+                for board in user_boards:
+                    board_wl = fetch_assignee_workload(board)
+                    if not board_wl:
+                        continue
+                    board_total = sum(w['task_count'] for w in board_wl.values())
+                    context += f"\n  **{board.name}** ({board_total} tasks):\n"
+                    for username, wl in sorted(board_wl.items(), key=lambda x: x[1]['task_count'], reverse=True):
+                        context += f"    • {wl['display_name']}: {wl['task_count']} tasks\n"
+
             # Add skill information for each team member (if available)
             try:
                 from accounts.models import UserProfile
                 context += "\n**Team Member Skills:**\n"
-                for assignee in task_distribution:
-                    username = assignee['assigned_to__username']
-                    if not username:
-                        continue
+                target_boards = [self.board] if self.board else list(user_boards)
+                member_ids = set()
+                for b in target_boards:
+                    for m in User.objects.filter(board_memberships__board=b):
+                        member_ids.add(m.id)
+                for uid in member_ids:
                     try:
-                        profile = UserProfile.objects.get(user__username=username)
-                        if profile.skills:
-                            skills_list = profile.skills if isinstance(profile.skills, list) else []
-                            if skills_list:
-                                first_name = assignee['assigned_to__first_name'] or ''
-                                last_name = assignee['assigned_to__last_name'] or ''
-                                name = f"{first_name} {last_name}".strip() or username
-                                skill_strs = [f"{s.get('name', 'Unknown')} ({s.get('level', 'N/A')})" for s in skills_list[:5]]
-                                context += f"  • **{name}**: {', '.join(skill_strs)}\n"
+                        profile = UserProfile.objects.select_related('user').get(user_id=uid)
+                        if profile.skills and isinstance(profile.skills, list) and profile.skills:
+                            name = profile.user.get_full_name() or profile.user.username
+                            skill_strs = [f"{s.get('name', 'Unknown')} ({s.get('level', 'N/A')})" for s in profile.skills[:5]]
+                            context += f"  • **{name}**: {', '.join(skill_strs)}\n"
                     except UserProfile.DoesNotExist:
                         pass
             except Exception as e:
                 logger.debug(f"Could not load skill data: {e}")
-            
-            # Check for workload imbalance
-            if task_distribution:
-                max_tasks = task_distribution[0]['task_count']
-                min_tasks = task_distribution[len(task_distribution)-1]['task_count']
-                if max_tasks > 2 * min_tasks and len(task_distribution) > 1:
-                    context += "\n⚠️ **Workload Imbalance Detected:** "
-                    context += f"Highest workload ({max_tasks} tasks) is more than 2x the lowest ({min_tasks} tasks)\n"
-            
+
             return context
-        
+
         except Exception as e:
             logger.error(f"Error getting task distribution context: {e}", exc_info=True)
             return f"Error calculating task distribution: {str(e)}"
     
     def _get_progress_metrics_context(self, prompt):
         """
-        Get progress metrics across tasks
-        Handles questions like: "What's the average progress?", "How complete are tasks?", etc.
-        
-        ALWAYS calculates and returns actual progress data
+        Get progress metrics across tasks.
+        Uses VDF column distribution for status counts (never progress-based buckets).
         """
         try:
             if not self._is_progress_query(prompt):
@@ -1617,57 +1691,78 @@ class TaskFlowChatbotService:
             user_boards = self._get_user_boards()
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
-            
-            # Get all tasks
-            all_tasks = Task.objects.filter(column__board__in=user_boards)
-            
-            if not all_tasks.exists():
+
+            from ai_assistant.utils.spectra_data_fetchers import (
+                fetch_board_tasks, fetch_column_distribution, DONE_COLUMN_NAMES,
+            )
+
+            # Aggregate across boards the user can see
+            target_boards = [self.board] if self.board else list(user_boards)
+            all_task_dicts = []
+            per_board_col_dist = {}
+            for b in target_boards:
+                dicts = fetch_board_tasks(b, filters={'item_type': 'task'})
+                all_task_dicts.extend(dicts)
+                per_board_col_dist[b] = fetch_column_distribution(b)
+
+            total = len(all_task_dicts)
+            if total == 0:
                 return "No tasks found in your boards."
-            
-            # Calculate progress metrics
-            from django.db.models import Avg, Max, Min
-            avg_progress = all_tasks.aggregate(Avg('progress'))['progress__avg'] or 0
-            max_progress = all_tasks.aggregate(Max('progress'))['progress__max'] or 0
-            min_progress = all_tasks.aggregate(Min('progress'))['progress__min'] or 0
-            
-            # Count by completion status
-            completed = all_tasks.filter(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-            ).count()
-            in_progress = all_tasks.filter(progress__gt=0, progress__lt=100).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-            ).count()
-            not_started = all_tasks.filter(progress=0).count()
-            
-            total = all_tasks.count()
-            
-            context = f"**Progress Metrics:**\n\n"
+
+            # Progress aggregates
+            progresses = [t['progress'] for t in all_task_dicts]
+            avg_progress = sum(progresses) / total
+            max_progress = max(progresses)
+            min_progress = min(progresses)
+
+            # Column-based status distribution (Bug 2 fix — never classify by progress)
+            col_counts = {}
+            for t in all_task_dicts:
+                col = t['column_name']
+                col_counts[col] = col_counts.get(col, 0) + 1
+
+            completed = sum(cnt for col, cnt in col_counts.items() if col.lower() in DONE_COLUMN_NAMES)
+            incomplete = total - completed
+
+            # Count milestones separately
+            milestone_count = sum(
+                len(fetch_board_tasks(b, filters={'exclude_item_type': 'task'}))
+                for b in target_boards
+            )
+
+            context = f"**=== BOARD SUMMARY (USE THESE NUMBERS — DO NOT RECOUNT) ===**\n"
+            context += f"  Total Tasks: {total}\n"
+            if milestone_count:
+                context += f"  Total Milestones: {milestone_count} (NOT counted as tasks)\n"
+            context += f"\n**Progress Metrics:**\n\n"
             context += f"**Overall Statistics:**\n"
             context += f"  - Total Tasks: {total}\n"
             context += f"  - Average Progress: {avg_progress:.1f}%\n"
             context += f"  - Highest Progress: {max_progress}%\n"
             context += f"  - Lowest Progress: {min_progress}%\n\n"
-            
-            context += f"**Task Status Distribution:**\n"
-            context += f"  - Completed: {completed} ({100*completed/total:.1f}%)\n"
-            context += f"  - In Progress: {in_progress} ({100*in_progress/total:.1f}%)\n"
-            context += f"  - Not Started: {not_started} ({100*not_started/total:.1f}%)\n\n"
-            
+
+            context += f"**Task Distribution by Column (actual workflow status):**\n"
+            for col_name, count in sorted(col_counts.items(), key=lambda x: x[1], reverse=True):
+                pct = 100 * count / total
+                marker = " ✅" if col_name.lower() in DONE_COLUMN_NAMES else ""
+                context += f"  - {col_name}: {count} ({pct:.1f}%){marker}\n"
+            context += f"\n  Summary: {completed} completed, {incomplete} incomplete\n\n"
+
             # Progress by board
             context += f"**Progress by Board:**\n"
-            for board in user_boards:
-                board_tasks = all_tasks.filter(column__board=board)
-                if board_tasks.exists():
-                    board_avg = board_tasks.aggregate(Avg('progress'))['progress__avg'] or 0
-                    board_completed = board_tasks.filter(
-                        Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-                    ).count()
-                    board_total = board_tasks.count()
-                    context += f"  - **{board.name}**: {board_avg:.1f}% average "
-                    context += f"({board_completed}/{board_total} completed)\n"
-            
+            for b in target_boards:
+                b_tasks = [t for t in all_task_dicts if True]  # already filtered
+                if self.board:
+                    b_tasks = all_task_dicts
+                else:
+                    b_tasks = [t for t in all_task_dicts if t.get('board_id') == b.id]
+                if b_tasks:
+                    b_avg = sum(t['progress'] for t in b_tasks) / len(b_tasks)
+                    b_done = sum(1 for t in b_tasks if t['is_complete'])
+                    context += f"  - **{b.name}**: {b_avg:.1f}% average ({b_done}/{len(b_tasks)} completed)\n"
+
             return context
-        
+
         except Exception as e:
             logger.error(f"Error getting progress metrics context: {e}", exc_info=True)
             return f"Error calculating progress: {str(e)}"
@@ -1683,10 +1778,14 @@ class TaskFlowChatbotService:
             if not self._is_overdue_query(prompt):
                 return None
             
-            # Get user's boards
-            user_boards = self._get_user_boards()
-            if not user_boards.exists():
-                return "You don't have access to any boards yet."
+            # Scope to active board when set, otherwise fall back to all user boards
+            if self.board:
+                board_filter = {'column__board': self.board}
+            else:
+                user_boards = self._get_user_boards()
+                if not user_boards.exists():
+                    return "You don't have access to any boards yet."
+                board_filter = {'column__board__in': user_boards}
             
             from django.utils import timezone
             from datetime import timedelta
@@ -1694,9 +1793,10 @@ class TaskFlowChatbotService:
             today = timezone.now().date()
             week_from_now = today + timedelta(days=7)
             
-            # Get all tasks with due dates
+            # Get all tasks with due dates (exclude milestones and other non-task items)
             tasks_with_dates = Task.objects.filter(
-                column__board__in=user_boards,
+                **board_filter,
+                item_type='task',
                 due_date__isnull=False
             ).select_related('assigned_to', 'column', 'column__board').order_by('due_date')
             
@@ -1705,16 +1805,16 @@ class TaskFlowChatbotService:
             
             # Categorize tasks
             overdue = tasks_with_dates.filter(due_date__lt=today).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed') | Q(progress=100)
             )
             due_today = tasks_with_dates.filter(due_date=today).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed') | Q(progress=100)
             )
             due_soon = tasks_with_dates.filter(
                 due_date__gt=today,
                 due_date__lte=week_from_now
             ).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed') | Q(progress=100)
             )
             
             context = f"**Task Deadlines Analysis:**\n\n"
@@ -1893,28 +1993,33 @@ class TaskFlowChatbotService:
             context += f"**Total Organizations:** {orgs.count()}\n\n"
             
             for org in orgs:
-                # Get detailed metrics
-                boards_count = Board.objects.filter(organization=org).count()
-                members_count = org.members.count()
-                
-                # Get user-accessible boards in this org
-                from kanban.utils.demo_protection import get_user_boards
-                user_boards_in_org = get_user_boards(self.user).filter(
-                    organization=org
+                # Get user-accessible boards in this org (RBAC-scoped)
+                user_boards_in_org = self._get_user_boards(organization=org)
+
+                # Only show counts the user can legitimately see:
+                # board count → user's own accessible boards (not org-wide total)
+                # member count → members on those accessible boards only
+                accessible_board_count = user_boards_in_org.count()
+
+                from django.contrib.auth import get_user_model
+                User_model = get_user_model()
+                accessible_member_ids = set(
+                    User_model.objects.filter(
+                        board_memberships__board__in=user_boards_in_org
+                    ).values_list('id', flat=True)
                 )
+                accessible_members_count = len(accessible_member_ids)
                 
                 context += f"**{org.name}**\n"
                 if org.domain:
                     context += f"  - Domain: {org.domain}\n"
-                context += f"  - Total Boards: {boards_count}\n"
-                if user_boards_in_org.count() != boards_count:
-                    context += f"  - Your Boards: {user_boards_in_org.count()}\n"
-                context += f"  - Members: {members_count}\n"
+                context += f"  - Your Boards: {accessible_board_count}\n"
+                context += f"  - Team Members (on your boards): {accessible_members_count}\n"
                 context += f"  - Created: {org.created_at.strftime('%Y-%m-%d')}\n"
                 context += f"  - Created by: {org.created_by.get_full_name() or org.created_by.username}\n"
                 
                 # List board names if manageable
-                if user_boards_in_org.count() > 0 and user_boards_in_org.count() <= 5:
+                if accessible_board_count > 0 and accessible_board_count <= 5:
                     board_names = [b.name for b in user_boards_in_org]
                     context += f"  - Board Names: {', '.join(board_names)}\n"
                 
@@ -1958,7 +2063,7 @@ class TaskFlowChatbotService:
                 logger.info(f"No critical tasks found for user {self.user}")
                 return "No critical tasks currently identified."
             
-            context = f"**Critical Tasks Analysis:**\n\n"
+            context = f"=== CRITICAL TASKS ANALYSIS (from database + AI risk scoring) ===\n\n"
             context += f"**Total Critical Tasks:** {critical_tasks.count()}\n\n"
             
             # Group by severity
@@ -2029,7 +2134,7 @@ class TaskFlowChatbotService:
             if not high_risk_tasks.exists():
                 return None
             
-            context = f"""**Risk Management Analysis:**
+            context = f"""=== AI RISK ANALYSIS (derived from scoring models, not structural dependencies) ===
 
 **High-Risk Tasks:** {len(high_risk_tasks)} identified
 
@@ -2214,21 +2319,29 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            # Get stakeholders for user's projects
+            # Get stakeholders for user's projects (deduplicated)
             stakeholders = ProjectStakeholder.objects.filter(
                 board__in=user_boards
-            ).select_related('user', 'board').order_by('board', 'engagement_level')[:20]
+            ).select_related('user', 'board').order_by('board', 'engagement_level').distinct()[:20]
             
             if not stakeholders.exists():
                 return None
             
+            # Deduplicate by user to avoid listing the same person multiple times
+            seen_user_ids = set()
+            unique_stakeholders = []
+            for s in stakeholders:
+                if s.user_id not in seen_user_ids:
+                    seen_user_ids.add(s.user_id)
+                    unique_stakeholders.append(s)
+            
             context = f"""**Stakeholder Management:**
 
-**Stakeholders:** {len(stakeholders)} identified
+**Stakeholders:** {len(unique_stakeholders)} identified
 
 """
             
-            for stakeholder in stakeholders:
+            for stakeholder in unique_stakeholders:
                 context += f"• **{stakeholder.user.get_full_name() or stakeholder.user.username}**\n"
                 context += f"  - Board: {stakeholder.board.name}\n"
                 context += f"  - Role: {stakeholder.role if hasattr(stakeholder, 'role') else 'Team Member'}\n"
@@ -2335,7 +2448,8 @@ class TaskFlowChatbotService:
     def _get_lean_context(self, prompt):
         """
         Get Lean Six Sigma data
-        Includes value-added vs waste analysis, efficiency metrics
+        Includes value-added vs waste analysis, efficiency metrics.
+        Uses the actual lss_classification field on tasks (not labels).
         """
         try:
             if not self._is_lean_query(prompt):
@@ -2346,24 +2460,25 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            # Get all tasks
-            all_tasks = Task.objects.filter(column__board__in=user_boards)
+            # Get all tasks (exclude milestones)
+            all_tasks = Task.objects.filter(column__board__in=user_boards, item_type='task')
             
-            # Try to get tasks by label category (Lean Six Sigma)
-            va_tasks = all_tasks.filter(
-                labels__name__icontains='value-added'
-            ).distinct().count()
-            
-            nva_tasks = all_tasks.filter(
-                labels__name__icontains='necessary'
-            ).distinct().count()
-            
-            waste_tasks = all_tasks.filter(
-                labels__name__icontains='waste'
-            ).distinct().count()
+            # Use the actual lss_classification model field (not labels)
+            va_tasks = all_tasks.filter(lss_classification='value_added').count()
+            nva_tasks = all_tasks.filter(lss_classification='necessary_nva').count()
+            waste_tasks = all_tasks.filter(lss_classification='waste').count()
             
             if va_tasks + nva_tasks + waste_tasks == 0:
-                return None
+                return (
+                    "**Lean Six Sigma Analysis:**\n\n"
+                    "No Lean Six Sigma classifications have been applied to tasks on your boards yet. "
+                    "The `lss_classification` field is empty for all tasks.\n\n"
+                    "**How to get started:**\n"
+                    "1. Classify tasks as **Value-Added**, **Necessary NVA**, or **Waste/Eliminate** "
+                    "using the Lean Six Sigma classification feature in the task editor\n"
+                    "2. Once classifications are set, I can provide a full value-stream analysis with "
+                    "percentages and recommendations"
+                )
             
             total_categorized = va_tasks + nva_tasks + waste_tasks
             
@@ -2380,6 +2495,16 @@ class TaskFlowChatbotService:
 3. Prioritize elimination of waste tasks ({waste_tasks} identified)
 """
             
+            # List individual task classifications if there are few enough
+            if total_categorized <= 20:
+                classified_tasks = all_tasks.filter(
+                    lss_classification__isnull=False
+                ).exclude(lss_classification='').select_related('column')
+                if classified_tasks.exists():
+                    context += "\n**Task-level Classifications:**\n"
+                    for t in classified_tasks:
+                        context += f"- {t.title}: {t.get_lss_classification_display()}\n"
+            
             return context
         
         except Exception as e:
@@ -2388,18 +2513,27 @@ class TaskFlowChatbotService:
     
     def _get_full_dependency_chain(self, task, max_depth=10):
         """
-        Recursively get the complete dependency chain for a task
-        Returns list of tasks from root to current task
+        Get the complete dependency chain for a task.
+        Checks both parent_task (legacy) and M2M dependencies field.
+        Returns list of tasks from root dependencies to current task.
         """
         chain = []
-        current = task
-        depth = 0
+        visited = set()
         
-        # Travel up the dependency chain
-        while current and depth < max_depth:
-            chain.insert(0, current)  # Add to beginning to maintain order
-            current = current.parent_task if hasattr(current, 'parent_task') else None
-            depth += 1
+        def _walk(t, depth):
+            if not t or t.id in visited or depth >= max_depth:
+                return
+            visited.add(t.id)
+            # Walk parent_task (legacy)
+            if hasattr(t, 'parent_task') and t.parent_task:
+                _walk(t.parent_task, depth + 1)
+            # Walk M2M dependencies
+            for dep in t.dependencies.all():
+                _walk(dep, depth + 1)
+            chain.append(t)
+        
+        _walk(task, 0)
+        return chain
         
         return chain
     
@@ -2556,7 +2690,7 @@ class TaskFlowChatbotService:
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
-                org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+                org = Organization.objects.filter(is_demo=True).first()
                 if org:
                     logger.info(f"User {self.user.username} has no org, using demo org for wiki queries")
                 else:
@@ -2608,22 +2742,28 @@ class TaskFlowChatbotService:
             # ── Collect published wiki pages ──────────────────────────────
             prompt_words = prompt.lower().split()
 
-            # Base queryset: all published pages the user can see in their org
-            wiki_pages = WikiPage.objects.filter(
-                organization=org,
-                is_published=True
-            ).select_related('category', 'created_by')
+            # RBAC: scope wiki pages to boards the user has access to
+            user_boards = self._get_user_boards()
+            board_linked_page_ids = WikiLink.objects.filter(
+                board__in=user_boards, link_type='board'
+            ).values_list('wiki_page_id', flat=True)
 
-            # Also include pages linked directly to the active board (regardless of org)
+            # Published pages linked to user's boards, plus org-level pages without a board link
+            wiki_pages = WikiPage.objects.filter(
+                Q(organization=org, is_published=True, id__in=board_linked_page_ids) |
+                Q(organization=org, is_published=True, links_to_items__isnull=True)
+            ).select_related('category', 'created_by').distinct()
+
+            # Also include pages linked directly to the active board
             if self.board:
-                board_linked_page_ids = WikiLink.objects.filter(
+                active_board_page_ids = WikiLink.objects.filter(
                     board=self.board, link_type='board'
                 ).values_list('wiki_page_id', flat=True)
-                wiki_pages = (
-                    wiki_pages | WikiPage.objects.filter(
-                        id__in=board_linked_page_ids, is_published=True
-                    ).select_related('category', 'created_by')
-                ).distinct()
+                wiki_pages = WikiPage.objects.filter(
+                    Q(organization=org, is_published=True, id__in=board_linked_page_ids) |
+                    Q(organization=org, is_published=True, links_to_items__isnull=True) |
+                    Q(id__in=active_board_page_ids, is_published=True)
+                ).select_related('category', 'created_by').distinct()
 
             logger.info(f"Total wiki pages in scope: {wiki_pages.count()}")
             logger.info(f"Search words (>3 chars): {[w for w in prompt_words if len(w) > 3]}")
@@ -2825,25 +2965,31 @@ class TaskFlowChatbotService:
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
-                org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+                org = Organization.objects.filter(is_demo=True).first()
             if not org:
                 return None
 
+            # RBAC: scope documentation summary to user's accessible boards
+            user_boards = self._get_user_boards()
+            board_linked_page_ids = WikiLink.objects.filter(
+                board__in=user_boards, link_type='board'
+            ).values_list('wiki_page_id', flat=True)
+
             pages_qs = WikiPage.objects.filter(
-                organization=org,
-                is_published=True,
-            ).select_related('category', 'created_by').order_by('-updated_at')
+                Q(organization=org, is_published=True, id__in=board_linked_page_ids) |
+                Q(organization=org, is_published=True, links_to_items__isnull=True)
+            ).select_related('category', 'created_by').order_by('-updated_at').distinct()
 
             # Also include pages linked to the current board
             if self.board:
                 board_page_ids = WikiLink.objects.filter(
                     board=self.board, link_type='board'
                 ).values_list('wiki_page_id', flat=True)
-                pages_qs = (
-                    pages_qs | WikiPage.objects.filter(
-                        id__in=board_page_ids, is_published=True
-                    ).select_related('category', 'created_by')
-                ).distinct()
+                pages_qs = WikiPage.objects.filter(
+                    Q(organization=org, is_published=True, id__in=board_linked_page_ids) |
+                    Q(organization=org, is_published=True, links_to_items__isnull=True) |
+                    Q(id__in=board_page_ids, is_published=True)
+                ).select_related('category', 'created_by').order_by('-updated_at').distinct()
 
             total = pages_qs.count()
             if total == 0:
@@ -2910,7 +3056,7 @@ class TaskFlowChatbotService:
                 org = self.user.profile.organization
             else:
                 # Fallback to demo organization for users without org
-                org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+                org = Organization.objects.filter(is_demo=True).first()
                 if org:
                     logger.info(f"User {self.user.username} has no org, using demo org for meeting queries")
                 else:
@@ -2919,10 +3065,11 @@ class TaskFlowChatbotService:
             
             context = "**🎤 Meeting & Discussion Context:**\n\n"
             
-            # Get all organization meetings (knowledge should be shared across org)
-            # More permissive than filtering by user - shows all org meetings
+            # RBAC: scope meetings to boards the user has access to
+            user_boards = self._get_user_boards()
             meetings = MeetingNotes.objects.filter(
-                organization=org
+                Q(organization=org, related_board__in=user_boards) |
+                Q(organization=org, related_board__isnull=True)
             ).select_related('created_by', 'related_board').prefetch_related('attendees').order_by('-date')
             
             logger.info(f"Meeting query by {self.user.username} in org '{org.name}'")
@@ -3150,12 +3297,12 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            context = "**Task Dependencies & Relationships:**\n\n"
+            context = "=== TASK DEPENDENCIES & RELATIONSHIPS (from database) ===\n\n"
             
             # Check if asking about a specific task
             specific_task = None
             for board in user_boards:
-                tasks = Task.objects.filter(column__board=board)
+                tasks = Task.objects.filter(column__board=board, item_type='task')
                 for task in tasks:
                     if task.title.lower() in prompt.lower():
                         specific_task = task
@@ -3221,36 +3368,71 @@ class TaskFlowChatbotService:
                 
                 context += "\n"
             
-            # Get general dependency overview
-            # Get tasks with dependencies
-            tasks_with_parent = Task.objects.filter(
-                column__board__in=user_boards,
-                parent_task__isnull=False
-            ).select_related('parent_task', 'column', 'assigned_to')[:15]
-            
-            # Get tasks with child tasks (subtasks)
+            # Get general dependency overview via VDF
+            from ai_assistant.utils.spectra_data_fetchers import (
+                fetch_dependency_graph, fetch_board_tasks,
+            )
+
+            target_boards = [self.board] if self.board else list(user_boards)
+            # Aggregate dependency graph across all relevant boards
+            all_dep_graph = {}
+            all_task_lookup = {}
+            for b in target_boards:
+                graph = fetch_dependency_graph(b)
+                all_dep_graph.update(graph)
+                for td in fetch_board_tasks(b):
+                    all_task_lookup[td['id']] = td
+
+            has_any_deps = any(
+                node['blocking'] or node['blocked_by']
+                for node in all_dep_graph.values()
+            )
+
+            # Get tasks with child tasks (subtasks) — still ORM for parent_task
             tasks_with_children = Task.objects.filter(
-                column__board__in=user_boards,
+                column__board__in=target_boards,
                 subtasks__isnull=False
             ).select_related('column').distinct()[:10]
-            
-            if not specific_task and (tasks_with_parent.exists() or tasks_with_children.exists()):
-                if tasks_with_parent.exists():
-                    context += f"**Tasks with Dependencies ({len(tasks_with_parent)}):**\n"
-                    for task in tasks_with_parent:
-                        context += f"• **{task.title}**\n"
-                        context += f"  - Depends On: {task.parent_task.title}\n"
-                        context += f"  - Parent Status: {task.parent_task.column.name if task.parent_task.column else 'Unknown'}\n"
-                        if task.column:
-                            context += f"  - Task Status: {task.column.name}\n"
-                        
-                        # Check if parent is blocking
-                        parent_done = task.parent_task.column and ('done' in task.parent_task.column.name.lower() or 'closed' in task.parent_task.column.name.lower())
-                        if not parent_done:
-                            context += f"  - ⚠️ Blocked: Waiting for '{task.parent_task.title}' to complete\n"
-                        
+
+            if not specific_task and (has_any_deps or tasks_with_children.exists()):
+                # ── M2M Dependencies (forward: what does this task depend on) ──
+                tasks_with_deps = [
+                    (tid, node) for tid, node in all_dep_graph.items()
+                    if node['blocked_by']
+                ]
+                if tasks_with_deps:
+                    context += f"**Task Dependencies ({len(tasks_with_deps)}):**\n"
+                    for tid, node in tasks_with_deps:
+                        td = all_task_lookup.get(tid)
+                        if not td:
+                            continue
+                        context += f"• **{td['title']}**\n"
+                        context += f"  - Status: {td['column_name']}\n"
+                        for dep_info in node['blocked_by']:
+                            dep_td = all_task_lookup.get(dep_info['task_id'])
+                            dep_status = dep_td['column_name'] if dep_td else 'Unknown'
+                            dep_complete = dep_td['is_complete'] if dep_td else False
+                            context += f"  - Depends On: {dep_info['title']} [{dep_status}]\n"
+                            if not dep_complete:
+                                context += f"    ⚠️ Blocked: Waiting for '{dep_info['title']}' to complete\n"
                         context += "\n"
-                
+
+                # ── REVERSE: Top Blocking Tasks (Bug 7 fix) ──
+                blocking_tasks = [
+                    (tid, node) for tid, node in all_dep_graph.items()
+                    if node['blocking_count'] > 0
+                ]
+                blocking_tasks.sort(key=lambda x: x[1]['blocking_count'], reverse=True)
+                if blocking_tasks:
+                    context += f"**🔗 Top Blocking Tasks (tasks that others depend on):**\n"
+                    for tid, node in blocking_tasks[:10]:
+                        td = all_task_lookup.get(tid)
+                        if not td:
+                            continue
+                        blocked_names = [b['title'] for b in node['blocking']]
+                        context += f"• **{td['title']}** [{td['column_name']}] — blocks {node['blocking_count']} task(s): {', '.join(blocked_names)}\n"
+                    context += "\n"
+
                 if tasks_with_children.exists():
                     context += f"\n**Tasks with Subtasks ({len(tasks_with_children)}):**\n"
                     for task in tasks_with_children:
@@ -3258,8 +3440,8 @@ class TaskFlowChatbotService:
                         context += f"• {task.title} ({child_count} subtasks)\n"
             
             # If no dependencies found anywhere, return explicit message
-            if context == "**Task Dependencies & Relationships:**\n\n":
-                return "**Task Dependencies & Relationships:**\n\nNo task dependencies are currently configured in your boards. Tasks are independent and can be worked on in any order.\n\nTo set up dependencies, edit a task and set its 'Parent Task' field to create blocking relationships."
+            if context == "=== TASK DEPENDENCIES & RELATIONSHIPS (from database) ===\n\n":
+                return "=== TASK DEPENDENCIES & RELATIONSHIPS (from database) ===\n\nNo task dependencies are currently configured in your boards. Tasks are independent and can be worked on in any order.\n\nTo set up dependencies, edit a task and set its 'Parent Task' field to create blocking relationships."
             
             return context
         
@@ -3401,6 +3583,7 @@ class TaskFlowChatbotService:
             'organization goal', 'org goal', 'workflow', 'strategic',
             'objective', 'vision', 'target metric', 'missions',
             'linked boards', 'goal progress', 'mission progress',
+            'okr', 'key result', 'alignment',
         ]
         prompt_lower = prompt.lower()
         return any(kw in prompt_lower for kw in keywords)
@@ -3430,6 +3613,12 @@ class TaskFlowChatbotService:
             org_goals = get_user_goals(self.user).filter(
                 Q(id__in=goal_ids) | Q(created_by=self.user)
             ).distinct()
+
+            # Fallback: if no goals found via board→strategy chain (e.g.
+            # sandbox copies with strategy_id=None), use all goals the
+            # user has access to based on their workspace/demo mode.
+            if not org_goals.exists():
+                org_goals = get_user_goals(self.user)
 
             if not org_goals.exists():
                 context += "No Organization Goals defined yet.\n"
@@ -3462,9 +3651,9 @@ class TaskFlowChatbotService:
                             if s.description:
                                 context += f"         Approach: {s.description[:150]}\n"
 
-                            boards = s.boards.filter(is_archived=False)
+                            boards = s.boards.filter(is_archived=False, id__in=user_boards)
                             for b in boards[:5]:
-                                task_count = Task.objects.filter(column__board=b).count()
+                                task_count = Task.objects.filter(column__board=b, item_type='task').count()
                                 context += f"         📋 Board: {b.name} ({task_count} tasks, {b.memberships.count()} members)\n"
                 else:
                     context += "   No missions linked yet.\n"
@@ -3619,7 +3808,7 @@ class TaskFlowChatbotService:
                     context += "\n"
                 elif board.baseline_task_count:
                     found_data = True
-                    current_count = Task.objects.filter(column__board=board).count()
+                    current_count = Task.objects.filter(column__board=board, item_type='task').count()
                     growth = ((current_count - board.baseline_task_count) / max(board.baseline_task_count, 1)) * 100
                     context += f"**📊 Scope Tracking:**\n"
                     context += f"  • Baseline: {board.baseline_task_count} tasks\n"
@@ -3839,6 +4028,9 @@ class TaskFlowChatbotService:
         Compact always-on snapshot of the current board state.
         Gives Spectra accurate live task counts and status distribution
         so it never uses stale data. Kept compact to minimize tokens.
+
+        Uses VDF layer for milestones and column distribution to ensure
+        correct milestone completion status and column-based counts.
         """
         try:
             if not self.board:
@@ -3846,36 +4038,71 @@ class TaskFlowChatbotService:
             if self.board.is_archived:
                 return None
 
-            from django.db.models import Count
-            from django.utils import timezone
+            from ai_assistant.utils.spectra_data_fetchers import (
+                fetch_column_distribution,
+                fetch_milestones,
+                fetch_overdue_tasks,
+            )
 
-            tasks = Task.objects.filter(column__board=self.board)
-            total = tasks.count()
+            # Column distribution (task counts by column, never progress-based)
+            col_dist = fetch_column_distribution(self.board)
+            total = sum(count for _, count in col_dist)
             if total == 0:
                 return f"**📌 Live Board Snapshot ({self.board.name}):** 0 tasks.\n"
 
-            status_counts = (
-                tasks.values('column__name', 'column__position')
-                .annotate(count=Count('id'))
-                .order_by('column__position')
+            # Milestones via VDF — correct dual-condition completion
+            milestones = fetch_milestones(self.board)
+            milestone_count = len(milestones)
+
+            # Overdue and unassigned counts via VDF
+            overdue_tasks = fetch_overdue_tasks(self.board)
+            overdue = len(overdue_tasks)
+            unassigned = sum(
+                1 for t in overdue_tasks if t['assigned_to_username'] is None
             )
+            # Also count unassigned among non-complete tasks
+            from ai_assistant.utils.spectra_data_fetchers import fetch_board_tasks
+            all_task_dicts = fetch_board_tasks(self.board, filters={'item_type': 'task', 'is_complete': False})
+            unassigned = sum(1 for t in all_task_dicts if t['assigned_to_username'] is None)
 
-            today = timezone.now().date()
-            overdue = tasks.filter(due_date__lt=today).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-            ).count()
-            unassigned = tasks.filter(assigned_to__isnull=True).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-            ).count()
+            ctx = f"**📌 Live Board Snapshot ({self.board.name}) — {total} tasks"
+            if milestone_count:
+                ctx += f", {milestone_count} milestones (NOT counted as tasks)"
+            ctx += f":**\n"
+            ctx += f"  USE THESE NUMBERS — DO NOT RECOUNT FROM THE TASK LIST.\n"
+            for col_name, count in col_dist:
+                ctx += f"  {col_name}: {count}\n"
 
-            ctx = f"**📌 Live Board Snapshot ({self.board.name}) — {total} tasks:**\n"
-            for s in status_counts:
-                ctx += f"  {s['column__name']}: {s['count']}"
-                ctx += "\n"
+            # List actual milestone names and due dates (from VDF)
+            if milestones:
+                ctx += f"\n  **🏁 Milestones ({milestone_count}):**\n"
+                for m in milestones:
+                    ms_status = '✅ Done' if m['is_complete'] else m['column_name']
+                    ms_due = ''
+                    if m['due_date_date']:
+                        if m['is_overdue']:
+                            ms_due = f" — Due: {m['due_date_date']} ⚠️ OVERDUE"
+                        else:
+                            ms_due = f" — Due: {m['due_date_date']}"
+                    ctx += f"  • {m['title']} [{ms_status}]{ms_due}\n"
             if overdue:
                 ctx += f"  ⚠️ Overdue: {overdue}\n"
             if unassigned:
                 ctx += f"  📋 Unassigned: {unassigned}\n"
+
+            # Compact hierarchy breadcrumb (if board is linked to a strategy)
+            if self.board.strategy_id:
+                strategy = self.board.strategy
+                mission = strategy.mission if strategy else None
+                goal = mission.organization_goal if mission else None
+                crumbs = []
+                if goal:
+                    crumbs.append(f"Goal: {goal.name}")
+                if mission:
+                    crumbs.append(f"Mission: {mission.name}")
+                crumbs.append(f"Strategy: {strategy.name}")
+                ctx += f"  🏗️ Hierarchy: {' → '.join(crumbs)} → {self.board.name}\n"
+
             ctx += "\n"
             return ctx
 
@@ -3946,13 +4173,9 @@ Your role is to help project managers and team members with:
 - **Focus Today (Decision Center)**: Pending decisions, risk assessments, briefings
 - **Knowledge Graph**: Organizational memory, lessons learned, patterns
 - **Analytics**: Team performance, engagement metrics, feedback
-- **Spectra Actions** (say "create a task", "send a message", etc.):
-  • Create tasks, boards, and automation rules
-  • Send messages to board members
-  • Log time entries on tasks
-  • Schedule calendar events and meetings
-  • Generate AI-powered retrospectives
-  • Create custom trigger-based or scheduled automations
+- **Spectra Actions** — Coming in v2.0:
+  • Action commands (create tasks, send messages, log time, etc.) are disabled in v1.0.
+  • If the user asks you to perform any action, politely decline and mention Spectra v2.0.
 
 CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 1. **ALWAYS USE PROVIDED CONTEXT DATA**: When project data is provided in the "Available Context Data" section, you MUST use it to answer questions directly and specifically
@@ -3960,7 +4183,7 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
 5. **WORKSPACE AWARENESS**: The user is currently in the **{workspace_env}**. You MUST only reference data from this environment:
-   - In "Demo Workspace": Only discuss demo boards, demo tasks, and demo data. If the user asks a **question** about something that only exists in their personal workspace, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards." Do NOT use this message when the user is making an action request (e.g. sending a message to someone) — instead, politely explain the issue (e.g. the person is not a known team member).
+   - In "Demo Workspace": Discuss demo boards, demo tasks, wiki pages, goals/missions/strategies, meeting notes, coding standards, knowledge resources, and any other data provided in the Available Context Data section — all of this IS demo data. If the user explicitly asks about their personal boards by name and those boards are not in the context, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards." Do NOT use this message for general questions about wiki, goals, strategies, documentation, coding practices, web search, sprint planning, or any topic where context data is provided. Do NOT use this message when the user is making an action request (e.g. sending a message to someone) — instead, politely explain the issue (e.g. the person is not a known team member).
    - In "My Workspace": Only discuss the user's personal boards and tasks. If the user asks about demo content, say: "I can only see your personal workspace data right now. Switch to Demo Workspace to explore the demo boards."
    - When creating boards or tasks, they stay in the current environment — demo artifacts don't leak into My Workspace and vice versa.
 5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" — you already know the user is {user_name} and the board context
@@ -3974,6 +4197,8 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 9. **FILTER COMPLETED WORK**: When listing risks, blockers, or actionable items, exclude tasks that are already "Done" or "Closed" unless specifically asked about completed work. Completed tasks are not risks.
 10. **CONCISE & ACTIONABLE**: Keep responses focused. Avoid generic productivity advice or filler content. Every sentence should add value.
 11. **NEVER HALLUCINATE OR FABRICATE DATA**: ONLY use user names, task names, team members, skills, and numbers that are explicitly present in the "Available Context Data" section below. If the context data does not contain team member information, workload data, or skill data, you MUST say so clearly (e.g., "I don't have team member data available for this board"). NEVER invent or guess user names, task counts, or skill levels. If you cannot answer a question from the provided context, say what data is missing rather than making something up.
+12. **PRE-CALCULATED NUMBERS ARE AUTHORITATIVE**: When a BOARD SUMMARY or Live Board Snapshot provides numbers (total tasks, tasks by status, milestones), use those exact figures. Do NOT recount items from the task list or attempt your own arithmetic. Tasks and milestones are separate object types — never add them together when reporting task totals. If asked "how many total tasks", report only the total_tasks figure, not total_tasks + milestones.
+13. **WEB SEARCH LIMITATIONS**: You do NOT have internet access or web browsing capability. If the user asks you to search the web, look something up online, or browse a URL, say: "I don't have web search or internet access. I can only answer from your project data, wiki pages, and my built-in knowledge. Would you like me to check your project data instead?" Do NOT say "I can only operate within your verified permissions" for web search requests — that message is only for prompt injection attempts. **IMPORTANT**: "search the documentation", "search the wiki", "find documentation about X", or "look up X in our docs" are NOT web search requests — these refer to internal wiki/documentation pages. If the Available Context Data includes wiki pages or a documentation summary, use that data to answer. Only use the "I don't have web search" response for requests that explicitly ask for internet, web, or online content.
 
 RESPONSE STRUCTURE:
 - For data queries (counts, lists, status): Provide the specific data FIRST, then optionally add insights
@@ -4005,7 +4230,11 @@ Format responses clearly with:
 - Bullet points for lists
 - **Bold** for emphasis and headers
 - Specific numbers and metrics
-- Actionable recommendations"""
+- Actionable recommendations
+
+IMPORTANT — READ-ONLY MODE (v1.0):
+You are operating in read-only mode. You can answer questions about project data, board status, task details, team workload, risks, milestones, wiki pages, meeting transcripts, and the organizational hierarchy (Goals, Missions, Strategies). You cannot create, update, or delete any data. If a user asks you to create a task, log time, send a message, create a board, schedule an event, or take any other write action, politely decline and explain that action commands are coming in Spectra v2.0. Never attempt to call a write tool. Never invent or guess at data not present in your context.
+When answering questions about organizational goals, missions, or strategies, use the data in the organizational_hierarchy section of your context. If that section is empty, tell the user that no goals have been configured in their workspace yet."""
     
     def get_response(self, prompt, use_cache=True, file_context=None):
         """
@@ -4030,9 +4259,35 @@ Format responses clearly with:
             # ── RBAC gate: verify user can read the active board ───────
             # If the user does not have access, return a denial response
             # immediately without building any context (prevents data leakage).
-            if self.board and self.user and not self.is_demo_mode:
-                from ai_assistant.utils.rbac_utils import can_spectra_read_board
-                if not can_spectra_read_board(self.user, self.board):
+            #
+            # My Workspace → standard RBAC check via can_spectra_read_board.
+            # Demo Workspace → sandbox isolation check: the board must belong
+            #   to THIS user's sandbox (owner=user & is_sandbox_copy) or be
+            #   an official demo board.  This prevents Demo User A from seeing
+            #   Demo User B's sandbox data.
+            if self.board and self.user:
+                _access_denied = False
+                if self.is_demo_mode:
+                    # Sandbox isolation: board must be user's own sandbox copy
+                    # or an official demo board
+                    if not (
+                        getattr(self.board, 'is_official_demo_board', False)
+                        or (
+                            getattr(self.board, 'is_sandbox_copy', False)
+                            and self.board.owner_id == self.user.id
+                        )
+                        or (
+                            getattr(self.board, 'created_by_session', '')
+                            == f'spectra_demo_{self.user.id}'
+                        )
+                    ):
+                        _access_denied = True
+                else:
+                    from ai_assistant.utils.rbac_utils import can_spectra_read_board
+                    if not can_spectra_read_board(self.user, self.board):
+                        _access_denied = True
+
+                if _access_denied:
                     from kanban.simple_access import get_spectra_denial_context
                     denial = get_spectra_denial_context(self.user, self.board)
                     denial_msg = denial.get('message', (
@@ -4154,7 +4409,9 @@ Format responses clearly with:
                     logger.debug("Added user tasks context")
             
             # 3. Incomplete tasks query
-            if is_incomplete_task_query:
+            # Skip when user is asking specifically about dependencies — the
+            # full incomplete list just adds noise to the context.
+            if is_incomplete_task_query and not is_dependency_query:
                 incomplete_context = self._get_incomplete_tasks_context(prompt)
                 if incomplete_context:
                     context_parts.append(incomplete_context)
@@ -4182,7 +4439,10 @@ Format responses clearly with:
                     logger.debug("Added progress metrics context")
             
             # 7. Overdue tasks
-            if is_overdue_query:
+            # Skip when the primary intent is dependency analysis — overdue
+            # context can mislead the LLM into mixing deadline urgency with
+            # structural dependency chains.
+            if is_overdue_query and not is_dependency_query:
                 overdue_context = self._get_overdue_tasks_context(prompt)
                 if overdue_context:
                     context_parts.append(overdue_context)
@@ -4267,8 +4527,13 @@ Format responses clearly with:
                     context_parts.append(board_features_ctx)
                     logger.debug("Added board features context")
             
-            # 16. General project context (if not already covered by specialized contexts)
-            if is_project_query and not context_parts:
+            # 16. General project context — ALWAYS include when board is set.
+            #     The full task list must always be present so Spectra can
+            #     cross-reference accurately. Previously gated on is_project_query
+            #     which caused missing context for prompts without trigger keywords
+            #     (e.g. "progress", "percentage", "on track" were not in the list).
+            #     Phase 8 fix: unconditional when self.board is set.
+            if self.board:
                 taskflow_context = self.get_taskflow_context(use_cache)
                 if taskflow_context:
                     context_parts.append(taskflow_context)
