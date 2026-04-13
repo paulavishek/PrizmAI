@@ -26,7 +26,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
 - **Board Automations** — Trigger-based rules for repetitive workflows *(Professional mode and above)*; scheduled recurring automations *(Enterprise mode)*
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
-- **Requirements Analysis** — Full lifecycle requirement management with traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. Spectra AI can answer questions about requirement status, coverage gaps, and traceability. *(Professional mode and above)*
+- **Requirements Analysis** — AI-powered requirement lifecycle management with full traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. AI capabilities include: **Quality Scoring** (per-requirement analysis across clarity, completeness, testability, unambiguity, and feasibility dimensions), **Gap Detection** (identify uncovered objectives, orphaned tasks, and missing requirement areas), **Acceptance Criteria Generation** (auto-generate Given/When/Then criteria from requirement descriptions), and **Impact Analysis** (downstream impact assessment for linked tasks, child requirements, and objectives). Spectra AI can answer questions about requirement status, coverage gaps, quality scores, and traceability. Accessible from the AI Tools panel → Manage section on the board page. *(Professional mode and above)*
 
 ### Strategic Alignment
 
@@ -54,6 +54,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **AI Retrospectives** — Auto-generated lessons learned with improvement tracking
 - **Skill Gap Analysis** — Team capability mapping against task requirements, with individual development plans
 - **Resource Leveling & Workload Optimization** — Intelligent workload balancing and assignment suggestions
+- **Requirements AI Analysis** — Gemini-powered requirement quality scoring (clarity, completeness, testability, unambiguity, feasibility), gap detection across objectives and tasks, automatic acceptance criteria generation in Given/When/Then format, and downstream impact analysis. Results are surfaced both in the Requirements UI and through Spectra chat queries.
 - **AI Bubble-up Summaries** — On-demand AI summaries generated and propagated at every level of the hierarchy (task, board, strategy, mission)
 - **Deadline Prediction & Risk Assessment** — AI-powered deadline estimates and risk scoring with mitigation suggestions
 - **Semantic Task Search** — Find tasks by meaning and intent, not just keywords
@@ -400,7 +401,7 @@ The team reviews the options and picks one (or writes a custom resolution). The 
 
 ### Creating a Commitment Protocol
 
-From any board, click the **Commitments** tab in the top navigation (next to Kanban, Gantt, Calendar), then click **New Protocol**. Fill in:
+From any board, open the **AI Tools** panel and expand the **Manage** section, then click **Commitments**. On the Commitments dashboard, click **New Protocol**. Fill in:
 
 | Field | What to enter |
 |---|---|
@@ -430,7 +431,7 @@ The **Commitments dashboard** shows all protocols for a board at a glance — po
 
 ### Getting to Commitment Protocols
 
-- From any board, click the **Commitments** tab in the navigation bar at the top of the board *(visible in Enterprise mode only — ask your Org Admin to upgrade the workspace preset if the tab is not shown)*
+- From any board, open the **AI Tools** panel → **Manage** section and click **Commitments** *(visible in Enterprise mode only — ask your Org Admin to upgrade the workspace preset if the tile is not shown)*
 - Or navigate directly to `/boards/<board-id>/commitments/` — if your workspace is not on Enterprise mode, you will be redirected to the Kanban view
 - A summary widget also appears on the **Triple Constraint Dashboard**
 - You can ask **Spectra** directly: *"What is the status of commitment #1?"*, *"Show me all at-risk commitments"*, or *"Place a bet of 5 tokens at 65% confidence on commitment #1"*
@@ -562,7 +563,8 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 Locked features are never silently removed — they act as *passive upgrade advertisements* (the same pattern used by Linear, Notion, and Figma):
 
 - **Sidebar links** (Goals, Missions) — hidden entirely in Lean mode to keep navigation uncluttered
-- **Board view tabs** (Gantt, Commitments) — hidden in the tab bar; a direct URL redirect returns the user to the Kanban view with an info message
+- **Board view tabs** (Gantt) — hidden in the tab bar; a direct URL redirect returns the user to the Kanban view with an info message
+- **AI Tools panel tiles** (Commitments, Requirements) — shown as locked tiles in the Manage section with a tooltip explaining which tier unlocks them
 - **Board panel tiles** (Shadow Board, Pre-Mortem, etc.) — visible as greyed-out locked tiles with a tooltip explaining which tier unlocks them
 - **Analytics charts** — the three advanced charts (Priority, User Workload, Lean Six Sigma) appear as blurred/greyed preview cards with a lock badge; the column-distribution chart always renders in full
 

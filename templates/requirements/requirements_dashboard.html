@@ -25,12 +25,26 @@
                 <i class="fas fa-plus me-1"></i>New Requirement
             </a>
             {% endif %}
+            <button class="btn btn-outline-info btn-sm" id="btnGapAnalysis" onclick="runGapAnalysis()">
+                <i class="fas fa-search-plus me-1"></i>AI Gap Analysis
+            </button>
             <a href="{% url 'requirements:traceability_matrix' board.id %}" class="btn btn-outline-primary btn-sm">
                 <i class="fas fa-project-diagram me-1"></i>Traceability Matrix
             </a>
             <a href="{% url 'requirements:export_csv' board.id %}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-download me-1"></i>Export CSV
             </a>
+        </div>
+    </div>
+
+    <!-- AI Gap Analysis Result -->
+    <div id="gapAnalysisResult" class="card mb-3 border-info" style="display:none;">
+        <div class="card-header py-2 bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+            <strong><i class="fas fa-search-plus me-1"></i>AI Gap Analysis</strong>
+            <button class="btn btn-sm btn-close" onclick="document.getElementById('gapAnalysisResult').style.display='none'"></button>
+        </div>
+        <div class="card-body py-2" id="gapAnalysisContent">
+            <div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Analyzing...</div>
         </div>
     </div>
 
@@ -207,4 +221,69 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function runGapAnalysis() {
+    var box = document.getElementById('gapAnalysisResult');
+    var content = document.getElementById('gapAnalysisContent');
+    box.style.display = '';
+    content.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Running AI gap analysis...</div>';
+
+    var csrfToken = '{{ csrf_token }}';
+    fetch('{% url "requirements:ai_gap_analysis" board.id %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        var sevMap = {critical:'bg-danger',high:'bg-warning text-dark',medium:'bg-primary',low:'bg-success',info:'bg-secondary'};
+        var html = '';
+
+        // Summary
+        if (d.summary) {
+            html += '<div class="d-flex align-items-center gap-2 mb-2">' +
+                '<span class="badge ' + (sevMap[d.severity]||'bg-secondary') + '">' + (d.severity||'info') + '</span>' +
+                '<span>' + d.summary + '</span></div>';
+        }
+        if (d.coverage_assessment) {
+            html += '<p class="small text-muted mb-2">' + d.coverage_assessment + '</p>';
+        }
+
+        // Gaps
+        if (d.gaps && d.gaps.length) {
+            html += '<div class="mb-2"><strong class="small">Identified Gaps:</strong>';
+            d.gaps.forEach(function(g) {
+                html += '<div class="d-flex align-items-start gap-2 ms-2 mt-1">' +
+                    '<span class="badge ' + (sevMap[g.severity]||'bg-secondary') + ' mt-1">' + g.severity + '</span>' +
+                    '<div><div class="small">' + g.area + '</div>' +
+                    '<div class="small text-muted"><i class="fas fa-lightbulb me-1"></i>' + g.recommendation + '</div></div></div>';
+            });
+            html += '</div>';
+        }
+
+        // Orphaned tasks
+        if (d.orphaned_tasks && d.orphaned_tasks.length) {
+            html += '<div class="mb-2"><strong class="small">Orphaned Tasks (no linked requirement):</strong>' +
+                '<div class="small text-muted ms-2">';
+            d.orphaned_tasks.slice(0, 10).forEach(function(t) {
+                html += '• ' + t.title + ' <span class="badge bg-light text-dark">' + t.column + '</span><br>';
+            });
+            if (d.orphaned_tasks.length > 10) html += '... and ' + (d.orphaned_tasks.length - 10) + ' more';
+            html += '</div></div>';
+        }
+
+        // Uncovered objectives
+        if (d.uncovered_objectives && d.uncovered_objectives.length) {
+            html += '<div class="mb-2"><strong class="small text-danger">Uncovered Objectives:</strong>' +
+                '<ul class="mb-0 small">';
+            d.uncovered_objectives.forEach(function(o) { html += '<li>' + o.title + '</li>'; });
+            html += '</ul></div>';
+        }
+
+        content.innerHTML = html || '<div class="text-muted">No gaps detected — good coverage!</div>';
+    }).catch(function() {
+        content.innerHTML = '<div class="text-danger">Failed to run gap analysis. Please try again.</div>';
+    });
+}
+</script>
 {% endblock %}

@@ -3705,6 +3705,9 @@ class TaskFlowChatbotService:
             'user requirement', 'technical requirement', 'requirement analysis',
             'requirement status', 'requirement priority', 'requirement coverage',
             'project objective', 'objectives', 'traceability matrix',
+            'requirement quality', 'quality score', 'requirement gap',
+            'gap analysis', 'orphaned task', 'uncovered objective',
+            'acceptance criteria generation', 'impact analysis',
         ]
         prompt_lower = prompt.lower()
         return any(kw in prompt_lower for kw in keywords)

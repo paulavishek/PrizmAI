@@ -343,6 +343,64 @@ def get_requirement_coverage_stats(board):
     }
 
 
+def get_requirements_quality_overview(board):
+    """
+    Aggregated quality overview for all requirements on a board.
+    Uses the rule-based fallback analyzer (no Gemini call) for fast,
+    cacheable summary data suitable for Spectra context.
+
+    Returns a dict with average quality score, dimension averages,
+    and lists of top issues.
+    """
+    Requirement, _, _, _ = _safe_import_models()
+    reqs = Requirement.objects.filter(board=board).prefetch_related('linked_tasks')
+    total = reqs.count()
+    if total == 0:
+        return {'narrative': 'No requirements to assess quality for.', 'average_score': 0}
+
+    from requirements.ai_analysis import RequirementsAIAnalyzer
+    analyzer = RequirementsAIAnalyzer(board)
+
+    dim_totals = {'clarity': 0, 'completeness': 0, 'testability': 0, 'unambiguity': 0, 'feasibility': 0}
+    score_total = 0
+    low_quality = []    # score < 50
+    missing_criteria = 0
+
+    for req in reqs:
+        result = analyzer._fallback_quality_analysis(req)
+        score_total += result['quality_score']
+        for dim, val in result['dimensions'].items():
+            dim_totals[dim] = dim_totals.get(dim, 0) + val
+        if result['quality_score'] < 50:
+            low_quality.append({'identifier': req.identifier, 'title': req.title, 'score': result['quality_score']})
+        if not req.acceptance_criteria:
+            missing_criteria += 1
+
+    avg_score = round(score_total / total)
+    dim_avgs = {k: round(v / total) for k, v in dim_totals.items()}
+
+    narrative = (
+        f"Requirement quality overview: average score {avg_score}/100 across {total} requirements. "
+        f"Dimension averages — clarity: {dim_avgs['clarity']}, completeness: {dim_avgs['completeness']}, "
+        f"testability: {dim_avgs['testability']}, unambiguity: {dim_avgs['unambiguity']}, feasibility: {dim_avgs['feasibility']}. "
+    )
+    if low_quality:
+        low_ids = ', '.join(r['identifier'] for r in low_quality[:5])
+        narrative += f"{len(low_quality)} requirement(s) scored below 50: {low_ids}. "
+    if missing_criteria:
+        narrative += f"{missing_criteria} requirement(s) lack acceptance criteria. "
+
+    return {
+        'narrative': narrative,
+        'average_score': avg_score,
+        'dimension_averages': dim_avgs,
+        'low_quality_count': len(low_quality),
+        'low_quality_items': low_quality[:5],
+        'missing_criteria_count': missing_criteria,
+        'total': total,
+    }
+
+
 def get_requirements_context_for_board(board):
     """
     Master context function called by the API endpoint and chatbot_service.
@@ -353,15 +411,18 @@ def get_requirements_context_for_board(board):
     summary = get_requirements_summary_for_board(board)
     traceability = get_traceability_summary(board)
     coverage = get_requirement_coverage_stats(board)
+    quality = get_requirements_quality_overview(board)
 
     return {
         'summary': summary,
         'traceability': traceability,
         'coverage': coverage,
+        'quality': quality,
         'full_narrative': (
             f"REQUIREMENTS ANALYSIS:\n"
             f"{summary.get('narrative', '')}\n"
             f"{traceability.get('narrative', '')}\n"
-            f"{coverage.get('narrative', '')}"
+            f"{coverage.get('narrative', '')}\n"
+            f"{quality.get('narrative', '')}"
         ),
     }

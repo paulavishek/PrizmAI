@@ -720,12 +720,6 @@
     <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
     {% endif %}
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
-    {% if features.show_commitments %}
-    <li class="nav-item"><a class="nav-link" href="{% url 'commitment_dashboard' board.id %}"><i class="fas fa-shield-halved me-1"></i>Commitments</a></li>
-    {% endif %}
-    {% if features.show_requirements %}
-    <li class="nav-item"><a class="nav-link" href="{% url 'requirements:dashboard' board.id %}"><i class="fas fa-clipboard-list me-1"></i>Requirements</a></li>
-    {% endif %}
 </ul>
 
 <!-- AI Resource Optimization moved to AI Tools panel -->
@@ -2093,7 +2087,43 @@
             </div>
         </div>
 
-        {# ── Section 3: AI ACTIONS ──────────────────────── #}
+        {# ── Section 3: MANAGE ─────────────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelManage"
+                 aria-expanded="false" aria-controls="panelManage">
+                <span><i class="fas fa-tasks me-1"></i> Manage</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelManage">
+                <div class="ai-panel-grid">
+                    {% if features.show_commitments %}
+                    <a class="ai-panel-tile" href="{% url 'commitment_dashboard' board.id %}" title="Living commitment protocols with prediction markets and confidence tracking">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-shield-halved"></i></span>
+                        <span class="tile-label">Commitments</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-shield-halved"></i></span>
+                        <span class="tile-label">Commitments <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_requirements %}
+                    <a class="ai-panel-tile" href="{% url 'requirements:dashboard' board.id %}" title="AI-powered requirement analysis, quality scoring, gap detection, and traceability">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="tile-label">Requirements</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="tile-label">Requirements <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 4: AI ACTIONS ──────────────────────── #}
         <div class="ai-panel-section">
             <div class="ai-panel-section-header"
                  data-bs-toggle="collapse" data-bs-target="#panelAIActions"
@@ -2206,7 +2236,7 @@
             </div>
         </div>
 
-        {# ── Section 4: BOARD SETTINGS (always visible, never collapsed) ── #}
+        {# ── Section 5: BOARD SETTINGS (always visible, never collapsed) ── #}
         <div class="ai-panel-section">
             <div class="ai-panel-section-header" style="cursor:default;">
                 <span><i class="fas fa-cog me-1"></i> Board Settings</span>
@@ -2274,7 +2304,7 @@
     var boardId = '{{ board.id }}';
     var storageKey = 'prizmai_panel_state_' + boardId;
     var presetName = '{{ features.preset_name|default:"lean" }}';
-    var sectionIds = ['panelAnalyze', 'panelPlan', 'panelAIActions'];
+    var sectionIds = ['panelAnalyze', 'panelPlan', 'panelManage', 'panelAIActions'];
 
     // Determine default state: enterprise → expanded, otherwise collapsed
     var defaultExpanded = (presetName === 'enterprise');
