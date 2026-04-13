@@ -659,7 +659,7 @@
         </button>
 
         <!-- Filter toggle -->
-        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#boardToolsPanel" aria-expanded="false" title="Filter & Search">
+        <button class="btn btn-sm btn-outline-secondary{% if any_filter_active %} active{% endif %}" data-bs-toggle="collapse" data-bs-target="#boardToolsPanel" aria-expanded="{% if any_filter_active %}true{% else %}false{% endif %}" title="Filter & Search">
             <i class="fas fa-filter"></i><span class="d-none d-lg-inline ms-1">Filter</span>
         </button>
 
@@ -726,7 +726,7 @@
 <!-- AI Resource Optimization moved to AI Tools panel -->
 
 <!-- ------- COLLAPSIBLE BOARD TOOLS (Filter/Search) ------- -->
-<div class="collapse mb-3" id="boardToolsPanel">
+<div class="collapse{% if any_filter_active %} show{% endif %} mb-3" id="boardToolsPanel">
     <!-- Search Panel -->
     <div class="card card-body mb-2">
         <h6 class="mb-2"><i class="fas fa-search me-1"></i>Search & Filter Tasks</h6>
@@ -799,7 +799,7 @@
     </div><!-- /card search -->
 
     <script>
-    // P3-01: Live filter � dropdowns auto-submit, search input debounced
+    // P3-01: Live filter — dropdowns auto-submit, search input submitted on Enter
     (function() {
         var form = document.querySelector('#search-form-container form');
         if (!form) return;
@@ -807,14 +807,20 @@
         form.querySelectorAll('select').forEach(function(sel) {
             sel.addEventListener('change', function() { form.submit(); });
         });
-        // Debounce text inputs
+        // Search input: submit on Enter key only (no auto-submit while typing)
         var searchInput = form.querySelector('input[type="text"], input[name="search_term"]');
         if (searchInput) {
-            var debounceTimer = null;
-            searchInput.addEventListener('input', function() {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function() { form.submit(); }, 300);
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    form.submit();
+                }
             });
+            // Prevent default form submission on Enter from reloading without panel state
+            // Focus the search input automatically if panel is open with active filters
+            {% if any_filter_active %}
+            searchInput.focus();
+            {% endif %}
         }
     })();
     </script>
