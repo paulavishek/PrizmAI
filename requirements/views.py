@@ -507,3 +507,67 @@ def api_requirements_data(request, board_id):
     from .spectra_data import get_requirements_context_for_board
     data = get_requirements_context_for_board(board)
     return JsonResponse(data)
+
+
+# ── AI-Powered Analysis Endpoints ────────────────────────────────────
+
+@login_required
+@require_POST
+def requirement_ai_quality_check(request, board_id, pk):
+    """Analyze requirement quality using AI. Returns JSON."""
+    board, membership = _get_board_and_check_access(request, board_id)
+    if board is None:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    requirement = get_object_or_404(Requirement, pk=pk, board=board)
+
+    from .ai_analysis import RequirementsAIAnalyzer
+    analyzer = RequirementsAIAnalyzer(board)
+    result = analyzer.analyze_quality(requirement)
+    return JsonResponse(result)
+
+
+@login_required
+@require_POST
+def requirement_ai_generate_criteria(request, board_id, pk):
+    """Generate acceptance criteria for a requirement using AI. Returns JSON."""
+    board, membership = _get_board_and_check_access(request, board_id)
+    if board is None:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    requirement = get_object_or_404(Requirement, pk=pk, board=board)
+
+    from .ai_analysis import RequirementsAIAnalyzer
+    analyzer = RequirementsAIAnalyzer(board)
+    result = analyzer.generate_acceptance_criteria(requirement)
+    return JsonResponse(result)
+
+
+@login_required
+@require_POST
+def requirement_ai_impact_analysis(request, board_id, pk):
+    """Analyze downstream impact of a requirement. Returns JSON."""
+    board, membership = _get_board_and_check_access(request, board_id)
+    if board is None:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    requirement = get_object_or_404(Requirement, pk=pk, board=board)
+
+    from .ai_analysis import RequirementsAIAnalyzer
+    analyzer = RequirementsAIAnalyzer(board)
+    result = analyzer.analyze_impact(requirement)
+    return JsonResponse(result)
+
+
+@login_required
+@require_POST
+def board_requirements_gap_analysis(request, board_id):
+    """Detect requirement gaps across a board. Returns JSON."""
+    board, membership = _get_board_and_check_access(request, board_id)
+    if board is None:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    from .ai_analysis import RequirementsAIAnalyzer
+    analyzer = RequirementsAIAnalyzer(board)
+    result = analyzer.detect_gaps()
+    return JsonResponse(result)

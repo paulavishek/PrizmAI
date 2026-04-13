@@ -432,15 +432,54 @@ def get_action_tools():
             },
         )
 
+        analyze_requirements_quality = FunctionDeclaration(
+            name='analyze_requirements_quality',
+            description=(
+                'Get an AI-powered quality overview of all requirements for a board, '
+                'including average quality scores across clarity, completeness, testability, '
+                'unambiguity, and feasibility dimensions, plus low-quality items.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'board_id': {
+                        'type': 'integer',
+                        'description': 'The board ID to analyze requirements quality for.',
+                    },
+                },
+                'required': ['board_id'],
+            },
+        )
+
+        detect_requirements_gaps = FunctionDeclaration(
+            name='detect_requirements_gaps',
+            description=(
+                'Detect gaps in requirements coverage for a board — uncovered objectives, '
+                'orphaned tasks without linked requirements, and missing requirement areas.'
+            ),
+            parameters={
+                'type': 'object',
+                'properties': {
+                    'board_id': {
+                        'type': 'integer',
+                        'description': 'The board ID to detect requirement gaps for.',
+                    },
+                },
+                'required': ['board_id'],
+            },
+        )
+
         _cached_tools = [
             Tool(function_declarations=[
                 # Read-only tools only (v1.0)
                 get_commitment_status,
                 list_at_risk_commitments,
                 get_requirements_summary,
+                analyze_requirements_quality,
+                detect_requirements_gaps,
             ])
         ]
-        logger.info("Spectra read-only tool schemas loaded (%d functions, v1.0)", 3)
+        logger.info("Spectra read-only tool schemas loaded (%d functions, v1.0)", 5)
         return _cached_tools
 
     except ImportError:
@@ -468,6 +507,8 @@ FUNCTION_TO_ACTION = {
     'place_commitment_bet': 'place_commitment_bet',
     # Requirements Analysis — read-only
     'get_requirements_summary': 'get_requirements_summary',
+    'analyze_requirements_quality': 'analyze_requirements_quality',
+    'detect_requirements_gaps': 'detect_requirements_gaps',
 }
 
 # ── Mapping from AI router intents to collecting modes ───────────────────

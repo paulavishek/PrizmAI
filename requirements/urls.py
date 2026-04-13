@@ -37,4 +37,10 @@ urlpatterns = [
 
     # API (JSON)
     path('board/<int:board_id>/api/data/', views.api_requirements_data, name='api_requirements_data'),
+
+    # AI Analysis
+    path('board/<int:board_id>/<int:pk>/ai/quality/', views.requirement_ai_quality_check, name='ai_quality_check'),
+    path('board/<int:board_id>/<int:pk>/ai/criteria/', views.requirement_ai_generate_criteria, name='ai_generate_criteria'),
+    path('board/<int:board_id>/<int:pk>/ai/impact/', views.requirement_ai_impact_analysis, name='ai_impact_analysis'),
+    path('board/<int:board_id>/ai/gaps/', views.board_requirements_gap_analysis, name='ai_gap_analysis'),
 ]
