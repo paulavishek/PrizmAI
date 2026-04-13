@@ -40,6 +40,23 @@ class GoalEditForm(forms.ModelForm):
 class MissionEditForm(forms.ModelForm):
     required_css_class = 'required'
     change_reason = forms.ChoiceField(
+        choices=CHANGE_REASON_CHOICES,
+        widget=forms.RadioSelect,
+        label='Change reason',
+    )
+    change_notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Why is this changing?'}),
+        label='Notes (optional)',
+    )
+    owner = forms.ModelChoiceField(
+        queryset=User.objects.all(),
+        required=False,
+        label='Owner',
+    )
+
+    class Meta:
+        model = Mission
         fields = ['name', 'description', 'due_date', 'owner', 'status']
         widgets = {
             'due_date': forms.DateInput(attrs={'type': 'date'}),
@@ -50,6 +67,23 @@ class MissionEditForm(forms.ModelForm):
 class StrategyEditForm(forms.ModelForm):
     required_css_class = 'required'
     change_reason = forms.ChoiceField(
+        choices=CHANGE_REASON_CHOICES,
+        widget=forms.RadioSelect,
+        label='Change reason',
+    )
+    change_notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Why is this changing?'}),
+        label='Notes (optional)',
+    )
+    owner = forms.ModelChoiceField(
+        queryset=User.objects.all(),
+        required=False,
+        label='Owner',
+    )
+
+    class Meta:
+        model = Strategy
         fields = ['name', 'description', 'due_date', 'owner', 'status']
         widgets = {
             'due_date': forms.DateInput(attrs={'type': 'date'}),
