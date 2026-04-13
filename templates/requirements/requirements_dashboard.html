@@ -225,6 +225,12 @@
 
 {% block extra_js %}
 <script>
+function _esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
 function runGapAnalysis() {
     var box = document.getElementById('gapAnalysisResult');
     var content = document.getElementById('gapAnalysisContent');
@@ -242,11 +248,11 @@ function runGapAnalysis() {
         // Summary
         if (d.summary) {
             html += '<div class="d-flex align-items-center gap-2 mb-2">' +
-                '<span class="badge ' + (sevMap[d.severity]||'bg-secondary') + '">' + (d.severity||'info') + '</span>' +
-                '<span>' + d.summary + '</span></div>';
+                '<span class="badge ' + (sevMap[d.severity]||'bg-secondary') + '">' + _esc(d.severity||'info') + '</span>' +
+                '<span>' + _esc(d.summary) + '</span></div>';
         }
         if (d.coverage_assessment) {
-            html += '<p class="small text-muted mb-2">' + d.coverage_assessment + '</p>';
+            html += '<p class="small text-muted mb-2">' + _esc(d.coverage_assessment) + '</p>';
         }
 
         // Gaps
@@ -254,9 +260,9 @@ function runGapAnalysis() {
             html += '<div class="mb-2"><strong class="small">Identified Gaps:</strong>';
             d.gaps.forEach(function(g) {
                 html += '<div class="d-flex align-items-start gap-2 ms-2 mt-1">' +
-                    '<span class="badge ' + (sevMap[g.severity]||'bg-secondary') + ' mt-1">' + g.severity + '</span>' +
-                    '<div><div class="small">' + g.area + '</div>' +
-                    '<div class="small text-muted"><i class="fas fa-lightbulb me-1"></i>' + g.recommendation + '</div></div></div>';
+                    '<span class="badge ' + (sevMap[g.severity]||'bg-secondary') + ' mt-1">' + _esc(g.severity) + '</span>' +
+                    '<div><div class="small">' + _esc(g.area) + '</div>' +
+                    '<div class="small text-muted"><i class="fas fa-lightbulb me-1"></i>' + _esc(g.recommendation) + '</div></div></div>';
             });
             html += '</div>';
         }
@@ -266,7 +272,7 @@ function runGapAnalysis() {
             html += '<div class="mb-2"><strong class="small">Orphaned Tasks (no linked requirement):</strong>' +
                 '<div class="small text-muted ms-2">';
             d.orphaned_tasks.slice(0, 10).forEach(function(t) {
-                html += '• ' + t.title + ' <span class="badge bg-light text-dark">' + t.column + '</span><br>';
+                html += '• ' + _esc(t.title) + ' <span class="badge bg-light text-dark">' + _esc(t.column) + '</span><br>';
             });
             if (d.orphaned_tasks.length > 10) html += '... and ' + (d.orphaned_tasks.length - 10) + ' more';
             html += '</div></div>';
@@ -276,7 +282,7 @@ function runGapAnalysis() {
         if (d.uncovered_objectives && d.uncovered_objectives.length) {
             html += '<div class="mb-2"><strong class="small text-danger">Uncovered Objectives:</strong>' +
                 '<ul class="mb-0 small">';
-            d.uncovered_objectives.forEach(function(o) { html += '<li>' + o.title + '</li>'; });
+            d.uncovered_objectives.forEach(function(o) { html += '<li>' + _esc(o.title) + '</li>'; });
             html += '</ul></div>';
         }
 
