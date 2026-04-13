@@ -346,14 +346,20 @@ function _post(url) {
     }).then(function(r) { return r.json(); });
 }
 
+function _esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
 function _scoreBadge(score) {
     var cls = score >= 75 ? 'bg-success' : score >= 50 ? 'bg-warning text-dark' : 'bg-danger';
-    return '<span class="badge ' + cls + ' fs-6">' + score + '/100</span>';
+    return '<span class="badge ' + cls + ' fs-6">' + _esc(String(score)) + '/100</span>';
 }
 
 function _riskBadge(level) {
     var map = {critical:'bg-danger',high:'bg-warning text-dark',medium:'bg-primary',low:'bg-success',info:'bg-secondary'};
-    return '<span class="badge ' + (map[level]||'bg-secondary') + '">' + level + '</span>';
+    return '<span class="badge ' + (map[level]||'bg-secondary') + '">' + _esc(level) + '</span>';
 }
 
 function runAiQualityCheck() {
@@ -368,18 +374,18 @@ function runAiQualityCheck() {
             html += '<div class="row g-2 mb-2">';
             var dims = d.dimensions;
             for (var k in dims) {
-                html += '<div class="col-auto"><span class="text-muted small text-capitalize">' + k + '</span> ' + _scoreBadge(dims[k]) + '</div>';
+                html += '<div class="col-auto"><span class="text-muted small text-capitalize">' + _esc(k) + '</span> ' + _scoreBadge(dims[k]) + '</div>';
             }
             html += '</div>';
         }
         if (d.improvement_suggestions && d.improvement_suggestions.length) {
             html += '<div class="mb-2"><strong class="small">Suggestions:</strong><ul class="mb-0 small">';
-            d.improvement_suggestions.forEach(function(s) { html += '<li>' + s + '</li>'; });
+            d.improvement_suggestions.forEach(function(s) { html += '<li>' + _esc(s) + '</li>'; });
             html += '</ul></div>';
         }
         if (d.risk_flags && d.risk_flags.length) {
             html += '<div><strong class="small text-danger">Risk Flags:</strong><ul class="mb-0 small">';
-            d.risk_flags.forEach(function(f) { html += '<li class="text-danger">' + f + '</li>'; });
+            d.risk_flags.forEach(function(f) { html += '<li class="text-danger">' + _esc(f) + '</li>'; });
             html += '</ul></div>';
         }
         content.innerHTML = html;
@@ -398,15 +404,15 @@ function runAiGenerateCriteria() {
         if (d.criteria && d.criteria.length) {
             d.criteria.forEach(function(c, i) {
                 html += '<div class="card mb-2"><div class="card-body py-2 px-3" style="font-size:.85rem;">' +
-                    '<strong>' + (i+1) + '. ' + (c.scenario || 'Scenario') + '</strong>' +
-                    '<div class="mt-1"><span class="badge bg-secondary me-1">Given</span> ' + c.given + '</div>' +
-                    '<div><span class="badge bg-primary me-1">When</span> ' + c.when + '</div>' +
-                    '<div><span class="badge bg-success me-1">Then</span> ' + c.then + '</div>' +
+                    '<strong>' + (i+1) + '. ' + _esc(c.scenario || 'Scenario') + '</strong>' +
+                    '<div class="mt-1"><span class="badge bg-secondary me-1">Given</span> ' + _esc(c.given) + '</div>' +
+                    '<div><span class="badge bg-primary me-1">When</span> ' + _esc(c.when) + '</div>' +
+                    '<div><span class="badge bg-success me-1">Then</span> ' + _esc(c.then) + '</div>' +
                     '</div></div>';
             });
         }
         if (d.notes) {
-            html += '<div class="small text-muted mt-1"><i class="fas fa-info-circle me-1"></i>' + d.notes + '</div>';
+            html += '<div class="small text-muted mt-1"><i class="fas fa-info-circle me-1"></i>' + _esc(d.notes) + '</div>';
         }
         content.innerHTML = html || '<div class="text-muted">No criteria generated.</div>';
     }).catch(function() {
@@ -425,18 +431,18 @@ function runAiImpactAnalysis() {
             '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
             (d.children_count||0) + ' child req(s), ' + (d.objectives_count||0) + ' objective(s)</span></div>';
         if (d.impact_summary) {
-            html += '<p class="small mb-2">' + d.impact_summary + '</p>';
+            html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
         }
         if (d.change_risks && d.change_risks.length) {
             html += '<div class="mb-2"><strong class="small">Change Risks:</strong>';
             d.change_risks.forEach(function(r) {
-                html += '<div class="small ms-2">• ' + _riskBadge(r.severity) + ' ' + r.scenario + ' — ' + r.impact + '</div>';
+                html += '<div class="small ms-2">• ' + _riskBadge(r.severity) + ' ' + _esc(r.scenario) + ' — ' + _esc(r.impact) + '</div>';
             });
             html += '</div>';
         }
         if (d.recommendations && d.recommendations.length) {
             html += '<div><strong class="small">Recommendations:</strong><ul class="mb-0 small">';
-            d.recommendations.forEach(function(r) { html += '<li>' + r + '</li>'; });
+            d.recommendations.forEach(function(r) { html += '<li>' + _esc(r) + '</li>'; });
             html += '</ul></div>';
         }
         content.innerHTML = html;
