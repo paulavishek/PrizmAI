@@ -110,7 +110,7 @@ JSON array:"""
             'temperature': 0.2,  # Very low for consistent, reproducible skill identification
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 1024,  # Skill list doesn't need many tokens
+            'max_output_tokens': 2048,  # Gemini 2.5 Flash thinking mode needs headroom
             'response_mime_type': 'application/json',  # Force JSON output from Gemini
         }
 
@@ -216,7 +216,10 @@ def build_team_skill_profile(board) -> Dict:
                     skill_name = skill.get('name', '').strip()
                     skill_level = skill.get('level', 'Intermediate').capitalize()
                     
+                    # Normalize skill name to title case for consistent aggregation
+                    # (e.g., "python" and "Python" should merge into "Python")
                     if skill_name:
+                        skill_name = skill_name.title() if skill_name.islower() else skill_name
                         if skill_name not in skill_inventory:
                             skill_inventory[skill_name] = {
                                 'expert': 0,
