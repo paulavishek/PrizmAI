@@ -26,13 +26,19 @@ class SkillGapAnalyzer {
      */
     async analyzeGaps(sprintDays = 14) {
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+            
             const response = await fetch(`/api/skill-gaps/analyze/${this.boardId}/?sprint_days=${sprintDays}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': this.getCsrfToken()
-                }
+                },
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 throw new Error('Failed to analyze skill gaps');
@@ -53,7 +59,11 @@ class SkillGapAnalyzer {
             return data;
         } catch (error) {
             console.error('Error analyzing gaps:', error);
-            this.showNotification('Failed to analyze skill gaps', 'error');
+            if (error.name === 'AbortError') {
+                this.showNotification('Analysis timed out. Try again — cached results will speed it up.', 'warning');
+            } else {
+                this.showNotification('Failed to analyze skill gaps', 'error');
+            }
             throw error;
         }
     }
