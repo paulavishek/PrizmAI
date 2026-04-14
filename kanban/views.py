@@ -3071,13 +3071,20 @@ def board_analytics(request, board_id):
         count=Count('id')
     ).order_by('updated_at__date')
 
+    # Build a full 30-day date range with 0 fills so the trend chart always
+    # shows a continuous timeline rather than only days with completions.
+    completion_by_date = {
+        item['updated_at__date']: item['count']
+        for item in completed_tasks_queryset
+    }
     completed_tasks = []
-    for item in completed_tasks_queryset:
+    for i in range(30):
+        day = (timezone.now() - timedelta(days=29 - i)).date()
         completed_tasks.append({
-            'date': item['updated_at__date'].strftime('%Y-%m-%d'),
-            'count': item['count']
+            'date': day.strftime('%Y-%m-%d'),
+            'count': completion_by_date.get(day, 0),
         })
-    
+
     # Calculate productivity based on task progress (exclude milestones)
     total_tasks = Task.objects.filter(column__board=board, item_type='task').count()
     
