@@ -131,6 +131,14 @@ function initializeDynamicCharts(configs) {
         const labels = rawData.map(function(item) { return item[cfg.label_field] || 'Unknown'; });
         const values = rawData.map(function(item) { return item[cfg.value_field] || 0; });
 
+        // If all values are zero, show a friendly "no data" message instead of an empty chart
+        var allZero = values.every(function(v) { return v === 0; });
+        if (allZero) {
+            const container = canvas.parentElement;
+            container.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-pie fa-3x text-muted mb-3"></i><p class="text-muted">No data available yet</p><small class="text-muted">Data will appear once tasks are categorised</small></div>';
+            return;
+        }
+
         // Determine colors
         let bgColors, borderColors;
         if (cfg.use_priority_colors) {

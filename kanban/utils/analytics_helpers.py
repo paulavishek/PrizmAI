@@ -286,14 +286,30 @@ def get_promoted_metrics(board, raw=False):
                 "Add a column like 'In Review' or 'Review' to track tasks awaiting approval."
             )
 
-        # Milestone completion percentage
-        completed = tasks.filter(progress=100).count()
-        milestone_pct = int(completed / total * 100) if total > 0 else 0
-        metrics['milestone_completion_pct'] = f"{milestone_pct}%" if total > 0 else "0%"
-        explanations['milestone_completion_pct'] = (
-            f"{completed} of {total} tasks are fully completed (100% progress). "
-            f"This tracks overall project progress toward completion milestones."
-        )
+        # Milestone completion percentage — only count actual milestone items
+        milestone_qs = Task.objects.filter(column__board=board, item_type='milestone')
+        total_milestones = milestone_qs.count()
+        completed_milestones = milestone_qs.filter(
+            Q(milestone_status='completed') | Q(progress=100)
+        ).count()
+        if total_milestones > 0:
+            milestone_pct = int(completed_milestones / total_milestones * 100)
+            metrics['milestone_completion_pct'] = f"{milestone_pct}%"
+            explanations['milestone_completion_pct'] = (
+                f"{completed_milestones} of {total_milestones} milestones are completed. "
+                f"This tracks progress through the project's key milestone markers."
+            )
+            task_details['milestone_completion_pct'] = list(
+                milestone_qs.values(
+                    'id', 'title', 'milestone_status', 'column__name', 'assigned_to__username', 'progress'
+                )[:20]
+            )
+        else:
+            metrics['milestone_completion_pct'] = "N/A"
+            explanations['milestone_completion_pct'] = (
+                "No milestone items found on this board. "
+                "Add items with the 'Milestone' type to track key project checkpoints."
+            )
 
     elif project_type == 'operations':
         # Process completion rate (completed / created in last 30 days)
@@ -483,7 +499,7 @@ PROMOTED_CHARTS = {
         },
         {
             'id': 'deadlineChart',
-            'title': 'Deadline Adherence Trend',
+            'title': 'Content Delivery Trend',
             'type': 'line',
             'data_key': 'completed_tasks',
             'label_field': 'date',
