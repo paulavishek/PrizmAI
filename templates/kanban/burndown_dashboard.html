@@ -376,7 +376,7 @@
                 <div class="metric-label">Predicted Completion</div>
                 <div class="metric-value">{{ prediction.predicted_completion_date|date:"M d, Y" }}</div>
                 <div class="metric-subtext">
-                    Â±{{ prediction.days_margin_of_error }} days ({{ prediction.confidence_percentage }}% confidence)
+                    &plusmn;{{ prediction.days_margin_of_error }} days ({{ prediction.confidence_percentage }}% confidence)
                 </div>
             </div>
 
@@ -423,9 +423,9 @@
             </div>
 
             <div class="metric-card">
-                <div class="metric-label">Current Velocity</div>
-                <div class="metric-value">{{ prediction.current_velocity }}</div>
-                <div class="metric-subtext">task{{ prediction.current_velocity|pluralize }}/week</div>
+                <div class="metric-label">Average Velocity</div>
+                <div class="metric-value">{{ prediction.average_velocity }}</div>
+                <div class="metric-subtext">tasks/week (used for prediction)</div>
             </div>
 
             <div class="metric-card">

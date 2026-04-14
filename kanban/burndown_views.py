@@ -179,14 +179,19 @@ def burndown_chart_data(request, board_id):
 @login_required
 def velocity_chart_data(request, board_id):
     """
-    API endpoint for velocity history chart
+    API endpoint for velocity history chart.
+    Shows snapshots from the same window used for predictions (8 weeks).
     """
     board = get_object_or_404(Board, id=board_id)
     
-    # Get velocity snapshots
+    # Use the same 8-week window as the predictor for consistency
+    cutoff_date = timezone.now().date() - timedelta(weeks=8)
+    
+    # Get velocity snapshots within the prediction window
     snapshots = TeamVelocitySnapshot.objects.filter(
-        board=board
-    ).order_by('period_end')[:20]  # Last 20 periods
+        board=board,
+        period_end__gte=cutoff_date
+    ).order_by('period_end')
     
     velocity_data = {
         'labels': [s.period_end.isoformat() for s in snapshots],
