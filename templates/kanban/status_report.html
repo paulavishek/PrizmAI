@@ -103,7 +103,7 @@
                     <p class="mb-0 text-muted small mt-1">
                         PrizmAI scans your board's live metrics — tasks, completion rate, overdue items,
                         velocity, risk levels, and budget — then asks Gemini to write a concise
-                        stakeholder update. Each generation uses 1 AI request from your daily quota.
+                        stakeholder update.
                     </p>
                 </div>
             </div>
@@ -116,10 +116,6 @@
                 <button type="submit" class="generate-btn" id="generate-btn">
                     <i class="fas fa-magic me-2"></i>Generate Status Report
                 </button>
-                <p class="text-muted small mt-2">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Counts as 1 AI request
-                </p>
             </div>
         </form>
         {% endif %}
@@ -206,11 +202,14 @@
 
 {% block extra_js %}
 <script>
-document.getElementById('report-form').addEventListener('submit', function() {
-    const btn = document.getElementById('generate-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
-});
+var reportForm = document.getElementById('report-form');
+if (reportForm) {
+    reportForm.addEventListener('submit', function() {
+        var btn = document.getElementById('generate-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
+    });
+}
 
 function copyReport() {
     const title = 'Status Report — {{ board.name }} — ' + new Date().toLocaleDateString();
