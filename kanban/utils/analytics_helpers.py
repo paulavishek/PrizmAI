@@ -35,7 +35,7 @@ METRIC_CONFIG = {
         'label': 'Blocked / At-Risk',
         'icon': 'fas fa-ban',
         'color': 'warning',
-        'description': 'High-priority or urgent tasks with no progress that may need attention.',
+        'description': 'Urgent tasks (any progress) or high-priority tasks with 0% progress that may need attention.',
     },
     'completion_rate_by_column': {
         'label': 'Column Completion',
@@ -185,7 +185,7 @@ def get_promoted_metrics(board, raw=False):
         ).exclude(progress=100).count()
         metrics['overdue_count'] = overdue
 
-        # Blocked / high-risk count (priority=urgent or high with no progress)
+        # Blocked / high-risk count (all urgent tasks, plus high-priority with 0% progress)
         blocked_qs = tasks.filter(
             Q(priority='urgent') | Q(priority='high', progress=0)
         ).exclude(progress=100).select_related('column', 'assigned_to')
