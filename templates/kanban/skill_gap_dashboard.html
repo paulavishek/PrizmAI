@@ -1397,18 +1397,23 @@
         `;
         document.body.appendChild(overlay);
 
-        // Start rotating messages
+        // Start rotating messages — no repeats, stop on the last one
         let msgIndex = 0;
         _loadingMsgInterval = setInterval(() => {
             const msgEl = document.getElementById('loadingOverlayMsg');
             if (!msgEl) { clearInterval(_loadingMsgInterval); return; }
+            if (msgIndex >= analysisMessages.length) {
+                clearInterval(_loadingMsgInterval);
+                return;
+            }
             msgEl.style.opacity = '0';
+            const idx = msgIndex;
             setTimeout(() => {
-                msgEl.textContent = analysisMessages[msgIndex % analysisMessages.length];
+                msgEl.textContent = analysisMessages[idx];
                 msgEl.style.opacity = '1';
-                msgIndex++;
             }, 300);
-        }, 4000);
+            msgIndex++;
+        }, 7000);
     };
 
     window.hideLoadingOverlay = function() {
