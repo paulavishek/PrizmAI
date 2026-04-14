@@ -160,6 +160,15 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception:
         pass
 
+    # Refresh dates on the newly created sandbox boards so they are
+    # relative to today (template dates may have been refreshed hours ago).
+    try:
+        from kanban.utils.demo_date_refresh import refresh_single_board_dates
+        for board in new_boards:
+            refresh_single_board_dates(board.id)
+    except Exception as e:
+        logger.warning("Error refreshing sandbox board dates: %s", e)
+
     # Regenerate Decision Center items so the dashboard/DC page
     # show fresh, accurate counts immediately after provisioning.
     try:

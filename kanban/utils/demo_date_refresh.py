@@ -14,6 +14,8 @@ IMPORTANT ARCHITECTURAL NOTES:
    - All subsequent accesses that day skip the refresh
 """
 
+import threading
+from contextlib import contextmanager
 from datetime import timedelta, date
 from django.utils import timezone
 from django.db import transaction
@@ -25,6 +27,48 @@ logger = logging.getLogger(__name__)
 
 # Cache key for last refresh timestamp
 DEMO_DATE_REFRESH_CACHE_KEY = 'demo_data_last_refresh_date'
+
+# Thread-local storage for board-scoped refresh
+_local = threading.local()
+
+
+@contextmanager
+def _scoped_to_boards(board_ids):
+    """Context manager to restrict _get_demo_board_ids() to a specific set."""
+    _local.scoped_board_ids = board_ids
+    try:
+        yield
+    finally:
+        _local.scoped_board_ids = None
+
+
+def _get_demo_board_ids():
+    """
+    Get all board IDs that should be refreshed: template boards from demo
+    organisations AND sandbox copies.  When called inside a
+    ``_scoped_to_boards([id])`` context manager the scope is narrowed to
+    just the given IDs (used by ``refresh_single_board_dates``).
+    """
+    scoped = getattr(_local, 'scoped_board_ids', None)
+    if scoped is not None:
+        return list(scoped)
+
+    try:
+        from kanban.models import Board
+        demo_org_ids = _get_demo_organizations()
+        template_ids = list(
+            Board.objects.filter(
+                organization_id__in=demo_org_ids
+            ).values_list('id', flat=True)
+        ) if demo_org_ids else []
+        sandbox_ids = list(
+            Board.objects.filter(
+                is_sandbox_copy=True
+            ).values_list('id', flat=True)
+        )
+        return template_ids + sandbox_ids
+    except Exception:
+        return []
 
 
 def should_refresh_demo_dates():
@@ -56,7 +100,20 @@ def mark_demo_dates_refreshed():
     cache.set(DEMO_DATE_REFRESH_CACHE_KEY, today, 60 * 60 * 25)
 
 
-def refresh_all_demo_dates():
+def refresh_single_board_dates(board_id):
+    """
+    Refresh dates for a single board only.
+
+    Used after sandbox provisioning so that only the newly created board is
+    updated instead of triggering a global refresh across all users'
+    sandboxes.  Does NOT mark the daily cache so the full daily refresh still
+    runs later.
+    """
+    with _scoped_to_boards([board_id]):
+        return refresh_all_demo_dates(skip_mark_cache=True)
+
+
+def refresh_all_demo_dates(skip_mark_cache=False):
     """
     Refresh all SEED demo data dates to be relative to the current date.
     
@@ -66,6 +123,11 @@ def refresh_all_demo_dates():
     
     This is the main entry point called by middleware or management command.
     Returns a dict of statistics about what was updated.
+
+    Args:
+        skip_mark_cache: If True, do not mark the global "refreshed today"
+            cache.  Used by ``refresh_single_board_dates`` so that the daily
+            full refresh still runs later.
     """
     stats = {
         'tasks_updated': 0,
@@ -91,6 +153,8 @@ def refresh_all_demo_dates():
         'task_activities_updated': 0,
         'completed_task_dates_updated': 0,
         'commitment_protocols_updated': 0,
+        'comments_updated': 0,
+        'chat_messages_updated': 0,
     }
     
     now = timezone.now()
@@ -163,9 +227,16 @@ def refresh_all_demo_dates():
 
             # 23. Refresh Commitment Protocol dates
             stats['commitment_protocols_updated'] = _refresh_commitment_protocol_dates(now, base_date)
+
+            # 24. Refresh Comment timestamps
+            stats['comments_updated'] = _refresh_comment_dates(now)
+
+            # 25. Refresh Chat Message / TaskThreadComment timestamps
+            stats['chat_messages_updated'] = _refresh_chat_message_dates(now)
         
         # Mark refresh as complete
-        mark_demo_dates_refreshed()
+        if not skip_mark_cache:
+            mark_demo_dates_refreshed()
         
         logger.info(f"Demo dates refreshed: {stats}")
         return stats
@@ -224,16 +295,13 @@ def _refresh_task_dates(now, base_date):
         from django.db.models import Q
         import datetime as _dt
 
-        demo_org_ids = _get_demo_organizations()
-        if not demo_org_ids:
-            from accounts.models import Organization
-            demo_org_ids = list(Organization.objects.filter(
-                name__icontains='demo'
-            ).values_list('id', flat=True))
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
 
         # Only seed demo tasks (not user-created)
         tasks = list(Task.objects.filter(
-            column__board__organization_id__in=demo_org_ids
+            column__board_id__in=demo_board_ids
         ).filter(
             Q(created_by_session__isnull=True) | Q(created_by_session='')
         ).select_related('column'))
@@ -330,10 +398,10 @@ def _refresh_time_entry_dates(base_date):
         from kanban.budget_models import TimeEntry
         from django.db.models import Q
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         # Only refresh time entries for SEED demo tasks (not user-created)
         entries = list(TimeEntry.objects.filter(
-            task__column__board__organization_id__in=demo_org_ids
+            task__column__board_id__in=demo_board_ids
         ).filter(
             Q(task__created_by_session__isnull=True) | Q(task__created_by_session='')
         ))
@@ -367,9 +435,9 @@ def _refresh_engagement_dates(base_date):
     try:
         from kanban.stakeholder_models import StakeholderEngagementRecord
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         records = list(StakeholderEngagementRecord.objects.filter(
-            stakeholder__board__organization_id__in=demo_org_ids
+            stakeholder__board_id__in=demo_board_ids
         ))
         
         if not records:
@@ -402,9 +470,9 @@ def _refresh_retrospective_dates(base_date):
     try:
         from kanban.retrospective_models import ProjectRetrospective
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         retrospectives = list(ProjectRetrospective.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not retrospectives:
@@ -453,9 +521,9 @@ def _refresh_velocity_snapshot_dates(base_date):
     try:
         from kanban.burndown_models import TeamVelocitySnapshot
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         snapshots = list(TeamVelocitySnapshot.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not snapshots:
@@ -500,9 +568,9 @@ def _refresh_coaching_suggestion_dates(now):
     try:
         from kanban.coach_models import CoachingSuggestion
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         suggestions = list(CoachingSuggestion.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not suggestions:
@@ -540,9 +608,9 @@ def _refresh_pm_metrics_dates(base_date):
     try:
         from kanban.coach_models import PMMetrics
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         metrics = list(PMMetrics.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not metrics:
@@ -573,11 +641,11 @@ def _refresh_conflict_dates(now):
     try:
         from kanban.conflict_models import ConflictDetection, ConflictResolution
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         
         # Refresh conflicts
         conflicts = list(ConflictDetection.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         conflicts_to_update = []
@@ -610,7 +678,7 @@ def _refresh_conflict_dates(now):
         
         # Refresh resolutions
         resolutions = list(ConflictResolution.objects.filter(
-            conflict__board__organization_id__in=demo_org_ids
+            conflict__board_id__in=demo_board_ids
         ))
         
         resolutions_to_update = []
@@ -731,9 +799,9 @@ def _refresh_improvement_metrics_dates(base_date):
     try:
         from kanban.retrospective_models import ImprovementMetric
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         metrics = list(ImprovementMetric.objects.filter(
-            retrospective__board__organization_id__in=demo_org_ids
+            retrospective__board_id__in=demo_board_ids
         ))
         
         if not metrics:
@@ -763,9 +831,9 @@ def _refresh_action_item_dates(now, base_date):
     try:
         from kanban.retrospective_models import RetrospectiveActionItem
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         action_items = list(RetrospectiveActionItem.objects.filter(
-            retrospective__board__organization_id__in=demo_org_ids
+            retrospective__board_id__in=demo_board_ids
         ))
         
         if not action_items:
@@ -812,9 +880,9 @@ def _refresh_burndown_prediction_dates(now, base_date):
     try:
         from kanban.burndown_models import BurndownPrediction
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         predictions = list(BurndownPrediction.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not predictions:
@@ -891,8 +959,9 @@ def _refresh_resource_leveling_dates(now, base_date):
             ResourceLevelingSuggestion.objects.bulk_update(suggestions_to_update, fields, batch_size=100)
         
         # Update TaskAssignmentHistory
+        demo_board_ids = _get_demo_board_ids()
         histories = list(TaskAssignmentHistory.objects.filter(
-            task__column__board__organization_id__in=demo_org_ids
+            task__column__board_id__in=demo_board_ids
         ))
         
         histories_to_update = []
@@ -917,9 +986,9 @@ def _refresh_roi_snapshot_dates(base_date):
     try:
         from kanban.budget_models import ProjectROI
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         snapshots = list(ProjectROI.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not snapshots:
@@ -949,9 +1018,9 @@ def _refresh_trend_analysis_dates(base_date):
     try:
         from kanban.retrospective_models import RetrospectiveTrend
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         trends = list(RetrospectiveTrend.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not trends:
@@ -992,9 +1061,9 @@ def _refresh_sprint_milestone_dates(base_date):
     try:
         from kanban.burndown_models import SprintMilestone
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         milestones = list(SprintMilestone.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ))
         
         if not milestones:
@@ -1039,9 +1108,9 @@ def _refresh_skill_development_plan_dates(now, base_date):
     try:
         from kanban.models import SkillDevelopmentPlan
         
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
         plans = list(SkillDevelopmentPlan.objects.filter(
-            board__organization_id__in=demo_org_ids
+            board_id__in=demo_board_ids
         ).select_related('board'))
         
         if not plans:
@@ -1206,17 +1275,16 @@ def _refresh_task_activity_dates(now):
         import random
         from kanban.models import TaskActivity
 
-        demo_org_ids = _get_demo_organizations()
-        if not demo_org_ids:
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
             return 0
 
         cutoff = now - timedelta(days=30)
 
-        # Only refresh stale activities on official demo boards
+        # Only refresh stale activities on demo boards
         stale_activities = list(
             TaskActivity.objects.filter(
-                task__column__board__organization_id__in=demo_org_ids,
-                task__column__board__is_official_demo_board=True,
+                task__column__board_id__in=demo_board_ids,
                 created_at__lt=cutoff,
             ).select_related('task')
         )
@@ -1255,20 +1323,11 @@ def _refresh_completed_task_updated_at(now):
         from kanban.models import Task
         from django.db.models import Q
 
-        demo_org_ids = _get_demo_organizations()
+        demo_board_ids = _get_demo_board_ids()
 
-        # Build filter: tasks in demo orgs OR on boards named after known demo
-        # boards (covers boards created outside the demo org, e.g. via
-        # onboarding, that still serve as the user's demo workspace).
-        demo_board_names = ['Software Development']
+        # Build filter: completed tasks on any demo board (template or sandbox)
         q = Q(item_type='task', progress=100)
-        org_q = Q()
-        if demo_org_ids:
-            org_q |= Q(column__board__organization_id__in=demo_org_ids)
-        org_q |= Q(
-            column__board__name__in=demo_board_names,
-            column__board__organization__isnull=True,
-        )
+        org_q = Q(column__board_id__in=demo_board_ids) if demo_board_ids else Q(pk__in=[])
         completed_tasks = list(
             Task.objects.filter(q & org_q).order_by('id')
         )
@@ -1310,12 +1369,12 @@ def _refresh_commitment_protocol_dates(now, base_date):
             CommitmentProtocol, ConfidenceSignal, CommitmentBet,
         )
 
-        demo_org_ids = _get_demo_organizations()
-        if not demo_org_ids:
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
             return 0
 
         protocols = list(CommitmentProtocol.objects.filter(
-            board__organization_id__in=demo_org_ids,
+            board_id__in=demo_board_ids,
         ))
 
         if not protocols:
@@ -1382,4 +1441,138 @@ def _refresh_commitment_protocol_dates(now, base_date):
 
     except Exception as e:
         logger.warning(f"Error refreshing commitment protocol dates: {e}")
+        return 0
+
+
+def _refresh_comment_dates(now):
+    """
+    Refresh Comment.created_at timestamps on demo boards so comments
+    don't show "180 days ago" after date staleness.
+
+    Uses an offset-preserving shift per board (same approach as tasks):
+    find the oldest comment, compute a single shift delta so the oldest
+    comment falls ~30 days before today, then shift all comments by
+    that delta.  This keeps conversation threads in chronological order.
+    """
+    try:
+        from kanban.models import Comment
+
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        comments = list(
+            Comment.objects.filter(
+                task__column__board_id__in=demo_board_ids,
+            ).select_related('task__column')
+        )
+
+        if not comments:
+            return 0
+
+        # Group by board
+        by_board = {}
+        for c in comments:
+            bid = c.task.column.board_id if c.task and c.task.column else 0
+            by_board.setdefault(bid, []).append(c)
+
+        to_update = []
+        for board_id, board_comments in by_board.items():
+            oldest = min(c.created_at for c in board_comments)
+            target_oldest = now - timedelta(days=30)
+            shift = target_oldest - oldest
+            if abs(shift.total_seconds()) < 86400:
+                continue  # already current
+            for c in board_comments:
+                c.created_at = c.created_at + shift
+                to_update.append(c)
+
+        if to_update:
+            Comment.objects.bulk_update(to_update, ['created_at'], batch_size=500)
+
+        return len(to_update)
+
+    except Exception as e:
+        logger.warning(f"Error refreshing comment dates: {e}")
+        return 0
+
+
+def _refresh_chat_message_dates(now):
+    """
+    Refresh ChatMessage and TaskThreadComment timestamps on demo boards.
+
+    Same offset-preserving shift strategy as comments: keep thread order
+    intact while moving absolute dates to the present.
+    """
+    try:
+        from messaging.models import ChatMessage, TaskThreadComment
+
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        total = 0
+
+        # ── ChatMessage (via ChatRoom.board) ──────────────────────────────
+        messages = list(
+            ChatMessage.objects.filter(
+                chat_room__board_id__in=demo_board_ids,
+            ).select_related('chat_room')
+        )
+
+        if messages:
+            by_room = {}
+            for m in messages:
+                by_room.setdefault(m.chat_room_id, []).append(m)
+
+            msgs_to_update = []
+            for room_id, room_msgs in by_room.items():
+                oldest = min(m.created_at for m in room_msgs)
+                target_oldest = now - timedelta(days=14)
+                shift = target_oldest - oldest
+                if abs(shift.total_seconds()) < 86400:
+                    continue
+                for m in room_msgs:
+                    m.created_at = m.created_at + shift
+                    msgs_to_update.append(m)
+
+            if msgs_to_update:
+                ChatMessage.objects.bulk_update(
+                    msgs_to_update, ['created_at'], batch_size=500
+                )
+            total += len(msgs_to_update)
+
+        # ── TaskThreadComment (via Task.column.board) ─────────────────────
+        thread_comments = list(
+            TaskThreadComment.objects.filter(
+                task__column__board_id__in=demo_board_ids,
+            ).select_related('task__column')
+        )
+
+        if thread_comments:
+            by_task = {}
+            for tc in thread_comments:
+                by_task.setdefault(tc.task_id, []).append(tc)
+
+            tcs_to_update = []
+            for task_id, task_tcs in by_task.items():
+                oldest = min(tc.created_at for tc in task_tcs)
+                target_oldest = now - timedelta(days=14)
+                shift = target_oldest - oldest
+                if abs(shift.total_seconds()) < 86400:
+                    continue
+                for tc in task_tcs:
+                    tc.created_at = tc.created_at + shift
+                    tcs_to_update.append(tc)
+
+            if tcs_to_update:
+                TaskThreadComment.objects.bulk_update(
+                    tcs_to_update, ['created_at'], batch_size=500
+                )
+            total += len(tcs_to_update)
+
+        return total
+
+    except Exception as e:
+        logger.warning(f"Error refreshing chat message dates: {e}")
         return 0
