@@ -925,22 +925,26 @@ def _compute_confidence_score(parsed: Dict) -> float:
     """
     Compute a data-driven confidence score based on how many expected fields
     the AI actually returned with meaningful content.
+    Handles both the new simplified format and the old/legacy format field names.
     """
-    # Each expected field contributes a weight to the confidence score
+    # Each tuple: (new_field_name, old_field_name_or_None, weight)
     checks = [
-        ('executive_summary', 0.20),
-        ('health_score', 0.10),
-        ('health_reasoning', 0.05),
-        ('key_insights', 0.20),
-        ('concerns', 0.15),
-        ('recommendations', 0.15),
-        ('lean_efficiency', 0.05),
-        ('workload_balance', 0.05),
-        ('productivity_trend', 0.05),
+        ('executive_summary', None, 0.20),
+        ('health_score', 'health_assessment', 0.10),
+        ('health_reasoning', None, 0.05),
+        ('key_insights', None, 0.20),
+        ('concerns', 'areas_of_concern', 0.15),
+        ('recommendations', 'process_improvement_recommendations', 0.15),
+        ('lean_efficiency', 'lean_analysis', 0.05),
+        ('workload_balance', 'team_performance', 0.05),
+        ('productivity_trend', 'trend_analysis', 0.05),
     ]
     score = 0.0
-    for field, weight in checks:
-        val = parsed.get(field)
+    for new_field, old_field, weight in checks:
+        val = parsed.get(new_field)
+        # Fall back to old field name if new one is missing
+        if (val is None or val == '' or val == []) and old_field:
+            val = parsed.get(old_field)
         if val is None or val == '' or val == []:
             continue
         # Lists get partial credit if present but short
@@ -949,6 +953,9 @@ def _compute_confidence_score(parsed: Dict) -> float:
                 score += weight
             elif len(val) >= 1:
                 score += weight * 0.7
+        elif isinstance(val, dict):
+            # Dicts (like health_assessment, lean_analysis) count as present
+            score += weight
         else:
             score += weight
     # Clamp between 0.3 and 0.95
