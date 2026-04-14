@@ -997,23 +997,34 @@ function formatAISummary(summary) {
         return '<p>Error formatting summary</p>';
     }
     
-    // Convert basic markdown-like formatting to HTML
+    // Convert markdown formatting to HTML properly
     let formatted = summary
+        // Headers first (before bold processing)
+        .replace(/###\s(.*?)$/gm, '<h6 class="mt-3 mb-2" style="font-size: 0.95rem;">$1</h6>')
+        .replace(/##\s(.*?)$/gm, '<h6 class="mt-3 mb-2" style="font-size: 1rem;">$1</h6>')
+        // Bold (**text** or __text__)
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/###\s(.*?)$/gm, '<h5>$1</h5>')
-        .replace(/##\s(.*?)$/gm, '<h4>$1</h4>')
-        .replace(/^-\s(.*?)$/gm, '<li>$1</li>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^\s*<li>/gm, '<ul><li>')
-        .replace(/<\/li>\s*$/gm, '</li></ul>');
+        .replace(/__(.*?)__/g, '<strong>$1</strong>')
+        // Italic (*text* or _text_) - single asterisks, not inside words
+        .replace(/(?<!\w)\*(.*?)\*(?!\w)/g, '<em>$1</em>')
+        // Clean up any remaining stray asterisks (e.g. from malformed markdown)
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        // List items
+        .replace(/^[-•]\s+(.*?)$/gm, '<li style="font-size: 0.9rem;">$1</li>')
+        // Paragraphs
+        .replace(/\n\n/g, '</p><p style="font-size: 0.9rem;">')
+        // Remove any remaining raw asterisks used as bullets
+        .replace(/^\*\s+/gm, '');
     
-    // Wrap in paragraphs
+    // Wrap list items in <ul>
+    formatted = formatted.replace(/(<li[^>]*>.*?<\/li>\s*)+/g, '<ul class="ps-3">$&</ul>');
+    
+    // Wrap in paragraphs if not already wrapped
     if (!formatted.startsWith('<')) {
-        formatted = '<p>' + formatted + '</p>';
+        formatted = '<p style="font-size: 0.9rem;">' + formatted + '</p>';
     }
     
-    return formatted;
+    return '<div class="ai-summary-formatted">' + formatted + '</div>';
 }
 
 function formatStructuredAISummary(summary) {
@@ -1048,7 +1059,7 @@ function formatStructuredAISummary(summary) {
     }
     
     // This function handles structured JSON summaries with explainability
-    let html = '<div class="structured-ai-summary">';
+    let html = '<div class="structured-ai-summary" style="font-size: 0.9rem;">';
     
     // Generation timestamp
     html += '<div class="text-muted small mb-3"><i class="fas fa-clock me-1"></i>Generated at ' + new Date().toLocaleString() + '</div>';
@@ -1056,8 +1067,8 @@ function formatStructuredAISummary(summary) {
     // Executive Summary
     if (summary.executive_summary) {
         html += '<div class="mb-4">';
-        html += '<h5 class="text-primary"><i class="fas fa-chart-line me-2"></i>Executive Summary</h5>';
-        html += '<p class="lead">' + escapeHtml(summary.executive_summary) + '</p>';
+        html += '<h6 class="text-primary" style="font-size: 1rem;"><i class="fas fa-chart-line me-2"></i>Executive Summary</h6>';
+        html += '<p style="font-size: 0.95rem;">' + cleanAIText(summary.executive_summary) + '</p>';
         
         // Confidence and Quality Indicators
         if (summary.confidence_score || summary.analysis_quality) {
@@ -1085,7 +1096,7 @@ function formatStructuredAISummary(summary) {
         html += '<h6 class="text-' + healthColor + '"><i class="fas fa-heartbeat me-2"></i>Project Health</h6>';
         html += '<span class="badge bg-' + healthColor + ' mb-2">' + escapeHtml(health.overall_score || 'Unknown').toUpperCase() + '</span>';
         if (health.score_reasoning) {
-            html += '<p class="text-muted small">' + escapeHtml(health.score_reasoning) + '</p>';
+            html += '<p class="text-muted small">' + cleanAIText(health.score_reasoning) + '</p>';
         }
         
         // Render health indicators if present
@@ -1121,9 +1132,9 @@ function formatStructuredAISummary(summary) {
             const confBadge = insight.confidence ? '<span class="badge bg-secondary me-2">' + insight.confidence + '</span>' : '';
             html += '<div class="card mb-2 border-left-info">';
             html += '<div class="card-body py-2">';
-            html += '<p class="mb-1">' + confBadge + escapeHtml(insight.insight || 'Insight') + '</p>';
+            html += '<p class="mb-1">' + confBadge + cleanAIText(insight.insight || 'Insight') + '</p>';
             if (insight.evidence) {
-                html += '<small class="text-muted"><strong>Evidence:</strong> ' + escapeHtml(String(insight.evidence)) + '</small>';
+                html += '<small class="text-muted"><strong>Evidence:</strong> ' + cleanAIText(String(insight.evidence)) + '</small>';
             }
             html += '</div></div>';
         });
@@ -1139,9 +1150,9 @@ function formatStructuredAISummary(summary) {
             const severityColors = {critical: 'danger', high: 'warning', medium: 'info', low: 'secondary'};
             const severityColor = severityColors[concern.severity] || 'secondary';
             html += '<div class="alert alert-' + severityColor + ' py-2 mb-2">';
-            html += '<strong>' + escapeHtml(concern.concern || 'Concern') + '</strong>';
+            html += '<strong>' + cleanAIText(concern.concern || 'Concern') + '</strong>';
             if (concern.recommended_action) {
-                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + escapeHtml(String(concern.recommended_action)) + '</p>';
+                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + cleanAIText(String(concern.recommended_action)) + '</p>';
             }
             html += '</div>';
         });
@@ -1157,14 +1168,14 @@ function formatStructuredAISummary(summary) {
             html += '<div class="card mb-2">';
             html += '<div class="card-body py-2">';
             html += '<div class="d-flex justify-content-between align-items-start">';
-            html += '<div><strong>' + (idx + 1) + '. ' + escapeHtml(rec.recommendation || 'Recommendation') + '</strong></div>';
+            html += '<div><strong>' + (idx + 1) + '. ' + cleanAIText(rec.recommendation || 'Recommendation') + '</strong></div>';
             if (rec.implementation_effort) {
                 const effortColor = rec.implementation_effort === 'low' ? 'success' : rec.implementation_effort === 'medium' ? 'warning' : 'danger';
                 html += '<span class="badge bg-' + effortColor + '">' + String(rec.implementation_effort) + ' effort</span>';
             }
             html += '</div>';
             if (rec.expected_impact) {
-                html += '<p class="mb-0 mt-1 small text-muted">' + escapeHtml(String(rec.expected_impact)) + '</p>';
+                html += '<p class="mb-0 mt-1 small text-muted">' + cleanAIText(String(rec.expected_impact)) + '</p>';
             }
             html += '</div></div>';
         });
@@ -1208,7 +1219,7 @@ function formatStructuredAISummary(summary) {
             const urgencyColor = urgencyColors[item.urgency] || 'secondary';
             const urgencyText = String(item.urgency || 'planned').replace('_', ' ');
             html += '<li class="mb-2">';
-            html += escapeHtml(item.action || 'Action item');
+            html += cleanAIText(item.action || 'Action item');
             html += ' <span class="badge bg-' + urgencyColor + ' ms-2">' + urgencyText + '</span>';
             html += '</li>';
         });
@@ -1449,4 +1460,20 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Clean AI-generated text by escaping HTML and stripping markdown formatting.
+ * Use this instead of escapeHtml for AI-generated text that may contain asterisks.
+ */
+function cleanAIText(text) {
+    let cleaned = escapeHtml(text);
+    // Strip markdown: **bold** → bold, *italic* → italic, ## headers → text
+    cleaned = cleaned
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/_([^_]+)_/g, '$1');
+    return cleaned;
 }

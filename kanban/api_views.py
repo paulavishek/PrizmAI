@@ -736,7 +736,9 @@ def summarize_board_analytics_api(request, board_id):
             ],
             'tasks_by_column': tasks_by_column,
             'tasks_by_priority': tasks_by_priority,
-            'tasks_by_user': tasks_by_user
+            'tasks_by_user': tasks_by_user,
+            'board_name': board.name,
+            'project_type': board.project_type or 'general',
         }
         
         # Generate analytics summary
@@ -933,7 +935,9 @@ def download_analytics_summary_pdf(request, board_id):
             ],
             'tasks_by_column': tasks_by_column,
             'tasks_by_priority': tasks_by_priority,
-            'tasks_by_user': tasks_by_user
+            'tasks_by_user': tasks_by_user,
+            'board_name': board.name,
+            'project_type': getattr(board, 'project_type', '') or 'general',
         }
         
         # Generate analytics summary using AI

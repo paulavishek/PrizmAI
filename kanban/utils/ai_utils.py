@@ -1027,7 +1027,34 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         tasks_by_user = analytics_data.get('tasks_by_user', [])
         
         # Build optimized prompt - streamlined for faster response while maintaining quality
-        prompt = f"""Analyze this board data and provide actionable insights for a project manager.
+        board_name = analytics_data.get('board_name', 'Board')
+        project_type = analytics_data.get('project_type', 'general')
+        
+        # Project-type-specific focus areas
+        type_focus = {
+            'product_tech': (
+                "Focus on: task velocity, blocked/at-risk items, column bottlenecks, "
+                "workload distribution, and technical debt indicators."
+            ),
+            'marketing_campaign': (
+                "Focus on: deadline adherence, content output rate, review pipeline, "
+                "milestone progress, and campaign phase distribution."
+            ),
+            'operations': (
+                "Focus on: process completion rate, cycle time efficiency, on-time delivery, "
+                "workload balance, and operational throughput."
+            ),
+            'general': (
+                "Focus on: overall productivity, task completion trends, workload balance, "
+                "and priority distribution."
+            ),
+        }
+        focus_area = type_focus.get(project_type, type_focus['general'])
+        
+        prompt = f"""Analyze this {project_type.replace('_', ' ')} board "{board_name}" and provide actionable insights for a project manager.
+
+## Board Type: {project_type.replace('_', ' ').title()}
+{focus_area}
 
 ## Metrics:
 - Tasks: {total_tasks} total, {completed_count} complete ({productivity}% productivity)
@@ -1037,19 +1064,21 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
 - Priority: {', '.join([f"{pri['priority']}:{pri['count']}" for pri in tasks_by_priority])}
 - Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}
 
+IMPORTANT: Do NOT use markdown formatting like asterisks, bold, or headers in any text values. Use plain text only.
+
 Return JSON only:
 {{
-  "executive_summary": "2-3 sentences summarizing health and key findings",
+  "executive_summary": "2-3 plain text sentences summarizing health and key findings for this {project_type.replace('_', ' ')} board",
   "health_score": "healthy|at_risk|critical",
-  "health_reasoning": "Brief explanation",
+  "health_reasoning": "Brief plain text explanation",
   "key_insights": [
-    {{"insight": "Finding", "evidence": "Data point", "confidence": "high|medium|low"}}
+    {{"insight": "Finding relevant to {project_type.replace('_', ' ')}", "evidence": "Data point", "confidence": "high|medium|low"}}
   ],
   "concerns": [
     {{"concern": "Issue", "severity": "critical|high|medium|low", "action": "Recommendation"}}
   ],
   "recommendations": [
-    {{"recommendation": "Action", "impact": "Expected result", "priority": 1}}
+    {{"recommendation": "Action specific to {project_type.replace('_', ' ')}", "impact": "Expected result", "priority": 1}}
   ],
   "lean_efficiency": "excellent|good|fair|poor",
   "workload_balance": "balanced|imbalanced",

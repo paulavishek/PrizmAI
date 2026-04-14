@@ -107,8 +107,15 @@ def _format_metric_value(key, value):
     if key == 'completion_rate_by_column':
         if not value:
             return 'N/A'
-        done = sum(1 for v in value.values() if v == '100%')
-        return f"{done}/{len(value)} cols done"
+        # Show average completion rate across columns
+        rates = []
+        for v in value.values():
+            try:
+                rates.append(int(v.replace('%', '')))
+            except (ValueError, AttributeError):
+                pass
+        avg_rate = int(sum(rates) / len(rates)) if rates else 0
+        return f"{avg_rate}% avg"
     if key == 'workload_distribution':
         if not value:
             return '0 active'
@@ -164,6 +171,8 @@ def get_promoted_metrics(board, raw=False):
     total = tasks.count()
 
     metrics = {}
+    task_details = {}   # key -> list of task dicts for modal display
+    explanations = {}   # key -> human-readable explanation string
 
     if project_type == 'product_tech':
         # Task velocity: tasks completed in last 7 days
@@ -177,10 +186,17 @@ def get_promoted_metrics(board, raw=False):
         metrics['overdue_count'] = overdue
 
         # Blocked / high-risk count (priority=urgent or high with no progress)
-        blocked = tasks.filter(
+        blocked_qs = tasks.filter(
             Q(priority='urgent') | Q(priority='high', progress=0)
-        ).exclude(progress=100).count()
-        metrics['blocked_count'] = blocked
+        ).exclude(progress=100).select_related('column', 'assigned_to')
+        metrics['blocked_count'] = blocked_qs.count()
+        task_details['blocked_count'] = list(
+            blocked_qs.values('id', 'title', 'priority', 'column__name', 'assigned_to__username')[:20]
+        )
+        explanations['blocked_count'] = (
+            f"Tasks that are urgent priority, or high priority with 0% progress. "
+            f"Found {blocked_qs.count()} task(s) that may need immediate attention."
+        )
 
         # Task completion rate by column
         columns = Column.objects.filter(board=board).order_by('position')
@@ -192,17 +208,29 @@ def get_promoted_metrics(board, raw=False):
             rate = int((col_done / col_total * 100)) if col_total > 0 else 0
             col_rates[col.name] = f"{rate}%"
         metrics['completion_rate_by_column'] = col_rates
+        explanations['completion_rate_by_column'] = (
+            "Shows what percentage of tasks in each column have reached 100% progress. "
+            "Columns like 'Done' are expected to be 100% while active columns will be lower. "
+            "This helps identify columns where tasks are stalling."
+        )
 
-        # Workload distribution
+        # Workload distribution — show ALL users with tasks on the board
         workload = list(
-            tasks.exclude(progress=100)
-            .values('assigned_to__username')
-            .annotate(count=Count('id'))
-            .order_by('-count')[:5]
+            tasks.values('assigned_to__username')
+            .annotate(
+                count=Count('id'),
+                active_count=Count('id', filter=Q(progress__lt=100)),
+            )
+            .order_by('-count')
         )
         metrics['workload_distribution'] = {
-            (w['assigned_to__username'] or 'Unassigned'): w['count'] for w in workload
+            (w['assigned_to__username'] or 'Unassigned'): f"{w['active_count']} active / {w['count']} total"
+            for w in workload
         }
+        explanations['workload_distribution'] = (
+            f"All team members with tasks on this board. "
+            f"Shows active (incomplete) and total task counts per contributor."
+        )
 
     elif project_type == 'marketing_campaign':
         # Tasks by phase (column)
@@ -215,18 +243,18 @@ def get_promoted_metrics(board, raw=False):
         # Deadline adherence rate
         with_due = tasks.filter(due_date__isnull=False)
         total_with_due = with_due.count()
-        on_time = with_due.filter(
-            Q(progress=100, due_date__date__gte=F('updated_at__date')) |
-            Q(progress=100, due_date__date__gte=today)
-        ).count()
         # Simpler calculation: completed tasks that were not overdue at completion
         completed_with_due = with_due.filter(progress=100).count()
         overdue_completed = with_due.filter(
             progress=100, due_date__date__lt=F('updated_at__date')
         ).count()
         on_time_completed = completed_with_due - overdue_completed
-        metrics['deadline_adherence_rate'] = (
-            f"{int(on_time_completed / total_with_due * 100)}%" if total_with_due > 0 else "N/A"
+        adherence_pct = int(on_time_completed / total_with_due * 100) if total_with_due > 0 else 0
+        metrics['deadline_adherence_rate'] = f"{adherence_pct}%" if total_with_due > 0 else "N/A"
+        explanations['deadline_adherence_rate'] = (
+            f"Percentage of tasks with deadlines that were completed on time. "
+            f"{on_time_completed} of {total_with_due} tasks with due dates were finished before their deadline. "
+            f"{overdue_completed} task(s) were completed late."
         )
 
         # Content output rate (tasks completed this week)
@@ -235,42 +263,85 @@ def get_promoted_metrics(board, raw=False):
 
         # Tasks currently in review columns (heuristic: columns with 'review' in name)
         review_cols = columns.filter(name__icontains='review')
-        review_count = tasks.filter(column__in=review_cols).exclude(progress=100).count()
-        metrics['tasks_in_review'] = review_count
+        if review_cols.exists():
+            review_tasks_qs = tasks.filter(column__in=review_cols).exclude(
+                progress=100
+            ).select_related('column', 'assigned_to')
+            review_count = review_tasks_qs.count()
+            metrics['tasks_in_review'] = review_count
+            task_details['tasks_in_review'] = list(
+                review_tasks_qs.values(
+                    'id', 'title', 'priority', 'column__name', 'assigned_to__username'
+                )[:20]
+            )
+            explanations['tasks_in_review'] = (
+                f"Tasks sitting in columns containing 'review' in their name. "
+                f"Found {review_count} task(s) awaiting review/approval."
+            )
+        else:
+            # No review column on this board
+            metrics['tasks_in_review'] = "N/A"
+            explanations['tasks_in_review'] = (
+                "No column with 'review' in its name was found on this board. "
+                "Add a column like 'In Review' or 'Review' to track tasks awaiting approval."
+            )
 
         # Milestone completion percentage
         completed = tasks.filter(progress=100).count()
-        metrics['milestone_completion_pct'] = f"{int(completed / total * 100)}%" if total > 0 else "0%"
+        milestone_pct = int(completed / total * 100) if total > 0 else 0
+        metrics['milestone_completion_pct'] = f"{milestone_pct}%" if total > 0 else "0%"
+        explanations['milestone_completion_pct'] = (
+            f"{completed} of {total} tasks are fully completed (100% progress). "
+            f"This tracks overall project progress toward completion milestones."
+        )
 
     elif project_type == 'operations':
         # Process completion rate (completed / created in last 30 days)
         created_30d = tasks.filter(created_at__gte=thirty_days_ago).count()
         completed_30d = tasks.filter(progress=100, updated_at__gte=thirty_days_ago).count()
-        metrics['process_completion_rate'] = (
-            f"{int(completed_30d / created_30d * 100)}%" if created_30d > 0 else "N/A"
+        process_pct = int(completed_30d / created_30d * 100) if created_30d > 0 else 0
+        metrics['process_completion_rate'] = f"{process_pct}%" if created_30d > 0 else "N/A"
+        explanations['process_completion_rate'] = (
+            f"Ratio of completed tasks to newly created tasks in the last 30 days. "
+            f"{completed_30d} completed out of {created_30d} created. "
+            f"A rate above 100% means the team is clearing backlog faster than new work arrives."
         )
 
-        # Workload distribution
+        # Workload distribution — show ALL users with tasks on the board
         workload = list(
-            tasks.exclude(progress=100)
-            .values('assigned_to__username')
-            .annotate(count=Count('id'))
-            .order_by('-count')[:5]
+            tasks.values('assigned_to__username')
+            .annotate(
+                count=Count('id'),
+                active_count=Count('id', filter=Q(progress__lt=100)),
+            )
+            .order_by('-count')
         )
         metrics['workload_distribution'] = {
-            (w['assigned_to__username'] or 'Unassigned'): w['count'] for w in workload
+            (w['assigned_to__username'] or 'Unassigned'): f"{w['active_count']} active / {w['count']} total"
+            for w in workload
         }
+        explanations['workload_distribution'] = (
+            f"All team members with tasks on this board. "
+            f"Shows active (incomplete) and total task counts per contributor."
+        )
 
         # Average cycle time (creation → completion, in days)
-        completed_tasks = tasks.filter(progress=100, updated_at__isnull=False)
-        if completed_tasks.exists():
-            total_days = sum(
-                (t.updated_at - t.created_at).days for t in completed_tasks[:100]  # cap for perf
-            )
-            avg_days = total_days / completed_tasks[:100].count()
+        completed_tasks_qs = tasks.filter(progress=100, updated_at__isnull=False)
+        if completed_tasks_qs.exists():
+            cycle_times = []
+            for t in completed_tasks_qs[:100]:  # cap for perf
+                delta = (t.updated_at - t.created_at).total_seconds()
+                cycle_times.append(max(0, delta / 86400))  # convert to days, floor at 0
+            avg_days = sum(cycle_times) / len(cycle_times) if cycle_times else 0
             metrics['avg_cycle_time_days'] = f"{avg_days:.1f} days"
+            explanations['avg_cycle_time_days'] = (
+                f"Average time from task creation to completion across "
+                f"{len(cycle_times)} completed task(s). "
+                f"Shorter cycle times indicate faster throughput."
+            )
         else:
             metrics['avg_cycle_time_days'] = "N/A"
+            explanations['avg_cycle_time_days'] = "No completed tasks to measure cycle time."
 
         # Overdue count
         overdue = tasks.filter(
@@ -283,8 +354,12 @@ def get_promoted_metrics(board, raw=False):
         total_done_with_due = with_due.count()
         overdue_at_completion = with_due.filter(due_date__date__lt=F('updated_at__date')).count()
         on_time = total_done_with_due - overdue_at_completion
-        metrics['on_time_rate'] = (
-            f"{int(on_time / total_done_with_due * 100)}%" if total_done_with_due > 0 else "N/A"
+        on_time_pct = int(on_time / total_done_with_due * 100) if total_done_with_due > 0 else 0
+        metrics['on_time_rate'] = f"{on_time_pct}%" if total_done_with_due > 0 else "N/A"
+        explanations['on_time_rate'] = (
+            f"Percentage of completed tasks that were finished before their due date. "
+            f"{on_time} of {total_done_with_due} completed tasks with deadlines were on time. "
+            f"{overdue_at_completion} task(s) were completed after their deadline."
         )
 
     if raw:
@@ -305,10 +380,23 @@ def get_promoted_metrics(board, raw=False):
                 'color': config.get('color', 'primary'),
                 'description': config.get('description', ''),
                 'modal_target': config.get('modal_target', ''),
+                'explanation': explanations.get(key, ''),
             }
             if isinstance(raw_value, dict):
                 entry['detail_items'] = [
                     {'name': k, 'value': v} for k, v in raw_value.items()
+                ]
+            # Add task details for metrics that have them
+            if key in task_details and task_details[key]:
+                entry['task_details'] = [
+                    {
+                        'id': t['id'],
+                        'title': t['title'],
+                        'priority': t.get('priority', ''),
+                        'column_name': t.get('column__name', ''),
+                        'assigned_to': t.get('assigned_to__username') or 'Unassigned',
+                    }
+                    for t in task_details[key]
                 ]
             result.append(entry)
     return result
