@@ -52,6 +52,23 @@
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
     }
+    
+    .btn-prizm-primary:disabled,
+    .btn-prizm-primary[disabled] {
+        color: #ffffff !important;
+        opacity: 0.9;
+    }
+    
+    /* Ensure spinner animation works on dynamically inserted elements */
+    .btn-prizm-primary .fa-spinner {
+        animation: fa-spin 1s linear infinite !important;
+        display: inline-block;
+    }
+    
+    @keyframes fa-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
 </style>
 {% endblock %}
 
@@ -414,7 +431,8 @@ function generateRecommendations() {
     ];
 
     let msgIndex = 0;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + messages[msgIndex];
+    btn.style.color = '#ffffff';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="animation: fa-spin 1s linear infinite;"></i> ' + messages[msgIndex];
 
     // Calculate interval: distribute remaining messages across ~55 seconds
     // First message shows immediately, rotate through the rest before ~60s
@@ -425,7 +443,7 @@ function generateRecommendations() {
     function advanceMessage() {
         msgIndex++;
         if (msgIndex < messages.length) {
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + messages[msgIndex];
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="animation: fa-spin 1s linear infinite;"></i> ' + messages[msgIndex];
         }
         // Stop at the last message — don't repeat
         if (msgIndex >= messages.length - 1) {
