@@ -61,15 +61,87 @@
     .fc .fc-timegrid-slot,
     .fc .fc-daygrid-bg-harness,
     .fc .fc-daygrid-day-frame { cursor: pointer; }
-    /* Assignee chips */
-    .assignee-chip {
-        cursor: pointer;
-        transition: opacity 0.15s;
-        user-select: none;
-        font-size: 0.8rem !important;
-        padding: 5px 10px !important;
+    /* Assignee filter dropdown */
+    .member-filter-dropdown {
+        position: relative;
+        display: inline-block;
     }
-    .assignee-chip.inactive { opacity: 0.35; text-decoration: line-through; }
+    .member-filter-btn {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 0.82rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: border-color 0.15s;
+    }
+    .member-filter-btn:hover { border-color: #7c3aed; }
+    .member-filter-btn .count-badge {
+        background: #7c3aed;
+        color: #fff;
+        border-radius: 50%;
+        width: 20px; height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .member-filter-panel {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        z-index: 1060;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        min-width: 240px;
+        max-height: 340px;
+        overflow-y: auto;
+        padding: 8px 0;
+        margin-top: 4px;
+    }
+    .member-filter-panel.show { display: block; }
+    .member-filter-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        cursor: pointer;
+        font-size: 0.84rem;
+        transition: background 0.1s;
+    }
+    .member-filter-item:hover { background: #f3f0ff; }
+    .member-filter-item .color-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .member-filter-item input[type="checkbox"] {
+        accent-color: #7c3aed;
+        flex-shrink: 0;
+    }
+    .member-filter-actions {
+        display: flex;
+        gap: 8px;
+        padding: 6px 14px;
+        border-top: 1px solid #eee;
+        margin-top: 4px;
+    }
+    .member-filter-actions button {
+        font-size: 0.78rem;
+        padding: 2px 10px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+        background: #fff;
+        cursor: pointer;
+    }
+    .member-filter-actions button:hover { background: #f3f0ff; }
 
     /* ═══ Fix 2: Highlight today's date cell ═══ */
     .fc .fc-day-today {
@@ -166,22 +238,25 @@
         </div>
     </div>
 
-    <!-- Unified legend row (Priority + Team colours) -->
-    <div class="d-flex flex-wrap gap-3 align-items-center mb-2" style="font-size:13px;">
-        <span class="text-muted fw-semibold">Priority:</span>
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc3545;"></span> Urgent</span>
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fd7e14;"></span> High</span>
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0d6efd;"></span> Medium</span>
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#198754;"></span> Low</span>
+    <!-- Legend + Member filter -->
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-3" style="font-size:13px;">
+        <span class="text-muted small"><i class="fas fa-info-circle me-1"></i>Task bars are coloured by assignee.</span>
         <span class="text-muted">|</span>
-        <span class="text-muted fw-semibold">Team:</span>
-        <span id="assignee-legend" class="d-flex flex-wrap gap-2"></span>
-    </div>
-
-    <!-- Assignee filter chips (built by JS) -->
-    <div class="d-flex flex-wrap gap-2 mb-3" id="assignee-chips">
-        <span class="badge assignee-chip" data-assignee-id="all"
-              style="background:#495057;">All Members</span>
+        <div class="member-filter-dropdown" id="member-filter-dropdown">
+            <button class="member-filter-btn" id="member-filter-btn" type="button">
+                <i class="fas fa-users" style="color:#7c3aed;"></i>
+                <span>Filter Members</span>
+                <span class="count-badge" id="member-filter-count" style="display:none;">0</span>
+                <i class="fas fa-chevron-down" style="font-size:0.65rem; opacity:0.5;"></i>
+            </button>
+            <div class="member-filter-panel" id="member-filter-panel">
+                <!-- items built by JS -->
+                <div class="member-filter-actions">
+                    <button type="button" id="member-filter-all">Show All</button>
+                    <button type="button" id="member-filter-none">Hide All</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Calendar -->
@@ -353,7 +428,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Assignee filter state — IDs in this set are HIDDEN
+    // Restore from sessionStorage (persists across navigation within session)
+    const FILTER_KEY = 'calFilter_board_{{ board.id }}';
     let hiddenAssigneeIds = new Set();
+    (function() {
+        try {
+            const stored = sessionStorage.getItem(FILTER_KEY);
+            if (stored) {
+                JSON.parse(stored).forEach(function(v) {
+                    hiddenAssigneeIds.add(v);
+                });
+            }
+        } catch(e) {}
+    })();
 
     // Priority colour map (for tooltip badges)
     const PRIORITY_COLORS = {
@@ -403,7 +490,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 filtered = events;
             } else {
                 filtered = events.filter(function(e) {
-                    const aid = e.extendedProps ? e.extendedProps.assignee_id : undefined;
+                    const ep = e.extendedProps || {};
+                    if (ep.source === 'event') {
+                        // Calendar events: filter by creator and participants
+                        const creatorId = ep.created_by_id;
+                        const participantIds = ep.participant_ids || [];
+                        // Show if creator OR any participant is visible
+                        const involvedIds = [creatorId].concat(participantIds);
+                        return involvedIds.some(function(id) {
+                            return !hiddenAssigneeIds.has(id);
+                        });
+                    }
+                    // Tasks: filter by assignee
+                    const aid = ep.assignee_id;
                     return !hiddenAssigneeIds.has(aid);
                 });
             }
@@ -506,57 +605,87 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     calendar.render();
 
-    // ---- Build assignee legend and filter chips ----
-    const legendEl = document.getElementById('assignee-legend');
-    const chipsEl  = document.getElementById('assignee-chips');
+    // ---- Build member filter dropdown ----
+    const filterPanel = document.getElementById('member-filter-panel');
+    const filterBtn   = document.getElementById('member-filter-btn');
+    const filterCount = document.getElementById('member-filter-count');
+    const actionsDiv  = filterPanel.querySelector('.member-filter-actions');
+
+    function buildFilterItem(id, label, color) {
+        const item = document.createElement('label');
+        item.className = 'member-filter-item';
+        const parsedId = id === 'unassigned' ? null : parseInt(id, 10);
+        const isChecked = !hiddenAssigneeIds.has(parsedId);
+        item.innerHTML = `
+            <input type="checkbox" ${isChecked ? 'checked' : ''} data-member-id="${id}">
+            <span class="color-dot" style="background:${color};"></span>
+            <span>${label}</span>
+        `;
+        filterPanel.insertBefore(item, actionsDiv);
+    }
 
     membersWithColors.forEach(function(m) {
-        // Legend entry
-        const legend = document.createElement('span');
-        legend.style.fontSize = '13px';
-        legend.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${m.color};"></span> ${m.display}`;
-        legendEl.appendChild(legend);
+        buildFilterItem(m.id, m.display, m.color);
+    });
+    buildFilterItem('unassigned', 'Unassigned', '#9ca3af');
 
-        // Filter chip
-        const chip = document.createElement('span');
-        chip.className = 'badge assignee-chip';
-        chip.dataset.assigneeId = m.id;
-        chip.style.background = m.color;
-        chip.textContent = m.display;
-        chipsEl.appendChild(chip);
+    function syncFilterToStorage() {
+        try {
+            if (hiddenAssigneeIds.size > 0) {
+                sessionStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(hiddenAssigneeIds)));
+            } else {
+                sessionStorage.removeItem(FILTER_KEY);
+            }
+        } catch(e) {}
+    }
+
+    function updateFilter() {
+        hiddenAssigneeIds.clear();
+        filterPanel.querySelectorAll('input[data-member-id]').forEach(function(cb) {
+            if (!cb.checked) {
+                const raw = cb.dataset.memberId;
+                hiddenAssigneeIds.add(raw === 'unassigned' ? null : parseInt(raw, 10));
+            }
+        });
+        const total = filterPanel.querySelectorAll('input[data-member-id]').length;
+        const hidden = hiddenAssigneeIds.size;
+        if (hidden > 0) {
+            filterCount.textContent = total - hidden;
+            filterCount.style.display = '';
+        } else {
+            filterCount.style.display = 'none';
+        }
+        syncFilterToStorage();
+        calendar.refetchEvents();
+    }
+
+    // Initialize count badge on load if filter is active
+    if (hiddenAssigneeIds.size > 0) {
+        const total = filterPanel.querySelectorAll('input[data-member-id]').length;
+        filterCount.textContent = total - hiddenAssigneeIds.size;
+        filterCount.style.display = '';
+    }
+
+    filterPanel.addEventListener('change', updateFilter);
+
+    document.getElementById('member-filter-all').addEventListener('click', function() {
+        filterPanel.querySelectorAll('input[data-member-id]').forEach(cb => cb.checked = true);
+        updateFilter();
+    });
+    document.getElementById('member-filter-none').addEventListener('click', function() {
+        filterPanel.querySelectorAll('input[data-member-id]').forEach(cb => cb.checked = false);
+        updateFilter();
     });
 
-    // Unassigned chip
-    const unassignedChip = document.createElement('span');
-    unassignedChip.className = 'badge assignee-chip';
-    unassignedChip.dataset.assigneeId = 'unassigned';
-    unassignedChip.style.background = '#9ca3af';
-    unassignedChip.textContent = 'Unassigned';
-    chipsEl.appendChild(unassignedChip);
-
-    // Chip click handler
-    chipsEl.addEventListener('click', function(e) {
-        const chip = e.target.closest('.assignee-chip');
-        if (!chip) return;
-        const rawId = chip.dataset.assigneeId;
-        if (rawId === 'all') {
-            hiddenAssigneeIds.clear();
-            chipsEl.querySelectorAll('.assignee-chip').forEach(c => c.classList.remove('inactive'));
-        } else {
-            const numId = rawId === 'unassigned' ? null : parseInt(rawId, 10);
-            if (hiddenAssigneeIds.has(numId)) {
-                hiddenAssigneeIds.delete(numId);
-                chip.classList.remove('inactive');
-            } else {
-                hiddenAssigneeIds.add(numId);
-                chip.classList.add('inactive');
-            }
-            // All chip dims if anything hidden
-            const allChip = chipsEl.querySelector('.assignee-chip[data-assignee-id="all"]');
-            if (hiddenAssigneeIds.size > 0) allChip.classList.add('inactive');
-            else allChip.classList.remove('inactive');
+    // Toggle dropdown
+    filterBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        filterPanel.classList.toggle('show');
+    });
+    document.addEventListener('click', function(e) {
+        if (!document.getElementById('member-filter-dropdown').contains(e.target)) {
+            filterPanel.classList.remove('show');
         }
-        calendar.refetchEvents();
     });
 
     // Keep tooltip following mouse
