@@ -630,6 +630,7 @@ def calendar_create_event(request):
             'start': fc_start,
             'end': fc_end,
             'allDay': is_all_day,
+            'url': f'/calendar/events/{event.id}/',
             'color': event.get_event_type_color(),
             'source': 'event',
             'extendedProps': {
