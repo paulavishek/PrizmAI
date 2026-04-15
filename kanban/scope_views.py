@@ -77,6 +77,9 @@ def scope_dashboard(request, board_id):
         'in_progress_tasks': tasks.filter(
             Q(column__name__icontains='in progress') | Q(column__name__icontains='doing')
         ).count(),
+        'in_review_tasks': tasks.filter(
+            Q(column__name__icontains='review') | Q(column__name__icontains='testing') | Q(column__name__icontains='QA')
+        ).count(),
         'completed_tasks': tasks.filter(
             Q(column__name__icontains='done') | Q(column__name__icontains='complete')
         ).count(),

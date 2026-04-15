@@ -482,6 +482,11 @@
                     </a>
                 </div>
                 <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Complexity</strong> = sum of complexity scores across all tasks &nbsp;|&nbsp;
+                        <strong>Avg</strong> = average complexity score per task (Complexity &divide; Tasks)
+                    </p>
                     {% if snapshots %}
                     <div class="timeline">
                         {% for snapshot in snapshots|slice:":10" %}
@@ -516,10 +521,10 @@
                                     <small class="text-muted">Tasks:</small> <strong>{{ snapshot.total_tasks }}</strong>
                                 </div>
                                 <div class="col-md-4">
-                                    <small class="text-muted">Complexity:</small> <strong>{{ snapshot.total_complexity_points }} pts</strong>
+                                    <small class="text-muted" title="Sum of complexity scores across all tasks">Complexity:</small> <strong>{{ snapshot.total_complexity_points }} pts</strong>
                                 </div>
                                 <div class="col-md-4">
-                                    <small class="text-muted">Avg:</small> <strong>{{ snapshot.avg_complexity|floatformat:1 }}</strong>
+                                    <small class="text-muted" title="Average complexity score per task">Avg:</small> <strong>{{ snapshot.avg_complexity|floatformat:1 }}</strong>
                                 </div>
                             </div>
                             {% if snapshot.notes %}
@@ -628,7 +633,16 @@
                     </div>
                     <div class="mb-3">
                         <div class="d-flex justify-content-between mb-1">
-                            <small>Completed</small>
+                            <small>In Review</small>
+                            <small>{{ current_metrics.in_review_tasks }}</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-info" style="width: {% widthratio current_metrics.in_review_tasks current_metrics.total_tasks 100 %}%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>Done</small>
                             <small>{{ current_metrics.completed_tasks }}</small>
                         </div>
                         <div class="progress" style="height: 8px;">
@@ -788,8 +802,8 @@
                                             {% if snap.is_baseline %}selected{% endif %}>
                                         {{ snap.snapshot_date|date:"M d, Y H:i" }}
                                         {% if snap.is_baseline %}(current baseline){% endif %}
-                                        â€” {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
-                                        {% if snap.notes %} â€” {{ snap.notes|truncatechars:40 }}{% endif %}
+                                        &mdash; {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
+                                        {% if snap.notes %} &mdash; {{ snap.notes|truncatechars:40 }}{% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -844,15 +858,15 @@
                                 <div class="row">
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Tasks</small>
-                                        <div class="fw-bold fs-5" id="previewTasks">â€”</div>
+                                        <div class="fw-bold fs-5" id="previewTasks">&mdash;</div>
                                     </div>
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Complexity</small>
-                                        <div class="fw-bold fs-5" id="previewComplexity">â€”</div>
+                                        <div class="fw-bold fs-5" id="previewComplexity">&mdash;</div>
                                     </div>
                                     <div class="col-4 text-center">
                                         <small class="text-muted">Avg Complexity</small>
-                                        <div class="fw-bold fs-5" id="previewAvg">â€”</div>
+                                        <div class="fw-bold fs-5" id="previewAvg">&mdash;</div>
                                     </div>
                                 </div>
                             </div>
@@ -885,7 +899,7 @@ function updateManualPreview() {
         preview.style.display = 'block';
         document.getElementById('previewTasks').textContent = tasks;
         document.getElementById('previewComplexity').textContent = complexity + ' pts';
-        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : 'â€”';
+        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : '\u2014';
     } else {
         preview.style.display = 'none';
     }
