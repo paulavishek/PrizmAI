@@ -112,8 +112,18 @@
     }
 
     .btn-ask:disabled {
-        opacity: 0.6;
+        opacity: 0.7;
         cursor: not-allowed;
+        transform: none;
+    }
+
+    .btn-ask:disabled .fa-spinner {
+        animation: fa-spin 1s linear infinite;
+    }
+
+    @keyframes fa-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 
     /* Toast notifications */
@@ -167,8 +177,7 @@
         <p>Get personalized project management advice based on your board's context</p>
         <div class="alert alert-info mt-3" style="max-width: 700px; margin: 0 auto;">
             <i class="fas fa-info-circle me-2"></i>
-            <strong>Note:</strong> The AI Coach analyzes data from <strong>{{ board.name }}</strong> board only. 
-            Questions about other boards or cross-board comparisons are not supported.
+            The AI Coach provides focused analysis of <strong>{{ board.name }}</strong> for the most accurate, context-aware advice.
         </div>
     </div>
 
@@ -249,8 +258,8 @@
     </div>
 
     <div class="text-center mt-4">
-        <a href="{% url 'dashboard' %}" class="btn-prizm-back">
-            <i class="fas fa-arrow-left me-2"></i>Back
+        <a href="{% url 'coach_dashboard' board.id %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to AI Coach
         </a>
     </div>
 </div>
