@@ -20,7 +20,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 # Configure logger
 logger = logging.getLogger(__name__)
 
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy
+from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, CalendarEvent
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
@@ -3493,6 +3493,57 @@ def board_calendar(request, board_id):
                 'due_date_str': due_str,
                 'start_date_str': t.start_date.isoformat() if t.start_date else None,
             }
+        })
+
+    # -----------------------------------------------------------------------
+    # Calendar events (meetings, OOO, busy blocks, team events) for this board
+    # -----------------------------------------------------------------------
+    from django.db.models import Q as _CalQ2
+    cal_events = (
+        CalendarEvent.objects
+        .filter(board=board)
+        .filter(
+            _CalQ2(created_by=request.user) |
+            _CalQ2(participants=request.user) |
+            _CalQ2(visibility='team')
+        )
+        .distinct()
+        .select_related('board', 'created_by', 'linked_task')
+        .prefetch_related('participants')
+    )
+
+    for ce in cal_events:
+        if ce.is_all_day:
+            fc_start = ce.start_datetime.strftime('%Y-%m-%d')
+            fc_end = (ce.end_datetime + _td(days=1)).strftime('%Y-%m-%d')
+        else:
+            fc_start = ce.start_datetime.isoformat()
+            fc_end = ce.end_datetime.isoformat()
+
+        events.append({
+            'id': f'event-{ce.id}',
+            'title': ce.title,
+            'start': fc_start,
+            'end': fc_end,
+            'allDay': ce.is_all_day,
+            'url': f'/calendar/events/{ce.id}/',
+            'color': ce.get_event_type_color(),
+            'extendedProps': {
+                'source': 'event',
+                'layer': 'event',
+                'event_id': ce.id,
+                'event_type': ce.get_event_type_display(),
+                'event_type_key': ce.event_type,
+                'visibility': ce.visibility,
+                'is_mine': ce.created_by_id == request.user.id,
+                'description': ce.description or '',
+                'location': ce.location or '',
+                'board': board.name,
+                'participants': [u.username for u in ce.participants.all()],
+                'created_by': ce.created_by.username,
+                'linked_task_title': ce.linked_task.title if ce.linked_task else None,
+                'linked_task_id': ce.linked_task_id,
+            },
         })
 
     _col_data = list(board.columns.order_by('position').values('id', 'name'))
