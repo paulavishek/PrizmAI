@@ -298,9 +298,13 @@
                                         <span class="badge bg-info">{{ rec.confidence_score }}% confidence</span>
                                     </div>
                                     <div>
-                                        {% if rec.estimated_savings %}
+                                        {% if rec.estimated_savings and rec.estimated_savings > 0 %}
                                         <span class="fw-bold" style="color: #2c3e50;">
                                             <i class="fas fa-piggy-bank text-success"></i> Save {{ metrics.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
+                                        </span>
+                                        {% else %}
+                                        <span class="text-muted small">
+                                            <i class="fas fa-lightbulb text-warning"></i> Indirect savings
                                         </span>
                                         {% endif %}
                                     </div>
@@ -394,8 +398,43 @@ function toggleRecommendationCard(recId) {
 function generateRecommendations() {
     const btn = event.target.closest('button');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-    
+
+    const messages = [
+        'Analyzing budget data...',
+        'Reviewing cost breakdowns...',
+        'Evaluating burn rate trends...',
+        'Identifying cost overruns...',
+        'Comparing estimated vs actual costs...',
+        'Assessing task-level variances...',
+        'Analyzing resource utilization...',
+        'Evaluating project risk factors...',
+        'Generating optimization strategies...',
+        'Preparing actionable recommendations...',
+        'Finalizing AI insights...',
+    ];
+
+    let msgIndex = 0;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + messages[msgIndex];
+
+    // Calculate interval: distribute remaining messages across ~55 seconds
+    // First message shows immediately, rotate through the rest before ~60s
+    const totalDuration = 55000; // 55 seconds to cycle through
+    const interval = Math.floor(totalDuration / (messages.length - 1));
+    let rotateTimer = null;
+
+    function advanceMessage() {
+        msgIndex++;
+        if (msgIndex < messages.length) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + messages[msgIndex];
+        }
+        // Stop at the last message — don't repeat
+        if (msgIndex >= messages.length - 1) {
+            clearInterval(rotateTimer);
+        }
+    }
+
+    rotateTimer = setInterval(advanceMessage, interval);
+
     fetch("{% url 'ai_generate_recommendations' board.id %}", {
         method: 'POST',
         headers: {
@@ -405,6 +444,7 @@ function generateRecommendations() {
     })
     .then(response => response.json())
     .then(data => {
+        clearInterval(rotateTimer);
         if (data.success && data.count > 0) {
             location.reload();
         } else if (data.success && data.count === 0) {
@@ -418,6 +458,7 @@ function generateRecommendations() {
         }
     })
     .catch(error => {
+        clearInterval(rotateTimer);
         alert('Error generating recommendations: ' + error);
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
