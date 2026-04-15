@@ -1681,7 +1681,7 @@
         position: fixed;
         z-index: 110;
         display: none;
-        overflow: hidden;
+        overflow: visible;
         pointer-events: none;
         box-shadow: 0 3px 10px rgba(0,0,0,0.10);
     }
@@ -1696,7 +1696,6 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        border-bottom: 2px solid #475569;
     }
     #gantt-sticky-header-bar .sticky-table-part .th-cell {
         padding: 0 10px;
@@ -1718,7 +1717,6 @@
         min-width: 0;
         overflow: hidden;
         background: #f8fafc;
-        border-bottom: 2px solid #cbd5e1;
     }
 
 </style>
@@ -2375,6 +2373,43 @@
      * O(V + E) — scales to 100+ tasks without issue.
      */
     function topologicalSortTasks(taskList) {
+        if (!taskList || taskList.length <= 1) return taskList;
+
+        // ── Phase-aware sorting ──
+        // Tasks may carry a .phase attribute (e.g. "Phase 1", "Phase 2") even
+        // when the board's phase display is turned off.  Preserve that grouping
+        // so that removing phases doesn't scramble the task order — tasks stay
+        // in their original phase groups, each group topologically sorted.
+        const phaseGroups = new Map();   // phaseName -> [task, ...]
+        const phaseOrder  = [];          // ordered unique phase names
+        taskList.forEach(t => {
+            const ph = (t.phase || '').trim();
+            if (!phaseGroups.has(ph)) {
+                phaseGroups.set(ph, []);
+                phaseOrder.push(ph);
+            }
+            phaseGroups.get(ph).push(t);
+        });
+
+        // If every task is in the same group (including all-blank), fall through
+        // to the original global sort.  Otherwise sort per-group.
+        if (phaseGroups.size > 1) {
+            const result = [];
+            phaseOrder.forEach(ph => {
+                const group = phaseGroups.get(ph);
+                result.push(..._topoSortGroup(group));
+            });
+            return result;
+        }
+
+        return _topoSortGroup(taskList);
+    }
+
+    /**
+     * Topological sort a single group of tasks (Kahn's algorithm).
+     * Predecessors always appear before successors; ties broken by start date.
+     */
+    function _topoSortGroup(taskList) {
         if (!taskList || taskList.length <= 1) return taskList;
 
         const taskMap = new Map();
@@ -4487,8 +4522,8 @@
 
         // Frappe-gantt's grid-header rect is header_height + 10, and lower-text
         // sits at y = header_height.  Use the full rect height for the SVG so
-        // nothing is clipped.
-        const svgHeaderHeight = headerHeight + 10;
+        // nothing is clipped.  Extra 5px for text descenders (letters like y, g, p).
+        const svgHeaderHeight = headerHeight + 15;
 
         // --- Create the overlay once, reuse it ---
         if (!_stickyBar) {
@@ -4500,7 +4535,9 @@
 
         // Rebuild content from scratch to match the current render
         _stickyBar.innerHTML = '';
-        _stickyBar.style.height = headerHeight + 'px';
+        // Use svgHeaderHeight (headerHeight + 10) so the lower date text
+        // (which sits at y = headerHeight) is fully visible, not clipped.
+        _stickyBar.style.height = svgHeaderHeight + 'px';
 
         // --- Left: table column header replica ---
         const tablePart = document.createElement('div');
@@ -4521,7 +4558,8 @@
 
         const svgNS = 'http://www.w3.org/2000/svg';
         _stickyDateSvg = document.createElementNS(svgNS, 'svg');
-        _stickyDateSvg.setAttribute('height', headerHeight);
+        _stickyDateSvg.setAttribute('height', svgHeaderHeight);
+        _stickyDateSvg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
         _stickyDateSvg.classList.add('gantt');  // inherit .gantt CSS rules for grid-header, date text etc.
         _stickyDateSvg.style.display = 'block';
         _stickyDateSvg.style.overflow = 'hidden';
@@ -4602,17 +4640,19 @@
         }
 
         // Sync the inner SVG viewBox with the actual visible portion of the
-        // Gantt SVG.  Use bounding rects to compute the true horizontal offset
-        // — this is immune to nested scroll containers and padding (frappe-gantt
-        // wraps the SVG in its own .gantt-container with padding + overflow-x).
-        const svgRect    = ganttSvg.getBoundingClientRect();
-        const scrollLeft = panelRect.left - svgRect.left;  // SVG-space x at panel's left edge
-        const panelW     = panelRect.width;
+        // Gantt SVG.  Compute the offset from the sticky-date-part's own screen
+        // position to the main SVG's screen position so the dates line up
+        // pixel-perfectly — immune to nested containers, padding, and rounding.
+        const svgRect      = ganttSvg.getBoundingClientRect();
+        const datePart     = _stickyBar.querySelector('.sticky-date-part');
+        const datePartRect = datePart ? datePart.getBoundingClientRect() : panelRect;
+        const scrollLeft   = datePartRect.left - svgRect.left;  // SVG x at date-part left edge
+        const visibleW     = datePartRect.width;
         // Use the SVG-coordinate header height (includes the +10 rect padding)
         // so lower date labels at y = header_height are not clipped.
         const svgH = _stickyBar._svgHeaderHeight || (headerHeight + 10);
-        _stickyDateSvg.setAttribute('width', panelW);
-        _stickyDateSvg.setAttribute('viewBox', `${scrollLeft} 0 ${panelW} ${svgH}`);
+        _stickyDateSvg.setAttribute('width', visibleW);
+        _stickyDateSvg.setAttribute('viewBox', `${scrollLeft} 0 ${visibleW} ${svgH}`);
     }
 
     // Wire global scroll / resize listeners once
