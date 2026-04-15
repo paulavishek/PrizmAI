@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit — {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:700px;">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ back_url }}">Calendar</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'calendar_event_detail' event.id %}">{{ event.title }}</a></li>
+            <li class="breadcrumb-item active">Edit</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:{{ event.get_event_type_color }}10; border-left:4px solid {{ event.get_event_type_color }};">
+            <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Edit Event</h5>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+                    <input type="text" name="title" class="form-control" value="{{ event.title }}" required>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Event Type</label>
+                        <select name="event_type" class="form-select" id="edit-event-type">
+                            <option value="meeting" {% if event.event_type == 'meeting' %}selected{% endif %}>🤝 Meeting</option>
+                            <option value="out_of_office" {% if event.event_type == 'out_of_office' %}selected{% endif %}>🏖 Out of Office</option>
+                            <option value="busy_block" {% if event.event_type == 'busy_block' %}selected{% endif %}>🔴 Busy Block</option>
+                            <option value="team_event" {% if event.event_type == 'team_event' %}selected{% endif %}>🏟 Team Event</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="is_all_day" id="edit-all-day"
+                                   {% if event.is_all_day %}checked{% endif %}>
+                            <label class="form-check-label" for="edit-all-day">All Day</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3" id="edit-datetime-row" {% if event.is_all_day %}style="display:none"{% endif %}>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Start <span class="text-danger">*</span></label>
+                        <input type="datetime-local" name="start_datetime" class="form-control"
+                               value="{{ event.start_datetime|date:'Y-m-d\TH:i' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">End <span class="text-danger">*</span></label>
+                        <input type="datetime-local" name="end_datetime" class="form-control"
+                               value="{{ event.end_datetime|date:'Y-m-d\TH:i' }}">
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3" id="edit-allday-row" {% if not event.is_all_day %}style="display:none"{% endif %}>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Start Date <span class="text-danger">*</span></label>
+                        <input type="date" name="start_datetime" class="form-control" id="edit-start-date"
+                               value="{{ event.start_datetime|date:'Y-m-d' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">End Date</label>
+                        <input type="date" name="end_datetime" class="form-control" id="edit-end-date"
+                               value="{{ event.end_datetime|date:'Y-m-d' }}">
+                    </div>
+                </div>
+
+                <div class="mb-3" id="edit-location-row">
+                    <label class="form-label fw-semibold">Location</label>
+                    <input type="text" name="location" class="form-control" value="{{ event.location|default_if_none:'' }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Description</label>
+                    <textarea name="description" class="form-control" rows="3">{{ event.description|default_if_none:'' }}</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Visibility</label>
+                    <select name="visibility" class="form-select">
+                        <option value="team" {% if event.visibility == 'team' %}selected{% endif %}>Team can see I'm busy</option>
+                        <option value="private" {% if event.visibility == 'private' %}selected{% endif %}>Private (only me)</option>
+                    </select>
+                </div>
+
+                <div class="mb-3" id="edit-participants-row">
+                    <label class="form-label fw-semibold">Participants</label>
+                    <select name="participants" class="form-select" multiple size="4">
+                        {% for u in participant_choices %}
+                        <option value="{{ u.id }}" {% if u.id in current_participant_ids %}selected{% endif %}>
+                            {{ u.get_full_name|default:u.username }} ({{ u.username }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Hold Ctrl/Cmd to select multiple.</small>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i> Save Changes
+                    </button>
+                    <a href="{% url 'calendar_event_detail' event.id %}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SOLO_TYPES = new Set(['out_of_office', 'busy_block']);
+
+function applyTypeFields(type) {
+    const isSolo = SOLO_TYPES.has(type);
+    document.getElementById('edit-participants-row').style.display = isSolo ? 'none' : '';
+    document.getElementById('edit-location-row').style.display = isSolo ? 'none' : '';
+}
+
+document.getElementById('edit-event-type').addEventListener('change', function() {
+    applyTypeFields(this.value);
+});
+
+document.getElementById('edit-all-day').addEventListener('change', function() {
+    const allDay = this.checked;
+    document.getElementById('edit-datetime-row').style.display = allDay ? 'none' : '';
+    document.getElementById('edit-allday-row').style.display = allDay ? '' : 'none';
+    // Sync values between date-only and datetime fields
+    if (allDay) {
+        const startDT = document.querySelector('#edit-datetime-row input[name="start_datetime"]');
+        const endDT = document.querySelector('#edit-datetime-row input[name="end_datetime"]');
+        if (startDT.value) document.getElementById('edit-start-date').value = startDT.value.split('T')[0];
+        if (endDT.value) document.getElementById('edit-end-date').value = endDT.value.split('T')[0];
+        // Disable datetime fields so only date fields submit
+        startDT.disabled = true;
+        endDT.disabled = true;
+        document.getElementById('edit-start-date').disabled = false;
+        document.getElementById('edit-end-date').disabled = false;
+    } else {
+        const startDate = document.getElementById('edit-start-date');
+        const endDate = document.getElementById('edit-end-date');
+        const startDT = document.querySelector('#edit-datetime-row input[name="start_datetime"]');
+        const endDT = document.querySelector('#edit-datetime-row input[name="end_datetime"]');
+        if (startDate.value && !startDT.value) startDT.value = startDate.value + 'T09:00';
+        if (endDate.value && !endDT.value) endDT.value = endDate.value + 'T10:00';
+        startDT.disabled = false;
+        endDT.disabled = false;
+        startDate.disabled = true;
+        endDate.disabled = true;
+    }
+});
+
+// Init on load
+applyTypeFields(document.getElementById('edit-event-type').value);
+
+// Disable the inactive date fields so only one pair submits
+(function() {
+    const allDay = document.getElementById('edit-all-day').checked;
+    if (allDay) {
+        document.querySelector('#edit-datetime-row input[name="start_datetime"]').disabled = true;
+        document.querySelector('#edit-datetime-row input[name="end_datetime"]').disabled = true;
+    } else {
+        document.getElementById('edit-start-date').disabled = true;
+        document.getElementById('edit-end-date').disabled = true;
+    }
+})();
+</script>
+{% endblock %}

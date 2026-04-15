@@ -703,8 +703,86 @@ def calendar_event_detail(request, event_id):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You don't have access to this event.")
 
-    context = {'event': event}
+    # Determine back URL — if event belongs to a board, go to that board's calendar
+    if event.board_id:
+        back_url = f'/boards/{event.board_id}/calendar/'
+    else:
+        back_url = '/calendar/'
+
+    context = {'event': event, 'back_url': back_url}
     return render(request, 'kanban/calendar_event_detail.html', context)
+
+
+@login_required
+@demo_write_guard
+def calendar_event_edit(request, event_id):
+    """Edit a CalendarEvent (creator only)."""
+    event = get_object_or_404(CalendarEvent, id=event_id, created_by=request.user)
+
+    # Determine back URL
+    if event.board_id:
+        back_url = f'/boards/{event.board_id}/calendar/'
+    else:
+        back_url = '/calendar/'
+
+    # Build participants list (board members if board-linked, otherwise all users the creator shares boards with)
+    if event.board:
+        participant_qs = User.objects.filter(
+            Q(board_memberships__board=event.board) | Q(created_boards=event.board)
+        ).exclude(id=request.user.id).distinct().order_by('username')
+    else:
+        user_boards = Board.objects.filter(
+            Q(memberships__user=request.user) | Q(created_by=request.user)
+        )
+        participant_qs = User.objects.filter(
+            Q(board_memberships__board__in=user_boards) | Q(created_boards__in=user_boards)
+        ).exclude(id=request.user.id).distinct().order_by('username')
+
+    if request.method == 'POST':
+        event.title = request.POST.get('title', '').strip() or event.title
+        event.event_type = request.POST.get('event_type', event.event_type)
+        event.description = request.POST.get('description', '').strip() or None
+        event.location = request.POST.get('location', '').strip() or None
+        event.visibility = request.POST.get('visibility', event.visibility)
+
+        is_all_day = request.POST.get('is_all_day') == 'on'
+        event.is_all_day = is_all_day
+
+        try:
+            start_str = request.POST.get('start_datetime', '')
+            end_str = request.POST.get('end_datetime', '')
+            if start_str:
+                start_dt = datetime.fromisoformat(start_str)
+                if timezone.is_naive(start_dt):
+                    start_dt = timezone.make_aware(start_dt)
+                event.start_datetime = start_dt
+            if end_str:
+                end_dt = datetime.fromisoformat(end_str)
+                if timezone.is_naive(end_dt):
+                    end_dt = timezone.make_aware(end_dt)
+                event.end_datetime = end_dt
+        except ValueError:
+            pass
+
+        event.save()
+
+        # Update participants for non-solo types
+        if event.event_type not in CalendarEvent.SOLO_TYPES:
+            participant_ids = request.POST.getlist('participants')
+            participants = User.objects.filter(id__in=participant_ids).exclude(id=request.user.id)
+            event.participants.set(participants)
+        else:
+            event.participants.clear()
+
+        return redirect('calendar_event_detail', event_id=event.id)
+
+    context = {
+        'event': event,
+        'back_url': back_url,
+        'participant_choices': participant_qs,
+        'current_participant_ids': list(event.participants.values_list('id', flat=True)),
+    }
+    return render(request, 'kanban/calendar_event_edit.html', context)
 
 
 @login_required

@@ -281,7 +281,7 @@
             <input type="datetime-local" class="form-control" id="bc-event-end">
           </div>
         </div>
-        <div class="row g-2 mb-3" id="bc-event-allday-row" style="display:none!important">
+        <div class="row g-2 mb-3" id="bc-event-allday-row" style="display:none">
           <div class="col-md-6">
             <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
             <input type="date" class="form-control" id="bc-event-start-date">
@@ -479,8 +479,17 @@ document.addEventListener('DOMContentLoaded', function() {
             tooltip.style.display = 'none';
         },
         eventDidMount: function(info) {
-            // Mark overdue events with a striped border (use due_date_str)
             var ep = info.event.extendedProps || {};
+
+            // Calendar events (meetings, OOO, etc.) – hide time prefix
+            if (ep.source === 'event') {
+                var timeEl = info.el.querySelector('.fc-event-time');
+                if (timeEl) timeEl.style.display = 'none';
+                info.el.removeAttribute('title');
+                return;
+            }
+
+            // Mark overdue tasks with a striped border (use due_date_str)
             var dueStr = ep.due_date_str;
             if (!dueStr) return;
             const d = new Date(dueStr);
