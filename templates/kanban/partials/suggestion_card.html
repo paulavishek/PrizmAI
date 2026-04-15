@@ -109,12 +109,43 @@
 
     {% if suggestion.recommended_actions %}
     <div class="mt-3">
+        {% if suggestion.suggestion_type == 'confidence_drop' %}
+        <!-- Recovery options for confidence drop — render as option cards -->
+        <strong><i class="fas fa-route me-2"></i>Recovery Options:</strong>
+        <p class="text-muted small mb-2">
+            <i class="fas fa-info-circle me-1"></i>
+            Your project confidence dropped below the healthy threshold.
+            Choose the option that best fits your situation — each comes with trade-offs.
+        </p>
+        <div class="row g-2 mt-1">
+            {% for option in suggestion.recommended_actions %}
+            <div class="col-md-4">
+                <div class="card h-100 border-start border-3 {% if forloop.counter == 1 %}border-primary{% elif forloop.counter == 2 %}border-danger{% else %}border-success{% endif %}">
+                    <div class="card-body p-3">
+                        <h6 class="mb-1">
+                            {% if forloop.counter == 1 %}<i class="fas fa-cut text-primary me-1"></i>
+                            {% elif forloop.counter == 2 %}<i class="fas fa-calendar-plus text-danger me-1"></i>
+                            {% else %}<i class="fas fa-users text-success me-1"></i>{% endif %}
+                            {{ option.title }}
+                        </h6>
+                        <p class="small mb-2">{{ option.description }}</p>
+                        <div class="small text-muted">
+                            <i class="fas fa-exchange-alt me-1"></i><em>{{ option.impact }}</em>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- Standard recommended actions list -->
         <strong><i class="fas fa-tasks me-2"></i>Recommended Actions:</strong>
         <ul class="actions-list">
             {% for action in suggestion.recommended_actions %}
             <li>{{ action|format_coach_action }}</li>
             {% endfor %}
         </ul>
+        {% endif %}
     </div>
     {% endif %}
 

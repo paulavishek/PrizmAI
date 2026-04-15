@@ -468,6 +468,223 @@
         </div>
     </div>
 
+    <!-- ── Project Confidence ─────────────────────────────────────────────────── -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card" style="border-top: 4px solid #6f42c1;">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0"><i class="fas fa-heartbeat me-2" style="color:#6f42c1;"></i>Project Confidence</h5>
+                        <small class="text-muted">Auto-computed from scope, budget, and schedule health</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <form method="post" action="{% url 'recalculate_confidence' board.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Recalculate now">
+                                <i class="fas fa-sync-alt me-1"></i>Recalculate
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if confidence_data %}
+                    <div class="row align-items-center mb-3">
+                        <!-- Score circle -->
+                        <div class="col-auto text-center">
+                            <div class="health-score-circle
+                                {% if confidence_data.color == 'success' %}health-circle-healthy
+                                {% elif confidence_data.color == 'warning' %}health-circle-at-risk
+                                {% else %}health-circle-critical{% endif %}"
+                                 style="width:100px;height:100px;font-size:2rem;">
+                                <span>{{ confidence_data.score|floatformat:0 }}</span>
+                                <small style="font-size:.6rem;font-weight:400;">/ 100</small>
+                            </div>
+                            <div class="mt-1">
+                                <span class="badge bg-{{ confidence_data.color }}">{{ confidence_data.status_label }}</span>
+                            </div>
+                        </div>
+                        <!-- Dimension breakdown -->
+                        <div class="col">
+                            <!-- Tip for new users -->
+                            <div class="alert alert-light py-2 px-3 mb-3" style="font-size:.82rem; border-left: 3px solid #6f42c1;">
+                                <i class="fas fa-lightbulb me-1" style="color:#6f42c1;"></i>
+                                <strong>How this works:</strong> This score is computed automatically from your project data — no setup needed.
+                                It combines scope stability, budget health, and schedule adherence into one number. If it drops below 40, the AI Coach
+                                will suggest recovery options.
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <div class="p-2 rounded bg-light text-center">
+                                        <div class="fw-bold {% if confidence_data.scope_score >= 70 %}text-success{% elif confidence_data.scope_score >= 40 %}text-warning{% else %}text-danger{% endif %}" style="font-size:1.3rem;">
+                                            {{ confidence_data.scope_score|floatformat:0 }}
+                                        </div>
+                                        <small class="text-muted d-block">Scope</small>
+                                        <div class="progress mt-1" style="height:4px;">
+                                            <div class="progress-bar bg-primary" style="width:{{ confidence_data.scope_score|floatformat:0 }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2 rounded bg-light text-center">
+                                        <div class="fw-bold {% if confidence_data.budget_score >= 70 %}text-success{% elif confidence_data.budget_score >= 40 %}text-warning{% else %}text-danger{% endif %}" style="font-size:1.3rem;">
+                                            {{ confidence_data.budget_score|floatformat:0 }}
+                                        </div>
+                                        <small class="text-muted d-block">Budget</small>
+                                        <div class="progress mt-1" style="height:4px;">
+                                            <div class="progress-bar bg-success" style="width:{{ confidence_data.budget_score|floatformat:0 }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2 rounded bg-light text-center">
+                                        <div class="fw-bold {% if confidence_data.schedule_score >= 70 %}text-success{% elif confidence_data.schedule_score >= 40 %}text-warning{% else %}text-danger{% endif %}" style="font-size:1.3rem;">
+                                            {{ confidence_data.schedule_score|floatformat:0 }}
+                                        </div>
+                                        <small class="text-muted d-block">Schedule</small>
+                                        <div class="progress mt-1" style="height:4px;">
+                                            <div class="progress-bar bg-danger" style="width:{{ confidence_data.schedule_score|floatformat:0 }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Trend -->
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                {% if confidence_data.trend == 'improving' %}
+                                <span class="badge bg-success"><i class="fas fa-arrow-up me-1"></i>Improving</span>
+                                {% elif confidence_data.trend == 'declining' %}
+                                <span class="badge bg-danger"><i class="fas fa-arrow-down me-1"></i>Declining</span>
+                                {% else %}
+                                <span class="badge bg-secondary"><i class="fas fa-minus me-1"></i>Stable</span>
+                                {% endif %}
+                                {% if confidence_data.previous_score %}
+                                <small class="text-muted">Previous: {{ confidence_data.previous_score|floatformat:0 }}%</small>
+                                {% endif %}
+                                <small class="text-muted ms-auto">Last computed: {{ confidence_data.computed_at|timesince }} ago</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Confidence History Chart -->
+                    {% if confidence_history %}
+                    <div class="mt-3">
+                        <h6 class="text-muted mb-2"><i class="fas fa-chart-line me-1"></i>30-Day Confidence Trend</h6>
+                        <canvas id="confidenceChart" height="120"></canvas>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <!-- No score yet -->
+                    <div class="text-center py-4">
+                        <i class="fas fa-heartbeat fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">No confidence score yet</h6>
+                        <p class="text-muted small mb-3">
+                            Click <strong>Recalculate</strong> to compute your first project confidence score,
+                            or wait for the next automatic computation (runs every 6 hours).
+                        </p>
+                        <form method="post" action="{% url 'recalculate_confidence' board.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-sync-alt me-1"></i>Compute Now
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+
+                    <!-- Recent Signals -->
+                    {% if recent_signals %}
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0"><i class="fas fa-signal me-1"></i>Recent Signals</h6>
+                        <button class="btn btn-sm btn-outline-secondary" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#addSignalForm">
+                            <i class="fas fa-plus me-1"></i>Add Signal
+                        </button>
+                    </div>
+                    <!-- Tip for new users -->
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Signals are events that affect your project confidence. Most are detected automatically (task completions, scope changes).
+                        You can also add manual signals for events the system can't detect, like stakeholder approval or a team member leaving.
+                    </p>
+                    <!-- Manual signal form (collapsed) -->
+                    <div class="collapse mb-3" id="addSignalForm">
+                        <div class="card card-body bg-light">
+                            <form method="post" action="{% url 'record_manual_signal' board.id %}">
+                                {% csrf_token %}
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label small">Type</label>
+                                        <select name="signal_type" class="form-select form-select-sm">
+                                            <option value="manual_positive">Positive Update</option>
+                                            <option value="manual_negative">Negative Update</option>
+                                            <option value="milestone_hit">Milestone Hit</option>
+                                            <option value="milestone_missed">Milestone Missed</option>
+                                            <option value="blocker_added">Blocker Emerged</option>
+                                            <option value="blocker_resolved">Blocker Resolved</option>
+                                            <option value="team_member_joined">Team Member Joined</option>
+                                            <option value="team_member_left">Team Member Left</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-7">
+                                        <label class="form-label small">Description</label>
+                                        <input type="text" name="description" class="form-control form-control-sm"
+                                               placeholder="Briefly describe what happened..." required maxlength="500">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                                            <i class="fas fa-paper-plane me-1"></i>Log
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <!-- Signal list -->
+                    <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0" style="font-size:.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:30%;">Event</th>
+                                    <th style="width:10%;">Impact</th>
+                                    <th>Description</th>
+                                    <th style="width:18%;">When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for signal in recent_signals %}
+                                <tr>
+                                    <td>
+                                        {% if signal.impact == 'positive' %}
+                                        <i class="fas fa-arrow-up text-success me-1"></i>
+                                        {% elif signal.impact == 'negative' %}
+                                        <i class="fas fa-arrow-down text-danger me-1"></i>
+                                        {% else %}
+                                        <i class="fas fa-minus text-muted me-1"></i>
+                                        {% endif %}
+                                        {{ signal.get_signal_type_display }}
+                                    </td>
+                                    <td>
+                                        {% if signal.strength > 0 %}
+                                        <span class="text-success">+{{ signal.strength|floatformat:2 }}</span>
+                                        {% elif signal.strength < 0 %}
+                                        <span class="text-danger">{{ signal.strength|floatformat:2 }}</span>
+                                        {% else %}
+                                        <span class="text-muted">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-truncate" style="max-width:300px;" title="{{ signal.description }}">{{ signal.description }}</td>
+                                    <td class="text-muted">{{ signal.timestamp|timesince }} ago</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ── AI Analysis ───────────────────────────────────────────────────────── -->
     <div class="row mb-4">
         <div class="col-12">
@@ -729,6 +946,69 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
         new bootstrap.Tooltip(el);
     });
+
+    /* ── Confidence Trend Chart ──────────────────────────────────── */
+    {% if confidence_history %}
+    var confCanvas = document.getElementById('confidenceChart');
+    if (confCanvas && typeof Chart !== 'undefined') {
+        var confData = {{ confidence_history|safe }};
+        new Chart(confCanvas, {
+            type: 'line',
+            data: {
+                labels: confData.map(function(d) { return d.date; }),
+                datasets: [
+                    {
+                        label: 'Composite',
+                        data: confData.map(function(d) { return d.score; }),
+                        borderColor: '#6f42c1',
+                        backgroundColor: 'rgba(111,66,193,0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                    },
+                    {
+                        label: 'Scope',
+                        data: confData.map(function(d) { return d.scope; }),
+                        borderColor: '#0d6efd',
+                        borderDash: [4,4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Budget',
+                        data: confData.map(function(d) { return d.budget; }),
+                        borderColor: '#198754',
+                        borderDash: [4,4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Schedule',
+                        data: confData.map(function(d) { return d.schedule; }),
+                        borderColor: '#dc3545',
+                        borderDash: [4,4],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                },
+                scales: {
+                    y: { min: 0, max: 100, ticks: { callback: function(v) { return v + '%'; } } },
+                    x: { ticks: { maxTicksToShow: 10, font: { size: 10 } } },
+                }
+            }
+        });
+    }
+    {% endif %}
 });
 </script>
 {% endblock %}

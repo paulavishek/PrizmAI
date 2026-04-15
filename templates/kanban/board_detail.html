@@ -2105,17 +2105,6 @@
             </div>
             <div class="collapse" id="panelManage">
                 <div class="ai-panel-grid">
-                    {% if features.show_commitments %}
-                    <a class="ai-panel-tile" href="{% url 'commitment_dashboard' board.id %}" title="Living commitment protocols with prediction markets and confidence tracking">
-                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-shield-halved"></i></span>
-                        <span class="tile-label">Commitments</span>
-                    </a>
-                    {% else %}
-                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-shield-halved"></i></span>
-                        <span class="tile-label">Commitments <i class="fas fa-lock lock-badge"></i></span>
-                    </span>
-                    {% endif %}
                     {% if features.show_requirements %}
                     <a class="ai-panel-tile" href="{% url 'requirements:dashboard' board.id %}" title="AI-powered requirement analysis, quality scoring, gap detection, and traceability">
                         <span class="tile-icon" style="color: #D97706;"><i class="fas fa-clipboard-list"></i></span>
