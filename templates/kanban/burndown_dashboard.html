@@ -349,7 +349,7 @@
                 <h1 class="burndown-title">
                     <i class="fas fa-chart-line text-primary me-2"></i>Burndown Prediction
                 </h1>
-                <p class="burndown-subtitle mb-0">{{ board.name }} â€” AI-powered completion forecast</p>
+                <p class="burndown-subtitle mb-0">{{ board.name }} — AI-powered completion forecast</p>
             </div>
             <div>
                 <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary me-2">
@@ -533,7 +533,7 @@
     </div>
     {% endif %}
 
-    <!-- Explainable AI â€” How This Prediction Was Calculated -->
+    <!-- Explainable AI — How This Prediction Was Calculated -->
     {% if prediction.model_parameters.explainability %}
     <div class="prediction-card">
         <h4 class="mb-3"><i class="fas fa-wand-magic-sparkles text-primary"></i> How This Prediction Works</h4>

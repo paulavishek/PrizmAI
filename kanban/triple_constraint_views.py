@@ -169,6 +169,9 @@ def triple_constraint_dashboard(request, board_id):
         board=board
     ).order_by('-period_end').first()
     velocity_tasks_per_week = float(latest_velocity.tasks_completed) if latest_velocity else 0
+    # Prefer average velocity from burndown prediction (more reliable than a single-week snapshot)
+    if not velocity_tasks_per_week and latest_prediction and latest_prediction.average_velocity:
+        velocity_tasks_per_week = float(latest_prediction.average_velocity)
 
     # What-if coefficients
     what_if = {
