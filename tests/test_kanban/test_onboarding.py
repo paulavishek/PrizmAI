@@ -1,5 +1,5 @@
 ﻿"""
-Tests for Onboarding v2 â€” AI-powered workspace setup
+Tests for Onboarding v2 — AI-powered workspace setup
 =====================================================
 
 Coverage:
@@ -158,7 +158,7 @@ class OnboardingWorkspacePreviewModelTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Welcome
+# View tests — Welcome
 # ===================================================================
 
 class OnboardingWelcomeViewTests(TestCase):
@@ -179,7 +179,7 @@ class OnboardingWelcomeViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Goal Input
+# View tests — Goal Input
 # ===================================================================
 
 class OnboardingGoalInputViewTests(TestCase):
@@ -225,7 +225,7 @@ class OnboardingGoalInputViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Status polling
+# View tests — Status polling
 # ===================================================================
 
 class OnboardingStatusViewTests(TestCase):
@@ -260,7 +260,7 @@ class OnboardingStatusViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Review
+# View tests — Review
 # ===================================================================
 
 class OnboardingReviewViewTests(TestCase):
@@ -298,7 +298,7 @@ class OnboardingReviewViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Commit
+# View tests — Commit
 # ===================================================================
 
 class OnboardingCommitViewTests(TestCase):
@@ -360,7 +360,7 @@ class OnboardingCommitViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Skip
+# View tests — Skip
 # ===================================================================
 
 class OnboardingSkipViewTests(TestCase):
@@ -384,7 +384,7 @@ class OnboardingSkipViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Explore Demo
+# View tests — Explore Demo
 # ===================================================================
 
 class OnboardingExploreDemoViewTests(TestCase):
@@ -402,7 +402,7 @@ class OnboardingExploreDemoViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Start Over
+# View tests — Start Over
 # ===================================================================
 
 class OnboardingStartOverViewTests(TestCase):
@@ -427,7 +427,7 @@ class OnboardingStartOverViewTests(TestCase):
 
 
 # ===================================================================
-# View tests â€” Toggle Demo Mode
+# View tests — Toggle Demo Mode
 # ===================================================================
 
 class ToggleDemoModeViewTests(TestCase):

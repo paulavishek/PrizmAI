@@ -388,7 +388,7 @@
                 <h1 class="coach-title">
                     <i class="fas fa-user-graduate text-primary me-2"></i>AI Coach
                 </h1>
-                <p class="coach-subtitle mb-0">{{ board.name }} â€” Proactive guidance to improve your project</p>
+                <p class="coach-subtitle mb-0">{{ board.name }} — Proactive guidance to improve your project</p>
             </div>
             <div class="text-end">
                 <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
@@ -496,7 +496,7 @@
         <p class="text-muted mb-3">Have a specific question about your project? Ask the AI coach for personalized advice based on this board's context.</p>
         <small class="text-muted d-block mb-3">
             <i class="fas fa-info-circle me-1"></i>
-            <em>The AI Coach analyzes data from {{ board.name }} only. Cross-board questions are not supported.</em>
+            <em>The AI Coach provides focused analysis of {{ board.name }} for the most accurate, context-aware advice.</em>
         </small>
         <a href="{% url 'coach_ask' board.id %}" class="btn btn-primary">
             <i class="fas fa-question-circle me-2"></i>Ask a Question
