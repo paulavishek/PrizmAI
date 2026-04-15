@@ -132,9 +132,16 @@ class UserPerformanceProfile(models.Model):
                   calling from methods that will save afterwards to avoid duplicate saves.
         """
         from kanban.models import Task
+        from kanban.utils.demo_protection import get_user_boards
+
+        # Scope to boards visible in the user's current workspace/demo context,
+        # consistent with Dashboard "My Tasks" scoping.
+        user_boards = get_user_boards(self.user)
         
         active_tasks = Task.objects.filter(
             assigned_to=self.user,
+            column__board__in=user_boards,
+            item_type='task',
             completed_at__isnull=True
         ).exclude(column__name__icontains='done')
         
