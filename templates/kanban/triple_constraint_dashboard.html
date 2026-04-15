@@ -565,12 +565,20 @@
                     </div>
 
                     <!-- Confidence History Chart -->
-                    {% if confidence_history %}
                     <div class="mt-3">
                         <h6 class="text-muted mb-2"><i class="fas fa-chart-line me-1"></i>30-Day Confidence Trend</h6>
+                        {% if confidence_history|length >= 2 %}
                         <canvas id="confidenceChart" height="120"></canvas>
+                        {% else %}
+                        <div class="text-center py-3 border rounded bg-light">
+                            <i class="fas fa-chart-line fa-2x text-muted mb-2"></i>
+                            <p class="text-muted small mb-0">
+                                Not enough data yet — the trend chart will appear after at least two data points are recorded.
+                                Each recalculation adds a point.
+                            </p>
+                        </div>
+                        {% endif %}
                     </div>
-                    {% endif %}
 
                     {% else %}
                     <!-- No score yet -->
@@ -948,7 +956,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     /* ── Confidence Trend Chart ──────────────────────────────────── */
-    {% if confidence_history %}
+    {% if confidence_history|length >= 2 %}
     var confCanvas = document.getElementById('confidenceChart');
     if (confCanvas && typeof Chart !== 'undefined') {
         var confData = {{ confidence_history|safe }};
