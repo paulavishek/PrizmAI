@@ -405,8 +405,12 @@ function generateRecommendations() {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
+        if (data.success && data.count > 0) {
             location.reload();
+        } else if (data.success && data.count === 0) {
+            alert('AI could not generate recommendations at this time. Please try again.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
             btn.disabled = false;

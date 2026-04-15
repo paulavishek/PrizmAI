@@ -4,6 +4,7 @@ Uses Gemini to analyze budgets, predict overruns, and generate recommendations
 """
 import json
 import logging
+import re
 from decimal import Decimal
 from typing import Dict, List, Optional
 from django.utils import timezone
@@ -85,7 +86,7 @@ class BudgetAIOptimizer:
         prompt = self._build_recommendation_prompt(metrics, overruns, burn_rate, cost_breakdown, context)
         
         # Get AI recommendations
-        ai_response = self._call_gemini_api(prompt, task_type='complex')
+        ai_response = self._call_gemini_api(prompt, task_type='complex', cache_operation='budget_recommendations')
         
         if not ai_response:
             return []
@@ -613,7 +614,7 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             # Token limits for budget operations - generous to ensure complete responses with explainability
             budget_token_limits = {
                 'budget_analysis': 6144,      # Comprehensive health analysis with recommendations + explainability
-                'budget_recommendations': 6144,  # Multiple detailed recommendations with reasoning
+                'budget_recommendations': 12288,  # Multiple detailed recommendations with reasoning (needs extra room)
                 'budget_prediction': 4096,    # Prediction with scenarios + confidence explanation
                 'budget_patterns': 4096,      # Pattern analysis with evidence
                 'budget_optimization': 4096,  # Resource optimization suggestions with reasoning
@@ -643,16 +644,100 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             logger.error(f"Error calling Gemini API: {str(e)}")
             return None
     
+    def _extract_json_text(self, text: str) -> str:
+        """Extract JSON from AI response, handling markdown fences, prose, and truncation."""
+        if not text:
+            raise ValueError('Empty response')
+        # Strip markdown code fences with 1-4 backticks, optional language tag
+        cleaned = re.sub(r'`{1,4}(?:json|JSON)?\s*', '', text).strip()
+        # Try direct parse first
+        try:
+            json.loads(cleaned)
+            return cleaned
+        except json.JSONDecodeError:
+            pass
+        # Try to find a JSON array
+        arr_match = re.search(r'(\[.*\])', cleaned, re.DOTALL)
+        if arr_match:
+            try:
+                json.loads(arr_match.group(1))
+                return arr_match.group(1)
+            except json.JSONDecodeError:
+                pass
+        # Try to find a JSON object
+        obj_match = re.search(r'(\{.*\})', cleaned, re.DOTALL)
+        if obj_match:
+            try:
+                json.loads(obj_match.group(1))
+                return obj_match.group(1)
+            except json.JSONDecodeError:
+                pass
+        # Handle truncated JSON — find start of array/object and try to repair
+        arr_start = cleaned.find('[')
+        obj_start = cleaned.find('{')
+        if arr_start != -1 or obj_start != -1:
+            # Pick whichever comes first
+            start = arr_start if (arr_start != -1 and (obj_start == -1 or arr_start <= obj_start)) else obj_start
+            fragment = cleaned[start:]
+            repaired = self._repair_truncated_json(fragment)
+            try:
+                json.loads(repaired)
+                return repaired
+            except json.JSONDecodeError:
+                pass
+        raise ValueError('No valid JSON found in response')
+
+    @staticmethod
+    def _repair_truncated_json(text: str) -> str:
+        """Close unclosed strings, arrays, and objects in truncated JSON."""
+        result = text
+        # Close unclosed string literal
+        in_string = False
+        i = 0
+        while i < len(result):
+            c = result[i]
+            if c == '\\' and in_string:
+                i += 2
+                continue
+            if c == '"':
+                in_string = not in_string
+            i += 1
+        if in_string:
+            result += '"'
+        # Remove trailing commas and incomplete key-value fragments
+        result = re.sub(r',\s*$', '', result)
+        # Remove a trailing incomplete key (e.g. "key": ) with no value
+        result = re.sub(r',\s*"[^"]*"\s*:\s*$', '', result)
+        # Count unclosed brackets/braces and close them
+        closes_bracket = 0
+        closes_brace = 0
+        in_str = False
+        i = 0
+        while i < len(result):
+            c = result[i]
+            if c == '\\' and in_str:
+                i += 2
+                continue
+            if c == '"':
+                in_str = not in_str
+            if not in_str:
+                if c == '{':
+                    closes_brace += 1
+                elif c == '}':
+                    closes_brace -= 1
+                elif c == '[':
+                    closes_bracket += 1
+                elif c == ']':
+                    closes_bracket -= 1
+            i += 1
+        result += ']' * max(0, closes_bracket)
+        result += '}' * max(0, closes_brace)
+        return result
+    
     def _parse_ai_response(self, response: str, metrics: Dict) -> Dict:
         """Parse AI analysis response"""
         try:
-            # Try to extract JSON from response
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
+            response_clean = self._extract_json_text(response)
             
             parsed = json.loads(response_clean)
             
@@ -666,8 +751,8 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 'trends': parsed.get('trends', []),
                 'metrics_summary': metrics,
             }
-        except json.JSONDecodeError:
-            logger.error("Failed to parse AI response as JSON")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse AI response as JSON: %s", response[:500] if response else 'empty')
             return {
                 'analysis_date': timezone.now().isoformat(),
                 'health_rating': 'Unknown',
@@ -678,66 +763,43 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
     def _parse_recommendations(self, response: str) -> List[Dict]:
         """Parse AI recommendations response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
+            response_clean = self._extract_json_text(response)
             
             recommendations = json.loads(response_clean)
             if isinstance(recommendations, dict) and 'recommendations' in recommendations:
                 recommendations = recommendations['recommendations']
             
             return recommendations if isinstance(recommendations, list) else []
-        except json.JSONDecodeError:
-            logger.error("Failed to parse recommendations")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse recommendations: %s", response[:500] if response else 'empty')
             return []
     
     def _parse_prediction(self, response: str) -> Dict:
         """Parse AI prediction response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
-            
+            response_clean = self._extract_json_text(response)
             return json.loads(response_clean)
-        except json.JSONDecodeError:
-            logger.error("Failed to parse prediction")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse prediction: %s", response[:500] if response else 'empty')
             return {'error': 'Failed to parse prediction'}
     
     def _parse_patterns(self, response: str) -> List[Dict]:
         """Parse pattern learning response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
-            
+            response_clean = self._extract_json_text(response)
             patterns = json.loads(response_clean)
             return patterns if isinstance(patterns, list) else []
-        except json.JSONDecodeError:
-            logger.error("Failed to parse patterns")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse patterns: %s", response[:500] if response else 'empty')
             return []
     
     def _parse_optimization(self, response: str) -> Dict:
         """Parse optimization response"""
         try:
-            response_clean = response.strip()
-            if response_clean.startswith('```json'):
-                response_clean = response_clean[7:]
-            if response_clean.endswith('```'):
-                response_clean = response_clean[:-3]
-            response_clean = response_clean.strip()
-            
+            response_clean = self._extract_json_text(response)
             return json.loads(response_clean)
-        except json.JSONDecodeError:
-            logger.error("Failed to parse optimization")
+        except (json.JSONDecodeError, ValueError):
+            logger.error("Failed to parse optimization: %s", response[:500] if response else 'empty')
             return {'error': 'Failed to parse optimization'}
     
     def _analyze_time_patterns(self) -> Dict:
