@@ -443,20 +443,36 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         eventMouseEnter: function(info) {
             const p = info.event.extendedProps;
-            const pKey = (p.priority || '').toLowerCase();
-            const pColor = PRIORITY_COLORS[pKey] || '#6c757d';
-            const dueStr = p.due_date_str;
-            const isOverdue = dueStr && (new Date(dueStr) < today) && p.progress < 100;
-            tooltip.innerHTML = `
-                ${isOverdue ? '<span style="color:#f87171;font-weight:700;">⚠ OVERDUE</span><br>' : ''}
-                <strong>${info.event.title}</strong><br>
-                <span>📌 ${p.column}</span><br>
-                <span>🚩 <span style="color:${pColor}; font-weight:600;">${p.priority}</span></span>
-                ${p.assignee
-                    ? `<br><span>👤 <span style="color:${info.event.backgroundColor};">${p.assignee}</span></span>`
-                    : '<br><span style="color:#9ca3af;">👤 Unassigned</span>'}
-                <br><span>⬜ ${p.progress}% complete</span>
-            `;
+
+            if (p.source === 'event') {
+                // Calendar event (meeting, OOO, busy block, team event)
+                const typeIcons = {meeting:'🤝', out_of_office:'🏖️', busy_block:'🔒', team_event:'🎉'};
+                const icon = typeIcons[p.event_type_key] || '🗓';
+                let parts = [`<strong>${info.event.title}</strong>`];
+                parts.push(`${icon} ${p.event_type || 'Event'}`);
+                if (p.board) parts.push(`📋 ${p.board}`);
+                if (p.location) parts.push(`📍 ${p.location}`);
+                if (p.participants && p.participants.length)
+                    parts.push(`👥 ${p.participants.join(', ')}`);
+                if (p.linked_task_title) parts.push(`🔗 ${p.linked_task_title}`);
+                tooltip.innerHTML = parts.join('<br>');
+            } else {
+                // Task
+                const pKey = (p.priority || '').toLowerCase();
+                const pColor = PRIORITY_COLORS[pKey] || '#6c757d';
+                const dueStr = p.due_date_str;
+                const isOverdue = dueStr && (new Date(dueStr) < today) && p.progress < 100;
+                tooltip.innerHTML = `
+                    ${isOverdue ? '<span style="color:#f87171;font-weight:700;">⚠ OVERDUE</span><br>' : ''}
+                    <strong>${info.event.title}</strong><br>
+                    <span>📌 ${p.column}</span><br>
+                    <span>🚩 <span style="color:${pColor}; font-weight:600;">${p.priority}</span></span>
+                    ${p.assignee
+                        ? `<br><span>👤 <span style="color:${info.event.backgroundColor};">${p.assignee}</span></span>`
+                        : '<br><span style="color:#9ca3af;">👤 Unassigned</span>'}
+                    <br><span>⬜ ${p.progress}% complete</span>
+                `;
+            }
             tooltip.style.display = 'block';
         },
         eventMouseLeave: function() {
