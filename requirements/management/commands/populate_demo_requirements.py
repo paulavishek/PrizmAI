@@ -18,10 +18,10 @@ class Command(BaseCommand):
             RequirementCategory, ProjectObjective, Requirement,
         )
 
-        # Find demo board
+        # Find demo board (template board with is_official_demo_board=True)
         demo_board = Board.objects.filter(
-            name__icontains='Software Development',
-            organization__name__icontains='Demo',
+            name='Software Development',
+            is_official_demo_board=True,
         ).first()
 
         if not demo_board:
@@ -93,7 +93,7 @@ class Command(BaseCommand):
         )
 
         # ── Grab existing demo tasks for linking ─────────────────────────
-        demo_tasks = list(Task.objects.filter(board=demo_board).order_by('id')[:20])
+        demo_tasks = list(Task.objects.filter(column__board=demo_board).order_by('id')[:20])
 
         # ── Requirements ─────────────────────────────────────────────────
         requirements_data = [
@@ -216,7 +216,7 @@ class Command(BaseCommand):
                 category=data['category'],
                 acceptance_criteria=data['acceptance_criteria'],
                 created_by=creator,
-                reviewer=reviewer if data['status'] != 'draft' else None,
+                assigned_reviewer=reviewer if data['status'] != 'draft' else None,
             )
             # Link objectives
             for obj in data.get('objectives', []):
@@ -229,4 +229,80 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f'Created {created_count} requirements, 3 categories, 5 objectives for demo board.'
+        ))
+
+        # ── Populate sandbox copies of this board ────────────────────────
+        sandbox_boards = Board.objects.filter(
+            is_sandbox_copy=True,
+            name='Software Development',
+        )
+        for sb in sandbox_boards:
+            self._populate_sandbox(sb, demo_board, creator, reviewer)
+
+    def _populate_sandbox(self, sandbox_board, template_board, creator, reviewer):
+        """Copy requirements data from template board to a sandbox copy."""
+        from kanban.models import Task
+        from requirements.models import (
+            RequirementCategory, ProjectObjective, Requirement,
+        )
+
+        # Clean existing
+        Requirement.objects.filter(board=sandbox_board).delete()
+        ProjectObjective.objects.filter(board=sandbox_board).delete()
+        RequirementCategory.objects.filter(board=sandbox_board).delete()
+
+        # Build task mapping: template task title → sandbox task
+        sandbox_tasks = {t.title: t for t in Task.objects.filter(column__board=sandbox_board)}
+
+        # Copy categories
+        cat_map = {}
+        for cat in RequirementCategory.objects.filter(board=template_board):
+            new_cat = RequirementCategory.objects.create(
+                board=sandbox_board,
+                name=cat.name,
+                description=cat.description,
+            )
+            cat_map[cat.pk] = new_cat
+
+        # Copy objectives
+        obj_map = {}
+        for obj in ProjectObjective.objects.filter(board=template_board):
+            new_obj = ProjectObjective.objects.create(
+                board=sandbox_board,
+                title=obj.title,
+                description=obj.description,
+                created_by=creator,
+            )
+            obj_map[obj.pk] = new_obj
+
+        # Copy requirements with relationships
+        for req in Requirement.objects.filter(board=template_board).prefetch_related(
+            'objectives', 'linked_tasks',
+        ):
+            new_req = Requirement.objects.create(
+                board=sandbox_board,
+                title=req.title,
+                description=req.description,
+                type=req.type,
+                priority=req.priority,
+                status=req.status,
+                category=cat_map.get(req.category_id),
+                acceptance_criteria=req.acceptance_criteria,
+                created_by=creator,
+                assigned_reviewer=reviewer if req.status != 'draft' else None,
+            )
+            # Map objectives
+            for old_obj in req.objectives.all():
+                new_obj = obj_map.get(old_obj.pk)
+                if new_obj:
+                    new_req.objectives.add(new_obj)
+            # Map tasks by title
+            for old_task in req.linked_tasks.all():
+                sb_task = sandbox_tasks.get(old_task.title)
+                if sb_task:
+                    new_req.linked_tasks.add(sb_task)
+
+        count = Requirement.objects.filter(board=sandbox_board).count()
+        self.stdout.write(self.style.SUCCESS(
+            f'  Copied {count} requirements to sandbox board #{sandbox_board.pk}.'
         ))

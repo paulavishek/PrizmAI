@@ -364,7 +364,7 @@ def traceability_matrix(request, board_id):
     requirements = list(Requirement.objects.filter(board=board).prefetch_related(
         'objectives', 'linked_tasks', 'linked_strategies',
     ))
-    tasks = list(Task.objects.filter(column__board=board).select_related('column', 'assigned_to'))
+    tasks = list(Task.objects.filter(column__board=board, item_type='task').select_related('column', 'assigned_to'))
 
     # Build objectives × requirements matrix
     obj_matrix = []
@@ -395,6 +395,7 @@ def traceability_matrix(request, board_id):
         'objectives': objectives,
         'requirements': requirements,
         'tasks': tasks,
+        'task_prefix': board.get_task_prefix(),
         'obj_matrix': obj_matrix,
         'task_matrix': task_matrix,
         'covered_count': covered_count,

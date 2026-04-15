@@ -1126,6 +1126,65 @@ def _duplicate_board(template_board, user):
     for new_pk, template_updated_at in task_template_dates.items():
         Task.objects.filter(pk=new_pk).update(updated_at=template_updated_at)
 
+    # --- Requirements Analysis (categories, objectives, requirements) ---
+    try:
+        from requirements.models import RequirementCategory, ProjectObjective, Requirement
+
+        cat_map = {}
+        for cat in RequirementCategory.objects.filter(board=template_board):
+            new_cat = RequirementCategory.objects.create(
+                board=new_board,
+                name=cat.name,
+                description=cat.description,
+            )
+            cat_map[cat.pk] = new_cat
+
+        obj_map = {}
+        for obj in ProjectObjective.objects.filter(board=template_board):
+            new_obj = ProjectObjective.objects.create(
+                board=new_board,
+                title=obj.title,
+                description=obj.description,
+                created_by=obj.created_by,
+            )
+            obj_map[obj.pk] = new_obj
+
+        req_map = {}
+        for req in Requirement.objects.filter(board=template_board).prefetch_related(
+            'objectives', 'linked_tasks',
+        ):
+            new_req = Requirement.objects.create(
+                board=new_board,
+                title=req.title,
+                description=req.description,
+                type=req.type,
+                priority=req.priority,
+                status=req.status,
+                category=cat_map.get(req.category_id),
+                acceptance_criteria=req.acceptance_criteria,
+                created_by=req.created_by,
+                assigned_reviewer=req.assigned_reviewer,
+            )
+            req_map[req.pk] = new_req
+            for obj in req.objectives.all():
+                new_obj = obj_map.get(obj.pk)
+                if new_obj:
+                    new_req.objectives.add(new_obj)
+            for old_task in req.linked_tasks.all():
+                new_task = task_map.get(old_task.pk)
+                if new_task:
+                    new_req.linked_tasks.add(new_task)
+
+        # Related requirements (self-referential M2M)
+        for old_pk, new_req in req_map.items():
+            old_req = Requirement.objects.get(pk=old_pk)
+            for related in old_req.related_requirements.all():
+                new_related = req_map.get(related.pk)
+                if new_related:
+                    new_req.related_requirements.add(new_related)
+    except Exception:
+        pass  # Requirements copying is best-effort
+
     return new_board
 
 

@@ -56,7 +56,7 @@ class RequirementsAIAnalyzer:
             'linked_tasks', 'objectives',
         ))
         objectives = list(ProjectObjective.objects.filter(board=self.board))
-        tasks = list(Task.objects.filter(column__board=self.board).select_related('column'))
+        tasks = list(Task.objects.filter(column__board=self.board, item_type='task').select_related('column'))
 
         if not reqs and not tasks:
             return {
