@@ -758,27 +758,43 @@ class BudgetAnalyzer:
         end_date = timezone.now()
         start_date = end_date - timedelta(days=days)
         
-        # Daily time entries
+        # Daily time entries with per-task hourly rates
         daily_hours = TimeEntry.objects.filter(
             task__column__board=board,
             work_date__gte=start_date.date()
-        ).values('work_date').annotate(
+        ).select_related('task').values(
+            'work_date', 'task_id'
+        ).annotate(
             total_hours=Sum('hours_spent')
         ).order_by('work_date')
+        
+        # Build a map of task_id -> hourly_rate from TaskCost
+        task_rates = {}
+        for tc in TaskCost.objects.filter(task__column__board=board):
+            task_rates[tc.task_id] = tc.hourly_rate if tc.hourly_rate else Decimal('0.00')
+        
+        # Aggregate daily costs using actual hourly rates
+        daily_cost_map = {}
+        daily_hours_map = {}
+        for entry in daily_hours:
+            d = entry['work_date']
+            rate = task_rates.get(entry['task_id'], Decimal('0.00'))
+            cost = entry['total_hours'] * rate
+            daily_cost_map[d] = daily_cost_map.get(d, Decimal('0.00')) + cost
+            daily_hours_map[d] = daily_hours_map.get(d, Decimal('0.00')) + entry['total_hours']
         
         # Calculate cumulative costs
         cumulative_data = []
         cumulative_cost = Decimal('0.00')
         
-        for entry in daily_hours:
-            # Estimate cost (this is simplified - actual calculation would need hourly rates)
-            estimated_daily_cost = entry['total_hours'] * Decimal('50.00')  # Default rate
-            cumulative_cost += estimated_daily_cost
+        for d in sorted(daily_cost_map.keys()):
+            daily_cost = daily_cost_map[d]
+            cumulative_cost += daily_cost
             
             cumulative_data.append({
-                'date': entry['work_date'],  # Keep as date object for template formatting
-                'daily_hours': float(entry['total_hours']),
-                'daily_cost_estimate': float(estimated_daily_cost),
+                'date': d,
+                'daily_hours': float(daily_hours_map[d]),
+                'daily_cost_estimate': float(daily_cost),
                 'cumulative_cost': float(cumulative_cost),
             })
         
