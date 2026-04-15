@@ -105,7 +105,7 @@
                     <tr>
                         <th style="text-align:left;min-width:200px;">Requirement</th>
                         {% for task in tasks %}
-                        <th class="req-cell" title="{{ task.title }}">T{{ task.id }}</th>
+                        <th class="req-cell" title="{{ task.title }}">{{ task_prefix }}-{{ task.id }}</th>
                         {% endfor %}
                     </tr>
                 </thead>

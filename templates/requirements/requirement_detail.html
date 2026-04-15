@@ -3,6 +3,12 @@
 
 {% block title %}{{ requirement.identifier }} — {{ requirement.title }} | PrizmAI{% endblock %}
 
+{% block extra_css %}
+<style>
+[id^="loadMsg_"] { transition: opacity 0.2s ease; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4 py-3">
     <!-- Breadcrumb -->
@@ -339,6 +345,66 @@ var qualityUrl = '{% url "requirements:ai_quality_check" board.id requirement.pk
 var criteriaUrl = '{% url "requirements:ai_generate_criteria" board.id requirement.pk %}';
 var impactUrl = '{% url "requirements:ai_impact_analysis" board.id requirement.pk %}';
 
+/* ── Revolving loading messages ───────────────────────────────────── */
+var _loadingMessages = {
+    quality: [
+        'Analyzing requirement clarity...',
+        'Evaluating completeness and detail...',
+        'Checking testability of acceptance criteria...',
+        'Assessing ambiguity and feasibility...',
+        'Scoring quality dimensions...',
+        'Compiling improvement suggestions...',
+        'Finalizing quality report...',
+    ],
+    criteria: [
+        'Reading requirement description...',
+        'Identifying key user scenarios...',
+        'Structuring Given/When/Then format...',
+        'Generating edge case scenarios...',
+        'Refining acceptance criteria...',
+        'Validating completeness of criteria...',
+        'Finalizing acceptance criteria...',
+    ],
+    impact: [
+        'Mapping linked tasks and dependencies...',
+        'Analyzing downstream requirement impact...',
+        'Evaluating affected objectives...',
+        'Assessing change risk scenarios...',
+        'Calculating ripple effect across the board...',
+        'Generating mitigation recommendations...',
+        'Finalizing impact report...',
+    ],
+};
+var _activeTimers = {};
+
+function _startLoadingMessages(contentEl, type) {
+    var msgs = _loadingMessages[type];
+    var idx = 0;
+    contentEl.innerHTML = '<div class="text-center py-3"><div class="mb-2"><i class="fas fa-spinner fa-spin me-1" style="color:#6f42c1;"></i></div><div class="text-muted small" id="loadMsg_' + type + '">' + _esc(msgs[0]) + '</div></div>';
+    _activeTimers[type] = setInterval(function() {
+        idx++;
+        if (idx >= msgs.length) {
+            clearInterval(_activeTimers[type]);
+            return;
+        }
+        var el = document.getElementById('loadMsg_' + type);
+        if (el) {
+            el.style.opacity = '0';
+            setTimeout(function() {
+                el.textContent = msgs[idx];
+                el.style.opacity = '1';
+            }, 200);
+        }
+    }, 4000);
+}
+
+function _stopLoadingMessages(type) {
+    if (_activeTimers[type]) {
+        clearInterval(_activeTimers[type]);
+        delete _activeTimers[type];
+    }
+}
+
 function _post(url) {
     return fetch(url, {
         method: 'POST',
@@ -366,8 +432,9 @@ function runAiQualityCheck() {
     var box = document.getElementById('aiQualityResult');
     var content = document.getElementById('aiQualityContent');
     box.style.display = '';
-    content.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Analyzing quality...</div>';
+    _startLoadingMessages(content, 'quality');
     _post(qualityUrl).then(function(d) {
+        _stopLoadingMessages('quality');
         var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
             '<span class="fw-bold">Overall Quality:</span> ' + _scoreBadge(d.quality_score) + '</div>';
         if (d.dimensions) {
@@ -390,6 +457,7 @@ function runAiQualityCheck() {
         }
         content.innerHTML = html;
     }).catch(function() {
+        _stopLoadingMessages('quality');
         content.innerHTML = '<div class="text-danger">Failed to run quality analysis. Please try again.</div>';
     });
 }
@@ -398,8 +466,9 @@ function runAiGenerateCriteria() {
     var box = document.getElementById('aiCriteriaResult');
     var content = document.getElementById('aiCriteriaContent');
     box.style.display = '';
-    content.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Generating criteria...</div>';
+    _startLoadingMessages(content, 'criteria');
     _post(criteriaUrl).then(function(d) {
+        _stopLoadingMessages('criteria');
         var html = '';
         if (d.criteria && d.criteria.length) {
             d.criteria.forEach(function(c, i) {
@@ -416,6 +485,7 @@ function runAiGenerateCriteria() {
         }
         content.innerHTML = html || '<div class="text-muted">No criteria generated.</div>';
     }).catch(function() {
+        _stopLoadingMessages('criteria');
         content.innerHTML = '<div class="text-danger">Failed to generate criteria. Please try again.</div>';
     });
 }
@@ -424,8 +494,9 @@ function runAiImpactAnalysis() {
     var box = document.getElementById('aiImpactResult');
     var content = document.getElementById('aiImpactContent');
     box.style.display = '';
-    content.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Analyzing impact...</div>';
+    _startLoadingMessages(content, 'impact');
     _post(impactUrl).then(function(d) {
+        _stopLoadingMessages('impact');
         var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
             '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
             '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
@@ -447,6 +518,7 @@ function runAiImpactAnalysis() {
         }
         content.innerHTML = html;
     }).catch(function() {
+        _stopLoadingMessages('impact');
         content.innerHTML = '<div class="text-danger">Failed to run impact analysis. Please try again.</div>';
     });
 }
