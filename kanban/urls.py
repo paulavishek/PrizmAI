@@ -111,6 +111,7 @@ urlpatterns = [
     path('calendar/create-event/', calendar_views.calendar_create_event, name='calendar_create_event'),
     path('calendar/boards/<int:board_id>/columns/', calendar_views.calendar_get_board_columns, name='calendar_get_board_columns'),
     path('calendar/events/<int:event_id>/', calendar_views.calendar_event_detail, name='calendar_event_detail'),
+    path('calendar/events/<int:event_id>/edit/', calendar_views.calendar_event_edit, name='calendar_event_edit'),
     path('calendar/events/<int:event_id>/delete/', calendar_views.calendar_event_delete, name='calendar_event_delete'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
