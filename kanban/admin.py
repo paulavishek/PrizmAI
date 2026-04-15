@@ -1256,6 +1256,26 @@ class UserCredibilityScoreAdmin(admin.ModelAdmin):
     readonly_fields = ('tokens_reset_date',)
 
 
+# ── Project Signals & Confidence Score ─────────────────────────────────────
+from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+
+
+@admin.register(ProjectSignal)
+class ProjectSignalAdmin(admin.ModelAdmin):
+    list_display = ('board', 'signal_type', 'impact', 'strength', 'description', 'ai_generated', 'timestamp')
+    list_filter = ('signal_type', 'impact', 'ai_generated', 'timestamp')
+    search_fields = ('board__name', 'description')
+    readonly_fields = ('timestamp',)
+
+
+@admin.register(ProjectConfidenceScore)
+class ProjectConfidenceScoreAdmin(admin.ModelAdmin):
+    list_display = ('board', 'composite_score', 'scope_score', 'budget_score', 'schedule_score', 'trend', 'computed_at')
+    list_filter = ('trend', 'computed_at')
+    search_fields = ('board__name',)
+    readonly_fields = ('computed_at',)
+
+
 # ── Feature Guide ─────────────────────────────────────────────────────────
 
 from .feature_guide_models import FeatureGuide

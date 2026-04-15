@@ -233,9 +233,11 @@ urlpatterns = [
     path('board/<int:board_id>/burndown/history/', burndown_views.prediction_history, name='prediction_history'),
     path('board/<int:board_id>/burndown/suggestions/', burndown_views.actionable_suggestions_api, name='actionable_suggestions_api'),
 
-    # Triple Constraint Dashboard (Scope + Cost + Time)
+    # Triple Constraint Dashboard (Scope + Cost + Time + Project Confidence)
     path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
     path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
+    path('boards/<int:board_id>/triple-constraint/recalculate-confidence/', triple_constraint_views.recalculate_confidence, name='recalculate_confidence'),
+    path('boards/<int:board_id>/triple-constraint/record-signal/', triple_constraint_views.record_manual_signal, name='record_manual_signal'),
 
     # Board Automations (new engine)
     path('boards/<int:board_id>/automations/', automation_views.automations_page, name='automations_list'),
@@ -391,18 +393,15 @@ urlpatterns = [
     path('boards/<int:board_id>/preset/', views.board_preset_update, name='board_preset_update'),
 
     # -----------------------------------------------------------------------
-    # Living Commitment Protocols (Anti-Roadmap)
+    # Living Commitment Protocols — DEPRECATED
+    # Feature decomposed: confidence score now lives in Triple Constraint,
+    # signal log is unified ProjectSignal, renegotiation is in AI Coach.
+    # Existing URLs redirect to Triple Constraint Dashboard for backwards
+    # compatibility.
     # -----------------------------------------------------------------------
-    path('boards/<int:board_id>/commitments/', commitment_views.commitment_dashboard, name='commitment_dashboard'),
-    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_create, name='commitment_create'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_detail, name='commitment_detail'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/bet/', commitment_views.commitment_place_bet, name='commitment_place_bet'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/signal/', commitment_views.commitment_signal_manual, name='commitment_signal_manual'),
-    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/', commitment_views.negotiation_session_detail, name='negotiation_session_detail'),
-    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/resolve/', commitment_views.negotiation_resolve, name='negotiation_resolve'),
-    # Commitment API endpoints (JSON, used by JS auto-refresh and Chart.js)
-    path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
-    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
+    path('boards/<int:board_id>/commitments/', commitment_views.commitment_redirect, name='commitment_dashboard'),
+    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_redirect, name='commitment_create'),
+    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_redirect, name='commitment_detail'),
 
     # -----------------------------------------------------------------------
     # Spectra Smart Access Request System
@@ -415,7 +414,6 @@ urlpatterns = [
     path('api/access-requests/<int:request_id>/approve/', access_request_views.api_approve_access_request, name='api_approve_access_request'),
     path('api/access-requests/<int:request_id>/deny/', access_request_views.api_deny_access_request, name='api_deny_access_request'),
     path('api/access-requests/pending-count/', access_request_views.get_pending_access_request_count, name='get_pending_access_request_count'),
-    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
 
     # -----------------------------------------------------------------------
     # My Favorites

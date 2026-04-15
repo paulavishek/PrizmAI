@@ -2650,6 +2650,7 @@ class WorkspaceInvitation(models.Model):
 # Import at the end to ensure all dependencies are loaded
 from .shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog  # noqa: E402
 from .access_request_models import AccessRequest  # noqa: E402
+from .project_signals_models import ProjectSignal, ProjectConfidenceScore  # noqa: E402
 
 
 class CalendarEvent(models.Model):
