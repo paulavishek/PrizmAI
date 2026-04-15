@@ -1669,6 +1669,58 @@
     /* Make table rows clickable for tasks */
     .gantt-table-row.clickable-row { cursor: pointer; }
 
+    /* ============================================
+       STICKY DATE HEADER OVERLAY
+       (position: fixed div appended to body)
+       Shows the Gantt timeline date bar AND
+       the table column header at the top of the
+       viewport whenever the actual headers
+       scroll out of view.
+       ============================================ */
+    #gantt-sticky-header-bar {
+        position: fixed;
+        z-index: 110;
+        display: none;
+        overflow: hidden;
+        pointer-events: none;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.10);
+    }
+    #gantt-sticky-header-bar .sticky-table-part {
+        flex-shrink: 0;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: #f1f5f9;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-bottom: 2px solid #475569;
+    }
+    #gantt-sticky-header-bar .sticky-table-part .th-cell {
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        height: 100%;
+    }
+    #gantt-sticky-header-bar .sticky-table-part .th-activity { flex: 1; min-width: 0; }
+    #gantt-sticky-header-bar .sticky-table-part .th-status   { width: 90px; justify-content: center; }
+    #gantt-sticky-header-bar .sticky-table-part .th-responsible { width: 100px; justify-content: center; }
+    #gantt-sticky-header-bar .sticky-table-part .th-progress { width: 90px; justify-content: center; }
+    #gantt-sticky-header-bar .sticky-divider {
+        width: 5px;
+        flex-shrink: 0;
+        background: #e2e8f0;
+    }
+    #gantt-sticky-header-bar .sticky-date-part {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        background: #f8fafc;
+        border-bottom: 2px solid #cbd5e1;
+    }
+
 </style>
 {% endblock %}
 
@@ -4394,6 +4446,8 @@
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
             localStorage.setItem('ganttTablePanelWidth', tablePanel.offsetWidth);
+            // Refresh sticky header width after divider drag
+            _updateStickyHdr();
         });
     }
 
@@ -4402,7 +4456,168 @@
      */
     function refreshSplitView() {
         buildTaskTable();
+        // Re-build the sticky date-header overlay after every render so it
+        // always mirrors the latest SVG header content (e.g. after view-mode change).
+        buildStickyDateHeader();
     }
+
+    /* ============================================================
+       STICKY HEADER BAR — combined fixed overlay shown while the
+       Gantt's native header rows have scrolled above the topbar.
+       Mirrors both the table column header (left) and the SVG
+       date row (right) as one seamless bar.
+       ============================================================ */
+    let _stickyBar = null;
+    let _stickyDateSvg = null;
+    let _stickyPanelScrollFn = null;
+
+    function buildStickyDateHeader() {
+        const splitView     = document.getElementById('gantt-split-view');
+        const tablePanel    = document.getElementById('gantt-table-panel');
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        const ganttSvg      = document.querySelector('#gantt');
+        if (!splitView || !tablePanel || !timelinePanel || !ganttSvg || !ganttChart) return;
+
+        // Use the actual rendered table header height so the sticky bar
+        // matches the real header row (syncTableRowHeights may have resized it).
+        const tableHdr = tablePanel.querySelector('.table-header');
+        const headerHeight = (tableHdr && tableHdr.offsetHeight > 0)
+            ? tableHdr.offsetHeight
+            : (ganttChart.options && ganttChart.options.header_height) || 50;
+
+        // Frappe-gantt's grid-header rect is header_height + 10, and lower-text
+        // sits at y = header_height.  Use the full rect height for the SVG so
+        // nothing is clipped.
+        const svgHeaderHeight = headerHeight + 10;
+
+        // --- Create the overlay once, reuse it ---
+        if (!_stickyBar) {
+            _stickyBar = document.createElement('div');
+            _stickyBar.id = 'gantt-sticky-header-bar';
+            _stickyBar.style.display = 'none';
+            document.body.appendChild(_stickyBar);
+        }
+
+        // Rebuild content from scratch to match the current render
+        _stickyBar.innerHTML = '';
+        _stickyBar.style.height = headerHeight + 'px';
+
+        // --- Left: table column header replica ---
+        const tablePart = document.createElement('div');
+        tablePart.className = 'sticky-table-part';
+        if (tableHdr) {
+            tablePart.innerHTML = tableHdr.innerHTML;
+        }
+        _stickyBar.appendChild(tablePart);
+
+        // --- Divider ---
+        const divider = document.createElement('div');
+        divider.className = 'sticky-divider';
+        _stickyBar.appendChild(divider);
+
+        // --- Right: SVG date header replica ---
+        const datePart = document.createElement('div');
+        datePart.className = 'sticky-date-part';
+
+        const svgNS = 'http://www.w3.org/2000/svg';
+        _stickyDateSvg = document.createElementNS(svgNS, 'svg');
+        _stickyDateSvg.setAttribute('height', headerHeight);
+        _stickyDateSvg.classList.add('gantt');  // inherit .gantt CSS rules for grid-header, date text etc.
+        _stickyDateSvg.style.display = 'block';
+        _stickyDateSvg.style.overflow = 'hidden';
+
+        const gridHeader = ganttSvg.querySelector('.grid-header');
+        // frappe-gantt 0.6.1 names its date layer "date" (singular)
+        const datesGroup = ganttSvg.querySelector('g.date');
+        if (gridHeader) _stickyDateSvg.appendChild(gridHeader.cloneNode(true));
+        if (datesGroup)  _stickyDateSvg.appendChild(datesGroup.cloneNode(true));
+        datePart.appendChild(_stickyDateSvg);
+        _stickyBar.appendChild(datePart);
+
+        // Store the SVG-coordinate header height for viewBox calculations
+        _stickyBar._svgHeaderHeight = svgHeaderHeight;
+
+        // --- Rebind panel-scroll listener ---
+        // Frappe-gantt wraps the SVG in its own .gantt-container div
+        // (with padding + overflow-x:auto), so horizontal scrolling can
+        // happen there instead of on #gantt-timeline-panel.  Listen on
+        // both so the sticky header always stays synced.
+        if (_stickyPanelScrollFn) {
+            timelinePanel.removeEventListener('scroll', _stickyPanelScrollFn);
+            const prevGC = timelinePanel.querySelector('.gantt-container');
+            if (prevGC) prevGC.removeEventListener('scroll', _stickyPanelScrollFn);
+        }
+        _stickyPanelScrollFn = function () { _updateStickyHdr(); };
+        timelinePanel.addEventListener('scroll', _stickyPanelScrollFn, { passive: true });
+        const ganttContainer = timelinePanel.querySelector('.gantt-container');
+        if (ganttContainer) {
+            ganttContainer.addEventListener('scroll', _stickyPanelScrollFn, { passive: true });
+        }
+
+        // Initial update
+        _updateStickyHdr();
+    }
+
+    function _updateStickyHdr() {
+        if (!_stickyBar || !_stickyDateSvg) return;
+
+        const splitView     = document.getElementById('gantt-split-view');
+        const tablePanel    = document.getElementById('gantt-table-panel');
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        const ganttSvg      = document.querySelector('#gantt');
+        if (!splitView || !tablePanel || !timelinePanel || !ganttSvg) {
+            _stickyBar.style.display = 'none'; return;
+        }
+
+        const splitRect  = splitView.getBoundingClientRect();
+        const panelRect  = timelinePanel.getBoundingClientRect();
+
+        // Effective top below the fixed topbar
+        const topbarEl  = document.querySelector('.prizm-topbar');
+        const topOffset = topbarEl ? Math.round(topbarEl.getBoundingClientRect().bottom) : 48;
+
+        // Show only when the split view header has scrolled above the topbar
+        const shouldShow = splitRect.top < topOffset && panelRect.height > 0;
+
+        if (!shouldShow) {
+            _stickyBar.style.display = 'none';
+            return;
+        }
+
+        const headerHeight = _stickyBar.offsetHeight || 50;
+        const tableW       = tablePanel.offsetWidth;
+        const dividerW     = 5;  // matches CSS
+
+        _stickyBar.style.display    = 'flex';
+        _stickyBar.style.left       = splitRect.left + 'px';
+        _stickyBar.style.top        = topOffset + 'px';
+        _stickyBar.style.width      = splitRect.width + 'px';
+        _stickyBar.style.height     = headerHeight + 'px';
+
+        // Size the left table part to match the actual table panel width
+        const tablePart = _stickyBar.querySelector('.sticky-table-part');
+        if (tablePart) {
+            tablePart.style.width = tableW + 'px';
+            tablePart.style.height = headerHeight + 'px';
+        }
+
+        // Sync the inner SVG viewBox with the actual visible portion of the
+        // Gantt SVG.  Use bounding rects to compute the true horizontal offset
+        // — this is immune to nested scroll containers and padding (frappe-gantt
+        // wraps the SVG in its own .gantt-container with padding + overflow-x).
+        const svgRect    = ganttSvg.getBoundingClientRect();
+        const scrollLeft = panelRect.left - svgRect.left;  // SVG-space x at panel's left edge
+        const panelW     = panelRect.width;
+        // Use the SVG-coordinate header height (includes the +10 rect padding)
+        // so lower date labels at y = header_height are not clipped.
+        const svgH = _stickyBar._svgHeaderHeight || (headerHeight + 10);
+        _stickyDateSvg.setAttribute('width', panelW);
+        _stickyDateSvg.setAttribute('viewBox', `${scrollLeft} 0 ${panelW} ${svgH}`);
+    }
+
+    // Wire global scroll / resize listeners once
+    window.addEventListener('scroll', _updateStickyHdr, { passive: true });
+    window.addEventListener('resize', _updateStickyHdr, { passive: true });
 
     // Initialize split-view infrastructure once on page load
     document.addEventListener('DOMContentLoaded', function () {
