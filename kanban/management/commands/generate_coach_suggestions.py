@@ -153,11 +153,13 @@ class Command(BaseCommand):
                     
                     duplicate = CoachingSuggestion.objects.filter(
                         board=board,
-                        suggestion_type=suggestion_data['suggestion_type']
                     ).filter(
-                        Q(status='active', created_at__gte=timezone.now() - timedelta(days=3)) |
-                        Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=3)) |
-                        Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(suggestion_type=suggestion_data['suggestion_type']) |
+                        Q(title=suggestion_data.get('title', ''))
+                    ).filter(
+                        Q(status='active', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=14)) |
                         Q(status='resolved', created_at__gte=timezone.now() - timedelta(days=30))
                     ).exists()
                     
