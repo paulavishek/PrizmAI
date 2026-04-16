@@ -224,6 +224,18 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'   ⚠️ Commitment protocol creation: {e}'))
 
+            # 10. AI Tools Demo Data (What-If, Shadow Board, Pre-Mortem, Stress Test, Scope Autopsy, Exit Protocol)
+            self.stdout.write(self.style.NOTICE('\n🧠 PHASE 10: Creating AI Tools Demo Data...'))
+            ai_tools_stats = self.create_ai_tools_demo_data()
+            self.stdout.write(self.style.SUCCESS(
+                f'   ✅ AI Tools: {ai_tools_stats["whatif"]} What-If scenarios, '
+                f'{ai_tools_stats["shadow_branches"]} Shadow Branches, '
+                f'{ai_tools_stats["premortem"]} Pre-Mortem analyses, '
+                f'{ai_tools_stats["stress_tests"]} Stress Tests, '
+                f'{ai_tools_stats["scope_autopsies"]} Scope Autopsies, '
+                f'{ai_tools_stats["exit_protocol"]} Exit Protocol entries'
+            ))
+
         # Final Summary
         self.print_final_summary()
 
@@ -623,6 +635,81 @@ class Command(BaseCommand):
         except Exception:
             pass
         self.stdout.write('   ✓ Cleared Decision Center data')
+
+        # =====================================================================
+        # STEP 17: Clear What-If Scenario data
+        # =====================================================================
+        try:
+            from kanban.whatif_models import WhatIfScenario
+            WhatIfScenario.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared What-If Scenario data')
+
+        # =====================================================================
+        # STEP 18: Clear Shadow Board data
+        # =====================================================================
+        try:
+            from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+            BranchDivergenceLog.objects.filter(branch__board__in=self.demo_boards).delete()
+            BranchSnapshot.objects.filter(branch__board__in=self.demo_boards).delete()
+            ShadowBranch.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Shadow Board data')
+
+        # =====================================================================
+        # STEP 19: Clear Pre-Mortem data
+        # =====================================================================
+        try:
+            from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+            PreMortemScenarioAcknowledgment.objects.filter(pre_mortem__board__in=self.demo_boards).delete()
+            PreMortemAnalysis.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Pre-Mortem data')
+
+        # =====================================================================
+        # STEP 20: Clear Stress Test data
+        # =====================================================================
+        try:
+            from kanban.stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
+            Vaccine.objects.filter(session__board__in=self.demo_boards).delete()
+            StressTestScenario.objects.filter(session__board__in=self.demo_boards).delete()
+            ImmunityScore.objects.filter(session__board__in=self.demo_boards).delete()
+            StressTestSession.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Stress Test data')
+
+        # =====================================================================
+        # STEP 21: Clear Scope Autopsy data
+        # =====================================================================
+        try:
+            from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+            ScopeTimelineEvent.objects.filter(report__board__in=self.demo_boards).delete()
+            ScopeAutopsyReport.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Scope Autopsy data')
+
+        # =====================================================================
+        # STEP 22: Clear Exit Protocol data
+        # =====================================================================
+        try:
+            from exit_protocol.models import (
+                ProjectHealthSignal, HospiceSession, ProjectOrgan,
+                OrganTransplant, CemeteryEntry, HospiceDismissal,
+            )
+            HospiceDismissal.objects.filter(board__in=self.demo_boards).delete()
+            OrganTransplant.objects.filter(organ__source_board__in=self.demo_boards).delete()
+            ProjectOrgan.objects.filter(source_board__in=self.demo_boards).delete()
+            CemeteryEntry.objects.filter(board__in=self.demo_boards).delete()
+            HospiceSession.objects.filter(board__in=self.demo_boards).delete()
+            ProjectHealthSignal.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Exit Protocol data')
 
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
@@ -2062,6 +2149,827 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             f'Boards linked: {linked}'
         )
 
+    # =========================================================================
+    # AI TOOLS DEMO DATA (What-If, Shadow Board, Pre-Mortem, Stress Test,
+    #                      Scope Autopsy, Exit Protocol)
+    # =========================================================================
+    def create_ai_tools_demo_data(self):
+        """Create demo data for all AI Tools features on the Software Development board."""
+        now = timezone.now()
+        board = self.software_board
+        alex = self.alex
+        sam = self.sam
+        jordan = self.jordan
+
+        if not board:
+            self.stdout.write(self.style.WARNING('   ⚠️ Software Development board not found, skipping AI tools'))
+            return {'whatif': 0, 'shadow_branches': 0, 'premortem': 0, 'stress_tests': 0, 'scope_autopsies': 0, 'exit_protocol': 0}
+
+        stats = {'whatif': 0, 'shadow_branches': 0, 'premortem': 0, 'stress_tests': 0, 'scope_autopsies': 0, 'exit_protocol': 0}
+
+        # -----------------------------------------------------------------
+        # 1. WHAT-IF SCENARIOS
+        # -----------------------------------------------------------------
+        try:
+            from kanban.whatif_models import WhatIfScenario
+
+            whatif_scenarios = [
+                {
+                    'name': 'Add Mobile App Module (+8 tasks)',
+                    'scenario_type': 'scope_change',
+                    'created_by': alex,
+                    'input_parameters': {
+                        'tasks_added': 8,
+                        'team_size_delta': 0,
+                        'deadline_shift_days': 0,
+                    },
+                    'baseline_snapshot': {
+                        'total_tasks': 30,
+                        'completed_tasks': 10,
+                        'in_progress_tasks': 8,
+                        'team_size': 3,
+                        'current_velocity': 4.2,
+                        'deadline': (now + timedelta(days=45)).isoformat(),
+                    },
+                    'impact_results': {
+                        'before': {'completion_date': (now + timedelta(days=38)).strftime('%Y-%m-%d'), 'workload_per_member': 6.7, 'risk_level': 'medium'},
+                        'after': {'completion_date': (now + timedelta(days=52)).strftime('%Y-%m-%d'), 'workload_per_member': 9.3, 'risk_level': 'high'},
+                        'delta': {'days_added': 14, 'workload_increase_pct': 39, 'risk_escalation': True},
+                    },
+                    'ai_analysis': {
+                        'summary': 'Adding 8 mobile app tasks will push the projected completion by ~2 weeks. The current team velocity of 4.2 tasks/week means the new scope requires roughly 2 additional sprints. Consider adding a mobile-focused developer or deferring the mobile module to Phase 2.',
+                        'risk_factors': ['Increased workload per team member exceeds sustainable threshold', 'Mobile development requires specialized skills not fully covered by current team', 'Testing effort will grow non-linearly with cross-platform requirements'],
+                        'recommendations': ['Hire a contract mobile developer for 6 weeks', 'Split mobile app into MVP and full-feature phases', 'Extend deadline by 2 weeks to maintain quality standards'],
+                    },
+                    'is_starred': True,
+                },
+                {
+                    'name': 'Reduce Team by 1 Member',
+                    'scenario_type': 'team_change',
+                    'created_by': sam,
+                    'input_parameters': {
+                        'tasks_added': 0,
+                        'team_size_delta': -1,
+                        'deadline_shift_days': 0,
+                    },
+                    'baseline_snapshot': {
+                        'total_tasks': 30,
+                        'completed_tasks': 10,
+                        'in_progress_tasks': 8,
+                        'team_size': 3,
+                        'current_velocity': 4.2,
+                        'deadline': (now + timedelta(days=45)).isoformat(),
+                    },
+                    'impact_results': {
+                        'before': {'completion_date': (now + timedelta(days=38)).strftime('%Y-%m-%d'), 'workload_per_member': 6.7, 'risk_level': 'medium'},
+                        'after': {'completion_date': (now + timedelta(days=55)).strftime('%Y-%m-%d'), 'workload_per_member': 10.0, 'risk_level': 'high'},
+                        'delta': {'days_added': 17, 'workload_increase_pct': 49, 'risk_escalation': True},
+                    },
+                    'ai_analysis': {
+                        'summary': 'Losing one team member drops velocity from 4.2 to ~2.8 tasks/week. The 20 remaining tasks would take an additional 2.5 weeks. Critical path items like Authentication System and Database Schema currently assigned to Sam Rivera would need redistribution.',
+                        'risk_factors': ['Single points of failure on security-critical tasks', 'Remaining members may face burnout with 49% workload increase', 'Knowledge silos in backend architecture'],
+                        'recommendations': ['Redistribute tasks based on skill overlap analysis', 'Prioritize critical path items and defer low-priority tasks', 'Consider part-time contractor to bridge the gap'],
+                    },
+                    'is_starred': False,
+                },
+                {
+                    'name': 'Extend Deadline by 3 Weeks + Add QA Tasks',
+                    'scenario_type': 'combined',
+                    'created_by': jordan,
+                    'input_parameters': {
+                        'tasks_added': 4,
+                        'team_size_delta': 0,
+                        'deadline_shift_days': 21,
+                    },
+                    'baseline_snapshot': {
+                        'total_tasks': 30,
+                        'completed_tasks': 10,
+                        'in_progress_tasks': 8,
+                        'team_size': 3,
+                        'current_velocity': 4.2,
+                        'deadline': (now + timedelta(days=45)).isoformat(),
+                    },
+                    'impact_results': {
+                        'before': {'completion_date': (now + timedelta(days=38)).strftime('%Y-%m-%d'), 'workload_per_member': 6.7, 'risk_level': 'medium'},
+                        'after': {'completion_date': (now + timedelta(days=51)).strftime('%Y-%m-%d'), 'workload_per_member': 8.0, 'risk_level': 'low'},
+                        'delta': {'days_added': 13, 'workload_increase_pct': 19, 'risk_escalation': False},
+                    },
+                    'ai_analysis': {
+                        'summary': 'This is the safest combined option. Adding 4 QA tasks with a 3-week deadline extension keeps workload within sustainable limits. The extra time allows for comprehensive integration testing, security audits, and performance optimization without rushing the team.',
+                        'risk_factors': ['Extended timeline may impact stakeholder expectations', 'QA tasks could uncover issues requiring additional rework'],
+                        'recommendations': ['Communicate updated timeline to stakeholders proactively', 'Use the buffer to implement automated regression tests', 'Schedule a mid-sprint checkpoint to validate QA progress'],
+                    },
+                    'is_starred': True,
+                },
+            ]
+
+            for scenario_data in whatif_scenarios:
+                WhatIfScenario.objects.update_or_create(
+                    board=board,
+                    name=scenario_data['name'],
+                    defaults={
+                        'created_by': scenario_data['created_by'],
+                        'scenario_type': scenario_data['scenario_type'],
+                        'input_parameters': scenario_data['input_parameters'],
+                        'baseline_snapshot': scenario_data['baseline_snapshot'],
+                        'impact_results': scenario_data['impact_results'],
+                        'ai_analysis': scenario_data['ai_analysis'],
+                        'is_starred': scenario_data['is_starred'],
+                    },
+                )
+                stats['whatif'] += 1
+            self.stdout.write('   ✓ What-If Scenarios created')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ What-If Scenarios: {e}'))
+
+        # -----------------------------------------------------------------
+        # 2. SHADOW BRANCHES
+        # -----------------------------------------------------------------
+        try:
+            from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+            from kanban.whatif_models import WhatIfScenario
+
+            # Get the starred scope_change scenario to link as source
+            source_scenario = WhatIfScenario.objects.filter(
+                board=board, name='Add Mobile App Module (+8 tasks)'
+            ).first()
+
+            branches = [
+                {
+                    'name': 'Mobile-First Launch',
+                    'description': 'Explores prioritizing the mobile app module alongside web development, sharing API resources across platforms.',
+                    'created_by': alex,
+                    'status': 'active',
+                    'source_scenario': source_scenario,
+                    'branch_color': '#0d6efd',
+                    'is_starred': True,
+                    'snapshots': [
+                        {
+                            'scope_delta': 8, 'team_delta': 0, 'deadline_delta_weeks': 2,
+                            'feasibility_score': 62, 'projected_completion_date': (now + timedelta(days=52)).date(),
+                            'projected_budget_utilization': 87.5,
+                            'conflicts_detected': {'resource_conflicts': 2, 'details': ['Sam Rivera over-allocated by 15 hours', 'QA pipeline bottleneck in Week 6']},
+                            'gemini_recommendation': 'Consider adding a mobile developer or shifting 2 non-critical web tasks to next sprint to free capacity.',
+                            'days_ago': 5,
+                        },
+                        {
+                            'scope_delta': 8, 'team_delta': 1, 'deadline_delta_weeks': 2,
+                            'feasibility_score': 74, 'projected_completion_date': (now + timedelta(days=48)).date(),
+                            'projected_budget_utilization': 92.0,
+                            'conflicts_detected': {'resource_conflicts': 1, 'details': ['QA pipeline bottleneck in Week 6']},
+                            'gemini_recommendation': 'With an additional team member, feasibility improves significantly. Main risk is now QA throughput.',
+                            'days_ago': 2,
+                        },
+                    ],
+                },
+                {
+                    'name': 'Lean MVP Approach',
+                    'description': 'Strips scope to bare essentials: core API, auth, and dashboard. Defers file upload, real-time collab, and caching to Phase 2.',
+                    'created_by': sam,
+                    'status': 'active',
+                    'source_scenario': None,
+                    'branch_color': '#198754',
+                    'is_starred': False,
+                    'snapshots': [
+                        {
+                            'scope_delta': -6, 'team_delta': 0, 'deadline_delta_weeks': -1,
+                            'feasibility_score': 89, 'projected_completion_date': (now + timedelta(days=31)).date(),
+                            'projected_budget_utilization': 68.0,
+                            'conflicts_detected': {'resource_conflicts': 0, 'details': []},
+                            'gemini_recommendation': 'Lean MVP has high feasibility. Ship early and gather user feedback before building Phase 2 features.',
+                            'days_ago': 3,
+                        },
+                    ],
+                },
+                {
+                    'name': 'Extended QA Timeline',
+                    'description': 'Keeps full scope but adds 3 weeks for dedicated QA, security audit, and load testing. Based on the combined deadline extension scenario.',
+                    'created_by': jordan,
+                    'status': 'archived',
+                    'source_scenario': None,
+                    'branch_color': '#6f42c1',
+                    'is_starred': False,
+                    'snapshots': [
+                        {
+                            'scope_delta': 4, 'team_delta': 0, 'deadline_delta_weeks': 3,
+                            'feasibility_score': 81, 'projected_completion_date': (now + timedelta(days=55)).date(),
+                            'projected_budget_utilization': 78.0,
+                            'conflicts_detected': {'resource_conflicts': 0, 'details': []},
+                            'gemini_recommendation': 'This approach balances quality and delivery. The extra QA time significantly reduces post-launch defect risk.',
+                            'days_ago': 7,
+                        },
+                    ],
+                },
+            ]
+
+            for branch_data in branches:
+                branch, _ = ShadowBranch.objects.update_or_create(
+                    board=board,
+                    name=branch_data['name'],
+                    defaults={
+                        'description': branch_data['description'],
+                        'created_by': branch_data['created_by'],
+                        'status': branch_data['status'],
+                        'source_scenario': branch_data['source_scenario'],
+                        'branch_color': branch_data['branch_color'],
+                        'is_starred': branch_data['is_starred'],
+                    },
+                )
+                stats['shadow_branches'] += 1
+
+                # Create snapshots (delete old ones first for idempotency)
+                branch.snapshots.all().delete()
+                prev_score = None
+                for snap_data in branch_data['snapshots']:
+                    snap = BranchSnapshot.objects.create(
+                        branch=branch,
+                        scope_delta=snap_data['scope_delta'],
+                        team_delta=snap_data['team_delta'],
+                        deadline_delta_weeks=snap_data['deadline_delta_weeks'],
+                        feasibility_score=snap_data['feasibility_score'],
+                        projected_completion_date=snap_data['projected_completion_date'],
+                        projected_budget_utilization=snap_data['projected_budget_utilization'],
+                        conflicts_detected=snap_data['conflicts_detected'],
+                        gemini_recommendation=snap_data['gemini_recommendation'],
+                    )
+                    # Backdate the snapshot
+                    BranchSnapshot.objects.filter(pk=snap.pk).update(
+                        captured_at=now - timedelta(days=snap_data['days_ago'])
+                    )
+
+                    # Create divergence log if score changed
+                    if prev_score is not None and prev_score != snap_data['feasibility_score']:
+                        BranchDivergenceLog.objects.create(
+                            branch=branch,
+                            old_score=prev_score,
+                            new_score=snap_data['feasibility_score'],
+                            trigger_event=f'Board recalculation after scope/team adjustment',
+                        )
+                    prev_score = snap_data['feasibility_score']
+
+            self.stdout.write('   ✓ Shadow Branches created')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ Shadow Branches: {e}'))
+
+        # -----------------------------------------------------------------
+        # 3. PRE-MORTEM ANALYSIS
+        # -----------------------------------------------------------------
+        try:
+            from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+
+            analysis_json = [
+                {
+                    'scenario_number': 1,
+                    'title': 'Authentication System Breach',
+                    'probability': 'medium',
+                    'impact': 'critical',
+                    'risk_score': 8,
+                    'failure_story': 'Six weeks after launch, a security researcher discovers that the JWT token refresh mechanism has a race condition allowing token reuse after revocation. Attackers exploit this to maintain persistent sessions. The team scrambles to patch the vulnerability while managing a public disclosure timeline.',
+                    'warning_signs': ['Authentication testing suite still at 0% completion', 'Security architecture patterns completed but not validated against OWASP Top 10', 'No penetration testing scheduled before launch'],
+                    'prevention_steps': ['Prioritize Authentication Testing Suite (Task #8) immediately', 'Schedule external security audit before go-live', 'Implement token blacklisting with Redis-backed store'],
+                    'affected_tasks': ['Authentication System', 'Authentication Testing Suite', 'Security Audit & Fixes'],
+                },
+                {
+                    'scenario_number': 2,
+                    'title': 'Database Migration Catastrophe',
+                    'probability': 'medium',
+                    'impact': 'high',
+                    'risk_score': 7,
+                    'failure_story': 'During the first production deployment, the database migration fails halfway through due to incompatible schema changes. The rollback script has never been tested. Production data is in an inconsistent state for 6 hours while the team manually repairs tables.',
+                    'warning_signs': ['Database Schema & Migrations task only at 40% with complex dependencies', 'No rollback procedure documented', 'Migration testing not included in CI/CD pipeline'],
+                    'prevention_steps': ['Complete Database Schema task with rollback scripts for each migration', 'Add migration dry-run step to deployment pipeline', 'Test migration on production-size dataset copy'],
+                    'affected_tasks': ['Database Schema & Migrations', 'Deployment Automation', 'Integration Testing Suite'],
+                },
+                {
+                    'scenario_number': 3,
+                    'title': 'Real-time Collaboration Performance Collapse',
+                    'probability': 'high',
+                    'impact': 'medium',
+                    'risk_score': 6,
+                    'failure_story': 'The real-time collaboration feature works fine in development with 3 users but collapses under 50 concurrent connections. WebSocket connections leak memory, and the message queue backs up causing 30-second delays. Users abandon the feature and revert to email.',
+                    'warning_signs': ['Real-time Collaboration task not yet started (0%)', 'Data Caching Layer not implemented — no read-through cache for frequently accessed data', 'Load Testing task still in backlog'],
+                    'prevention_steps': ['Begin Data Caching Layer before Real-time Collaboration', 'Set up load testing infrastructure early', 'Implement connection pooling and backpressure mechanisms'],
+                    'affected_tasks': ['Real-time Collaboration', 'Data Caching Layer', 'Load Testing & Optimization'],
+                },
+                {
+                    'scenario_number': 4,
+                    'title': 'Key Developer Departure',
+                    'probability': 'low',
+                    'impact': 'critical',
+                    'risk_score': 7,
+                    'failure_story': 'Sam Rivera, who owns the majority of critical-path backend tasks (Base API, Authentication, Search Engine, API Rate Limiting), receives an offer and gives 2-week notice. The remaining team cannot maintain velocity on highly specialized code. Launch is delayed by 6 weeks.',
+                    'warning_signs': ['Heavy task concentration on single team member (12 of 30 tasks)', 'Incomplete documentation of architectural decisions', 'No cross-training sessions scheduled'],
+                    'prevention_steps': ['Distribute critical-path knowledge via pair programming sessions', 'Ensure Project Documentation Setup captures all architectural decisions', 'Cross-train Jordan on API and authentication patterns'],
+                    'affected_tasks': ['Base API Structure', 'Authentication System', 'Search & Indexing Engine', 'API Rate Limiting'],
+                },
+                {
+                    'scenario_number': 5,
+                    'title': 'Scope Creep Through Feature Requests',
+                    'probability': 'high',
+                    'impact': 'medium',
+                    'risk_score': 5,
+                    'failure_story': 'Stakeholders begin requesting "just one more feature" during the In Review phase. Each small addition seems manageable individually, but collectively they add 40% more scope. The team burns out trying to accommodate changes while maintaining the original deadline. Quality drops, bugs multiply.',
+                    'warning_signs': ['No formal change request process in place', 'User Onboarding Flow and UI/UX Polish tasks have vague acceptance criteria', 'Core Features Code Review marked urgent but not started'],
+                    'prevention_steps': ['Implement a formal scope change request process with impact analysis', 'Define clear acceptance criteria for all Phase 3 tasks', 'Set a feature freeze date 2 weeks before launch'],
+                    'affected_tasks': ['User Onboarding Flow', 'UI/UX Polish', 'Core Features Code Review', 'Launch & Go-Live'],
+                },
+            ]
+
+            premortem, _ = PreMortemAnalysis.objects.update_or_create(
+                board=board,
+                defaults={
+                    'created_by': alex,
+                    'overall_risk_level': 'high',
+                    'analysis_json': analysis_json,
+                    'board_snapshot': {
+                        'total_tasks': 30,
+                        'completed_tasks': 10,
+                        'in_progress_tasks': 8,
+                        'team_members': ['Alex Chen', 'Sam Rivera', 'Jordan Taylor'],
+                        'phases': ['Foundation & Setup', 'Core Features', 'Polish & Launch'],
+                        'critical_path': ['Authentication System', 'Database Schema', 'Integration Testing', 'Security Audit', 'Launch'],
+                    },
+                },
+            )
+
+            # Add acknowledgments (sam acknowledged scenarios 1 and 4, jordan acknowledged 3)
+            for scenario_idx, user, notes in [
+                (0, sam, 'Acknowledged. I will prioritize the auth testing suite this sprint and schedule a security review with the team.'),
+                (3, sam, 'Valid concern. I will start documenting all API architecture decisions and schedule pair programming sessions with Jordan.'),
+                (2, jordan, 'Agreed on the load testing priority. I will set up the k6 load testing framework this week and create baseline benchmarks.'),
+            ]:
+                PreMortemScenarioAcknowledgment.objects.update_or_create(
+                    pre_mortem=premortem,
+                    scenario_index=scenario_idx,
+                    acknowledged_by=user,
+                    defaults={'notes': notes},
+                )
+
+            stats['premortem'] += 1
+            self.stdout.write('   ✓ Pre-Mortem Analysis created')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ Pre-Mortem Analysis: {e}'))
+
+        # -----------------------------------------------------------------
+        # 4. STRESS TEST (Red Team AI)
+        # -----------------------------------------------------------------
+        try:
+            from kanban.stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
+
+            session, _ = StressTestSession.objects.update_or_create(
+                board=board,
+                defaults={
+                    'run_by': alex,
+                    'score_rationale': (
+                        'The project shows moderate resilience with significant vulnerabilities in '
+                        'dependency management and schedule buffer. The heavy concentration of critical '
+                        'tasks on a single developer creates a fragile single-point-of-failure. '
+                        'Budget utilization is healthy but schedule pressure is mounting with 20 '
+                        'incomplete tasks and no contingency time built in.'
+                    ),
+                    'assumptions_made': [
+                        'Current team velocity of 4.2 tasks/week is sustainable',
+                        'No major scope changes expected from stakeholders',
+                        'Third-party API dependencies remain stable',
+                        'Team members maintain current availability (no PTO or sick leave)',
+                    ],
+                },
+            )
+
+            # Immunity Score
+            ImmunityScore.objects.update_or_create(
+                session=session,
+                defaults={
+                    'overall': 58,
+                    'schedule': 45,
+                    'budget': 72,
+                    'team': 48,
+                    'dependencies': 52,
+                    'scope_stability': 65,
+                    'schedule_rationale': 'With 20 of 30 tasks incomplete and no schedule buffer, any disruption cascades directly into deadline risk. The critical path has zero float.',
+                    'budget_rationale': 'Budget utilization at 68% with project roughly 50% complete. Healthy ratio but leaves limited room for emergency contractor hiring.',
+                    'team_rationale': 'Heavy single-developer dependency on Sam Rivera (12 tasks) creates a critical vulnerability. Bus factor is effectively 1 for backend systems.',
+                    'dependencies_rationale': '5 external dependencies identified with no fallback strategy. Authentication system blocks 4 downstream tasks.',
+                    'scope_stability_rationale': 'Scope has been relatively stable but Phase 3 tasks lack clear acceptance criteria, creating creep risk during review cycles.',
+                },
+            )
+
+            # Stress Test Scenarios (attack simulations)
+            scenarios_data = [
+                {
+                    'scenario_number': 1,
+                    'attack_type': 'KEY_PERSON_RISK',
+                    'title': 'Lead Backend Developer Unavailable for 2 Weeks',
+                    'attack_description': 'Sam Rivera becomes unavailable (medical emergency) for 2 weeks during the critical Authentication System and Database Schema sprint. No backup developer has context on these systems.',
+                    'cascade_effect': 'Authentication System (80% complete) stalls. Database Schema (40%) halts. 4 dependent tasks (API Rate Limiting, Search Engine, Integration Testing, Security Audit) are blocked. Projected delay: 3-4 weeks. Team morale drops as remaining members absorb additional scope.',
+                    'outcome': 'FAIL',
+                    'severity': 9,
+                    'tasks_blocked': 6,
+                    'estimated_delay_weeks': 4,
+                    'has_recovery_path': True,
+                    'early_warning_sign': 'Single developer assigned to >40% of remaining critical-path tasks',
+                    'tags': ['team', 'single-point-of-failure', 'critical-path'],
+                },
+                {
+                    'scenario_number': 2,
+                    'attack_type': 'DEPENDENCY_FAILURE',
+                    'title': 'Third-Party Auth Provider API Breaking Change',
+                    'attack_description': 'The chosen OAuth provider pushes a breaking API change with 7-day migration window. The Authentication System must be partially rewritten to accommodate new token format and endpoint changes.',
+                    'cascade_effect': 'Authentication System requires 40+ hours of rework. User Registration Flow needs corresponding updates. All testing must be redone. Integration Testing Suite scope expands by 30%.',
+                    'outcome': 'SURVIVED_BARELY',
+                    'severity': 7,
+                    'tasks_blocked': 3,
+                    'estimated_delay_weeks': 2,
+                    'has_recovery_path': True,
+                    'early_warning_sign': 'No abstraction layer between application and auth provider SDK',
+                    'tags': ['dependencies', 'external-api', 'architecture'],
+                },
+                {
+                    'scenario_number': 3,
+                    'attack_type': 'SCOPE_EXPLOSION',
+                    'title': 'Stakeholder Demands Mobile Responsive MVP',
+                    'attack_description': 'Two weeks before launch, the executive sponsor mandates that all features must work on mobile browsers. This was not in the original requirements and impacts Dashboard UI, File Upload, User Management, and Notification Service.',
+                    'cascade_effect': 'UI/UX Polish scope triples. Performance Optimization must cover mobile devices. Accessibility Compliance becomes critical rather than nice-to-have. Testing effort increases by 50%.',
+                    'outcome': 'FAIL',
+                    'severity': 8,
+                    'tasks_blocked': 5,
+                    'estimated_delay_weeks': 3,
+                    'has_recovery_path': True,
+                    'early_warning_sign': 'No mobile requirements discussed in Requirements Analysis phase',
+                    'tags': ['scope', 'stakeholder', 'requirements'],
+                },
+                {
+                    'scenario_number': 4,
+                    'attack_type': 'INFRASTRUCTURE_FAILURE',
+                    'title': 'CI/CD Pipeline Corruption Loses 3 Days of Builds',
+                    'attack_description': 'A misconfigured deployment script corrupts the CI/CD pipeline. Build artifacts for the last 3 days are lost. The Deployment Automation task (not yet started) has no disaster recovery plan.',
+                    'cascade_effect': 'Team loses 2 days recreating build configurations. Integration Testing must restart from clean state. Developer confidence in deployment process drops. Risk of similar issues during actual launch.',
+                    'outcome': 'SURVIVED',
+                    'severity': 5,
+                    'tasks_blocked': 2,
+                    'estimated_delay_weeks': 1,
+                    'has_recovery_path': True,
+                    'early_warning_sign': 'Deployment Automation task at 0% with no infrastructure-as-code',
+                    'tags': ['infrastructure', 'devops', 'recovery'],
+                },
+                {
+                    'scenario_number': 5,
+                    'attack_type': 'QUALITY_CRISIS',
+                    'title': 'Security Vulnerability Discovered in Production Dependencies',
+                    'attack_description': 'A critical CVE is published for a core dependency used in the Base API Structure. The vulnerability allows remote code execution. Immediate patching requires updating the dependency which breaks 3 internal modules.',
+                    'cascade_effect': 'Security Audit becomes urgent blocker. Base API compatibility tests must be rerun. Performance benchmarks invalidated. Potential 2-week delay while dependency is updated and all affected modules are verified.',
+                    'outcome': 'SURVIVED_BARELY',
+                    'severity': 8,
+                    'tasks_blocked': 4,
+                    'estimated_delay_weeks': 2,
+                    'has_recovery_path': True,
+                    'early_warning_sign': 'No automated dependency vulnerability scanning in place',
+                    'tags': ['security', 'dependencies', 'quality'],
+                },
+            ]
+
+            # Delete old scenarios for idempotency
+            session.scenarios.all().delete()
+            session.vaccines.all().delete()
+
+            for s_data in scenarios_data:
+                StressTestScenario.objects.create(
+                    session=session,
+                    scenario_number=s_data['scenario_number'],
+                    attack_type=s_data['attack_type'],
+                    title=s_data['title'],
+                    attack_description=s_data['attack_description'],
+                    cascade_effect=s_data['cascade_effect'],
+                    outcome=s_data['outcome'],
+                    severity=s_data['severity'],
+                    tasks_blocked=s_data['tasks_blocked'],
+                    estimated_delay_weeks=s_data['estimated_delay_weeks'],
+                    has_recovery_path=s_data['has_recovery_path'],
+                    early_warning_sign=s_data['early_warning_sign'],
+                    tags=s_data['tags'],
+                )
+
+            # Vaccines (structural fix recommendations)
+            vaccines_data = [
+                {
+                    'vaccine_number': 1,
+                    'targets_scenario_number': 1,
+                    'name': 'Cross-Training Program',
+                    'description': 'Implement mandatory pair programming sessions so that at least 2 team members have context on every critical-path system. Focus on Authentication and Database subsystems first.',
+                    'effort_level': 'MEDIUM',
+                    'effort_rationale': 'Requires 4-6 hours/week of structured pair programming for 3 weeks.',
+                    'projected_score_improvement': 12,
+                    'implementation_hint': 'Schedule 2-hour pair programming blocks: Sam+Jordan on Auth, Sam+Alex on Database. Document architectural decisions in wiki.',
+                },
+                {
+                    'vaccine_number': 2,
+                    'targets_scenario_number': 2,
+                    'name': 'Auth Provider Abstraction Layer',
+                    'description': 'Introduce an adapter pattern between the application and the OAuth provider. This isolates the codebase from provider-specific breaking changes.',
+                    'effort_level': 'LOW',
+                    'effort_rationale': 'Estimated 8-12 hours of refactoring for an experienced developer.',
+                    'projected_score_improvement': 8,
+                    'implementation_hint': 'Create an AuthProviderInterface with methods for token exchange, refresh, and revocation. Current provider becomes one implementation.',
+                },
+                {
+                    'vaccine_number': 3,
+                    'targets_scenario_number': 3,
+                    'name': 'Scope Freeze Protocol',
+                    'description': 'Establish a formal scope freeze date 3 weeks before launch. Any post-freeze requests must go through an impact assessment with PM sign-off.',
+                    'effort_level': 'LOW',
+                    'effort_rationale': 'Process change requiring 2-hour team meeting and documentation update.',
+                    'projected_score_improvement': 10,
+                    'implementation_hint': 'Create a scope change request template in the wiki. Configure a "Scope Freeze" milestone on the board. Communicate to all stakeholders.',
+                },
+                {
+                    'vaccine_number': 4,
+                    'targets_scenario_number': 4,
+                    'name': 'Infrastructure-as-Code Setup',
+                    'description': 'Move all CI/CD configuration into version-controlled infrastructure-as-code. Add automated backup of build artifacts and pipeline configs.',
+                    'effort_level': 'MEDIUM',
+                    'effort_rationale': 'Requires 2-3 days of DevOps work to codify existing manual configurations.',
+                    'projected_score_improvement': 7,
+                    'implementation_hint': 'Use Terraform/Pulumi for infra, GitHub Actions for CI/CD. Store all configs in the repo. Add daily artifact backups to cloud storage.',
+                },
+                {
+                    'vaccine_number': 5,
+                    'targets_scenario_number': 5,
+                    'name': 'Automated Dependency Scanning',
+                    'description': 'Integrate Dependabot or Snyk into the CI pipeline to automatically detect and flag vulnerable dependencies before they reach production.',
+                    'effort_level': 'LOW',
+                    'effort_rationale': 'Takes 1-2 hours to configure automated scanning in CI pipeline.',
+                    'projected_score_improvement': 9,
+                    'implementation_hint': 'Enable GitHub Dependabot for the repo. Add Snyk test to CI. Create policy: critical CVEs block merge, high CVEs require review within 48h.',
+                },
+            ]
+
+            for v_data in vaccines_data:
+                Vaccine.objects.create(
+                    session=session,
+                    board=board,
+                    vaccine_number=v_data['vaccine_number'],
+                    targets_scenario_number=v_data['targets_scenario_number'],
+                    name=v_data['name'],
+                    description=v_data['description'],
+                    effort_level=v_data['effort_level'],
+                    effort_rationale=v_data['effort_rationale'],
+                    projected_score_improvement=v_data['projected_score_improvement'],
+                    implementation_hint=v_data['implementation_hint'],
+                )
+
+            stats['stress_tests'] += 1
+            self.stdout.write('   ✓ Stress Test session created')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ Stress Test: {e}'))
+
+        # -----------------------------------------------------------------
+        # 5. SCOPE AUTOPSY
+        # -----------------------------------------------------------------
+        try:
+            from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+
+            report, _ = ScopeAutopsyReport.objects.update_or_create(
+                board=board,
+                defaults={
+                    'created_by': alex,
+                    'status': 'complete',
+                    'baseline_task_count': 24,
+                    'baseline_date': now - timedelta(days=35),
+                    'final_task_count': 30,
+                    'total_scope_growth_percentage': 25.0,
+                    'total_delay_days': 12,
+                    'total_budget_impact': Decimal('18500.00'),
+                    'pattern_analysis': (
+                        'Analysis reveals a pattern of incremental scope additions concentrated in '
+                        'Phases 2 and 3. The majority of scope growth (4 of 6 added tasks) was driven '
+                        'by security and quality requirements that were underestimated during initial '
+                        'planning. Two tasks were added based on stakeholder feedback during sprint reviews. '
+                        'The additions follow a "requirements discovery" pattern common in agile projects '
+                        'where the full scope becomes clear only as development progresses.\n\n'
+                        'Key pattern: Security-related tasks were the largest single category of scope '
+                        'growth, suggesting the initial security architecture review did not adequately '
+                        'capture implementation complexity.'
+                    ),
+                    'ai_summary': (
+                        'The Software Development project experienced 25% scope growth over 5 weeks, '
+                        'growing from 24 to 30 tasks. This is above the industry average of 15-20% for '
+                        'similar-sized projects. The growth was primarily driven by security requirements '
+                        'discovery (API Rate Limiting, Security Audit) and quality assurance gaps '
+                        '(Integration Testing, Load Testing). Total estimated impact: 12 days delay '
+                        'and $18,500 in additional costs. The scope growth was not chaotic — it followed '
+                        'a predictable pattern of requirements maturation that could have been partially '
+                        'mitigated with a more thorough initial security threat modeling exercise.'
+                    ),
+                    'recommendations': [
+                        {'title': 'Implement Security Threat Modeling in Phase 1', 'description': 'Add a dedicated security threat modeling session during the Requirements Analysis phase to surface security tasks earlier.', 'priority': 'high'},
+                        {'title': 'Add 20% Scope Buffer to Estimates', 'description': 'Based on this project\'s growth pattern, include a 20% task buffer in future project estimates to account for requirements discovery.', 'priority': 'medium'},
+                        {'title': 'Bi-weekly Scope Health Check', 'description': 'Schedule bi-weekly scope reviews comparing current task count against baseline to catch drift early.', 'priority': 'medium'},
+                        {'title': 'Stakeholder Feedback Integration Windows', 'description': 'Define specific sprint review windows where stakeholder feedback can add scope, rather than ad-hoc additions throughout the project.', 'priority': 'low'},
+                    ],
+                    'board_snapshot': {
+                        'total_tasks': 30,
+                        'completed_tasks': 10,
+                        'phases': 3,
+                        'team_size': 3,
+                        'project_start': (now - timedelta(days=40)).strftime('%Y-%m-%d'),
+                    },
+                },
+            )
+
+            # Create timeline events
+            report.timeline_events.all().delete()
+            timeline_events = [
+                {
+                    'event_date': now - timedelta(days=35),
+                    'title': 'Project Kickoff — Baseline Set',
+                    'description': 'Initial project scope defined with 24 tasks across 3 phases. Baseline captured after Requirements Analysis & Planning completion.',
+                    'source_type': 'task_added',
+                    'tasks_added': 24, 'tasks_removed': 0, 'net_task_change': 0,
+                    'added_by': alex,
+                    'estimated_delay_days': 0,
+                    'estimated_budget_impact': Decimal('0'),
+                    'cumulative_task_count': 24,
+                    'is_major_event': True,
+                },
+                {
+                    'event_date': now - timedelta(days=28),
+                    'title': 'API Rate Limiting Added',
+                    'description': 'During security architecture review, the team identified that API rate limiting was missing from the original scope. Added as a high-priority task to prevent abuse.',
+                    'source_type': 'scope_alert',
+                    'tasks_added': 1, 'tasks_removed': 0, 'net_task_change': 1,
+                    'added_by': sam,
+                    'estimated_delay_days': 2,
+                    'estimated_budget_impact': Decimal('3200.00'),
+                    'cumulative_task_count': 25,
+                    'is_major_event': False,
+                },
+                {
+                    'event_date': now - timedelta(days=23),
+                    'title': 'Integration Testing Suite Expanded',
+                    'description': 'Sprint retrospective revealed gaps in test coverage. Integration Testing Suite added to ensure cross-module compatibility before release.',
+                    'source_type': 'meeting',
+                    'tasks_added': 1, 'tasks_removed': 0, 'net_task_change': 1,
+                    'added_by': jordan,
+                    'estimated_delay_days': 2,
+                    'estimated_budget_impact': Decimal('2800.00'),
+                    'cumulative_task_count': 26,
+                    'is_major_event': False,
+                },
+                {
+                    'event_date': now - timedelta(days=18),
+                    'title': 'Security Audit & Load Testing Added',
+                    'description': 'Stakeholder review meeting raised concerns about production readiness. Two new tasks added: Security Audit & Fixes and Load Testing & Optimization.',
+                    'source_type': 'meeting',
+                    'tasks_added': 2, 'tasks_removed': 0, 'net_task_change': 2,
+                    'added_by': alex,
+                    'estimated_delay_days': 5,
+                    'estimated_budget_impact': Decimal('7500.00'),
+                    'cumulative_task_count': 28,
+                    'is_major_event': True,
+                },
+                {
+                    'event_date': now - timedelta(days=12),
+                    'title': 'Accessibility Compliance Requirement',
+                    'description': 'Legal team flagged WCAG 2.1 compliance as a requirement for enterprise clients. Accessibility Compliance task added to Phase 3.',
+                    'source_type': 'scope_alert',
+                    'tasks_added': 1, 'tasks_removed': 0, 'net_task_change': 1,
+                    'added_by': alex,
+                    'estimated_delay_days': 2,
+                    'estimated_budget_impact': Decimal('3000.00'),
+                    'cumulative_task_count': 29,
+                    'is_major_event': False,
+                },
+                {
+                    'event_date': now - timedelta(days=7),
+                    'title': 'Error Tracking & Monitoring Added',
+                    'description': 'After a production incident on a related project, the team proactively added Error Tracking & Monitoring to ensure observability from day one.',
+                    'source_type': 'ai_suggestion',
+                    'tasks_added': 1, 'tasks_removed': 0, 'net_task_change': 1,
+                    'added_by': sam,
+                    'estimated_delay_days': 1,
+                    'estimated_budget_impact': Decimal('2000.00'),
+                    'cumulative_task_count': 30,
+                    'is_major_event': False,
+                },
+            ]
+
+            for evt in timeline_events:
+                ScopeTimelineEvent.objects.create(report=report, **evt)
+
+            stats['scope_autopsies'] += 1
+            self.stdout.write('   ✓ Scope Autopsy Report created')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ Scope Autopsy: {e}'))
+
+        # -----------------------------------------------------------------
+        # 6. EXIT PROTOCOL (Cemetery entry for a demo "dead" project)
+        #    NOTE: We create a CemeteryEntry on the Bug Tracking board
+        #    to show the cemetery feature. We do NOT create a HospiceSession
+        #    on the Software Development board (that would mark it as dying).
+        # -----------------------------------------------------------------
+        try:
+            from exit_protocol.models import (
+                ProjectHealthSignal, CemeteryEntry,
+            )
+
+            # Create health signals on the Software Development board for context
+            ProjectHealthSignal.objects.filter(board=board).delete()
+            signal_data = [
+                {'days_ago': 14, 'velocity_last_sprint': 5.0, 'velocity_3sprint_avg': 4.8, 'velocity_decline_pct': 0, 'budget_spent_pct': 45, 'tasks_complete_pct': 33, 'deadlines_missed_30d': 0, 'days_since_last_activity': 0, 'dimensions_available': 4, 'hospice_risk_score': 0.15, 'score_is_valid': True},
+                {'days_ago': 7, 'velocity_last_sprint': 4.2, 'velocity_3sprint_avg': 4.5, 'velocity_decline_pct': 6.7, 'budget_spent_pct': 58, 'tasks_complete_pct': 40, 'deadlines_missed_30d': 1, 'days_since_last_activity': 0, 'dimensions_available': 4, 'hospice_risk_score': 0.25, 'score_is_valid': True},
+                {'days_ago': 0, 'velocity_last_sprint': 4.0, 'velocity_3sprint_avg': 4.4, 'velocity_decline_pct': 9.1, 'budget_spent_pct': 68, 'tasks_complete_pct': 47, 'deadlines_missed_30d': 2, 'days_since_last_activity': 0, 'dimensions_available': 4, 'hospice_risk_score': 0.30, 'score_is_valid': True},
+            ]
+            for sig in signal_data:
+                days_ago = sig.pop('days_ago')
+                health = ProjectHealthSignal.objects.create(board=board, **sig)
+                ProjectHealthSignal.objects.filter(pk=health.pk).update(
+                    recorded_at=now - timedelta(days=days_ago)
+                )
+
+            # Create a Cemetery Entry for the Bug Tracking board (if it exists)
+            # This gives users a "dead project" to explore in the cemetery
+            cemetery_board = self.bug_board
+            if cemetery_board:
+                CemeteryEntry.objects.filter(board=cemetery_board).delete()
+                CemeteryEntry.objects.create(
+                    board=cemetery_board,
+                    project_name='Legacy Bug Tracker v1',
+                    project_description='The original bug tracking system built on a monolithic architecture. Replaced by the new microservices-based Bug Tracking board after persistent scalability issues.',
+                    board_id_snapshot=cemetery_board.pk,
+                    team_size=4,
+                    total_tasks=45,
+                    completed_tasks=38,
+                    budget_allocated=Decimal('75000.00'),
+                    budget_spent=Decimal('82000.00'),
+                    start_date=(now - timedelta(days=180)).date(),
+                    end_date=(now - timedelta(days=15)).date(),
+                    cause_of_death='scope_creep_spiral',
+                    ai_cause_rationale=(
+                        'The Legacy Bug Tracker project experienced a classic scope creep spiral. '
+                        'What began as a simple defect tracking tool grew to include feature requests, '
+                        'sprint planning, and reporting capabilities — each addition stretching the '
+                        'monolithic architecture beyond its design limits. The final trigger was a '
+                        'database performance collapse when the bug count exceeded 10,000 records, '
+                        'revealing fundamental scaling limitations that could not be fixed without '
+                        'a complete rewrite.'
+                    ),
+                    contributing_factors=[
+                        'Monolithic architecture hit scaling ceiling at 10K records',
+                        'Scope expanded 3x from original requirements without architecture review',
+                        'Budget overrun of 9.3% ($7,000) with diminishing returns on new features',
+                        'Team morale declined as technical debt accumulated',
+                        'No automated testing — manual QA could not keep pace with changes',
+                    ],
+                    autopsy_report={
+                        'phases': [
+                            {'name': 'Launch (6 months ago)', 'health': 'green', 'notes': 'Strong start with clear scope and enthusiastic team'},
+                            {'name': 'Feature Expansion (4 months ago)', 'health': 'yellow', 'notes': 'Scope began growing. Sprint planning and reporting features added'},
+                            {'name': 'Performance Issues (2 months ago)', 'health': 'orange', 'notes': 'Database queries slowed. Team spent 40% of time on hotfixes'},
+                            {'name': 'Death Spiral (1 month ago)', 'health': 'red', 'notes': 'Critical performance failure. Decision to rebuild on microservices'},
+                        ],
+                        'final_velocity': 1.2,
+                        'peak_velocity': 5.8,
+                    },
+                    autopsy_summary=(
+                        'The Legacy Bug Tracker project achieved 84% task completion but ultimately '
+                        'failed due to architectural limitations that could not support the expanded '
+                        'scope. The project delivered significant value in its first 4 months but the '
+                        'decision to continuously add features without revisiting the architecture '
+                        'led to an unsustainable technical debt spiral. Key lesson: monolithic '
+                        'architectures need explicit scaling reviews when scope grows beyond 2x original.'
+                    ),
+                    lessons_to_repeat=[
+                        'Strong initial requirements gathering and team alignment',
+                        'Regular sprint retrospectives caught issues early (even if not always acted upon)',
+                        'Comprehensive bug categorization taxonomy proved valuable and was carried forward',
+                    ],
+                    lessons_to_avoid=[
+                        'Never expand scope 3x without an architecture review checkpoint',
+                        'Establish performance budgets and load test regularly from sprint 2 onwards',
+                        'Do not defer automated testing — manual QA does not scale',
+                        'Set hard budget gates that trigger automatic scope review',
+                    ],
+                    open_questions=[
+                        'Should we have pivoted to microservices earlier, or was the monolith the right choice for the MVP phase?',
+                        'Could the project have been saved with a dedicated performance engineer?',
+                    ],
+                    decline_timeline=[
+                        {'week': 1, 'score': 95}, {'week': 4, 'score': 90},
+                        {'week': 8, 'score': 82}, {'week': 12, 'score': 70},
+                        {'week': 16, 'score': 55}, {'week': 20, 'score': 35},
+                        {'week': 24, 'score': 15},
+                    ],
+                    tags=['monolith', 'scope-creep', 'scaling', 'technical-debt', 'performance'],
+                )
+                stats['exit_protocol'] += 1
+                self.stdout.write('   ✓ Exit Protocol (Cemetery Entry + Health Signals) created')
+            else:
+                self.stdout.write('   ⚠️ Bug Tracking board not found — skipping Cemetery Entry')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ Exit Protocol: {e}'))
+
+        return stats
+
     def print_final_summary(self):
         """Print final summary of all demo data"""
         self.stdout.write(self.style.SUCCESS('\n' + '=' * 80))
@@ -2085,6 +2993,38 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
         commitment_signals = ConfidenceSignal.objects.filter(protocol__board__in=self.demo_boards).count()
         commitment_bets = CommitmentBet.objects.filter(protocol__board__in=self.demo_boards).count()
         
+        # AI Tools counts
+        try:
+            from kanban.whatif_models import WhatIfScenario
+            whatif_count = WhatIfScenario.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            whatif_count = 0
+        try:
+            from kanban.shadow_models import ShadowBranch
+            shadow_count = ShadowBranch.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            shadow_count = 0
+        try:
+            from kanban.premortem_models import PreMortemAnalysis
+            premortem_count = PreMortemAnalysis.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            premortem_count = 0
+        try:
+            from kanban.stress_test_models import StressTestSession
+            stress_count = StressTestSession.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            stress_count = 0
+        try:
+            from kanban.scope_autopsy_models import ScopeAutopsyReport
+            autopsy_count = ScopeAutopsyReport.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            autopsy_count = 0
+        try:
+            from exit_protocol.models import CemeteryEntry
+            cemetery_count = CemeteryEntry.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            cemetery_count = 0
+
         self.stdout.write(f'''
 📊 Demo Data Summary:
    ├── Tasks: {task_count}
@@ -2096,7 +3036,8 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
    │   ├── Knowledge Base: {kb_entries} entries
    │   └── Recommendations: {ai_recommendations}
    ├── Time Entries: {time_entries}
-   └── Commitments: {commitment_protocols} protocols, {commitment_signals} signals, {commitment_bets} bets
+   ├── Commitments: {commitment_protocols} protocols, {commitment_signals} signals, {commitment_bets} bets
+   └── AI Tools: {whatif_count} What-If, {shadow_count} Shadow Branches, {premortem_count} Pre-Mortem, {stress_count} Stress Tests, {autopsy_count} Scope Autopsies, {cemetery_count} Cemetery Entries
 
 🎉 Demo environment is now fully populated!
 
