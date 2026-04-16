@@ -2195,6 +2195,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'before': {'completion_date': (now + timedelta(days=38)).strftime('%Y-%m-%d'), 'workload_per_member': 6.7, 'risk_level': 'medium'},
                         'after': {'completion_date': (now + timedelta(days=52)).strftime('%Y-%m-%d'), 'workload_per_member': 9.3, 'risk_level': 'high'},
                         'delta': {'days_added': 14, 'workload_increase_pct': 39, 'risk_escalation': True},
+                        'feasibility_score': 0.55,
                     },
                     'ai_analysis': {
                         'summary': 'Adding 8 mobile app tasks will push the projected completion by ~2 weeks. The current team velocity of 4.2 tasks/week means the new scope requires roughly 2 additional sprints. Consider adding a mobile-focused developer or deferring the mobile module to Phase 2.',
@@ -2224,6 +2225,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'before': {'completion_date': (now + timedelta(days=38)).strftime('%Y-%m-%d'), 'workload_per_member': 6.7, 'risk_level': 'medium'},
                         'after': {'completion_date': (now + timedelta(days=55)).strftime('%Y-%m-%d'), 'workload_per_member': 10.0, 'risk_level': 'high'},
                         'delta': {'days_added': 17, 'workload_increase_pct': 49, 'risk_escalation': True},
+                        'feasibility_score': 0.40,
                     },
                     'ai_analysis': {
                         'summary': 'Losing one team member drops velocity from 4.2 to ~2.8 tasks/week. The 20 remaining tasks would take an additional 2.5 weeks. Critical path items like Authentication System and Database Schema currently assigned to Sam Rivera would need redistribution.',
@@ -2253,6 +2255,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'before': {'completion_date': (now + timedelta(days=38)).strftime('%Y-%m-%d'), 'workload_per_member': 6.7, 'risk_level': 'medium'},
                         'after': {'completion_date': (now + timedelta(days=51)).strftime('%Y-%m-%d'), 'workload_per_member': 8.0, 'risk_level': 'low'},
                         'delta': {'days_added': 13, 'workload_increase_pct': 19, 'risk_escalation': False},
+                        'feasibility_score': 0.78,
                     },
                     'ai_analysis': {
                         'summary': 'This is the safest combined option. Adding 4 QA tasks with a 3-week deadline extension keeps workload within sustainable limits. The extra time allows for comprehensive integration testing, security audits, and performance optimization without rushing the team.',
@@ -2417,63 +2420,47 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
         try:
             from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 
-            analysis_json = [
-                {
-                    'scenario_number': 1,
-                    'title': 'Authentication System Breach',
-                    'probability': 'medium',
-                    'impact': 'critical',
-                    'risk_score': 8,
-                    'failure_story': 'Six weeks after launch, a security researcher discovers that the JWT token refresh mechanism has a race condition allowing token reuse after revocation. Attackers exploit this to maintain persistent sessions. The team scrambles to patch the vulnerability while managing a public disclosure timeline.',
-                    'warning_signs': ['Authentication testing suite still at 0% completion', 'Security architecture patterns completed but not validated against OWASP Top 10', 'No penetration testing scheduled before launch'],
-                    'prevention_steps': ['Prioritize Authentication Testing Suite (Task #8) immediately', 'Schedule external security audit before go-live', 'Implement token blacklisting with Redis-backed store'],
-                    'affected_tasks': ['Authentication System', 'Authentication Testing Suite', 'Security Audit & Fixes'],
-                },
-                {
-                    'scenario_number': 2,
-                    'title': 'Database Migration Catastrophe',
-                    'probability': 'medium',
-                    'impact': 'high',
-                    'risk_score': 7,
-                    'failure_story': 'During the first production deployment, the database migration fails halfway through due to incompatible schema changes. The rollback script has never been tested. Production data is in an inconsistent state for 6 hours while the team manually repairs tables.',
-                    'warning_signs': ['Database Schema & Migrations task only at 40% with complex dependencies', 'No rollback procedure documented', 'Migration testing not included in CI/CD pipeline'],
-                    'prevention_steps': ['Complete Database Schema task with rollback scripts for each migration', 'Add migration dry-run step to deployment pipeline', 'Test migration on production-size dataset copy'],
-                    'affected_tasks': ['Database Schema & Migrations', 'Deployment Automation', 'Integration Testing Suite'],
-                },
-                {
-                    'scenario_number': 3,
-                    'title': 'Real-time Collaboration Performance Collapse',
-                    'probability': 'high',
-                    'impact': 'medium',
-                    'risk_score': 6,
-                    'failure_story': 'The real-time collaboration feature works fine in development with 3 users but collapses under 50 concurrent connections. WebSocket connections leak memory, and the message queue backs up causing 30-second delays. Users abandon the feature and revert to email.',
-                    'warning_signs': ['Real-time Collaboration task not yet started (0%)', 'Data Caching Layer not implemented — no read-through cache for frequently accessed data', 'Load Testing task still in backlog'],
-                    'prevention_steps': ['Begin Data Caching Layer before Real-time Collaboration', 'Set up load testing infrastructure early', 'Implement connection pooling and backpressure mechanisms'],
-                    'affected_tasks': ['Real-time Collaboration', 'Data Caching Layer', 'Load Testing & Optimization'],
-                },
-                {
-                    'scenario_number': 4,
-                    'title': 'Key Developer Departure',
-                    'probability': 'low',
-                    'impact': 'critical',
-                    'risk_score': 7,
-                    'failure_story': 'Sam Rivera, who owns the majority of critical-path backend tasks (Base API, Authentication, Search Engine, API Rate Limiting), receives an offer and gives 2-week notice. The remaining team cannot maintain velocity on highly specialized code. Launch is delayed by 6 weeks.',
-                    'warning_signs': ['Heavy task concentration on single team member (12 of 30 tasks)', 'Incomplete documentation of architectural decisions', 'No cross-training sessions scheduled'],
-                    'prevention_steps': ['Distribute critical-path knowledge via pair programming sessions', 'Ensure Project Documentation Setup captures all architectural decisions', 'Cross-train Jordan on API and authentication patterns'],
-                    'affected_tasks': ['Base API Structure', 'Authentication System', 'Search & Indexing Engine', 'API Rate Limiting'],
-                },
-                {
-                    'scenario_number': 5,
-                    'title': 'Scope Creep Through Feature Requests',
-                    'probability': 'high',
-                    'impact': 'medium',
-                    'risk_score': 5,
-                    'failure_story': 'Stakeholders begin requesting "just one more feature" during the In Review phase. Each small addition seems manageable individually, but collectively they add 40% more scope. The team burns out trying to accommodate changes while maintaining the original deadline. Quality drops, bugs multiply.',
-                    'warning_signs': ['No formal change request process in place', 'User Onboarding Flow and UI/UX Polish tasks have vague acceptance criteria', 'Core Features Code Review marked urgent but not started'],
-                    'prevention_steps': ['Implement a formal scope change request process with impact analysis', 'Define clear acceptance criteria for all Phase 3 tasks', 'Set a feature freeze date 2 weeks before launch'],
-                    'affected_tasks': ['User Onboarding Flow', 'UI/UX Polish', 'Core Features Code Review', 'Launch & Go-Live'],
-                },
-            ]
+            analysis_json = {
+                'failure_scenarios': [
+                    {
+                        'title': 'Authentication System Breach',
+                        'probability': 'Medium',
+                        'description': 'Six weeks after launch, a security researcher discovers that the JWT token refresh mechanism has a race condition allowing token reuse after revocation. The authentication testing suite is still at 0% completion and security architecture patterns have not been validated against OWASP Top 10. No penetration testing is scheduled before launch.',
+                        'early_warning_sign': 'Authentication testing suite still at 0% completion with no assignee actively working on it',
+                        'prevention_action': 'Prioritize Authentication Testing Suite immediately and schedule an external security audit before go-live',
+                    },
+                    {
+                        'title': 'Database Migration Catastrophe',
+                        'probability': 'Medium',
+                        'description': 'During the first production deployment, the database migration fails halfway through due to incompatible schema changes. The rollback script has never been tested. Production data is in an inconsistent state for 6 hours while the team manually repairs tables. The Database Schema & Migrations task is only at 40% with complex dependencies.',
+                        'early_warning_sign': 'Database Schema & Migrations task stalled at 40% with no rollback procedure documented',
+                        'prevention_action': 'Complete Database Schema task with rollback scripts for each migration and add migration dry-run step to deployment pipeline',
+                    },
+                    {
+                        'title': 'Real-time Collaboration Performance Collapse',
+                        'probability': 'High',
+                        'description': 'The real-time collaboration feature works fine in development with 3 users but collapses under 50 concurrent connections. WebSocket connections leak memory, and the message queue backs up causing 30-second delays. The Data Caching Layer is not implemented and Load Testing is still in the backlog.',
+                        'early_warning_sign': 'Real-time Collaboration task not yet started while Data Caching Layer dependency remains at 0%',
+                        'prevention_action': 'Begin Data Caching Layer before Real-time Collaboration and set up load testing infrastructure early',
+                    },
+                    {
+                        'title': 'Key Developer Departure',
+                        'probability': 'Low',
+                        'description': 'Sam Rivera, who owns 12 of 30 tasks including critical-path backend work (Base API, Authentication, Search Engine, API Rate Limiting), could depart with 2-week notice. The remaining team cannot maintain velocity on highly specialized code with incomplete architectural documentation.',
+                        'early_warning_sign': 'Heavy task concentration on single team member with incomplete documentation of architectural decisions',
+                        'prevention_action': 'Distribute critical-path knowledge via pair programming sessions and ensure Project Documentation captures all architectural decisions',
+                    },
+                    {
+                        'title': 'Scope Creep Through Feature Requests',
+                        'probability': 'High',
+                        'description': 'Stakeholders begin requesting "just one more feature" during the In Review phase. Each small addition seems manageable individually, but collectively they add 40% more scope. The team burns out trying to accommodate changes while maintaining the original deadline. Quality drops and bugs multiply.',
+                        'early_warning_sign': 'No formal change request process in place with User Onboarding and UI/UX Polish tasks having vague acceptance criteria',
+                        'prevention_action': 'Implement a formal scope change request process with impact analysis and set a feature freeze date 2 weeks before launch',
+                    },
+                ],
+                'overall_risk_level': 'High',
+                'confidence_note': 'Analysis based on current task distribution and progress metrics. Team velocity assumptions may vary based on sprint-to-sprint variance.',
+            }
 
             premortem, _ = PreMortemAnalysis.objects.update_or_create(
                 board=board,
@@ -2761,10 +2748,10 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'mitigated with a more thorough initial security threat modeling exercise.'
                     ),
                     'recommendations': [
-                        {'title': 'Implement Security Threat Modeling in Phase 1', 'description': 'Add a dedicated security threat modeling session during the Requirements Analysis phase to surface security tasks earlier.', 'priority': 'high'},
-                        {'title': 'Add 20% Scope Buffer to Estimates', 'description': 'Based on this project\'s growth pattern, include a 20% task buffer in future project estimates to account for requirements discovery.', 'priority': 'medium'},
-                        {'title': 'Bi-weekly Scope Health Check', 'description': 'Schedule bi-weekly scope reviews comparing current task count against baseline to catch drift early.', 'priority': 'medium'},
-                        {'title': 'Stakeholder Feedback Integration Windows', 'description': 'Define specific sprint review windows where stakeholder feedback can add scope, rather than ad-hoc additions throughout the project.', 'priority': 'low'},
+                        {'title': 'Implement Security Threat Modeling in Phase 1', 'description': 'Add a dedicated security threat modeling session during the Requirements Analysis phase to surface security tasks earlier.', 'applies_to': 'planning'},
+                        {'title': 'Add 20% Scope Buffer to Estimates', 'description': 'Based on this project\'s growth pattern, include a 20% task buffer in future project estimates to account for requirements discovery.', 'applies_to': 'planning'},
+                        {'title': 'Bi-weekly Scope Health Check', 'description': 'Schedule bi-weekly scope reviews comparing current task count against baseline to catch drift early.', 'applies_to': 'execution'},
+                        {'title': 'Stakeholder Feedback Integration Windows', 'description': 'Define specific sprint review windows where stakeholder feedback can add scope, rather than ad-hoc additions throughout the project.', 'applies_to': 'stakeholder_management'},
                     ],
                     'board_snapshot': {
                         'total_tasks': 30,
@@ -2954,10 +2941,13 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'Could the project have been saved with a dedicated performance engineer?',
                     ],
                     decline_timeline=[
-                        {'week': 1, 'score': 95}, {'week': 4, 'score': 90},
-                        {'week': 8, 'score': 82}, {'week': 12, 'score': 70},
-                        {'week': 16, 'score': 55}, {'week': 20, 'score': 35},
-                        {'week': 24, 'score': 15},
+                        {'date': (now - timedelta(days=180)).strftime('%Y-%m-%d'), 'severity': 5, 'event': 'Project launched with strong momentum'},
+                        {'date': (now - timedelta(days=150)).strftime('%Y-%m-%d'), 'severity': 10, 'event': 'First signs of scope creep — sprint planning feature requested'},
+                        {'date': (now - timedelta(days=120)).strftime('%Y-%m-%d'), 'severity': 18, 'event': 'Reporting features added, architecture strain visible'},
+                        {'date': (now - timedelta(days=90)).strftime('%Y-%m-%d'), 'severity': 30, 'event': 'Database queries slowing, team spending 40% on hotfixes'},
+                        {'date': (now - timedelta(days=60)).strftime('%Y-%m-%d'), 'severity': 45, 'event': 'Performance collapse at 10K records, budget overrun begins'},
+                        {'date': (now - timedelta(days=30)).strftime('%Y-%m-%d'), 'severity': 65, 'event': 'Team morale plummets, velocity drops to 1.2 tasks/week'},
+                        {'date': (now - timedelta(days=15)).strftime('%Y-%m-%d'), 'severity': 85, 'event': 'Decision to rebuild on microservices — project declared dead'},
                     ],
                     tags=['monolith', 'scope-creep', 'scaling', 'technical-debt', 'performance'],
                 )
