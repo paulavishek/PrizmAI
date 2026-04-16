@@ -416,37 +416,21 @@ function generateRecommendations() {
     const btn = event.target.closest('button');
     btn.disabled = true;
 
-    const messages = [
-        'Analyzing budget data...',
-        'Reviewing cost breakdowns...',
-        'Evaluating burn rate trends...',
-        'Identifying cost overruns...',
-        'Comparing estimated vs actual costs...',
-        'Assessing task-level variances...',
-        'Analyzing resource utilization...',
-        'Evaluating project risk factors...',
-        'Generating optimization strategies...',
-        'Preparing actionable recommendations...',
-        'Finalizing AI insights...',
-    ];
-
-    let msgIndex = 0;
+    var msgs = PrizmLoading.messages.budget;
+    var msgIndex = 0;
     btn.style.color = '#ffffff';
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="animation: fa-spin 1s linear infinite;"></i> ' + messages[msgIndex];
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + msgs[0];
 
-    // Calculate interval: distribute remaining messages across ~55 seconds
-    // First message shows immediately, rotate through the rest before ~60s
-    const totalDuration = 55000; // 55 seconds to cycle through
-    const interval = Math.floor(totalDuration / (messages.length - 1));
-    let rotateTimer = null;
+    var totalDuration = 55000;
+    var interval = Math.floor(totalDuration / (msgs.length - 1));
+    var rotateTimer = null;
 
     function advanceMessage() {
         msgIndex++;
-        if (msgIndex < messages.length) {
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="animation: fa-spin 1s linear infinite;"></i> ' + messages[msgIndex];
+        if (msgIndex < msgs.length) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + msgs[msgIndex];
         }
-        // Stop at the last message — don't repeat
-        if (msgIndex >= messages.length - 1) {
+        if (msgIndex >= msgs.length - 1) {
             clearInterval(rotateTimer);
         }
     }

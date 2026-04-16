@@ -124,7 +124,7 @@
                                 <div class="spinner-border spinner-border-sm text-primary" role="status">
                                     <span class="visually-hidden">Loading...</span>
                                 </div>
-                                <span class="ms-2 text-muted">Generating description with AI...</span>
+                                <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="aiDescription">Generating description with AI…</span>
                             </div>
                             {% if form.description.errors %}
                                 <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
@@ -535,7 +535,7 @@
                                     <div class="spinner-border spinner-border-sm text-success" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="complexity">Analyzing task complexity…</span>
                                 </div>
                                 <div id="task-breakdown-result" class="d-none mt-2"></div>
                             </div>
@@ -610,7 +610,7 @@
                                     <div class="spinner-border spinner-border-sm text-primary" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Analyzing with AI...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="classification">Analyzing with AI…</span>
                                 </div>
                                 <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
                                     <div class="d-flex align-items-start">
@@ -659,7 +659,7 @@
                                     <div class="spinner-border spinner-border-sm text-info" role="status">
                                         <span class="visually-hidden">Analyzing team members...</span>
                                     </div>
-                                    <span class="ms-2 text-muted"><i class="fas fa-wand-magic-sparkles me-1"></i>Analyzing team skills, workload & performance...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="assignee"><i class="fas fa-wand-magic-sparkles me-1"></i>Analyzing team skills, workload & performance…</span>
                                 </div>
                                 <div id="assignee-suggestion-result" class="d-none mt-2"></div>
                                 {% if task.assigned_to %}
@@ -694,7 +694,7 @@
                                     <div class="spinner-border spinner-border-sm text-warning" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Analyzing optimal priority...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="priority">Analyzing optimal priority…</span>
                                 </div>
                                 {% if task.priority %}
                                 <div class="p-2 bg-light rounded mt-2">
@@ -726,7 +726,7 @@
                                     <div class="spinner-border spinner-border-sm text-info" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Predicting optimal deadline...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="deadline">Predicting optimal deadline…</span>
                                 </div>
                                 <div id="deadline-prediction-result" class="d-none mt-2"></div>
                                 {% if task.due_date %}
@@ -760,7 +760,7 @@
                                     <div class="spinner-border spinner-border-sm text-primary" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Generating comprehensive summary...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="summary">Generating comprehensive summary…</span>
                                 </div>
                                 <div id="task-summary-result" class="mt-2">
                                     {% if task.ai_summary %}
@@ -812,7 +812,7 @@
                                                 <div class="spinner-border spinner-border-sm text-primary" role="status">
                                                     <span class="visually-hidden">Loading...</span>
                                                 </div>
-                                                <span class="ms-2 text-muted">Generating summary...</span>
+                                                <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="summary">Generating summary…</span>
                                             </div>
                                         </div>
                                     </div>
@@ -3649,10 +3649,8 @@
                     </div>
                     <div class="modal-body" id="stakeholder-suggestions-body">
                         <div class="text-center py-4">
-                            <div class="spinner-border text-info" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-3">Analyzing task and identifying relevant stakeholders...</p>
+                            <div class="prizm-spinner"></div>
+                            <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="stakeholder">Identifying relevant stakeholders…</p>
                         </div>
                     </div>
                     <div class="modal-footer">

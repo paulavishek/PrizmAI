@@ -117,6 +117,10 @@
                     <i class="fas fa-magic me-2"></i>Generate Status Report
                 </button>
             </div>
+            <div id="status-report-loading" class="text-center mb-3" style="display:none;" data-prizm-container>
+                <div class="prizm-spinner prizm-spinner--sm"></div>
+                <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="statusReport">Generating status report…</span>
+            </div>
         </form>
         {% endif %}
 
@@ -208,6 +212,8 @@ if (reportForm) {
         var btn = document.getElementById('generate-btn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
+        var loadingEl = document.getElementById('status-report-loading');
+        if (loadingEl) loadingEl.style.display = '';
     });
 }
 

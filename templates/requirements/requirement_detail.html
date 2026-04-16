@@ -379,30 +379,12 @@ var _activeTimers = {};
 
 function _startLoadingMessages(contentEl, type) {
     var msgs = _loadingMessages[type];
-    var idx = 0;
-    contentEl.innerHTML = '<div class="text-center py-3"><div class="mb-2"><i class="fas fa-spinner fa-spin me-1" style="color:#6f42c1;"></i></div><div class="text-muted small" id="loadMsg_' + type + '">' + _esc(msgs[0]) + '</div></div>';
-    _activeTimers[type] = setInterval(function() {
-        idx++;
-        if (idx >= msgs.length) {
-            clearInterval(_activeTimers[type]);
-            return;
-        }
-        var el = document.getElementById('loadMsg_' + type);
-        if (el) {
-            el.style.opacity = '0';
-            setTimeout(function() {
-                el.textContent = msgs[idx];
-                el.style.opacity = '1';
-            }, 200);
-        }
-    }, 4000);
-}
-
+      contentEl.innerHTML = '<div class="text-center py-3"><div class="mb-2"><div class="prizm-spinner prizm-spinner--sm"></div></div><div class="prizm-loading-message-inline" id="loadMsg_' + type + '">' + _esc(msgs[0]) + '</div></div>';
+      var el = document.getElementById('loadMsg_' + type);
+      if (el) _activeTimers[type] = PrizmLoading.rotateMessages(el, msgs, 40000);
 function _stopLoadingMessages(type) {
     if (_activeTimers[type]) {
-        clearInterval(_activeTimers[type]);
-        delete _activeTimers[type];
-    }
+          _activeTimers[type].stop();
 }
 
 function _post(url) {

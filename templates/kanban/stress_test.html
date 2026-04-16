@@ -186,11 +186,9 @@
     {% endif %}
 
     <!-- Loading spinner (hidden by default) -->
-    <div id="stress-test-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Running stress test…</span>
-        </div>
-        <p class="mt-3 text-muted">Red Team AI is attacking your project plan… this takes 15-20 seconds.</p>
+    <div id="stress-test-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
+        <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="stressTest">Running stress test scenarios…</p>
     </div>
 
     {% if not session %}

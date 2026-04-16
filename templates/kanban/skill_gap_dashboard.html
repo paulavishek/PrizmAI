@@ -1368,62 +1368,18 @@
     };
 
     // Utility functions
-    const analysisMessages = [
-        'Scanning task requirements...',
-        'Extracting skills from task descriptions using AI...',
-        'Comparing team capabilities vs task demands...',
-        'Evaluating proficiency levels across the team...',
-        'Identifying coverage gaps and risk areas...',
-        'Calculating severity and priority of gaps...',
-        'Building skill matrix and gap report...',
-        'Generating AI-powered recommendations...',
-        'Almost there — finalizing analysis...'
-    ];
-    let _loadingMsgInterval = null;
+    var _skillGapHandle = null;
 
     window.showLoadingOverlay = function(message) {
-        const overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        overlay.style.zIndex = '9999';
-        overlay.innerHTML = `
-            <div class="text-center text-white">
-                <div class="spinner-border mb-3" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p id="loadingOverlayMsg" style="transition: opacity 0.3s ease;">${message}</p>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-
-        // Start rotating messages — no repeats, stop on the last one
-        let msgIndex = 0;
-        _loadingMsgInterval = setInterval(() => {
-            const msgEl = document.getElementById('loadingOverlayMsg');
-            if (!msgEl) { clearInterval(_loadingMsgInterval); return; }
-            if (msgIndex >= analysisMessages.length) {
-                clearInterval(_loadingMsgInterval);
-                return;
-            }
-            msgEl.style.opacity = '0';
-            const idx = msgIndex;
-            setTimeout(() => {
-                msgEl.textContent = analysisMessages[idx];
-                msgEl.style.opacity = '1';
-            }, 300);
-            msgIndex++;
-        }, 7000);
+        _skillGapHandle = PrizmLoading.showOverlay(null, {
+            messages: PrizmLoading.messages.skillGap
+        });
     };
 
     window.hideLoadingOverlay = function() {
-        if (_loadingMsgInterval) {
-            clearInterval(_loadingMsgInterval);
-            _loadingMsgInterval = null;
-        }
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.remove();
+        if (_skillGapHandle) {
+            _skillGapHandle.remove();
+            _skillGapHandle = null;
         }
     };
 

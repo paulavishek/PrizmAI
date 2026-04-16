@@ -365,9 +365,15 @@
                         </form>
                     {% else %}
                         <div class="text-center py-4">
-                            <i class="fas fa-spinner fa-spin fa-3x text-muted mb-3"></i>
-                            <p class="text-muted">Generating AI suggestions...</p>
+                            <div class="prizm-spinner prizm-spinner--lg"></div>
+                            <p class="mt-3 prizm-loading-message-inline" id="conflict-gen-msg">Generating AI resolution suggestions…</p>
                         </div>
+                        <script>
+                            (function() {
+                                var el = document.getElementById('conflict-gen-msg');
+                                if (el) PrizmLoading.rotateMessages(el, PrizmLoading.messages.conflictResolution);
+                            })();
+                        </script>
                     {% endif %}
                 </div>
             </div>

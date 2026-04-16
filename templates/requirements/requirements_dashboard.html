@@ -238,7 +238,8 @@ function runGapAnalysis() {
     var box = document.getElementById('gapAnalysisResult');
     var content = document.getElementById('gapAnalysisContent');
     box.style.display = '';
-    content.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Running AI gap analysis...</div>';
+    content.innerHTML = '<div class="text-center py-3"><div class="prizm-spinner prizm-spinner--sm mb-2"></div><div class="prizm-loading-message-inline" id="gapLoadMsg">Running AI gap analysis\u2026</div></div>';
+    if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('gapLoadMsg'), PrizmLoading.messages.requirementGap);
 
     var csrfToken = '{{ csrf_token }}';
     fetch('{% url "requirements:ai_gap_analysis" board.id %}', {
