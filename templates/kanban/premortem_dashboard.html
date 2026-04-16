@@ -93,11 +93,9 @@
     </div>
 
     <!-- Loading spinner (hidden by default) -->
-    <div id="premortem-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-danger" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
-        <p class="mt-3 text-muted">AI is simulating failure scenarios… this takes 10-15 seconds.</p>
+    <div id="premortem-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
+        <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="premortem">Analyzing project risks…</p>
     </div>
 
     <!-- Results container (populated by JS after run) -->
@@ -171,11 +169,9 @@
     {% endif %}
 
     <!-- Loading spinner for re-runs (hidden by default) -->
-    <div id="premortem-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-danger" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
-        <p class="mt-3 text-muted">AI is simulating failure scenarios… this takes 10-15 seconds.</p>
+    <div id="premortem-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
+        <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="premortem">Analyzing project risks…</p>
     </div>
 
     <!-- Scenario Cards -->

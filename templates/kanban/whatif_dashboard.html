@@ -248,9 +248,9 @@
     <div id="impact-panel">
 
         <!-- Loading -->
-        <div id="impact-loading" class="text-center py-5" style="display:none;">
-            <div class="spinner-border text-info" role="status"></div>
-            <p class="mt-2 text-muted">Running scenario simulation&hellip;</p>
+        <div id="impact-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+            <div class="prizm-spinner"></div>
+            <p class="mt-2 prizm-loading-message-inline" data-prizm-messages="whatif">Running scenario simulation…</p>
         </div>
 
         <!-- Results -->
@@ -315,9 +315,9 @@
                         <i class="fas fa-wand-magic-sparkles me-2"></i> Generate AI Recommendation
                     </button>
                 </div>
-                <div id="ai-loading" class="text-center py-4" style="display:none;">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Running AI analysis&hellip;</p>
+                <div id="ai-loading" class="text-center py-4" style="display:none;" data-prizm-container>
+                    <div class="prizm-spinner"></div>
+                    <p class="mt-2 prizm-loading-message-inline" data-prizm-messages="whatif">Running AI analysis…</p>
                 </div>
                 <div id="ai-result-card" class="card ai-card mb-4" style="display:none;">
                     <div class="card-header py-3">

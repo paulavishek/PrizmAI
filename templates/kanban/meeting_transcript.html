@@ -210,11 +210,9 @@
         <div class="col-12">
             <div class="card shadow border-left-info">
                 <div class="card-body text-center processing-animation">
-                    <div class="spinner-border text-info mb-3" role="status">
-                        <span class="visually-hidden">Processing...</span>
-                    </div>
-                    <h5>AI is analyzing your meeting transcript...</h5>
-                    <p class="text-muted">This may take a few moments as we extract actionable tasks and context.</p>
+                    <div class="prizm-spinner"></div>
+                    <h5 class="mt-3 prizm-loading-message-inline" data-prizm-messages="meetingTranscript">AI is analyzing your meeting transcript…</h5>
+                    <p class="prizm-loading-message-inline" style="font-size:0.85rem;">This may take a few moments as we extract actionable tasks and context.</p>
                     <div class="progress mt-3" style="height: 6px;">
                         <div class="progress-bar progress-bar-striped progress-bar-animated" 
                              role="progressbar" style="width: 100%"></div>
