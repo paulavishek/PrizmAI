@@ -236,6 +236,16 @@ class Command(BaseCommand):
                 f'{ai_tools_stats["exit_protocol"]} Exit Protocol entries'
             ))
 
+            # 11. Retrospective Demo Data
+            self.stdout.write(self.style.NOTICE('\n📋 PHASE 11: Creating Retrospective Demo Data...'))
+            retro_stats = self.create_retrospective_demo_data()
+            self.stdout.write(self.style.SUCCESS(
+                f'   ✅ Retrospectives: {retro_stats["retrospectives"]} retrospectives, '
+                f'{retro_stats["lessons"]} lessons, '
+                f'{retro_stats["actions"]} action items, '
+                f'{retro_stats["metrics"]} metrics'
+            ))
+
         # Final Summary
         self.print_final_summary()
 
@@ -2960,6 +2970,544 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
 
         return stats
 
+    def create_retrospective_demo_data(self):
+        """Create demo data for the Retrospectives feature on the Software Development board."""
+        from decimal import Decimal
+        from kanban.retrospective_models import (
+            ProjectRetrospective, LessonLearned, ImprovementMetric,
+            RetrospectiveActionItem, RetrospectiveTrend,
+        )
+
+        now = timezone.now()
+        today = now.date()
+        board = self.software_board
+        alex = self.alex
+        sam = self.sam
+        jordan = self.jordan
+
+        if not board:
+            self.stdout.write(self.style.WARNING('   ⚠️ Software Development board not found, skipping Retrospectives'))
+            return {'retrospectives': 0, 'lessons': 0, 'actions': 0, 'metrics': 0}
+
+        stats = {'retrospectives': 0, 'lessons': 0, 'actions': 0, 'metrics': 0}
+
+        try:
+            # -----------------------------------------------------------------
+            # RETROSPECTIVE 1: Sprint 1 — Foundation & Setup (finalized)
+            # -----------------------------------------------------------------
+            retro1, _ = ProjectRetrospective.objects.update_or_create(
+                board=board,
+                title='Sprint 1 Retrospective — Foundation & Setup',
+                defaults={
+                    'retrospective_type': 'sprint',
+                    'status': 'finalized',
+                    'period_start': today - timedelta(days=28),
+                    'period_end': today - timedelta(days=15),
+                    'metrics_snapshot': {
+                        'tasks_completed': 6,
+                        'tasks_planned': 8,
+                        'velocity': 3.0,
+                        'avg_cycle_time_days': 4.2,
+                        'defect_count': 2,
+                        'team_utilization': 78,
+                    },
+                    'what_went_well': (
+                        'The team demonstrated strong alignment during the Foundation & Setup phase. '
+                        'Requirements Analysis was completed ahead of schedule, and the Development '
+                        'Environment Setup went smoothly with minimal configuration issues. The '
+                        'System Architecture Design review received positive feedback from all '
+                        'stakeholders, establishing a solid technical foundation for the project.'
+                    ),
+                    'what_needs_improvement': (
+                        'Sprint planning underestimated the complexity of the Security Architecture '
+                        'Patterns task, which required more research than anticipated. The Database '
+                        'Schema & Migrations task stalled at 40% due to unclear requirements around '
+                        'data migration paths. Communication between backend and QA sub-teams could '
+                        'be improved — Jordan was blocked for 2 days waiting for API documentation.'
+                    ),
+                    'key_achievements': [
+                        'Completed Requirements Analysis & Planning ahead of schedule',
+                        'System Architecture Design approved by all stakeholders',
+                        'Development environment fully reproducible with Docker setup',
+                        'Security architecture patterns documented and peer-reviewed',
+                    ],
+                    'challenges_faced': [
+                        {'challenge': 'Security Architecture complexity underestimated', 'impact': 'medium', 'resolution': 'Added 2 extra days and brought in external review'},
+                        {'challenge': 'Database migration path unclear for legacy data', 'impact': 'high', 'resolution': 'Scheduled dedicated spike to map migration strategy'},
+                        {'challenge': 'QA blocked waiting for API documentation', 'impact': 'low', 'resolution': 'Instituted daily sync between backend and QA'},
+                    ],
+                    'improvement_recommendations': [
+                        'Add a spike task for any story estimated above 8 points',
+                        'Require API documentation before marking backend tasks as In Review',
+                        'Schedule mid-sprint checkpoint for tasks on critical path',
+                    ],
+                    'overall_sentiment_score': Decimal('0.72'),
+                    'team_morale_indicator': 'high',
+                    'performance_trend': 'insufficient_data',
+                    'ai_generated_at': now - timedelta(days=14),
+                    'ai_confidence_score': Decimal('0.82'),
+                    'ai_model_used': 'gemini-2.5-flash',
+                    'created_by': alex,
+                    'finalized_by': alex,
+                    'finalized_at': now - timedelta(days=13),
+                    'lessons_learned': [
+                        {'category': 'planning', 'lesson': 'Security tasks need dedicated estimation spikes'},
+                        {'category': 'communication', 'lesson': 'API docs should be a prerequisite for QA tasks'},
+                        {'category': 'technical', 'lesson': 'Docker-based dev setup significantly reduced onboarding time'},
+                    ],
+                },
+            )
+            # Fix timestamps
+            ProjectRetrospective.objects.filter(pk=retro1.pk).update(
+                created_at=now - timedelta(days=14),
+            )
+            stats['retrospectives'] += 1
+
+            # -----------------------------------------------------------------
+            # RETROSPECTIVE 2: Sprint 2 — Core Features (reviewed)
+            # -----------------------------------------------------------------
+            retro2, _ = ProjectRetrospective.objects.update_or_create(
+                board=board,
+                title='Sprint 2 Retrospective — Core Features',
+                defaults={
+                    'retrospective_type': 'sprint',
+                    'status': 'reviewed',
+                    'period_start': today - timedelta(days=14),
+                    'period_end': today - timedelta(days=1),
+                    'previous_retrospective': retro1,
+                    'metrics_snapshot': {
+                        'tasks_completed': 4,
+                        'tasks_planned': 10,
+                        'velocity': 4.2,
+                        'avg_cycle_time_days': 3.8,
+                        'defect_count': 5,
+                        'team_utilization': 92,
+                    },
+                    'what_went_well': (
+                        'Dashboard UI Development was completed with high quality and received '
+                        'positive user feedback. Team velocity improved from 3.0 to 4.2 tasks/week, '
+                        'a 40% increase. The daily sync meetings between backend and QA (implemented '
+                        'from Sprint 1 retro) eliminated the blocking issue — no team member was '
+                        'blocked for more than 4 hours this sprint.'
+                    ),
+                    'what_needs_improvement': (
+                        'Only 4 of 10 planned tasks were completed, indicating over-commitment in '
+                        'sprint planning. The Notification Service and User Management API both '
+                        'hit unexpected complexity with real-time event handling. Defect count '
+                        'increased from 2 to 5, primarily in the File Upload System where edge '
+                        'cases around large file handling were missed. Sam is carrying 60% of '
+                        'in-progress tasks, creating a bus factor risk.'
+                    ),
+                    'key_achievements': [
+                        'Dashboard UI completed with 95% design fidelity',
+                        'Velocity improved 40% over Sprint 1',
+                        'Zero blocking incidents (down from 1 in Sprint 1)',
+                        'File Upload System core functionality delivered',
+                    ],
+                    'challenges_faced': [
+                        {'challenge': 'Over-commitment — only 40% of planned tasks completed', 'impact': 'high', 'resolution': 'Will reduce sprint capacity by 30% next sprint'},
+                        {'challenge': 'File Upload edge cases with files >100MB', 'impact': 'medium', 'resolution': 'Added chunked upload support and size validation'},
+                        {'challenge': 'Sam overloaded with 60% of critical tasks', 'impact': 'high', 'resolution': 'Redistributing Search Engine and API Rate Limiting to Jordan'},
+                        {'challenge': 'Defect rate doubled from Sprint 1', 'impact': 'medium', 'resolution': 'Adding mandatory code review checklist before merge'},
+                    ],
+                    'improvement_recommendations': [
+                        'Reduce sprint capacity by 30% until velocity stabilizes',
+                        'Implement mandatory code review checklist to catch edge cases',
+                        'Cross-train Jordan on backend APIs to reduce Sam dependency',
+                        'Add automated integration tests for file handling before merge',
+                    ],
+                    'overall_sentiment_score': Decimal('0.65'),
+                    'team_morale_indicator': 'moderate',
+                    'performance_trend': 'improving',
+                    'ai_generated_at': now - timedelta(days=1),
+                    'ai_confidence_score': Decimal('0.78'),
+                    'ai_model_used': 'gemini-2.5-flash',
+                    'created_by': alex,
+                    'lessons_learned': [
+                        {'category': 'planning', 'lesson': 'Team consistently over-commits — use 70% capacity rule'},
+                        {'category': 'quality', 'lesson': 'Edge cases in file handling need dedicated test plan'},
+                        {'category': 'teamwork', 'lesson': 'Task concentration on one developer is a project risk'},
+                        {'category': 'process', 'lesson': 'Daily syncs between sub-teams measurably reduced blocking'},
+                    ],
+                },
+            )
+            ProjectRetrospective.objects.filter(pk=retro2.pk).update(
+                created_at=now - timedelta(days=1),
+            )
+            stats['retrospectives'] += 1
+
+            # -----------------------------------------------------------------
+            # LESSONS LEARNED
+            # -----------------------------------------------------------------
+            lessons_data = [
+                {
+                    'retrospective': retro1,
+                    'title': 'Security tasks need estimation spikes',
+                    'description': 'The Security Architecture Patterns task was underestimated by 60%. Complex security tasks should include a dedicated spike for research before estimation.',
+                    'category': 'planning',
+                    'priority': 'high',
+                    'trigger_event': 'Security Architecture Patterns task took 5 days instead of estimated 2',
+                    'impact_description': '2-day schedule slip on critical path',
+                    'recommended_action': 'Add a 1-day spike task for any security-related story before estimation',
+                    'action_owner': alex,
+                    'status': 'implemented',
+                    'implementation_date': today - timedelta(days=10),
+                    'expected_benefit': 'More accurate sprint planning for security tasks',
+                    'actual_benefit': 'Sprint 2 security estimates were within 10% of actual',
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.85'),
+                },
+                {
+                    'retrospective': retro1,
+                    'title': 'API documentation as prerequisite for QA',
+                    'description': 'QA team was blocked for 2 days waiting for API documentation. API docs should be a mandatory deliverable before moving tasks to In Review.',
+                    'category': 'communication',
+                    'priority': 'high',
+                    'trigger_event': 'Jordan blocked for 2 days on Authentication Testing Suite',
+                    'impact_description': 'QA pipeline stalled, delayed feedback loop',
+                    'recommended_action': 'Add "API docs complete" as a Definition of Done criterion',
+                    'action_owner': sam,
+                    'status': 'implemented',
+                    'implementation_date': today - timedelta(days=12),
+                    'expected_benefit': 'Zero QA blocking incidents from missing documentation',
+                    'actual_benefit': 'Sprint 2 had zero documentation-related blocks',
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.90'),
+                },
+                {
+                    'retrospective': retro1,
+                    'title': 'Docker-based dev environment reduces onboarding',
+                    'description': 'The Docker-based development environment setup reduced new developer onboarding from 2 days to 2 hours. This pattern should be replicated for all future projects.',
+                    'category': 'technical',
+                    'priority': 'medium',
+                    'trigger_event': 'Sam completed Development Environment Setup with full Docker support',
+                    'impact_description': 'Positive — saved estimated 16 hours of setup time across team',
+                    'recommended_action': 'Maintain Docker configs as first-class project artifacts with CI validation',
+                    'action_owner': sam,
+                    'status': 'validated',
+                    'implementation_date': today - timedelta(days=25),
+                    'validation_date': today - timedelta(days=10),
+                    'expected_benefit': 'Consistent development environments, faster onboarding',
+                    'actual_benefit': 'Eliminated "works on my machine" issues entirely',
+                    'ai_suggested': False,
+                },
+                {
+                    'retrospective': retro2,
+                    'title': 'Apply 70% capacity rule for sprint planning',
+                    'description': 'Team completed only 40% of planned sprint work. Historical data shows sustainable velocity at ~70% of theoretical capacity. Over-commitment leads to carryover and morale impact.',
+                    'category': 'planning',
+                    'priority': 'critical',
+                    'trigger_event': 'Sprint 2 completion rate at 40% despite improved velocity',
+                    'impact_description': '6 tasks carried over, team morale dropped from high to moderate',
+                    'recommended_action': 'Cap sprint commitment at 70% of theoretical capacity (7 tasks instead of 10)',
+                    'action_owner': alex,
+                    'status': 'planned',
+                    'expected_benefit': 'Higher completion rate, improved team morale and predictability',
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.88'),
+                    'is_recurring_issue': True,
+                    'recurrence_count': 2,
+                },
+                {
+                    'retrospective': retro2,
+                    'title': 'Mandatory code review checklist for edge cases',
+                    'description': 'Defect count doubled from Sprint 1 to Sprint 2, primarily from missed edge cases in File Upload System. A standardized code review checklist would catch these systematically.',
+                    'category': 'quality',
+                    'priority': 'high',
+                    'trigger_event': 'File Upload System had 3 defects related to large file handling',
+                    'impact_description': '2 days of rework on File Upload System',
+                    'recommended_action': 'Create and enforce a code review checklist covering boundary conditions, error handling, and performance',
+                    'action_owner': jordan,
+                    'status': 'in_progress',
+                    'expected_benefit': 'Reduce defect rate by 50% in Sprint 3',
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.82'),
+                },
+                {
+                    'retrospective': retro2,
+                    'title': 'Cross-train to reduce single-developer dependency',
+                    'description': 'Sam carries 60% of critical in-progress tasks. If Sam is unavailable, the project faces severe velocity impact. Knowledge transfer sessions are needed.',
+                    'category': 'teamwork',
+                    'priority': 'critical',
+                    'trigger_event': 'Risk analysis showed Sam owns 12 of 30 tasks including all critical-path backend work',
+                    'impact_description': 'Bus factor of 1 for backend architecture and API development',
+                    'recommended_action': 'Schedule weekly pair programming sessions between Sam and Jordan on backend patterns',
+                    'action_owner': sam,
+                    'status': 'in_progress',
+                    'expected_benefit': 'Reduce bus factor risk, enable parallel backend development',
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.91'),
+                    'is_recurring_issue': True,
+                    'recurrence_count': 2,
+                },
+            ]
+
+            lesson_objects = []
+            for ld in lessons_data:
+                lesson, _ = LessonLearned.objects.update_or_create(
+                    board=board,
+                    title=ld['title'],
+                    defaults={k: v for k, v in ld.items() if k != 'title'},
+                )
+                lesson_objects.append(lesson)
+                stats['lessons'] += 1
+
+            # Link related lessons (Sprint 1 security + Sprint 2 capacity planning are both about estimation)
+            lesson_objects[0].related_lessons.add(lesson_objects[3])
+            self.stdout.write(f'   ✓ {stats["lessons"]} Lessons Learned created')
+
+            # -----------------------------------------------------------------
+            # IMPROVEMENT METRICS
+            # -----------------------------------------------------------------
+            metrics_data = [
+                {
+                    'retrospective': retro1,
+                    'metric_type': 'velocity',
+                    'metric_name': 'Sprint Velocity',
+                    'description': 'Tasks completed per week',
+                    'metric_value': Decimal('3.0'),
+                    'previous_value': None,
+                    'target_value': Decimal('5.0'),
+                    'trend': 'no_data',
+                    'unit_of_measure': 'tasks/week',
+                    'higher_is_better': True,
+                    'measured_at': today - timedelta(days=15),
+                },
+                {
+                    'retrospective': retro1,
+                    'metric_type': 'quality',
+                    'metric_name': 'Defect Rate',
+                    'description': 'Defects found per sprint',
+                    'metric_value': Decimal('2.0'),
+                    'previous_value': None,
+                    'target_value': Decimal('1.0'),
+                    'trend': 'no_data',
+                    'unit_of_measure': 'defects',
+                    'higher_is_better': False,
+                    'measured_at': today - timedelta(days=15),
+                },
+                {
+                    'retrospective': retro1,
+                    'metric_type': 'cycle_time',
+                    'metric_name': 'Avg Cycle Time',
+                    'description': 'Average days from In Progress to Done',
+                    'metric_value': Decimal('4.2'),
+                    'previous_value': None,
+                    'target_value': Decimal('3.0'),
+                    'trend': 'no_data',
+                    'unit_of_measure': 'days',
+                    'higher_is_better': False,
+                    'measured_at': today - timedelta(days=15),
+                },
+                {
+                    'retrospective': retro2,
+                    'metric_type': 'velocity',
+                    'metric_name': 'Sprint Velocity',
+                    'description': 'Tasks completed per week',
+                    'metric_value': Decimal('4.2'),
+                    'previous_value': Decimal('3.0'),
+                    'target_value': Decimal('5.0'),
+                    'trend': 'improving',
+                    'unit_of_measure': 'tasks/week',
+                    'higher_is_better': True,
+                    'measured_at': today - timedelta(days=1),
+                },
+                {
+                    'retrospective': retro2,
+                    'metric_type': 'quality',
+                    'metric_name': 'Defect Rate',
+                    'description': 'Defects found per sprint',
+                    'metric_value': Decimal('5.0'),
+                    'previous_value': Decimal('2.0'),
+                    'target_value': Decimal('1.0'),
+                    'trend': 'declining',
+                    'unit_of_measure': 'defects',
+                    'higher_is_better': False,
+                    'measured_at': today - timedelta(days=1),
+                },
+                {
+                    'retrospective': retro2,
+                    'metric_type': 'cycle_time',
+                    'metric_name': 'Avg Cycle Time',
+                    'description': 'Average days from In Progress to Done',
+                    'metric_value': Decimal('3.8'),
+                    'previous_value': Decimal('4.2'),
+                    'target_value': Decimal('3.0'),
+                    'trend': 'improving',
+                    'unit_of_measure': 'days',
+                    'higher_is_better': False,
+                    'measured_at': today - timedelta(days=1),
+                },
+                {
+                    'retrospective': retro2,
+                    'metric_type': 'estimation_accuracy',
+                    'metric_name': 'Estimation Accuracy',
+                    'description': 'Percentage of tasks completed within original estimate',
+                    'metric_value': Decimal('40.0'),
+                    'previous_value': Decimal('75.0'),
+                    'target_value': Decimal('80.0'),
+                    'trend': 'declining',
+                    'unit_of_measure': '%',
+                    'higher_is_better': True,
+                    'measured_at': today - timedelta(days=1),
+                },
+            ]
+
+            for md in metrics_data:
+                ImprovementMetric.objects.update_or_create(
+                    board=board,
+                    retrospective=md['retrospective'],
+                    metric_type=md['metric_type'],
+                    defaults={k: v for k, v in md.items() if k not in ('retrospective', 'metric_type')},
+                )
+                stats['metrics'] += 1
+            self.stdout.write(f'   ✓ {stats["metrics"]} Improvement Metrics created')
+
+            # -----------------------------------------------------------------
+            # ACTION ITEMS
+            # -----------------------------------------------------------------
+            actions_data = [
+                {
+                    'retrospective': retro1,
+                    'title': 'Add spike tasks for security stories',
+                    'description': 'Before estimating any security-related story, add a 1-day timeboxed spike task for research and feasibility assessment.',
+                    'action_type': 'process_change',
+                    'status': 'completed',
+                    'assigned_to': alex,
+                    'priority': 'high',
+                    'target_completion_date': today - timedelta(days=10),
+                    'actual_completion_date': today - timedelta(days=11),
+                    'expected_impact': 'More accurate sprint planning for security tasks',
+                    'actual_impact': 'Sprint 2 security estimates were within 10% of actual effort',
+                    'progress_percentage': 100,
+                    'related_lesson': lesson_objects[0],
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.85'),
+                },
+                {
+                    'retrospective': retro1,
+                    'title': 'Add API docs to Definition of Done',
+                    'description': 'Update the team Definition of Done to require API documentation (endpoint specs, request/response examples) before any backend task can move to In Review.',
+                    'action_type': 'documentation',
+                    'status': 'completed',
+                    'assigned_to': sam,
+                    'priority': 'high',
+                    'target_completion_date': today - timedelta(days=12),
+                    'actual_completion_date': today - timedelta(days=13),
+                    'expected_impact': 'Eliminate QA blocking from missing API docs',
+                    'actual_impact': 'Zero documentation-related blocks in Sprint 2',
+                    'progress_percentage': 100,
+                    'related_lesson': lesson_objects[1],
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.90'),
+                },
+                {
+                    'retrospective': retro2,
+                    'title': 'Implement 70% capacity sprint planning',
+                    'description': 'Revise sprint planning process to cap committed work at 70% of theoretical team capacity. Use remaining 30% as buffer for unplanned work and technical debt.',
+                    'action_type': 'process_change',
+                    'status': 'pending',
+                    'assigned_to': alex,
+                    'priority': 'critical',
+                    'target_completion_date': today + timedelta(days=3),
+                    'expected_impact': 'Increase sprint completion rate from 40% to 85%+',
+                    'progress_percentage': 0,
+                    'related_lesson': lesson_objects[3],
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.88'),
+                },
+                {
+                    'retrospective': retro2,
+                    'title': 'Create code review checklist',
+                    'description': 'Draft a standardized code review checklist covering boundary conditions, error handling, input validation, performance implications, and security considerations.',
+                    'action_type': 'process_change',
+                    'status': 'in_progress',
+                    'assigned_to': jordan,
+                    'priority': 'high',
+                    'target_completion_date': today + timedelta(days=5),
+                    'expected_impact': 'Reduce defect rate by 50% in Sprint 3',
+                    'progress_percentage': 40,
+                    'progress_notes': 'Checklist draft complete for boundary conditions and error handling sections. Still working on security and performance sections.',
+                    'related_lesson': lesson_objects[4],
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.82'),
+                },
+                {
+                    'retrospective': retro2,
+                    'title': 'Schedule weekly pair programming (Sam + Jordan)',
+                    'description': 'Set up recurring weekly 2-hour pair programming sessions where Sam walks Jordan through backend API patterns, authentication flows, and database architecture.',
+                    'action_type': 'training',
+                    'status': 'in_progress',
+                    'assigned_to': sam,
+                    'priority': 'critical',
+                    'target_completion_date': today + timedelta(days=21),
+                    'expected_impact': 'Reduce bus factor risk — Jordan can independently handle backend tasks within 3 weeks',
+                    'progress_percentage': 30,
+                    'progress_notes': 'First session completed: covered API structure and authentication flow. Jordan can now review backend PRs independently.',
+                    'related_lesson': lesson_objects[5],
+                    'ai_suggested': True,
+                    'ai_confidence': Decimal('0.91'),
+                },
+            ]
+
+            for ad in actions_data:
+                RetrospectiveActionItem.objects.update_or_create(
+                    board=board,
+                    title=ad['title'],
+                    defaults={k: v for k, v in ad.items() if k != 'title'},
+                )
+                stats['actions'] += 1
+            self.stdout.write(f'   ✓ {stats["actions"]} Action Items created')
+
+            # -----------------------------------------------------------------
+            # TREND ANALYSIS
+            # -----------------------------------------------------------------
+            RetrospectiveTrend.objects.update_or_create(
+                board=board,
+                period_type='quarterly',
+                defaults={
+                    'retrospectives_analyzed': 2,
+                    'total_lessons_learned': 6,
+                    'lessons_implemented': 3,
+                    'lessons_validated': 1,
+                    'total_action_items': 5,
+                    'action_items_completed': 2,
+                    'recurring_issues': [
+                        {'issue': 'Sprint over-commitment and inaccurate estimation', 'count': 2},
+                        {'issue': 'Single-developer dependency on critical path', 'count': 2},
+                    ],
+                    'top_improvement_categories': [
+                        {'category': 'planning', 'count': 3},
+                        {'category': 'quality', 'count': 2},
+                        {'category': 'communication', 'count': 1},
+                    ],
+                    'velocity_trend': 'improving',
+                    'quality_trend': 'declining',
+                    'ai_insights': (
+                        'The team shows strong improvement in velocity (+40%) and communication '
+                        '(zero blocks in Sprint 2) but quality metrics are concerning with defect '
+                        'rate increasing 150%. The recurring pattern of over-commitment suggests '
+                        'the team needs to adopt a more conservative sprint planning approach. '
+                        'The single-developer dependency on Sam for backend work is the highest '
+                        'risk factor — cross-training sessions should be prioritized.'
+                    ),
+                    'key_recommendations': [
+                        'Adopt 70% capacity rule immediately for Sprint 3 planning',
+                        'Fast-track the code review checklist to address quality decline',
+                        'Continue pair programming sessions — aim for Jordan to lead a backend task by Sprint 4',
+                    ],
+                },
+            )
+
+            self.stdout.write('   ✓ Retrospective Trend analysis created')
+
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️ Retrospectives: {e}'))
+            import traceback
+            traceback.print_exc()
+
+        return stats
+
     def print_final_summary(self):
         """Print final summary of all demo data"""
         self.stdout.write(self.style.SUCCESS('\n' + '=' * 80))
@@ -3014,6 +3562,12 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             cemetery_count = CemeteryEntry.objects.filter(board__in=self.demo_boards).count()
         except Exception:
             cemetery_count = 0
+        try:
+            retro_count = ProjectRetrospective.objects.filter(board__in=self.demo_boards).count()
+            lesson_count = LessonLearned.objects.filter(board__in=self.demo_boards).count()
+            retro_action_count = RetrospectiveActionItem.objects.filter(board__in=self.demo_boards).count()
+        except Exception:
+            retro_count = lesson_count = retro_action_count = 0
 
         self.stdout.write(f'''
 📊 Demo Data Summary:
@@ -3028,6 +3582,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
    ├── Time Entries: {time_entries}
    ├── Commitments: {commitment_protocols} protocols, {commitment_signals} signals, {commitment_bets} bets
    └── AI Tools: {whatif_count} What-If, {shadow_count} Shadow Branches, {premortem_count} Pre-Mortem, {stress_count} Stress Tests, {autopsy_count} Scope Autopsies, {cemetery_count} Cemetery Entries
+   └── Retrospectives: {retro_count} retrospectives, {lesson_count} lessons, {retro_action_count} actions
 
 🎉 Demo environment is now fully populated!
 
