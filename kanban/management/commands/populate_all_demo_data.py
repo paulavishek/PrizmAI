@@ -2087,7 +2087,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
 
         # --- Link the demo Mission to this Goal ---
         linked_count = Mission.objects.filter(
-            name='Prevent AI Security Threats',
+            name='Build Enterprise Security Platform',
             is_seed_demo_data=True,
         ).exclude(organization_goal=goal).update(organization_goal=goal)
 
