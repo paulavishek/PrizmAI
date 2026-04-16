@@ -116,6 +116,10 @@ urlpatterns = [
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
     path('boards/<int:board_id>/prizmbrief/', prizmbrief_views.prizmbrief_setup, name='prizmbrief_setup'),
+    path('boards/<int:board_id>/prizmbrief/save/', prizmbrief_views.save_brief, name='prizmbrief_save'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/', prizmbrief_views.saved_brief_detail, name='prizmbrief_saved_detail'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/rename/', prizmbrief_views.rename_brief, name='prizmbrief_rename'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/delete/', prizmbrief_views.delete_brief, name='prizmbrief_delete'),
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),

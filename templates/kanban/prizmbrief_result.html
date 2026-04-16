@@ -175,6 +175,46 @@
     line-height: 1.65;
   }
   .pb-helper-box ol { margin: 6px 0 0; padding-left: 1.3rem; }
+
+  /* ── Save brief inline UI ───────────────────────────────── */
+  .pb-save-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 12px;
+    padding-top: 14px;
+    border-top: 1px solid #e9ecef;
+  }
+  .pb-save-input {
+    flex: 1;
+    min-width: 200px;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.92rem;
+    transition: border-color 0.15s;
+  }
+  .pb-save-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+  }
+  .pb-btn-save { background: linear-gradient(135deg,#28a745,#20c997); color: #fff; }
+  .pb-save-feedback {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 6px;
+    display: none;
+  }
+  .pb-save-feedback.success { display: inline; background: #d4edda; color: #155724; }
+  .pb-save-feedback.error   { display: inline; background: #f8d7da; color: #842029; }
+  .pb-save-counter {
+    font-size: 0.82rem;
+    color: #6c757d;
+    white-space: nowrap;
+  }
 </style>
 {% endblock %}
 
@@ -276,10 +316,27 @@
         to format automatically.
       </div>
     </div>
+
+    <!-- ── Save Brief ─────────────────────────────────────────── -->
+    <div class="pb-save-section" id="pb-save-section">
+      <span style="font-weight:600; font-size:0.92rem;">💾 Save this brief</span>
+      <input type="text" class="pb-save-input" id="pb-save-name"
+             placeholder="e.g. Sprint 12 Status Update" maxlength="120">
+      <button class="pb-action-btn pb-btn-save" id="pb-save-btn" onclick="saveBrief()">
+        💾 Save
+      </button>
+      <span class="pb-save-counter" id="pb-save-counter">
+        {{ saved_count }}/{{ max_saved }} saved
+      </span>
+      <span class="pb-save-feedback" id="pb-save-feedback"></span>
+    </div>
   </div>
 
   <!-- Hidden full text for copy/download -->
   <textarea id="pb-full-text" style="position:absolute;left:-9999px;" readonly>{{ full_text }}</textarea>
+
+  <!-- Slides data for save -->
+  {{ slides_json_data|safe }}
 
 </div>
 {% endblock %}
@@ -343,6 +400,67 @@
   function toggleHelper() {
     const box = document.getElementById('pb-helper-box');
     box.style.display = box.style.display === 'block' ? 'none' : 'block';
+  }
+
+  /* ── Save brief via AJAX ───────────────────────────────── */
+  const SLIDES_DATA = JSON.parse(document.getElementById('pb-slides-json').textContent);
+
+  function saveBrief() {
+    const nameInput = document.getElementById('pb-save-name');
+    const btn       = document.getElementById('pb-save-btn');
+    const feedback  = document.getElementById('pb-save-feedback');
+    const name      = nameInput.value.trim();
+
+    if (!name) {
+      showFeedback('Please enter a name for this brief.', 'error');
+      nameInput.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Saving…';
+    feedback.className = 'pb-save-feedback';
+    feedback.style.display = 'none';
+
+    fetch('{% url "prizmbrief_save" board.id %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify({
+        name: name,
+        slides: SLIDES_DATA,
+        full_text: document.getElementById('pb-full-text').value,
+        audience: '{{ last_audience }}',
+        purpose: '{{ last_purpose }}',
+        mode: '{{ last_mode }}',
+        audience_label: '{{ audience_label }}',
+        purpose_label: '{{ purpose_label }}',
+        mode_label: '{{ mode_label }}',
+      }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showFeedback('✅ Saved! You can find it on the PrizmBrief setup page.', 'success');
+        document.getElementById('pb-save-counter').textContent = data.saved_count + '/' + data.max_saved + ' saved';
+        nameInput.value = '';
+      } else {
+        showFeedback(data.error || 'Could not save.', 'error');
+      }
+    })
+    .catch(() => showFeedback('Network error. Please try again.', 'error'))
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = '💾 Save';
+    });
+  }
+
+  function showFeedback(msg, type) {
+    const el = document.getElementById('pb-save-feedback');
+    el.textContent = msg;
+    el.className = 'pb-save-feedback ' + type;
   }
 </script>
 {% endblock %}
