@@ -670,7 +670,7 @@
 
         <!-- Settings (3-dot) -->
         <div class="dropdown">
-            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Board Settings">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Board Menu">
                 <i class="fas fa-ellipsis-v"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -680,15 +680,24 @@
                 <li><a class="dropdown-item" href="{% url 'create_label' board.id %}"><i class="fas fa-tags me-2"></i>Manage Labels</a></li>
                 {% endif %}
                 {% if can_edit_board %}
+                <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
                 {% endif %}
                 {% if can_manage_members and not board.is_sandbox_copy %}
                 <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users-cog me-2 text-info"></i>Board Members</a></li>
                 {% endif %}
+                <li><hr class="dropdown-divider"></li>
+                {% if features.show_automations %}
+                <li><a class="dropdown-item" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-2 text-warning"></i>Automations</a></li>
+                {% endif %}
                 {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
                 {% endif %}
+                <li><a class="dropdown-item" href="{% url 'board_knowledge' board.id %}"><i class="fas fa-brain me-2 text-purple"></i>Knowledge Base</a></li>
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json"><i class="fas fa-file-export me-2 text-secondary"></i>Export JSON</a></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv"><i class="fas fa-file-csv me-2 text-secondary"></i>Export CSV</a></li>
                 {% if board.organization and not is_demo_board %}
                 <li><hr class="dropdown-divider"></li>
                 <li>
@@ -1083,7 +1092,7 @@
 </div>
 
 {# ------- Quick-View Drawer (Tier 1) � HTML now in base.html ------- #}
-<!-- Wiki Links moved to Board Settings ? Link Wiki Pages (3-dot menu) -->
+<!-- Wiki Links moved to Board Menu → Link Wiki Pages (3-dot menu) -->
 
 <!-- Set WIP Limit Modal -->
 <div class="modal fade" id="wipLimitModal" tabindex="-1" aria-hidden="true">
@@ -2054,21 +2063,6 @@
             </div>
             <div class="collapse" id="panelPlan">
                 <div class="ai-panel-grid">
-                    {% if features.show_gantt %}
-                    <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}" title="Interactive Gantt chart with dependencies">
-                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-gantt"></i></span>
-                        <span class="tile-label">Gantt Chart</span>
-                    </a>
-                    {% else %}
-                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-chart-gantt"></i></span>
-                        <span class="tile-label">Gantt Chart <i class="fas fa-lock lock-badge"></i></span>
-                    </span>
-                    {% endif %}
-                    <a class="ai-panel-tile" href="{% url 'board_calendar' board.id %}" title="Calendar view of tasks and deadlines">
-                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-calendar-alt"></i></span>
-                        <span class="tile-label">Calendar</span>
-                    </a>
                     {% if features.show_budget_roi %}
                     <a class="ai-panel-tile" href="{% url 'budget_dashboard' board.id %}" title="Track budget, costs, and return on investment">
                         <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-dollar-sign"></i></span>
@@ -2091,28 +2085,14 @@
                         <span class="tile-label">Scope <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
-                </div>
-            </div>
-        </div>
-
-        {# ── Section 3: MANAGE ─────────────────────────── #}
-        <div class="ai-panel-section">
-            <div class="ai-panel-section-header"
-                 data-bs-toggle="collapse" data-bs-target="#panelManage"
-                 aria-expanded="false" aria-controls="panelManage">
-                <span><i class="fas fa-tasks me-1"></i> Manage</span>
-                <i class="fas fa-chevron-right section-chevron"></i>
-            </div>
-            <div class="collapse" id="panelManage">
-                <div class="ai-panel-grid">
                     {% if features.show_requirements %}
                     <a class="ai-panel-tile" href="{% url 'requirements:dashboard' board.id %}" title="AI-powered requirement analysis, quality scoring, gap detection, and traceability">
-                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-clipboard-list"></i></span>
                         <span class="tile-label">Requirements</span>
                     </a>
                     {% else %}
                     <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="tile-icon" style="color: #1D9E75;"><i class="fas fa-clipboard-list"></i></span>
                         <span class="tile-label">Requirements <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
@@ -2120,15 +2100,15 @@
             </div>
         </div>
 
-        {# ── Section 4: AI ACTIONS ──────────────────────── #}
+        {# ── Section 3: AI INSIGHTS ─────────────────────── #}
         <div class="ai-panel-section">
             <div class="ai-panel-section-header"
-                 data-bs-toggle="collapse" data-bs-target="#panelAIActions"
-                 aria-expanded="false" aria-controls="panelAIActions">
-                <span><i class="fas fa-robot me-1"></i> AI Actions</span>
+                 data-bs-toggle="collapse" data-bs-target="#panelInsights"
+                 aria-expanded="false" aria-controls="panelInsights">
+                <span><i class="fas fa-lightbulb me-1"></i> AI Insights</span>
                 <i class="fas fa-chevron-right section-chevron"></i>
             </div>
-            <div class="collapse" id="panelAIActions">
+            <div class="collapse" id="panelInsights">
                 <div class="ai-panel-grid">
                     {% if features.show_ai_coach %}
                     <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}" title="Proactive AI coaching suggestions for your project">
@@ -2152,117 +2132,112 @@
                         <span class="tile-label">PrizmBrief <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 4: SCENARIOS & RISK ────────────────── #}
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelScenarios"
+                 aria-expanded="false" aria-controls="panelScenarios">
+                <span><i class="fas fa-exclamation-triangle me-1"></i> Scenarios & Risk</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
+            </div>
+            <div class="collapse" id="panelScenarios">
+                <div class="ai-panel-grid">
                     {% if features.show_whatif %}
                     <a class="ai-panel-tile" href="{% url 'whatif_dashboard' board.id %}" title="Simulate scenario changes and analyze impact">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-flask"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-flask"></i></span>
                         <span class="tile-label">What-If</span>
                     </a>
                     {% else %}
                     <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-flask"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-flask"></i></span>
                         <span class="tile-label">What-If <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
                     {% if features.show_shadow_board %}
                     <a class="ai-panel-tile" href="{% url 'shadow_board_list' board.id %}" title="Create parallel universe simulations of your project">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-atom"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-atom"></i></span>
                         <span class="tile-label">Shadow Board</span>
                     </a>
                     {% else %}
                     <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-atom"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-atom"></i></span>
                         <span class="tile-label">Shadow Board <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
                     {% if features.show_premortem %}
                     <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}" title="Simulate failure scenarios before they happen">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-shield-alt"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-shield-alt"></i></span>
                         <span class="tile-label">Pre-Mortem</span>
                     </a>
                     {% else %}
                     <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-shield-alt"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-shield-alt"></i></span>
                         <span class="tile-label">Pre-Mortem <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
                     {% if features.show_stress_test %}
                     <a class="ai-panel-tile" href="{% url 'stress_test_dashboard' board.id %}" title="Red-team your project plan with AI attack scenarios">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-bolt"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-bolt"></i></span>
                         <span class="tile-label">Stress Test</span>
                     </a>
                     {% else %}
                     <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-bolt"></i></span>
+                        <span class="tile-icon" style="color: #E05C6C;"><i class="fas fa-bolt"></i></span>
                         <span class="tile-label">Stress Test <i class="fas fa-lock lock-badge"></i></span>
-                    </span>
-                    {% endif %}
-                    {% if features.show_ai_retrospectives %}
-                    <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}" title="AI-powered retrospectives and improvement tracking">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-history"></i></span>
-                        <span class="tile-label">Retrospectives</span>
-                    </a>
-                    {% else %}
-                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-history"></i></span>
-                        <span class="tile-label">Retrospectives <i class="fas fa-lock lock-badge"></i></span>
-                    </span>
-                    {% endif %}
-                    {% if features.show_scope_autopsy %}
-                    <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}" title="Forensic analysis of how your scope grew">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-microscope"></i></span>
-                        <span class="tile-label">Scope Autopsy</span>
-                    </a>
-                    {% else %}
-                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-microscope"></i></span>
-                        <span class="tile-label">Scope Autopsy <i class="fas fa-lock lock-badge"></i></span>
-                    </span>
-                    {% endif %}
-                    {% if features.show_exit_protocol %}
-                    <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}" title="Manage project wind-down, knowledge preservation, and archival">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-skull-crossbones"></i></span>
-                        <span class="tile-label">Exit Protocol</span>
-                    </a>
-                    {% else %}
-                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
-                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-skull-crossbones"></i></span>
-                        <span class="tile-label">Exit Protocol <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        {# ── Section 5: BOARD SETTINGS (always visible, never collapsed) ── #}
+        {# ── Section 5: PROJECT REVIEW ──────────────────── #}
         <div class="ai-panel-section">
-            <div class="ai-panel-section-header" style="cursor:default;">
-                <span><i class="fas fa-cog me-1"></i> Board Settings</span>
+            <div class="ai-panel-section-header"
+                 data-bs-toggle="collapse" data-bs-target="#panelReview"
+                 aria-expanded="false" aria-controls="panelReview">
+                <span><i class="fas fa-clipboard-check me-1"></i> Project Review</span>
+                <i class="fas fa-chevron-right section-chevron"></i>
             </div>
-
-            <div class="ai-panel-grid">
-                {% if features.show_automations %}
-                <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}" title="Configure automated workflows and rules">
-                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-bolt"></i></span>
-                    <span class="tile-label">Automations</span>
-                </a>
-                {% else %}
-                <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
-                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-bolt"></i></span>
-                    <span class="tile-label">Automations <i class="fas fa-lock lock-badge"></i></span>
-                </span>
-                {% endif %}
-                <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}" title="Manage board knowledge base for AI context">
-                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-wand-magic-sparkles"></i></span>
-                    <span class="tile-label">Knowledge Base</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=json" title="Export board data as JSON file">
-                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-file-export"></i></span>
-                    <span class="tile-label">Export JSON</span>
-                </a>
-                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=csv" title="Export board data as CSV spreadsheet">
-                    <span class="tile-icon" style="color: #888780;"><i class="fas fa-file-csv"></i></span>
-                    <span class="tile-label">Export CSV</span>
-                </a>
+            <div class="collapse" id="panelReview">
+                <div class="ai-panel-grid">
+                    {% if features.show_ai_retrospectives %}
+                    <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}" title="AI-powered retrospectives and improvement tracking">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-history"></i></span>
+                        <span class="tile-label">Retrospectives</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-history"></i></span>
+                        <span class="tile-label">Retrospectives <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_scope_autopsy %}
+                    <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}" title="Forensic analysis of how your scope grew">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-microscope"></i></span>
+                        <span class="tile-label">Scope Autopsy</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-microscope"></i></span>
+                        <span class="tile-label">Scope Autopsy <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                    {% if features.show_exit_protocol %}
+                    <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}" title="Manage project wind-down, knowledge preservation, and archival">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-skull-crossbones"></i></span>
+                        <span class="tile-label">Exit Protocol</span>
+                    </a>
+                    {% else %}
+                    <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Enterprise mode — upgrade your workspace to unlock">
+                        <span class="tile-icon" style="color: #D97706;"><i class="fas fa-skull-crossbones"></i></span>
+                        <span class="tile-label">Exit Protocol <i class="fas fa-lock lock-badge"></i></span>
+                    </span>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -2301,7 +2276,7 @@
     var boardId = '{{ board.id }}';
     var storageKey = 'prizmai_panel_state_' + boardId;
     var presetName = '{{ features.preset_name|default:"lean" }}';
-    var sectionIds = ['panelAnalyze', 'panelPlan', 'panelManage', 'panelAIActions'];
+    var sectionIds = ['panelAnalyze', 'panelPlan', 'panelInsights', 'panelScenarios', 'panelReview'];
 
     // Determine default state: enterprise → expanded, otherwise collapsed
     var defaultExpanded = (presetName === 'enterprise');
