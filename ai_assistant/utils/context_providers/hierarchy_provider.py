@@ -23,7 +23,7 @@ class HierarchyContextProvider(BaseContextProvider):
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
         try:
-            from kanban.goals_models import OrganizationGoal, Mission, Strategy
+            from kanban.models import OrganizationGoal, Mission, Strategy
         except ImportError:
             return ''
 
@@ -59,14 +59,20 @@ class HierarchyContextProvider(BaseContextProvider):
 
     def _get_detail_impl(self, board, user, query='', is_demo_mode=False):
         try:
-            from kanban.goals_models import OrganizationGoal, Mission, Strategy
+            from kanban.models import OrganizationGoal, Mission, Strategy
         except ImportError:
             return ''
 
+        # Collect strategy IDs from accessible boards + the active board
         accessible_boards = self._get_accessible_boards(user, is_demo_mode)
-        strategy_ids = accessible_boards.filter(
+        strategy_ids = set(accessible_boards.filter(
             strategy__isnull=False
-        ).values_list('strategy_id', flat=True).distinct()
+        ).values_list('strategy_id', flat=True).distinct())
+
+        # Include the active board's strategy even if _get_accessible_boards
+        # doesn't return it (e.g. official demo board for sandbox users)
+        if board and board.strategy_id:
+            strategy_ids.add(board.strategy_id)
 
         if not strategy_ids:
             return '**🏗️ Hierarchy Navigator:** No goals/missions linked.\n'

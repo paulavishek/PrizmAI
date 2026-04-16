@@ -23,19 +23,18 @@ class WikiContextProvider(BaseContextProvider):
         except ImportError:
             return ''
 
-        if board:
-            pages = WikiPage.objects.filter(board=board, is_published=True)
+        # WikiPage is org-scoped, not board-scoped
+        org = self._get_user_org(user)
+        if org:
+            pages = WikiPage.objects.filter(organization=org, is_published=True)
         else:
-            accessible = self._get_accessible_boards(user, is_demo_mode)
-            pages = WikiPage.objects.filter(
-                board__in=accessible, is_published=True
-            )
+            pages = WikiPage.objects.none()
 
         count = pages.count()
         if count == 0:
             return '📚 **Wiki:** No published pages.\n'
 
-        categories = pages.values_list('category', flat=True).distinct()
+        categories = pages.values_list('category__name', flat=True).distinct()
         cat_list = [c for c in categories if c][:5]
         cat_str = f' Categories: {", ".join(cat_list)}' if cat_list else ''
 
@@ -47,13 +46,11 @@ class WikiContextProvider(BaseContextProvider):
         except ImportError:
             return ''
 
-        if board:
-            pages = WikiPage.objects.filter(board=board, is_published=True)
+        org = self._get_user_org(user)
+        if org:
+            pages = WikiPage.objects.filter(organization=org, is_published=True)
         else:
-            accessible = self._get_accessible_boards(user, is_demo_mode)
-            pages = WikiPage.objects.filter(
-                board__in=accessible, is_published=True
-            )
+            pages = WikiPage.objects.none()
 
         if not pages.exists():
             return '**📚 Wiki:** No published pages.\n'

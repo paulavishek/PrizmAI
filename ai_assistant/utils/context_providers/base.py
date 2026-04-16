@@ -142,6 +142,15 @@ class BaseContextProvider(ABC):
             user, is_demo_mode=is_demo_mode, organization=org,
         )
 
+    def _get_user_org(self, user):
+        """Return the user's organization, or None."""
+        try:
+            if hasattr(user, 'profile') and user.profile.organization_id:
+                return user.profile.organization
+        except Exception:
+            pass
+        return None
+
     # ── Abstract methods (subclasses implement these) ───────────────────
 
     @abstractmethod
