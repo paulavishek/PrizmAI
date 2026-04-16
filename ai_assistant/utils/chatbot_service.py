@@ -4394,308 +4394,157 @@ When answering questions about organizational goals, missions, or strategies, us
                     'context': {}
                 }
             
-            # Detect query types
-            is_search_query = self._is_search_query(prompt)
-            is_strategic_query = self._is_strategic_query(prompt)
-            is_project_query = self._is_project_query(prompt)
-            is_aggregate_query = self._is_aggregate_query(prompt)
-            is_risk_query = self._is_risk_query(prompt)
-            is_stakeholder_query = self._is_stakeholder_query(prompt)
-            is_resource_query = self._is_resource_query(prompt)
-            is_lean_query = self._is_lean_query(prompt)
-            is_dependency_query = self._is_dependency_query(prompt)
-            is_organization_query = self._is_organization_query(prompt)
-            is_user_info_query = self._is_user_info_query(prompt)
-            is_critical_task_query = self._is_critical_task_query(prompt)
-            is_mitigation_query = self._is_mitigation_query(prompt)
-            is_user_task_query = self._is_user_task_query(prompt)
-            is_incomplete_task_query = self._is_incomplete_task_query(prompt)
-            is_board_comparison_query = self._is_board_comparison_query(prompt)
-            is_task_distribution_query = self._is_task_distribution_query(prompt)
-            is_progress_query = self._is_progress_query(prompt)
-            is_overdue_query = self._is_overdue_query(prompt)
-            is_wiki_query = self._is_wiki_query(prompt)
-            is_meeting_query = self._is_meeting_query(prompt)
-            is_deadline_projection_query = self._is_deadline_projection_query(prompt)
-            is_strategic_workflow_query = self._is_strategic_workflow_query(prompt)
-            is_board_features_query = self._is_board_features_query(prompt)
-            is_requirement_query = self._is_requirement_query(prompt)
-            
-            # Build context in priority order
+            # ── Context Provider System (v2) ──────────────────────────────
+            # Instead of 30+ keyword detectors, use the provider registry +
+            # smart router to build context.  Every query gets compact
+            # summaries from ALL providers (~50-100 lines).  The router
+            # selects up to 5 providers for full detailed context.
+            from ai_assistant.utils.context_providers import registry as ctx_registry
+            from ai_assistant.utils.context_router import route_query, classify_query_type
+
             context_parts = []
 
-            # 0. Attached document context (highest priority — user is querying this document)
+            # 0. Attached document context (highest priority)
             if file_context:
                 context_parts.append(file_context)
                 logger.debug('Added attached file context')
-            
+
             # 0b. Session memory — recent conversation for multi-turn continuity
             session_memory = self.get_session_memory_context(self.session_id)
             if session_memory:
                 context_parts.append(session_memory)
                 logger.debug('Added session memory context')
-            
-            # 0c. Always-on documentation summary — gives Spectra awareness of all
-            #     published wiki pages so it can reference them even when the user
-            #     doesn't use wiki-specific keywords (compact, ~1 line per page).
-            doc_summary = self._get_documentation_summary_context()
-            if doc_summary:
-                context_parts.append(doc_summary)
-                logger.debug('Added documentation summary context')
-            
-            # 0d. Always-on live board snapshot — accurate task counts & status
-            #     distribution so Spectra never uses stale data.
-            live_snapshot = self._get_live_project_snapshot_context()
-            if live_snapshot:
-                context_parts.append(live_snapshot)
-                logger.debug('Added live board snapshot context')
-            
-            # 1. Wiki context (documentation, guides, best practices)
-            #    Also triggered for meeting queries so wiki-stored meeting pages
-            #    are surfaced alongside MeetingNotes model data.
-            if is_wiki_query or is_meeting_query:
-                wiki_context = self._get_wiki_context(prompt)
-                if wiki_context:
-                    context_parts.append(wiki_context)
-                    logger.debug("Added wiki context")
-            
-            # 2. Meeting context (discussions, decisions, action items)
+
+            # ── Always-on feature summaries (replaces live_snapshot + doc_summary) ──
+            # Compact 2-5 line summaries from ALL providers. This gives Spectra
+            # baseline awareness of every feature so it never says "I don't have
+            # that information" for basic factual questions.
+            feature_summaries = ctx_registry.get_all_summaries(
+                self.board, self.user, self.is_demo_mode
+            )
+            if feature_summaries:
+                context_parts.append(feature_summaries)
+                logger.debug('Added feature summaries from %d providers',
+                             len(ctx_registry.providers))
+
+            # ── Smart-routed detailed context ──────────────────────────────
+            # The router picks the most relevant providers for this query.
+            provider_tags = ctx_registry.get_all_tags()
+            matched_providers = route_query(prompt, provider_tags)
+            if matched_providers:
+                detail_context = ctx_registry.get_relevant_details(
+                    self.board, self.user, prompt,
+                    matched_providers, self.is_demo_mode
+                )
+                if detail_context:
+                    context_parts.append(detail_context)
+                    logger.debug('Added detailed context from providers: %s',
+                                 matched_providers)
+
+            # ── Legacy context builders (kept for specialised features) ────
+            # These handle niche queries the providers don't cover yet
+            # (user info, meetings, organization, lean, web search).
+            is_search_query = self._is_search_query(prompt)
+            is_strategic_query = self._is_strategic_query(prompt)
+            is_wiki_query = self._is_wiki_query(prompt)
+            is_meeting_query = self._is_meeting_query(prompt)
+            is_organization_query = self._is_organization_query(prompt)
+            is_user_info_query = self._is_user_info_query(prompt)
+            is_user_task_query = self._is_user_task_query(prompt)
+            is_lean_query = self._is_lean_query(prompt)
+            is_resource_query = self._is_resource_query(prompt)
+
             if is_meeting_query:
                 meeting_context = self._get_meeting_context(prompt)
                 if meeting_context:
                     context_parts.append(meeting_context)
-                    logger.debug("Added meeting context")
-            
-            # 3. Organization context (system-wide)
+                    logger.debug("Added meeting context (legacy)")
+
             if is_organization_query:
                 org_context = self._get_organization_context(prompt)
                 if org_context:
                     context_parts.append(org_context)
-                    logger.debug("Added organization context")
-            
-            # 4. User info context (team members, demo vs real users, user-specific questions)
+                    logger.debug("Added organization context (legacy)")
+
             if is_user_info_query:
                 user_info_context = self._get_user_info_context(prompt)
                 if user_info_context:
                     context_parts.append(user_info_context)
-                    logger.debug("Added user info context")
-            
-            # 2. User-specific tasks (high priority - user asking about their tasks)
+                    logger.debug("Added user info context (legacy)")
+
             if is_user_task_query:
                 user_tasks_context = self._get_user_tasks_context(prompt)
                 if user_tasks_context:
                     context_parts.append(user_tasks_context)
-                    logger.debug("Added user tasks context")
-            
-            # 3. Incomplete tasks query
-            # Skip when user is asking specifically about dependencies — the
-            # full incomplete list just adds noise to the context.
-            if is_incomplete_task_query and not is_dependency_query:
-                incomplete_context = self._get_incomplete_tasks_context(prompt)
-                if incomplete_context:
-                    context_parts.append(incomplete_context)
-                    logger.debug("Added incomplete tasks context")
-            
-            # 4. Board comparison
-            if is_board_comparison_query:
-                comparison_context = self._get_board_comparison_context(prompt)
-                if comparison_context:
-                    context_parts.append(comparison_context)
-                    logger.debug("Added board comparison context")
-            
-            # 5. Task distribution
-            if is_task_distribution_query:
-                distribution_context = self._get_task_distribution_context(prompt)
-                if distribution_context:
-                    context_parts.append(distribution_context)
-                    logger.debug("Added task distribution context")
-            
-            # 6. Progress metrics
-            if is_progress_query:
-                progress_context = self._get_progress_metrics_context(prompt)
-                if progress_context:
-                    context_parts.append(progress_context)
-                    logger.debug("Added progress metrics context")
-            
-            # 7. Overdue tasks
-            # Skip when the primary intent is dependency analysis — overdue
-            # context can mislead the LLM into mixing deadline urgency with
-            # structural dependency chains.
-            if is_overdue_query and not is_dependency_query:
-                overdue_context = self._get_overdue_tasks_context(prompt)
-                if overdue_context:
-                    context_parts.append(overdue_context)
-                    logger.debug("Added overdue tasks context")
-            
-            # 8. Mitigation context (high priority - directly answers mitigation questions)
-            if is_mitigation_query:
-                mitigation_context = self._get_mitigation_context(prompt, board=self.board)
-                if mitigation_context:
-                    context_parts.append(mitigation_context)
-                    logger.debug("Added mitigation context")
-            
-            # 9. Critical tasks context
-            # Include critical tasks context when query is about critical/risk tasks
-            # Also include it when mitigation is asked ALONG WITH critical/risk (user wants both)
-            if is_critical_task_query or is_risk_query:
-                critical_context = self._get_critical_tasks_context(prompt)
-                if critical_context:
-                    context_parts.append(critical_context)
-                    logger.debug("Added critical tasks context")
-            
-            # 10. Aggregate context (system-wide queries)
-            if is_aggregate_query:
-                aggregate_context = self._get_aggregate_context(prompt)
-                if aggregate_context:
-                    context_parts.append(aggregate_context)
-                    logger.debug("Added aggregate context")
-            
-            # 11. Risk context (only if not already covered by critical tasks context)
-            if is_risk_query and not is_critical_task_query:
-                risk_context = self._get_risk_context(prompt)
-                if risk_context:
-                    context_parts.append(risk_context)
-                    logger.debug("Added risk context")
-            
-            # 12. Stakeholder context
-            if is_stakeholder_query:
-                stakeholder_context = self._get_stakeholder_context(prompt)
-                if stakeholder_context:
-                    context_parts.append(stakeholder_context)
-                    logger.debug("Added stakeholder context")
-            
-            # 13. Resource context
-            if is_resource_query:
-                resource_context = self._get_resource_context(prompt)
-                if resource_context:
-                    context_parts.append(resource_context)
-                    logger.debug("Added resource context")
-            
-            # 14. Lean context
+                    logger.debug("Added user tasks context (legacy)")
+
             if is_lean_query:
                 lean_context = self._get_lean_context(prompt)
                 if lean_context:
                     context_parts.append(lean_context)
-                    logger.debug("Added lean context")
-            
-            # 15. Dependency context
-            if is_dependency_query:
-                dependency_context = self._get_dependency_context(prompt)
-                if dependency_context:
-                    context_parts.append(dependency_context)
-                    logger.debug("Added dependency context")
-            
-            # 15b. Deadline projection context (can we complete by X date?)
-            if is_deadline_projection_query:
-                deadline_context = self._get_deadline_projection_context(prompt)
-                if deadline_context:
-                    context_parts.append(deadline_context)
-                    logger.debug("Added deadline projection context")
-            
-            # 15c. Strategic workflow context (org goals → missions → strategies → boards)
-            if is_strategic_workflow_query:
-                strategic_wf_context = self._get_strategic_workflow_context(prompt)
-                if strategic_wf_context:
-                    context_parts.append(strategic_wf_context)
-                    logger.debug("Added strategic workflow context")
-            
-            # 15d. Board features context (AI Tools, budget, burndown, etc.)
-            if is_board_features_query:
-                board_features_ctx = self._get_board_features_context(prompt)
-                if board_features_ctx:
-                    context_parts.append(board_features_ctx)
-                    logger.debug("Added board features context")
-            
-            # 15e. Requirements analysis context
-            if is_requirement_query:
-                req_context = self._get_requirements_context(prompt)
-                if req_context:
-                    context_parts.append(req_context)
-                    logger.debug("Added requirements analysis context")
-            
-            # 16. General project context — ALWAYS include when board is set.
-            #     The full task list must always be present so Spectra can
-            #     cross-reference accurately. Previously gated on is_project_query
-            #     which caused missing context for prompts without trigger keywords
-            #     (e.g. "progress", "percentage", "on track" were not in the list).
-            #     Phase 8 fix: unconditional when self.board is set.
-            if self.board:
-                taskflow_context = self.get_taskflow_context(use_cache)
-                if taskflow_context:
-                    context_parts.append(taskflow_context)
-                    logger.debug("Added general project context")
-            
-            # 17. Knowledge base context
+                    logger.debug("Added lean context (legacy)")
+
+            if is_resource_query:
+                resource_context = self._get_resource_context(prompt)
+                if resource_context:
+                    context_parts.append(resource_context)
+                    logger.debug("Added resource context (legacy)")
+
+            # Knowledge base context
             kb_context = self.get_knowledge_base_context(prompt)
             if kb_context:
                 context_parts.append(kb_context)
                 logger.debug("Added KB context")
-            
-            # 17b. User feedback learning context (AI learning loop)
+
+            # User feedback learning context
             feedback_learning_context = self.get_user_feedback_learning_context()
             if feedback_learning_context:
                 context_parts.append(feedback_learning_context)
-                logger.debug("Added user feedback learning context")
-            
-            # 17c. User preference context (respects user's feature toggles)
+
+            # User preference context
             pref_context = self.get_user_preference_context()
             if pref_context:
                 context_parts.append(pref_context)
-                logger.debug("Added user preference context")
-            
-            # 18. Web search context for research and strategic queries
-            # SKIP web search if we already have strong internal context or wiki context
-            search_context = ""
+
+            # ── Web search (only if no strong internal context) ────────────
             used_web_search = False
             search_sources = []
-            
-            # Check if wiki context was already added (indicates query is about internal docs)
-            has_wiki_context = is_wiki_query and any('wiki' in part.lower() or 'documentation' in part.lower() for part in context_parts)
-            
-            # Check if we already have strong internal context (project data answers the question)
-            has_strong_internal_context = len(context_parts) >= 2 or any(
-                indicator in '\n'.join(context_parts).lower() 
-                for indicator in ['tasks assigned', 'task distribution', 'total tasks', 'workload', 'risk analysis', 'critical tasks', 'overdue']
-            ) if context_parts else False
-            
-            # Trigger web search ONLY for queries that genuinely need external knowledge
-            # Skip if: wiki context exists, OR strong internal context already answers the question
-            if (is_search_query or is_strategic_query) and not has_wiki_context and not has_strong_internal_context and getattr(settings, 'ENABLE_WEB_SEARCH', False) and self.search_client:
+
+            has_strong_internal_context = len(context_parts) >= 3
+            if (
+                (is_search_query or is_strategic_query)
+                and not has_strong_internal_context
+                and getattr(settings, 'ENABLE_WEB_SEARCH', False)
+                and self.search_client
+            ):
                 try:
                     search_context = self.search_client.get_search_context(prompt, max_results=3)
-                    if search_context:  # Only add if we got results (None = failed)
+                    if search_context:
                         context_parts.append(search_context)
                         used_web_search = True
-                        # Extract sources
                         for line in search_context.split('\n'):
                             if 'Source' in line or 'URL:' in line:
                                 search_sources.append(line)
-                        logger.debug(f"Added web search context (triggered by: {'strategic query' if is_strategic_query else 'search query'})")
-                    else:
-                        logger.info(f"Web search failed or returned no results - AI will use project data and general knowledge")
+                        logger.debug("Added web search context")
                 except Exception as e:
-                    logger.warning(f"Web search failed: {e} - AI will provide answer using project data and general knowledge")
-            elif has_wiki_context:
-                logger.info(f"Skipping web search - wiki context already found for this query")
-            
-            # Build system prompt
+                    logger.warning(f"Web search failed: {e}")
+
+            # ── Build final prompt & call Gemini ───────────────────────────
             system_prompt = self.generate_system_prompt()
             if context_parts:
                 system_prompt += "\n\n**Available Context Data:**\n" + "\n".join(context_parts)
                 logger.debug(f"Built context with {len(context_parts)} parts")
             else:
                 logger.debug("No specific context found for query")
-            
-            # Classify query for dual-mode temperature selection
-            query_classification = classify_spectra_query(prompt)
+
+            query_classification = classify_query_type(prompt)
             query_type = query_classification['type']
             temperature = query_classification['temperature']
-            
+
             logger.debug(f"Spectra query classified: {query_type}, temp: {temperature}")
-            
-            # Get response from Gemini with optimized temperature (STATELESS - no history maintained)
+
             response = self.gemini_client.get_response(prompt, system_prompt, temperature=temperature)
-            
+
             return {
                 'response': response['content'],
                 'source': 'gemini',
@@ -4706,26 +4555,9 @@ When answering questions about organizational goals, missions, or strategies, us
                 'query_type': query_type,
                 'temperature_used': temperature,
                 'context': {
-                    'is_project_query': is_project_query,
-                    'is_search_query': is_search_query,
-                    'is_strategic_query': is_strategic_query,
-                    'is_aggregate_query': is_aggregate_query,
-                    'is_risk_query': is_risk_query,
-                    'is_stakeholder_query': is_stakeholder_query,
-                    'is_resource_query': is_resource_query,
-                    'is_lean_query': is_lean_query,
-                    'is_dependency_query': is_dependency_query,
-                    'is_organization_query': is_organization_query,
-                    'is_critical_task_query': is_critical_task_query,
-                    'is_mitigation_query': is_mitigation_query,
-                    'is_user_task_query': is_user_task_query,
-                    'is_incomplete_task_query': is_incomplete_task_query,
-                    'is_board_comparison_query': is_board_comparison_query,
-                    'is_task_distribution_query': is_task_distribution_query,
-                    'is_progress_query': is_progress_query,
-                    'is_overdue_query': is_overdue_query,
-                    'is_deadline_projection_query': is_deadline_projection_query,
-                    'context_provided': bool(context_parts)
+                    'matched_providers': matched_providers,
+                    'provider_count': len(matched_providers),
+                    'context_provided': bool(context_parts),
                 }
             }
         
