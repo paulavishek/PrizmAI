@@ -46,6 +46,9 @@ from kanban.commitment_models import (
 # Import Workspace Preset models
 from kanban.preset_models import WorkspacePreset, BoardPreset, build_feature_flags
 
+# Import PrizmBrief models
+from kanban.prizmbrief_models import SavedBrief
+
 
 # ---------------------------------------------------------------------------
 # WORKSPACE — the isolation boundary for multi-workspace support.
