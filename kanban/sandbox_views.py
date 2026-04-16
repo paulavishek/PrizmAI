@@ -1185,6 +1185,263 @@ def _duplicate_board(template_board, user):
     except Exception:
         pass  # Requirements copying is best-effort
 
+    # --- What-If Scenarios ---
+    whatif_map = {}  # old pk → new instance (needed for Shadow Branch source_scenario FK)
+    try:
+        from kanban.whatif_models import WhatIfScenario
+        for ws in WhatIfScenario.objects.filter(board=template_board):
+            old_pk = ws.pk
+            new_ws = WhatIfScenario.objects.create(
+                board=new_board,
+                created_by=ws.created_by,
+                name=ws.name,
+                scenario_type=ws.scenario_type,
+                input_parameters=ws.input_parameters,
+                baseline_snapshot=ws.baseline_snapshot,
+                impact_results=ws.impact_results,
+                ai_analysis=ws.ai_analysis,
+                is_starred=ws.is_starred,
+            )
+            WhatIfScenario.objects.filter(pk=new_ws.pk).update(created_at=ws.created_at)
+            whatif_map[old_pk] = new_ws
+    except Exception:
+        pass
+
+    # --- Shadow Branches + Snapshots + Divergence Logs ---
+    try:
+        from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+        for branch in ShadowBranch.objects.filter(board=template_board):
+            old_branch_pk = branch.pk
+            new_source = whatif_map.get(branch.source_scenario_id) if branch.source_scenario_id else None
+            new_branch = ShadowBranch.objects.create(
+                board=new_board,
+                name=branch.name,
+                description=branch.description,
+                created_by=branch.created_by,
+                status=branch.status,
+                source_scenario=new_source,
+                branch_color=branch.branch_color,
+                is_starred=branch.is_starred,
+            )
+            ShadowBranch.objects.filter(pk=new_branch.pk).update(created_at=branch.created_at)
+
+            for snap in BranchSnapshot.objects.filter(branch_id=old_branch_pk):
+                new_snap = BranchSnapshot.objects.create(
+                    branch=new_branch,
+                    scope_delta=snap.scope_delta,
+                    team_delta=snap.team_delta,
+                    deadline_delta_weeks=snap.deadline_delta_weeks,
+                    feasibility_score=snap.feasibility_score,
+                    projected_completion_date=snap.projected_completion_date,
+                    projected_budget_utilization=snap.projected_budget_utilization,
+                    conflicts_detected=snap.conflicts_detected,
+                    gemini_recommendation=snap.gemini_recommendation,
+                )
+                BranchSnapshot.objects.filter(pk=new_snap.pk).update(captured_at=snap.captured_at)
+
+            for div in BranchDivergenceLog.objects.filter(branch_id=old_branch_pk):
+                new_div = BranchDivergenceLog.objects.create(
+                    branch=new_branch,
+                    old_score=div.old_score,
+                    new_score=div.new_score,
+                    trigger_event=div.trigger_event,
+                )
+                BranchDivergenceLog.objects.filter(pk=new_div.pk).update(logged_at=div.logged_at)
+    except Exception:
+        pass
+
+    # --- Pre-Mortem Analysis + Acknowledgments ---
+    try:
+        from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+        for pm in PreMortemAnalysis.objects.filter(board=template_board):
+            old_pm_pk = pm.pk
+            new_pm = PreMortemAnalysis.objects.create(
+                board=new_board,
+                created_by=pm.created_by,
+                overall_risk_level=pm.overall_risk_level,
+                analysis_json=pm.analysis_json,
+                board_snapshot=pm.board_snapshot,
+            )
+            PreMortemAnalysis.objects.filter(pk=new_pm.pk).update(created_at=pm.created_at)
+
+            for ack in PreMortemScenarioAcknowledgment.objects.filter(pre_mortem_id=old_pm_pk):
+                new_ack = PreMortemScenarioAcknowledgment.objects.create(
+                    pre_mortem=new_pm,
+                    scenario_index=ack.scenario_index,
+                    acknowledged_by=ack.acknowledged_by,
+                    notes=ack.notes,
+                )
+                PreMortemScenarioAcknowledgment.objects.filter(pk=new_ack.pk).update(
+                    acknowledged_at=ack.acknowledged_at,
+                )
+    except Exception:
+        pass
+
+    # --- Stress Test Session + ImmunityScore + Scenarios + Vaccines ---
+    try:
+        from kanban.stress_test_models import (
+            StressTestSession, ImmunityScore, StressTestScenario, Vaccine,
+        )
+        for session in StressTestSession.objects.filter(board=template_board):
+            old_session_pk = session.pk
+            new_session = StressTestSession.objects.create(
+                board=new_board,
+                run_by=session.run_by,
+                score_rationale=session.score_rationale,
+                assumptions_made=session.assumptions_made,
+            )
+            StressTestSession.objects.filter(pk=new_session.pk).update(created_at=session.created_at)
+
+            try:
+                old_score = ImmunityScore.objects.get(session_id=old_session_pk)
+                ImmunityScore.objects.create(
+                    session=new_session,
+                    overall=old_score.overall,
+                    schedule=old_score.schedule,
+                    budget=old_score.budget,
+                    team=old_score.team,
+                    dependencies=old_score.dependencies,
+                    scope_stability=old_score.scope_stability,
+                    schedule_rationale=old_score.schedule_rationale,
+                    budget_rationale=old_score.budget_rationale,
+                    team_rationale=old_score.team_rationale,
+                    dependencies_rationale=old_score.dependencies_rationale,
+                    scope_stability_rationale=old_score.scope_stability_rationale,
+                )
+            except ImmunityScore.DoesNotExist:
+                pass
+
+            for sc in StressTestScenario.objects.filter(session_id=old_session_pk):
+                StressTestScenario.objects.create(
+                    session=new_session,
+                    scenario_number=sc.scenario_number,
+                    attack_type=sc.attack_type,
+                    title=sc.title,
+                    attack_description=sc.attack_description,
+                    cascade_effect=sc.cascade_effect,
+                    outcome=sc.outcome,
+                    severity=sc.severity,
+                    tasks_blocked=sc.tasks_blocked,
+                    estimated_delay_weeks=sc.estimated_delay_weeks,
+                    has_recovery_path=sc.has_recovery_path,
+                    early_warning_sign=sc.early_warning_sign,
+                    tags=sc.tags,
+                    is_addressed=sc.is_addressed,
+                    addressed_at=sc.addressed_at,
+                    addressed_by=sc.addressed_by,
+                )
+
+            for vac in Vaccine.objects.filter(session_id=old_session_pk):
+                Vaccine.objects.create(
+                    session=new_session,
+                    board=new_board,
+                    vaccine_number=vac.vaccine_number,
+                    targets_scenario_number=vac.targets_scenario_number,
+                    name=vac.name,
+                    description=vac.description,
+                    effort_level=vac.effort_level,
+                    effort_rationale=vac.effort_rationale,
+                    projected_score_improvement=vac.projected_score_improvement,
+                    implementation_hint=vac.implementation_hint,
+                    is_applied=vac.is_applied,
+                    applied_at=vac.applied_at,
+                    applied_by=vac.applied_by,
+                )
+    except Exception:
+        pass
+
+    # --- Scope Autopsy Report + Timeline Events ---
+    try:
+        from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+        for report in ScopeAutopsyReport.objects.filter(board=template_board):
+            old_report_pk = report.pk
+            new_report = ScopeAutopsyReport.objects.create(
+                board=new_board,
+                created_by=report.created_by,
+                status=report.status,
+                baseline_task_count=report.baseline_task_count,
+                baseline_date=report.baseline_date,
+                final_task_count=report.final_task_count,
+                total_scope_growth_percentage=report.total_scope_growth_percentage,
+                total_delay_days=report.total_delay_days,
+                total_budget_impact=report.total_budget_impact,
+                timeline_json=report.timeline_json,
+                pattern_analysis=report.pattern_analysis,
+                ai_summary=report.ai_summary,
+                recommendations=report.recommendations,
+                board_snapshot=report.board_snapshot,
+            )
+            ScopeAutopsyReport.objects.filter(pk=new_report.pk).update(created_at=report.created_at)
+
+            for evt in ScopeTimelineEvent.objects.filter(report_id=old_report_pk):
+                ScopeTimelineEvent.objects.create(
+                    report=new_report,
+                    event_date=evt.event_date,
+                    title=evt.title,
+                    description=evt.description,
+                    source_type=evt.source_type,
+                    source_object_type=evt.source_object_type,
+                    source_object_id=evt.source_object_id,
+                    tasks_added=evt.tasks_added,
+                    tasks_removed=evt.tasks_removed,
+                    net_task_change=evt.net_task_change,
+                    added_by=evt.added_by,
+                    estimated_delay_days=evt.estimated_delay_days,
+                    estimated_budget_impact=evt.estimated_budget_impact,
+                    cumulative_task_count=evt.cumulative_task_count,
+                    is_major_event=evt.is_major_event,
+                )
+    except Exception:
+        pass
+
+    # --- Exit Protocol: Health Signals + Cemetery Entry ---
+    try:
+        from exit_protocol.models import ProjectHealthSignal, CemeteryEntry
+        for sig in ProjectHealthSignal.objects.filter(board=template_board):
+            new_sig = ProjectHealthSignal.objects.create(
+                board=new_board,
+                velocity_last_sprint=sig.velocity_last_sprint,
+                velocity_3sprint_avg=sig.velocity_3sprint_avg,
+                velocity_decline_pct=sig.velocity_decline_pct,
+                budget_spent_pct=sig.budget_spent_pct,
+                tasks_complete_pct=sig.tasks_complete_pct,
+                deadlines_missed_30d=sig.deadlines_missed_30d,
+                days_since_last_activity=sig.days_since_last_activity,
+                dimensions_available=sig.dimensions_available,
+                hospice_risk_score=sig.hospice_risk_score,
+                score_is_valid=sig.score_is_valid,
+                triggered_hospice=sig.triggered_hospice,
+            )
+            ProjectHealthSignal.objects.filter(pk=new_sig.pk).update(recorded_at=sig.recorded_at)
+
+        # Cemetery entries reference a board — only copy if the entry is on this template board
+        for ce in CemeteryEntry.objects.filter(board=template_board):
+            CemeteryEntry.objects.create(
+                board=new_board,
+                project_name=ce.project_name,
+                project_description=ce.project_description,
+                board_id_snapshot=new_board.pk,
+                team_size=ce.team_size,
+                total_tasks=ce.total_tasks,
+                completed_tasks=ce.completed_tasks,
+                budget_allocated=ce.budget_allocated,
+                budget_spent=ce.budget_spent,
+                start_date=ce.start_date,
+                end_date=ce.end_date,
+                cause_of_death=ce.cause_of_death,
+                ai_cause_rationale=ce.ai_cause_rationale,
+                contributing_factors=ce.contributing_factors,
+                autopsy_report=ce.autopsy_report,
+                autopsy_summary=ce.autopsy_summary,
+                lessons_to_repeat=ce.lessons_to_repeat,
+                lessons_to_avoid=ce.lessons_to_avoid,
+                open_questions=ce.open_questions,
+                decline_timeline=ce.decline_timeline,
+                tags=ce.tags,
+            )
+    except Exception:
+        pass
+
     return new_board
 
 
@@ -1434,8 +1691,46 @@ def _purge_existing_sandbox(user):
         except Exception:
             pass
 
+        # ── Nullify SET_NULL FKs from objects OUTSIDE the deletion set ──
+        # (e.g. CemeteryEntry.resurrected_as on a non-sandbox board pointing
+        #  to a sandbox board, Board.cloned_from self-refs within the set, etc.)
+        try:
+            Board.objects.filter(
+                cloned_from_id__in=sandbox_board_ids,
+            ).update(cloned_from=None)
+        except Exception:
+            pass
+
+        try:
+            from exit_protocol.models import CemeteryEntry
+            CemeteryEntry.objects.filter(
+                resurrected_as_id__in=sandbox_board_ids,
+            ).update(resurrected_as=None)
+        except Exception:
+            pass
+
+        try:
+            from wiki.models import MeetingNotes
+            MeetingNotes.objects.filter(
+                related_board_id__in=sandbox_board_ids,
+            ).update(related_board=None)
+        except Exception:
+            pass
+
         # ── Now delete sandbox boards + user-created demo boards (cascades most other models) ──
-        all_boards_to_delete.delete()
+        from django.db import connection
+        if connection.vendor == 'sqlite':
+            # SQLite enforces FK constraints per-statement; complex cascade
+            # chains can fail even when Django's collector orders them
+            # correctly.  Temporarily disable FK checks for the bulk delete.
+            cursor = connection.cursor()
+            cursor.execute('PRAGMA foreign_keys = OFF')
+            try:
+                all_boards_to_delete.delete()
+            finally:
+                cursor.execute('PRAGMA foreign_keys = ON')
+        else:
+            all_boards_to_delete.delete()
 
     # ── User-scoped data (not board-scoped, survives board deletion) ──
     try:
