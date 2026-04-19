@@ -617,6 +617,17 @@ def quick_link_wiki(request, content_type, object_id):
                 }
             )
         
+        # Record activity log for wiki page linking on tasks
+        if content_type == 'task':
+            from kanban.models import TaskActivity
+            page_names = ', '.join([p.title for p in pages])
+            TaskActivity.objects.create(
+                task=item,
+                user=request.user,
+                activity_type='updated',
+                description=f"Linked wiki page(s) '{page_names}' to '{item.title}'"
+            )
+        
         # Check if this is an AJAX request
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'success': True, 'message': 'Wiki pages linked successfully!'})

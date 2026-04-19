@@ -361,7 +361,7 @@
                                     <div class="mb-4">
                                         <h6><i class="fas fa-dollar-sign text-success"></i> Budget & Cost Estimation</h6>
                                         <div class="alert alert-info py-2 mb-3">
-                                            <small><i class="fas fa-info-circle me-1"></i> Cost estimates help track project budget and enable AI-powered budget recommendations.</small>
+                                            <small><i class="fas fa-info-circle me-1"></i> Cost estimates help track project budget and enable AI-powered budget recommendations. <strong>Estimated Cost</strong> is the overall task budget. <strong>Estimated Labor Cost</strong> is auto-calculated from Hours × Rate.</small>
                                         </div>
                                         <div class="row">
                                             <div class="col-md-4 mb-3">
@@ -372,7 +372,7 @@
                                                     <span class="input-group-text">$</span>
                                                     {{ form.estimated_cost }}
                                                 </div>
-                                                <small class="form-text text-muted">{{ form.estimated_cost.help_text }}</small>
+                                                <small class="form-text text-muted">Estimated cost for completing this task</small>
                                                 {% if form.estimated_cost.errors %}
                                                     <div class="invalid-feedback d-block">{{ form.estimated_cost.errors }}</div>
                                                 {% endif %}
@@ -422,6 +422,39 @@
 
                                     <hr>
 
+                                    <!-- 🛠️ Required Skills (Chip UI) -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-tools text-secondary"></i> Required Skills</h6>
+                                        {# Hidden textarea — keeps JSON value for form submission #}
+                                        <div class="d-none">{{ form.required_skills }}</div>
+                                        {# Chip display area #}
+                                        <div id="skills-chip-container"
+                                             class="d-flex flex-wrap gap-1 p-2 border rounded bg-light mb-2"
+                                             style="min-height: 42px;">
+                                        </div>
+                                        {# Inline add form #}
+                                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                                            <input type="text" id="skill-name-input"
+                                                   class="form-control form-control-sm"
+                                                   placeholder="Skill name"
+                                                   style="max-width: 180px;" autocomplete="off">
+                                            <select id="skill-level-select" class="form-select form-select-sm" style="max-width: 150px;">
+                                                <option value="">-- Level --</option>
+                                                <option value="Beginner">Beginner</option>
+                                                <option value="Intermediate">Intermediate</option>
+                                                <option value="Advanced">Advanced</option>
+                                                <option value="Expert">Expert</option>
+                                            </select>
+                                            <button type="button" id="add-skill-btn" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-plus me-1"></i> Add
+                                            </button>
+                                        </div>
+                                        <small class="form-text text-muted mt-1 d-block">Add the skills required for this task. Click &times; on a chip to remove it.</small>
+                                        {% if form.required_skills.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
+                                        {% endif %}
+                                    </div>
+
                                     <!-- Task Relationships → moved to Relationships tab -->
                             </div>
                         </div>
@@ -451,42 +484,6 @@
                             </div>
                         </div>
                         
-                        <hr>
-                        
-                        <!-- Required Skills (Chip UI) -->
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">
-                                <i class="fas fa-tools me-1"></i> Required Skills
-                            </label>
-                            {# Hidden textarea — keeps JSON value for form submission #}
-                            <div class="d-none">{{ form.required_skills }}</div>
-                            {# Chip display area #}
-                            <div id="skills-chip-container"
-                                 class="d-flex flex-wrap gap-1 p-2 border rounded bg-light mb-2"
-                                 style="min-height: 42px;">
-                            </div>
-                            {# Inline add form #}
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <input type="text" id="skill-name-input"
-                                       class="form-control form-control-sm"
-                                       placeholder="Skill name"
-                                       style="max-width: 180px;" autocomplete="off">
-                                <select id="skill-level-select" class="form-select form-select-sm" style="max-width: 150px;">
-                                    <option value="">-- Level --</option>
-                                    <option value="Beginner">Beginner</option>
-                                    <option value="Intermediate">Intermediate</option>
-                                    <option value="Advanced">Advanced</option>
-                                    <option value="Expert">Expert</option>
-                                </select>
-                                <button type="button" id="add-skill-btn" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-plus me-1"></i> Add
-                                </button>
-                            </div>
-                            <small class="form-text text-muted mt-1 d-block">Add the skills required for this task. Click &times; on a chip to remove it.</small>
-                            {% if form.required_skills.errors %}
-                                <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
-                            {% endif %}
-                        </div>
 
                     </div><!-- /tab-relationships -->
 
@@ -2058,12 +2055,11 @@
         }
 
         // Budget/Cost calculation preview
-        // autoFillCost: when true, overwrites the cost input with hours x rate.
-        // Set to false on initial load so the stored DB value is preserved.
-        function updateLaborCostPreview(autoFillCost) {
+        // Shows the computed labor cost (hours × rate) in a read-only preview.
+        // The "Estimated Cost" field is independent and never auto-overwritten.
+        function updateLaborCostPreview() {
             const hoursInput = document.getElementById('id_estimated_hours');
             const rateInput = document.getElementById('id_hourly_rate');
-            const costInput = document.getElementById('id_estimated_cost');
             const preview = document.getElementById('laborCostPreview');
             
             if (hoursInput && rateInput && preview) {
@@ -2074,12 +2070,6 @@
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
                 });
-                
-                // Only auto-fill the Estimated Cost field when the user actively changes
-                // hours or rate — never overwrite on initial page load (preserves DB value).
-                if (autoFillCost && costInput && laborCost > 0) {
-                    costInput.value = laborCost.toFixed(2);
-                }
             }
         }
         
@@ -2088,14 +2078,14 @@
         const rateInput = document.getElementById('id_hourly_rate');
         
         if (hoursInput) {
-            hoursInput.addEventListener('input', function() { updateLaborCostPreview(true); });
+            hoursInput.addEventListener('input', function() { updateLaborCostPreview(); });
         }
         if (rateInput) {
-            rateInput.addEventListener('input', function() { updateLaborCostPreview(true); });
+            rateInput.addEventListener('input', function() { updateLaborCostPreview(); });
         }
         
-        // Initial calculation — preview only, do NOT overwrite the stored estimated cost
-        updateLaborCostPreview(false);
+        // Initial calculation
+        updateLaborCostPreview();
         
         // Set up increase progress buttons
         document.querySelectorAll('.increase-progress').forEach(btn => {
@@ -2148,8 +2138,44 @@
                 })
                 .then(response => {
                     if (response.ok) {
-                        // Reload to show the new comment in the activity tab
-                        window.location.href = window.location.pathname + '#tab-activity';
+                        // Dynamically add comment to the DOM without full reload
+                        const commentContent = textarea.value.trim();
+                        const username = '{{ request.user.username|escapejs }}';
+                        const now = new Date();
+                        const dateStr = now.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+                        const timeStr = now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', hour12: false});
+                        const initial = username.charAt(0).toUpperCase();
+
+                        const commentHtml = `
+                        <div class="d-flex mb-4">
+                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                                ${initial}
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">${username}</h6>
+                                    <small class="text-muted">${dateStr} at ${timeStr}</small>
+                                </div>
+                                <p class="mb-0">${commentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+                            </div>
+                        </div>`;
+
+                        // Find comments container and add at top (newest first)
+                        const commentsCard = document.querySelector('#tab-activity .card-body');
+                        const noCommentsMsg = commentsCard.querySelector('p.text-muted');
+                        if (noCommentsMsg && noCommentsMsg.textContent.includes('No comments yet')) {
+                            noCommentsMsg.remove();
+                        }
+                        const hr = commentsCard.querySelector('hr');
+                        if (hr) {
+                            hr.insertAdjacentHTML('beforebegin', commentHtml);
+                        } else {
+                            commentsCard.insertAdjacentHTML('afterbegin', commentHtml);
+                        }
+
+                        // Clear textarea and re-enable button
+                        textarea.value = '';
+                        addCommentBtn.disabled = false;
                     }
                 })
                 .catch(() => {
@@ -2953,21 +2979,13 @@
     }
     
     // Store the original referrer URL on page load (before any navigation)
-    // This captures where the user came from (e.g., Gantt chart)
+    // Only use explicit 'next' URL parameter — do NOT use document.referrer
+    // to prevent the form save from redirecting away from the task detail page.
     const originalReferrer = (function() {
-        // First check if there's a 'next' parameter in the URL
         const urlParams = new URLSearchParams(window.location.search);
         const nextParam = urlParams.get('next');
         if (nextParam) {
             return nextParam;
-        }
-        
-        // Otherwise use document.referrer if it's a valid internal page
-        const referrer = document.referrer;
-        if (referrer && !referrer.includes('/tasks/')) {
-            // Only use referrer if it's not another task page
-            // This prevents going back to task detail after form submit
-            return referrer;
         }
         return null;
     })();
@@ -4273,7 +4291,7 @@ function addManualChecklistItem() {
                     <div class="flex-grow-1 min-w-0">
                         <small>${item.title}</small>
                     </div>
-                    <span class="badge bg-warning text-dark" style="font-size:0.65em;">medium</span>
+                    <span class="badge bg-secondary" style="font-size:0.65em;">${item.priority || 'low'}</span>
                     <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" onclick="deleteChecklistItem(${item.id})" title="Remove">
                         <i class="fas fa-times" style="font-size:0.75em;"></i>
                     </button>
