@@ -371,6 +371,43 @@ def _duplicate_board(template_board, user):
     except Exception:
         pass
 
+    # --- Stakeholders & Task Involvements ---
+    try:
+        from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
+        stakeholder_map = {}  # old stakeholder pk → new stakeholder instance
+        for sh in ProjectStakeholder.objects.filter(board=template_board):
+            new_sh = ProjectStakeholder.objects.create(
+                board=new_board,
+                name=sh.name,
+                email=sh.email,
+                role=sh.role,
+                organization=sh.organization,
+                influence_level=sh.influence_level,
+                interest_level=sh.interest_level,
+                engagement_strategy=sh.engagement_strategy,
+                communication_preference=sh.communication_preference,
+                notes=sh.notes,
+                created_by=sh.created_by,
+            )
+            stakeholder_map[sh.pk] = new_sh
+
+        for inv in StakeholderTaskInvolvement.objects.filter(
+            stakeholder__board=template_board
+        ).select_related('stakeholder', 'task'):
+            new_sh = stakeholder_map.get(inv.stakeholder_id)
+            new_task = task_map.get(inv.task_id)
+            if new_sh and new_task:
+                StakeholderTaskInvolvement.objects.create(
+                    stakeholder=new_sh,
+                    task=new_task,
+                    involvement_type=inv.involvement_type,
+                    engagement_status=inv.engagement_status,
+                    feedback=inv.feedback,
+                    satisfaction_rating=inv.satisfaction_rating,
+                )
+    except Exception:
+        pass
+
     # --- Burndown / Velocity ---
     try:
         from kanban.burndown_models import (

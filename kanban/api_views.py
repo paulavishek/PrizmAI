@@ -2344,6 +2344,7 @@ def add_checklist_item(request):
             title=title,
             position=task.checklist_items.count(),
             source='manual',
+            priority='low',
         )
         return JsonResponse({
             'success': True,

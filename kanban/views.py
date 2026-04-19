@@ -5288,6 +5288,14 @@ def upload_task_file(request, task_id):
             # Filename, size, and type are now set by form.save() with proper sanitization
             file_obj.save()
             
+            # Record activity log for attachment upload
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f"Uploaded attachment '{file_obj.filename}' to '{task.title}'"
+            )
+            
             messages.success(request, f'File "{file_obj.filename}" uploaded successfully!')
             
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
