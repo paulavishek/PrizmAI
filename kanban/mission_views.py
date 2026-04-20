@@ -549,7 +549,11 @@ def set_mission_goal(request, mission_id):
     if request.method == 'POST':
         goal_id = request.POST.get('goal_id', '').strip()
         if goal_id:
-            goal = get_object_or_404(OrganizationGoal, id=goal_id)
+            _active_ws = getattr(request, 'workspace', None)
+            goal_qs = OrganizationGoal.objects.all()
+            if _active_ws:
+                goal_qs = goal_qs.filter(workspace=_active_ws)
+            goal = get_object_or_404(goal_qs, id=goal_id)
             mission.organization_goal = goal
             mission.save(update_fields=['organization_goal'])
             messages.success(request, f'Mission linked to goal "{goal.name}".')
@@ -822,8 +826,12 @@ def mission_detail(request, mission_id):
         'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
         'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
         'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
-        # All goals for the "Link to Goal" sidebar widget — scoped to user's own goals
-        'all_goals': OrganizationGoal.objects.filter(created_by=request.user).order_by('name'),
+        # All goals for the "Link to Goal" sidebar widget — scoped to active workspace
+        'all_goals': OrganizationGoal.objects.filter(
+            workspace=getattr(request, 'workspace', None)
+        ).order_by('name') if getattr(request, 'workspace', None) else OrganizationGoal.objects.filter(
+            created_by=request.user, is_demo=False, is_seed_demo_data=False,
+        ).order_by('name'),
     })
 
 
@@ -847,7 +855,13 @@ def create_mission(request):
         messages.error(request, 'You do not have permission to create missions. Only Workspace Admins and Goal Owners can create missions.')
         return redirect('mission_list')
 
-    all_goals = OrganizationGoal.objects.order_by('name')
+    _active_ws = getattr(request, 'workspace', None)
+    if _active_ws:
+        all_goals = OrganizationGoal.objects.filter(workspace=_active_ws).order_by('name')
+    else:
+        all_goals = OrganizationGoal.objects.filter(
+            created_by=request.user, is_demo=False, is_seed_demo_data=False,
+        ).order_by('name')
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()

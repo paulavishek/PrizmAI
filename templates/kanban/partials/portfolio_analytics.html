@@ -67,13 +67,19 @@ Expects: portfolio (dict with groups, unclassified_count), portfolio_narrative (
 
 <script>
 function refreshPortfolioNarrative(recordType, recordId) {
+    var btn = event ? event.target.closest('button') : null;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating\u2026'; }
     fetch('/kanban/api/strategic/' + recordType + '/' + recordId + '/generate-portfolio-narrative/', {
         method: 'POST',
         headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'}
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'ok') { location.reload(); }
+    }).then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error (' + r.status + ')'); });
+        return r.json();
+    }).then(function(data) {
+        if (data.success) { location.reload(); }
         else { alert(data.error || 'Failed to generate narrative.'); }
-    }).catch(() => alert('Network error.'));
+    }).catch(function(err) { alert(err.message || 'Network error.'); })
+    .finally(function() { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic me-1"></i>Generate'; } });
 }
 </script>
 {% endif %}

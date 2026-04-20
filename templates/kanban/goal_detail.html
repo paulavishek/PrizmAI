@@ -245,10 +245,13 @@ function regenerateProxyMetrics() {
     fetch("{% url 'generate_proxy_metrics_api' goal.id %}", {
         method: 'POST',
         headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'}
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'ok') { location.reload(); }
+    }).then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error'); });
+        return r.json();
+    }).then(function(data) {
+        if (data.success) { location.reload(); }
         else { alert(data.error || 'Failed.'); }
-    }).catch(() => alert('Network error.'));
+    }).catch(function(err) { alert(err.message || 'Network error.'); });
 }
 function updateProxyMetric(metricId) {
     var val = document.getElementById('pm-val-' + metricId).value.trim();
@@ -258,10 +261,13 @@ function updateProxyMetric(metricId) {
         headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}',
                   'Content-Type': 'application/json'},
         body: JSON.stringify({value: val})
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'ok') { location.reload(); }
+    }).then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error'); });
+        return r.json();
+    }).then(function(data) {
+        if (data.success) { location.reload(); }
         else { alert(data.error || 'Failed.'); }
-    }).catch(() => alert('Network error.'));
+    }).catch(function(err) { alert(err.message || 'Network error.'); });
 }
 </script>
 {% endblock %}
@@ -336,7 +342,8 @@ function updateProxyMetric(metricId) {
     <div class="sidebar-label">Version</div>
     <div class="sidebar-value">
         v{{ record.version }}
-        · <a href="#tab-versions" class="text-decoration-none" onclick="document.querySelector('[data-bs-target=\"#tab-versions\"]').click();">View history</a>
+        · <a href="#tab-versions" class="text-decoration-none"
+           onclick="event.preventDefault(); var t=document.querySelector('.strategic-tabs .nav-link[data-bs-target=&quot;#tab-versions&quot;]'); if(t) t.click();">View history</a>
     </div>
 </div>
 {% endblock %}
