@@ -647,6 +647,38 @@ def dashboard(request):
         else:
             ungrouped_missions.append(item)
 
+    # Include standalone goals (no linked missions) so they appear in
+    # the Hierarchy Navigator even before the user links missions.
+    if demo_mode:
+        _all_goals_qs = OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    elif active_ws and not active_ws.is_demo:
+        _all_goals_qs = OrganizationGoal.objects.filter(workspace=active_ws)
+    elif _is_org_admin:
+        _admin_org = getattr(profile, 'organization', None) if profile else None
+        if _admin_org and not getattr(_admin_org, 'is_demo', False):
+            _all_goals_qs = OrganizationGoal.objects.filter(
+                Q(workspace__organization=_admin_org),
+                is_demo=False, is_seed_demo_data=False,
+            )
+        else:
+            _all_goals_qs = OrganizationGoal.objects.filter(
+                created_by=request.user, is_demo=False, is_seed_demo_data=False,
+            )
+    else:
+        _all_goals_qs = OrganizationGoal.objects.filter(
+            Q(created_by=request.user) |
+            Q(missions__strategies__boards__memberships__user=request.user),
+            is_demo=False, is_seed_demo_data=False,
+        ).distinct()
+    for _standalone_goal in _all_goals_qs:
+        if _standalone_goal.id not in goal_map:
+            goal_map[_standalone_goal.id] = {
+                'goal': _standalone_goal,
+                'missions': [],
+            }
+
     goal_tree = list(goal_map.values())
     if ungrouped_missions:
         goal_tree.append({'goal': None, 'missions': ungrouped_missions})
