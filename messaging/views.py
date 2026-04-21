@@ -51,7 +51,12 @@ def messaging_hub(request):
     # Calculate unread messages per board
     boards_with_unread = []
     for board in user_boards:
-        board_rooms = board.chat_rooms.filter(members=request.user)
+        is_demo = getattr(board, 'is_official_demo_board', False)
+        if is_demo:
+            # Demo boards: count all rooms regardless of formal membership
+            board_rooms = board.chat_rooms.all()
+        else:
+            board_rooms = board.chat_rooms.filter(members=request.user)
         unread_count = 0
         for room in board_rooms:
             unread_count += room.messages.exclude(read_by=request.user).exclude(author=request.user).count()
@@ -455,12 +460,16 @@ def get_unread_message_count(request):
     # Get boards scoped to the user's current workspace (demo vs real)
     # Use centralized helper to prevent cross-workspace leakage
     accessible_boards = get_user_boards(request.user)
-    
-    # Get chat rooms from accessible boards where user is a member
+
+    # For official demo boards, all accessible users can see unread counts even
+    # before visiting the room (which triggers the lazy auto-add to membership).
+    # For personal/org boards, only count rooms where user is a formal member.
+    demo_boards = accessible_boards.filter(is_official_demo_board=True)
+    non_demo_boards = accessible_boards.exclude(is_official_demo_board=True)
+
     user_chat_rooms = ChatRoom.objects.filter(
-        members=request.user,
-        board__in=accessible_boards
-    )
+        Q(board__in=demo_boards) | Q(members=request.user, board__in=non_demo_boards)
+    ).distinct()
     
     # Count total unread messages
     # Messages are unread if: the user hasn't marked them as read AND they're not from the user
