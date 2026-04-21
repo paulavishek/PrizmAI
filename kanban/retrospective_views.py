@@ -36,8 +36,9 @@ def _add_manual_lessons(retrospective, board, lessons_list):
                 board=board,
                 title=lesson_text[:100],
                 description=lesson_text,
-                category='team_process',
+                category='other',
                 priority='medium',
+                recommended_action='Review and implement this lesson in the next sprint.',
                 ai_suggested=False,
                 status='identified'
             )
@@ -55,7 +56,7 @@ def _add_manual_actions(retrospective, board, actions_list):
                 board=board,
                 title=action_text[:100],
                 description=action_text,
-                action_type='process_improvement',
+                action_type='process_change',
                 priority='medium',
                 target_completion_date=target_date,
                 ai_suggested=False,
