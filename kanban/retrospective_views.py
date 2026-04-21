@@ -89,10 +89,11 @@ def retrospective_list(request, board_id):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
-    # Summary statistics
+    # Summary statistics — counts are always board-wide, unaffected by filters
+    all_retrospectives = ProjectRetrospective.objects.filter(board=board)
     stats = {
-        'total_retrospectives': retrospectives.count(),
-        'finalized_count': retrospectives.filter(status='finalized').count(),
+        'total_retrospectives': all_retrospectives.count(),
+        'finalized_count': all_retrospectives.filter(status='finalized').count(),
         'total_lessons': LessonLearned.objects.filter(board=board).count(),
         'implemented_lessons': LessonLearned.objects.filter(
             board=board, status__in=['implemented', 'validated']

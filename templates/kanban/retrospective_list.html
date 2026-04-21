@@ -172,8 +172,14 @@
         {% empty %}
         <div class="col-12">
             <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i> No retrospectives found. 
-                <a href="{% url 'retrospective_create' board.id %}">Generate your first retrospective</a> to start tracking improvements.
+                <i class="fas fa-info-circle"></i>
+                {% if status_filter or type_filter %}
+                    No retrospectives match your current filters.
+                    <a href="{% url 'retrospective_list' board.id %}">Clear filters</a> to see all retrospectives.
+                {% else %}
+                    No retrospectives yet.
+                    <a href="{% url 'retrospective_create' board.id %}">Generate your first retrospective</a> to start tracking improvements.
+                {% endif %}
             </div>
         </div>
         {% endfor %}
