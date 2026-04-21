@@ -650,4 +650,27 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 {% endfor %}
 
+<script>
+// Scroll to and highlight a specific action item when navigating from the dashboard
+(function() {
+    const hash = window.location.hash;
+    if (!hash || !hash.startsWith('#action-')) return;
+
+    function scrollToAction() {
+        const target = document.querySelector(hash);
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('table-primary');
+        setTimeout(function() { target.classList.remove('table-primary'); }, 3000);
+    }
+
+    // Run after page is fully rendered
+    if (document.readyState === 'complete') {
+        scrollToAction();
+    } else {
+        window.addEventListener('load', scrollToAction);
+    }
+})();
+</script>
+
 {% endblock %}

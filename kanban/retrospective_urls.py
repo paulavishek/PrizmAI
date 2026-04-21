@@ -42,6 +42,10 @@ urlpatterns = [
          name='lesson_update_status'),
     
     # Action items
+    path('board/<int:board_id>/actions/', 
+         retrospective_views.retrospective_actions_list, 
+         name='retrospective_actions_list'),
+
     path('board/<int:board_id>/actions/<int:action_id>/status/', 
          retrospective_views.action_update_status, 
          name='action_update_status'),
