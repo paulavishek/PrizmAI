@@ -343,8 +343,14 @@ class RetrospectiveGenerator:
         if ai_cache:
             cached = ai_cache.get(prompt, 'retrospective', context_id)
             if cached:
-                logger.debug("Retrospective AI cache HIT")
-                return cached
+                # Discard stale entries produced by the old (broken) parser
+                # — they had empty lists for every structured section.
+                if (cached.get('lessons_learned') or cached.get('improvement_recommendations')):
+                    logger.debug("Retrospective AI cache HIT")
+                    return cached
+                else:
+                    logger.debug("Retrospective AI cache HIT but empty sections — discarding stale entry")
+                    ai_cache.invalidate(prompt, 'retrospective', context_id)
         
         # Get AI response with complex task routing
         response = self.gemini_client.get_response(
@@ -483,19 +489,14 @@ Format the response with clear sections using the headers above.
     
     def _parse_ai_response(self, ai_content, metrics, patterns):
         """
-        Parse AI-generated response into structured format
-        
-        Args:
-            ai_content: Raw AI response text
-            metrics: Original metrics
-            patterns: Original patterns
-            
-        Returns:
-            dict: Structured insights
+        Parse AI-generated response into structured format.
+        Handles both bold-header format (**SECTION**) and markdown-heading
+        format (### SECTION or ### N. SECTION) as well as JSON wrapped in
+        ```json ... ``` code fences.
         """
         import json
         import re
-        
+
         insights = {
             'what_went_well': '',
             'what_needs_improvement': '',
@@ -508,64 +509,105 @@ Format the response with clear sections using the headers above.
             'performance_trend': 'stable',
             'raw_analysis': ai_content
         }
-        
+
+        # ── helpers ──────────────────────────────────────────────────────
+        def _sec(name):
+            """Return a pattern that matches a section regardless of whether
+            the AI used **NAME** or ### [N. ]NAME as the heading.
+            Captures everything up to the next heading or end of string."""
+            escaped = re.escape(name)
+            bold    = r'\*\*' + escaped + r'\*\*'
+            heading = r'#{1,3}\s*(?:\d+\.\s*)?' + escaped + r'[^\n]*'
+            return r'(?:' + bold + r'|' + heading + r')\s*(.*?)(?=(?:#{1,3}\s|\*\*[A-Z])|\Z)'
+
+        def _extract_json(text):
+            """Extract a JSON array from text, stripping code fences."""
+            # 1. Extract raw content inside ```json ... ``` or ``` ... ```
+            fence = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+            if fence:
+                try:
+                    data = json.loads(fence.group(1).strip())
+                    if isinstance(data, list):
+                        return data
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            # 2. Fall back: find outermost [...] array (greedy — captures all nested brackets)
+            bare = re.search(r'\[[\s\S]*\]', text)
+            if bare:
+                try:
+                    return json.loads(bare.group(0))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            return None
+
+        def _inline_value(name, text):
+            """Extract an inline value from headings like
+            ### OVERALL SENTIMENT SCORE: 0.4  or  **OVERALL SENTIMENT SCORE** 0.4"""
+            escaped = re.escape(name)
+            pat = r'(?:\*\*' + escaped + r'\*\*|#{1,3}\s*(?:\d+\.\s*)?' + escaped + r')[:\s]+([^\n]+)'
+            m = re.search(pat, text, re.IGNORECASE)
+            return m.group(1).strip() if m else None
+
+        # ── content sections ─────────────────────────────────────────────
+        text_sections = {
+            'what_went_well':        'WHAT WENT WELL',
+            'what_needs_improvement':'WHAT NEEDS IMPROVEMENT',
+        }
+        json_sections = {
+            'lessons_learned':           'LESSONS LEARNED',
+            'key_achievements':          'KEY ACHIEVEMENTS',
+            'challenges_faced':          'CHALLENGES FACED',
+            'improvement_recommendations':'IMPROVEMENT RECOMMENDATIONS',
+        }
+
         try:
-            # Extract sections using regex
-            sections = {
-                'what_went_well': r'\*\*WHAT WENT WELL\*\*\s*(.*?)(?=\*\*|$)',
-                'what_needs_improvement': r'\*\*WHAT NEEDS IMPROVEMENT\*\*\s*(.*?)(?=\*\*|$)',
-                'lessons_learned': r'\*\*LESSONS LEARNED\*\*\s*(.*?)(?=\*\*|$)',
-                'key_achievements': r'\*\*KEY ACHIEVEMENTS\*\*\s*(.*?)(?=\*\*|$)',
-                'challenges_faced': r'\*\*CHALLENGES FACED\*\*\s*(.*?)(?=\*\*|$)',
-                'improvement_recommendations': r'\*\*IMPROVEMENT RECOMMENDATIONS\*\*\s*(.*?)(?=\*\*|$)',
-                'sentiment': r'\*\*OVERALL SENTIMENT SCORE\*\*\s*([0-9.]+)',
-                'morale': r'\*\*TEAM MORALE INDICATOR\*\*\s*(\w+)',
-                'trend': r'\*\*PERFORMANCE TREND\*\*\s*(\w+)',
-            }
-            
-            for key, pattern in sections.items():
-                match = re.search(pattern, ai_content, re.DOTALL | re.IGNORECASE)
-                if match:
-                    content = match.group(1).strip()
-                    
-                    if key in ['lessons_learned', 'key_achievements', 'challenges_faced', 'improvement_recommendations']:
-                        # Try to parse as JSON
-                        try:
-                            # Find JSON array in content
-                            json_match = re.search(r'\[.*\]', content, re.DOTALL)
-                            if json_match:
-                                insights[key] = json.loads(json_match.group(0))
-                            else:
-                                # Parse as bullet points
-                                insights[key] = self._parse_bullet_points(content, key)
-                        except json.JSONDecodeError:
-                            # Fallback to bullet point parsing
+            for key, name in text_sections.items():
+                m = re.search(_sec(name), ai_content, re.DOTALL | re.IGNORECASE)
+                if m:
+                    insights[key] = m.group(1).strip()
+
+            for key, name in json_sections.items():
+                m = re.search(_sec(name), ai_content, re.DOTALL | re.IGNORECASE)
+                if m:
+                    content = m.group(1).strip()
+                    try:
+                        parsed = _extract_json(content)
+                        if parsed is not None:
+                            insights[key] = parsed
+                        else:
                             insights[key] = self._parse_bullet_points(content, key)
-                    elif key == 'sentiment':
-                        try:
-                            insights['overall_sentiment_score'] = float(content)
-                        except ValueError:
-                            pass
-                    elif key == 'morale':
-                        insights['team_morale_indicator'] = content.lower()
-                    elif key == 'trend':
-                        insights['performance_trend'] = content.lower()
-                    else:
-                        insights[key] = content
-            
-            # Ensure we have at least some data
+                    except (json.JSONDecodeError, ValueError):
+                        insights[key] = self._parse_bullet_points(content, key)
+
+            # ── scalar fields ─────────────────────────────────────────────
+            sentiment_raw = _inline_value('OVERALL SENTIMENT SCORE', ai_content)
+            if sentiment_raw:
+                try:
+                    insights['overall_sentiment_score'] = float(
+                        re.search(r'[0-9.]+', sentiment_raw).group(0)
+                    )
+                except (AttributeError, ValueError):
+                    pass
+
+            morale_raw = _inline_value('TEAM MORALE INDICATOR', ai_content)
+            if morale_raw:
+                insights['team_morale_indicator'] = morale_raw.split()[0].lower()
+
+            trend_raw = _inline_value('PERFORMANCE TREND', ai_content)
+            if trend_raw:
+                insights['performance_trend'] = trend_raw.split()[0].lower()
+
+            # ── guarantees ───────────────────────────────────────────────
             if not insights['what_went_well']:
                 insights['what_went_well'] = self._generate_default_positives(metrics, patterns)
-            
             if not insights['what_needs_improvement']:
                 insights['what_needs_improvement'] = self._generate_default_improvements(metrics, patterns)
-            
+
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
-            # Fall back to basic parsing
             insights['what_went_well'] = self._generate_default_positives(metrics, patterns)
             insights['what_needs_improvement'] = self._generate_default_improvements(metrics, patterns)
-        
+
         return insights
     
     def _parse_bullet_points(self, content, section_type):
