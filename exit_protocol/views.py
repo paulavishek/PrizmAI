@@ -79,6 +79,13 @@ def exit_protocol_dashboard(request, board_id):
                 'status': 'danger' if factor >= 0.75 else 'warning' if factor >= 0.40 else 'success',
             })
 
+    # Determine if any individual dimension is in a concerning state
+    # even when the overall score is below the hospice threshold
+    concern_dimensions = [
+        dim['label'] for dim in score_breakdown
+        if dim['status'] in ('warning', 'danger')
+    ]
+
     return render(request, 'exit_protocol/dashboard.html', {
         'board': board,
         'signals': signals,
@@ -88,6 +95,7 @@ def exit_protocol_dashboard(request, board_id):
         'banner_dismissed': banner_dismissed,
         'score_breakdown': score_breakdown,
         'last_signal': last_signal,
+        'concern_dimensions': concern_dimensions,
     })
 
 
@@ -100,11 +108,12 @@ def recalculate_health_score(request, board_id):
     check_access_or_403(request.user, board)
 
     from .tasks import compute_board_health_score
-    compute_board_health_score.delay(board_id)
+    # Run synchronously with force=True to bypass the new-board age guard.
+    compute_board_health_score(board_id, force=True)
 
     return JsonResponse({
-        'status': 'recalculating',
-        'message': 'Health score recalculation started. Refresh in a few seconds.',
+        'status': 'done',
+        'message': 'Health score recalculated.',
     })
 
 
@@ -177,7 +186,14 @@ def view_transition_memos(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     check_access_or_403(request.user, board)
 
-    session = get_object_or_404(HospiceSession, board=board)
+    session = HospiceSession.objects.filter(board=board).first()
+
+    if session is None:
+        return render(request, 'exit_protocol/transition_memos.html', {
+            'board': board,
+            'hospice_session': None,
+            'memos': [],
+        })
 
     if request.method == 'POST':
         try:

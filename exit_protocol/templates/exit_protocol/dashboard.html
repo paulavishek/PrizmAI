@@ -525,6 +525,21 @@
       </div>
 
       {% else %}
+      {% if concern_dimensions %}
+      <div class="monitoring-banner" style="background: #fffbeb; border: 1px solid #f6e05e; border-radius: 12px; padding: 1.5rem; text-align: center;">
+        <div class="monitor-icon">
+          <i class="fas fa-exclamation-circle" style="color: #d69e2e; font-size: 2rem;"></i>
+        </div>
+        <p class="monitor-title" style="color: #b7791f; margin: 0.5rem 0;">Monitoring: Attention Needed</p>
+        <p style="color: #744210; font-size: 0.88rem; margin-bottom: 0.5rem;">
+          The overall risk score is healthy, but
+          {% for dim in concern_dimensions %}<strong>{{ dim }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% if concern_dimensions|length == 1 %}is{% else %}are{% endif %} showing elevated risk.
+          No immediate action required, but keep an eye on these areas.
+        </p>
+        <p style="color: #92400e; font-size: 0.8rem; margin: 0;">PrizmAI will automatically flag this project if the overall score crosses 40%.</p>
+      </div>
+      {% else %}
       <div class="monitoring-banner">
         <div class="monitor-icon">
           <i class="fas fa-shield-alt" style="color: #38a169;"></i>
@@ -532,6 +547,7 @@
         <p class="monitor-title">All Systems Normal</p>
         <p>No active hospice session. This project's health is being continuously monitored by PrizmAI.</p>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </div>
@@ -693,7 +709,7 @@ if (recalcBtn) {
     .then(res => res.json())
     .then(() => {
       status.textContent = 'Done! Refreshing…';
-      setTimeout(() => window.location.reload(), 3000);
+      setTimeout(() => window.location.reload(), 500);
     })
     .catch(() => {
       recalcBtn.disabled = false;

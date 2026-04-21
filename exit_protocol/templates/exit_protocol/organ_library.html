@@ -21,8 +21,8 @@
       </select>
     </div>
     <div class="col-auto">
-      <input type="number" name="min_score" class="form-control form-control-sm" placeholder="Min score" min="0" max="100"
-        value="{{ request.GET.min_score }}">
+      <input type="number" name="min_score" class="form-control form-control-sm" placeholder="Min score (0–100)" min="0" max="100"
+        style="width: 9rem;" value="{{ request.GET.min_score }}">
     </div>
     <div class="col-auto">
       <input type="text" name="source_project" class="form-control form-control-sm" placeholder="Source project..."
@@ -93,8 +93,17 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="text-center py-5">
-    <p class="text-muted">No available organs found matching your criteria.</p>
+  <div class="text-center py-5" style="background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; margin-top: 1rem; padding: 3rem 2rem;">
+    <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🫀</div>
+    <p style="font-size: 1rem; font-weight: 600; color: #4a5568; margin-bottom: 0.25rem;">No organs found</p>
+    <p style="font-size: 0.875rem; color: #718096; margin: 0;">
+      {% if request.GET.organ_type or request.GET.min_score or request.GET.source_project %}
+        No reusable components match your current filters. Try clearing them.
+      {% else %}
+        Organs are extracted from projects when a wind-down review is completed.<br>
+        Once archived, their reusable components appear here.
+      {% endif %}
+    </p>
   </div>
   {% endif %}
 </div>

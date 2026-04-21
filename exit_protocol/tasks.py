@@ -38,10 +38,11 @@ def monitor_all_boards_health():
 
 
 @shared_task(name='exit_protocol.tasks.compute_board_health_score')
-def compute_board_health_score(board_id):
+def compute_board_health_score(board_id, force=False):
     """
     Computes hospice_risk_score for a single board.
     Applies minimum-data rules to avoid false positives.
+    Pass force=True to bypass age guard (used by manual recalculate).
     """
     from kanban.models import Board, Task
     from .models import ProjectHealthSignal, HospiceSession, HospiceDismissal
@@ -53,8 +54,8 @@ def compute_board_health_score(board_id):
 
     now = timezone.now()
 
-    # RULE: Skip boards with fewer than 7 days of activity
-    if board.created_at and (now - board.created_at).days < 7:
+    # RULE: Skip boards with fewer than 7 days of activity (bypassed on manual recalculate)
+    if not force and board.created_at and (now - board.created_at).days < 7:
         return
 
     # ── Collect metrics per dimension ──
