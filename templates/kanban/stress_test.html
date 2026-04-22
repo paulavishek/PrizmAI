@@ -17,9 +17,10 @@
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-bolt text-warning"></i> Project Stress Test {% feature_help "stress_test" %}</h2>
+            <h2><i class="fas fa-bolt text-warning"></i> Project Stress Test</h2>
             <p class="text-muted mb-1">{{ board.name }} — Simulate failure before it happens. Measure how much your plan can take.</p>
-            <button class="btn btn-link btn-sm ps-0 text-decoration-none text-muted"
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
                     type="button"
                     data-bs-toggle="collapse"
                     data-bs-target="#stressTestGuide"
@@ -48,17 +49,17 @@
 
     <!-- ── How It Works — Collapsible Guide ── -->
     <div class="collapse mb-4" id="stressTestGuide">
-        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0;">
+        <div class="card border shadow-sm">
             <div class="card-body p-4">
                 <div class="row g-4">
 
                     <!-- What is this? -->
                     <div class="col-12">
-                        <h6 class="text-warning mb-2"><i class="fas fa-bolt me-2"></i>What is the Stress Test?</h6>
-                        <p class="mb-0 small" style="color:#c8c8d8;">The Red Team AI reads your live project data and deliberately tries to break your plan. It invents the five most damaging failure scenarios specific to your project, scores your resilience from 0–100, and prescribes structural fixes. Think of it as a fire drill — better to discover the weakness now than when it happens for real.</p>
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-bolt text-warning me-2"></i>What is the Stress Test?</h6>
+                        <p class="mb-0 small text-secondary">The Red Team AI reads your live project data and deliberately tries to break your plan. It invents the five most damaging failure scenarios specific to your project, scores your resilience from 0–100, and prescribes structural fixes. Think of it as a fire drill — better to discover the weakness now than when it happens for real.</p>
                     </div>
 
-                    <div class="col-12"><hr style="border-color:#ffffff20; margin:0;"></div>
+                    <div class="col-12"><hr class="my-0"></div>
 
                     <!-- Two columns: Scenarios vs Vaccines -->
                     <div class="col-md-6">
@@ -67,12 +68,12 @@
                                 <i class="fas fa-crosshairs fa-2x text-danger"></i>
                             </div>
                             <div>
-                                <h6 class="mb-1" style="color:#fff;">Attack Scenarios <span class="badge bg-danger ms-1" style="font-size:0.65rem;">Left column</span></h6>
-                                <p class="small mb-2" style="color:#c8c8d8;">Hypothetical futures the AI simulated against your plan. None of these have happened yet — the AI invented them by analysing your weakest points.</p>
-                                <div class="p-2 rounded mb-1" style="background:#ffffff10; border-left: 3px solid #e74c3c;">
-                                    <p class="small mb-0" style="color:#e0e0e0;"><strong style="color:#f39c12;"><i class="fas fa-circle me-1"></i>Mark Addressed</strong> means: <em>"I&rsquo;ve read this, I understand the risk, and I&rsquo;m actively watching for it."</em> It&rsquo;s an acknowledgment — you&rsquo;re not saying it&rsquo;s fixed, just that it&rsquo;s on your radar.</p>
+                                <h6 class="mb-1 fw-semibold text-dark">Attack Scenarios <span class="badge bg-danger ms-1" style="font-size:0.65rem;">Left column</span></h6>
+                                <p class="small mb-2 text-secondary">Hypothetical futures the AI simulated against your plan. None of these have happened yet — the AI invented them by analysing your weakest points.</p>
+                                <div class="p-2 rounded mb-1 bg-danger-subtle border-start border-danger border-3">
+                                    <p class="small mb-0 text-dark"><strong class="text-danger"><i class="fas fa-circle me-1"></i>Mark Addressed</strong> means: <em>"I&rsquo;ve read this, I understand the risk, and I&rsquo;m actively watching for it."</em> It&rsquo;s an acknowledgment — not a fix, just awareness on your radar.</p>
                                 </div>
-                                <p class="small mb-0 mt-1" style="color:#aaa;"><i class="fas fa-coins text-warning me-1"></i>Score impact: <strong style="color:#f39c12;">+3 to +8 pts</strong> per acknowledged scenario.</p>
+                                <p class="small mb-0 mt-1 text-secondary"><i class="fas fa-coins text-warning me-1"></i>Score impact: <strong class="text-warning">+3 to +8 pts</strong> per acknowledged scenario.</p>
                             </div>
                         </div>
                     </div>
@@ -83,55 +84,55 @@
                                 <i class="fas fa-syringe fa-2x text-success"></i>
                             </div>
                             <div>
-                                <h6 class="mb-1" style="color:#fff;">Vaccines <span class="badge bg-success ms-1" style="font-size:0.65rem;">Right column</span></h6>
-                                <p class="small mb-2" style="color:#c8c8d8;">Structural changes the AI prescribes to close the specific gap that made each attack possible. These are real, concrete project changes — not just awareness.</p>
-                                <div class="p-2 rounded mb-1" style="background:#ffffff10; border-left: 3px solid #27ae60;">
-                                    <p class="small mb-0" style="color:#e0e0e0;"><strong style="color:#2ecc71;"><i class="fas fa-check-circle me-1"></i>Mark as Applied</strong> means: <em>"We have actually made this structural change."</em> The AI banks this permanently and stops attacking that weakness — finding new ones instead.</p>
+                                <h6 class="mb-1 fw-semibold text-dark">Vaccines <span class="badge bg-success ms-1" style="font-size:0.65rem;">Right column</span></h6>
+                                <p class="small mb-2 text-secondary">Structural changes the AI prescribes to close the specific gap that made each attack possible. These are real, concrete project changes — not just awareness.</p>
+                                <div class="p-2 rounded mb-1 bg-success-subtle border-start border-success border-3">
+                                    <p class="small mb-0 text-dark"><strong class="text-success"><i class="fas fa-check-circle me-1"></i>Mark as Applied</strong> means: <em>"We have actually made this structural change."</em> The AI banks this permanently and stops attacking that weakness — finding new ones instead.</p>
                                 </div>
-                                <p class="small mb-0 mt-1" style="color:#aaa;"><i class="fas fa-coins text-warning me-1"></i>Score impact: <strong style="color:#2ecc71;">+8 to +20 pts</strong> per vaccine applied. <strong>Much higher than Addressing alone.</strong></p>
+                                <p class="small mb-0 mt-1 text-secondary"><i class="fas fa-coins text-warning me-1"></i>Score impact: <strong class="text-success">+8 to +20 pts</strong> per vaccine applied. <strong>Much higher than Addressing alone.</strong></p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-12"><hr style="border-color:#ffffff20; margin:0;"></div>
+                    <div class="col-12"><hr class="my-0"></div>
 
                     <!-- Comparison table -->
                     <div class="col-md-7">
-                        <h6 class="mb-2" style="color:#fff;"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
                         <div class="table-responsive">
-                            <table class="table table-sm mb-0" style="color:#c8c8d8; font-size:0.8rem;">
-                                <thead>
-                                    <tr style="border-color:#ffffff20;">
-                                        <th style="color:#aaa; border-color:#ffffff20;"></th>
-                                        <th style="color:#e74c3c; border-color:#ffffff20;"><i class="fas fa-circle me-1"></i>Mark Addressed</th>
-                                        <th style="color:#27ae60; border-color:#ffffff20;"><i class="fas fa-syringe me-1"></i>Apply Vaccine</th>
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted"></th>
+                                        <th class="text-danger"><i class="fas fa-circle me-1"></i>Mark Addressed</th>
+                                        <th class="text-success"><i class="fas fa-syringe me-1"></i>Apply Vaccine</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr style="border-color:#ffffff15;">
-                                        <td style="color:#aaa;">What it means</td>
-                                        <td>&ldquo;I&rsquo;m aware of this risk&rdquo;</td>
-                                        <td>&ldquo;I&rsquo;ve structurally fixed this&rdquo;</td>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">What it means</td>
+                                        <td class="text-dark">&ldquo;I&rsquo;m aware of this risk&rdquo;</td>
+                                        <td class="text-dark">&ldquo;I&rsquo;ve structurally fixed this&rdquo;</td>
                                     </tr>
-                                    <tr style="border-color:#ffffff15;">
-                                        <td style="color:#aaa;">Score boost</td>
-                                        <td style="color:#f39c12;">+3–8 pts</td>
-                                        <td style="color:#2ecc71;">+8–20 pts each</td>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Score boost</td>
+                                        <td class="fw-semibold text-warning">+3–8 pts</td>
+                                        <td class="fw-semibold text-success">+8–20 pts each</td>
                                     </tr>
-                                    <tr style="border-color:#ffffff15;">
-                                        <td style="color:#aaa;">Effort needed</td>
-                                        <td>One click</td>
-                                        <td>Real project work</td>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Effort needed</td>
+                                        <td class="text-dark">One click</td>
+                                        <td class="text-dark">Real project work</td>
                                     </tr>
-                                    <tr style="border-color:#ffffff15;">
-                                        <td style="color:#aaa;">AI behaviour next run</td>
-                                        <td>Still probes same area</td>
-                                        <td>Finds NEW weaknesses</td>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">AI behaviour next run</td>
+                                        <td class="text-dark">Still probes same area</td>
+                                        <td class="text-dark fw-semibold">Finds NEW weaknesses</td>
                                     </tr>
-                                    <tr style="border-color:#ffffff15;">
-                                        <td style="color:#aaa;">Analogy</td>
-                                        <td>Knowing a road is icy</td>
-                                        <td>Gritting the road</td>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Analogy</td>
+                                        <td class="text-dark">Knowing a road is icy</td>
+                                        <td class="text-dark">Gritting the road</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -140,31 +141,31 @@
 
                     <!-- Recommended workflow + bands -->
                     <div class="col-md-5">
-                        <h6 class="mb-2" style="color:#fff;"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
-                        <ol class="small ps-3 mb-3" style="color:#c8c8d8;">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-3 text-secondary">
                             <li class="mb-1">Run the Stress Test &amp; read all five attacks carefully</li>
-                            <li class="mb-1"><strong style="color:#2ecc71;">Apply vaccines</strong> where you can make the real structural change</li>
-                            <li class="mb-1"><strong style="color:#f39c12;">Mark scenarios addressed</strong> for risks you&rsquo;re monitoring</li>
+                            <li class="mb-1"><strong class="text-success">Apply vaccines</strong> where you can make the real structural change</li>
+                            <li class="mb-1"><strong class="text-warning">Mark scenarios addressed</strong> for risks you&rsquo;re monitoring</li>
                             <li class="mb-1">Re-run the test — the AI will score your progress and find new weak spots</li>
                             <li>Repeat until you reach your target band</li>
                         </ol>
-                        <h6 class="mb-2" style="color:#fff;"><i class="fas fa-shield-alt me-1 text-info"></i>Immunity bands</h6>
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-shield-alt me-1 text-info"></i>Immunity bands</h6>
                         <div class="d-flex flex-column gap-1">
                             <div class="d-flex align-items-center gap-2 small">
                                 <span class="badge" style="background:#0891b2; min-width:90px;">ANTIFRAGILE</span>
-                                <span style="color:#aaa;">90–100 &bull; Gets stronger under pressure</span>
+                                <span class="text-dark">90–100 &bull; Gets stronger under pressure</span>
                             </div>
                             <div class="d-flex align-items-center gap-2 small">
                                 <span class="badge" style="background:#059669; min-width:90px;">RESILIENT</span>
-                                <span style="color:#aaa;">70–89 &bull; Survives most disruptions</span>
+                                <span class="text-dark">70–89 &bull; Survives most disruptions</span>
                             </div>
                             <div class="d-flex align-items-center gap-2 small">
                                 <span class="badge" style="background:#d97706; min-width:90px;">MODERATE</span>
-                                <span style="color:#aaa;">40–69 &bull; Fails major shocks</span>
+                                <span class="text-dark">40–69 &bull; Fails major shocks</span>
                             </div>
                             <div class="d-flex align-items-center gap-2 small">
                                 <span class="badge" style="background:#c0392b; min-width:90px;">FRAGILE</span>
-                                <span style="color:#aaa;">0–39 &bull; Collapses under first shock</span>
+                                <span class="text-dark">0–39 &bull; Collapses under first shock</span>
                             </div>
                         </div>
                     </div>
@@ -560,16 +561,16 @@
                     </div>
                     {% endif %}
 
-                    <div class="form-check mt-2">
-                        <input type="checkbox" class="form-check-input"
+                    <div class="form-check mt-2 vaccine-apply-check">
+                        <input type="checkbox" class="form-check-input vaccine-checkbox"
                                id="vaccine-check-{{ vaccine.id }}"
                                {% if vaccine.is_applied %}checked{% endif %}
                                onchange="toggleVaccine({{ vaccine.id }}, this)">
-                        <label class="form-check-label small" for="vaccine-check-{{ vaccine.id }}">
+                        <label class="form-check-label small fw-semibold" for="vaccine-check-{{ vaccine.id }}">
                             {% if vaccine.is_applied %}
-                            Applied{% if vaccine.applied_by %} by {{ vaccine.applied_by.get_full_name|default:vaccine.applied_by.username }}{% endif %}
+                            <span class="text-success">Applied{% if vaccine.applied_by %} by {{ vaccine.applied_by.get_full_name|default:vaccine.applied_by.username }}{% endif %}</span>
                             {% else %}
-                            Mark as applied
+                            <span class="text-secondary">Mark as applied</span>
                             {% endif %}
                         </label>
                         <span data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-container="body"
@@ -711,12 +712,32 @@
     font-size: 10px;
 }
 
-/* ── Vaccine checkbox animation ── */
-.form-check-input {
+/* ── Vaccine apply checkbox ── */
+.vaccine-apply-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+}
+.vaccine-apply-check .vaccine-checkbox {
+    width: 1.1em;
+    height: 1.1em;
+    border: 2px solid #16a34a;
+    flex-shrink: 0;
+    cursor: pointer;
     transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
-.form-check-input:checked {
+.vaccine-apply-check .vaccine-checkbox:checked {
+    background-color: #16a34a;
+    border-color: #16a34a;
     animation: vaccineApplied 0.4s ease;
+}
+.vaccine-apply-check .vaccine-checkbox:focus {
+    box-shadow: 0 0 0 0.2rem rgba(22, 163, 74, 0.3);
+    outline: none;
 }
 @keyframes vaccineApplied {
     0%   { transform: scale(1); }
