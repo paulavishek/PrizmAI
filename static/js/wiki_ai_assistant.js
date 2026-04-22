@@ -25,7 +25,7 @@ function detectPageTypeAndShowButton() {
     if (categoryAiType === 'meeting') {
         aiBtn.style.display = 'inline-block';
         aiBtn.className = 'btn btn-outline-success btn-sm me-2';
-        if (aiButtonText) aiButtonText.textContent = 'Meeting Analysis';
+        if (aiButtonText) aiButtonText.textContent = 'Meeting Assistant';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'inline-block';
     } else if (categoryAiType === 'documentation') {
         aiBtn.style.display = 'inline-block';
