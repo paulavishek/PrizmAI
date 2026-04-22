@@ -436,6 +436,12 @@
                     <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.75rem; cursor:help;"></i>
                 </span>
             </h5>
+            {% if session_count > 1 %}
+            <p class="text-muted small mb-3">
+                <i class="fas fa-info-circle me-1 text-info"></i>
+                Each re-run generates 5 fresh scenarios targeting your <em>current</em> weakest points. Applied vaccines close old gaps — so the AI automatically shifts its attacks to probe your remaining vulnerabilities.
+            </p>
+            {% endif %}
             {% for scenario in session.scenarios.all %}
             <div class="card mb-3 border-start border-4
                 {% if scenario.outcome == 'FAIL' %}border-danger
@@ -592,7 +598,7 @@
                         <strong class="text-success fs-5" id="projected-score"></strong>
                     </div>
                     <small class="text-muted d-block mt-1" id="pending-vaccines-count"></small>
-                    <small class="text-muted d-block mt-1">Apply all pending vaccines, then re-run to verify your new score.</small>
+                    <small class="text-muted d-block mt-1">This estimate reflects vaccines already applied. Re-run the test to verify your actual updated score.</small>
                 </div>
             </div>
             {% endif %}
@@ -897,30 +903,42 @@ function updateProjectedScore() {
     if (!projectedEl) return;
 
     const currentScore = {{ session.immunity_score.overall|default:"0" }};
-    let totalImprovement = 0;
+    let appliedImprovement = 0;
+    let pendingImprovement = 0;
+    let appliedCount = 0;
     let pendingCount = 0;
 
     document.querySelectorAll('[id^="vaccine-check-"]').forEach(cb => {
-        if (!cb.checked) {
-            pendingCount++;
-            const card = cb.closest('.card');
-            const badges = card.querySelectorAll('.badge');
-            for (const badge of badges) {
-                const match = badge.textContent.match(/\+(\d+)pts/);
-                if (match) {
-                    totalImprovement += parseInt(match[1]);
-                    break;
-                }
+        const card = cb.closest('.card');
+        const badges = card.querySelectorAll('.badge');
+        let improvement = 0;
+        for (const badge of badges) {
+            const match = badge.textContent.match(/\+(\d+)pts/);
+            if (match) {
+                improvement = parseInt(match[1]);
+                break;
             }
+        }
+        if (cb.checked) {
+            appliedCount++;
+            appliedImprovement += improvement;
+        } else {
+            pendingCount++;
+            pendingImprovement += improvement;
         }
     });
 
-    const projected = Math.min(100, currentScore + totalImprovement);
+    const projected = Math.min(100, currentScore + appliedImprovement);
     projectedEl.textContent = projected + ' / 100';
     if (pendingEl) {
-        pendingEl.textContent = pendingCount > 0
-            ? pendingCount + ' vaccine' + (pendingCount !== 1 ? 's' : '') + ' pending'
-            : 'All vaccines applied!';
+        if (appliedCount === 0 && pendingCount > 0) {
+            pendingEl.textContent = pendingCount + ' vaccine' + (pendingCount !== 1 ? 's' : '') + ' pending';
+        } else if (pendingCount === 0) {
+            pendingEl.textContent = 'All vaccines applied!';
+        } else {
+            const maxPotential = Math.min(100, currentScore + appliedImprovement + pendingImprovement);
+            pendingEl.textContent = appliedCount + ' applied · ' + pendingCount + ' more pending (max potential: ' + maxPotential + '/100)';
+        }
     }
 }
 
