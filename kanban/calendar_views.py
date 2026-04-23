@@ -116,7 +116,16 @@ def unified_calendar(request):
     ]
 
     # Teammates list with assigned colours (for filter chips & availability mode)
+    # Current user is listed first so they can filter their own tasks too
+    _me_display = request.user.get_full_name() or request.user.username
     teammates_data = [
+        {
+            'id': request.user.id,
+            'username': request.user.username,
+            'display': f'{_me_display} (You)',
+            'color': _assignee_color(request.user.id),
+        }
+    ] + [
         {
             'id': u.id,
             'username': u.username,
@@ -253,7 +262,7 @@ def unified_calendar_events_api(request):
         )
         if is_mine:
             layer = 'mine'
-            color = _priority_color(task.priority)
+            color = _assignee_color(task.assigned_to_id)
         else:
             layer = 'teammate'
             color = _assignee_color(task.assigned_to_id)
@@ -294,7 +303,7 @@ def unified_calendar_events_api(request):
                 'assignee': task.assigned_to.username if task.assigned_to else None,
                 'assignee_id': task.assigned_to_id,
                 'assignee_name': assignee_name,
-                'assignee_color': color if layer == 'teammate' else None,
+                'assignee_color': color,
                 'due_date_str': due_str,
                 'start_date_str': task.start_date.isoformat() if task.start_date else None,
             },
