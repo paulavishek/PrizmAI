@@ -21,51 +21,129 @@
 
     .chat-rooms-container {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1.25rem;
         margin-top: 1.5rem;
     }
 
     .room-card {
         background: white;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 1.5rem;
-        transition: all 0.3s ease;
-        cursor: pointer;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.25rem 1.25rem 1rem;
+        transition: box-shadow 0.2s ease, transform 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        position: relative;
     }
 
     .room-card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.09);
+        transform: translateY(-3px);
+    }
+
+    .room-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .room-card-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .room-card-menu {
+        display: flex;
+        gap: 0.25rem;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+
+    .room-card:hover .room-card-menu {
+        opacity: 1;
+    }
+
+    .room-action-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        border: 1px solid transparent;
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        text-decoration: none;
+        color: #64748b;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .room-action-btn:hover {
+        color: #334155;
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+    }
+
+    .room-action-btn.delete-btn:hover {
+        color: #dc2626;
+        background: #fef2f2;
+        border-color: #fecaca;
     }
 
     .room-name {
-        font-size: 1.25rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        color: #333;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 0.35rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .room-description {
-        font-size: 0.9rem;
-        color: #666;
-        margin-bottom: 1rem;
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-bottom: 0.75rem;
+        line-height: 1.4;
+        flex-grow: 1;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .room-card-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        padding-top: 0.75rem;
+        border-top: 1px solid #f1f5f9;
     }
 
     .room-members {
-        font-size: 0.85rem;
-        color: #888;
-        margin-bottom: 1rem;
+        font-size: 0.8rem;
+        color: #94a3b8;
     }
 
-    .room-actions {
-        display: flex;
-        gap: 0.5rem;
-    }
-
-    .room-actions a {
-        flex: 1;
+    .room-open-btn {
+        font-size: 0.82rem;
+        padding: 0.3rem 0.9rem;
+        border-radius: 7px;
+        font-weight: 600;
     }
 </style>
 {% endblock %}
@@ -102,19 +180,40 @@
     <div class="chat-rooms-container">
         {% for item in chat_rooms_with_unread %}
             <div class="room-card">
+                <div class="room-card-header">
+                    <div class="room-card-icon">
+                        <i class="fas fa-comments"></i>
+                    </div>
+                    <div class="room-card-menu">
+                        <a href="{% url 'messaging:edit_chat_room' room_id=item.room.id %}"
+                           class="room-action-btn"
+                           title="Edit room">
+                            <i class="fas fa-pencil-alt"></i>
+                        </a>
+                        <button type="button"
+                                class="room-action-btn delete-btn"
+                                title="Delete room"
+                                data-bs-toggle="modal"
+                                data-bs-target="#deleteRoomModal"
+                                data-room-id="{{ item.room.id }}"
+                                data-room-name="{{ item.room.name }}">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
                 <div class="room-name">{{ item.room.name }}</div>
                 {% if item.room.description %}
                     <div class="room-description">{{ item.room.description }}</div>
                 {% endif %}
-                <div class="room-members">
-                    <i class="fas fa-users me-1"></i>
-                    {{ item.room.members.count }} member{{ item.room.members.count|pluralize }}
-                </div>
-                <div class="room-actions">
-                    <a href="{% url 'messaging:chat_room_detail' room_id=item.room.id %}" class="btn btn-sm btn-primary">
+                <div class="room-card-footer">
+                    <span class="room-members">
+                        <i class="fas fa-users me-1"></i>
+                        {{ item.room.members.count }} member{{ item.room.members.count|pluralize }}
+                    </span>
+                    <a href="{% url 'messaging:chat_room_detail' room_id=item.room.id %}" class="btn btn-primary room-open-btn">
                         <i class="fas fa-comments me-1"></i> Open
                         {% if item.unread_count > 0 %}
-                            <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
+                            <span class="badge bg-white text-primary ms-1" style="font-size:0.72rem;">{{ item.unread_count }}</span>
                         {% endif %}
                     </a>
                 </div>
@@ -128,6 +227,33 @@
         <a href="{% url 'messaging:create_chat_room' board_id=board.id %}">Create the first one</a>
     </div>
 {% endif %}
+
+<!-- Delete Room Confirmation Modal -->
+<div class="modal fade" id="deleteRoomModal" tabindex="-1" aria-labelledby="deleteRoomModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteRoomModalLabel">
+                    <i class="fas fa-exclamation-triangle text-danger me-2"></i> Delete Chat Room
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete <strong id="deleteRoomName"></strong>?
+                This will permanently remove the room and all its messages.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteRoomForm" method="post" action="">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i> Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -158,6 +284,16 @@
             // Page was restored from back/forward cache
             window.location.reload();
         }
+    });
+
+    // Populate delete modal with correct room info
+    const deleteModal = document.getElementById('deleteRoomModal');
+    deleteModal.addEventListener('show.bs.modal', function(event) {
+        const btn = event.relatedTarget;
+        const roomId = btn.getAttribute('data-room-id');
+        const roomName = btn.getAttribute('data-room-name');
+        document.getElementById('deleteRoomName').textContent = roomName;
+        document.getElementById('deleteRoomForm').action = `/messaging/room/${roomId}/delete/`;
     });
 </script>
 {% endblock %}

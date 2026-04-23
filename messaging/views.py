@@ -204,7 +204,7 @@ def create_chat_room(request, board_id):
             chat_room.members.add(request.user)
             
             django_messages.success(request, f'Chat room "{chat_room.name}" created successfully!')
-            return redirect('chat_room_detail', room_id=chat_room.id)
+            return redirect('messaging:chat_room_detail', room_id=chat_room.id)
     else:
         form = ChatRoomForm(board=board)
     
@@ -213,6 +213,53 @@ def create_chat_room(request, board_id):
         'board': board,
     }
     return render(request, 'messaging/create_chat_room.html', context)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@demo_write_guard
+def edit_chat_room(request, room_id):
+    """Edit the name/description/members of an existing chat room"""
+    chat_room = get_object_or_404(ChatRoom, id=room_id)
+    board = chat_room.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        django_messages.error(request, 'You do not have permission to edit this chat room.')
+        return redirect('messaging:chat_room_list', board_id=board.id)
+
+    if request.method == 'POST':
+        form = ChatRoomForm(request.POST, instance=chat_room, board=board)
+        if form.is_valid():
+            form.save()
+            django_messages.success(request, f'Chat room "{chat_room.name}" updated successfully!')
+            return redirect('messaging:chat_room_list', board_id=board.id)
+    else:
+        form = ChatRoomForm(instance=chat_room, board=board)
+
+    context = {
+        'form': form,
+        'board': board,
+        'chat_room': chat_room,
+    }
+    return render(request, 'messaging/edit_chat_room.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def delete_chat_room(request, room_id):
+    """Delete a chat room"""
+    chat_room = get_object_or_404(ChatRoom, id=room_id)
+    board = chat_room.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        django_messages.error(request, 'You do not have permission to delete this chat room.')
+        return redirect('messaging:chat_room_list', board_id=board.id)
+
+    room_name = chat_room.name
+    chat_room.delete()
+    django_messages.success(request, f'Chat room "{room_name}" deleted successfully.')
+    return redirect('messaging:chat_room_list', board_id=board.id)
 
 
 @login_required
@@ -245,7 +292,7 @@ def send_chat_message(request, room_id):
                 'timestamp': message.created_at.isoformat(),
             })
         else:
-            return redirect('chat_room_detail', room_id=room_id)
+            return redirect('messaging:chat_room_detail', room_id=room_id)
     
     return JsonResponse({'error': 'Invalid message'}, status=400)
 
