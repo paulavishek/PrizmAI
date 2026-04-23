@@ -104,6 +104,9 @@ class ShadowBoardListView(ListView):
         context = super().get_context_data(**kwargs)
         context['board'] = board
         context['predefined_colors'] = BRANCH_COLOR_PALETTE
+        context['has_archived_branches'] = any(
+            b.status == 'archived' for b in context['branches']
+        )
 
         # --- Quantum Standup Data ---
         # Today's real progress
@@ -724,6 +727,10 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 def delete_branch(request, board_id, branch_id):
     """
     API endpoint: Permanently delete a shadow branch and all its snapshots.
+
+    If the deleted branch was active or committed, all archived branches on
+    the same board are automatically restored to active (since they were
+    archived because of that branch's commit).
     """
     try:
         board = get_object_or_404(Board, id=board_id)
@@ -734,14 +741,38 @@ def delete_branch(request, board_id, branch_id):
 
         branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
         branch_name = branch.name
+        was_active_or_committed = branch.status in ('active', 'committed')
+
         branch.delete()
 
+        # When an active/committed branch is removed, restore any archived branches
+        # so the board isn't left with nothing to work with.
+        restored_count = 0
+        if was_active_or_committed:
+            archived_qs = ShadowBranch.objects.filter(board=board, status='archived')
+            restored_count = archived_qs.count()
+            if restored_count:
+                archived_qs.update(status='active')
+                logger.info(
+                    f'Restored {restored_count} archived branch(es) after deleting '
+                    f'active/committed branch "{branch_name}" (id={branch_id}) '
+                    f'by {request.user.username}'
+                )
+
         logger.info(f'Branch "{branch_name}" (id={branch_id}) deleted by {request.user.username}')
-        return JsonResponse({
+
+        response_data = {
             'success': True,
             'message': f'Branch "{branch_name}" deleted.',
             'redirect_url': f'/boards/{board_id}/shadow/',
-        })
+            'restored_count': restored_count,
+        }
+        if restored_count:
+            response_data['restore_message'] = (
+                f'{restored_count} archived branch{"es were" if restored_count > 1 else " was"} '
+                f'automatically restored to active.'
+            )
+        return JsonResponse(response_data)
     except Exception as e:
         logger.error(f'Error deleting branch {branch_id}: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
@@ -803,6 +834,34 @@ def link_scenario_to_branch(request, board_id, branch_id):
 
     except Exception as e:
         logger.error(f'Error linking scenario to branch {branch_id}: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def restore_all_archived_branches(request, board_id):
+    """
+    API endpoint: Restore all archived branches on a board back to active.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        archived_qs = ShadowBranch.objects.filter(board=board, status='archived')
+        count = archived_qs.count()
+        archived_qs.update(status='active')
+
+        logger.info(f'All {count} archived branch(es) restored by {request.user.username} on board {board_id}')
+        return JsonResponse({
+            'success': True,
+            'restored_count': count,
+            'message': f'{count} archived branch{"es" if count != 1 else ""} restored to active.',
+        })
+    except Exception as e:
+        logger.error(f'Error restoring all archived branches: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 
