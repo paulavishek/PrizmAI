@@ -21,11 +21,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize create branch form
     initCreateBranchForm();
     
+    // Initialize color picker
+    initColorPicker();
+
     // Load saved scenarios into select
     loadScenarios();
 
     // Poll for branches still calculating their first snapshot
     pollPendingBranches();
+
+    // Restore All Archived button
+    const restoreAllBtn = document.getElementById('restoreAllArchivedBtn');
+    if (restoreAllBtn) {
+        restoreAllBtn.addEventListener('click', restoreAllArchived);
+    }
 });
 
 /**
@@ -388,8 +397,12 @@ function showDeleteConfirmation(branchId, branchName) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            // Reload after brief delay to reflect updated branch list
-            setTimeout(() => window.location.reload(), 600);
+            if (data.restore_message) {
+                showSuccess(`Branch deleted. ${data.restore_message}`);
+            } else {
+                showSuccess('Branch deleted.');
+            }
+            setTimeout(() => window.location.reload(), 1600);
         } else {
             alertError('Could not delete branch: ' + (data.error || 'Unknown error'));
         }
@@ -424,13 +437,24 @@ function toggleStarBranch(branchId, btn) {
  * Show commit confirmation modal
  */
 function showCommitConfirmation(branchId) {
-    // Find branch name for display
     const branchCard = document.querySelector(`[data-branch-id="${branchId}"]`);
-    const branchName = branchCard?.querySelector('.card-title').textContent.trim() || 'Unknown';
-    
-    if (confirm(`Are you sure you want to commit branch "${branchName}"?`)) {
+    const branchName = branchCard?.querySelector('.card-title')?.textContent.trim() || 'this branch';
+
+    // Populate modal
+    const nameEl = document.getElementById('commitBranchName');
+    if (nameEl) nameEl.textContent = `"${branchName}"`;
+
+    const modal = new bootstrap.Modal(document.getElementById('commitConfirmModal'));
+    modal.show();
+
+    // Wire up confirm button (replace any previous listener)
+    const confirmBtn = document.getElementById('confirmCommitBtn');
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', function () {
+        modal.hide();
         commitBranch(branchId);
-    }
+    });
 }
 
 /**
@@ -513,6 +537,51 @@ function loadScenarios() {
             }
         })
         .catch(e => console.warn('Could not load scenarios:', e));
+}
+
+/**
+ * Initialize color picker — marks the initially-checked swatch and keeps
+ * the .color-selected class in sync so the CSS checkmark + ring shows correctly.
+ */
+function initColorPicker() {
+    const picker = document.querySelector('.branch-color-picker');
+    if (!picker) return;
+
+    picker.querySelectorAll('input[type="radio"]').forEach(function(radio) {
+        const label = radio.closest('label');
+        if (!label) return;
+
+        // Apply selected class to whichever radio starts checked
+        if (radio.checked) label.classList.add('color-selected');
+
+        radio.addEventListener('change', function() {
+            picker.querySelectorAll('label').forEach(l => l.classList.remove('color-selected'));
+            if (radio.checked) label.classList.add('color-selected');
+        });
+    });
+}
+
+/**
+ * Restore all archived branches on this board to active.
+ */
+function restoreAllArchived() {
+    fetch(`/api/boards/${getBoardId()}/shadow/restore-all/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showSuccess(data.message || 'All archived branches restored.');
+            setTimeout(() => window.location.reload(), 1200);
+        } else {
+            alertError('Could not restore branches: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(e => alertError('Could not restore branches: ' + e.message));
 }
 
 // ============================================================================

@@ -81,27 +81,57 @@
         background-color: #f8d7da;
     }
 
+    .branch-color-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 6px 2px;
+    }
+
     .branch-color-picker label {
-        display: inline-block;
-        width: 40px;
-        height: 40px;
-        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
         cursor: pointer;
-        margin: 5px;
-        border: 2px solid transparent;
-        transition: all 0.2s;
+        margin: 0;
+        border: 3px solid transparent;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+        transition: transform 0.15s, box-shadow 0.15s;
+        position: relative;
+        flex-shrink: 0;
     }
-    
+
     .branch-color-picker label:hover {
-        transform: scale(1.1);
+        transform: scale(1.12);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
     }
-    
+
     .branch-color-picker input[type="radio"] {
-        display: none;
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
     }
-    
-    .branch-color-picker input[type="radio"]:checked + span {
-        border: 2px solid #000;
+
+    .branch-color-picker label.color-selected {
+        transform: none;
+        box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(0,0,0,0.5);
+    }
+
+    .branch-color-picker label.color-selected::after {
+        content: '';
+        position: absolute;
+        width: 10px;
+        height: 6px;
+        border-left: 2.5px solid #fff;
+        border-bottom: 2.5px solid #fff;
+        transform: rotate(-45deg) translateY(-1px);
+        filter: drop-shadow(0 0 2px rgba(0,0,0,0.6));
+        pointer-events: none;
     }
 </style>
 {% endblock %}
@@ -218,13 +248,29 @@
     <!-- Branch Cards Grid -->
     <div class="mb-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="compareToggle">
-                <label class="form-check-label" for="compareToggle">
-                    <small>Compare Mode</small>
-                </label>
+            <div>
+                <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
             </div>
+            <div class="d-flex align-items-center gap-3">
+                {% if has_archived_branches %}
+                <button class="btn btn-sm btn-outline-secondary" id="restoreAllArchivedBtn" title="Restore all archived branches to active">
+                    <i class="fas fa-history me-1"></i>Restore All Archived
+                </button>
+                {% endif %}
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="compareToggle">
+                    <label class="form-check-label" for="compareToggle">
+                        <small>Compare Mode</small>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info note about commit behaviour -->
+        <div class="alert alert-info alert-dismissible py-2 px-3 mb-3" id="commitInfoBanner" role="alert">
+            <i class="fas fa-lightbulb me-2 text-info"></i>
+            <small><strong>How committing works:</strong> When you commit a branch it becomes your chosen project direction and all other active branches are automatically archived. Archived branches are preserved — use the <i class="fas fa-undo"></i> button on any card to bring one back to active, or click <strong>Restore All Archived</strong> above to unarchive everything at once.</small>
+            <button type="button" class="btn-close" style="font-size:0.65rem;" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
 
         <div class="branch-grid" id="branchGrid">
@@ -281,22 +327,33 @@
                                     <i class="fas fa-star{% if not branch.is_starred %} far{% endif %}"></i>
                                 </button>
                                 {% if branch.status == 'active' %}
-                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" title="Commit this branch" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Commit this branch as chosen direction" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-check"></i>
                                 </button>
                                 {% endif %}
                                 {% if branch.status == 'archived' %}
-                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-undo"></i>
                                 </button>
                                 {% endif %}
-                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                             {% endwith %}
                         {% else %}
-                            <p class="text-muted text-center my-4"><small>Calculating first snapshot...</small></p>
+                            <!-- Branch still calculating — show restore/delete even without snapshots -->
+                            <p class="text-muted text-center my-3"><small>Calculating first snapshot...</small></p>
+                            <div class="btn-group btn-group-sm w-100" role="group">
+                                {% if branch.status == 'archived' %}
+                                <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-undo me-1"></i>Restore
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-danger btn-delete" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Delete branch permanently" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         {% endif %}
                     </div>
                 </div>
@@ -331,6 +388,39 @@
                     <tbody id="diffTableBody">
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Commit Confirmation Modal -->
+<div class="modal fade" id="commitConfirmModal" tabindex="-1" aria-labelledby="commitConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title" id="commitConfirmModalLabel">
+                    <i class="fas fa-check-circle me-2 text-success"></i>Commit Branch
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-3">You are about to commit <strong id="commitBranchName"></strong> as your chosen project direction.</p>
+                <div class="alert alert-warning mb-0 py-2">
+                    <i class="fas fa-archive me-2"></i>
+                    <strong>All other active branches will be archived.</strong>
+                    <hr class="my-2">
+                    <small class="text-muted">
+                        This is intentional — committing a branch means you've decided on one path forward. 
+                        The other branches aren't lost: each archived branch gets an 
+                        <i class="fas fa-undo"></i> <strong>Restore</strong> button so you can bring any of them back to active at any time.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmCommitBtn">
+                    <i class="fas fa-check me-2"></i>Yes, Commit This Branch
+                </button>
             </div>
         </div>
     </div>
