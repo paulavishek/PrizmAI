@@ -72,7 +72,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 - **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy. Board members can view parent Strategy, Mission, and Goal names in read-only mode (upward visibility), but cannot edit parent levels without a separate explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins. A user becomes an Org Admin by creating an organisation during onboarding or by being promoted via the Member management page. Django superusers bypass board-level access checks but do not automatically hold the Org Admin role.
 - **Workspace Preset System** — Three progressive complexity tiers — **Lean**, **Professional**, and **Enterprise** — let Org Admins tune the interface to match their team's size and needs. Lean surfaces a clean Kanban board, calendar, Spectra chat, and one analytics chart. Professional unlocks Gantt Charts, Burndown, Goals & Missions navigation, AI Retrospectives, Skill Gap Analysis, full Analytics, and trigger-based Automations. Enterprise adds Shadow Board, What-If Simulator, Pre-Mortem, Stress Test, Project Confidence & Signals, Scope Autopsy, Resource Optimization, Scheduled Automations, Exit Protocol, and Budget / ROI tools. Board Owners can further restrict individual boards to a lower tier, but can never exceed the org-wide ceiling. The global preset is configured in **Workspace Settings** (sidebar → profile menu → Workspace Settings, Org Admins only). New organisations default to Lean; existing organisations migrated to Enterprise.
-- **Decision Center** — A unified morning review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
+- **Focus Today** — A unified daily review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
 - **Favorites Sidebar** — Star and reorder boards, goals, tasks, wiki pages, and other items for quick access from the sidebar
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
 - **Real-Time Messaging** — WebSocket-powered team chat with @mentions, notifications, and **AI Message Composer** — type a rough draft and let AI rewrite it as a polished, professional team update in one click
@@ -474,7 +474,7 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 | Stakeholders and engagement metrics | Yes |
 | Chat rooms and messages | Yes |
 | Project confidence scores and signal log | Yes |
-| Decision Center items | Yes |
+| Focus Today items | Yes |
 | Wiki links and knowledge base entries | Yes |
 | AI coaching suggestions and PM metrics | Yes |
 | Real user memberships from the template | No — you are the sole real Owner |

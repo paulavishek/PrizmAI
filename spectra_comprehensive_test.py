@@ -35,7 +35,7 @@ QUESTIONS = [
     "What is Jordan Taylor's weekly capacity?",
     "What timezone is this demo workspace set to?",
     # Section 2: Dashboard & Focus Today (Q9-Q16)
-    "What is my 'Your Focus Today' summary telling me right now?",
+    "What is my 'Focus Today' summary telling me right now?",
     "How many tasks do I currently have assigned to me?",
     "How many tasks are overdue on the Software Development board?",
     "How many tasks are marked as High Risk?",
