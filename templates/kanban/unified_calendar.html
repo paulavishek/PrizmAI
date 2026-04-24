@@ -199,20 +199,6 @@
     </div>
     {% endif %}
 
-    <!-- Team view mode toggle -->
-    <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
-        <span class="small text-muted fw-semibold">Team view:</span>
-        <div class="btn-group btn-group-sm" role="group" aria-label="Team view mode">
-            <button type="button" class="btn btn-outline-secondary" id="btn-mode-detail">
-                <i class="fas fa-list-ul me-1"></i> Detail
-            </button>
-            <button type="button" class="btn btn-outline-secondary" id="btn-mode-avail">
-                <i class="fas fa-calendar-check me-1"></i> Availability
-            </button>
-        </div>
-        <span class="text-muted small" id="team-mode-badge"></span>
-    </div>
-
 
     <!-- Calendar -->
     <div class="calendar-container">
@@ -460,7 +446,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ---- Team layer / view mode state ----
-    let teamViewMode      = localStorage.getItem('prizmTeamViewMode') || 'detail';
+    const teamViewMode = 'detail';
     let hiddenTeammateIds = new Set();
     let hiddenPriorities  = new Set();
     let hiddenEventTypes  = new Set();
@@ -629,10 +615,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
                 document.getElementById('detail-open-link').style.display = '';
             } else {
-                // My own events — full detail
-                const participants = p.participants && p.participants.length
-                    ? p.participants.join(', ')
-                    : '(none beyond you)';
+                // My own events (or events I'm invited to) — full detail
+                const organizerStr = p.created_by ? (p.created_by + ' (organizer)') : '';
+                const participantList = (p.participants || []).filter(u => u !== p.created_by);
+                const allParticipants = organizerStr
+                    ? [organizerStr, ...participantList]
+                    : participantList;
+                const participants = allParticipants.length ? allParticipants.join(', ') : '(only you)';
                 const privBadge = p.visibility === 'private'
                     ? '<div class="mt-2"><span class="badge bg-secondary">🔒 Private</span></div>' : '';
                 body = `
@@ -714,42 +703,6 @@ document.addEventListener('DOMContentLoaded', function () {
         },
     });
     calendar.render();
-
-    // ---- Apply stored team view mode ----
-    (function applyMode() {
-        const detailBtn = document.getElementById('btn-mode-detail');
-        const availBtn  = document.getElementById('btn-mode-avail');
-        const badge     = document.getElementById('team-mode-badge');
-        if (!detailBtn) return;
-        if (teamViewMode === 'detail') {
-            detailBtn.classList.add('active');
-            availBtn.classList.remove('active');
-            if (badge) badge.textContent = 'Showing teammate task details';
-        } else {
-            availBtn.classList.add('active');
-            detailBtn.classList.remove('active');
-            if (badge) badge.textContent = 'Showing busy / free blocks';
-        }
-    })();
-
-    document.getElementById('btn-mode-detail').addEventListener('click', function() {
-        teamViewMode = 'detail';
-        localStorage.setItem('prizmTeamViewMode', 'detail');
-        document.getElementById('btn-mode-detail').classList.add('active');
-        document.getElementById('btn-mode-avail').classList.remove('active');
-        const b = document.getElementById('team-mode-badge');
-        if (b) b.textContent = 'Showing teammate task details';
-        calendar.refetchEvents();
-    });
-    document.getElementById('btn-mode-avail').addEventListener('click', function() {
-        teamViewMode = 'availability';
-        localStorage.setItem('prizmTeamViewMode', 'availability');
-        document.getElementById('btn-mode-avail').classList.add('active');
-        document.getElementById('btn-mode-detail').classList.remove('active');
-        const b = document.getElementById('team-mode-badge');
-        if (b) b.textContent = 'Showing busy / free blocks';
-        calendar.refetchEvents();
-    });
 
     // ---- Build priority filter dropdown ----
     const PRIORITY_OPTIONS = [
