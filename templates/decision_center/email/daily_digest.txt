@@ -1,7 +1,7 @@
 PrizmAI — Your Focus Today – Daily Digest
 =======================================
 
-Good morning{% if user_name %}, {{ user_name }}{% endif %}!
+{{ greeting }}{% if user_name %}, {{ user_name }}{% endif %}!
 
 {% if briefing_headline %}AI Briefing: {{ briefing_headline }}
 {% if briefing_text %}{{ briefing_text }}{% endif %}
