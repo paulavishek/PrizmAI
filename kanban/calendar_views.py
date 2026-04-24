@@ -312,7 +312,10 @@ def unified_calendar_events_api(request):
     # --- Calendar Events ---
     for ev in event_qs:
         is_mine = (ev.created_by_id == request.user.id)
-        layer = 'event' if is_mine else 'teammate_status'
+        # Participants who are invited to an event should see full details, not the
+        # sanitized teammate_status view.
+        is_invited = not is_mine and any(p.id == request.user.id for p in ev.participants.all())
+        layer = 'event' if (is_mine or is_invited) else 'teammate_status'
 
         if ev.is_all_day:
             # Convert UTC→IST before extracting date, otherwise UTC midnight-5:30
@@ -330,7 +333,7 @@ def unified_calendar_events_api(request):
         linked_task_title = ev.linked_task.title if ev.linked_task else None
 
         # Sanitize title for teammate events — protect personal details
-        if is_mine:
+        if is_mine or is_invited:
             fc_title = ev.title
         else:
             owner_name = ev.created_by.get_full_name() or ev.created_by.username
@@ -624,8 +627,8 @@ def calendar_create_event(request):
 
     # Build FullCalendar event object for immediate rendering
     if is_all_day:
-        fc_start = event.start_datetime.strftime('%Y-%m-%d')
-        fc_end = event.end_datetime.strftime('%Y-%m-%d')
+        fc_start = timezone.localtime(event.start_datetime).strftime('%Y-%m-%d')
+        fc_end = (timezone.localtime(event.end_datetime) + timedelta(days=1)).strftime('%Y-%m-%d')
     else:
         fc_start = event.start_datetime.isoformat()
         fc_end = event.end_datetime.isoformat()
