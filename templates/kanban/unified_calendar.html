@@ -687,14 +687,34 @@ document.addEventListener('DOMContentLoaded', function () {
             if (p.layer === 'teammate') {
                 info.el.style.opacity = '0.72';
             }
-            // Mark overdue tasks using due_date_str (not start date)
+            // Build today as local midnight — used for all date comparisons below
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            // Mark past/overdue tasks using due_date_str (not start date)
             if (p.source === 'task') {
                 var dueStr = p.due_date_str;
                 if (dueStr) {
-                    const d = new Date(dueStr);
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    if (d < today && p.progress < 100) {
-                        info.el.style.opacity = '0.7';
+                    // Parse as LOCAL date to avoid UTC date-shift in UTC± timezones
+                    const [dy, dm, dd] = dueStr.split('-').map(Number);
+                    const dueLocal = new Date(dy, dm - 1, dd);
+                    const isPast = dueLocal < today;
+                    if (isPast) {
+                        const isListView = info.view.type.startsWith('list');
+                        // List view: strike through ALL past tasks (completed or not) — means "in the past"
+                        // Month/week view: only strike incomplete past tasks — highlights overdue work
+                        if (isListView || p.progress < 100) {
+                            info.el.style.opacity = '0.7';
+                            info.el.style.textDecoration = 'line-through';
+                        }
+                    }
+                }
+            } else if (p.source === 'event' && info.view.type.startsWith('list')) {
+                // In list view: visually dim past events that have fully ended before today
+                var evEndStr = p.end_date_str;
+                if (evEndStr) {
+                    const [ey, em, ed] = evEndStr.split('-').map(Number);
+                    const endLocal = new Date(ey, em - 1, ed);
+                    if (endLocal < today) {
+                        info.el.style.opacity = '0.55';
                         info.el.style.textDecoration = 'line-through';
                     }
                 }

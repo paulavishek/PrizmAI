@@ -319,19 +319,21 @@ def unified_calendar_events_api(request):
         is_invited = not is_mine and any(p.id == request.user.id for p in ev.participants.all())
         layer = 'event' if (is_mine or is_invited) else 'teammate_status'
 
+        # Use explicit astimezone() — bypasses Django's thread-local timezone
+        # which is unreliable under Daphne/ASGI thread-pool execution.
+        _srv_tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
         if ev.is_all_day:
-            # Use explicit astimezone() — bypasses Django's thread-local timezone
-            # which is unreliable under Daphne/ASGI thread-pool execution.
-            _srv_tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
             local_start = ev.start_datetime.astimezone(_srv_tz)
             local_end   = ev.end_datetime.astimezone(_srv_tz)
             start_str_fc = local_start.strftime('%Y-%m-%d')
             # FullCalendar all-day end is EXCLUSIVE, so advance by 1 day so that
             # the user's chosen end date is actually the last visible day.
-            end_str_fc   = (local_end.date() + timedelta(days=1)).isoformat()
+            end_str_fc      = (local_end.date() + timedelta(days=1)).isoformat()
+            ev_end_date_str = local_end.strftime('%Y-%m-%d')  # inclusive last calendar day
         else:
-            start_str_fc = ev.start_datetime.isoformat()
-            end_str_fc = ev.end_datetime.isoformat()
+            start_str_fc    = ev.start_datetime.isoformat()
+            end_str_fc      = ev.end_datetime.isoformat()
+            ev_end_date_str = ev.end_datetime.astimezone(_srv_tz).strftime('%Y-%m-%d')
 
         linked_task_title = ev.linked_task.title if ev.linked_task else None
 
@@ -376,6 +378,7 @@ def unified_calendar_events_api(request):
                 'creator_id': ev.created_by_id,
                 'linked_task_title': linked_task_title,
                 'linked_task_id': ev.linked_task_id,
+                'end_date_str': ev_end_date_str,
             },
         })
 
