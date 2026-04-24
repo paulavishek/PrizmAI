@@ -52,9 +52,9 @@
                         <th style="width:130px;">Start</th>
                         <td>
                             {% if event.is_all_day %}
-                                {{ event.start_datetime|date:"N j, Y" }} (All day)
+                                {{ event_start_display|date:"N j, Y" }} (All day)
                             {% else %}
-                                {{ event.start_datetime|date:"N j, Y, g:i a" }}
+                                {{ event_start_display|date:"N j, Y, g:i a" }}
                             {% endif %}
                         </td>
                     </tr>
@@ -62,9 +62,9 @@
                         <th>End</th>
                         <td>
                             {% if event.is_all_day %}
-                                {{ event.end_datetime|date:"N j, Y" }}
+                                {{ event_end_display|date:"N j, Y" }}
                             {% else %}
-                                {{ event.end_datetime|date:"N j, Y, g:i a" }}
+                                {{ event_end_display|date:"N j, Y, g:i a" }}
                             {% endif %}
                         </td>
                     </tr>
@@ -97,13 +97,14 @@
                     <tr>
                         <th>Participants</th>
                         <td>
-                            {% if participants %}
-                                {% for p in participants %}
-                                <span class="badge bg-light text-dark border me-1">{{ p.get_full_name|default:p.username }}</span>
-                                {% endfor %}
-                            {% else %}
-                                <span class="text-muted">None invited</span>
+                            <span class="badge bg-primary text-white border me-1">
+                                {{ event.created_by.get_full_name|default:event.created_by.username }} (organizer)
+                            </span>
+                            {% for p in participants %}
+                            {% if p != event.created_by %}
+                            <span class="badge bg-light text-dark border me-1">{{ p.get_full_name|default:p.username }}</span>
                             {% endif %}
+                            {% endfor %}
                         </td>
                     </tr>
                     {% endwith %}

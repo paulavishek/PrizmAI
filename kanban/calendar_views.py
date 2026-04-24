@@ -13,7 +13,9 @@ Provides:
 
 import json
 import logging
+import zoneinfo
 from datetime import datetime, timedelta
+from django.conf import settings
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -318,14 +320,15 @@ def unified_calendar_events_api(request):
         layer = 'event' if (is_mine or is_invited) else 'teammate_status'
 
         if ev.is_all_day:
-            # Convert UTC→IST before extracting date, otherwise UTC midnight-5:30
-            # would roll back to the previous calendar day.
-            local_start = timezone.localtime(ev.start_datetime)
-            local_end   = timezone.localtime(ev.end_datetime)
+            # Use explicit astimezone() — bypasses Django's thread-local timezone
+            # which is unreliable under Daphne/ASGI thread-pool execution.
+            _srv_tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
+            local_start = ev.start_datetime.astimezone(_srv_tz)
+            local_end   = ev.end_datetime.astimezone(_srv_tz)
             start_str_fc = local_start.strftime('%Y-%m-%d')
             # FullCalendar all-day end is EXCLUSIVE, so advance by 1 day so that
             # the user's chosen end date is actually the last visible day.
-            end_str_fc   = (local_end + timedelta(days=1)).strftime('%Y-%m-%d')
+            end_str_fc   = (local_end.date() + timedelta(days=1)).isoformat()
         else:
             start_str_fc = ev.start_datetime.isoformat()
             end_str_fc = ev.end_datetime.isoformat()
@@ -540,12 +543,24 @@ def calendar_create_event(request):
         return JsonResponse({'success': False, 'error': 'Start and end datetime are required.'}, status=400)
 
     try:
-        start_dt = datetime.fromisoformat(start_str)
-        end_dt = datetime.fromisoformat(end_str)
-        if timezone.is_naive(start_dt):
-            start_dt = timezone.make_aware(start_dt)
-        if timezone.is_naive(end_dt):
-            end_dt = timezone.make_aware(end_dt)
+        if is_all_day:
+            # For all-day events, store as UTC midnight of the chosen date.
+            # This makes the date completely timezone-independent:
+            # ev.start_datetime.date() always equals the chosen calendar date.
+            import datetime as _dt_mod
+            start_date = _dt_mod.date.fromisoformat(start_str.split('T')[0])
+            end_date   = _dt_mod.date.fromisoformat(end_str.split('T')[0])
+            start_dt = datetime(start_date.year, start_date.month, start_date.day,
+                                tzinfo=_dt_mod.timezone.utc)
+            end_dt   = datetime(end_date.year, end_date.month, end_date.day,
+                                tzinfo=_dt_mod.timezone.utc)
+        else:
+            start_dt = datetime.fromisoformat(start_str)
+            end_dt = datetime.fromisoformat(end_str)
+            if timezone.is_naive(start_dt):
+                start_dt = timezone.make_aware(start_dt)
+            if timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
     except ValueError as exc:
         return JsonResponse({'success': False, 'error': f'Invalid datetime: {exc}'}, status=400)
 
@@ -627,8 +642,9 @@ def calendar_create_event(request):
 
     # Build FullCalendar event object for immediate rendering
     if is_all_day:
-        fc_start = timezone.localtime(event.start_datetime).strftime('%Y-%m-%d')
-        fc_end = (timezone.localtime(event.end_datetime) + timedelta(days=1)).strftime('%Y-%m-%d')
+        # All-day events are now stored as UTC midnight, so .date() gives the correct calendar date.
+        fc_start = event.start_datetime.date().isoformat()
+        fc_end = (event.end_datetime.date() + timedelta(days=1)).isoformat()
     else:
         fc_start = event.start_datetime.isoformat()
         fc_end = event.end_datetime.isoformat()
@@ -723,7 +739,25 @@ def calendar_event_detail(request, event_id):
     else:
         back_url = '/calendar/'
 
-    context = {'event': event, 'back_url': back_url}
+    # Pre-compute display dates using explicit timezone conversion (bypasses
+    # Django's thread-local which is unreliable under Daphne/ASGI).
+    import zoneinfo as _zi
+    _srv_tz = _zi.ZoneInfo(settings.TIME_ZONE)
+    if event.is_all_day:
+        # All-day events: new ones stored as UTC midnight; old ones stored as
+        # local midnight converted to UTC.  astimezone(server_tz) handles both.
+        event_start_display = event.start_datetime.astimezone(_srv_tz).date()
+        event_end_display   = event.end_datetime.astimezone(_srv_tz).date()
+    else:
+        event_start_display = event.start_datetime.astimezone(_srv_tz)
+        event_end_display   = event.end_datetime.astimezone(_srv_tz)
+
+    context = {
+        'event': event,
+        'back_url': back_url,
+        'event_start_display': event_start_display,
+        'event_end_display': event_end_display,
+    }
     return render(request, 'kanban/calendar_event_detail.html', context)
 
 

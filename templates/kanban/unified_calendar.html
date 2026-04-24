@@ -4,7 +4,6 @@
 {% block title %}My Calendar — PrizmAI{% endblock %}
 
 {% block extra_css %}
-<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
 <style>
     .calendar-container {
         background: #fff;
@@ -405,7 +404,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script src='{% static "vendor/fullcalendar.min.js" %}'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // ---- Data from Django ----
