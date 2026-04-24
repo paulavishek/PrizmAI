@@ -788,6 +788,7 @@ def send_daily_digest_emails():
 
         context = {
             'user_name': user.get_full_name() or user.username,
+            'greeting': _get_time_greeting(now.hour),
             'briefing_headline': briefing.headline if briefing else '',
             'briefing_text': briefing.briefing if briefing else '',
             'action_count': len(action_items),
@@ -814,14 +815,17 @@ def send_daily_digest_emails():
         )
 
         try:
-            send_mail(
+            import email.utils
+            from django.core.mail import EmailMultiAlternatives
+            msg = EmailMultiAlternatives(
                 subject=subject,
-                message=body_text,
+                body=body_text,
                 from_email=None,  # uses DEFAULT_FROM_EMAIL
-                recipient_list=[user.email],
-                html_message=body_html,
-                fail_silently=False,
+                to=[user.email],
+                headers={'Date': email.utils.format_datetime(now)},
             )
+            msg.attach_alternative(body_html, 'text/html')
+            msg.send(fail_silently=False)
             cache.set(cache_key, True, 60 * 60 * 20)  # expires in 20 h
             sent += 1
             logger.info(
@@ -853,3 +857,13 @@ def _build_decision_center_url():
         return f'{base.rstrip("/")}/decision-center/'
     except Exception:
         return 'http://127.0.0.1:8000/decision-center/'
+
+
+def _get_time_greeting(hour: int) -> str:
+    """Return a time-appropriate greeting for the given hour (0-23)."""
+    if 5 <= hour < 12:
+        return 'Good morning'
+    elif 12 <= hour < 17:
+        return 'Good afternoon'
+    else:
+        return 'Good evening'
