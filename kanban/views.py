@@ -1155,6 +1155,44 @@ def dashboard(request):
             'board_name': (_top_risk_task.column.board.name
                           if _top_risk_task.column and _top_risk_task.column.board else ''),
         }
+
+    # Build list of up to 3 top risk items for the briefing panel
+    briefing_top_risks = []
+    _risk_candidates = list(high_risk_tasks_qs[:3])
+    if not _risk_candidates and overdue_count > 0:
+        _risk_candidates = list(
+            Task.objects
+            .filter(column__board_id__in=_board_ids, item_type='task', due_date__lt=timezone.now())
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')[:3]
+        )
+    _now_for_risks = timezone.now()
+    for _rc in _risk_candidates:
+        _rc_due = _rc.due_date
+        _rc_days = None
+        if _rc_due:
+            _rc_days = int((_rc_due - _now_for_risks).days)
+            _rc_due_local = timezone.localtime(_rc_due)
+            _rc_date_str = _rc_due_local.strftime('%b') + ' ' + str(_rc_due_local.day)
+            if _rc_days < 0:
+                _rc_due_label = f"Overdue · {_rc_date_str}"
+            elif _rc_days == 0:
+                _rc_due_label = "Due today"
+            elif _rc_days == 1:
+                _rc_due_label = "Due tomorrow"
+            else:
+                _rc_due_label = f"Due {_rc_date_str}"
+        else:
+            _rc_due_label = "No due date"
+        briefing_top_risks.append({
+            'task':       _rc,
+            'risk_level': _rc.risk_level or ('high' if _rc_days is not None and _rc_days < 0 else ''),
+            'due_label':  _rc_due_label,
+            'due_date':   _rc_due,
+            'board_name': (_rc.column.board.name if _rc.column and _rc.column.board else ''),
+        })
+
     # briefing_risk is kept for has_content check
     if overdue_count > 0 or total_high_risk > 0:
         briefing_risk = True  # sentinel — actual display uses briefing_top_risk
@@ -1218,6 +1256,7 @@ def dashboard(request):
         'pulse':          briefing_pulse,
         'risk':           briefing_risk,
         'top_risk':       briefing_top_risk,
+        'top_risks':      briefing_top_risks,
         'action':         briefing_action,
         'action_type':    briefing_action_type,
         'action_tasks':   briefing_action_tasks,
