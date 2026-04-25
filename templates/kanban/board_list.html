@@ -734,6 +734,11 @@ function handleModalPagination() {
 
 document.addEventListener('DOMContentLoaded', function() {
     handleModalPagination();
+
+    // Initialise Bootstrap tooltips (used by the Immunity Score badge)
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el, { trigger: 'hover', placement: 'top' });
+    });
 });
 </script>
 {% endblock %}
