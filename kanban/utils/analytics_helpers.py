@@ -457,13 +457,12 @@ PROMOTED_CHARTS = {
         {
             'id': 'velocityChart',
             'title': 'Completion Velocity (Last 30 Days)',
-            'type': 'line',
+            'type': 'bar',
             'data_key': 'completed_tasks',
             'label_field': 'date',
             'value_field': 'count',
             'color': 'rgba(40, 167, 69, 0.8)',
             'border_color': 'rgba(40, 167, 69, 1)',
-            'fill': True,
         },
     ],
     'marketing_campaign': [
@@ -500,13 +499,12 @@ PROMOTED_CHARTS = {
         {
             'id': 'deadlineChart',
             'title': 'Content Delivery Trend',
-            'type': 'line',
+            'type': 'bar',
             'data_key': 'completed_tasks',
             'label_field': 'date',
             'value_field': 'count',
             'color': 'rgba(40, 167, 69, 0.8)',
             'border_color': 'rgba(40, 167, 69, 1)',
-            'fill': True,
         },
     ],
     'operations': [
@@ -543,13 +541,12 @@ PROMOTED_CHARTS = {
         {
             'id': 'cycleChart',
             'title': 'Completion Trend',
-            'type': 'line',
+            'type': 'bar',
             'data_key': 'completed_tasks',
             'label_field': 'date',
             'value_field': 'count',
             'color': 'rgba(40, 167, 69, 0.8)',
             'border_color': 'rgba(40, 167, 69, 1)',
-            'fill': True,
         },
     ],
 }

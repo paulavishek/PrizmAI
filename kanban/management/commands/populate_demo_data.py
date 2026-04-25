@@ -833,6 +833,34 @@ class Command(BaseCommand):
         import random
 
         # =====================================================================
+        # Sprint 0: Pre-project setup (6 tasks) — anchored 70 days in the past
+        # These tasks are always completed and appear as the oldest completions
+        # in the Completion Velocity chart (the refresh function orders by ID,
+        # so lower IDs == earlier creation == oldest updated_at assignment).
+        # =====================================================================
+        sprint0_anchor = timezone.now().date() - timedelta(days=70)
+        sprint0_data = [
+            {'title': 'Project Kickoff & Team Onboarding', 'desc': 'Kick off the project, align team on goals, establish working agreements and communication channels', 'priority': 'high', 'complexity': 3, 'assignee': alex, 'duration': 2},
+            {'title': 'Stakeholder Communication Plan', 'desc': 'Define cadence and format for status updates, escalation paths, and stakeholder RACI matrix', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'duration': 3},
+            {'title': 'Initial Risk Register', 'desc': 'Identify top project risks, assign owners, and define mitigation strategies for the first sprint', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'duration': 2},
+            {'title': 'Development Toolchain Configuration', 'desc': 'Install and configure IDE plugins, linters, formatters, and shared editor settings for the team', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'duration': 3},
+            {'title': 'Code Style & Contribution Guidelines', 'desc': 'Draft CONTRIBUTING.md, define PR review checklist, branch naming convention, and commit message format', 'priority': 'medium', 'complexity': 2, 'assignee': jordan, 'duration': 2},
+            {'title': 'Sprint 1 Planning Session', 'desc': 'Run sprint planning meeting, break epics into sprint stories, assign points, and confirm Definition of Done', 'priority': 'medium', 'complexity': 2, 'assignee': alex, 'duration': 1},
+        ]
+        for i, t in enumerate(sprint0_data):
+            t['start'] = sprint0_anchor + timedelta(days=i * 5)
+            t['due'] = t['start'] + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(t['due'], time(12, 0)))
+            task = Task.objects.create(
+                column=done, title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=alex, progress=100,
+                start_date=t['start'], due_date=due_datetime, phase='Sprint 0',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
+
+        # =====================================================================
         # Date & dependency design — "Mainline + One Branch" per phase
         # =====================================================================
         #
@@ -907,8 +935,8 @@ class Command(BaseCommand):
             {'title': 'System Architecture Design', 'desc': 'Design microservices architecture and define API contracts', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'duration': 3},
             {'title': 'Security Architecture Patterns', 'desc': 'Define security patterns, encryption standards, and access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 8},
             {'title': 'Base API Structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 3},
-            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 80, 'column': review, 'duration': 6},
-            {'title': 'User Registration Flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'duration': 4},
+            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 6},
+            {'title': 'User Registration Flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 100, 'column': done, 'duration': 4},
             {'title': 'Database Schema & Migrations', 'desc': 'Create ERD and define core database models with migrations', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'duration': 7},
             {'title': 'Authentication Testing Suite', 'desc': 'Comprehensive test coverage for auth system with security tests', 'priority': 'high', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 5},
             {'title': 'Project Documentation Setup', 'desc': 'Set up documentation site with API reference and dev guides', 'priority': 'medium', 'complexity': 7, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 5},
@@ -932,7 +960,7 @@ class Command(BaseCommand):
         phase2_start = phase1_end + timedelta(days=5)
         phase2_data = [
             {'title': 'Dashboard UI Development', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 10},
-            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'duration': 7},
+            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 100, 'column': done, 'duration': 7},
             {'title': 'Notification Service', 'desc': 'Real-time notifications via WebSocket and email queues', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'duration': 4},
             {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 60, 'column': in_progress, 'duration': 8},
             {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'medium', 'complexity': 7, 'assignee': sam, 'progress': 30, 'column': in_progress, 'duration': 3},
