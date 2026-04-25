@@ -1501,7 +1501,7 @@ def _reassign_demo_tasks_to_user(sandbox, user):
         return
 
     # Find tasks on sandbox boards that are assigned to demo personas
-    candidates = (
+    candidates = list(
         Task.objects
         .filter(
             column__board__in=boards,
@@ -1511,22 +1511,31 @@ def _reassign_demo_tasks_to_user(sandbox, user):
         )
         .exclude(progress=100)
         .select_related('assigned_to', 'column__board')
-        .order_by('priority', 'due_date')
+        .order_by('due_date')
     )
 
-    # Pick up to NUM_TASKS_TO_REASSIGN from different assignees for variety
+    # Pick tasks from distinct priority tiers so the dashboard "My Tasks"
+    # sort/filter shows clearly different results for each sort mode.
+    # Strategy: one urgent, one medium, one high — each from a different
+    # priority level so Urgency/Priority/Due Date sorts all produce
+    # visibly different orderings.
+    TARGET_PRIORITIES = ['urgent', 'medium', 'high', 'low']
     picked = []
-    seen_assignees = set()
-    # First pass: one per assignee
-    for t in candidates:
-        if t.assigned_to_id not in seen_assignees and len(picked) < NUM_TASKS_TO_REASSIGN:
-            picked.append(t)
-            seen_assignees.add(t.assigned_to_id)
-    # Second pass: fill remaining slots
+    used_ids = set()
+    for target_priority in TARGET_PRIORITIES:
+        if len(picked) >= NUM_TASKS_TO_REASSIGN:
+            break
+        for t in candidates:
+            if t.id not in used_ids and t.priority == target_priority:
+                picked.append(t)
+                used_ids.add(t.id)
+                break
+    # Fill any remaining slots from whatever is left
     if len(picked) < NUM_TASKS_TO_REASSIGN:
         for t in candidates:
-            if t not in picked and len(picked) < NUM_TASKS_TO_REASSIGN:
+            if t.id not in used_ids and len(picked) < NUM_TASKS_TO_REASSIGN:
                 picked.append(t)
+                used_ids.add(t.id)
 
     mapping = {}
     for task in picked:
@@ -1536,6 +1545,17 @@ def _reassign_demo_tasks_to_user(sandbox, user):
 
     sandbox.reassigned_tasks = mapping
     sandbox.save(update_fields=['reassigned_tasks'])
+
+    # Spread out updated_at so the "Recent" sort produces a clearly different
+    # order from Urgency/Priority/Due Date sorts.
+    # picked is ordered [urgent, medium, high, ...], so we assign the freshest
+    # timestamp to the last item (high priority) and the oldest to the first
+    # (urgent) — making Recent sort roughly reverse of Priority sort.
+    from django.utils import timezone as _tz
+    from datetime import timedelta as _td
+    _offsets = [_td(days=14), _td(days=5), _td(hours=2)]
+    for task, offset in zip(picked, _offsets):
+        Task.objects.filter(pk=task.pk).update(updated_at=_tz.now() - offset)
 
 
 def _restore_demo_task_assignments(sandbox):
