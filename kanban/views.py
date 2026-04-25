@@ -315,36 +315,36 @@ def dashboard(request):
             }
         ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')
     elif sort_by == 'recent':
-        # Sort by: 1) Most recently created/updated, 2) Priority
-        my_tasks = my_tasks_query.extra(
-            select={
-                'priority_order': """
-                    CASE priority 
-                        WHEN 'urgent' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
-                    END
-                """
-            }
-        ).order_by('-updated_at', '-created_at', 'priority_order')
+        # Sort by: most recently modified/updated first.
+        # Purely time-based — no priority tiebreaker so it stays distinct from
+        # the priority and urgency sorts.
+        my_tasks = my_tasks_query.order_by('-updated_at', '-created_at')
     else:  # Default: 'urgency'
-        # Sort by: 1) Overdue tasks first, 2) Priority level, 3) Due date, 4) Creation date
+        # Urgency = time-sensitivity, not just the priority label.
+        # Score = (days until due date) minus a priority boost:
+        #   urgent=7d, high=3d, medium=1d, low=0d
+        # A high-priority task due in 2 days (score=-1) outranks an urgent task
+        # due in 30 days (score=23). Overdue tasks always have negative scores.
+        # Tasks with no due date are least urgent (score=9999).
+        # This makes Urgency sort meaningfully different from Priority sort when
+        # a lower-priority task is due sooner than a higher-priority one.
         my_tasks = my_tasks_query.extra(
             select={
-                'is_overdue': "CASE WHEN due_date < datetime('now') THEN 1 ELSE 0 END",
-                'priority_order': """
-                    CASE priority 
-                        WHEN 'urgent' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
+                'urgency_score': """
+                    CASE
+                        WHEN due_date IS NULL THEN 9999
+                        ELSE (julianday(due_date) - julianday('now')) -
+                             CASE priority
+                                 WHEN 'urgent' THEN 7
+                                 WHEN 'high'   THEN 3
+                                 WHEN 'medium' THEN 1
+                                 WHEN 'low'    THEN 0
+                                 ELSE 0
+                             END
                     END
                 """
             }
-        ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')
+        ).order_by('urgency_score', 'created_at')
     
     # Count of my tasks (for stats) — derived from the same base query to stay in sync
     my_tasks_count = my_tasks_query.count()
