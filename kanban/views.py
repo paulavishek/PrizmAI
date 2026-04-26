@@ -3028,12 +3028,22 @@ def create_label(request, board_id):
             label.board = board
             label.save()
             messages.success(request, 'Label created successfully!')
-            return redirect('board_detail', board_id=board.id)
+            return redirect('create_label', board_id=board.id)
     else:
-        form = TaskLabelForm()    
-        return render(request, 'kanban/create_label.html', {
+        form = TaskLabelForm()
+
+    color_palette = [
+        '#EF4444', '#DC2626', '#F97316', '#EA580C',
+        '#EAB308', '#CA8A04', '#22C55E', '#16A34A',
+        '#14B8A6', '#0D9488', '#06B6D4', '#0891B2',
+        '#3B82F6', '#2563EB', '#6366F1', '#4F46E5',
+        '#8B5CF6', '#7C3AED', '#EC4899', '#DB2777',
+        '#F43F5E', '#FF5733', '#84CC16', '#64748B',
+    ]
+    return render(request, 'kanban/create_label.html', {
         'form': form,
         'board': board,
+        'color_palette': color_palette,
         'has_lean_labels': board.labels.filter(category='lean').exists(),
         'has_regular_labels': board.labels.filter(category='regular').exists()
     })

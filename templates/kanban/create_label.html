@@ -9,6 +9,15 @@
         document.querySelectorAll('.badge[data-color]').forEach(function(badge) {
             badge.style.backgroundColor = badge.dataset.color;
         });
+
+        // Highlight the initially selected color swatch
+        const initialColor = document.getElementById('id_color').value.toUpperCase();
+        document.querySelectorAll('.color-swatch').forEach(function(swatch) {
+            if (swatch.dataset.color.toUpperCase() === initialColor) {
+                swatch.style.borderColor = '#000';
+                swatch.style.transform = 'scale(1.2)';
+            }
+        });
         
         // Add Lean Six Sigma Labels button handler
         const addLeanLabelsBtn = document.getElementById('addLeanLabels');
@@ -30,6 +39,24 @@
             });
         }
     });
+
+    function selectColor(hex) {
+        // Update hidden input
+        document.getElementById('id_color').value = hex;
+        // Update preview
+        document.getElementById('selectedColorPreview').style.backgroundColor = hex;
+        document.getElementById('selectedColorHex').textContent = hex;
+        // Update swatch borders
+        document.querySelectorAll('.color-swatch').forEach(function(swatch) {
+            if (swatch.dataset.color.toUpperCase() === hex.toUpperCase()) {
+                swatch.style.borderColor = '#000';
+                swatch.style.transform = 'scale(1.2)';
+            } else {
+                swatch.style.borderColor = 'transparent';
+                swatch.style.transform = 'scale(1)';
+            }
+        });
+    }
 </script>
 <div class="row justify-content-center">
     <div class="col-md-8">
@@ -46,7 +73,29 @@
                         <h5>Create New Label</h5>
                         <form method="post">
                             {% csrf_token %}
-                            {{ form|crispy }}
+                            {{ form.name|as_crispy_field }}
+
+                            <!-- Color Palette Picker -->
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Color <span class="text-danger">*</span></label>
+                                <div class="d-flex flex-wrap gap-2 p-2 border rounded bg-light mb-2" id="colorPalette">
+                                    {% for hex in color_palette %}
+                                    <div class="color-swatch" data-color="{{ hex }}"
+                                         title="{{ hex }}"
+                                         style="width:28px;height:28px;border-radius:50%;background-color:{{ hex }};cursor:pointer;border:2px solid transparent;transition:border-color .15s,transform .1s;flex-shrink:0;"
+                                         onclick="selectColor('{{ hex }}')">
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <input type="hidden" name="color" id="id_color" value="{{ form.color.value|default:'#EF4444' }}">
+                                <div class="d-flex align-items-center gap-2 mt-1">
+                                    <div id="selectedColorPreview"
+                                         style="width:22px;height:22px;border-radius:50%;border:2px solid #dee2e6;background-color:{{ form.color.value|default:'#EF4444' }};"></div>
+                                    <small class="text-muted" id="selectedColorHex">{{ form.color.value|default:'#EF4444' }}</small>
+                                </div>
+                            </div>
+
+                            {{ form.category|as_crispy_field }}
                             <div class="d-grid gap-2 mt-3">
                                 <button type="submit" class="btn btn-primary">Create Label</button>
                             </div>
