@@ -462,14 +462,21 @@ def _refresh_engagement_dates(base_date):
             if not record.date:
                 continue
             
-            # Engagement records in the past 60 days
+            # Engagement records spread across the past 60 days
             days_offset = -(record.id % 60 + 1)
             record.date = base_date + timedelta(days=days_offset)
+
+            # Keep pending follow-up dates in the near future so they never
+            # look stale — 5 to 14 days ahead, varied by record id.
+            if record.follow_up_required and not record.follow_up_completed:
+                record.follow_up_date = base_date + timedelta(days=(record.id % 10 + 5))
+
             records_to_update.append(record)
         
         if records_to_update:
-            StakeholderEngagementRecord.objects.bulk_update(records_to_update, 
-                                                           ['date'], batch_size=500)
+            StakeholderEngagementRecord.objects.bulk_update(
+                records_to_update, ['date', 'follow_up_date'], batch_size=500,
+            )
         
         return len(records_to_update)
         

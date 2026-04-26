@@ -97,12 +97,16 @@ class Command(BaseCommand):
         from kanban.commitment_models import CommitmentProtocol
         from kanban.automation_models import BoardAutomation
         from decision_center.models import DecisionItem
-        from kanban.stakeholder_models import ProjectStakeholder
+        from kanban.stakeholder_models import (
+            ProjectStakeholder, StakeholderTaskInvolvement, StakeholderEngagementRecord,
+        )
 
         CalendarEvent.objects.filter(board=self.board).delete()
         CommitmentProtocol.objects.filter(board=self.board).delete()
         BoardAutomation.objects.filter(board=self.board).delete()
         DecisionItem.objects.filter(board=self.board).delete()
+        StakeholderEngagementRecord.objects.filter(stakeholder__board=self.board).delete()
+        StakeholderTaskInvolvement.objects.filter(stakeholder__board=self.board).delete()
         ProjectStakeholder.objects.filter(board=self.board).delete()
         self.stdout.write('   ✓ Cleared existing data for all 5 features')
 
@@ -652,7 +656,10 @@ class Command(BaseCommand):
     #  5. PROJECT STAKEHOLDERS
     # -----------------------------------------------------------------
     def _create_stakeholders(self):
-        from kanban.stakeholder_models import ProjectStakeholder
+        from kanban.stakeholder_models import (
+            ProjectStakeholder, StakeholderTaskInvolvement, StakeholderEngagementRecord,
+        )
+        from kanban.models import Task
 
         self.stdout.write(self.style.NOTICE('\n👥 Creating Project Stakeholders...'))
 
@@ -734,15 +741,158 @@ class Command(BaseCommand):
                 'notes': 'Manages CI/CD pipeline and deployment infrastructure. Needs 2 weeks notice before go-live for production environment prep.',
                 'created_by': self.alex,
             },
+            {
+                'name': 'Tom Bradley',
+                'role': 'Compliance Auditor',
+                'organization': 'External Audit Partners',
+                'email': 'tom.bradley@auditpartners.example.com',
+                'influence_level': 'low',
+                'interest_level': 'low',
+                'current_engagement': 'inform',
+                'desired_engagement': 'inform',
+                'notes': 'External compliance auditor. Receives quarterly status reports and go-live sign-off documentation. Minimal day-to-day involvement required.',
+                'created_by': self.alex,
+            },
         ]
 
+        sh_objects = {}
         for sh_data in stakeholders:
-            ProjectStakeholder.objects.create(
+            sh = ProjectStakeholder.objects.create(
                 board=self.board,
                 is_active=True,
                 **sh_data,
             )
+            sh_objects[sh.name] = sh
             count += 1
 
-        self.stdout.write(f'   ✅ Created {count} project stakeholders')
+        # --- Task Involvements ---
+        board_tasks = {
+            t.title: t
+            for t in Task.objects.filter(column__board=self.board)
+        }
+
+        def _task(keyword):
+            """Return first task whose title contains keyword (case-insensitive)."""
+            kw = keyword.lower()
+            return next((t for title, t in board_tasks.items() if kw in title.lower()), None)
+
+        # (stakeholder_name, task_keyword, involvement_type, engagement_status, satisfaction, feedback)
+        involvement_specs = [
+            ('Dr. Priya Sharma',  'Requirements Analysis',      'approver',    'collaborated', 5, 'Approved scope and confirmed budget allocation.'),
+            ('Dr. Priya Sharma',  'System Architecture Design', 'approver',    'collaborated', 5, 'Signed off on architecture direction after review session.'),
+            ('Marcus Johnson',    'User Registration Flow',     'approver',    'collaborated', 4, 'Provided acceptance criteria and approved final design.'),
+            ('Marcus Johnson',    'Project Documentation',      'approver',    'involved',     4, 'Reviewed outline; requested additional API usage examples.'),
+            ('Lisa Chen',         'Authentication System',      'reviewer',    'consulted',    4, 'Security review completed. Flagged session token expiry requirement.'),
+            ('Lisa Chen',         'API Rate Limiting',          'reviewer',    'consulted',    4, 'Reviewed rate-limit thresholds; approved approach.'),
+            ('Lisa Chen',         'Integration Testing',        'reviewer',    'informed',     3, 'Monitoring test coverage for security-sensitive paths.'),
+            ('David Park',        'User Registration Flow',     'contributor', 'involved',     5, 'Delivered high-fidelity wireframes; incorporated A11y feedback.'),
+            ('David Park',        'Database Schema',            'contributor', 'involved',     4, 'Reviewed entity relationships to ensure UI data needs are met.'),
+            ('Rachel Torres',     'Project Documentation',      'observer',    'informed',     4, 'Received documentation draft; flagged customer-facing terminology gaps.'),
+            ('James Wilson',      'Development Environment',    'reviewer',    'consulted',    4, 'Reviewed CI/CD pipeline config; approved container registry setup.'),
+            ('James Wilson',      'Notification Service',       'reviewer',    'informed',     3, 'Flagged need for at-rest encryption on notification queue.'),
+            ('Tom Bradley',       'Requirements Analysis',      'observer',    'informed',     4, 'Received project scope summary for compliance pre-screening.'),
+        ]
+
+        inv_count = 0
+        for sh_name, keyword, inv_type, eng_status, rating, feedback in involvement_specs:
+            sh = sh_objects.get(sh_name)
+            task = _task(keyword)
+            if sh and task:
+                StakeholderTaskInvolvement.objects.get_or_create(
+                    stakeholder=sh,
+                    task=task,
+                    defaults={
+                        'involvement_type': inv_type,
+                        'engagement_status': eng_status,
+                        'engagement_count': 2 if eng_status in ('collaborated', 'involved') else 1,
+                        'satisfaction_rating': rating,
+                        'feedback': feedback,
+                    },
+                )
+                inv_count += 1
+
+        # --- Engagement Records ---
+        # Dates are relative to today so records never look stale after a demo date refresh.
+        # (stakeholder_name, days_ago, channel, description, outcome, sentiment, rating,
+        #  follow_up_required, follow_up_days_from_today, created_by_key)
+        engagement_specs = [
+            ('Dr. Priya Sharma',  7,  'meeting', 'Weekly project status review with exec sponsor.',
+             'Budget confirmed for Q2. Priority on Authentication System escalated.',
+             'positive', 5, False, None, 'alex'),
+            ('Dr. Priya Sharma', 21,  'video',   'Architecture milestone check-in.',
+             'Signed off on system design. Requested bi-weekly risk summary going forward.',
+             'positive', 5, True, 14, 'alex'),
+            ('Dr. Priya Sharma', 42,  'meeting', 'Project kick-off and scope alignment.',
+             'Executive sponsor confirmed. Success criteria agreed.',
+             'positive', 4, False, None, 'alex'),
+            ('Marcus Johnson',    5,  'video',   'Sprint planning — user-facing feature prioritisation.',
+             'User Registration and Dashboard features elevated to P1 for current sprint.',
+             'positive', 5, False, None, 'alex'),
+            ('Marcus Johnson',   18,  'chat',    'Shared wireframe prototypes for review.',
+             'Minor UX revisions requested. Go-ahead given for development start.',
+             'positive', 4, False, None, 'sam'),
+            ('Marcus Johnson',   35,  'meeting', 'Product roadmap walkthrough.',
+             'Roadmap approved. Documentation deliverable scoped into sprint 2.',
+             'positive', 4, True, 10, 'alex'),
+            ('Lisa Chen',        10,  'meeting', 'Security requirements workshop — authentication flows.',
+             'Session token expiry policy agreed: 30 min idle, 8 hr absolute.',
+             'positive', 4, True, 7, 'sam'),
+            ('Lisa Chen',        28,  'email',   'Shared API Rate Limiting design spec for compliance review.',
+             'Approved with minor notes on logging granularity.',
+             'neutral', 3, False, None, 'sam'),
+            ('Lisa Chen',        50,  'meeting', 'Initial security scope briefing.',
+             'Identified 3 audit checkpoints: auth, data handling, third-party integrations.',
+             'positive', 4, False, None, 'alex'),
+            ('David Park',        8,  'video',   'User Registration Flow UX review session.',
+             'High-fidelity prototypes approved. A11y improvements incorporated.',
+             'positive', 5, False, None, 'jordan'),
+            ('David Park',       30,  'meeting', 'Design system handoff and component library walkthrough.',
+             'Component library transferred to dev. Two open items on mobile breakpoints.',
+             'positive', 4, True, 7, 'jordan'),
+            ('Rachel Torres',    12,  'email',   'Sent feature preview summary and beta user guide draft.',
+             'Positive response. Rachel requested access to staging for hands-on review.',
+             'positive', 4, True, 5, 'alex'),
+            ('Rachel Torres',    45,  'email',   'Monthly stakeholder status email — project health update.',
+             'Acknowledged. No concerns raised.',
+             'neutral', 3, False, None, 'alex'),
+            ('James Wilson',     14,  'video',   'CI/CD pipeline architecture review.',
+             'Container registry and deployment slots confirmed. 2-week runway for prod prep noted.',
+             'positive', 4, False, None, 'sam'),
+            ('James Wilson',     38,  'chat',    'Notification Service queue encryption query.',
+             'Flagged at-rest encryption requirement. Sam to raise ticket.',
+             'neutral', 3, True, 7, 'sam'),
+            ('Tom Bradley',      60,  'email',   'Quarterly compliance status report distributed.',
+             'Report acknowledged. No compliance blockers raised for current scope.',
+             'neutral', 4, False, None, 'alex'),
+        ]
+
+        user_map = {'alex': self.alex, 'sam': self.sam, 'jordan': self.jordan}
+        rec_count = 0
+        for spec in engagement_specs:
+            sh_name, days_ago, channel, description, outcome, sentiment, rating, \
+                follow_up, follow_up_days, creator_key = spec
+            sh = sh_objects.get(sh_name)
+            if not sh:
+                continue
+            rec_date = self.today - timedelta(days=days_ago)
+            follow_up_date = (self.today + timedelta(days=follow_up_days)) if (follow_up and follow_up_days) else None
+            StakeholderEngagementRecord.objects.create(
+                stakeholder=sh,
+                date=rec_date,
+                description=description,
+                communication_channel=channel,
+                outcome=outcome,
+                engagement_sentiment=sentiment,
+                satisfaction_rating=rating,
+                follow_up_required=follow_up,
+                follow_up_date=follow_up_date,
+                follow_up_completed=False,
+                created_by=user_map[creator_key],
+            )
+            rec_count += 1
+
+        self.stdout.write(
+            f'   ✅ Created {count} stakeholders, {inv_count} task involvements, '
+            f'{rec_count} engagement records'
+        )
         return count
