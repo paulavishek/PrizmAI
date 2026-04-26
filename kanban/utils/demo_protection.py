@@ -205,6 +205,57 @@ def get_user_goals(user):
     ).distinct()
 
 
+def get_user_strategies(user):
+    """Return a Strategy queryset scoped to the user's current workspace mode.
+
+    Mirrors the logic of ``get_user_missions()`` for the strategy layer:
+
+    * **Demo mode**: only seed demo strategies, plus any linked to the user's
+      sandbox boards.
+    * **Workspace mode**: strategies belonging to the active workspace.
+    * **Real mode fallback**: user-created or board-linked strategies,
+      explicitly excluding demo/seed data.
+    """
+    from kanban.models import Strategy  # late import
+
+    profile = getattr(user, 'profile', None)
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        user_board_ids = list(
+            get_user_boards(user).values_list('id', flat=True)
+        )
+        return Strategy.objects.filter(
+            Q(is_seed_demo_data=True) |
+            Q(boards__id__in=user_board_ids)
+        ).distinct()
+
+    if active_ws and not active_ws.is_demo:
+        return Strategy.objects.filter(
+            workspace=active_ws,
+        ).distinct()
+
+    # Org admin fallback: scope to their organisation
+    from kanban.permissions import is_user_org_admin
+    if is_user_org_admin(user):
+        org = getattr(profile, 'organization', None)
+        if org and not getattr(org, 'is_demo', False):
+            return Strategy.objects.filter(
+                Q(workspace__organization=org) |
+                Q(boards__organization=org),
+                is_seed_demo_data=False,
+            ).distinct()
+
+    return Strategy.objects.filter(
+        Q(created_by=user) |
+        Q(boards__id__in=list(
+            get_user_boards(user).values_list('id', flat=True)
+        )),
+        is_seed_demo_data=False,
+    ).distinct()
+
+
 def get_demo_workspace():
     """Return the demo Workspace instance (or None).
 

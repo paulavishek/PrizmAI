@@ -5001,16 +5001,18 @@ def edit_board(request, board_id):
         messages.error(request, "You don't have permission to edit this board.")
         return redirect('board_detail', board_id=board.id)
 
+    from kanban.utils.demo_protection import get_user_strategies
+
     if request.method == 'POST':
         form = BoardForm(request.POST, instance=board)
         if form.is_valid():
             form.save()
 
-            # Handle strategy linking/unlinking
+            # Handle strategy linking/unlinking — scope to the user's workspace
             strategy_id = request.POST.get('strategy_id', '').strip()
             if strategy_id:
                 try:
-                    new_strategy = Strategy.objects.get(id=int(strategy_id))
+                    new_strategy = get_user_strategies(request.user).get(id=int(strategy_id))
                     board.strategy = new_strategy
                     board.save(update_fields=['strategy'])
                     messages.success(request, f'Board "{board.name}" updated and linked to strategy "{new_strategy.name}"!')
@@ -5028,9 +5030,10 @@ def edit_board(request, board_id):
     else:
         form = BoardForm(instance=board)
 
-    from kanban.models import Strategy as _Strategy
     all_strategies = list(
-        _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+        get_user_strategies(request.user)
+        .select_related('mission')
+        .order_by('mission__name', 'name')
         .values('id', 'name', 'mission__name', 'mission_id')
     )
 
