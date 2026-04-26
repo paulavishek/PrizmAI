@@ -100,6 +100,7 @@ urlpatterns = [
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
     path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
+    path('boards/<int:board_id>/list/', views.board_list_view, name='board_list_view'),
 
     # -----------------------------------------------------------------------
     # Unified Cross-Board Calendar
@@ -110,10 +111,15 @@ urlpatterns = [
     path('calendar/create-event/', calendar_views.calendar_create_event, name='calendar_create_event'),
     path('calendar/boards/<int:board_id>/columns/', calendar_views.calendar_get_board_columns, name='calendar_get_board_columns'),
     path('calendar/events/<int:event_id>/', calendar_views.calendar_event_detail, name='calendar_event_detail'),
+    path('calendar/events/<int:event_id>/edit/', calendar_views.calendar_event_edit, name='calendar_event_edit'),
     path('calendar/events/<int:event_id>/delete/', calendar_views.calendar_event_delete, name='calendar_event_delete'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
     path('boards/<int:board_id>/prizmbrief/', prizmbrief_views.prizmbrief_setup, name='prizmbrief_setup'),
+    path('boards/<int:board_id>/prizmbrief/save/', prizmbrief_views.save_brief, name='prizmbrief_save'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/', prizmbrief_views.saved_brief_detail, name='prizmbrief_saved_detail'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/rename/', prizmbrief_views.rename_brief, name='prizmbrief_rename'),
+    path('boards/<int:board_id>/prizmbrief/saved/<int:brief_id>/delete/', prizmbrief_views.delete_brief, name='prizmbrief_delete'),
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),
@@ -231,9 +237,11 @@ urlpatterns = [
     path('board/<int:board_id>/burndown/history/', burndown_views.prediction_history, name='prediction_history'),
     path('board/<int:board_id>/burndown/suggestions/', burndown_views.actionable_suggestions_api, name='actionable_suggestions_api'),
 
-    # Triple Constraint Dashboard (Scope + Cost + Time)
+    # Triple Constraint Dashboard (Scope + Cost + Time + Project Confidence)
     path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
     path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
+    path('boards/<int:board_id>/triple-constraint/recalculate-confidence/', triple_constraint_views.recalculate_confidence, name='recalculate_confidence'),
+    path('boards/<int:board_id>/triple-constraint/record-signal/', triple_constraint_views.record_manual_signal, name='record_manual_signal'),
 
     # Board Automations (new engine)
     path('boards/<int:board_id>/automations/', automation_views.automations_page, name='automations_list'),
@@ -340,6 +348,7 @@ urlpatterns = [
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/toggle-star/', shadow_views.toggle_star_branch, name='toggle_star_branch'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/delete/', shadow_views.delete_branch, name='delete_shadow_branch'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/restore/', shadow_views.restore_branch, name='restore_shadow_branch'),
+    path('api/boards/<int:board_id>/shadow/restore-all/', shadow_views.restore_all_archived_branches, name='restore_all_archived_branches'),
     path('api/boards/<int:board_id>/shadow/<int:branch_id>/link-scenario/', shadow_views.link_scenario_to_branch, name='link_scenario_to_branch'),
     path('boards/<int:board_id>/shadow/promote-scenario/', shadow_views.promote_scenario_to_branch, name='promote_scenario'),
     
@@ -389,18 +398,15 @@ urlpatterns = [
     path('boards/<int:board_id>/preset/', views.board_preset_update, name='board_preset_update'),
 
     # -----------------------------------------------------------------------
-    # Living Commitment Protocols (Anti-Roadmap)
+    # Living Commitment Protocols — DEPRECATED
+    # Feature decomposed: confidence score now lives in Triple Constraint,
+    # signal log is unified ProjectSignal, renegotiation is in AI Coach.
+    # Existing URLs redirect to Triple Constraint Dashboard for backwards
+    # compatibility.
     # -----------------------------------------------------------------------
-    path('boards/<int:board_id>/commitments/', commitment_views.commitment_dashboard, name='commitment_dashboard'),
-    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_create, name='commitment_create'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_detail, name='commitment_detail'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/bet/', commitment_views.commitment_place_bet, name='commitment_place_bet'),
-    path('boards/<int:board_id>/commitments/<int:commitment_id>/signal/', commitment_views.commitment_signal_manual, name='commitment_signal_manual'),
-    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/', commitment_views.negotiation_session_detail, name='negotiation_session_detail'),
-    path('boards/<int:board_id>/negotiations/<int:negotiation_id>/resolve/', commitment_views.negotiation_resolve, name='negotiation_resolve'),
-    # Commitment API endpoints (JSON, used by JS auto-refresh and Chart.js)
-    path('api/boards/<int:board_id>/commitments/', commitment_views.commitments_list_api, name='commitments_list_api'),
-    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/curve/', commitment_views.commitment_curve_api, name='commitment_curve_api'),
+    path('boards/<int:board_id>/commitments/', commitment_views.commitment_redirect, name='commitment_dashboard'),
+    path('boards/<int:board_id>/commitments/new/', commitment_views.commitment_redirect, name='commitment_create'),
+    path('boards/<int:board_id>/commitments/<int:commitment_id>/', commitment_views.commitment_redirect, name='commitment_detail'),
 
     # -----------------------------------------------------------------------
     # Spectra Smart Access Request System
@@ -413,7 +419,6 @@ urlpatterns = [
     path('api/access-requests/<int:request_id>/approve/', access_request_views.api_approve_access_request, name='api_approve_access_request'),
     path('api/access-requests/<int:request_id>/deny/', access_request_views.api_deny_access_request, name='api_deny_access_request'),
     path('api/access-requests/pending-count/', access_request_views.get_pending_access_request_count, name='get_pending_access_request_count'),
-    path('api/boards/<int:board_id>/commitments/<int:commitment_id>/market/', commitment_views.commitment_market_api, name='commitment_market_api'),
 
     # -----------------------------------------------------------------------
     # My Favorites

@@ -321,6 +321,7 @@ def send_message(request):
         # In demo mode, the chat UI has no board selector.  If the session
         # doesn't have a board yet, pick the user's first sandbox board so
         # Spectra has context for questions like "How many tasks on this board?"
+        _auto_selected_board_note = None  # will be prepended to AI response
         if not board and is_demo_mode:
             from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
             user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
@@ -331,6 +332,7 @@ def send_message(request):
                 board = demo_boards.first()
                 session.board = board
                 session.save()
+                _auto_selected_board_note = f"📋 I'm analyzing **{board.name}**. You can switch boards from the board selector."
                 logger.info("Auto-selected demo board %s for user %s", board.id, request.user.id)
         elif not board and not is_demo_mode:
             # Personal workspace: auto-select the first accessible board
@@ -343,6 +345,7 @@ def send_message(request):
                 board = personal_boards.first()
                 session.board = board
                 session.save()
+                _auto_selected_board_note = f"📋 I'm analyzing **{board.name}**. You can switch boards from the board selector."
 
         # ── Conversational Spectra: check conversation state ─────────
         from ai_assistant.utils.conversation_flow import (
@@ -438,6 +441,10 @@ def send_message(request):
             use_cache=not refresh_data,
             file_context=file_context,
         )
+
+        # Prepend board auto-selection note so users know which board Spectra picked
+        if _auto_selected_board_note and response.get('response'):
+            response['response'] = _auto_selected_board_note + "\n\n" + response['response']
         
         # Save assistant message
         assistant_message = AIAssistantMessage.objects.create(

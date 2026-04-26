@@ -139,7 +139,7 @@
                                 <tr>
                                     <td><strong>{{ stakeholder.name }}</strong></td>
                                     <td>{{ stakeholder.role }}</td>
-                                    <td>{{ stakeholder.organization|default:"â€”" }}</td>
+                                    <td>{{ stakeholder.organization|default:"—" }}</td>
                                     <td>
                                         <span class="badge {% if stakeholder.influence_level == 'high' %}bg-danger{% elif stakeholder.influence_level == 'medium' %}bg-warning{% else %}bg-info{% endif %}">
                                             {{ stakeholder.get_influence_level_display }}

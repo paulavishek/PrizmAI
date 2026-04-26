@@ -69,12 +69,14 @@
                             <h6 class="border-bottom pb-2 mb-3">
                                 <i class="fas fa-clipboard-list text-primary me-2"></i>Board Details
                             </h6>
+                            <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                             <div class="mb-3">
-                                <label for="{{ form.name.id_for_label }}" class="form-label">Board Name <span class="text-danger">*</span></label>
+                                <label for="{{ form.name.id_for_label }}" class="form-label">Board Name <span class="required-asterisk">*</span></label>
                                 {{ form.name }}
                                 {% if form.name.errors %}
                                     <div class="invalid-feedback d-block">{{ form.name.errors }}</div>
                                 {% endif %}
+                                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Board name is required.</div>
                             </div>
                             
                             <!-- AI Smart Setup Assistant -->
@@ -96,7 +98,7 @@
                                         <div class="spinner-border spinner-border-sm text-info" role="status">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
-                                        <span class="ms-2 text-muted small">Analyzing your project and generating recommendations...</span>
+                                        <span class="ms-2 prizm-loading-message-inline small" data-prizm-messages="boardSetup">Analyzing your project and generating recommendations…</span>
                                     </div>
                                 </div>
                             </div>
@@ -148,7 +150,7 @@
                                 <div class="spinner-border spinner-border-sm text-info" role="status">
                                     <span class="visually-hidden">Loading...</span>
                                 </div>
-                                <span class="ms-2 text-muted small">Analyzing optimal column structure...</span>
+                                <span class="ms-2 prizm-loading-message-inline small" data-prizm-messages="columnStructure">Analyzing optimal column structure…</span>
                             </div>
                             <div id="column-recommendations-result" class="d-none"></div>
                         </div>

@@ -22,7 +22,7 @@
 
 ## 2. Dashboard & Focus Today
 
-9. What is my "Your Focus Today" summary telling me right now?
+9. What is my "Focus Today" summary telling me right now?
 10. How many tasks do I currently have assigned to me?
 11. How many tasks are overdue on the Software Development board?
 12. How many tasks are marked as High Risk?

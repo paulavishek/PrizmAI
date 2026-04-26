@@ -1210,3 +1210,102 @@ class SpectraActionService:
             logger.exception('Spectra place_commitment_bet failed: %s', exc)
             return {'success': False, 'error': str(exc)}
 
+    # ── Requirements Analysis ────────────────────────────────────────────────
+
+    def get_requirements_summary(self, user, board, collected_data):
+        """
+        Return a pre-computed summary of all requirements on a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.spectra_data import get_requirements_context_for_board
+
+            ctx = get_requirements_context_for_board(board)
+            summary = ctx.get('summary', {})
+
+            if summary.get('total', 0) == 0:
+                return {
+                    'success': True,
+                    'message': f"📋 **{board.name}** has no requirements defined yet.",
+                }
+
+            return {
+                'success': True,
+                'message': ctx.get('full_narrative', 'No data available.'),
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra get_requirements_summary failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def analyze_requirements_quality(self, user, board, collected_data):
+        """
+        Return an AI-powered quality overview of all requirements on a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.spectra_data import get_requirements_quality_overview
+
+            quality = get_requirements_quality_overview(board)
+            narrative = quality.get('narrative', 'No quality data available.')
+
+            return {
+                'success': True,
+                'message': f"🔍 **Requirements Quality Report**\n\n{narrative}",
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra analyze_requirements_quality failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    def detect_requirements_gaps(self, user, board, collected_data):
+        """
+        Detect gaps in requirements coverage for a board.
+        collected_data keys: board_id
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from requirements.ai_analysis import RequirementsAIAnalyzer
+
+            analyzer = RequirementsAIAnalyzer(board)
+            result = analyzer.detect_gaps()
+
+            parts = [f"📊 **Gap Analysis — {board.name}**\n"]
+            if result.get('summary'):
+                parts.append(result['summary'])
+            if result.get('gaps'):
+                parts.append("\n**Identified Gaps:**")
+                for g in result['gaps'][:5]:
+                    parts.append(f"- [{g.get('severity', 'info').upper()}] {g['area']}")
+                    if g.get('recommendation'):
+                        parts.append(f"  → {g['recommendation']}")
+            if result.get('uncovered_objectives'):
+                parts.append(f"\n**Uncovered Objectives:** {len(result['uncovered_objectives'])}")
+                for o in result['uncovered_objectives'][:5]:
+                    parts.append(f"- {o['title']}")
+            if result.get('orphaned_tasks'):
+                parts.append(f"\n**Orphaned Tasks (no requirement):** {len(result['orphaned_tasks'])}")
+
+            return {
+                'success': True,
+                'message': '\n'.join(parts),
+            }
+
+        except ImportError:
+            return {'success': False, 'error': 'Requirements feature is not installed.'}
+        except Exception as exc:
+            logger.exception('Spectra detect_requirements_gaps failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+

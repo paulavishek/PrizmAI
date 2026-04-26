@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="{% static 'css/theme.css' %}">
     <link rel="stylesheet" href="{% static 'css/accessibility.css' %}">
     <link rel="stylesheet" href="{% static 'css/ai_explainability.css' %}">
+    <link rel="stylesheet" href="{% static 'css/prizm_loading.css' %}">
     
     <style>
         /* Fix alert close button visibility */
@@ -732,6 +733,9 @@
 
     <!-- AI Progressive Disclosure (WebSocket streaming) -->
     <script src="{% static 'js/ai_progressive.js' %}"></script>
+
+    <!-- Centralized loading spinner & rotating messages -->
+    <script src="{% static 'js/prizm_loading.js' %}"></script>
     
     <!-- Unified Display Mode JS -->
     <script src="{% static 'js/display-mode.js' %}"></script>
@@ -846,6 +850,56 @@ function prizmGoBack(fallbackUrl) {
 function goBack() {
     prizmGoBack('/dashboard/');
 }
+</script>
+<!-- Required-field validation: show warnings on submit for empty required inputs -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('form').forEach(function(form) {
+        // Skip forms that are purely search/filter/delete confirmation
+        if (form.classList.contains('no-validate')) return;
+
+        form.addEventListener('submit', function(e) {
+            var firstInvalid = null;
+            form.querySelectorAll('input[required], select[required], textarea[required]').forEach(function(field) {
+                var wrapper = field.closest('.mb-3') || field.parentElement;
+                var msg = wrapper ? wrapper.querySelector('.field-validation-msg') : null;
+                if (!field.value || !field.value.trim()) {
+                    field.classList.add('is-invalid');
+                    if (msg) msg.style.display = 'block';
+                    if (!firstInvalid) firstInvalid = field;
+                } else {
+                    field.classList.remove('is-invalid');
+                    if (msg) msg.style.display = 'none';
+                }
+            });
+            if (firstInvalid) {
+                e.preventDefault();
+                firstInvalid.focus();
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+
+        // Clear validation state on input
+        form.querySelectorAll('input[required], select[required], textarea[required]').forEach(function(field) {
+            field.addEventListener('input', function() {
+                if (field.value && field.value.trim()) {
+                    field.classList.remove('is-invalid');
+                    var wrapper = field.closest('.mb-3') || field.parentElement;
+                    var msg = wrapper ? wrapper.querySelector('.field-validation-msg') : null;
+                    if (msg) msg.style.display = 'none';
+                }
+            });
+            field.addEventListener('change', function() {
+                if (field.value && field.value.trim()) {
+                    field.classList.remove('is-invalid');
+                    var wrapper = field.closest('.mb-3') || field.parentElement;
+                    var msg = wrapper ? wrapper.querySelector('.field-validation-msg') : null;
+                    if (msg) msg.style.display = 'none';
+                }
+            });
+        });
+    });
+});
 </script>
     {% block extra_js %}{% endblock %}
 {% if user.is_authenticated %}

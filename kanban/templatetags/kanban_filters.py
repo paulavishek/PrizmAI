@@ -254,6 +254,7 @@ def board_immunity_badge(board):
     Usage: {% board_immunity_badge board %}
     """
     try:
+        from django.urls import reverse
         from kanban.stress_test_models import ImmunityScore
         score_obj = (
             ImmunityScore.objects
@@ -266,11 +267,18 @@ def board_immunity_badge(board):
         colour = score_obj.get_band_colour()
         band = score_obj.get_band()
         score = score_obj.overall
+        url = reverse('stress_test_dashboard', kwargs={'board_id': board.pk})
+        tooltip = (
+            f"Project Stress Test — Immunity Score: {score}/100 ({band}). "
+            f"This score measures how resilient your project plan is against simulated risks. "
+            f"Click to view the full report."
+        )
         return mark_safe(
-            f'<span class="badge ms-2" style="background-color:{colour};color:#fff;" '
-            f'title="Immunity: {band}">'
-            f'<i class="fas fa-shield-alt me-1"></i>{score}'
-            f'</span>'
+            f'<a href="{url}" class="badge ms-2 text-decoration-none" '
+            f'style="background-color:{colour};color:#fff;" '
+            f'data-bs-toggle="tooltip" data-bs-placement="top" title="{tooltip}">'
+            f'<i class="fas fa-shield-alt me-1"></i>Immunity&nbsp;{score}'
+            f'</a>'
         )
     except Exception:
         return ''

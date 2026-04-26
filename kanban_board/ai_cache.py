@@ -54,6 +54,11 @@ AI_CACHE_TTLS = {
     'pm_performance': 7200,           # 2 hours - Performance analysis
     'learning_content': 21600,        # 6 hours - Educational content is stable
     'scope_analysis': 3600,           # 1 hour
+    'whatif_analysis': 3600,          # 1 hour - scenario params rarely re-run identically
+    'triple_constraint': 1800,        # 30 minutes - depends on live board metrics
+    'premortem': 3600,                # 1 hour - board snapshot stable short term
+    'stress_test': 3600,              # 1 hour - expensive analysis, board data stable
+    'scope_autopsy': 7200,            # 2 hours - historical forensic, very stable
     
     # Medium caches (15-60 minutes) - Results that need periodic refresh
     'risk_assessment': 1800,          # 30 minutes

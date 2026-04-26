@@ -3,6 +3,19 @@
 
 {% block title %}Retrospective Dashboard - {{ board.name }}{% endblock %}
 
+{% block extra_css %}
+<style>
+.metric-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+}
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <!-- Breadcrumb -->
@@ -23,7 +36,7 @@
     <div class="row mb-4">
         <div class="col-md-8">
             <h2><i class="fas fa-chart-line"></i> Improvement Dashboard</h2>
-            <p class="text-muted">{{ board.name }} â€” Track organizational learning and continuous improvement over time</p>
+            <p class="text-muted">{{ board.name }} — Track organizational learning and continuous improvement over time</p>
         </div>
         <div class="col-md-4">
             <div class="d-flex justify-content-end gap-2">
@@ -32,6 +45,9 @@
                 </a>
                 <a href="{% url 'lessons_learned_list' board.id %}" class="btn btn-info">
                     <i class="fas fa-graduation-cap"></i> All Lessons
+                </a>
+                <a href="{% url 'retrospective_actions_list' board.id %}" class="btn btn-warning">
+                    <i class="fas fa-tasks"></i> All Actions
                 </a>
             </div>
             <div class="mt-2">
@@ -43,60 +59,80 @@
     </div>
 
     <!-- Key Metrics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3>{{ stats.total_retrospectives }}</h3>
-                    <p class="text-muted mb-0">Retrospectives</p>
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <a href="{% url 'retrospective_list' board.id %}" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.total_retrospectives }}</h3>
+                        <p class="text-muted mb-1 fw-semibold">Retrospectives</p>
+                        <small class="text-muted">Total conducted</small>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3>{{ stats.implementation_rate|floatformat:1 }}%</h3>
-                    <p class="text-muted mb-0">Implementation Rate</p>
-                    <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }}</small>
+        <div class="col">
+            <a href="{% url 'lessons_learned_list' board.id %}" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.implementation_rate|floatformat:1 }}%</h3>
+                        <p class="text-muted mb-1 fw-semibold">Implementation Rate</p>
+                        <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }} lessons</small>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3>{{ stats.completion_rate|floatformat:1 }}%</h3>
-                    <p class="text-muted mb-0">Action Completion</p>
-                    <small class="text-muted">{{ stats.actions_completed }}/{{ stats.total_actions }}</small>
+        <div class="col">
+            <a href="{% url 'retrospective_actions_list' board.id %}" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.completion_rate|floatformat:1 }}%</h3>
+                        <p class="text-muted mb-1 fw-semibold">Action Completion</p>
+                        <small class="text-muted">{{ stats.actions_completed }}/{{ stats.total_actions }} actions</small>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
-                <div class="card-body">
-                    <h3>{{ stats.recurring_issues }}</h3>
-                    <p class="text-muted mb-0">Recurring Themes</p>
+        <div class="col">
+            <a href="#recurring-themes" class="text-decoration-none">
+                <div class="card text-center h-100 metric-card {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
+                    <div class="card-body d-flex flex-column justify-content-center py-4">
+                        <h3 class="mb-1">{{ stats.recurring_issues }}</h3>
+                        <p class="text-muted mb-1 fw-semibold">Recurring Themes</p>
+                        <small class="text-muted">Issues seen 2+ times</small>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 
     <!-- Trend Analysis -->
     {% if trend %}
-    <div class="card mb-4">
+    <div class="card mb-4" id="recurring-themes">
         <div class="card-header">
             <h5><i class="fas fa-chart-area"></i> Trend Analysis</h5>
         </div>
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <h6>Velocity Trend</h6>
+                    <h6>Velocity Trend
+                        <i class="fas fa-info-circle text-muted ms-1" style="font-size: 0.85em;"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="Measures how much work the team completes per sprint — based on action item completion rates across recent retrospectives."></i>
+                    </h6>
+                    <p class="text-muted small mb-1">How efficiently the team is delivering work over time.</p>
                     <div class="alert alert-{% if trend.velocity_trend == 'improving' %}success{% elif trend.velocity_trend == 'declining' %}danger{% else %}info{% endif %}">
                         <i class="fas fa-{% if trend.velocity_trend == 'improving' %}arrow-up{% elif trend.velocity_trend == 'declining' %}arrow-down{% else %}minus{% endif %}"></i>
                         <strong>{{ trend.get_velocity_trend_display }}</strong>
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <h6>Quality Trend</h6>
+                    <h6>Quality Trend
+                        <i class="fas fa-info-circle text-muted ms-1" style="font-size: 0.85em;"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="Reflects the team's overall sentiment and lesson implementation rate — a higher score means more issues are being resolved across retrospectives."></i>
+                    </h6>
+                    <p class="text-muted small mb-1">How well the team is improving product and process quality.</p>
                     <div class="alert alert-{% if trend.quality_trend == 'improving' %}success{% elif trend.quality_trend == 'declining' %}danger{% else %}info{% endif %}">
                         <i class="fas fa-{% if trend.quality_trend == 'improving' %}arrow-up{% elif trend.quality_trend == 'declining' %}arrow-down{% else %}minus{% endif %}"></i>
                         <strong>{{ trend.get_quality_trend_display }}</strong>
@@ -243,6 +279,13 @@
 
 {% block extra_js %}
 <script>
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+});
+
 // Handle back navigation
 function goBack() {
     // Check if there's a previous page in history

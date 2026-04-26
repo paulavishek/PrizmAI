@@ -13,7 +13,9 @@ Provides:
 
 import json
 import logging
+import zoneinfo
 from datetime import datetime, timedelta
+from django.conf import settings
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -116,7 +118,16 @@ def unified_calendar(request):
     ]
 
     # Teammates list with assigned colours (for filter chips & availability mode)
+    # Current user is listed first so they can filter their own tasks too
+    _me_display = request.user.get_full_name() or request.user.username
     teammates_data = [
+        {
+            'id': request.user.id,
+            'username': request.user.username,
+            'display': f'{_me_display} (You)',
+            'color': _assignee_color(request.user.id),
+        }
+    ] + [
         {
             'id': u.id,
             'username': u.username,
@@ -253,7 +264,7 @@ def unified_calendar_events_api(request):
         )
         if is_mine:
             layer = 'mine'
-            color = _priority_color(task.priority)
+            color = _assignee_color(task.assigned_to_id)
         else:
             layer = 'teammate'
             color = _assignee_color(task.assigned_to_id)
@@ -294,7 +305,7 @@ def unified_calendar_events_api(request):
                 'assignee': task.assigned_to.username if task.assigned_to else None,
                 'assignee_id': task.assigned_to_id,
                 'assignee_name': assignee_name,
-                'assignee_color': color if layer == 'teammate' else None,
+                'assignee_color': color,
                 'due_date_str': due_str,
                 'start_date_str': task.start_date.isoformat() if task.start_date else None,
             },
@@ -303,25 +314,31 @@ def unified_calendar_events_api(request):
     # --- Calendar Events ---
     for ev in event_qs:
         is_mine = (ev.created_by_id == request.user.id)
-        layer = 'event' if is_mine else 'teammate_status'
+        # Participants who are invited to an event should see full details, not the
+        # sanitized teammate_status view.
+        is_invited = not is_mine and any(p.id == request.user.id for p in ev.participants.all())
+        layer = 'event' if (is_mine or is_invited) else 'teammate_status'
 
+        # Use explicit astimezone() — bypasses Django's thread-local timezone
+        # which is unreliable under Daphne/ASGI thread-pool execution.
+        _srv_tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
         if ev.is_all_day:
-            # Convert UTC→IST before extracting date, otherwise UTC midnight-5:30
-            # would roll back to the previous calendar day.
-            local_start = timezone.localtime(ev.start_datetime)
-            local_end   = timezone.localtime(ev.end_datetime)
+            local_start = ev.start_datetime.astimezone(_srv_tz)
+            local_end   = ev.end_datetime.astimezone(_srv_tz)
             start_str_fc = local_start.strftime('%Y-%m-%d')
             # FullCalendar all-day end is EXCLUSIVE, so advance by 1 day so that
             # the user's chosen end date is actually the last visible day.
-            end_str_fc   = (local_end + timedelta(days=1)).strftime('%Y-%m-%d')
+            end_str_fc      = (local_end.date() + timedelta(days=1)).isoformat()
+            ev_end_date_str = local_end.strftime('%Y-%m-%d')  # inclusive last calendar day
         else:
-            start_str_fc = ev.start_datetime.isoformat()
-            end_str_fc = ev.end_datetime.isoformat()
+            start_str_fc    = ev.start_datetime.isoformat()
+            end_str_fc      = ev.end_datetime.isoformat()
+            ev_end_date_str = ev.end_datetime.astimezone(_srv_tz).strftime('%Y-%m-%d')
 
         linked_task_title = ev.linked_task.title if ev.linked_task else None
 
         # Sanitize title for teammate events — protect personal details
-        if is_mine:
+        if is_mine or is_invited:
             fc_title = ev.title
         else:
             owner_name = ev.created_by.get_full_name() or ev.created_by.username
@@ -361,6 +378,7 @@ def unified_calendar_events_api(request):
                 'creator_id': ev.created_by_id,
                 'linked_task_title': linked_task_title,
                 'linked_task_id': ev.linked_task_id,
+                'end_date_str': ev_end_date_str,
             },
         })
 
@@ -528,12 +546,24 @@ def calendar_create_event(request):
         return JsonResponse({'success': False, 'error': 'Start and end datetime are required.'}, status=400)
 
     try:
-        start_dt = datetime.fromisoformat(start_str)
-        end_dt = datetime.fromisoformat(end_str)
-        if timezone.is_naive(start_dt):
-            start_dt = timezone.make_aware(start_dt)
-        if timezone.is_naive(end_dt):
-            end_dt = timezone.make_aware(end_dt)
+        if is_all_day:
+            # For all-day events, store as UTC midnight of the chosen date.
+            # This makes the date completely timezone-independent:
+            # ev.start_datetime.date() always equals the chosen calendar date.
+            import datetime as _dt_mod
+            start_date = _dt_mod.date.fromisoformat(start_str.split('T')[0])
+            end_date   = _dt_mod.date.fromisoformat(end_str.split('T')[0])
+            start_dt = datetime(start_date.year, start_date.month, start_date.day,
+                                tzinfo=_dt_mod.timezone.utc)
+            end_dt   = datetime(end_date.year, end_date.month, end_date.day,
+                                tzinfo=_dt_mod.timezone.utc)
+        else:
+            start_dt = datetime.fromisoformat(start_str)
+            end_dt = datetime.fromisoformat(end_str)
+            if timezone.is_naive(start_dt):
+                start_dt = timezone.make_aware(start_dt)
+            if timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
     except ValueError as exc:
         return JsonResponse({'success': False, 'error': f'Invalid datetime: {exc}'}, status=400)
 
@@ -615,8 +645,9 @@ def calendar_create_event(request):
 
     # Build FullCalendar event object for immediate rendering
     if is_all_day:
-        fc_start = event.start_datetime.strftime('%Y-%m-%d')
-        fc_end = event.end_datetime.strftime('%Y-%m-%d')
+        # All-day events are now stored as UTC midnight, so .date() gives the correct calendar date.
+        fc_start = event.start_datetime.date().isoformat()
+        fc_end = (event.end_datetime.date() + timedelta(days=1)).isoformat()
     else:
         fc_start = event.start_datetime.isoformat()
         fc_end = event.end_datetime.isoformat()
@@ -630,6 +661,7 @@ def calendar_create_event(request):
             'start': fc_start,
             'end': fc_end,
             'allDay': is_all_day,
+            'url': f'/calendar/events/{event.id}/',
             'color': event.get_event_type_color(),
             'source': 'event',
             'extendedProps': {
@@ -644,7 +676,9 @@ def calendar_create_event(request):
                 'location': event.location or '',
                 'board': board.name if board else '',
                 'participants': [u.username for u in notified_participants],
+                'participant_ids': [u.id for u in notified_participants],
                 'created_by': request.user.username,
+                'created_by_id': request.user.id,
                 'linked_task_title': linked_task.title if linked_task else None,
                 'linked_task_id': linked_task.id if linked_task else None,
             },
@@ -702,8 +736,104 @@ def calendar_event_detail(request, event_id):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You don't have access to this event.")
 
-    context = {'event': event}
+    # Determine back URL — if event belongs to a board, go to that board's calendar
+    if event.board_id:
+        back_url = f'/boards/{event.board_id}/calendar/'
+    else:
+        back_url = '/calendar/'
+
+    # Pre-compute display dates using explicit timezone conversion (bypasses
+    # Django's thread-local which is unreliable under Daphne/ASGI).
+    import zoneinfo as _zi
+    _srv_tz = _zi.ZoneInfo(settings.TIME_ZONE)
+    if event.is_all_day:
+        # All-day events: new ones stored as UTC midnight; old ones stored as
+        # local midnight converted to UTC.  astimezone(server_tz) handles both.
+        event_start_display = event.start_datetime.astimezone(_srv_tz).date()
+        event_end_display   = event.end_datetime.astimezone(_srv_tz).date()
+    else:
+        event_start_display = event.start_datetime.astimezone(_srv_tz)
+        event_end_display   = event.end_datetime.astimezone(_srv_tz)
+
+    context = {
+        'event': event,
+        'back_url': back_url,
+        'event_start_display': event_start_display,
+        'event_end_display': event_end_display,
+    }
     return render(request, 'kanban/calendar_event_detail.html', context)
+
+
+@login_required
+@demo_write_guard
+def calendar_event_edit(request, event_id):
+    """Edit a CalendarEvent (creator only)."""
+    event = get_object_or_404(CalendarEvent, id=event_id, created_by=request.user)
+
+    # Determine back URL
+    if event.board_id:
+        back_url = f'/boards/{event.board_id}/calendar/'
+    else:
+        back_url = '/calendar/'
+
+    # Build participants list (board members if board-linked, otherwise all users the creator shares boards with)
+    if event.board:
+        participant_qs = User.objects.filter(
+            Q(board_memberships__board=event.board) | Q(created_boards=event.board)
+        ).exclude(id=request.user.id).distinct().order_by('username')
+    else:
+        user_boards = Board.objects.filter(
+            Q(memberships__user=request.user) | Q(created_by=request.user)
+        )
+        participant_qs = User.objects.filter(
+            Q(board_memberships__board__in=user_boards) | Q(created_boards__in=user_boards)
+        ).exclude(id=request.user.id).distinct().order_by('username')
+
+    if request.method == 'POST':
+        event.title = request.POST.get('title', '').strip() or event.title
+        event.event_type = request.POST.get('event_type', event.event_type)
+        event.description = request.POST.get('description', '').strip() or None
+        event.location = request.POST.get('location', '').strip() or None
+        event.visibility = request.POST.get('visibility', event.visibility)
+
+        is_all_day = request.POST.get('is_all_day') == 'on'
+        event.is_all_day = is_all_day
+
+        try:
+            start_str = request.POST.get('start_datetime', '')
+            end_str = request.POST.get('end_datetime', '')
+            if start_str:
+                start_dt = datetime.fromisoformat(start_str)
+                if timezone.is_naive(start_dt):
+                    start_dt = timezone.make_aware(start_dt)
+                event.start_datetime = start_dt
+            if end_str:
+                end_dt = datetime.fromisoformat(end_str)
+                if timezone.is_naive(end_dt):
+                    end_dt = timezone.make_aware(end_dt)
+                event.end_datetime = end_dt
+        except ValueError:
+            pass
+
+        event.save()
+
+        # Update participants for non-solo types
+        if event.event_type not in CalendarEvent.SOLO_TYPES:
+            participant_ids = request.POST.getlist('participants')
+            participants = User.objects.filter(id__in=participant_ids).exclude(id=request.user.id)
+            event.participants.set(participants)
+        else:
+            event.participants.clear()
+
+        return redirect('calendar_event_detail', event_id=event.id)
+
+    context = {
+        'event': event,
+        'back_url': back_url,
+        'participant_choices': participant_qs,
+        'current_participant_ids': list(event.participants.values_list('id', flat=True)),
+    }
+    return render(request, 'kanban/calendar_event_edit.html', context)
 
 
 @login_required

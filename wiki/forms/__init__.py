@@ -4,6 +4,7 @@ from ..models import WikiPage, WikiCategory, WikiAttachment, WikiLink, MeetingNo
 
 
 class WikiCategoryForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = WikiCategory
         fields = ['name', 'description', 'icon', 'color', 'position', 'ai_assistant_type']
@@ -23,6 +24,7 @@ class WikiCategoryForm(forms.ModelForm):
 
 
 class WikiPageForm(forms.ModelForm):
+    required_css_class = 'required'
     # Override tags field to use CharField instead of JSONField's default widget
     tags = forms.CharField(
         required=False,

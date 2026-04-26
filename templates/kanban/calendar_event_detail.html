@@ -7,13 +7,13 @@
 <div class="container py-4" style="max-width:700px;">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{% url 'unified_calendar' %}">Calendar</a></li>
+            <li class="breadcrumb-item"><a href="{{ back_url }}">Calendar</a></li>
             <li class="breadcrumb-item active">{{ event.title }}</li>
         </ol>
     </nav>
 
     <div class="mb-3">
-        <a href="{% url 'unified_calendar' %}" class="btn-prizm-back">
+        <a href="{{ back_url }}" class="btn-prizm-back">
             <i class="fas fa-arrow-left"></i> Back to Calendar
         </a>
     </div>
@@ -34,10 +34,15 @@
                 {% endif %}
             </div>
             {% if event.created_by == request.user %}
-            <button class="btn btn-outline-danger btn-sm" id="btn-delete-event"
-                    data-event-id="{{ event.id }}">
-                <i class="fas fa-trash-alt"></i>
-            </button>
+            <div class="d-flex gap-2">
+                <a href="{% url 'calendar_event_edit' event.id %}" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <button class="btn btn-outline-danger btn-sm" id="btn-delete-event"
+                        data-event-id="{{ event.id }}">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
             {% endif %}
         </div>
         <div class="card-body">
@@ -47,9 +52,9 @@
                         <th style="width:130px;">Start</th>
                         <td>
                             {% if event.is_all_day %}
-                                {{ event.start_datetime|date:"N j, Y" }} (All day)
+                                {{ event_start_display|date:"N j, Y" }} (All day)
                             {% else %}
-                                {{ event.start_datetime|date:"N j, Y, g:i a" }}
+                                {{ event_start_display|date:"N j, Y, g:i a" }}
                             {% endif %}
                         </td>
                     </tr>
@@ -57,9 +62,9 @@
                         <th>End</th>
                         <td>
                             {% if event.is_all_day %}
-                                {{ event.end_datetime|date:"N j, Y" }}
+                                {{ event_end_display|date:"N j, Y" }}
                             {% else %}
-                                {{ event.end_datetime|date:"N j, Y, g:i a" }}
+                                {{ event_end_display|date:"N j, Y, g:i a" }}
                             {% endif %}
                         </td>
                     </tr>
@@ -92,13 +97,14 @@
                     <tr>
                         <th>Participants</th>
                         <td>
-                            {% if participants %}
-                                {% for p in participants %}
-                                <span class="badge bg-light text-dark border me-1">{{ p.get_full_name|default:p.username }}</span>
-                                {% endfor %}
-                            {% else %}
-                                <span class="text-muted">None invited</span>
+                            <span class="badge bg-primary text-white border me-1">
+                                {{ event.created_by.get_full_name|default:event.created_by.username }} (organizer)
+                            </span>
+                            {% for p in participants %}
+                            {% if p != event.created_by %}
+                            <span class="badge bg-light text-dark border me-1">{{ p.get_full_name|default:p.username }}</span>
                             {% endif %}
+                            {% endfor %}
                         </td>
                     </tr>
                     {% endwith %}
@@ -118,11 +124,7 @@
         </div>
     </div>
 
-    <div class="mt-3">
-        <a href="{% url 'unified_calendar' %}" class="btn btn-outline-secondary btn-sm">
-            <i class="fas fa-arrow-left me-1"></i> Back to Calendar
-        </a>
-    </div>
+
 </div>
 {% endblock %}
 
@@ -140,7 +142,7 @@ if (deleteBtn) {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                window.location.href = '{% url "unified_calendar" %}';
+                window.location.href = '{{ back_url }}';
             } else {
                 alert('Could not delete event.');
             }

@@ -4,7 +4,6 @@
 {% block title %}My Calendar — PrizmAI{% endblock %}
 
 {% block extra_css %}
-<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
 <style>
     .calendar-container {
         background: #fff;
@@ -139,22 +138,54 @@
         </div>
     </div>
 
-    <!-- Legend -->
-    <div class="d-flex flex-wrap gap-2 align-items-center mb-1" style="font-size:0.8rem;">
-        <strong class="small text-muted me-1">Your tasks (priority):</strong>
-        <span class="small"><span class="badge" style="background:#dc3545;">●</span> Urgent</span>
-        <span class="small"><span class="badge" style="background:#fd7e14;">●</span> High</span>
-        <span class="small"><span class="badge" style="background:#0d6efd;">●</span> Medium</span>
-        <span class="small"><span class="badge" style="background:#198754;">●</span> Low</span>
-        <span class="ms-3 small text-muted me-1">Events:</span>
-        <span class="small"><span class="badge" style="background:#6f42c1;">●</span> Meeting</span>
-        <span class="small"><span class="badge" style="background:#f59e0b;">●</span> Out of Office</span>
-        <span class="small"><span class="badge" style="background:#64748b;">●</span> Busy Block</span>
-        <span class="small"><span class="badge" style="background:#0284c7;">●</span> Team Event</span>
-    </div>
-    <!-- Teammate colour legend (built by JS) -->
-    <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="teammate-legend" style="font-size:0.8rem;">
-        <strong class="small text-muted me-1">Teammates:</strong>
+    <!-- Filter dropdowns: priority, events, teammates -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3" style="font-size:0.8rem;">
+
+        <!-- Priority filter -->
+        <div class="d-flex align-items-center gap-2">
+            <strong class="small text-muted">Your tasks (priority):</strong>
+            <div class="dropdown" id="priority-dropdown-wrapper">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="priority-dropdown-btn" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false"
+                        style="font-size:0.8rem; padding:2px 10px;">
+                    <span id="priority-dropdown-label">All visible</span>
+                </button>
+                <ul class="dropdown-menu shadow-sm py-1" id="priority-dropdown-menu"
+                    aria-labelledby="priority-dropdown-btn" style="min-width:150px;"></ul>
+            </div>
+        </div>
+
+        <!-- Events filter -->
+        <div class="d-flex align-items-center gap-2">
+            <strong class="small text-muted">Events:</strong>
+            <div class="dropdown" id="event-type-dropdown-wrapper">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="event-type-dropdown-btn" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false"
+                        style="font-size:0.8rem; padding:2px 10px;">
+                    <span id="event-type-dropdown-label">All visible</span>
+                </button>
+                <ul class="dropdown-menu shadow-sm py-1" id="event-type-dropdown-menu"
+                    aria-labelledby="event-type-dropdown-btn" style="min-width:160px;"></ul>
+            </div>
+        </div>
+
+        <!-- Teammate filter (built by JS) -->
+        <div class="d-flex align-items-center gap-2" id="teammate-legend">
+            <strong class="small text-muted">Teammates:</strong>
+            <div class="dropdown" id="teammate-dropdown-wrapper" style="display:none;">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="teammate-dropdown-btn" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false"
+                        style="font-size:0.8rem; padding:2px 10px;">
+                    <span id="teammate-dropdown-label">All visible</span>
+                </button>
+                <ul class="dropdown-menu shadow-sm py-1" id="teammate-dropdown-menu"
+                    aria-labelledby="teammate-dropdown-btn" style="min-width:160px;"></ul>
+            </div>
+        </div>
+
     </div>
 
     <!-- Board filter chips -->
@@ -167,21 +198,6 @@
     </div>
     {% endif %}
 
-    <!-- Team view mode toggle -->
-    <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
-        <span class="small text-muted fw-semibold">Team view:</span>
-        <div class="btn-group btn-group-sm" role="group" aria-label="Team view mode">
-            <button type="button" class="btn btn-outline-secondary" id="btn-mode-detail">
-                <i class="fas fa-list-ul me-1"></i> Detail
-            </button>
-            <button type="button" class="btn btn-outline-secondary" id="btn-mode-avail">
-                <i class="fas fa-calendar-check me-1"></i> Availability
-            </button>
-        </div>
-        <span class="text-muted small" id="team-mode-badge"></span>
-    </div>
-    <!-- Teammate filter chips (built by JS) -->
-    <div class="d-flex flex-wrap gap-2 mb-3" id="teammate-chips" style="display:none!important;"></div>
 
     <!-- Calendar -->
     <div class="calendar-container">
@@ -388,7 +404,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script src='{% static "vendor/fullcalendar.min.js" %}'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // ---- Data from Django ----
@@ -429,19 +445,42 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ---- Team layer / view mode state ----
-    let teamViewMode      = localStorage.getItem('prizmTeamViewMode') || 'detail';
+    const teamViewMode = 'detail';
     let hiddenTeammateIds = new Set();
+    let hiddenPriorities  = new Set();
+    let hiddenEventTypes  = new Set();
 
     // ---- Layer/mode event processing ----
     function processEvents(data) {
         let filtered = data;
-        // Apply teammate visibility filter (hides tasks AND status events from that teammate)
+        // Apply teammate visibility filter (covers all task layers + unassigned, sentinel -1)
         if (hiddenTeammateIds.size > 0) {
-            filtered = data.filter(function(e) {
+            filtered = filtered.filter(function(e) {
                 const p = e.extendedProps;
                 if (!p) return true;
-                if (p.layer === 'teammate')        return !hiddenTeammateIds.has(p.assignee_id);
+                if (p.source === 'task') {
+                    const aid = (p.assignee_id != null) ? p.assignee_id : -1;
+                    return !hiddenTeammateIds.has(aid);
+                }
                 if (p.layer === 'teammate_status') return !hiddenTeammateIds.has(p.creator_id);
+                return true;
+            });
+        }
+        // Priority filter (own tasks)
+        if (hiddenPriorities.size > 0) {
+            filtered = filtered.filter(function(e) {
+                const p = e.extendedProps;
+                if (!p) return true;
+                if (p.source === 'task' && p.layer === 'mine') return !hiddenPriorities.has(p.priority);
+                return true;
+            });
+        }
+        // Event type filter
+        if (hiddenEventTypes.size > 0) {
+            filtered = filtered.filter(function(e) {
+                const p = e.extendedProps;
+                if (!p) return true;
+                if (p.source === 'event') return !hiddenEventTypes.has(p.event_type_key);
                 return true;
             });
         }
@@ -575,10 +614,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
                 document.getElementById('detail-open-link').style.display = '';
             } else {
-                // My own events — full detail
-                const participants = p.participants && p.participants.length
-                    ? p.participants.join(', ')
-                    : '(none beyond you)';
+                // My own events (or events I'm invited to) — full detail
+                const organizerStr = p.created_by ? (p.created_by + ' (organizer)') : '';
+                const participantList = (p.participants || []).filter(u => u !== p.created_by);
+                const allParticipants = organizerStr
+                    ? [organizerStr, ...participantList]
+                    : participantList;
+                const participants = allParticipants.length ? allParticipants.join(', ') : '(only you)';
                 const privBadge = p.visibility === 'private'
                     ? '<div class="mt-2"><span class="badge bg-secondary">🔒 Private</span></div>' : '';
                 body = `
@@ -645,14 +687,34 @@ document.addEventListener('DOMContentLoaded', function () {
             if (p.layer === 'teammate') {
                 info.el.style.opacity = '0.72';
             }
-            // Mark overdue tasks using due_date_str (not start date)
+            // Build today as local midnight — used for all date comparisons below
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            // Mark past/overdue tasks using due_date_str (not start date)
             if (p.source === 'task') {
                 var dueStr = p.due_date_str;
                 if (dueStr) {
-                    const d = new Date(dueStr);
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    if (d < today && p.progress < 100) {
-                        info.el.style.opacity = '0.7';
+                    // Parse as LOCAL date to avoid UTC date-shift in UTC± timezones
+                    const [dy, dm, dd] = dueStr.split('-').map(Number);
+                    const dueLocal = new Date(dy, dm - 1, dd);
+                    const isPast = dueLocal < today;
+                    if (isPast) {
+                        const isListView = info.view.type.startsWith('list');
+                        // List view: strike through ALL past tasks (completed or not) — means "in the past"
+                        // Month/week view: only strike incomplete past tasks — highlights overdue work
+                        if (isListView || p.progress < 100) {
+                            info.el.style.opacity = '0.7';
+                            info.el.style.textDecoration = 'line-through';
+                        }
+                    }
+                }
+            } else if (p.source === 'event' && info.view.type.startsWith('list')) {
+                // In list view: visually dim past events that have fully ended before today
+                var evEndStr = p.end_date_str;
+                if (evEndStr) {
+                    const [ey, em, ed] = evEndStr.split('-').map(Number);
+                    const endLocal = new Date(ey, em - 1, ed);
+                    if (endLocal < today) {
+                        info.el.style.opacity = '0.55';
                         info.el.style.textDecoration = 'line-through';
                     }
                 }
@@ -661,82 +723,140 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     calendar.render();
 
-    // ---- Apply stored team view mode ----
-    (function applyMode() {
-        const detailBtn = document.getElementById('btn-mode-detail');
-        const availBtn  = document.getElementById('btn-mode-avail');
-        const badge     = document.getElementById('team-mode-badge');
-        if (!detailBtn) return;
-        if (teamViewMode === 'detail') {
-            detailBtn.classList.add('active');
-            availBtn.classList.remove('active');
-            if (badge) badge.textContent = 'Showing teammate task details';
-        } else {
-            availBtn.classList.add('active');
-            detailBtn.classList.remove('active');
-            if (badge) badge.textContent = 'Showing busy / free blocks';
-        }
-    })();
+    // ---- Build priority filter dropdown ----
+    const PRIORITY_OPTIONS = [
+        { key: 'Urgent', label: 'Urgent', color: '#dc3545' },
+        { key: 'High',   label: 'High',   color: '#fd7e14' },
+        { key: 'Medium', label: 'Medium', color: '#0d6efd' },
+        { key: 'Low',    label: 'Low',    color: '#198754' },
+    ];
+    const prioMenu  = document.getElementById('priority-dropdown-menu');
+    const prioLabel = document.getElementById('priority-dropdown-label');
 
-    document.getElementById('btn-mode-detail').addEventListener('click', function() {
-        teamViewMode = 'detail';
-        localStorage.setItem('prizmTeamViewMode', 'detail');
-        document.getElementById('btn-mode-detail').classList.add('active');
-        document.getElementById('btn-mode-avail').classList.remove('active');
-        const b = document.getElementById('team-mode-badge');
-        if (b) b.textContent = 'Showing teammate task details';
-        calendar.refetchEvents();
-    });
-    document.getElementById('btn-mode-avail').addEventListener('click', function() {
-        teamViewMode = 'availability';
-        localStorage.setItem('prizmTeamViewMode', 'availability');
-        document.getElementById('btn-mode-avail').classList.add('active');
-        document.getElementById('btn-mode-detail').classList.remove('active');
-        const b = document.getElementById('team-mode-badge');
-        if (b) b.textContent = 'Showing busy / free blocks';
-        calendar.refetchEvents();
-    });
+    function updatePriorityLabel() {
+        if (!prioLabel) return;
+        const total   = PRIORITY_OPTIONS.length;
+        const visible = total - hiddenPriorities.size;
+        prioLabel.textContent = hiddenPriorities.size === 0 ? 'All visible' : `${visible} of ${total} visible`;
+    }
 
-    // ---- Build teammate legend + filter chips ----
-    const tmLegendEl = document.getElementById('teammate-legend');
-    const tmChipsEl  = document.getElementById('teammate-chips');
+    if (prioMenu) {
+        PRIORITY_OPTIONS.forEach(function(opt) {
+            const li = document.createElement('li');
+            li.innerHTML =
+                `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                        style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                    <input type="checkbox" class="prio-check" data-priority="${opt.key}" checked
+                           style="width:14px; height:14px; flex-shrink:0;">
+                    <span>${opt.label}</span>
+                </label>`;
+            prioMenu.appendChild(li);
+        });
+        prioMenu.addEventListener('change', function(e) {
+            const cb = e.target.closest('.prio-check');
+            if (!cb) return;
+            if (cb.checked) hiddenPriorities.delete(cb.dataset.priority);
+            else            hiddenPriorities.add(cb.dataset.priority);
+            updatePriorityLabel();
+            calendar.refetchEvents();
+        });
+        updatePriorityLabel();
+    }
 
-    if (teammatesData.length > 0) {
-        if (tmChipsEl) tmChipsEl.style.removeProperty('display');
+    // ---- Build event-type filter dropdown ----
+    const EVENT_TYPE_OPTIONS = [
+        { key: 'meeting',       label: 'Meeting' },
+        { key: 'out_of_office', label: 'Out of Office' },
+        { key: 'busy_block',    label: 'Busy Block' },
+        { key: 'team_event',    label: 'Team Event' },
+    ];
+    const evtMenu  = document.getElementById('event-type-dropdown-menu');
+    const evtLabel = document.getElementById('event-type-dropdown-label');
+
+    function updateEventTypeLabel() {
+        if (!evtLabel) return;
+        const total   = EVENT_TYPE_OPTIONS.length;
+        const visible = total - hiddenEventTypes.size;
+        evtLabel.textContent = hiddenEventTypes.size === 0 ? 'All visible' : `${visible} of ${total} visible`;
+    }
+
+    if (evtMenu) {
+        EVENT_TYPE_OPTIONS.forEach(function(opt) {
+            const li = document.createElement('li');
+            li.innerHTML =
+                `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                        style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                    <input type="checkbox" class="evt-check" data-event-type="${opt.key}" checked
+                           style="width:14px; height:14px; flex-shrink:0;">
+                    <span>${opt.label}</span>
+                </label>`;
+            evtMenu.appendChild(li);
+        });
+        evtMenu.addEventListener('change', function(e) {
+            const cb = e.target.closest('.evt-check');
+            if (!cb) return;
+            if (cb.checked) hiddenEventTypes.delete(cb.dataset.eventType);
+            else            hiddenEventTypes.add(cb.dataset.eventType);
+            updateEventTypeLabel();
+            calendar.refetchEvents();
+        });
+        updateEventTypeLabel();
+    }
+
+    // ---- Build teammate filter dropdown ----
+    const tmDropdownWrapper = document.getElementById('teammate-dropdown-wrapper');
+    const tmDropdownMenu    = document.getElementById('teammate-dropdown-menu');
+    const tmDropdownLabel   = document.getElementById('teammate-dropdown-label');
+
+    function updateTeammateDropdownLabel() {
+        if (!tmDropdownLabel) return;
+        const total   = teammatesData.length + 1;  // +1 for Unassigned
+        const visible = total - hiddenTeammateIds.size;
+        tmDropdownLabel.textContent = hiddenTeammateIds.size === 0
+            ? 'All visible'
+            : `${visible} of ${total} visible`;
+    }
+
+    if (teammatesData.length > 0 && tmDropdownWrapper) {
+        tmDropdownWrapper.style.display = '';
         teammatesData.forEach(function(t) {
-            // Legend entry
-            if (tmLegendEl) {
-                const ls = document.createElement('span');
-                ls.className = 'small';
-                ls.innerHTML = `<span class="badge" style="background:${t.color};">●</span> ${t.display}`;
-                tmLegendEl.appendChild(ls);
-            }
-            // Filter chip
-            if (tmChipsEl) {
-                const chip = document.createElement('span');
-                chip.className = 'badge teammate-chip';
-                chip.dataset.teammateId = t.id;
-                chip.style.background = t.color;
-                chip.textContent = t.display;
-                tmChipsEl.appendChild(chip);
-            }
+            const li = document.createElement('li');
+            li.innerHTML =
+                `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                        style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                    <input type="checkbox" class="tm-check" data-teammate-id="${t.id}" checked
+                           style="accent-color:${t.color}; width:14px; height:14px; flex-shrink:0;">
+                    <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                                 background:${t.color};flex-shrink:0;"></span>
+                    <span>${t.display}</span>
+                </label>`;
+            tmDropdownMenu.appendChild(li);
         });
 
-        if (tmChipsEl) {
-            tmChipsEl.addEventListener('click', function(e) {
-                const chip = e.target.closest('.teammate-chip');
-                if (!chip) return;
-                const tid = parseInt(chip.dataset.teammateId, 10);
-                if (hiddenTeammateIds.has(tid)) {
-                    hiddenTeammateIds.delete(tid);
-                    chip.classList.remove('inactive');
-                } else {
-                    hiddenTeammateIds.add(tid);
-                    chip.classList.add('inactive');
-                }
-                calendar.refetchEvents();
-            });
-        }
+        // Add "Unassigned" as a static entry (sentinel id = -1)
+        const liUnassigned = document.createElement('li');
+        liUnassigned.innerHTML =
+            `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
+                    style="cursor:pointer; font-size:0.82rem; user-select:none;">
+                <input type="checkbox" class="tm-check" data-teammate-id="-1" checked
+                       style="accent-color:#9ca3af; width:14px; height:14px; flex-shrink:0;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                             background:#9ca3af;flex-shrink:0;"></span>
+                <span>Unassigned</span>
+            </label>`;
+        tmDropdownMenu.appendChild(liUnassigned);
+
+        tmDropdownMenu.addEventListener('change', function(e) {
+            const cb = e.target.closest('.tm-check');
+            if (!cb) return;
+            const tid = parseInt(cb.dataset.teammateId, 10);
+            if (cb.checked) hiddenTeammateIds.delete(tid);
+            else            hiddenTeammateIds.add(tid);
+            updateTeammateDropdownLabel();
+            calendar.refetchEvents();
+        });
+
+        updateTeammateDropdownLabel();
     }
 
     // Close popup on outside click

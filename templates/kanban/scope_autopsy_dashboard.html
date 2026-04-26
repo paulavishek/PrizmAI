@@ -84,15 +84,13 @@
     </div>
 
     {# Loading spinner (shown after click) #}
-    <div id="autopsy-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
         <div class="mt-3">
             <div class="progress mx-auto" style="max-width:400px;height:8px;">
                 <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
             </div>
-            <p class="mt-2 text-muted" id="autopsy-status-text">Collecting scope events…</p>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Collecting scope events…</p>
         </div>
     </div>
 
@@ -101,14 +99,12 @@
     {# STATE C — Generating (poll until complete)                    #}
     {# ============================================================ #}
     <div class="text-center py-5">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
         <div class="mt-3">
             <div class="progress mx-auto" style="max-width:400px;height:8px;">
                 <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:40%"></div>
             </div>
-            <p class="mt-2 text-muted" id="autopsy-status-text">Analyzing scope history…</p>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Analyzing scope history…</p>
         </div>
     </div>
 
@@ -131,15 +127,13 @@
         </div>
     </div>
     {# Loading spinner (shown after click) #}
-    <div id="autopsy-loading" class="text-center py-5" style="display:none;">
-        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
-            <span class="visually-hidden">Analyzing…</span>
-        </div>
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
         <div class="mt-3">
             <div class="progress mx-auto" style="max-width:400px;height:8px;">
                 <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
             </div>
-            <p class="mt-2 text-muted" id="autopsy-status-text">Collecting scope events…</p>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Collecting scope events…</p>
         </div>
     </div>
 
@@ -148,6 +142,18 @@
     {# STATE D — Results                                             #}
     {# ============================================================ #}
 
+    {# Loading spinner shown when Re-run is clicked #}
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--lg"></div>
+        <div class="mt-3">
+            <div class="progress mx-auto" style="max-width:400px;height:8px;">
+                <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
+            </div>
+            <p class="mt-2 prizm-loading-message-inline" id="autopsy-status-text" data-prizm-messages="scopeAutopsy">Collecting scope events…</p>
+        </div>
+    </div>
+
+    <div id="results-content">
     {# ── Summary bar ─────────────────────────────────────────────── #}
     <div class="card mb-4">
         <div class="card-body d-flex flex-wrap align-items-center justify-content-between">
@@ -161,7 +167,7 @@
             </div>
             <div>
                 {% if has_quota %}
-                <button class="btn btn-sm btn-outline-warning me-2" onclick="runAutopsy()">
+                <button id="btn-run-autopsy" class="btn btn-sm btn-outline-warning me-2" onclick="runAutopsy()">
                     <i class="fas fa-redo me-1"></i> Re-run
                 </button>
                 {% endif %}
@@ -375,6 +381,8 @@
     </div>
     {% endif %}
 
+    </div>{# end results-content #}
+
     {% endif %}{# end state checks #}
 </div>
 
@@ -423,8 +431,13 @@ function toggleEventDetail(idx) {
 function runAutopsy() {
     const btn = document.getElementById('btn-run-autopsy');
     const loader = document.getElementById('autopsy-loading');
-    if (btn) btn.style.display = 'none';
-    if (btn && btn.closest('.card')) btn.closest('.card').style.display = 'none';
+    const resultsContent = document.getElementById('results-content');
+    if (btn) btn.disabled = true;
+    if (resultsContent) {
+        resultsContent.style.display = 'none';
+    } else if (btn && btn.closest('.card')) {
+        btn.closest('.card').style.display = 'none';
+    }
     if (loader) loader.style.display = 'block';
 
     updateProgress(15, 'Collecting scope events…');

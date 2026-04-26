@@ -11,6 +11,7 @@ CHANGE_REASON_CHOICES = GoalVersion.CHANGE_REASON_CHOICES
 
 
 class GoalEditForm(forms.ModelForm):
+    required_css_class = 'required'
     change_reason = forms.ChoiceField(
         choices=CHANGE_REASON_CHOICES,
         widget=forms.RadioSelect,
@@ -37,6 +38,7 @@ class GoalEditForm(forms.ModelForm):
 
 
 class MissionEditForm(forms.ModelForm):
+    required_css_class = 'required'
     change_reason = forms.ChoiceField(
         choices=CHANGE_REASON_CHOICES,
         widget=forms.RadioSelect,
@@ -63,6 +65,7 @@ class MissionEditForm(forms.ModelForm):
 
 
 class StrategyEditForm(forms.ModelForm):
+    required_css_class = 'required'
     change_reason = forms.ChoiceField(
         choices=CHANGE_REASON_CHOICES,
         widget=forms.RadioSelect,
@@ -89,6 +92,7 @@ class StrategyEditForm(forms.ModelForm):
 
 
 class MilestoneForm(forms.ModelForm):
+    required_css_class = 'required'
     class Meta:
         model = Milestone
         fields = ['name', 'due_date', 'status']

@@ -11,11 +11,13 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Sum, Avg, Max
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from kanban.models import Board, Task
 from kanban.budget_models import ProjectBudget, TaskCost
 from kanban.burndown_models import BurndownPrediction, TeamVelocitySnapshot, SprintMilestone
 from kanban.utils.triple_constraint_ai import analyze_triple_constraints
+from kanban.project_confidence_service import ProjectConfidenceService
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +171,9 @@ def triple_constraint_dashboard(request, board_id):
         board=board
     ).order_by('-period_end').first()
     velocity_tasks_per_week = float(latest_velocity.tasks_completed) if latest_velocity else 0
+    # Prefer average velocity from burndown prediction (more reliable than a single-week snapshot)
+    if not velocity_tasks_per_week and latest_prediction and latest_prediction.average_velocity:
+        velocity_tasks_per_week = float(latest_prediction.average_velocity)
 
     # What-if coefficients
     what_if = {
@@ -241,21 +246,28 @@ def triple_constraint_dashboard(request, board_id):
             logger.error('Triple constraint AI view error: %s', e)
             ai_error = 'AI analysis failed. Please check your API key and try again.'
 
-    # ── Commitment Health (Living Commitment Protocols widget) ──────────────────
-    commitment_health = None
+    # ── Project Confidence Score ──────────────────────────────────────────────
+    confidence_data = None
+    confidence_history = []
+    recent_signals = []
     try:
-        from kanban.commitment_models import CommitmentProtocol
-        cp_qs = CommitmentProtocol.objects.filter(board=board, status__in=['active', 'at_risk', 'critical'])
-        if cp_qs.exists():
-            avg_conf = sum(c.current_confidence for c in cp_qs) / cp_qs.count()
-            commitment_health = {
-                'count': cp_qs.count(),
-                'avg_confidence': round(avg_conf, 1),
-                'critical_count': cp_qs.filter(status='critical').count(),
-                'at_risk_count': cp_qs.filter(status='at_risk').count(),
+        latest_confidence = ProjectConfidenceService.get_latest_score(board)
+        if latest_confidence:
+            confidence_data = {
+                'score': latest_confidence.composite_score,
+                'scope_score': latest_confidence.scope_score,
+                'budget_score': latest_confidence.budget_score,
+                'schedule_score': latest_confidence.schedule_score,
+                'trend': latest_confidence.trend,
+                'previous_score': latest_confidence.previous_score,
+                'color': latest_confidence.confidence_color,
+                'status_label': latest_confidence.status_label,
+                'computed_at': latest_confidence.computed_at,
             }
+        confidence_history = ProjectConfidenceService.get_confidence_history(board, days=30)
+        recent_signals = ProjectConfidenceService.get_recent_signals(board, limit=10)
     except Exception:
-        pass  # Non-critical widget — never block the main page
+        pass  # Non-critical — never block the main page
 
     context = {
         'board': board,
@@ -280,9 +292,63 @@ def triple_constraint_dashboard(request, board_id):
         # AI
         'ai_result': ai_result,
         'ai_error': ai_error,
-        # Commitment Protocols widget
-        'commitment_health': commitment_health,
+        # Project Confidence
+        'confidence_data': confidence_data,
+        'confidence_history': confidence_history,
+        'recent_signals': recent_signals,
     }
 
     return render(request, 'kanban/triple_constraint_dashboard.html', context)
+
+
+@login_required
+@require_POST
+def recalculate_confidence(request, board_id):
+    """Recalculate project confidence score on demand."""
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    ProjectConfidenceService.compute_score(board)
+    messages.success(request, 'Project confidence recalculated.')
+    return redirect('triple_constraint_dashboard', board_id=board.id)
+
+
+@login_required
+@require_POST
+def record_manual_signal(request, board_id):
+    """Record a manual project signal from the Triple Constraint Dashboard."""
+    from kanban.decorators import demo_write_guard as _dwg
+
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from kanban.simple_access import get_spectra_denial_context
+        ctx = get_spectra_denial_context(request.user, board, trigger='triple_constraint')
+        return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
+
+    signal_type = request.POST.get('signal_type', 'manual_positive')
+    description = request.POST.get('description', '').strip()
+
+    if not description:
+        messages.error(request, 'Please provide a description for the signal.')
+        return redirect('triple_constraint_dashboard', board_id=board.id)
+
+    # Determine strength from type
+    positive_types = {
+        'task_completed', 'milestone_hit', 'blocker_resolved',
+        'scope_approved', 'budget_approved', 'manual_positive',
+    }
+    strength = 0.3 if signal_type in positive_types else -0.3
+
+    ProjectConfidenceService.record_signal(
+        board=board,
+        signal_type=signal_type,
+        strength=strength,
+        description=description,
+        user=request.user,
+    )
+    messages.success(request, 'Signal recorded. Confidence will update on next computation.')
+    return redirect('triple_constraint_dashboard', board_id=board.id)
 

@@ -52,6 +52,23 @@
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
     }
+    
+    .btn-prizm-primary:disabled,
+    .btn-prizm-primary[disabled] {
+        color: #ffffff !important;
+        opacity: 0.9;
+    }
+    
+    /* Ensure spinner animation works on dynamically inserted elements */
+    .btn-prizm-primary .fa-spinner {
+        animation: fa-spin 1s linear infinite !important;
+        display: inline-block;
+    }
+    
+    @keyframes fa-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
 </style>
 {% endblock %}
 
@@ -298,9 +315,13 @@
                                         <span class="badge bg-info">{{ rec.confidence_score }}% confidence</span>
                                     </div>
                                     <div>
-                                        {% if rec.estimated_savings %}
+                                        {% if rec.estimated_savings and rec.estimated_savings > 0 %}
                                         <span class="fw-bold" style="color: #2c3e50;">
                                             <i class="fas fa-piggy-bank text-success"></i> Save {{ metrics.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
+                                        </span>
+                                        {% else %}
+                                        <span class="text-muted small">
+                                            <i class="fas fa-lightbulb text-warning"></i> Indirect savings
                                         </span>
                                         {% endif %}
                                     </div>
@@ -394,8 +415,28 @@ function toggleRecommendationCard(recId) {
 function generateRecommendations() {
     const btn = event.target.closest('button');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-    
+
+    var msgs = PrizmLoading.messages.budget;
+    var msgIndex = 0;
+    btn.style.color = '#ffffff';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + msgs[0];
+
+    var totalDuration = 55000;
+    var interval = Math.floor(totalDuration / (msgs.length - 1));
+    var rotateTimer = null;
+
+    function advanceMessage() {
+        msgIndex++;
+        if (msgIndex < msgs.length) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + msgs[msgIndex];
+        }
+        if (msgIndex >= msgs.length - 1) {
+            clearInterval(rotateTimer);
+        }
+    }
+
+    rotateTimer = setInterval(advanceMessage, interval);
+
     fetch("{% url 'ai_generate_recommendations' board.id %}", {
         method: 'POST',
         headers: {
@@ -405,8 +446,13 @@ function generateRecommendations() {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
+        clearInterval(rotateTimer);
+        if (data.success && data.count > 0) {
             location.reload();
+        } else if (data.success && data.count === 0) {
+            alert('AI could not generate recommendations at this time. Please try again.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
             btn.disabled = false;
@@ -414,6 +460,7 @@ function generateRecommendations() {
         }
     })
     .catch(error => {
+        clearInterval(rotateTimer);
         alert('Error generating recommendations: ' + error);
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';

@@ -188,77 +188,50 @@ class BurndownPredictor:
         }
     
     def _ensure_velocity_snapshots(self, board):
-        """Ensure velocity snapshots exist for recent periods"""
+        """Ensure velocity snapshots exist for recent periods.
+        
+        Uses Monday-Sunday ISO week boundaries so snapshots are deterministic
+        regardless of which day the prediction runs, preventing overlapping periods.
+        """
         from kanban.burndown_models import TeamVelocitySnapshot
         from kanban.models import Task
         from datetime import datetime
         
         today = timezone.now().date()
         
-        # Always update/create snapshot for current period (last 7 days)
-        # This ensures velocity reflects recently completed tasks
-        current_period_end = today
-        current_period_start = today - timedelta(days=6)  # 7-day period
+        # Calculate current ISO week boundaries (Monday-Sunday)
+        current_week_monday = today - timedelta(days=today.weekday())  # Monday
+        current_week_sunday = current_week_monday + timedelta(days=6)  # Sunday
         
-        # Convert to timezone-aware datetime for proper comparison with DateTimeField
-        period_start_dt = timezone.make_aware(datetime.combine(current_period_start, datetime.min.time()))
-        period_end_dt = timezone.make_aware(datetime.combine(current_period_end, datetime.max.time()))
-        
-        # Calculate velocity for current period
-        completed_tasks = Task.objects.filter(
-            column__board=board,
-            completed_at__gte=period_start_dt,
-            completed_at__lte=period_end_dt
-        )
-        
-        tasks_count = completed_tasks.count()
-        story_points = sum(
-            t.complexity_score or 5 for t in completed_tasks
-        )
-        
-        # Get active team members
+        # Get active team members (once, reused for all snapshots)
         User = get_user_model()
         team_members = list(User.objects.filter(board_memberships__board=board))
         active_count = len(team_members)
+        team_member_ids = [m.id for m in team_members]
         
-        # Update or create snapshot for current period
-        TeamVelocitySnapshot.objects.update_or_create(
-            board=board,
-            period_start=current_period_start,
-            period_end=current_period_end,
-            defaults={
-                'period_type': 'weekly',
-                'tasks_completed': tasks_count,
-                'story_points_completed': Decimal(str(story_points)),
-                'hours_completed': Decimal(str(tasks_count * 8)),  # Estimate
-                'active_team_members': active_count,
-                'team_member_list': [m.id for m in team_members],
-                'quality_score': Decimal('95.0'),  # Default high quality
-            }
-        )
-        
-        # Create velocity snapshots for previous weeks (if not exist)
-        for week_offset in range(1, 8):  # Start from 1 to skip current week
-            period_end = today - timedelta(days=week_offset * 7)
-            period_start = period_end - timedelta(days=6)  # 7-day periods
+        # Create/update snapshots for current week and previous weeks
+        for week_offset in range(0, 8):
+            period_start = current_week_monday - timedelta(weeks=week_offset)
+            period_end = current_week_sunday - timedelta(weeks=week_offset)
             
-            # Check if snapshot already exists
-            if TeamVelocitySnapshot.objects.filter(
-                board=board,
-                period_start=period_start,
-                period_end=period_end
-            ).exists():
-                continue
+            # For historical weeks (not the current one), skip if snapshot already exists
+            if week_offset > 0:
+                if TeamVelocitySnapshot.objects.filter(
+                    board=board,
+                    period_start=period_start,
+                    period_end=period_end
+                ).exists():
+                    continue
             
-            # Convert to timezone-aware datetime for proper comparison
-            hist_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
-            hist_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
+            # Convert to timezone-aware datetime for proper comparison with DateTimeField
+            period_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
+            period_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
             
             # Calculate velocity for this period
             completed_tasks = Task.objects.filter(
                 column__board=board,
-                completed_at__gte=hist_start_dt,
-                completed_at__lte=hist_end_dt
+                completed_at__gte=period_start_dt,
+                completed_at__lte=period_end_dt
             )
             
             tasks_count = completed_tasks.count()
@@ -266,18 +239,20 @@ class BurndownPredictor:
                 t.complexity_score or 5 for t in completed_tasks
             )
             
-            # Create snapshot
-            TeamVelocitySnapshot.objects.create(
+            # Update or create snapshot (update_or_create for current week, create for historical)
+            TeamVelocitySnapshot.objects.update_or_create(
                 board=board,
                 period_start=period_start,
                 period_end=period_end,
-                period_type='weekly',
-                tasks_completed=tasks_count,
-                story_points_completed=Decimal(str(story_points)),
-                hours_completed=Decimal(str(tasks_count * 8)),  # Estimate
-                active_team_members=active_count,
-                team_member_list=[m.id for m in team_members],
-                quality_score=Decimal('95.0'),  # Default high quality
+                defaults={
+                    'period_type': 'weekly',
+                    'tasks_completed': tasks_count,
+                    'story_points_completed': Decimal(str(story_points)),
+                    'hours_completed': Decimal(str(tasks_count * 8)),  # Estimate
+                    'active_team_members': active_count,
+                    'team_member_list': team_member_ids,
+                    'quality_score': Decimal('95.0'),  # Default high quality
+                }
             )
     
     def _get_velocity_history(self, board) -> List[Dict]:
@@ -451,16 +426,17 @@ class BurndownPredictor:
         weeks_needed = remaining_tasks / avg_velocity
         days_until = weeks_needed * 7
         
-        # Calculate confidence interval using standard error
-        # Standard error = std_dev / sqrt(n_periods)
+        # Calculate confidence interval
+        # Margin of error grows with the projection horizon:
+        # For n_periods of weekly estimates, cumulative std dev = std_dev * sqrt(n_periods)
+        # Then margin in tasks = z_score * cumulative_std_dev
         n_periods = max(remaining_tasks / avg_velocity, 1)
-        standard_error = std_dev / math.sqrt(n_periods) if n_periods > 0 else std_dev
         
         # Get Z-score for confidence level
         z_score = self.Z_SCORES.get(confidence_level, 1.645)
         
-        # Calculate margin of error in tasks
-        margin_tasks = z_score * standard_error * math.sqrt(n_periods)
+        # Calculate margin of error in tasks (grows with sqrt of projection length)
+        margin_tasks = z_score * std_dev * math.sqrt(n_periods)
         
         # Convert to days
         margin_days = (margin_tasks / avg_velocity) * 7 if avg_velocity > 0 else 30
@@ -784,8 +760,8 @@ class BurndownPredictor:
         
         today = timezone.now().date()
         
-        # Basic scope metrics
-        all_tasks = Task.objects.filter(column__board=board)
+        # Basic scope metrics (filter same as _calculate_scope_metrics)
+        all_tasks = Task.objects.filter(column__board=board, item_type='task')
         total = all_tasks.count()
         completed = all_tasks.filter(progress=100).count()
         remaining = total - completed
@@ -840,110 +816,85 @@ class BurndownPredictor:
     ) -> List:
         """Create burndown alerts based on prediction
         
-        Only creates alerts if no active alert of the same type exists for this board.
-        This prevents duplicate alerts from being created on each prediction generation.
+        Resolves any existing active alerts for this board first, then creates
+        fresh alerts based on the current prediction. This prevents stale alerts
+        with outdated metric values from persisting across predictions.
         """
         from kanban.burndown_models import BurndownAlert
         
         alerts = []
         board = prediction.board
         
-        # Helper function to check if active alert of type already exists
-        def active_alert_exists(alert_type):
-            return BurndownAlert.objects.filter(
-                board=board,
-                alert_type=alert_type,
-                status='active'
-            ).exists()
+        # Resolve ALL existing active alerts for this board — they will be
+        # recreated below if the condition still applies (with updated values)
+        BurndownAlert.objects.filter(
+            board=board,
+            status='active'
+        ).update(status='resolved')
         
         # Delay probability alert
         delay_prob = float(risk_assessment['delay_probability'])
         if delay_prob >= 50:
-            if not active_alert_exists('target_risk'):
-                alert = BurndownAlert.objects.create(
-                    prediction=prediction,
-                    board=prediction.board,
-                    alert_type='target_risk',
-                    severity='critical',
-                    status='active',
-                    title=f"Critical: {delay_prob:.0f}% Risk of Missing Target",
-                    message=f"Current trajectory shows {delay_prob:.0f}% probability of missing target date. "
-                           f"Immediate action required to get back on track.",
-                    metric_value=Decimal(str(delay_prob)),
-                    threshold_value=Decimal('50.0'),
-                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('impact') == 'critical' or s.get('priority') <= 2],
-                )
-                alerts.append(alert)
-        elif delay_prob >= 30:
-            if not active_alert_exists('target_risk'):
-                alert = BurndownAlert.objects.create(
-                    prediction=prediction,
-                    board=prediction.board,
-                    alert_type='target_risk',
-                    severity='warning',
-                    status='active',
-                    title=f"Warning: {delay_prob:.0f}% Risk of Delay",
-                    message=f"Elevated risk of missing target. Review priorities and consider corrective actions.",
-                    metric_value=Decimal(str(delay_prob)),
-                    threshold_value=Decimal('30.0'),
-                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('priority') <= 3],
-                )
-                alerts.append(alert)
-        else:
-            # Risk is now low - resolve any existing target_risk alerts
-            BurndownAlert.objects.filter(
-                board=board,
+            alert = BurndownAlert.objects.create(
+                prediction=prediction,
+                board=prediction.board,
                 alert_type='target_risk',
-                status='active'
-            ).update(status='resolved')
+                severity='critical',
+                status='active',
+                title=f"Critical: {delay_prob:.0f}% Risk of Missing Target",
+                message=f"Current trajectory shows {delay_prob:.0f}% probability of missing target date. "
+                       f"Immediate action required to get back on track.",
+                metric_value=Decimal(str(delay_prob)),
+                threshold_value=Decimal('50.0'),
+                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('impact') == 'critical' or s.get('priority') <= 2],
+            )
+            alerts.append(alert)
+        elif delay_prob >= 30:
+            alert = BurndownAlert.objects.create(
+                prediction=prediction,
+                board=prediction.board,
+                alert_type='target_risk',
+                severity='warning',
+                status='active',
+                title=f"Warning: {delay_prob:.0f}% Risk of Delay",
+                message=f"Elevated risk of missing target. Review priorities and consider corrective actions.",
+                metric_value=Decimal(str(delay_prob)),
+                threshold_value=Decimal('30.0'),
+                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('priority') <= 3],
+            )
+            alerts.append(alert)
         
         # Velocity variance alert
         cv = velocity_stats['coefficient_of_variation']
         if cv > 50:
-            if not active_alert_exists('variance_high'):
-                alert = BurndownAlert.objects.create(
-                    prediction=prediction,
-                    board=prediction.board,
-                    alert_type='variance_high',
-                    severity='warning',
-                    status='active',
-                    title=f"High Velocity Variance Detected",
-                    message=f"Team velocity is inconsistent ({cv:.1f}% CV). This makes predictions less reliable. "
-                           f"Focus on stabilizing workflow and removing blockers.",
-                    metric_value=Decimal(str(cv)),
-                    threshold_value=Decimal('50.0'),
-                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'stabilize_velocity'],
-                )
-                alerts.append(alert)
-        else:
-            # Variance is now acceptable - resolve any existing variance_high alerts
-            BurndownAlert.objects.filter(
-                board=board,
+            alert = BurndownAlert.objects.create(
+                prediction=prediction,
+                board=prediction.board,
                 alert_type='variance_high',
-                status='active'
-            ).update(status='resolved')
+                severity='warning',
+                status='active',
+                title=f"High Velocity Variance Detected",
+                message=f"Team velocity is inconsistent ({cv:.1f}% CV). This makes predictions less reliable. "
+                       f"Focus on stabilizing workflow and removing blockers.",
+                metric_value=Decimal(str(cv)),
+                threshold_value=Decimal('50.0'),
+                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'stabilize_velocity'],
+            )
+            alerts.append(alert)
         
         # Velocity decline alert
         if velocity_stats['trend'] == 'decreasing':
-            if not active_alert_exists('velocity_drop'):
-                alert = BurndownAlert.objects.create(
-                    prediction=prediction,
-                    board=prediction.board,
-                    alert_type='velocity_drop',
-                    severity='critical',
-                    status='active',
-                    title="Team Velocity Declining",
-                    message="Team velocity has been declining over recent periods. "
-                           "Investigate root causes and take corrective action.",
-                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'address_slowdown'],
-                )
-                alerts.append(alert)
-        else:
-            # Velocity is no longer declining - resolve any existing velocity_drop alerts
-            BurndownAlert.objects.filter(
-                board=board,
+            alert = BurndownAlert.objects.create(
+                prediction=prediction,
+                board=prediction.board,
                 alert_type='velocity_drop',
-                status='active'
-            ).update(status='resolved')
+                severity='critical',
+                status='active',
+                title="Team Velocity Declining",
+                message="Team velocity has been declining over recent periods. "
+                       "Investigate root causes and take corrective action.",
+                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'address_slowdown'],
+            )
+            alerts.append(alert)
         
         return alerts

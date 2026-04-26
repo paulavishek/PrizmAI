@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Focus Today – Daily Digest – PrizmAI</title>
+  <title>Focus Today – Daily Digest – PrizmAI</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 0;">
@@ -18,7 +18,7 @@
                 Pri<span style="font-style:italic;">z</span>mAI
               </h1>
               <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">
-                Your Focus Today &middot; Daily Digest
+                Focus Today &middot; Daily Digest
               </p>
             </td>
           </tr>
@@ -27,7 +27,7 @@
           <tr>
             <td style="padding:32px 40px 12px;">
               <p style="margin:0;color:#374151;font-size:16px;line-height:1.6;">
-                Good morning{{ user_name|default:"" }}{% if user_name %}, {{ user_name }}{% endif %}!
+                {{ greeting }}{% if user_name %}, {{ user_name }}{% endif %}!
               </p>
             </td>
           </tr>
@@ -147,7 +147,7 @@
             <td style="padding:8px 40px 28px;text-align:center;">
               <a href="{{ decision_center_url }}"
                  style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#ffffff;text-decoration:none;padding:14px 40px;border-radius:8px;font-size:16px;font-weight:600;letter-spacing:0.3px;">
-                Open Your Focus Today
+                Open Focus Today
               </a>
             </td>
           </tr>

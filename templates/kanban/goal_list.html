@@ -81,8 +81,8 @@
 
                     {% if goal.target_metric %}
                     <div class="mb-2">
-                        <span class="badge bg-warning text-dark">
-                            <i class="fas fa-bullseye me-1"></i>{{ goal.target_metric }}
+                        <span class="badge bg-warning text-dark" style="white-space:normal; word-break:break-word; text-align:left; max-width:100%; display:inline-block;">
+                            <i class="fas fa-bullseye me-1"></i>{{ goal.target_metric|truncatechars:100 }}
                         </span>
                     </div>
                     {% endif %}

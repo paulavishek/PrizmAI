@@ -911,39 +911,47 @@ def trigger_branch_recalculation_on_membership_deleted(sender, instance, **kwarg
 
 
 # ---------------------------------------------------------------------------
-# Living Commitment Protocols — auto-signal triggers
+# Project Signals — unified event tracking for confidence scoring
+# Replaces the old commitment-specific signal triggers.
 # ---------------------------------------------------------------------------
 
 @receiver(post_save, sender='kanban.Task')
-def trigger_commitment_signals_on_task_save(sender, instance, created, **kwargs):
+def record_project_signal_on_task_save(sender, instance, created, **kwargs):
     """
-    When a Task is saved (created or updated), check whether its board has any
-    active CommitmentProtocols that should receive an auto-detected signal.
-
-    We only fire if the board actually has active/at_risk protocols to avoid
-    unnecessary Celery round-trips on every task save.
+    When a task is completed or newly created, record a ProjectSignal
+    so the confidence score reflects the change.
     """
     try:
         board = instance.column.board if instance.column_id else None
         if board is None:
             return
 
-        from kanban.commitment_models import CommitmentProtocol
-        has_protocols = CommitmentProtocol.objects.filter(
-            board=board,
-            status__in=['active', 'at_risk'],
-        ).exists()
-
-        if has_protocols:
-            from kanban.tasks.commitment_tasks import auto_detect_signals_for_board
-            auto_detect_signals_for_board.apply_async(
-                args=[board.id],
-                countdown=10,  # slight delay to batch rapid consecutive saves
+        if created:
+            # New task added — potential scope growth (mild negative signal)
+            from kanban.project_confidence_service import ProjectConfidenceService
+            ProjectConfidenceService.record_signal(
+                board=board,
+                signal_type='task_added',
+                strength=-0.05,
+                description=f'Task "{instance.title}" added to the board.',
+                task=instance,
+                ai_generated=True,
+            )
+        elif getattr(instance, 'progress', 0) == 100:
+            # Task completed — positive signal
+            from kanban.project_confidence_service import ProjectConfidenceService
+            ProjectConfidenceService.record_signal(
+                board=board,
+                signal_type='task_completed',
+                strength=0.15,
+                description=f'Task "{instance.title}" completed.',
+                task=instance,
+                ai_generated=True,
             )
     except Exception:
         import logging
         logging.getLogger(__name__).warning(
-            'trigger_commitment_signals_on_task_save: unexpected error',
+            'record_project_signal_on_task_save: unexpected error',
             exc_info=True,
         )
 
@@ -978,32 +986,28 @@ def auto_assign_column_color(sender, instance, **kwargs):
 
 
 @receiver(post_delete, sender='kanban.Task')
-def trigger_commitment_signals_on_task_delete(sender, instance, **kwargs):
+def record_project_signal_on_task_delete(sender, instance, **kwargs):
     """
-    When a Task is deleted, re-scan commitment signals for its board.
-    Deletions can represent scope changes that shift confidence.
+    When a task is deleted, record a scope-change signal.
     """
     try:
         board = instance.column.board if instance.column_id else None
         if board is None:
             return
 
-        from kanban.commitment_models import CommitmentProtocol
-        has_protocols = CommitmentProtocol.objects.filter(
+        from kanban.project_confidence_service import ProjectConfidenceService
+        ProjectConfidenceService.record_signal(
             board=board,
-            status__in=['active', 'at_risk'],
-        ).exists()
-
-        if has_protocols:
-            from kanban.tasks.commitment_tasks import auto_detect_signals_for_board
-            auto_detect_signals_for_board.apply_async(
-                args=[board.id],
-                countdown=5,
-            )
+            signal_type='task_removed',
+            strength=0.0,  # Neutral — removal is ambiguous (could be cleanup or scope cut)
+            description=f'Task "{instance.title}" removed from the board.',
+            task=None,  # Task is being deleted, can't reference
+            ai_generated=True,
+        )
     except Exception:
         import logging
         logging.getLogger(__name__).warning(
-            'trigger_commitment_signals_on_task_delete: unexpected error',
+            'record_project_signal_on_task_delete: unexpected error',
             exc_info=True,
         )
 

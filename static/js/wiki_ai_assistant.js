@@ -25,7 +25,7 @@ function detectPageTypeAndShowButton() {
     if (categoryAiType === 'meeting') {
         aiBtn.style.display = 'inline-block';
         aiBtn.className = 'btn btn-outline-success btn-sm me-2';
-        if (aiButtonText) aiButtonText.textContent = 'Meeting Analysis';
+        if (aiButtonText) aiButtonText.textContent = 'Meeting Assistant';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'inline-block';
     } else if (categoryAiType === 'documentation') {
         aiBtn.style.display = 'inline-block';
@@ -64,13 +64,12 @@ async function processMeetingNotes() {
     // Show processing state
     modalBody.innerHTML = `
         <div class="text-center py-5">
-            <div class="spinner-border text-success mb-3" role="status" style="width: 3rem; height: 3rem;">
-                <span class="visually-hidden">Processing...</span>
-            </div>
+            <div class="prizm-spinner prizm-spinner--lg mb-3"></div>
             <h5>Analyzing meeting notes with AI...</h5>
-            <p class="text-muted">Extracting action items, decisions, blockers, and risks...</p>
+            <p class="prizm-loading-message-inline" id="wiki-meeting-msg">Extracting action items, decisions, blockers, and risks...</p>
         </div>
     `;
+    if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('wiki-meeting-msg'), PrizmLoading.messages.wikiAnalysis);
     
     try {
         const response = await fetch(`/wiki/api/wiki-page/${wikiPageId}/analyze/`, {
@@ -110,13 +109,12 @@ async function processDocumentation() {
     // Show processing state
     modalBody.innerHTML = `
         <div class="text-center py-5">
-            <div class="spinner-border text-info mb-3" role="status" style="width: 3rem; height: 3rem;">
-                <span class="visually-hidden">Processing...</span>
-            </div>
+            <div class="prizm-spinner prizm-spinner--lg mb-3"></div>
             <h5>Analyzing documentation with AI...</h5>
-            <p class="text-muted">Extracting key information and suggestions...</p>
+            <p class="prizm-loading-message-inline" id="wiki-docs-msg">Extracting key information and suggestions...</p>
         </div>
     `;
+    if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('wiki-docs-msg'), PrizmLoading.messages.wikiGenerate);
     
     try {
         const response = await fetch(`/wiki/api/wiki-page/${wikiPageId}/analyze-documentation/`, {

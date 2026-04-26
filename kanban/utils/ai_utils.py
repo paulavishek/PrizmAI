@@ -921,6 +921,47 @@ IMPORTANT: Keep ALL string values SHORT (under 80 characters each). Do NOT use n
         return None
 
 
+def _compute_confidence_score(parsed: Dict) -> float:
+    """
+    Compute a data-driven confidence score based on how many expected fields
+    the AI actually returned with meaningful content.
+    Handles both the new simplified format and the old/legacy format field names.
+    """
+    # Each tuple: (new_field_name, old_field_name_or_None, weight)
+    checks = [
+        ('executive_summary', None, 0.20),
+        ('health_score', 'health_assessment', 0.10),
+        ('health_reasoning', None, 0.05),
+        ('key_insights', None, 0.20),
+        ('concerns', 'areas_of_concern', 0.15),
+        ('recommendations', 'process_improvement_recommendations', 0.15),
+        ('lean_efficiency', 'lean_analysis', 0.05),
+        ('workload_balance', 'team_performance', 0.05),
+        ('productivity_trend', 'trend_analysis', 0.05),
+    ]
+    score = 0.0
+    for new_field, old_field, weight in checks:
+        val = parsed.get(new_field)
+        # Fall back to old field name if new one is missing
+        if (val is None or val == '' or val == []) and old_field:
+            val = parsed.get(old_field)
+        if val is None or val == '' or val == []:
+            continue
+        # Lists get partial credit if present but short
+        if isinstance(val, list):
+            if len(val) >= 3:
+                score += weight
+            elif len(val) >= 1:
+                score += weight * 0.7
+        elif isinstance(val, dict):
+            # Dicts (like health_assessment, lean_analysis) count as present
+            score += weight
+        else:
+            score += weight
+    # Clamp between 0.3 and 0.95
+    return max(0.3, min(0.95, score))
+
+
 def _transform_analytics_response(parsed: Dict) -> Dict:
     """
     Transform simplified AI response to full format for backward compatibility.
@@ -928,12 +969,14 @@ def _transform_analytics_response(parsed: Dict) -> Dict:
     """
     # If already in old format, return as-is
     if 'health_assessment' in parsed:
+        if 'confidence_score' not in parsed:
+            parsed['confidence_score'] = _compute_confidence_score(parsed)
         return parsed
     
     # Transform simplified response to expected format
     result = {
         'executive_summary': parsed.get('executive_summary', ''),
-        'confidence_score': 0.75,  # Default confidence
+        'confidence_score': _compute_confidence_score(parsed),
     }
     
     # Map health_score -> health_assessment
@@ -1027,7 +1070,34 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         tasks_by_user = analytics_data.get('tasks_by_user', [])
         
         # Build optimized prompt - streamlined for faster response while maintaining quality
-        prompt = f"""Analyze this board data and provide actionable insights for a project manager.
+        board_name = analytics_data.get('board_name', 'Board')
+        project_type = analytics_data.get('project_type', 'general')
+        
+        # Project-type-specific focus areas
+        type_focus = {
+            'product_tech': (
+                "Focus on: task velocity, blocked/at-risk items, column bottlenecks, "
+                "workload distribution, and technical debt indicators."
+            ),
+            'marketing_campaign': (
+                "Focus on: deadline adherence, content output rate, review pipeline, "
+                "milestone progress, and campaign phase distribution."
+            ),
+            'operations': (
+                "Focus on: process completion rate, cycle time efficiency, on-time delivery, "
+                "workload balance, and operational throughput."
+            ),
+            'general': (
+                "Focus on: overall productivity, task completion trends, workload balance, "
+                "and priority distribution."
+            ),
+        }
+        focus_area = type_focus.get(project_type, type_focus['general'])
+        
+        prompt = f"""Analyze this {project_type.replace('_', ' ')} board "{board_name}" and provide actionable insights for a project manager.
+
+## Board Type: {project_type.replace('_', ' ').title()}
+{focus_area}
 
 ## Metrics:
 - Tasks: {total_tasks} total, {completed_count} complete ({productivity}% productivity)
@@ -1037,19 +1107,20 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
 - Priority: {', '.join([f"{pri['priority']}:{pri['count']}" for pri in tasks_by_priority])}
 - Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}
 
-Return JSON only:
+IMPORTANT: Do NOT use markdown formatting like asterisks, bold, or headers in any text values. Use plain text only.
+Respond with ONLY the JSON object below, no commentary, no code fences, no explanation before or after:
 {{
-  "executive_summary": "2-3 sentences summarizing health and key findings",
+  "executive_summary": "2-3 plain text sentences summarizing health and key findings for this {project_type.replace('_', ' ')} board",
   "health_score": "healthy|at_risk|critical",
-  "health_reasoning": "Brief explanation",
+  "health_reasoning": "Brief plain text explanation",
   "key_insights": [
-    {{"insight": "Finding", "evidence": "Data point", "confidence": "high|medium|low"}}
+    {{"insight": "Finding relevant to {project_type.replace('_', ' ')}", "evidence": "Data point", "confidence": "high|medium|low"}}
   ],
   "concerns": [
     {{"concern": "Issue", "severity": "critical|high|medium|low", "action": "Recommendation"}}
   ],
   "recommendations": [
-    {{"recommendation": "Action", "impact": "Expected result", "priority": 1}}
+    {{"recommendation": "Action specific to {project_type.replace('_', ' ')}", "impact": "Expected result", "priority": 1, "implementation_effort": "low|medium|high"}}
   ],
   "lean_efficiency": "excellent|good|fair|poor",
   "workload_balance": "balanced|imbalanced",
@@ -1131,7 +1202,7 @@ Return JSON only:
                     logger.warning(f"AI returned non-dict JSON: {type(parsed)}")
                     return {
                         'executive_summary': str(parsed),
-                        'confidence_score': 0.5,
+                        'confidence_score': 0.25,
                         'parsing_note': 'AI returned unexpected JSON type'
                     }
             except json.JSONDecodeError as e:
@@ -1150,30 +1221,31 @@ Return JSON only:
                         parsed = json.loads(match)
                         if isinstance(parsed, dict) and 'executive_summary' in parsed:
                             logger.info("Recovered JSON using regex extraction")
+                            parsed = _transform_analytics_response(parsed)
                             return parsed
                     except json.JSONDecodeError:
                         continue
                 
                 # Last resort: extract key fields manually
-                result = {'confidence_score': 0.5, 'parsing_note': 'Partial extraction from malformed JSON'}
+                result = {'parsing_note': 'Partial extraction from malformed JSON'}
                 
                 # Extract executive_summary
                 exec_match = re.search(r'"executive_summary"\s*:\s*"((?:[^"\\]|\\.)*)"', response_text)
                 if exec_match:
                     result['executive_summary'] = exec_match.group(1).replace('\\"', '"').replace('\\n', '\n')
                 
-                # Extract confidence_score
-                conf_match = re.search(r'"confidence_score"\s*:\s*([\d.]+)', response_text)
-                if conf_match:
-                    try:
-                        result['confidence_score'] = float(conf_match.group(1))
-                    except ValueError:
-                        pass
-                
-                # Extract health_assessment overall_score
-                health_match = re.search(r'"overall_score"\s*:\s*"([^"]+)"', response_text)
+                # Extract health_score
+                health_match = re.search(r'"health_score"\s*:\s*"([^"]+)"', response_text)
                 if health_match:
-                    result['health_assessment'] = {'overall_score': health_match.group(1)}
+                    result['health_assessment'] = {'overall_score': health_match.group(1), 'score_reasoning': '', 'health_indicators': []}
+
+                # Extract health_reasoning
+                reasoning_match = re.search(r'"health_reasoning"\s*:\s*"((?:[^"\\]|\\.)*)"', response_text)
+                if reasoning_match and 'health_assessment' in result:
+                    result['health_assessment']['score_reasoning'] = reasoning_match.group(1).replace('\\"', '"')
+                
+                # Compute confidence based on what we actually recovered
+                result['confidence_score'] = _compute_confidence_score(result)
                 
                 if 'executive_summary' in result:
                     logger.info("Partially recovered data from malformed JSON")
@@ -1182,7 +1254,7 @@ Return JSON only:
                 # Complete fallback
                 return {
                     'executive_summary': original_response[:500] if len(original_response) > 500 else original_response,
-                    'confidence_score': 0.5,
+                    'confidence_score': 0.25,
                     'parsing_note': 'Returned plain text summary due to JSON parsing error'
                 }
         return None

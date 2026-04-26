@@ -518,26 +518,18 @@ function viewConflict(conflictId, notificationId) {
 }
 
 // Loading helpers
+var _conflictLoadingHandle = null;
 function showLoading(message) {
-    // Simple loading indicator
-    const loading = document.createElement('div');
-    loading.id = 'loadingOverlay';
-    loading.innerHTML = `
-        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
-                    background: rgba(0,0,0,0.5); z-index: 9999; 
-                    display: flex; align-items: center; justify-content: center;">
-            <div style="background: white; padding: 2rem; border-radius: 10px; text-align: center;">
-                <div class="spinner-border text-primary mb-2" role="status"></div>
-                <p class="mb-0">${message}</p>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(loading);
+    _conflictLoadingHandle = PrizmLoading.showOverlay(null, {
+        messages: PrizmLoading.messages.conflicts
+    });
 }
 
 function hideLoading() {
-    const loading = document.getElementById('loadingOverlay');
-    if (loading) loading.remove();
+    if (_conflictLoadingHandle) {
+        _conflictLoadingHandle.remove();
+        _conflictLoadingHandle = null;
+    }
 }
 </script>
 {% endblock %}

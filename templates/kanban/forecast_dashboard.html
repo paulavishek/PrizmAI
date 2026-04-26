@@ -494,7 +494,7 @@
                     <td>
                         <span class="forecast-conf-badge" data-conf="{{ forecast.confidence_score }}" style="font-weight:600; font-size:0.85rem; cursor:help;"
                               title="Click for details" data-bs-toggle="collapse" data-bs-target="#forecast-explain-{{ forecast.id }}">
-                            â€”
+                            —
                         </span>
                     </td>
                     <td>
@@ -519,7 +519,7 @@
                                 <strong><i class="bi bi-bar-chart me-1 text-primary"></i>Confidence Factors:</strong>
                                 <ul class="mb-0 mt-1 ps-3" style="color:#64748b;">
                                 {% for factor in forecast.forecast_explainability.confidence_factors %}
-                                    <li>{{ factor.factor }}: <strong>{{ factor.status }}</strong> â€” {{ factor.detail }}</li>
+                                    <li>{{ factor.factor }}: <strong>{{ factor.status }}</strong> — {{ factor.detail }}</li>
                                 {% endfor %}
                                 </ul>
                             </div>

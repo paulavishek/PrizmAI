@@ -20,7 +20,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 # Configure logger
 logger = logging.getLogger(__name__)
 
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy
+from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, CalendarEvent
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
@@ -315,36 +315,36 @@ def dashboard(request):
             }
         ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')
     elif sort_by == 'recent':
-        # Sort by: 1) Most recently created/updated, 2) Priority
-        my_tasks = my_tasks_query.extra(
-            select={
-                'priority_order': """
-                    CASE priority 
-                        WHEN 'urgent' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
-                    END
-                """
-            }
-        ).order_by('-updated_at', '-created_at', 'priority_order')
+        # Sort by: most recently modified/updated first.
+        # Purely time-based — no priority tiebreaker so it stays distinct from
+        # the priority and urgency sorts.
+        my_tasks = my_tasks_query.order_by('-updated_at', '-created_at')
     else:  # Default: 'urgency'
-        # Sort by: 1) Overdue tasks first, 2) Priority level, 3) Due date, 4) Creation date
+        # Urgency = time-sensitivity, not just the priority label.
+        # Score = (days until due date) minus a priority boost:
+        #   urgent=7d, high=3d, medium=1d, low=0d
+        # A high-priority task due in 2 days (score=-1) outranks an urgent task
+        # due in 30 days (score=23). Overdue tasks always have negative scores.
+        # Tasks with no due date are least urgent (score=9999).
+        # This makes Urgency sort meaningfully different from Priority sort when
+        # a lower-priority task is due sooner than a higher-priority one.
         my_tasks = my_tasks_query.extra(
             select={
-                'is_overdue': "CASE WHEN due_date < datetime('now') THEN 1 ELSE 0 END",
-                'priority_order': """
-                    CASE priority 
-                        WHEN 'urgent' THEN 1 
-                        WHEN 'high' THEN 2 
-                        WHEN 'medium' THEN 3 
-                        WHEN 'low' THEN 4 
-                        ELSE 5 
+                'urgency_score': """
+                    CASE
+                        WHEN due_date IS NULL THEN 9999
+                        ELSE (julianday(due_date) - julianday('now')) -
+                             CASE priority
+                                 WHEN 'urgent' THEN 7
+                                 WHEN 'high'   THEN 3
+                                 WHEN 'medium' THEN 1
+                                 WHEN 'low'    THEN 0
+                                 ELSE 0
+                             END
                     END
                 """
             }
-        ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')
+        ).order_by('urgency_score', 'created_at')
     
     # Count of my tasks (for stats) — derived from the same base query to stay in sync
     my_tasks_count = my_tasks_query.count()
@@ -646,6 +646,38 @@ def dashboard(request):
             goal_map[gid]['missions'].append(item)
         else:
             ungrouped_missions.append(item)
+
+    # Include standalone goals (no linked missions) so they appear in
+    # the Hierarchy Navigator even before the user links missions.
+    if demo_mode:
+        _all_goals_qs = OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        )
+    elif active_ws and not active_ws.is_demo:
+        _all_goals_qs = OrganizationGoal.objects.filter(workspace=active_ws)
+    elif _is_org_admin:
+        _admin_org = getattr(profile, 'organization', None) if profile else None
+        if _admin_org and not getattr(_admin_org, 'is_demo', False):
+            _all_goals_qs = OrganizationGoal.objects.filter(
+                Q(workspace__organization=_admin_org),
+                is_demo=False, is_seed_demo_data=False,
+            )
+        else:
+            _all_goals_qs = OrganizationGoal.objects.filter(
+                created_by=request.user, is_demo=False, is_seed_demo_data=False,
+            )
+    else:
+        _all_goals_qs = OrganizationGoal.objects.filter(
+            Q(created_by=request.user) |
+            Q(missions__strategies__boards__memberships__user=request.user),
+            is_demo=False, is_seed_demo_data=False,
+        ).distinct()
+    for _standalone_goal in _all_goals_qs:
+        if _standalone_goal.id not in goal_map:
+            goal_map[_standalone_goal.id] = {
+                'goal': _standalone_goal,
+                'missions': [],
+            }
 
     goal_tree = list(goal_map.values())
     if ungrouped_missions:
@@ -1123,6 +1155,44 @@ def dashboard(request):
             'board_name': (_top_risk_task.column.board.name
                           if _top_risk_task.column and _top_risk_task.column.board else ''),
         }
+
+    # Build list of up to 3 top risk items for the briefing panel
+    briefing_top_risks = []
+    _risk_candidates = list(high_risk_tasks_qs[:3])
+    if not _risk_candidates and overdue_count > 0:
+        _risk_candidates = list(
+            Task.objects
+            .filter(column__board_id__in=_board_ids, item_type='task', due_date__lt=timezone.now())
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')[:3]
+        )
+    _now_for_risks = timezone.now()
+    for _rc in _risk_candidates:
+        _rc_due = _rc.due_date
+        _rc_days = None
+        if _rc_due:
+            _rc_days = int((_rc_due - _now_for_risks).days)
+            _rc_due_local = timezone.localtime(_rc_due)
+            _rc_date_str = _rc_due_local.strftime('%b') + ' ' + str(_rc_due_local.day)
+            if _rc_days < 0:
+                _rc_due_label = f"Overdue · {_rc_date_str}"
+            elif _rc_days == 0:
+                _rc_due_label = "Due today"
+            elif _rc_days == 1:
+                _rc_due_label = "Due tomorrow"
+            else:
+                _rc_due_label = f"Due {_rc_date_str}"
+        else:
+            _rc_due_label = "No due date"
+        briefing_top_risks.append({
+            'task':       _rc,
+            'risk_level': _rc.risk_level or ('high' if _rc_days is not None and _rc_days < 0 else ''),
+            'due_label':  _rc_due_label,
+            'due_date':   _rc_due,
+            'board_name': (_rc.column.board.name if _rc.column and _rc.column.board else ''),
+        })
+
     # briefing_risk is kept for has_content check
     if overdue_count > 0 or total_high_risk > 0:
         briefing_risk = True  # sentinel — actual display uses briefing_top_risk
@@ -1186,6 +1256,7 @@ def dashboard(request):
         'pulse':          briefing_pulse,
         'risk':           briefing_risk,
         'top_risk':       briefing_top_risk,
+        'top_risks':      briefing_top_risks,
         'action':         briefing_action,
         'action_type':    briefing_action_type,
         'action_tasks':   briefing_action_tasks,
@@ -3071,13 +3142,20 @@ def board_analytics(request, board_id):
         count=Count('id')
     ).order_by('updated_at__date')
 
+    # Build a full 30-day date range with 0 fills so the trend chart always
+    # shows a continuous timeline rather than only days with completions.
+    completion_by_date = {
+        item['updated_at__date']: item['count']
+        for item in completed_tasks_queryset
+    }
     completed_tasks = []
-    for item in completed_tasks_queryset:
+    for i in range(30):
+        day = (timezone.now() - timedelta(days=29 - i)).date()
         completed_tasks.append({
-            'date': item['updated_at__date'].strftime('%Y-%m-%d'),
-            'count': item['count']
+            'date': day.strftime('%Y-%m-%d'),
+            'count': completion_by_date.get(day, 0),
         })
-    
+
     # Calculate productivity based on task progress (exclude milestones)
     total_tasks = Task.objects.filter(column__board=board, item_type='task').count()
     
@@ -3488,6 +3566,59 @@ def board_calendar(request, board_id):
             }
         })
 
+    # -----------------------------------------------------------------------
+    # Calendar events (meetings, OOO, busy blocks, team events) for this board
+    # -----------------------------------------------------------------------
+    from django.db.models import Q as _CalQ2
+    cal_events = (
+        CalendarEvent.objects
+        .filter(board=board)
+        .filter(
+            _CalQ2(created_by=request.user) |
+            _CalQ2(participants=request.user) |
+            _CalQ2(visibility='team')
+        )
+        .distinct()
+        .select_related('board', 'created_by', 'linked_task')
+        .prefetch_related('participants')
+    )
+
+    for ce in cal_events:
+        if ce.is_all_day:
+            fc_start = ce.start_datetime.strftime('%Y-%m-%d')
+            fc_end = (ce.end_datetime + _td(days=1)).strftime('%Y-%m-%d')
+        else:
+            fc_start = ce.start_datetime.isoformat()
+            fc_end = ce.end_datetime.isoformat()
+
+        events.append({
+            'id': f'event-{ce.id}',
+            'title': ce.title,
+            'start': fc_start,
+            'end': fc_end,
+            'allDay': ce.is_all_day,
+            'url': f'/calendar/events/{ce.id}/',
+            'color': ce.get_event_type_color(),
+            'extendedProps': {
+                'source': 'event',
+                'layer': 'event',
+                'event_id': ce.id,
+                'event_type': ce.get_event_type_display(),
+                'event_type_key': ce.event_type,
+                'visibility': ce.visibility,
+                'is_mine': ce.created_by_id == request.user.id,
+                'description': ce.description or '',
+                'location': ce.location or '',
+                'board': board.name,
+                'participants': [u.username for u in ce.participants.all()],
+                'participant_ids': [u.id for u in ce.participants.all()],
+                'created_by': ce.created_by.username,
+                'created_by_id': ce.created_by_id,
+                'linked_task_title': ce.linked_task.title if ce.linked_task else None,
+                'linked_task_id': ce.linked_task_id,
+            },
+        })
+
     _col_data = list(board.columns.order_by('position').values('id', 'name'))
 
     context = {
@@ -3503,6 +3634,128 @@ def board_calendar(request, board_id):
         'participants_json': _json.dumps([m for m in _mem_data if m['id'] != request.user.id]),
     }
     return render(request, 'kanban/calendar_view.html', context)
+
+
+@login_required
+def board_list_view(request, board_id):
+    """
+    List view: flat table of all tasks with sortable columns, inline filters,
+    and grouping by column (status). Provides a dense, spreadsheet-like
+    overview that complements the Kanban, Gantt, and Calendar views.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+
+    # Base queryset — tasks only (no milestones)
+    tasks = (
+        Task.objects
+        .filter(column__board=board, item_type='task')
+        .select_related('column', 'assigned_to', 'created_by')
+        .prefetch_related('labels')
+    )
+
+    # ── Filters ──────────────────────────────────────────────────────
+    search_query = request.GET.get('search', '').strip()
+    column_filter = request.GET.get('column', '')
+    priority_filter = request.GET.get('priority', '')
+    assignee_filter = request.GET.get('assignee', '')
+    label_filter = request.GET.get('label', '')
+
+    if search_query:
+        tasks = tasks.filter(
+            Q(title__icontains=search_query) | Q(description__icontains=search_query)
+        )
+    if column_filter:
+        tasks = tasks.filter(column_id=column_filter)
+    if priority_filter:
+        tasks = tasks.filter(priority=priority_filter)
+    if assignee_filter:
+        if assignee_filter == 'unassigned':
+            tasks = tasks.filter(assigned_to__isnull=True)
+        else:
+            tasks = tasks.filter(assigned_to_id=assignee_filter)
+    if label_filter:
+        tasks = tasks.filter(labels__id=label_filter)
+
+    # ── Sorting ──────────────────────────────────────────────────────
+    sort_by = request.GET.get('sort', 'column')
+    sort_dir = request.GET.get('dir', 'asc')
+    sort_prefix = '' if sort_dir == 'asc' else '-'
+
+    sort_map = {
+        'title': 'title',
+        'column': 'column__position',
+        'priority': 'priority',
+        'assignee': 'assigned_to__username',
+        'due_date': 'due_date',
+        'progress': 'progress',
+        'created': 'created_at',
+    }
+    order_field = sort_map.get(sort_by, 'column__position')
+    tasks = tasks.order_by(f'{sort_prefix}{order_field}', 'position')
+
+    # ── Grouping (default: group by column/status) ───────────────────
+    group_by = request.GET.get('group', 'column')
+    columns = board.columns.order_by('position')
+
+    if group_by == 'column':
+        grouped_tasks = []
+        for col in columns:
+            col_tasks = [t for t in tasks if t.column_id == col.id]
+            if col_tasks or not (search_query or column_filter or priority_filter or assignee_filter or label_filter):
+                grouped_tasks.append({'label': col.name, 'color': col.color, 'tasks': col_tasks, 'count': len(col_tasks)})
+    elif group_by == 'priority':
+        grouped_tasks = []
+        for value, display in Task.PRIORITY_CHOICES:
+            p_tasks = [t for t in tasks if t.priority == value]
+            if p_tasks:
+                grouped_tasks.append({'label': display, 'color': None, 'tasks': p_tasks, 'count': len(p_tasks)})
+        # Tasks with no priority
+        no_p = [t for t in tasks if not t.priority]
+        if no_p:
+            grouped_tasks.append({'label': 'No Priority', 'color': None, 'tasks': no_p, 'count': len(no_p)})
+    elif group_by == 'assignee':
+        from itertools import groupby as _groupby
+        grouped_tasks = []
+        all_tasks = list(tasks)
+        assigned = sorted([t for t in all_tasks if t.assigned_to], key=lambda t: t.assigned_to.username)
+        for username, grp in _groupby(assigned, key=lambda t: t.assigned_to.username):
+            g_tasks = list(grp)
+            grouped_tasks.append({'label': username, 'color': None, 'tasks': g_tasks, 'count': len(g_tasks)})
+        unassigned = [t for t in all_tasks if not t.assigned_to]
+        if unassigned:
+            grouped_tasks.append({'label': 'Unassigned', 'color': None, 'tasks': unassigned, 'count': len(unassigned)})
+    else:
+        grouped_tasks = [{'label': 'All Tasks', 'color': None, 'tasks': list(tasks), 'count': tasks.count()}]
+
+    # ── Filter dropdown data ─────────────────────────────────────────
+    assignees = User.objects.filter(
+        assigned_tasks__column__board=board
+    ).distinct().order_by('username')
+
+    labels = TaskLabel.objects.filter(board=board).order_by('name')
+
+    context = {
+        'board': board,
+        'grouped_tasks': grouped_tasks,
+        'columns': columns,
+        'assignees': assignees,
+        'labels': labels,
+        'priority_choices': Task.PRIORITY_CHOICES,
+        'total_count': sum(g['count'] for g in grouped_tasks),
+        # Current filter/sort state (for preserving form values)
+        'search_query': search_query,
+        'column_filter': column_filter,
+        'priority_filter': priority_filter,
+        'assignee_filter': assignee_filter,
+        'label_filter': label_filter,
+        'sort_by': sort_by,
+        'sort_dir': sort_dir,
+        'group_by': group_by,
+    }
+    return render(request, 'kanban/board_list_view.html', context)
 
 
 def add_gantt_milestone(request, board_id):
@@ -5105,6 +5358,14 @@ def upload_task_file(request, task_id):
             file_obj.uploaded_by = request.user
             # Filename, size, and type are now set by form.save() with proper sanitization
             file_obj.save()
+            
+            # Record activity log for attachment upload
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f"Uploaded attachment '{file_obj.filename}' to '{task.title}'"
+            )
             
             messages.success(request, f'File "{file_obj.filename}" uploaded successfully!')
             

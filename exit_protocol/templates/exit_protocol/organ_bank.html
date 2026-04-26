@@ -74,8 +74,10 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="text-center py-5">
-    <p class="text-muted">No organs extracted yet. Organ extraction happens during the hospice process.</p>
+  <div class="text-center py-5" style="background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; margin-top: 1rem; padding: 3rem 2rem;">
+    <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🫀</div>
+    <p style="font-size: 1rem; font-weight: 600; color: #4a5568; margin-bottom: 0.25rem;">No organs extracted yet</p>
+    <p style="font-size: 0.875rem; color: #718096; margin: 0;">Reusable components are extracted automatically when a wind-down review is initiated for this project.</p>
   </div>
   {% endif %}
 </div>

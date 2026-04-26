@@ -32,6 +32,7 @@ class CoachingSuggestion(models.Model):
         ('communication_gap', 'Communication Gap'),
         ('dependency_blocker', 'Dependency Blocking Progress'),
         ('best_practice', 'Best Practice Recommendation'),
+        ('confidence_drop', 'Project Confidence Drop'),
     ]
     
     # Severity Levels

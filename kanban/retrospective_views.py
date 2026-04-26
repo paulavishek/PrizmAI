@@ -36,8 +36,9 @@ def _add_manual_lessons(retrospective, board, lessons_list):
                 board=board,
                 title=lesson_text[:100],
                 description=lesson_text,
-                category='team_process',
+                category='other',
                 priority='medium',
+                recommended_action='Review and implement this lesson in the next sprint.',
                 ai_suggested=False,
                 status='identified'
             )
@@ -55,7 +56,7 @@ def _add_manual_actions(retrospective, board, actions_list):
                 board=board,
                 title=action_text[:100],
                 description=action_text,
-                action_type='process_improvement',
+                action_type='process_change',
                 priority='medium',
                 target_completion_date=target_date,
                 ai_suggested=False,
@@ -89,10 +90,11 @@ def retrospective_list(request, board_id):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
-    # Summary statistics
+    # Summary statistics — counts are always board-wide, unaffected by filters
+    all_retrospectives = ProjectRetrospective.objects.filter(board=board)
     stats = {
-        'total_retrospectives': retrospectives.count(),
-        'finalized_count': retrospectives.filter(status='finalized').count(),
+        'total_retrospectives': all_retrospectives.count(),
+        'finalized_count': all_retrospectives.filter(status='finalized').count(),
         'total_lessons': LessonLearned.objects.filter(board=board).count(),
         'implemented_lessons': LessonLearned.objects.filter(
             board=board, status__in=['implemented', 'validated']
@@ -471,6 +473,59 @@ def lessons_learned_list(request, board_id):
     }
     
     return render(request, 'kanban/lessons_learned_list.html', context)
+
+
+@login_required
+def retrospective_actions_list(request, board_id):
+    """View all action items across all retrospectives for a board"""
+    board = get_object_or_404(Board, id=board_id)
+
+    all_board_actions = RetrospectiveActionItem.objects.filter(board=board)
+
+    # Summary stats (before filtering)
+    completed_count = all_board_actions.filter(status='completed').count()
+    pending_count = all_board_actions.filter(status__in=['pending', 'in_progress']).count()
+    overdue_count = all_board_actions.filter(
+        status__in=['pending', 'in_progress'],
+        target_completion_date__lt=timezone.now().date()
+    ).count()
+
+    actions = all_board_actions.select_related(
+        'retrospective', 'assigned_to'
+    ).order_by('status', 'target_completion_date')
+
+    status_filter = request.GET.get('status')
+    if status_filter:
+        actions = actions.filter(status=status_filter)
+
+    priority_filter = request.GET.get('priority')
+    if priority_filter:
+        actions = actions.filter(priority=priority_filter)
+
+    paginator = Paginator(actions, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    priority_choices = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    context = {
+        'board': board,
+        'page_obj': page_obj,
+        'actions': page_obj,
+        'status_filter': status_filter,
+        'priority_filter': priority_filter,
+        'status_choices': RetrospectiveActionItem.STATUS_CHOICES,
+        'priority_choices': priority_choices,
+        'completed_count': completed_count,
+        'pending_count': pending_count,
+        'overdue_count': overdue_count,
+    }
+    return render(request, 'kanban/retrospective_actions_list.html', context)
 
 
 def _generate_trend_analysis(board):

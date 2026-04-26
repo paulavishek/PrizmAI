@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Traceability Matrix — {{ board.name }} | PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .matrix-table th, .matrix-table td { font-size: .8rem; text-align: center; vertical-align: middle; }
+    .matrix-table .req-cell { min-width: 30px; }
+    .matrix-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+    .matrix-dot.linked { background: #198754; }
+    .matrix-dot.unlinked { background: #dee2e6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:.85rem;">
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'requirements:dashboard' board.id %}">Requirements</a></li>
+            <li class="breadcrumb-item active">Traceability Matrix</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="fas fa-project-diagram me-2 text-primary"></i>Traceability Matrix</h4>
+        <a href="{% url 'requirements:dashboard' board.id %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Back to Requirements
+        </a>
+    </div>
+
+    <!-- Coverage Summary -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="fs-5 fw-bold text-primary">{{ requirements|length }}</div>
+                    <small class="text-muted">Total Requirements</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="fs-5 fw-bold text-success">{{ covered_count }}</div>
+                    <small class="text-muted">With Tasks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="fs-5 fw-bold text-warning">{{ uncovered_count }}</div>
+                    <small class="text-muted">Without Tasks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="fs-5 fw-bold">{{ coverage_pct }}%</div>
+                    <small class="text-muted">Coverage</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Objectives × Requirements Matrix -->
+    {% if objectives and requirements %}
+    <div class="card mb-4">
+        <div class="card-header py-2"><strong>Objectives × Requirements</strong></div>
+        <div class="table-responsive">
+            <table class="table table-bordered matrix-table mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="text-align:left;min-width:200px;">Objective</th>
+                        {% for req in requirements %}
+                        <th class="req-cell" title="{{ req.identifier }}: {{ req.title }}">{{ req.identifier }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in obj_matrix %}
+                    <tr>
+                        <td style="text-align:left;">{{ row.objective.title|truncatewords:8 }}</td>
+                        {% for linked in row.links %}
+                        <td><span class="matrix-dot {% if linked %}linked{% else %}unlinked{% endif %}" title="{% if linked %}Linked{% else %}Not linked{% endif %}"></span></td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Requirements × Tasks Matrix -->
+    {% if requirements and tasks %}
+    <div class="card">
+        <div class="card-header py-2"><strong>Requirements × Tasks</strong></div>
+        <div class="table-responsive">
+            <table class="table table-bordered matrix-table mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="text-align:left;min-width:200px;">Requirement</th>
+                        {% for task in tasks %}
+                        <th class="req-cell" title="{{ task.title }}">{{ task_prefix }}-{{ task.id }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in task_matrix %}
+                    <tr>
+                        <td style="text-align:left;">
+                            <a href="{% url 'requirements:requirement_detail' board.id row.requirement.pk %}">
+                                {{ row.requirement.identifier }}
+                            </a>
+                            {{ row.requirement.title|truncatewords:5 }}
+                        </td>
+                        {% for linked in row.links %}
+                        <td><span class="matrix-dot {% if linked %}linked{% else %}unlinked{% endif %}"></span></td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not requirements %}
+    <div class="text-center text-muted py-5">
+        <i class="fas fa-project-diagram fa-3x mb-3 d-block"></i>
+        <p>No requirements to show in the traceability matrix.</p>
+        <a href="{% url 'requirements:requirement_create' board.id %}" class="btn btn-primary btn-sm">Create a Requirement</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1171,6 +1171,38 @@
     #hierarchy-navigator .hn-preview-slot .fw-semibold.small { font-size: 0.85rem !important; }
     #hierarchy-navigator .hn-preview-slot p.text-muted { font-size: 0.82rem !important; }
     #hierarchy-navigator .hn-preview-slot .d-flex span { font-size: 0.8rem !important; }
+
+    /* ── Hierarchy Navigator: card description overflow prevention ── */
+    #hierarchy-navigator .hn-item .card-body {
+        overflow: hidden;
+    }
+    #hierarchy-navigator .hn-item .card-body .flex-grow-1 {
+        min-width: 0;
+        overflow: hidden;
+    }
+    #hierarchy-navigator .hn-item .card-body h6 {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+    #hierarchy-navigator .hn-item .card-body small.text-muted {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        word-break: break-word;
+    }
+    #hierarchy-navigator .hn-expand p.text-muted {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        word-break: break-word;
+    }
 </style>
 {% endblock %}
 
@@ -1364,7 +1396,7 @@
                 <div class="d-flex align-items-center gap-3 flex-wrap">
                     <!-- Title — always visible -->
                     <h6 class="mb-0 fw-bold flex-shrink-0">
-                        <i class="fas fa-bolt text-warning me-1"></i> Your Focus Today
+                        <i class="fas fa-bolt text-warning me-1"></i> Focus Today
                     </h6>
                     <!-- Badges rendered server-side to prevent flash -->
                     {% if dc_total_count > 0 %}
@@ -1693,6 +1725,11 @@
                                 {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.68rem;">Overdue</span>{% endif %}
                             </div>
                             {% endif %}
+                            {% if my_tasks_sort_by == 'recent' %}
+                            <div style="font-size:0.78rem;" class="text-muted">
+                                <i class="far fa-clock me-1"></i>Updated {{ task.updated_at|timesince }} ago
+                            </div>
+                            {% endif %}
                             <div class="d-flex align-items-center gap-2 mt-1">
                                 <div class="progress flex-grow-1" style="height:5px;">
                                     <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
@@ -1761,41 +1798,30 @@
                 {% endif %}
                 {% if daily_briefing.risk %}
                 <div class="col-md-4">
-                    {% if daily_briefing.top_risk %}
-                    <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
-                       class="briefing-item briefing-item-clickable briefing-item-risk d-block text-decoration-none"
-                       title="View task: {{ daily_briefing.top_risk.task.title }}">
-                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
-                        <div class="mt-2">
-                            <span class="fw-semibold d-block"
-                               style="font-size:0.82rem; color:#1e3a8a;">
-                                {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
-                            </span>
-                            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
-                                {% if daily_briefing.top_risk.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.75rem;">Critical</span>
+                    <div class="briefing-item briefing-item-risk">
+                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Items{% if daily_briefing.top_risks %} ({{ daily_briefing.top_risks|length }}){% endif %}</span>
+                        {% if daily_briefing.top_risks %}
+                        <div class="mt-2 d-flex flex-column gap-2">
+                            {% for risk_item in daily_briefing.top_risks %}
+                            <a href="{% url 'task_detail' risk_item.task.id %}"
+                               class="d-flex align-items-start gap-2 text-decoration-none"
+                               title="View task: {{ risk_item.task.title }}">
+                                {% if risk_item.risk_level == 'critical' %}
+                                    <span class="badge bg-danger flex-shrink-0" style="font-size:0.7rem; margin-top:2px;">Critical</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.75rem;">High Risk</span>
+                                    <span class="badge bg-warning text-dark flex-shrink-0" style="font-size:0.7rem; margin-top:2px;">High</span>
                                 {% endif %}
-                                <small class="text-muted" style="font-size:0.78rem;">
-                                    <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
-                                </small>
-                                {% if daily_briefing.top_risk.board_name %}
-                                <small class="text-muted" style="font-size:0.78rem;">
-                                    <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
-                                </small>
-                                {% endif %}
-                            </div>
+                                <div>
+                                    <span class="d-block fw-semibold" style="font-size:0.8rem; color:#1e3a8a; line-height:1.3;">{{ risk_item.task.title|truncatechars:42 }}</span>
+                                    <span class="text-muted" style="font-size:0.74rem;">
+                                        <i class="fas fa-calendar-alt me-1"></i>{{ risk_item.due_label }}{% if risk_item.board_name %} · {{ risk_item.board_name|truncatechars:18 }}{% endif %}
+                                    </span>
+                                </div>
+                            </a>
+                            {% endfor %}
                         </div>
-                        <div class="briefing-action-footer" style="color:#92400e;">
-                            View task <i class="fas fa-arrow-right ms-1"></i>
-                        </div>
-                    </a>
-                    {% else %}
-                    <div class="briefing-item">
-                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
+                        {% endif %}
                     </div>
-                    {% endif %}
                 </div>
                 {% endif %}
                 {% if daily_briefing.action %}

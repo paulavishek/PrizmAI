@@ -271,6 +271,8 @@ def summarize_board_analytics_task(self, board_id, user_id):
             'tasks_by_column': tasks_by_column,
             'tasks_by_priority': tasks_by_priority,
             'tasks_by_user': tasks_by_user,
+            'board_name': board.name,
+            'project_type': board.project_type or 'general',
         }
 
         _send_status(task_id, 'Generating AI insights…', 60)

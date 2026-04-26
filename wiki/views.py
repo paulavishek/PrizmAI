@@ -581,7 +581,9 @@ def quick_link_wiki(request, content_type, object_id):
     if not org:
         org = demo_org
     
-    # Get boards scoped to user's current workspace (demo-aware)\n    from kanban.utils.demo_protection import get_user_boards\n    accessible_boards = get_user_boards(request.user)
+    # Get boards scoped to user's current workspace (demo-aware)
+    from kanban.utils.demo_protection import get_user_boards
+    accessible_boards = get_user_boards(request.user)
     
     if content_type == 'task':
         # MVP Mode: Allow tasks from any accessible board
@@ -613,6 +615,17 @@ def quick_link_wiki(request, content_type, object_id):
                     'created_by': request.user,
                     'description': form.cleaned_data['link_description']
                 }
+            )
+        
+        # Record activity log for wiki page linking on tasks
+        if content_type == 'task':
+            from kanban.models import TaskActivity
+            page_names = ', '.join([p.title for p in pages])
+            TaskActivity.objects.create(
+                task=item,
+                user=request.user,
+                activity_type='updated',
+                description=f"Linked wiki page(s) '{page_names}' to '{item.title}'"
             )
         
         # Check if this is an AJAX request

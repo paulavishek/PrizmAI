@@ -17,7 +17,7 @@
     <div class="row mb-4 align-items-center">
         <div class="col-md-6">
             <h2><i class="fas fa-history"></i> Retrospectives</h2>
-            <p class="text-muted mb-0">{{ board.name }} â€” AI-powered analysis of what went well and what needs improvement</p>
+            <p class="text-muted mb-0">{{ board.name }} — AI-powered analysis of what went well and what needs improvement</p>
         </div>
         <div class="col-md-3 text-end">
             <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-info w-100 mb-2">
@@ -172,8 +172,14 @@
         {% empty %}
         <div class="col-12">
             <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i> No retrospectives found. 
-                <a href="{% url 'retrospective_create' board.id %}">Generate your first retrospective</a> to start tracking improvements.
+                <i class="fas fa-info-circle"></i>
+                {% if status_filter or type_filter %}
+                    No retrospectives match your current filters.
+                    <a href="{% url 'retrospective_list' board.id %}">Clear filters</a> to see all retrospectives.
+                {% else %}
+                    No retrospectives yet.
+                    <a href="{% url 'retrospective_create' board.id %}">Generate your first retrospective</a> to start tracking improvements.
+                {% endif %}
             </div>
         </div>
         {% endfor %}

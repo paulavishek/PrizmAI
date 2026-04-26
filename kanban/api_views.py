@@ -736,7 +736,9 @@ def summarize_board_analytics_api(request, board_id):
             ],
             'tasks_by_column': tasks_by_column,
             'tasks_by_priority': tasks_by_priority,
-            'tasks_by_user': tasks_by_user
+            'tasks_by_user': tasks_by_user,
+            'board_name': board.name,
+            'project_type': board.project_type or 'general',
         }
         
         # Generate analytics summary
@@ -933,7 +935,9 @@ def download_analytics_summary_pdf(request, board_id):
             ],
             'tasks_by_column': tasks_by_column,
             'tasks_by_priority': tasks_by_priority,
-            'tasks_by_user': tasks_by_user
+            'tasks_by_user': tasks_by_user,
+            'board_name': board.name,
+            'project_type': getattr(board, 'project_type', '') or 'general',
         }
         
         # Generate analytics summary using AI
@@ -1154,14 +1158,19 @@ def download_analytics_summary_pdf(request, board_id):
                 elements.append(heading_para)
             # Check if it's a bullet point
             elif line.startswith('*') or line.startswith('-'):
-                bullet_text = line.lstrip('*- ').strip()
+                # Remove only the leading bullet marker (* or -) and following spaces
+                bullet_text = re.sub(r'^[*\-]\s*', '', line).strip()
                 # Replace **bold** with <b>bold</b>
                 bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+                # Remove any remaining stray asterisks
+                bullet_text = bullet_text.replace('*', '')
                 bullet_para = Paragraph(f"• {bullet_text}", body_style)
                 elements.append(bullet_para)
             else:
                 # Regular text - replace **bold** with <b>bold</b>
                 formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+                # Remove any remaining stray asterisks
+                formatted_line = formatted_line.replace('*', '')
                 text_para = Paragraph(formatted_line, body_style)
                 elements.append(text_para)
         
@@ -2335,6 +2344,7 @@ def add_checklist_item(request):
             title=title,
             position=task.checklist_items.count(),
             source='manual',
+            priority='low',
         )
         return JsonResponse({
             'success': True,

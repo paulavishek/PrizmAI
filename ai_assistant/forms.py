@@ -4,6 +4,7 @@ from .models import AIAssistantSession, UserPreference
 
 class AISessionForm(forms.ModelForm):
     """Form for creating/editing AI Assistant sessions"""
+    required_css_class = 'required'
     
     class Meta:
         model = AIAssistantSession

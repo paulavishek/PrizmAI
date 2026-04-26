@@ -26,6 +26,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
 - **Board Automations** — Trigger-based rules for repetitive workflows *(Professional mode and above)*; scheduled recurring automations *(Enterprise mode)*
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
+- **Requirements Analysis** — AI-powered requirement lifecycle management with full traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. AI capabilities include: **Quality Scoring** (per-requirement analysis across clarity, completeness, testability, unambiguity, and feasibility dimensions), **Gap Detection** (identify uncovered objectives, orphaned tasks, and missing requirement areas), **Acceptance Criteria Generation** (auto-generate Given/When/Then criteria from requirement descriptions), and **Impact Analysis** (downstream impact assessment for linked tasks, child requirements, and objectives). Spectra AI can answer questions about requirement status, coverage gaps, quality scores, and traceability. Accessible from the AI Tools panel → Manage section on the board page. *(Professional mode and above)*
 
 ### Strategic Alignment
 
@@ -53,6 +54,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **AI Retrospectives** — Auto-generated lessons learned with improvement tracking
 - **Skill Gap Analysis** — Team capability mapping against task requirements, with individual development plans
 - **Resource Leveling & Workload Optimization** — Intelligent workload balancing and assignment suggestions
+- **Requirements AI Analysis** — Gemini-powered requirement quality scoring (clarity, completeness, testability, unambiguity, feasibility), gap detection across objectives and tasks, automatic acceptance criteria generation in Given/When/Then format, and downstream impact analysis. Results are surfaced both in the Requirements UI and through Spectra chat queries.
 - **AI Bubble-up Summaries** — On-demand AI summaries generated and propagated at every level of the hierarchy (task, board, strategy, mission)
 - **Deadline Prediction & Risk Assessment** — AI-powered deadline estimates and risk scoring with mitigation suggestions
 - **Semantic Task Search** — Find tasks by meaning and intent, not just keywords
@@ -63,14 +65,14 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Scope Creep Autopsy** — Forensic post-mortem analysis that traces every scope expansion to its exact cause, contributor, date, and cost or delay impact. Generates exportable PDF reports that turn scope history into actionable lessons for future projects.
 - **What-If Scenario Analyzer** — A decision-support engine that lets PMs simulate the cascading impact of three key variables before committing: scope changes (±20 tasks), team size adjustments (±5 members, modeled with Brooks's Law), and deadline shifts (±8 weeks). Each simulation computes a live baseline from velocity history, budget, and burndown data, then produces a projected state with a feasibility score (0–100), detected conflicts (resource overload, deadline infeasibility, budget overrun), a before/after comparison table, and a Gemini-powered strategic recommendation. Scenarios can be saved, starred, and reloaded for ongoing comparison.
 - **Shadow Board — Parallel Universe Simulator** — Takes What-If further: instead of running one scenario and discarding it, Shadow Board lets you promote saved scenarios into living, parallel *branches* of your project. Each branch keeps updating automatically as real work progresses, so you can compare "hire 3 contractors" vs "cut 5 tasks" side-by-side with live feasibility scores, AI recommendations, and projected completion dates — all powered by Gemini. When you're ready to decide, commit one branch to reality and archive the rest with a full audit trail. See the [Shadow Board guide](#shadow-board--parallel-universe-simulator-1) below.
-- **Living Commitment Protocols (Anti-Roadmap)** — Replace rigid, pretend-certain project plans with living commitments that honestly track how confident your team actually is. Each protocol has a real-time confidence score that decays automatically over time, a prediction market where team members bet tokens on outcomes, an AI coach that triggers renegotiation when confidence drops too low, and a full signal log showing every event that moved the needle. See the [Living Commitment Protocols guide](#living-commitment-protocols--anti-roadmap) below.
+- **Project Confidence & Signals (integrated into Triple Constraint Dashboard)** — Instead of a standalone commitment tracker, PrizmAI auto-computes a composite confidence score (0–100) for every board by analysing three dimensions in real time: **Scope** (how much scope has changed), **Budget** (spend vs. allocation), and **Schedule** (delay probability from burndown data). A unified Signal Log records every event that moves the needle — task completions, budget changes, scope shifts — and team members can log manual signals too. When confidence drops below 40%, the AI Coach automatically proposes three concrete recovery options (reduce scope, extend timeline, add resources). The full confidence history, trend chart, and signal log live on the [Triple Constraint Dashboard](#project-confidence--signals).
 - **Exit Protocol — Project Wind-Down System** — A structured, compassionate system for ending projects deliberately instead of letting them die quietly. When a project is struggling, PrizmAI watches for warning signs and guides the team through a dignified wind-down: extracting all reusable knowledge, generating transition memos for every team member, archiving the project with a full AI-written autopsy report, and preserving the lessons in a searchable Project Cemetery. Reusable components (templates, workflows, automation rules) can be transplanted into future projects. Buried projects can even be "resurrected" as a fresh board pre-loaded with all the lessons from the original. See the [Exit Protocol guide](#exit-protocol--project-wind-down-system-1) below.
 
 ### Enterprise & Collaboration
 
 - **Role-Based Access Control (RBAC)** — Four roles — Org Admin, Owner, Member, and Viewer — control exactly what each person can see and do. Access flows downward automatically through the Goal → Mission → Strategy → Board hierarchy. Board members can view parent Strategy, Mission, and Goal names in read-only mode (upward visibility), but cannot edit parent levels without a separate explicit invitation. Budget data and strategic goals are restricted to Owners and Org Admins. A user becomes an Org Admin by creating an organisation during onboarding or by being promoted via the Member management page. Django superusers bypass board-level access checks but do not automatically hold the Org Admin role.
-- **Workspace Preset System** — Three progressive complexity tiers — **Lean**, **Professional**, and **Enterprise** — let Org Admins tune the interface to match their team's size and needs. Lean surfaces a clean Kanban board, calendar, Spectra chat, and one analytics chart. Professional unlocks Gantt Charts, Burndown, Goals & Missions navigation, AI Retrospectives, Skill Gap Analysis, full Analytics, and trigger-based Automations. Enterprise adds Shadow Board, What-If Simulator, Pre-Mortem, Stress Test, Commitment Protocols, Scope Autopsy, Resource Optimization, Scheduled Automations, Exit Protocol, and Budget / ROI tools. Board Owners can further restrict individual boards to a lower tier, but can never exceed the org-wide ceiling. The global preset is configured in **Workspace Settings** (sidebar → profile menu → Workspace Settings, Org Admins only). New organisations default to Lean; existing organisations migrated to Enterprise.
-- **Decision Center** — A unified morning review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
+- **Workspace Preset System** — Three progressive complexity tiers — **Lean**, **Professional**, and **Enterprise** — let Org Admins tune the interface to match their team's size and needs. Lean surfaces a clean Kanban board, calendar, Spectra chat, and one analytics chart. Professional unlocks Gantt Charts, Burndown, Goals & Missions navigation, AI Retrospectives, Skill Gap Analysis, full Analytics, and trigger-based Automations. Enterprise adds Shadow Board, What-If Simulator, Pre-Mortem, Stress Test, Project Confidence & Signals, Scope Autopsy, Resource Optimization, Scheduled Automations, Exit Protocol, and Budget / ROI tools. Board Owners can further restrict individual boards to a lower tier, but can never exceed the org-wide ceiling. The global preset is configured in **Workspace Settings** (sidebar → profile menu → Workspace Settings, Org Admins only). New organisations default to Lean; existing organisations migrated to Enterprise.
+- **Focus Today** — A unified daily review dashboard that batches conflicts, risks, overdue tasks, over-allocations, scope alerts, budget warnings, and AI recommendations into a prioritized daily queue with AI-generated briefings
 - **Favorites Sidebar** — Star and reorder boards, goals, tasks, wiki pages, and other items for quick access from the sidebar
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
 - **Real-Time Messaging** — WebSocket-powered team chat with @mentions, notifications, and **AI Message Composer** — type a rough draft and let AI rewrite it as a polished, professional team update in one click
@@ -344,95 +346,51 @@ It's a one-glance answer to: *"Did today's work make our decision easier or hard
 
 ---
 
-## Living Commitment Protocols — Anti-Roadmap
+## Project Confidence & Signals
 
-> **In plain English:** A traditional project plan says "we will ship by June 15th" and never updates that statement even when reality changes. Living Commitment Protocols replace that false certainty with an honest answer: *"Right now, we're 72% confident we'll hit this target — and here's exactly why that number moved since last week."*
+> **In plain English:** Instead of a standalone commitment tracker with manual setup, PrizmAI now auto-computes a Project Confidence score for every board — no configuration required. It analyses your scope changes, budget usage, and schedule health in real time, then shows you a single number (0–100) that honestly answers: *"How likely is this project to land on time and on budget?"*
 
 ### Why it exists
 
-Roadmaps lie — not because teams are dishonest, but because plans made months in advance can't account for blockers, team changes, shifting requirements, and the dozen small surprises that hit every project. The result: PMs report green status until the very last week, then the deadline slips.
+Roadmaps lie — not because teams are dishonest, but because plans made months in advance can't account for blockers, team changes, shifting requirements, and the dozen small surprises that hit every project. The old Commitment Protocols required manual setup per commitment; the new system is **zero-configuration** — it reads data that already exists on your board.
 
-Living Commitment Protocols treat **confidence as a first-class measurement**. Instead of pretending certainty, your team publicly tracks how likely each commitment actually is — and the system automatically warns you when confidence is eroding before it's too late to act.
+### How the confidence score works
 
-### The four parts of a Commitment Protocol
+The composite score (0–100) is a weighted blend of three dimensions, each scored independently:
 
-#### 📉 Confidence Decay
+| Dimension | Weight | What it measures |
+|---|---|---|
+| **Scope** | 30% | How much scope has changed vs. original task count — 0% change = 100, >40% = 0 |
+| **Budget** | 30% | Spend ratio — ≤70% used = 100, 100% = 30, >120% = 0 |
+| **Schedule** | 40% | Delay probability from burndown forecasting, adjusted by risk level |
 
-Every commitment starts with an initial confidence score (e.g., 80%). That score **automatically decreases over time** based on a decay model you choose when creating the protocol:
+A **signal adjustment** (±10 max) nudges the composite score based on recent positive or negative events. Scores recalculate automatically every 6 hours via a background Celery task, and you can trigger a manual recalculation from the dashboard.
 
-- **Exponential** — Confidence drops quickly at first, then levels off. Good for near-term commitments where uncertainty is front-loaded.
-- **Linear** — Confidence drops at a steady, predictable rate. Good for long, stable projects.
-- **Stepped** — Confidence holds steady, then drops sharply when milestones are missed. Good for phase-gated projects.
+### The Signal Log
 
-You set a **half-life** (e.g., 14 days) which controls how fast the decay happens. After 14 days with no positive news, the confidence score halves. The **Confidence Curve** chart shows both what actually happened historically and where the score is heading if nothing changes.
+Anything that happens on the project is recorded as a **Project Signal** with a strength value (-1.0 to +1.0). Signals come from two sources:
 
-#### 🎯 Prediction Market
+- **Automatic** — Task completions (+0.15), new tasks added (-0.05), task deletions (neutral), budget changes, and schedule shifts are logged automatically by PrizmAI
+- **Manual** — Team members can record signals from the Triple Constraint Dashboard: milestone hit, blocker emerged, stakeholder approval, requirement change, team change, or a custom event. Each signal requires a short description
 
-Team members can each place a **bet** on what they think the final outcome will be. They wager **tokens** (100 per person, reset weekly) on their prediction.
+The Signal Log table on the dashboard shows the 20 most recent signals — type, impact direction, description, timestamp, and whether it was AI-generated or manual.
 
-Why bets? When people put even a small stake behind their opinion, they share honest assessments instead of socially safe ones. The **Market Consensus** — a weighted average of all bets — is often more accurate than the official score because it surfaces what the team *actually* believes privately.
+### AI Coach recovery (auto-renegotiation)
 
-When at least 3 bets are placed, the market opens and shows:
-- **Weighted consensus** — Each person's bet is weighted by their past accuracy (credibility score)
-- **Divergence** — How far the team's honest view is from the official confidence score. A big divergence is an early warning sign.
-- **Total tokens wagered** — How much conviction is behind the market
+When the composite confidence score drops below **40%**, the AI Coach automatically creates a **confidence_drop** coaching suggestion with three structured recovery options:
 
-After the deadline, bets are resolved and accurate predictors earn better credibility scores, making their future bets count more.
+1. **Reduce Scope** — Cut low-priority items to restore feasibility
+2. **Extend Timeline** — Negotiate a realistic new deadline
+3. **Add Resources** — Bring in additional team members or budget
 
-#### 📡 Signal Log
+These appear as recovery cards in the coaching panel, each with a clear description of the trade-offs involved.
 
-Anything that happens on the project can **push the confidence score up or down** in real time. Signals come from two sources:
+### Where to find it
 
-- **Automatic** — When tasks linked to a protocol are completed, added, or deleted, PrizmAI automatically logs a signal and adjusts the score
-- **Manual** — Team members can log their own signals from the detail page: milestone hit, blocker emerged, stakeholder approval, team change, etc. Each signal requires a short description of what happened
-
-The Signal Log tab shows every event in order — what type it was, how much it moved the score, and who recorded it.
-
-#### 🤝 AI Renegotiation Bot
-
-When confidence drops below a **negotiation threshold** you set (e.g., 30%), PrizmAI's AI coach automatically steps in and opens a **Negotiation Session**. The bot:
-1. Reads the full history of the commitment — all signals, bets, and the original plan
-2. Drafts a plain-English message explaining what's going wrong and why
-3. Proposes **three concrete options** to restore confidence, each with an impact assessment
-
-The team reviews the options and picks one (or writes a custom resolution). The protocol then moves to *Renegotiated* status and the new terms are recorded permanently.
-
-### Creating a Commitment Protocol
-
-From any board, click the **Commitments** tab in the top navigation (next to Kanban, Gantt, Calendar), then click **New Protocol**. Fill in:
-
-| Field | What to enter |
-|---|---|
-| **Title** | A short, clear name — e.g., "Ship Mobile App v2" |
-| **Description** | What exactly you're committing to |
-| **Target date** | The deadline |
-| **Initial confidence** | Your honest starting confidence (0–100%) |
-| **Decay model** | Exponential, linear, or stepped |
-| **Half-life (days)** | How many days before confidence halves without new signals |
-| **Negotiation threshold** | The confidence % that triggers the AI renegotiation bot |
-| **Linked tasks** | Optional — tasks from this board that affect this commitment |
-
-### The portfolio view
-
-The **Commitments dashboard** shows all protocols for a board at a glance — portfolio-level confidence, individual protocol cards with live confidence bars, and counts of at-risk and critical protocols at the top.
-
-### Status meanings
-
-| Status | What it means |
-|---|---|
-| **Active** | On track, confidence above the warning threshold |
-| **At Risk** | Confidence is declining — worth watching |
-| **Critical** | Confidence has fallen to a dangerous level |
-| **Renegotiated** | The team has agreed new terms after a negotiation session |
-| **Met** | Deadline passed and the commitment was fulfilled |
-| **Missed** | Deadline passed and the commitment was not fulfilled |
-
-### Getting to Commitment Protocols
-
-- From any board, click the **Commitments** tab in the navigation bar at the top of the board *(visible in Enterprise mode only — ask your Org Admin to upgrade the workspace preset if the tab is not shown)*
-- Or navigate directly to `/boards/<board-id>/commitments/` — if your workspace is not on Enterprise mode, you will be redirected to the Kanban view
-- A summary widget also appears on the **Triple Constraint Dashboard**
-- You can ask **Spectra** directly: *"What is the status of commitment #1?"*, *"Show me all at-risk commitments"*, or *"Place a bet of 5 tokens at 65% confidence on commitment #1"*
+- Open the **Triple Constraint Dashboard** from any board (AI Tools → Analyse → Triple Constraint). The **Project Confidence** section sits between the What-If Simulator and the AI Analysis
+- The section shows: the composite score circle (colour-coded green/yellow/orange/red), three dimension bars, the 30-day trend chart, and the signal log
+- You can record a manual signal or trigger a recalculation directly from the dashboard
+- Old `/boards/<board-id>/commitments/` URLs automatically redirect to the Triple Constraint Dashboard
 
 ---
 
@@ -515,8 +473,8 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 | Conflict detections and resolution patterns | Yes |
 | Stakeholders and engagement metrics | Yes |
 | Chat rooms and messages | Yes |
-| Commitment protocols (signals, bets, credibility scores) | Yes |
-| Decision Center items | Yes |
+| Project confidence scores and signal log | Yes |
+| Focus Today items | Yes |
 | Wiki links and knowledge base entries | Yes |
 | AI coaching suggestions and PM metrics | Yes |
 | Real user memberships from the template | No — you are the sole real Owner |
@@ -550,7 +508,7 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 | **Spectra Agentic Mode** | — | _v2.0_ | _v2.0_ |
 | **Shadow Board & What-If** | — | — | ✅ |
 | **Pre-Mortem & Stress Test** | — | — | ✅ |
-| **Commitment Protocols** | — | — | ✅ |
+| **Project Confidence & Signals** | — | — | ✅ |
 | **Scope Autopsy & Exit Protocol** | — | — | ✅ |
 | **Budget & ROI Dashboard** | — | — | ✅ |
 | **Resource Optimization** | — | — | ✅ |
@@ -561,7 +519,8 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 Locked features are never silently removed — they act as *passive upgrade advertisements* (the same pattern used by Linear, Notion, and Figma):
 
 - **Sidebar links** (Goals, Missions) — hidden entirely in Lean mode to keep navigation uncluttered
-- **Board view tabs** (Gantt, Commitments) — hidden in the tab bar; a direct URL redirect returns the user to the Kanban view with an info message
+- **Board view tabs** (Gantt) — hidden in the tab bar; a direct URL redirect returns the user to the Kanban view with an info message
+- **AI Tools panel tiles** (Commitments, Requirements) — shown as locked tiles in the Manage section with a tooltip explaining which tier unlocks them
 - **Board panel tiles** (Shadow Board, Pre-Mortem, etc.) — visible as greyed-out locked tiles with a tooltip explaining which tier unlocks them
 - **Analytics charts** — the three advanced charts (Priority, User Workload, Lean Six Sigma) appear as blurred/greyed preview cards with a lock badge; the column-distribution chart always renders in full
 

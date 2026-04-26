@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Requirements — {{ board.name }} | PrizmAI{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:.85rem;">
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">Requirements</li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="fas fa-clipboard-list me-2 text-primary"></i>Requirements Analysis</h4>
+        <div class="d-flex gap-2">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Back to Board
+            </a>
+            {% if can_edit %}
+            <a href="{% url 'requirements:category_create' board.id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-folder-plus me-1"></i>Add Category
+            </a>
+            <a href="{% url 'requirements:requirement_create' board.id %}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus me-1"></i>New Requirement
+            </a>
+            {% endif %}
+            <button class="btn btn-outline-info btn-sm" id="btnGapAnalysis" onclick="runGapAnalysis()">
+                <i class="fas fa-search-plus me-1"></i>AI Gap Analysis
+            </button>
+            <a href="{% url 'requirements:traceability_matrix' board.id %}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-project-diagram me-1"></i>Traceability Matrix
+            </a>
+            <a href="{% url 'requirements:export_csv' board.id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i>Export CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- AI Gap Analysis Result -->
+    <div id="gapAnalysisResult" class="card mb-3 border-info" style="display:none;">
+        <div class="card-header py-2 bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+            <strong><i class="fas fa-search-plus me-1"></i>AI Gap Analysis</strong>
+            <button class="btn btn-sm btn-close" onclick="document.getElementById('gapAnalysisResult').style.display='none'"></button>
+        </div>
+        <div class="card-body py-2" id="gapAnalysisContent">
+            <div class="text-center py-3"><i class="fas fa-spinner fa-spin me-1"></i>Analyzing...</div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-primary">{{ total }}</div>
+                    <small class="text-muted">Total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-warning">{{ status_counts.draft|default:"0" }}</div>
+                    <small class="text-muted">Draft</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-info">{{ status_counts.in_review|default:"0" }}</div>
+                    <small class="text-muted">In Review</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-success">{{ status_counts.approved|default:"0" }}</div>
+                    <small class="text-muted">Approved</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold" style="color:#6f42c1;">{{ status_counts.implemented|default:"0" }}</div>
+                    <small class="text-muted">Implemented</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold">{{ coverage_pct }}%</div>
+                    <small class="text-muted">Task Coverage</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search requirements..." value="{{ search }}">
+                </div>
+                <div class="col-md-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">All Statuses</option>
+                        {% for val, label in status_choices %}
+                        <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="type" class="form-select form-select-sm">
+                        <option value="">All Types</option>
+                        {% for val, label in type_choices %}
+                        <option value="{{ val }}" {% if type_filter == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="priority" class="form-select form-select-sm">
+                        <option value="">All Priorities</option>
+                        {% for val, label in priority_choices %}
+                        <option value="{{ val }}" {% if priority_filter == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="category" class="form-select form-select-sm">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if category_filter == cat.id|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-sm btn-primary w-100"><i class="fas fa-filter"></i></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Requirements Table -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" style="font-size:.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:90px;">ID</th>
+                        <th>Title</th>
+                        <th style="width:110px;">Type</th>
+                        <th style="width:100px;">Status</th>
+                        <th style="width:90px;">Priority</th>
+                        <th style="width:120px;">Category</th>
+                        <th style="width:80px;">Tasks</th>
+                        <th style="width:100px;">Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requirements %}
+                    <tr style="cursor:pointer;" onclick="window.location='{% url 'requirements:requirement_detail' board.id req.pk %}'">
+                        <td><code>{{ req.identifier }}</code></td>
+                        <td>
+                            <strong>{{ req.title }}</strong>
+                            {% if req.children.count > 0 %}
+                            <span class="badge bg-light text-dark ms-1" title="Has {{ req.children.count }} sub-requirements">
+                                <i class="fas fa-sitemap"></i> {{ req.children.count }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-secondary">{{ req.get_type_display }}</span></td>
+                        <td>
+                            {% if req.status == 'draft' %}
+                            <span class="badge bg-warning text-dark">Draft</span>
+                            {% elif req.status == 'in_review' %}
+                            <span class="badge bg-info">In Review</span>
+                            {% elif req.status == 'approved' %}
+                            <span class="badge bg-success">Approved</span>
+                            {% elif req.status == 'rejected' %}
+                            <span class="badge bg-danger">Rejected</span>
+                            {% elif req.status == 'implemented' %}
+                            <span class="badge" style="background:#6f42c1;color:#fff;">Implemented</span>
+                            {% elif req.status == 'verified' %}
+                            <span class="badge bg-dark">Verified</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if req.priority == 'critical' %}
+                            <span class="badge bg-danger">Critical</span>
+                            {% elif req.priority == 'high' %}
+                            <span class="badge bg-warning text-dark">High</span>
+                            {% elif req.priority == 'medium' %}
+                            <span class="badge bg-primary">Medium</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Low</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ req.category.name|default:"—" }}</td>
+                        <td>{{ req.linked_tasks.count }}</td>
+                        <td>{{ req.created_at|date:"M d" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="fas fa-clipboard-list fa-2x mb-2 d-block"></i>
+                            No requirements yet.
+                            {% if can_edit %}
+                            <a href="{% url 'requirements:requirement_create' board.id %}">Create your first requirement</a>.
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function _esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
+function runGapAnalysis() {
+    var box = document.getElementById('gapAnalysisResult');
+    var content = document.getElementById('gapAnalysisContent');
+    box.style.display = '';
+    content.innerHTML = '<div class="text-center py-3"><div class="prizm-spinner prizm-spinner--sm mb-2"></div><div class="prizm-loading-message-inline" id="gapLoadMsg">Running AI gap analysis\u2026</div></div>';
+    if (typeof PrizmLoading !== 'undefined') PrizmLoading.rotateMessages(document.getElementById('gapLoadMsg'), PrizmLoading.messages.requirementGap);
+
+    var csrfToken = '{{ csrf_token }}';
+    fetch('{% url "requirements:ai_gap_analysis" board.id %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        var sevMap = {critical:'bg-danger',high:'bg-warning text-dark',medium:'bg-primary',low:'bg-success',info:'bg-secondary'};
+        var html = '';
+
+        // Summary
+        if (d.summary) {
+            html += '<div class="d-flex align-items-center gap-2 mb-2">' +
+                '<span class="badge ' + (sevMap[d.severity]||'bg-secondary') + '">' + _esc(d.severity||'info') + '</span>' +
+                '<span>' + _esc(d.summary) + '</span></div>';
+        }
+        if (d.coverage_assessment) {
+            html += '<p class="small text-muted mb-2">' + _esc(d.coverage_assessment) + '</p>';
+        }
+
+        // Gaps
+        if (d.gaps && d.gaps.length) {
+            html += '<div class="mb-2"><strong class="small">Identified Gaps:</strong>';
+            d.gaps.forEach(function(g) {
+                html += '<div class="d-flex align-items-start gap-2 ms-2 mt-1">' +
+                    '<span class="badge ' + (sevMap[g.severity]||'bg-secondary') + ' mt-1">' + _esc(g.severity) + '</span>' +
+                    '<div><div class="small">' + _esc(g.area) + '</div>' +
+                    '<div class="small text-muted"><i class="fas fa-lightbulb me-1"></i>' + _esc(g.recommendation) + '</div></div></div>';
+            });
+            html += '</div>';
+        }
+
+        // Orphaned tasks
+        if (d.orphaned_tasks && d.orphaned_tasks.length) {
+            html += '<div class="mb-2"><strong class="small">Orphaned Tasks (no linked requirement):</strong>' +
+                '<div class="small text-muted ms-2">';
+            d.orphaned_tasks.slice(0, 10).forEach(function(t) {
+                html += '• ' + _esc(t.title) + ' <span class="badge bg-light text-dark">' + _esc(t.column) + '</span><br>';
+            });
+            if (d.orphaned_tasks.length > 10) html += '... and ' + (d.orphaned_tasks.length - 10) + ' more';
+            html += '</div></div>';
+        }
+
+        // Uncovered objectives
+        if (d.uncovered_objectives && d.uncovered_objectives.length) {
+            html += '<div class="mb-2"><strong class="small text-danger">Uncovered Objectives:</strong>' +
+                '<ul class="mb-0 small">';
+            d.uncovered_objectives.forEach(function(o) { html += '<li>' + _esc(o.title) + '</li>'; });
+            html += '</ul></div>';
+        }
+
+        content.innerHTML = html || '<div class="text-muted">No gaps detected — good coverage!</div>';
+    }).catch(function() {
+        content.innerHTML = '<div class="text-danger">Failed to run gap analysis. Please try again.</div>';
+    });
+}
+</script>
+{% endblock %}

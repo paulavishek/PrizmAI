@@ -1368,6 +1368,43 @@ def _delete_user_board_safely(board):
         pass
 
     try:
+        from kanban.whatif_models import WhatIfScenario
+        WhatIfScenario.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+        BranchDivergenceLog.objects.filter(branch__board=board).delete()
+        BranchSnapshot.objects.filter(branch__board=board).delete()
+        ShadowBranch.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+        PreMortemScenarioAcknowledgment.objects.filter(pre_mortem__board=board).delete()
+        PreMortemAnalysis.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
+        Vaccine.objects.filter(session__board=board).delete()
+        StressTestScenario.objects.filter(session__board=board).delete()
+        ImmunityScore.objects.filter(session__board=board).delete()
+        StressTestSession.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
+        from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+        ScopeTimelineEvent.objects.filter(report__board=board).delete()
+        ScopeAutopsyReport.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
         from exit_protocol.models import (
             HospiceDismissal, CemeteryEntry, ProjectOrgan, HospiceSession,
             ProjectHealthSignal,

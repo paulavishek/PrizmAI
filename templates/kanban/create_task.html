@@ -99,6 +99,7 @@
                                 <span class="badge bg-primary me-2">1</span>
                                 <i class="fas fa-edit text-primary me-1"></i> The Basics
                             </h5>
+                            <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
 
                             <!-- Phase Selection (only visible if board has phases) -->
                             {% if board.num_phases > 0 %}
@@ -113,16 +114,18 @@
                                 {% if form.phase.errors %}
                                     <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
                                 {% endif %}
+                                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Please select a phase.</div>
                             </div>
                             {% endif %}
 
                             <!-- Title -->
                             <div class="mb-3">
-                                <label for="{{ form.title.id_for_label }}" class="form-label">Title <span class="text-danger">*</span></label>
+                                <label for="{{ form.title.id_for_label }}" class="form-label">Title <span class="required-asterisk">*</span></label>
                                 {{ form.title }}
                                 {% if form.title.errors %}
                                     <div class="invalid-feedback d-block">{{ form.title.errors }}</div>
                                 {% endif %}
+                                <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Task title is required.</div>
                             </div>
 
                             <!-- Description with AI Generation -->
@@ -138,7 +141,7 @@
                                     <div class="spinner-border spinner-border-sm text-primary" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Generating description with AI...</span>
+                                    <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="aiDescription">Generating description with AI…</span>
                                 </div>
                                 {% if form.description.errors %}
                                     <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
@@ -554,7 +557,7 @@
                                         <div class="spinner-border spinner-border-sm text-success" role="status">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
-                                        <span class="ms-2 text-muted">Analyzing task complexity...</span>
+                                        <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="complexity">Analyzing task complexity…</span>
                                     </div>
                                     <div id="task-breakdown-result" class="d-none mt-2"></div>
                                 </div>
@@ -603,7 +606,7 @@
                                         <div class="spinner-border spinner-border-sm text-primary" role="status">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
-                                        <span class="ms-2 text-muted">Analyzing with AI...</span>
+                                        <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="classification">Analyzing with AI…</span>
                                     </div>
                                     {% if form.lss_classification.errors %}
                                         <div class="invalid-feedback d-block">{{ form.lss_classification.errors }}</div>
@@ -640,7 +643,7 @@
                                         <div class="spinner-border spinner-border-sm text-info" role="status">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
-                                        <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
+                                        <span class="ms-2 prizm-loading-message-inline small" data-prizm-messages="deadline">Predicting optimal deadline…</span>
                                     </div>
                                     <div id="deadline-prediction-result" class="d-none mt-2"></div>
                                 </div>
@@ -664,7 +667,7 @@
                                         <div class="spinner-border spinner-border-sm text-warning" role="status">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
-                                        <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
+                                        <span class="ms-2 prizm-loading-message-inline small" data-prizm-messages="priority">Analyzing optimal priority…</span>
                                     </div>
                                 </div>
                             </div>
@@ -687,7 +690,7 @@
                                         <div class="spinner-border spinner-border-sm text-info" role="status">
                                             <span class="visually-hidden">Analyzing all task context...</span>
                                         </div>
-                                        <span class="ms-2 text-muted"><i class="fas fa-brain me-1"></i>Deep-analyzing task context, team skills, workload & performance...</span>
+                                        <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="assignee"><i class="fas fa-brain me-1"></i>Analyzing team skills, workload & performance…</span>
                                     </div>
                                     <div id="smart-assignee-suggestion-result" class="d-none mt-2"></div>
                                 </div>
@@ -715,7 +718,7 @@
                                     <div class="spinner-border spinner-border-sm text-info" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted small">Analyzing task...</span>
+                                    <span class="ms-2 prizm-loading-message-inline small" data-prizm-messages="aiAnalysis">Analyzing task…</span>
                                 </div>
                                 <div id="lean-ai-result" class="d-none px-3 pb-3"></div>
                             </div>

@@ -256,9 +256,9 @@
         <button class="analyze-btn" onclick="analyzeDependencies({{ task.id }})">
             <i class="bi bi-lightning"></i> Analyze Dependencies
         </button>
-        <span id="analyze-status" class="ms-3" style="display: none;">
+        <span id="analyze-status" class="ms-3" style="display: none;" data-prizm-container>
             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            Analyzing...
+            <span class="prizm-loading-message-inline" data-prizm-messages="dependency">Analyzing dependencies…</span>
         </span>
     </div>
 

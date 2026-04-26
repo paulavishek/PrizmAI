@@ -110,46 +110,71 @@ JSON array:"""
             'temperature': 0.2,  # Very low for consistent, reproducible skill identification
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 1024,  # Skill list doesn't need many tokens
+            'max_output_tokens': 2048,  # Gemini 2.5 Flash thinking mode needs headroom
+            'response_mime_type': 'application/json',  # Force JSON output from Gemini
         }
 
-        response = model.generate_content(prompt, generation_config=generation_config)
-        response_text = response.text.strip()
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                response = model.generate_content(prompt, generation_config=generation_config)
+                response_text = response.text.strip()
+                
+                # Try direct JSON parse first (response_mime_type should guarantee JSON)
+                try:
+                    skills = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Fallback: extract JSON array from response text
+                    json_match = re.search(r'\[[\s\S]*\]', response_text)
+                    if json_match:
+                        skills = json.loads(json_match.group(0))
+                    else:
+                        if attempt < max_attempts - 1:
+                            logger.warning(f"No valid JSON in skill extraction response (attempt {attempt + 1}), retrying...")
+                            continue
+                        logger.warning(f"No valid JSON found in skill extraction response after {max_attempts} attempts")
+                        return []
+                
+                # Handle if response is a dict wrapping a list
+                if isinstance(skills, dict):
+                    skills = skills.get('skills', skills.get('data', []))
+                
+                if not isinstance(skills, list):
+                    if attempt < max_attempts - 1:
+                        continue
+                    return []
+                
+                # Validate structure
+                valid_skills = []
+                valid_levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
+                
+                for skill in skills:
+                    if isinstance(skill, dict) and 'name' in skill and 'level' in skill:
+                        # Normalize level capitalization
+                        level = skill['level'].capitalize()
+                        if level in valid_levels:
+                            valid_skills.append({
+                                'name': skill['name'].strip(),
+                                'level': level
+                            })
+                
+                # Cache the result
+                if use_cache and ai_cache and valid_skills:
+                    ai_cache.set(prompt, valid_skills, 'skill_analysis')
+                    logger.debug("Skill extraction result cached")
+                
+                logger.info(f"Extracted {len(valid_skills)} skills from task: {task_title}")
+                return valid_skills
+                
+            except json.JSONDecodeError:
+                if attempt < max_attempts - 1:
+                    logger.warning(f"JSON parse error in skill extraction (attempt {attempt + 1}), retrying...")
+                    continue
+                logger.error(f"Failed to parse skill extraction JSON after {max_attempts} attempts")
+                return []
         
-        # Extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r'\[[\s\S]*\]', response_text)
-        if json_match:
-            skills_json = json_match.group(0)
-            skills = json.loads(skills_json)
-            
-            # Validate structure
-            valid_skills = []
-            valid_levels = ['Beginner', 'Intermediate', 'Advanced', 'Expert']
-            
-            for skill in skills:
-                if isinstance(skill, dict) and 'name' in skill and 'level' in skill:
-                    # Normalize level capitalization
-                    level = skill['level'].capitalize()
-                    if level in valid_levels:
-                        valid_skills.append({
-                            'name': skill['name'].strip(),
-                            'level': level
-                        })
-            
-            # Cache the result
-            if use_cache and ai_cache and valid_skills:
-                ai_cache.set(prompt, valid_skills, 'skill_analysis')
-                logger.debug("Skill extraction result cached")
-            
-            logger.info(f"Extracted {len(valid_skills)} skills from task: {task_title}")
-            return valid_skills
-        
-        logger.warning(f"No valid JSON found in skill extraction response")
         return []
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse skill extraction JSON: {str(e)}")
-        return []
     except Exception as e:
         logger.error(f"Error extracting skills from task: {str(e)}")
         return []
@@ -191,7 +216,10 @@ def build_team_skill_profile(board) -> Dict:
                     skill_name = skill.get('name', '').strip()
                     skill_level = skill.get('level', 'Intermediate').capitalize()
                     
+                    # Normalize skill name to title case for consistent aggregation
+                    # (e.g., "python" and "Python" should merge into "Python")
                     if skill_name:
+                        skill_name = skill_name.title() if skill_name.islower() else skill_name
                         if skill_name not in skill_inventory:
                             skill_inventory[skill_name] = {
                                 'expert': 0,
@@ -272,19 +300,46 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         # Auto-populate required_skills for tasks that don't have them
         tasks_needing_skills = [t for t in tasks if not t.required_skills]
         skills_extracted_count = 0
+        extraction_failures = 0
+        
+        # Time budget: limit skill extraction to 60 seconds to prevent request timeouts
+        import time as _time
+        extraction_start = _time.time()
+        EXTRACTION_TIME_BUDGET_SECS = 60
         
         if tasks_needing_skills:
             logger.info(f"Auto-extracting skills for {len(tasks_needing_skills)} tasks without defined skills")
             # Process up to 50 tasks so a single Run Analysis populates all tasks,
             # making gap detection fully deterministic on subsequent runs.
             for task in tasks_needing_skills[:50]:
+                # Check time budget before each extraction
+                elapsed = _time.time() - extraction_start
+                if elapsed > EXTRACTION_TIME_BUDGET_SECS:
+                    logger.warning(
+                        f"Skill extraction time budget exhausted ({elapsed:.1f}s). "
+                        f"Processed {skills_extracted_count + extraction_failures}/{len(tasks_needing_skills)} tasks."
+                    )
+                    break
+                
+                # Stop early if too many consecutive failures (API issue)
+                if extraction_failures >= 5 and skills_extracted_count == 0:
+                    logger.warning(
+                        f"Stopping skill extraction after {extraction_failures} consecutive failures - "
+                        f"possible API issue. Will use existing task skills for gap analysis."
+                    )
+                    break
+                
                 try:
                     extracted_skills = extract_skills_from_task(task.title, task.description or "")
                     if extracted_skills:
                         task.required_skills = extracted_skills
                         task.save(update_fields=['required_skills'])
                         skills_extracted_count += 1
+                        extraction_failures = 0  # Reset consecutive failure counter
+                    else:
+                        extraction_failures += 1
                 except Exception as e:
+                    extraction_failures += 1
                     logger.warning(f"Failed to extract skills for task {task.id}: {str(e)}")
                     continue
             
@@ -866,24 +921,34 @@ def update_team_skill_profile_model(board):
     """
     try:
         from kanban.models import TeamSkillProfile
+        import time as _time
         
         # Build current profile
         profile_data = build_team_skill_profile(board)
         
-        # Update or create model
-        team_profile, created = TeamSkillProfile.objects.update_or_create(
-            board=board,
-            defaults={
-                'skill_inventory': profile_data['skill_inventory'],
-                'total_capacity_hours': profile_data['total_capacity_hours'],
-                'utilized_capacity_hours': profile_data['utilized_capacity_hours'],
-                'last_analysis': timezone.now()
-            }
-        )
-        
-        action = "Created" if created else "Updated"
-        logger.info(f"{action} TeamSkillProfile for board {board.name}")
-        return team_profile
+        # Update or create model with retry for SQLite database lock
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                team_profile, created = TeamSkillProfile.objects.update_or_create(
+                    board=board,
+                    defaults={
+                        'skill_inventory': profile_data['skill_inventory'],
+                        'total_capacity_hours': profile_data['total_capacity_hours'],
+                        'utilized_capacity_hours': profile_data['utilized_capacity_hours'],
+                        'last_analysis': timezone.now()
+                    }
+                )
+                
+                action = "Created" if created else "Updated"
+                logger.info(f"{action} TeamSkillProfile for board {board.name}")
+                return team_profile
+            except Exception as db_err:
+                if 'database is locked' in str(db_err) and attempt < max_retries - 1:
+                    logger.warning(f"Database locked updating TeamSkillProfile, retrying ({attempt + 1}/{max_retries})...")
+                    _time.sleep(0.5 * (attempt + 1))
+                    continue
+                raise
         
     except Exception as e:
         logger.error(f"Error updating TeamSkillProfile: {str(e)}")

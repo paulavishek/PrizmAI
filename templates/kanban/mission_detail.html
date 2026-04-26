@@ -362,7 +362,8 @@
     <div class="sidebar-label">Version</div>
     <div class="sidebar-value">
         v{{ record.version }}
-        · <a href="#tab-versions" class="text-decoration-none" onclick="document.querySelector('[data-bs-target=\"#tab-versions\"]').click();">View history</a>
+        · <a href="#tab-versions" class="text-decoration-none"
+           onclick="event.preventDefault(); var t=document.querySelector('.strategic-tabs .nav-link[data-bs-target=&quot;#tab-versions&quot;]'); if(t) t.click();">View history</a>
     </div>
 </div>
 {% endblock %}

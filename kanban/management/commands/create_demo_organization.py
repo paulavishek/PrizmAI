@@ -254,16 +254,6 @@ class Command(BaseCommand):
                 'description': 'Track features, sprints, and releases for our product. Showcase AI-powered task management and burndown forecasting.',
                 'columns': ['To Do', 'In Progress', 'In Review', 'Done'],
             },
-            {
-                'name': 'Marketing Campaign',
-                'description': 'Plan and execute product launch marketing campaigns across digital channels. Track content creation, ad performance, and lead generation.',
-                'columns': ['Backlog', 'In Progress', 'Review', 'Done'],
-            },
-            {
-                'name': 'Bug Tracking',
-                'description': 'Track, triage, and resolve software bugs and quality issues. Prioritize defects by severity and customer impact.',
-                'columns': ['New', 'Triaged', 'In Progress', 'Resolved'],
-            },
         ]
         
         boards = []

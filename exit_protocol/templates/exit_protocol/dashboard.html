@@ -6,59 +6,264 @@
 
 {% block extra_css %}
 <style>
-  .ep-dashboard { max-width: 900px; margin: 0 auto; }
-  .ep-header { margin-bottom: 2rem; }
-  .ep-header h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-  .ep-header .board-name { color: #888; font-size: 0.9rem; }
+  .ep-dashboard { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
 
-  /* Risk Gauge */
-  .risk-gauge { text-align: center; margin: 2rem 0; }
-  .gauge-value { font-size: 3rem; font-weight: 700; }
-  .gauge-label { font-size: 0.85rem; color: #888; }
-  .gauge-low { color: #28a745; }
-  .gauge-moderate { color: #ffc107; }
-  .gauge-high { color: #dc3545; }
+  /* ── Hero Header ─────────────────────────────────────── */
+  .ep-hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    color: #fff;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .ep-hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(230,81,0,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .ep-hero .breadcrumb { margin-bottom: 0.75rem; }
+  .ep-hero .breadcrumb-item a { color: rgba(255,255,255,0.65); text-decoration: none; }
+  .ep-hero .breadcrumb-item a:hover { color: #fff; }
+  .ep-hero .breadcrumb-item.active { color: rgba(255,255,255,0.45); }
+  .ep-hero .breadcrumb-item + .breadcrumb-item::before { color: rgba(255,255,255,0.35); }
+  .ep-hero h1 { font-size: 1.65rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .ep-hero .subtitle { color: rgba(255,255,255,0.7); font-size: 0.9rem; }
+  .ep-hero .btn-back {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    border-radius: 8px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .ep-hero .btn-back:hover { background: rgba(255,255,255,0.2); color: #fff; }
 
-  .signal-history { margin: 2rem 0; }
-  .signal-chart { width: 100%; height: 200px; }
+  /* ── Cards ───────────────────────────────────────────── */
+  .ep-card {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+    transition: box-shadow 0.2s;
+    height: 100%;
+  }
+  .ep-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06); }
+  .ep-card-header {
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .ep-card-header .card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+  .ep-card-header h3 { font-size: 0.95rem; font-weight: 600; margin: 0; color: #2d3748; }
+  .ep-card-body { padding: 1.25rem; }
 
-  .hospice-status { margin: 2rem 0; }
-  .status-card { background: #f8f9fa; border-radius: 10px; padding: 1.5rem; }
-  .status-badge { font-size: 0.8rem; padding: 0.25rem 0.6rem; border-radius: 4px; }
-  .status-badge.assessment { background: #e3f2fd; color: #1565c0; }
-  .status-badge.knowledge_extraction { background: #fff3e0; color: #e65100; }
-  .status-badge.team_transition { background: #f3e5f5; color: #7b1fa2; }
-  .status-badge.organ_scan { background: #e8f5e9; color: #2e7d32; }
-  .status-badge.burial_pending { background: #fce4ec; color: #c62828; }
-  .status-badge.buried { background: #263238; color: #b0bec5; }
+  /* ── Risk Gauge (Circular) ───────────────────────────── */
+  .risk-gauge-wrapper { text-align: center; padding: 1.5rem 1rem; }
+  .gauge-ring {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin: 0 auto 1rem;
+  }
+  .gauge-ring svg { transform: rotate(-90deg); }
+  .gauge-ring .gauge-bg { fill: none; stroke: #edf2f7; stroke-width: 10; }
+  .gauge-ring .gauge-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+  .gauge-ring .gauge-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .gauge-ring .gauge-percent { font-size: 2.5rem; font-weight: 800; line-height: 1; }
+  .gauge-ring .gauge-sublabel { font-size: 0.72rem; color: #888; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .gauge-low .gauge-fill { stroke: #38a169; }
+  .gauge-low .gauge-percent { color: #38a169; }
+  .gauge-moderate .gauge-fill { stroke: #d69e2e; }
+  .gauge-moderate .gauge-percent { color: #d69e2e; }
+  .gauge-high .gauge-fill { stroke: #e53e3e; }
+  .gauge-high .gauge-percent { color: #e53e3e; }
+  .gauge-hint { font-size: 0.78rem; color: #a0aec0; margin-top: 0.25rem; }
 
-  .hospice-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; }
-  .btn-initiate { background: #e65100; color: #fff; border: none; padding: 0.6rem 1.5rem; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
-  .btn-initiate:hover { background: #bf360c; }
-  .btn-bury { background: #c62828; color: #fff; border: none; padding: 0.6rem 1.5rem; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
-  .btn-bury:hover { background: #b71c1c; }
+  /* ── Dimension Breakdown ─────────────────────────────── */
+  .dim-row { display: flex; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid #f7fafc; }
+  .dim-row:last-child { border-bottom: none; }
+  .dim-label { width: 100px; font-size: 0.82rem; font-weight: 500; color: #4a5568; }
+  .dim-bar-wrapper { flex: 1; margin: 0 0.75rem; }
+  .dim-bar { height: 8px; border-radius: 4px; background: #edf2f7; overflow: hidden; }
+  .dim-bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+  .dim-bar-fill.bg-success { background: linear-gradient(90deg, #48bb78, #38a169) !important; }
+  .dim-bar-fill.bg-warning { background: linear-gradient(90deg, #ecc94b, #d69e2e) !important; }
+  .dim-bar-fill.bg-danger { background: linear-gradient(90deg, #fc8181, #e53e3e) !important; }
+  .dim-value { width: 48px; text-align: right; font-size: 0.82rem; font-weight: 600; }
+  .dim-contribution { width: 52px; text-align: right; font-size: 0.75rem; color: #a0aec0; }
+
+  /* ── Signal History Chart ────────────────────────────── */
+  .signal-chart-container { width: 100%; height: 260px; }
+
+  /* ── Status Section ──────────────────────────────────── */
+  .status-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #e9ecef;
+  }
+  .status-badge {
+    font-size: 0.78rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .status-badge.assessment { background: #ebf4ff; color: #2b6cb0; }
+  .status-badge.knowledge_extraction { background: #fffaf0; color: #c05621; }
+  .status-badge.team_transition { background: #faf5ff; color: #6b46c1; }
+  .status-badge.organ_scan { background: #f0fff4; color: #276749; }
+  .status-badge.burial_pending { background: #fff5f5; color: #c53030; }
+  .status-badge.buried { background: #1a202c; color: #a0aec0; }
+
+  .hospice-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
+  .hospice-actions .btn { border-radius: 8px; font-size: 0.85rem; padding: 0.5rem 1.15rem; }
+
+  .btn-initiate {
+    background: linear-gradient(135deg, #e65100, #bf360c);
+    color: #fff;
+    border: none;
+    padding: 0.65rem 1.75rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(230,81,0,0.3);
+  }
+  .btn-initiate:hover { background: linear-gradient(135deg, #bf360c, #8d2608); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(230,81,0,0.4); }
+
+  .btn-bury {
+    background: linear-gradient(135deg, #c62828, #b71c1c);
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-bury:hover { background: linear-gradient(135deg, #b71c1c, #8e0000); transform: translateY(-1px); }
+
+  /* ── Quick Links ─────────────────────────────────────── */
+  .ep-quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+  .ep-quick-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.15rem;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    text-decoration: none;
+    color: #2d3748;
+    transition: all 0.2s;
+  }
+  .ep-quick-link:hover { border-color: #cbd5e0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transform: translateY(-1px); color: #2d3748; }
+  .ep-quick-link .link-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .ep-quick-link .link-text { font-size: 0.85rem; font-weight: 600; }
+  .ep-quick-link .link-desc { font-size: 0.72rem; color: #a0aec0; margin-top: 1px; }
+
+  /* ── Monitoring Banner ───────────────────────────────── */
+  .monitoring-banner {
+    background: linear-gradient(135deg, #f7fafc, #edf2f7);
+    border: 1px dashed #cbd5e0;
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+  }
+  .monitoring-banner .monitor-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #ebf8ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .monitoring-banner p { color: #718096; font-size: 0.9rem; margin: 0; }
+  .monitoring-banner .monitor-title { font-weight: 600; color: #4a5568; margin-bottom: 0.25rem; font-size: 0.95rem; }
+
+  /* ── Dark mode overrides ─────────────────────────────── */
+  [data-bs-theme="dark"] .ep-card { background: #1e2130; border-color: #2d3148; }
+  [data-bs-theme="dark"] .ep-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  [data-bs-theme="dark"] .ep-card-header { border-color: #2d3148; }
+  [data-bs-theme="dark"] .ep-card-header h3 { color: #e2e8f0; }
+  [data-bs-theme="dark"] .dim-label { color: #cbd5e0; }
+  [data-bs-theme="dark"] .dim-bar { background: #2d3748; }
+  [data-bs-theme="dark"] .dim-row { border-color: #2d3148; }
+  [data-bs-theme="dark"] .status-card { background: #1e2130; border-color: #2d3148; }
+  [data-bs-theme="dark"] .ep-quick-link { background: #1e2130; border-color: #2d3148; color: #e2e8f0; }
+  [data-bs-theme="dark"] .ep-quick-link:hover { border-color: #4a5568; color: #e2e8f0; }
+  [data-bs-theme="dark"] .monitoring-banner { background: linear-gradient(135deg, #1a1d2e, #1e2130); border-color: #2d3748; }
+  [data-bs-theme="dark"] .monitoring-banner p { color: #a0aec0; }
+  [data-bs-theme="dark"] .monitoring-banner .monitor-title { color: #e2e8f0; }
+  [data-bs-theme="dark"] .monitoring-banner .monitor-icon { background: #2a2d3e; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="ep-dashboard">
-  <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb" class="mb-2">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
-      <li class="breadcrumb-item active">Exit Protocol</li>
-    </ol>
-  </nav>
 
-  <div class="d-flex justify-content-between align-items-start mb-4 pb-3 border-bottom">
-    <div>
-      <h1 class="h2 mb-1"><i class="fas fa-door-open text-warning me-2"></i>Exit Protocol {% feature_help "exit_protocol" %}</h1>
-      <p class="text-muted mb-0">{{ board.name }} — Manage project wind-down, knowledge preservation, and archival</p>
+  <!-- ── Hero Header ─────────────────────────────────── -->
+  <div class="ep-hero">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+        <li class="breadcrumb-item active">Exit Protocol</li>
+      </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center mt-2">
+      <div>
+        <h1><i class="fas fa-door-open me-2" style="color: #f6ad55;"></i>Exit Protocol {% feature_help "exit_protocol" %}</h1>
+        <p class="subtitle mb-0">{{ board.name }} — Manage project wind-down, knowledge preservation, and archival</p>
+      </div>
+      <a href="{% url 'board_detail' board.id %}" class="btn btn-back">
+        <i class="fas fa-arrow-left me-1"></i> Back to Board
+      </a>
     </div>
-    <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
-      <i class="fas fa-arrow-left me-1"></i> Back to Board
-    </a>
   </div>
 
   {% if messages %}
@@ -70,151 +275,281 @@
   {% endfor %}
   {% endif %}
 
-  <!-- Risk Gauge -->
-  <div class="risk-gauge">
-    {% with score=current_risk_score %}
-    <div class="gauge-value {% if score >= 0.75 %}gauge-high{% elif score >= 0.4 %}gauge-moderate{% else %}{% if hospice_session %}gauge-moderate{% else %}gauge-low{% endif %}{% endif %}">
-      {% widthratio score 1 100 %}%
-    </div>
-    <div class="gauge-label">Hospice Risk Score</div>
-    {% if hospice_session and score < 0.4 %}
-    <div style="font-size: 0.75rem; color: #888; margin-top: 4px;">Low risk — project is safe to wind down</div>
-    {% endif %}
-    {% endwith %}
-  </div>
-
-  <!-- Score Breakdown Table -->
-  {% if score_breakdown %}
-  <div class="score-breakdown mt-3 mb-3" style="max-width: 480px; margin: 0 auto;">
-    <p class="text-muted small text-center mb-2">Score breakdown by dimension</p>
-    <table class="table table-sm table-borderless mb-0">
-      <thead>
-        <tr>
-          <th class="text-muted fw-normal small">Dimension</th>
-          <th class="text-muted fw-normal small text-end">Factor</th>
-          <th class="text-muted fw-normal small text-end">Contribution</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for dim in score_breakdown %}
-        <tr>
-          <td style="font-size:0.85rem;">{{ dim.label }}</td>
-          <td class="text-end">
-            <div class="progress d-inline-flex align-middle" style="height:6px;width:80px;vertical-align:middle;">
-              <div class="progress-bar bg-{{ dim.status }}" style="width:{{ dim.factor_pct }}%"></div>
+  <!-- ── Main Grid: Gauge + Breakdown + Chart ────────── -->
+  <div class="row g-3 mb-3">
+    <!-- Risk Gauge Card -->
+    <div class="col-lg-4 col-md-5">
+      <div class="ep-card">
+        <div class="ep-card-header">
+          <div class="card-icon" style="background: #fff5f5; color: #e53e3e;">
+            <i class="fas fa-heartbeat"></i>
+          </div>
+          <h3>Risk Score</h3>
+        </div>
+        <div class="ep-card-body">
+          <div class="risk-gauge-wrapper">
+            {% with score=current_risk_score %}
+            {% widthratio score 1 100 as score_pct %}
+            <div class="gauge-ring {% if score >= 0.75 %}gauge-high{% elif score >= 0.4 %}gauge-moderate{% else %}{% if hospice_session %}gauge-moderate{% else %}gauge-low{% endif %}{% endif %}">
+              <svg viewBox="0 0 180 180" width="180" height="180">
+                <circle class="gauge-bg" cx="90" cy="90" r="78"></circle>
+                <circle class="gauge-fill" cx="90" cy="90" r="78"
+                  stroke-dasharray="490"
+                  stroke-dashoffset="{{ score|floatformat:2 }}"
+                  style="stroke-dashoffset: calc(490 - (490 * {{ score_pct }}) / 100);">
+                </circle>
+              </svg>
+              <div class="gauge-center">
+                <div class="gauge-percent">{{ score_pct }}%</div>
+                <div class="gauge-sublabel">Hospice Risk</div>
+              </div>
             </div>
-            <span class="ms-2 small text-{{ dim.status }}">{{ dim.factor_pct }}%</span>
-          </td>
-          <td class="text-end small text-muted">+{{ dim.contribution_pct }}%</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% if last_signal %}
-    <p class="text-muted text-center mt-2" style="font-size:0.75rem;">
-      Last calculated: {{ last_signal.recorded_at|timesince }} ago
-      &nbsp;·&nbsp;
-      {{ last_signal.dimensions_available }} dimension{{ last_signal.dimensions_available|pluralize }} available
-    </p>
-    {% endif %}
-    <div class="text-center mt-2">
-      <button id="recalculate-btn" class="btn btn-sm btn-outline-secondary"
-              data-url="{% url 'exit_protocol:recalculate' board.id %}">
-        <i class="bi bi-arrow-clockwise"></i> Recalculate Now
-      </button>
-      <span id="recalculate-status" class="ms-2 small text-muted d-none">Recalculating…</span>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Signal History -->
-  {% if signals %}
-  <div class="signal-history">
-    <h2 style="font-size: 1.1rem;">📈 Health Signal History</h2>
-    <div class="signal-chart">
-      <canvas id="signalChart"></canvas>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Hospice Session Status -->
-  <div class="hospice-status">
-    {% if hospice_session %}
-    <div class="status-card">
-      <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem;">Hospice Session Active</h3>
-      <p>
-        Status: <span class="status-badge {{ hospice_session.status }}">{{ hospice_session.get_status_display }}</span>
-      </p>
-      <p style="font-size: 0.85rem; color: #888;">
-        Initiated {{ hospice_session.initiated_at|timesince }} ago
-        {% if hospice_session.initiated_by %}by {{ hospice_session.initiated_by.get_full_name|default:hospice_session.initiated_by.username }}{% endif %}
-      </p>
-
-      {% if hospice_session.ai_assessment %}
-      <div class="card mt-3">
-        <div class="card-body">
-          <h5 class="card-title" style="font-size: 1rem;">🤖 AI Assessment</h5>
-          <p class="card-text" style="font-size: 0.9rem; white-space: pre-wrap;">{{ hospice_session.ai_assessment }}</p>
+            {% if hospice_session and score < 0.4 %}
+            <div class="gauge-hint">Low risk — safe to wind down</div>
+            {% elif score >= 0.75 %}
+            <div class="gauge-hint" style="color: #e53e3e;">Critical — immediate attention needed</div>
+            {% elif score >= 0.4 %}
+            <div class="gauge-hint" style="color: #d69e2e;">Elevated — monitor closely</div>
+            {% else %}
+            <div class="gauge-hint">Healthy — no concerns</div>
+            {% endif %}
+            {% endwith %}
+            <div class="mt-3">
+              <button id="recalculate-btn" class="btn btn-sm btn-outline-secondary"
+                      data-url="{% url 'exit_protocol:recalculate' board.id %}">
+                <i class="bi bi-arrow-clockwise"></i> Recalculate
+              </button>
+              <span id="recalculate-status" class="ms-2 small text-muted d-none">Recalculating…</span>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- Score Breakdown + Chart -->
+    <div class="col-lg-8 col-md-7">
+      <div class="row g-3 h-100">
+        <!-- Dimension Breakdown -->
+        <div class="col-12">
+          <div class="ep-card">
+            <div class="ep-card-header">
+              <div class="card-icon" style="background: #ebf8ff; color: #3182ce;">
+                <i class="fas fa-chart-pie"></i>
+              </div>
+              <h3>Score Breakdown</h3>
+              {% if last_signal %}
+              <span class="ms-auto text-muted" style="font-size: 0.72rem;">
+                Updated {{ last_signal.recorded_at|timesince }} ago · {{ last_signal.dimensions_available }} dimension{{ last_signal.dimensions_available|pluralize }}
+              </span>
+              {% endif %}
+            </div>
+            <div class="ep-card-body">
+              {% if score_breakdown %}
+              {% for dim in score_breakdown %}
+              <div class="dim-row">
+                <span class="dim-label">{{ dim.label }}</span>
+                <div class="dim-bar-wrapper">
+                  <div class="dim-bar">
+                    <div class="dim-bar-fill bg-{{ dim.status }}" style="width: {{ dim.factor_pct }}%;"></div>
+                  </div>
+                </div>
+                <span class="dim-value text-{{ dim.status }}">{{ dim.factor_pct }}%</span>
+                <span class="dim-contribution">+{{ dim.contribution_pct }}%</span>
+              </div>
+              {% endfor %}
+              {% else %}
+              <p class="text-muted small mb-0">No health data recorded yet. Click "Recalculate" to generate initial scores.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Health Signal History -->
+        <div class="col-12">
+          <div class="ep-card" style="flex: 1;">
+            <div class="ep-card-header">
+              <div class="card-icon" style="background: #fefcbf; color: #b7791f;">
+                <i class="fas fa-chart-line"></i>
+              </div>
+              <h3>Health Signal History</h3>
+            </div>
+            <div class="ep-card-body">
+              {% if signals %}
+              <div class="signal-chart-container">
+                <canvas id="signalChart"></canvas>
+              </div>
+              {% else %}
+              <p class="text-muted small mb-0">Health signal data will appear here after the first calculation cycle.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Quick Navigation Links ──────────────────────── -->
+  <div class="ep-quick-links mb-3">
+    <a href="{% url 'exit_protocol:transition_memos' board.id %}" class="ep-quick-link">
+      <div class="link-icon" style="background: #ebf4ff; color: #3182ce;">
+        <i class="fas fa-file-alt"></i>
+      </div>
+      <div>
+        <div class="link-text">Transition Memos</div>
+        <div class="link-desc">AI-generated handoff documents</div>
+      </div>
+    </a>
+    <a href="{% url 'exit_protocol:organ_bank' board.id %}" class="ep-quick-link">
+      <div class="link-icon" style="background: #f0fff4; color: #38a169;">
+        <i class="fas fa-cubes"></i>
+      </div>
+      <div>
+        <div class="link-text">Organ Bank</div>
+        <div class="link-desc">Reusable components from this project</div>
+      </div>
+    </a>
+    <a href="{% url 'exit_protocol:organ_library' %}" class="ep-quick-link">
+      <div class="link-icon" style="background: #faf5ff; color: #805ad5;">
+        <i class="fas fa-book-medical"></i>
+      </div>
+      <div>
+        <div class="link-text">Organ Library</div>
+        <div class="link-desc">Browse all reusable components</div>
+      </div>
+    </a>
+    <a href="{% url 'exit_protocol:cemetery' %}" class="ep-quick-link">
+      <div class="link-icon" style="background: #f7fafc; color: #718096;">
+        <i class="fas fa-landmark"></i>
+      </div>
+      <div>
+        <div class="link-text">Project Cemetery</div>
+        <div class="link-desc">Archived projects &amp; autopsy reports</div>
+      </div>
+    </a>
+  </div>
+
+  <!-- ── Hospice Session Status ──────────────────────── -->
+  <div class="ep-card mb-3">
+    <div class="ep-card-header">
+      <div class="card-icon" style="background: {% if hospice_session %}#fff5f5{% else %}#f0fff4{% endif %}; color: {% if hospice_session %}#e53e3e{% else %}#38a169{% endif %};">
+        <i class="fas fa-{% if hospice_session %}hospital{% else %}shield-alt{% endif %}"></i>
+      </div>
+      <h3>{% if hospice_session %}Hospice Session{% elif show_initiate_cta %}Health Concern Detected{% else %}Project Monitoring{% endif %}</h3>
+    </div>
+    <div class="ep-card-body">
+      {% if hospice_session %}
+      <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <span class="status-badge {{ hospice_session.status }}">{{ hospice_session.get_status_display }}</span>
+        <span class="text-muted" style="font-size: 0.82rem;">
+          Initiated {{ hospice_session.initiated_at|timesince }} ago
+          {% if hospice_session.initiated_by %}by {{ hospice_session.initiated_by.get_full_name|default:hospice_session.initiated_by.username }}{% endif %}
+        </span>
+      </div>
+
+      {% if hospice_session.ai_assessment %}
+      <div class="p-3 rounded-3 mb-3" style="background: #f7fafc; border: 1px solid #e2e8f0;">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-robot" style="color: #805ad5;"></i>
+          <strong style="font-size: 0.9rem; color: #4a5568;">AI Assessment</strong>
+        </div>
+        <p class="mb-0" style="font-size: 0.88rem; white-space: pre-wrap; color: #4a5568; line-height: 1.6;">{{ hospice_session.ai_assessment }}</p>
+      </div>
       {% else %}
-      <p style="color: #888; font-style: italic; margin-top: 0.5rem;">AI assessment is being generated...</p>
+      <div class="p-3 rounded-3 mb-3" style="background: #fffaf0; border: 1px solid #feebc8;">
+        <i class="fas fa-spinner fa-spin me-2" style="color: #dd6b20;"></i>
+        <span style="font-size: 0.88rem; color: #9c4221;">AI assessment is being generated…</span>
+      </div>
       {% endif %}
 
-      <!-- Knowledge Checklist -->
       {% if hospice_session.knowledge_checklist %}
-      <div class="mt-3">
-        <h5 style="font-size: 1rem;">📋 Knowledge Extraction Checklist</h5>
-        {% for category, items in hospice_session.knowledge_checklist.items %}
-        {% if items %}
-        <div class="mb-2">
-          <strong style="font-size: 0.85rem;">{{ category|humanize_key }}</strong>
-          {% for item in items %}
-          <div class="form-check" style="margin-left: 1rem;">
-            <input class="form-check-input checklist-item" type="checkbox"
-              data-item-id="{{ item.id }}"
-              {% if item.id in hospice_session.checklist_completed_items %}checked{% endif %}>
-            <label class="form-check-label" style="font-size: 0.85rem;">
-              {{ item.title }}
-              {% if item.date %}<small class="text-muted ms-2">{{ item.date }}</small>{% endif %}
-            </label>
+      <div class="mb-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-clipboard-check" style="color: #3182ce;"></i>
+          <strong style="font-size: 0.9rem; color: #4a5568;">Knowledge Extraction Checklist</strong>
+        </div>
+        <div class="row g-2">
+          {% for category, items in hospice_session.knowledge_checklist.items %}
+          {% if items %}
+          <div class="col-lg-6">
+            <div class="p-2 rounded" style="background: #f7fafc;">
+              <strong style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;">{{ category|humanize_key }}</strong>
+              {% for item in items %}
+              <div class="form-check mt-1" style="margin-left: 0.5rem;">
+                <input class="form-check-input checklist-item" type="checkbox"
+                  data-item-id="{{ item.id }}"
+                  {% if item.id in hospice_session.checklist_completed_items %}checked{% endif %}>
+                <label class="form-check-label" style="font-size: 0.82rem;">
+                  {{ item.title }}
+                  {% if item.date %}<small class="text-muted ms-1">{{ item.date }}</small>{% endif %}
+                </label>
+              </div>
+              {% endfor %}
+            </div>
           </div>
+          {% endif %}
           {% endfor %}
         </div>
-        {% endif %}
-        {% endfor %}
       </div>
       {% endif %}
 
       <div class="hospice-actions">
-        <a href="{% url 'exit_protocol:transition_memos' board.id %}" class="btn btn-outline-primary btn-sm">📝 Transition Memos</a>
-        <a href="{% url 'exit_protocol:organ_bank' board.id %}" class="btn btn-outline-secondary btn-sm">🫀 Organ Bank</a>
-
+        <a href="{% url 'exit_protocol:transition_memos' board.id %}" class="btn btn-outline-primary">
+          <i class="fas fa-file-alt me-1"></i> Transition Memos
+        </a>
+        <a href="{% url 'exit_protocol:organ_bank' board.id %}" class="btn btn-outline-secondary">
+          <i class="fas fa-cubes me-1"></i> Organ Bank
+        </a>
         {% if hospice_session.status != 'buried' %}
         <button type="button" class="btn-bury" data-bs-toggle="modal" data-bs-target="#buryModal">
-          <i class="bi bi-archive"></i> Archive This Project
+          <i class="bi bi-archive me-1"></i> Archive This Project
         </button>
         {% endif %}
       </div>
+
+      {% elif show_initiate_cta %}
+      <div class="d-flex align-items-start gap-3">
+        <div class="flex-shrink-0" style="width: 48px; height: 48px; background: #fff5f5; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+          <i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 1.25rem;"></i>
+        </div>
+        <div class="flex-grow-1">
+          <p style="font-size: 0.9rem; color: #4a5568; margin-bottom: 1rem;">
+            PrizmAI has detected sustained challenges with this project. Consider initiating a structured wind-down review to preserve knowledge and manage the transition.
+          </p>
+          <form method="post" action="{% url 'exit_protocol:initiate' board.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-initiate" onclick="return confirm('Start a hospice review for this project? This will generate AI assessments and begin knowledge extraction.');">
+              <i class="fas fa-procedures me-1"></i> Initiate Wind-Down Review
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {% else %}
+      {% if concern_dimensions %}
+      <div class="monitoring-banner" style="background: #fffbeb; border: 1px solid #f6e05e; border-radius: 12px; padding: 1.5rem; text-align: center;">
+        <div class="monitor-icon">
+          <i class="fas fa-exclamation-circle" style="color: #d69e2e; font-size: 2rem;"></i>
+        </div>
+        <p class="monitor-title" style="color: #b7791f; margin: 0.5rem 0;">Monitoring: Attention Needed</p>
+        <p style="color: #744210; font-size: 0.88rem; margin-bottom: 0.5rem;">
+          The overall risk score is healthy, but
+          {% for dim in concern_dimensions %}<strong>{{ dim }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% if concern_dimensions|length == 1 %}is{% else %}are{% endif %} showing elevated risk.
+          No immediate action required, but keep an eye on these areas.
+        </p>
+        <p style="color: #92400e; font-size: 0.8rem; margin: 0;">PrizmAI will automatically flag this project if the overall score crosses 40%.</p>
+      </div>
+      {% else %}
+      <div class="monitoring-banner">
+        <div class="monitor-icon">
+          <i class="fas fa-shield-alt" style="color: #38a169;"></i>
+        </div>
+        <p class="monitor-title">All Systems Normal</p>
+        <p>No active hospice session. This project's health is being continuously monitored by PrizmAI.</p>
+      </div>
+      {% endif %}
+      {% endif %}
     </div>
-    {% elif show_initiate_cta %}
-    <div class="status-card" style="border-left: 4px solid #e65100;">
-      <h3 style="font-size: 1.1rem;">⚠️ Project Health Concern Detected</h3>
-      <p style="font-size: 0.9rem; color: #666;">
-        PrizmAI has detected sustained challenges with this project. Consider initiating a structured wind-down review.
-      </p>
-      <form method="post" action="{% url 'exit_protocol:initiate' board.id %}">
-        {% csrf_token %}
-        <button type="submit" class="btn-initiate" onclick="return confirm('Start a hospice review for this project? This will generate AI assessments and begin knowledge extraction.');">
-          🏥 Initiate Wind-Down Review
-        </button>
-      </form>
-    </div>
-    {% else %}
-    <div class="status-card">
-      <p style="color: #888;">No active hospice session. This project's health is being monitored.</p>
-    </div>
-    {% endif %}
   </div>
 </div>
 
@@ -263,6 +598,10 @@
   ];
 
   const ctx = document.getElementById('signalChart').getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+  gradient.addColorStop(0, 'rgba(230,81,0,0.18)');
+  gradient.addColorStop(1, 'rgba(230,81,0,0.02)');
+
   new Chart(ctx, {
     type: 'line',
     data: {
@@ -271,19 +610,41 @@
         label: 'Risk Score',
         data: signals.map(s => s.score * 100),
         borderColor: '#e65100',
-        backgroundColor: 'rgba(230,81,0,0.1)',
-        borderWidth: 2,
+        backgroundColor: gradient,
+        borderWidth: 2.5,
         fill: true,
-        tension: 0.3,
+        tension: 0.4,
+        pointRadius: 4,
+        pointBackgroundColor: '#fff',
+        pointBorderColor: '#e65100',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a202c',
+          titleFont: { size: 12 },
+          bodyFont: { size: 13 },
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: { label: ctx => `Risk: ${ctx.parsed.y.toFixed(1)}%` }
+        }
+      },
       scales: {
-        y: { min: 0, max: 100, ticks: { callback: v => v + '%' } },
-        x: { ticks: { maxRotation: 45 } }
+        y: {
+          min: 0, max: 100,
+          ticks: { callback: v => v + '%', font: { size: 11 } },
+          grid: { color: 'rgba(0,0,0,0.04)' }
+        },
+        x: {
+          ticks: { maxRotation: 45, font: { size: 11 } },
+          grid: { display: false }
+        }
       }
     }
   });
@@ -348,7 +709,7 @@ if (recalcBtn) {
     .then(res => res.json())
     .then(() => {
       status.textContent = 'Done! Refreshing…';
-      setTimeout(() => window.location.reload(), 3000);
+      setTimeout(() => window.location.reload(), 500);
     })
     .catch(() => {
       recalcBtn.disabled = false;

@@ -140,7 +140,21 @@ def run_scope_autopsy(request, board_id):
             'error': 'No scope changes detected. Autopsy requires scope growth beyond baseline.',
         }, status=400)
 
-    # Prevent duplicate runs
+    # Prevent duplicate runs — but allow re-run if the existing generating report is stale (>5 min)
+    from datetime import timedelta
+    stale_cutoff = timezone.now() - timedelta(minutes=5)
+    stale_running = ScopeAutopsyReport.objects.filter(
+        board=board,
+        status='generating',
+        created_at__lt=stale_cutoff,
+    )
+    if stale_running.exists():
+        # Expire stale reports so the new run can proceed
+        stale_running.update(
+            status='failed',
+            ai_summary='Analysis timed out before a new run was requested.',
+        )
+
     running = ScopeAutopsyReport.objects.filter(
         board=board, status='generating',
     ).exists()
@@ -173,7 +187,20 @@ def run_scope_autopsy(request, board_id):
 @login_required
 def scope_autopsy_status(request, report_id):
     """Return the current status of a report (for polling)."""
+    from datetime import timedelta
     report = get_object_or_404(ScopeAutopsyReport, id=report_id)
+
+    # Auto-expire reports stuck in 'generating' for over 5 minutes
+    if (
+        report.status == 'generating'
+        and report.created_at < timezone.now() - timedelta(minutes=5)
+    ):
+        report.status = 'failed'
+        report.ai_summary = (
+            'Analysis timed out. The AI did not respond in time. '
+            'Please try re-running the autopsy.'
+        )
+        report.save(update_fields=['status', 'ai_summary'])
 
     data = {
         'status': report.status,

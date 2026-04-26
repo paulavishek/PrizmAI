@@ -142,14 +142,14 @@
             <div class="stat-card warning">
                 <h3>{{ skill_gaps.count }}</h3>
                 <p class="mb-0"><i class="fas fa-exclamation-triangle me-1"></i> Active Skill Gaps</p>
-                <small>{{ critical_gaps }} Critical â€¢ {{ high_gaps }} High</small>
+                <small>{{ critical_gaps }} Critical &bull; {{ high_gaps }} High</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card info">
                 <h3>{{ development_plans.count }}</h3>
                 <p class="mb-0"><i class="fas fa-graduation-cap me-1"></i> Development Plans</p>
-                <small>{{ active_plans }} Active â€¢ {{ proposed_plans }} Proposed</small>
+                <small>{{ active_plans }} Active &bull; {{ proposed_plans }} Proposed</small>
             </div>
         </div>
         <div class="col-md-3">
@@ -195,7 +195,7 @@
                                         <span class="badge bg-secondary ms-2">{{ gap.proficiency_level }}</span>
                                     </h6>
                                     <small class="text-muted">
-                                        Need {{ gap.gap_count }} more â€¢ {{ gap.affected_tasks.count }} tasks affected
+                                        Need {{ gap.gap_count }} more &bull; {{ gap.affected_tasks.count }} tasks affected
                                     </small>
                                 </div>
                                 <div class="text-end">
@@ -323,7 +323,7 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">
                                     {% if plan.target_users.count == 0 %}No team members assigned{% else %}{{ plan.target_users.count }} team member{{ plan.target_users.count|pluralize }}{% endif %}
-                                    {% if plan.estimated_hours %} â€¢ {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
+                                    {% if plan.estimated_hours %} &bull; {{ plan.estimated_hours|floatformat:0 }}h{% endif %}
                                 </small>
                                 <div>
                                     <button class="btn btn-sm btn-outline-primary" onclick="viewPlanDetails({{ plan.id }})">
@@ -815,9 +815,9 @@
                     
                     <div class="mb-3">
                         <small class="text-muted">
-                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} â€¢ 
+                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} &bull; 
                             <i class="fas fa-calendar ms-2 me-1"></i>${new Date(plan.created_at).toLocaleDateString()}
-                            ${plan.ai_suggested ? ' â€¢ <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
+                            ${plan.ai_suggested ? ' &bull; <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
                         </small>
                     </div>
                 </div>
@@ -930,10 +930,10 @@
                 console.log('Updated summary card count to:', remainingPlans);
             }
             
-            // Update the subtitle in the summary card (Active â€¢ Proposed)
+            // Update the subtitle in the summary card (Active / Proposed)
             const summarySubtitle = document.querySelector('.stat-card.info small');
             if (summarySubtitle) {
-                summarySubtitle.textContent = `${activeCount} Active â€¢ ${proposedCount} Proposed`;
+                summarySubtitle.textContent = `${activeCount} Active \u2022 ${proposedCount} Proposed`;
                 console.log('Updated summary card subtitle');
             }
             
@@ -1368,27 +1368,18 @@
     };
 
     // Utility functions
+    var _skillGapHandle = null;
+
     window.showLoadingOverlay = function(message) {
-        const overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        overlay.style.zIndex = '9999';
-        overlay.innerHTML = `
-            <div class="text-center text-white">
-                <div class="spinner-border mb-3" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p>${message}</p>
-            </div>
-        `;
-        document.body.appendChild(overlay);
+        _skillGapHandle = PrizmLoading.showOverlay(null, {
+            messages: PrizmLoading.messages.skillGap
+        });
     };
 
     window.hideLoadingOverlay = function() {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.remove();
+        if (_skillGapHandle) {
+            _skillGapHandle.remove();
+            _skillGapHandle = null;
         }
     };
 
