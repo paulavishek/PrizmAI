@@ -939,6 +939,55 @@ def _duplicate_board(template_board, user):
                     period_start=em.period_start,
                     period_end=em.period_end,
                 )
+
+        # --- Fresh Engagement Records (seeded at provision time, dates relative to today) ---
+        # Not copied from template — generated fresh so charts look populated from day one
+        # in every user's sandbox without carrying over template-specific history.
+        from kanban.stakeholder_models import StakeholderEngagementRecord
+        from datetime import date as _date, timedelta as _td
+        _today = _date.today()
+        _name_to_sh = {sh.name: sh for sh in stakeholder_map.values()}
+        # (stakeholder_name, days_ago, channel, description, outcome, sentiment, rating)
+        _seed_records = [
+            ('Dr. Priya Sharma',   7, 'meeting', 'Weekly project status review.',
+             'Budget confirmed. Authentication System escalated to P1.', 'positive', 5),
+            ('Dr. Priya Sharma',  28, 'video',   'Architecture milestone check-in.',
+             'Signed off on system design.', 'positive', 5),
+            ('Marcus Johnson',     5, 'video',   'Sprint planning — feature prioritisation.',
+             'User Registration elevated to P1 for current sprint.', 'positive', 5),
+            ('Marcus Johnson',    21, 'chat',    'Shared wireframe prototypes for review.',
+             'Minor UX revisions requested. Go-ahead given.', 'positive', 4),
+            ('Lisa Chen',         10, 'meeting', 'Security requirements workshop.',
+             'Session token policy agreed: 30 min idle, 8 hr absolute.', 'positive', 4),
+            ('Lisa Chen',         32, 'email',   'API Rate Limiting spec sent for compliance review.',
+             'Approved with minor notes on logging granularity.', 'neutral', 3),
+            ('David Park',         8, 'video',   'User Registration Flow UX review.',
+             'Prototypes approved. A11y improvements incorporated.', 'positive', 5),
+            ('David Park',        30, 'meeting', 'Design system handoff.',
+             'Component library transferred. Two open items on mobile breakpoints.', 'positive', 4),
+            ('Rachel Torres',     12, 'email',   'Feature preview summary and beta guide sent.',
+             'Positive response; staging access requested.', 'positive', 4),
+            ('James Wilson',      14, 'video',   'CI/CD pipeline architecture review.',
+             'Container registry confirmed. 2-week prod prep runway noted.', 'positive', 4),
+            ('James Wilson',      40, 'chat',    'Notification Service queue encryption discussion.',
+             'At-rest encryption flagged as requirement.', 'neutral', 3),
+            ('Tom Bradley',       60, 'email',   'Quarterly compliance status report.',
+             'Acknowledged. No compliance blockers raised.', 'neutral', 4),
+        ]
+        for _sh_name, _days_ago, _channel, _desc, _outcome, _sentiment, _rating in _seed_records:
+            _new_sh = _name_to_sh.get(_sh_name)
+            if _new_sh:
+                StakeholderEngagementRecord.objects.create(
+                    stakeholder=_new_sh,
+                    date=_today - _td(days=_days_ago),
+                    description=_desc,
+                    communication_channel=_channel,
+                    outcome=_outcome,
+                    engagement_sentiment=_sentiment,
+                    satisfaction_rating=_rating,
+                    follow_up_required=False,
+                    created_by=user,
+                )
     except Exception:
         pass
 
