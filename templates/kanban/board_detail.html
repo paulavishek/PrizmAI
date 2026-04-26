@@ -927,12 +927,6 @@
                                 </button>
                             </li>
                             <li>
-                                <button type="button" class="dropdown-item collapse-column-btn"
-                                        data-column-id="{{ column.id }}">
-                                    <i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column
-                                </button>
-                            </li>
-                            <li>
                                 <a class="dropdown-item" href="{% url 'create_task_in_column' board.id column.id %}">
                                     <i class="fas fa-plus me-2 text-success"></i>Add Task
                                 </a>
@@ -1885,90 +1879,44 @@
         return m ? m[1] : '';
     }
 
-    // -- Collapse Column (event delegation on document, capture phase) --
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.collapse-column-btn');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
+    // -- Column Color Picker (direct handlers on each button) --
+    document.querySelectorAll('.column-color-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
 
-        var colId = btn.dataset.columnId;
-        var colEl = document.getElementById('column-' + colId);
-        if (!colEl) return;
-
-        // Close the Bootstrap dropdown first
-        var ddToggle = btn.closest('.dropdown');
-        if (ddToggle) {
-            var triggerBtn = ddToggle.querySelector('[data-bs-toggle="dropdown"]');
-            if (triggerBtn) {
-                var inst = bootstrap.Dropdown.getOrCreateInstance(triggerBtn);
-                inst.hide();
-            }
-        }
-
-        var isCollapsed = colEl.classList.toggle('column-collapsed');
-        colEl.setAttribute('draggable', isCollapsed ? 'false' : 'true');
-        var tasksDiv = colEl.querySelector('.kanban-column-tasks');
-        var addBtn   = colEl.querySelector('.p-2');
-        if (tasksDiv) tasksDiv.classList.toggle('d-none', isCollapsed);
-        if (addBtn)  addBtn.classList.toggle('d-none', isCollapsed);
-        btn.innerHTML = isCollapsed
-            ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
-            : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
-    }, true);  // <-- capture phase
-
-    // -- Click collapsed column header to expand --
-    document.addEventListener('click', function(e) {
-        var colEl = e.target.closest('.kanban-column.column-collapsed');
-        if (!colEl) return;
-        if (e.target.closest('.dropdown, button, a')) return;
-        colEl.classList.remove('column-collapsed');
-        colEl.setAttribute('draggable', 'true');
-        var tasksDiv = colEl.querySelector('.kanban-column-tasks');
-        var addBtn   = colEl.querySelector('.p-2');
-        if (tasksDiv) tasksDiv.classList.remove('d-none');
-        if (addBtn)  addBtn.classList.remove('d-none');
-        var collapseBtn = colEl.querySelector('.collapse-column-btn');
-        if (collapseBtn) collapseBtn.innerHTML = '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+            var colId = btn.dataset.columnId;
+            var color = btn.dataset.color;
+            var fd = new FormData();
+            fd.append('color', color);
+            fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            fetch('/columns/' + colId + '/update-color/', {
+                method: 'POST',
+                body: fd
+            })
+            .then(function(r) {
+                if (!r.ok) { console.error('Color update HTTP error:', r.status); return null; }
+                return r.json();
+            })
+            .then(function(data) {
+                if (data && data.success) {
+                    var header = document.querySelector('#column-' + colId + ' .kanban-column-header');
+                    if (header) {
+                        header.className = header.className.replace(/kanban-column-header--\w+/g, '');
+                        header.classList.add('kanban-column-header--' + color);
+                    }
+                    // Update selected ring
+                    var parent = btn.closest('.d-flex.gap-1');
+                    if (parent) {
+                        parent.querySelectorAll('.column-color-btn').forEach(function(b) {
+                            b.classList.remove('border-dark', 'border-2');
+                        });
+                        btn.classList.add('border-dark', 'border-2');
+                    }
+                }
+            })
+            .catch(function(err) { console.error('Color update failed:', err); });
+        });
     });
-
-    // -- Column Color Picker (event delegation on document, capture phase) --
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.column-color-btn');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        var colId = btn.dataset.columnId;
-        var color = btn.dataset.color;
-        var csrf  = getCSRF();
-        var fd = new FormData();
-        fd.append('color', color);
-        fetch('/columns/' + colId + '/update-color/', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': csrf },
-            body: fd
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
-                var header = document.querySelector('#column-' + colId + ' .kanban-column-header');
-                if (header) {
-                    header.className = header.className.replace(/kanban-column-header--\w+/g, '');
-                    header.classList.add('kanban-column-header--' + color);
-                }
-                // Update selected ring
-                var parent = btn.closest('.d-flex.gap-1');
-                if (parent) {
-                    parent.querySelectorAll('.column-color-btn').forEach(function(b) {
-                        b.classList.remove('border-dark', 'border-2');
-                    });
-                    btn.classList.add('border-dark', 'border-2');
-                }
-            }
-        })
-        .catch(function(err) { console.error('Color update failed:', err); });
-    }, true);  // <-- capture phase
 })();
 </script>
 
