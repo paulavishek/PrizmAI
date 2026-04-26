@@ -4,8 +4,9 @@
 
 {% block extra_css %}
 <style>
-.kg-node-card { border-left: 4px solid #6c757d; transition: box-shadow 0.2s; }
-.kg-node-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.kg-node-card { border-left: 4px solid #6c757d; transition: box-shadow 0.2s, transform 0.15s; }
+.kg-node-card.kg-clickable { cursor: pointer; }
+.kg-node-card.kg-clickable:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: translateY(-1px); }
 .kg-node-card.decision { border-left-color: #0d6efd; }
 .kg-node-card.lesson { border-left-color: #198754; }
 .kg-node-card.risk_event { border-left-color: #dc3545; }
@@ -17,6 +18,25 @@
 .kg-node-card.manual_log { border-left-color: #20c997; }
 .kg-tag { font-size: 0.75rem; }
 .kg-section-title { border-bottom: 2px solid #dee2e6; padding-bottom: 0.5rem; }
+.kg-expand-hint { font-size: 0.72rem; color: #adb5bd; }
+.kg-conn-item { background: #f8f9fa; border-radius: 6px; }
+.kg-conn-arrow { font-size: 1.1rem; color: #6c757d; }
+.conn-badge-led_to { background-color: #0d6efd !important; }
+.conn-badge-caused { background-color: #fd7e14 !important; }
+.conn-badge-similar_to { background-color: #6c757d !important; }
+.conn-badge-prevented { background-color: #198754 !important; }
+.conn-badge-repeated_from { background-color: #6f42c1 !important; }
+#modalContent { white-space: pre-wrap; line-height: 1.75; }
+.modal-header.kg-modal-header { border-left: 5px solid #6c757d; border-radius: 0.375rem 0.375rem 0 0; }
+.modal-header.kg-modal-header.decision { border-left-color: #0d6efd; }
+.modal-header.kg-modal-header.manual_log { border-left-color: #20c997; }
+.modal-header.kg-modal-header.risk_event { border-left-color: #dc3545; }
+.modal-header.kg-modal-header.milestone { border-left-color: #0dcaf0; }
+.modal-header.kg-modal-header.conflict_resolution { border-left-color: #6f42c1; }
+.modal-header.kg-modal-header.scope_change { border-left-color: #fd7e14; }
+.modal-header.kg-modal-header.ai_recommendation { border-left-color: #667eea; }
+.modal-header.kg-modal-header.lesson { border-left-color: #198754; }
+.modal-header.kg-modal-header.outcome { border-left-color: #ffc107; }
 </style>
 {% endblock %}
 
@@ -54,21 +74,27 @@
             <h5 class="kg-section-title"><i class="fas fa-gavel me-2 text-primary"></i>Decision Log & Lessons</h5>
             {% if manual_nodes %}
             {% for node in manual_nodes %}
-            <div class="card kg-node-card {{ node.node_type }} mb-3">
+            <div class="card kg-node-card {{ node.node_type }} mb-3 kg-clickable"
+                 data-node-id="{{ node.id }}"
+                 data-bs-toggle="modal"
+                 data-bs-target="#nodeDetailModal">
                 <div class="card-body py-2 px-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <h6 class="mb-1">{{ node.title }}</h6>
                         <small class="text-muted text-nowrap ms-2">{{ node.created_at|date:"M d, Y" }}</small>
                     </div>
-                    <p class="mb-1 small">{{ node.content|truncatewords:50 }}</p>
-                    <div>
-                        <span class="badge bg-secondary kg-tag">{{ node.get_node_type_display }}</span>
-                        {% for tag in node.tags %}
-                        <span class="badge bg-light text-dark kg-tag">{{ tag }}</span>
-                        {% endfor %}
-                        {% if node.connection_count %}
-                        <span class="badge bg-info kg-tag"><i class="fas fa-link me-1"></i>{{ node.connection_count }} connection{{ node.connection_count|pluralize }}</span>
-                        {% endif %}
+                    <p class="mb-1 small text-muted">{{ node.content|truncatewords:40 }}</p>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div>
+                            <span class="badge bg-secondary kg-tag">{{ node.get_node_type_display }}</span>
+                            {% for tag in node.tags %}
+                            <span class="badge bg-light text-dark kg-tag">{{ tag }}</span>
+                            {% endfor %}
+                            {% if node.connection_count %}
+                            <span class="badge bg-info kg-tag"><i class="fas fa-link me-1"></i>{{ node.connection_count }} connection{{ node.connection_count|pluralize }}</span>
+                            {% endif %}
+                        </div>
+                        <span class="kg-expand-hint">Click to expand <i class="fas fa-up-right-and-down-left-from-center ms-1"></i></span>
                     </div>
                 </div>
             </div>
@@ -86,21 +112,27 @@
             <h5 class="kg-section-title"><i class="fas fa-robot me-2 text-success"></i>Auto-Captured Memories <span class="badge bg-success">{{ auto_count }}</span></h5>
             {% if auto_nodes %}
             {% for node in auto_nodes %}
-            <div class="card kg-node-card {{ node.node_type }} mb-3">
+            <div class="card kg-node-card {{ node.node_type }} mb-3 kg-clickable"
+                 data-node-id="{{ node.id }}"
+                 data-bs-toggle="modal"
+                 data-bs-target="#nodeDetailModal">
                 <div class="card-body py-2 px-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <h6 class="mb-1">{{ node.title }}</h6>
                         <small class="text-muted text-nowrap ms-2">{{ node.created_at|date:"M d, Y" }}</small>
                     </div>
-                    <p class="mb-1 small">{{ node.content|truncatewords:50 }}</p>
-                    <div>
-                        <span class="badge bg-secondary kg-tag">{{ node.get_node_type_display }}</span>
-                        {% for tag in node.tags %}
-                        <span class="badge bg-light text-dark kg-tag">{{ tag }}</span>
-                        {% endfor %}
-                        {% if node.connection_count %}
-                        <span class="badge bg-info kg-tag"><i class="fas fa-link me-1"></i>{{ node.connection_count }} connection{{ node.connection_count|pluralize }}</span>
-                        {% endif %}
+                    <p class="mb-1 small text-muted">{{ node.content|truncatewords:40 }}</p>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div>
+                            <span class="badge bg-secondary kg-tag">{{ node.get_node_type_display }}</span>
+                            {% for tag in node.tags %}
+                            <span class="badge bg-light text-dark kg-tag">{{ tag }}</span>
+                            {% endfor %}
+                            {% if node.connection_count %}
+                            <span class="badge bg-info kg-tag"><i class="fas fa-link me-1"></i>{{ node.connection_count }} connection{{ node.connection_count|pluralize }}</span>
+                            {% endif %}
+                        </div>
+                        <span class="kg-expand-hint">Click to expand <i class="fas fa-up-right-and-down-left-from-center ms-1"></i></span>
                     </div>
                 </div>
             </div>
@@ -111,6 +143,45 @@
                 No auto-captured memories yet. Complete tasks, resolve conflicts, and archive projects to build your knowledge base.
             </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Node Detail Modal -->
+<div class="modal fade" id="nodeDetailModal" tabindex="-1" aria-labelledby="nodeDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header kg-modal-header" id="nodeModalHeader">
+                <div class="flex-grow-1 me-3">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge" id="nodeModalTypeBadge"></span>
+                        <span id="nodeModalAutoCapBadge" class="badge bg-success" style="display:none;">
+                            <i class="fas fa-robot me-1"></i>Auto-Captured
+                        </span>
+                        <small class="text-muted" id="nodeModalMeta"></small>
+                    </div>
+                    <h5 class="modal-title mb-0" id="nodeDetailModalLabel" style="line-height:1.4;"></h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Full content -->
+                <p id="nodeModalContent" class="text-body"></p>
+
+                <!-- Tags -->
+                <div id="nodeModalTags" class="mb-3"></div>
+
+                <!-- Connections -->
+                <div id="nodeModalConnectionsSection" style="display:none;">
+                    <hr class="my-3">
+                    <h6 class="mb-3">
+                        <i class="fas fa-diagram-project me-2 text-info"></i>
+                        AI-Discovered Connections
+                        <span class="badge bg-info ms-1" id="nodeModalConnCount"></span>
+                    </h6>
+                    <div id="nodeModalConnectionsList"></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -157,8 +228,114 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ nodes_data|json_script:"kgNodesData" }}
+{{ node_connections_data|json_script:"kgConnectionsData" }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+
+    // ── Node Detail Modal ──────────────────────────────────────────────────
+    const nodesData = JSON.parse(document.getElementById('kgNodesData').textContent);
+    const connectionsData = JSON.parse(document.getElementById('kgConnectionsData').textContent);
+
+    const TYPE_COLORS = {
+        decision: 'primary',
+        manual_log: 'success',
+        risk_event: 'danger',
+        outcome: 'warning',
+        milestone: 'info',
+        conflict_resolution: 'purple',
+        scope_change: 'warning',
+        ai_recommendation: 'secondary',
+        lesson: 'success',
+    };
+    const CONN_LABELS = {
+        led_to:        { out: 'LED TO →',       in:  '← LED HERE BY' },
+        caused:        { out: 'CAUSED →',        in:  '← CAUSED BY'   },
+        similar_to:    { out: 'SIMILAR TO',      in:  'SIMILAR TO'    },
+        prevented:     { out: 'PREVENTED →',     in:  '← PREVENTED BY'},
+        repeated_from: { out: 'REPEATED FROM →', in:  '← REPEATED IN' },
+    };
+
+    document.getElementById('nodeDetailModal').addEventListener('show.bs.modal', function(event) {
+        const card = event.relatedTarget;
+        if (!card) return;
+        const nodeId = card.dataset.nodeId;
+        const node = nodesData[nodeId];
+        if (!node) return;
+
+        // Header type border
+        const header = document.getElementById('nodeModalHeader');
+        header.className = 'modal-header kg-modal-header ' + node.node_type;
+
+        // Title
+        document.getElementById('nodeDetailModalLabel').textContent = node.title;
+
+        // Type badge
+        const typeBadge = document.getElementById('nodeModalTypeBadge');
+        const color = TYPE_COLORS[node.node_type] || 'secondary';
+        typeBadge.className = `badge bg-${color}`;
+        typeBadge.textContent = node.node_type_display;
+
+        // Auto-capture badge
+        const autoBadge = document.getElementById('nodeModalAutoCapBadge');
+        autoBadge.style.display = node.is_auto_captured ? 'inline-flex' : 'none';
+
+        // Meta (date / author)
+        const meta = document.getElementById('nodeModalMeta');
+        let metaParts = [node.created_at];
+        if (node.created_by) metaParts.push('by ' + node.created_by);
+        meta.textContent = metaParts.join(' · ');
+
+        // Full content
+        document.getElementById('nodeModalContent').textContent = node.content;
+
+        // Tags
+        const tagsEl = document.getElementById('nodeModalTags');
+        if (node.tags && node.tags.length) {
+            tagsEl.innerHTML = node.tags.map(t =>
+                `<span class="badge bg-light text-dark border me-1 mb-1" style="font-size:0.8rem;">${t}</span>`
+            ).join('');
+            tagsEl.style.display = '';
+        } else {
+            tagsEl.style.display = 'none';
+        }
+
+        // Connections
+        const conns = connectionsData[nodeId] || [];
+        const connSection = document.getElementById('nodeModalConnectionsSection');
+        if (conns.length) {
+            document.getElementById('nodeModalConnCount').textContent = conns.length;
+            const list = document.getElementById('nodeModalConnectionsList');
+            list.innerHTML = conns.map(conn => {
+                const labels = CONN_LABELS[conn.type] || { out: conn.type_display, in: conn.type_display };
+                const label = conn.direction === 'outgoing' ? labels.out : labels.in;
+                const isOutgoing = conn.direction === 'outgoing';
+                const thisLabel = `<span class="text-muted fst-italic">This memory</span>`;
+                const otherLabel = `<strong>${conn.other_title}</strong> <small class="text-muted">(${conn.other_type})</small>`;
+                const flow = isOutgoing
+                    ? `${thisLabel} &nbsp;<span class="kg-conn-arrow">→</span>&nbsp; ${otherLabel}`
+                    : `${otherLabel} &nbsp;<span class="kg-conn-arrow">→</span>&nbsp; ${thisLabel}`;
+                const aiPill = conn.ai_generated
+                    ? `<span class="badge bg-light text-secondary border" style="font-size:0.7rem;"><i class="fas fa-robot me-1"></i>AI discovered</span>`
+                    : '';
+                return `
+                <div class="kg-conn-item p-3 mb-2 d-flex align-items-start gap-3">
+                    <div class="pt-1">
+                        <span class="badge conn-badge-${conn.type} text-white" style="font-size:0.72rem; min-width:110px; text-align:center;">${label}</span>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="mb-1">${flow}</div>
+                        ${conn.reason ? `<p class="mb-1 small text-muted fst-italic">&ldquo;${conn.reason}&rdquo;</p>` : ''}
+                        ${aiPill}
+                    </div>
+                </div>`;
+            }).join('');
+            connSection.style.display = '';
+        } else {
+            connSection.style.display = 'none';
+        }
+    });
+
     // --- Add Manual Memory ---
     const saveBtn = document.getElementById('saveMemoryBtn');
     const errDiv = document.getElementById('addMemoryError');

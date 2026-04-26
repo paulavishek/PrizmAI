@@ -37,6 +37,7 @@ def board_knowledge(request, board_id):
     nodes = (
         MemoryNode.objects
         .filter(board=board)
+        .select_related('created_by')
         .annotate(connection_count=Count('outgoing_connections') + Count('incoming_connections'))
         .order_by('-importance_score', '-created_at')
     )
@@ -44,12 +45,63 @@ def board_knowledge(request, board_id):
     manual_nodes = nodes.filter(is_auto_captured=False)
     auto_nodes = nodes.filter(is_auto_captured=True)
 
+    # Serialize all node data + connections as JSON for the interactive detail modal
+    node_list = list(nodes)
+    all_node_ids = [n.pk for n in node_list]
+
+    nodes_data = {}
+    for node in node_list:
+        nodes_data[str(node.pk)] = {
+            'title': node.title,
+            'content': node.content,
+            'node_type': node.node_type,
+            'node_type_display': node.get_node_type_display(),
+            'tags': node.tags if isinstance(node.tags, list) else [],
+            'created_at': node.created_at.strftime('%b %d, %Y'),
+            'created_by': (
+                node.created_by.get_full_name() or node.created_by.username
+                if node.created_by else None
+            ),
+            'is_auto_captured': node.is_auto_captured,
+            'importance_score': round(node.importance_score, 2),
+        }
+
+    # Build per-node connection map (both incoming and outgoing)
+    connections_qs = MemoryConnection.objects.filter(
+        Q(from_node_id__in=all_node_ids) | Q(to_node_id__in=all_node_ids)
+    ).select_related('from_node', 'to_node')
+
+    node_connections_map = {}
+    for conn in connections_qs:
+        if conn.from_node_id in all_node_ids:
+            node_connections_map.setdefault(str(conn.from_node_id), []).append({
+                'direction': 'outgoing',
+                'type': conn.connection_type,
+                'type_display': conn.get_connection_type_display(),
+                'reason': conn.reason,
+                'other_title': conn.to_node.title,
+                'other_type': conn.to_node.get_node_type_display(),
+                'ai_generated': conn.ai_generated,
+            })
+        if conn.to_node_id in all_node_ids:
+            node_connections_map.setdefault(str(conn.to_node_id), []).append({
+                'direction': 'incoming',
+                'type': conn.connection_type,
+                'type_display': conn.get_connection_type_display(),
+                'reason': conn.reason,
+                'other_title': conn.from_node.title,
+                'other_type': conn.from_node.get_node_type_display(),
+                'ai_generated': conn.ai_generated,
+            })
+
     context = {
         'board': board,
         'manual_nodes': manual_nodes,
         'auto_nodes': auto_nodes,
         'auto_count': auto_nodes.count(),
         'total_count': nodes.count(),
+        'nodes_data': nodes_data,
+        'node_connections_data': node_connections_map,
     }
     return render(request, 'knowledge_graph/board_knowledge.html', context)
 

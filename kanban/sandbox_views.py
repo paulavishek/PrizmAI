@@ -1528,6 +1528,47 @@ def _duplicate_board(template_board, user):
     except Exception:
         pass
 
+    # --- Knowledge Graph: MemoryNodes & MemoryConnections ---
+    try:
+        from knowledge_graph.models import MemoryNode, MemoryConnection
+        node_map = {}  # old node pk → new node instance
+        for node in MemoryNode.objects.filter(board=template_board):
+            old_pk = node.pk
+            new_node = MemoryNode(
+                board=new_board,
+                mission=node.mission,
+                node_type=node.node_type,
+                title=node.title,
+                content=node.content,
+                context_data=node.context_data,
+                tags=node.tags,
+                created_by=node.created_by,
+                is_auto_captured=node.is_auto_captured,
+                source_object_type=node.source_object_type,
+                source_object_id=node.source_object_id,
+                importance_score=node.importance_score,
+            )
+            new_node.save()
+            MemoryNode.objects.filter(pk=new_node.pk).update(created_at=node.created_at)
+            node_map[old_pk] = new_node
+
+        # Copy AI-discovered connections between copied nodes
+        for conn in MemoryConnection.objects.filter(from_node__board=template_board):
+            new_from = node_map.get(conn.from_node_id)
+            new_to = node_map.get(conn.to_node_id)
+            if new_from and new_to:
+                MemoryConnection.objects.get_or_create(
+                    from_node=new_from,
+                    to_node=new_to,
+                    connection_type=conn.connection_type,
+                    defaults={
+                        'reason': conn.reason,
+                        'ai_generated': conn.ai_generated,
+                    },
+                )
+    except Exception:
+        pass
+
     return new_board
 
 
