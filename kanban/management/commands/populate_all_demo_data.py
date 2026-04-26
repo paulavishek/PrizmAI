@@ -236,8 +236,16 @@ class Command(BaseCommand):
                 f'{ai_tools_stats["exit_protocol"]} Exit Protocol entries'
             ))
 
-            # 11. Retrospective Demo Data
-            self.stdout.write(self.style.NOTICE('\n📋 PHASE 11: Creating Retrospective Demo Data...'))
+            # 11. Knowledge Base Demo Data
+            self.stdout.write(self.style.NOTICE('\n🧠 PHASE 11: Creating Knowledge Base Demo Data...'))
+            from django.core.management import call_command as _call_kg
+            try:
+                _call_kg('populate_knowledge_demo_data')
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'   ⚠️ Knowledge Base population: {e}'))
+
+            # 12. Retrospective Demo Data
+            self.stdout.write(self.style.NOTICE('\n📋 PHASE 12: Creating Retrospective Demo Data...'))
             retro_stats = self.create_retrospective_demo_data()
             self.stdout.write(self.style.SUCCESS(
                 f'   ✅ Retrospectives: {retro_stats["retrospectives"]} retrospectives, '
@@ -720,6 +728,16 @@ class Command(BaseCommand):
         except Exception:
             pass
         self.stdout.write('   ✓ Cleared Exit Protocol data')
+
+        # =====================================================================
+        # STEP 23: Clear Knowledge Graph data
+        # =====================================================================
+        try:
+            from knowledge_graph.models import MemoryNode
+            MemoryNode.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Knowledge Graph data')
 
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
