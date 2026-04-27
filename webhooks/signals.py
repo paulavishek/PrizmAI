@@ -124,8 +124,8 @@ def task_saved(sender, instance, created, **kwargs):
             triggered_by=task.created_by  # Could track who updated in the future
         )
         
-        # Check if task was completed (progress = 100)
-        if task.progress == 100:
+        # Check if task was JUST completed (transitioned to Done), not merely re-saved at 100%
+        if getattr(instance, '_just_completed', False):
             trigger_webhooks(
                 event_type='task.completed',
                 board=board,

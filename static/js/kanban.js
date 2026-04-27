@@ -1171,7 +1171,19 @@ function updateTaskPosition(taskId, columnId, position = 0) {
             console.log('Task moved successfully');
             // Show success notification
             showNotification('Task moved successfully', 'success');
-            
+
+            // If the backend auto-set progress to 100%, update the card's progress strip and done styling
+            if (data.progress === 100 && taskEl) {
+                const fill = taskEl.querySelector('.card-progress-fill');
+                if (fill) {
+                    fill.style.width = '100%';
+                    fill.dataset.progress = '100';
+                    fill.classList.remove('bg-danger', 'bg-warning');
+                    fill.classList.add('bg-success');
+                }
+                taskEl.classList.add('done-card');
+            }
+
             // Update column scrolling after task move
             updateColumnScrolling();
             

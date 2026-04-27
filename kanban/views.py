@@ -4016,7 +4016,9 @@ def move_task(request):
             task.progress = 100
         
         task.save()
-        
+
+        response_data = {'success': True, 'progress': task.progress}
+
         # Record activity (only for authenticated users)
         if request.user.is_authenticated:
             TaskActivity.objects.create(
@@ -4051,8 +4053,8 @@ def move_task(request):
             t.position = new_position
             t.save()
         
-        return JsonResponse({'success': True})
-    
+        return JsonResponse(response_data)
+
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
 @login_required
