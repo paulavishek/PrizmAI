@@ -213,7 +213,7 @@ def task_assigned(sender, instance, created, **kwargs):
     """
     Triggered when a task is assigned to a user
     """
-    if not created and hasattr(instance, '_assignment_changed'):
+    if not created and getattr(instance, '_assignment_changed', False):
         task = instance
         board = task.column.board
         
