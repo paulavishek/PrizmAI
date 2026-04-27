@@ -64,16 +64,16 @@ def capture_task_completed(sender, instance, created, **kwargs):
         board=board,
         mission=board.strategy.mission if board and board.strategy else None,
         node_type='milestone' if is_high_priority else 'outcome',
-        title=f"Task completed: {instance.name[:150]}",
+        title=f"Task completed: {instance.title[:150]}",
         content=(
-            f"Task '{instance.name}' was completed"
+            f"Task '{instance.title}' was completed"
             f"{' by ' + instance.assigned_to.get_full_name() if instance.assigned_to else ''}. "
             f"Priority: {instance.get_priority_display()}. "
             f"Board: {board.name if board else 'Unknown'}."
         ),
         context_data={
             'task_id': instance.pk,
-            'task_name': instance.name,
+            'task_name': instance.title,
             'priority': instance.priority,
             'assigned_to': instance.assigned_to_id,
             'board_name': board.name if board else None,
@@ -85,7 +85,7 @@ def capture_task_completed(sender, instance, created, **kwargs):
         source_object_id=instance.pk,
         importance_score=0.7 if is_high_priority else 0.4,
     )
-    logger.info("Memory node created for task completion: %s", instance.name)
+    logger.info("Memory node created for task completion: %s", instance.title)
 
 
 # ── Signal 3: Board Archived ────────────────────────────────────────────────
