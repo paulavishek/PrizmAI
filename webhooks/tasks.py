@@ -13,6 +13,39 @@ from celery import shared_task
 from webhooks.models import Webhook, WebhookDelivery
 
 
+def _is_slack_webhook(url):
+    """Return True if the URL is a Slack Incoming Webhook."""
+    return 'hooks.slack.com' in url
+
+
+def _build_slack_payload(event_type, data):
+    """
+    Convert a PrizmAI webhook event into a Slack-compatible {"text": "..."} payload.
+    Slack Incoming Webhooks require a top-level "text" key.
+    """
+    title = data.get('title', '')
+    board_name = ''
+    if isinstance(data.get('board'), dict):
+        board_name = data['board'].get('name', '')
+
+    EVENT_MESSAGES = {
+        'test.event': '🔔 PrizmAI test — your Slack integration is working!',
+        'task.created': f'📋 Task created: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
+        'task.updated': f'✏️ Task updated: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
+        'task.deleted': f'🗑️ Task deleted: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
+        'task.completed': f'✅ Task completed: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
+        'task.assigned': f'👤 Task assigned: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
+        'task.moved': f'🔀 Task moved: *{title}*' + (
+            f' → *{data.get("to_column", {}).get("name", "")}*' if isinstance(data.get("to_column"), dict) else ''
+        ) + (f' on board *{board_name}*' if board_name else ''),
+        'comment.added': f'💬 Comment added on: *{title}*' + (f' in board *{board_name}*' if board_name else ''),
+        'board.updated': f'📌 Board updated: *{board_name}*' if board_name else '📌 Board updated',
+    }
+
+    text = EVENT_MESSAGES.get(event_type, f'🔔 PrizmAI event: {event_type}')
+    return {'text': text}
+
+
 @shared_task(bind=True, max_retries=3)
 def deliver_webhook(self, delivery_id):
     """
@@ -35,13 +68,16 @@ def deliver_webhook(self, delivery_id):
         delivery.save()
         return {'error': 'Webhook inactive'}
     
-    # Prepare payload
-    payload = {
-        'event': delivery.event_type,
-        'timestamp': delivery.created_at.isoformat(),
-        'delivery_id': delivery.id,
-        'data': delivery.payload
-    }
+    # Prepare payload — use Slack-compatible format for Slack Incoming Webhooks
+    if _is_slack_webhook(webhook.url):
+        payload = _build_slack_payload(delivery.event_type, delivery.payload)
+    else:
+        payload = {
+            'event': delivery.event_type,
+            'timestamp': delivery.created_at.isoformat(),
+            'delivery_id': delivery.id,
+            'data': delivery.payload
+        }
     
     # Prepare headers
     headers = {

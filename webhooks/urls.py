@@ -18,4 +18,7 @@ urlpatterns = [
     
     # Event logs
     path('boards/<int:board_id>/webhook-events/', views.webhook_events, name='webhook_events'),
+
+    # Delivery status (for test-result polling)
+    path('deliveries/<int:delivery_id>/status/', views.delivery_status, name='delivery_status'),
 ]

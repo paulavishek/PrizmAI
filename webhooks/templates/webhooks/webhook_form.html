@@ -22,6 +22,26 @@
                             {{ form.non_field_errors }}
                         </div>
                         {% endif %}
+
+                        {% if not webhook %}
+                        {# Quick-setup preset panel — only shown on Create, not Edit #}
+                        <div class="mb-4">
+                            <p class="form-label mb-2 fw-semibold">Quick setup</p>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('slack')">
+                                    <i class="bi bi-slack me-1"></i> Slack
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('teams')">
+                                    <i class="bi bi-microsoft-teams me-1"></i> MS Teams
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('custom')">
+                                    <i class="bi bi-gear me-1"></i> Custom
+                                </button>
+                            </div>
+                            <div id="preset-guide" class="mt-3" style="display:none;"></div>
+                        </div>
+                        <hr class="mb-4">
+                        {% endif %}
                         
                         <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                         
@@ -37,7 +57,7 @@
                             <small class="form-text text-muted">{{ form.name.help_text }}</small>
                         </div>
                         
-                        <div class="mb-3">
+                        <div class="mb-4">
                             <label for="{{ form.url.id_for_label }}" class="form-label">
                                 Webhook URL <span class="required-asterisk">*</span>
                             </label>
@@ -48,25 +68,65 @@
                             <div class="field-validation-msg"><i class="fas fa-exclamation-circle"></i> Webhook URL is required.</div>
                             <small class="form-text text-muted">{{ form.url.help_text }}</small>
                         </div>
+
+                        <div class="mb-3 p-3 border rounded bg-light d-flex align-items-center justify-content-between">
+                            <div>
+                                <label class="form-label mb-0 fw-semibold" for="{{ form.is_active.id_for_label }}">
+                                    Webhook Active
+                                </label>
+                                <div class="text-muted small">When enabled, this webhook will receive events</div>
+                            </div>
+                            <div class="form-check form-switch ms-3 mb-0">
+                                <input class="form-check-input" type="checkbox" role="switch"
+                                       id="{{ form.is_active.id_for_label }}"
+                                       name="{{ form.is_active.html_name }}"
+                                       {% if form.is_active.value %}checked{% endif %}
+                                       style="width:2.5em; height:1.25em;">
+                            </div>
+                        </div>
                         
                         <div class="mb-3">
                             <label class="form-label">
                                 Events to Trigger <span class="text-danger">*</span>
                             </label>
-                            {{ form.events }}
+                            {# Render checkboxes in two grouped sections instead of the default flat list #}
+                            <div class="border rounded p-3">
+                                <p class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.05em;">Task Events</p>
+                                {% for widget in form.events %}
+                                    {% with val=widget.data.value %}
+                                    {% if val == "task.created" or val == "task.updated" or val == "task.deleted" or val == "task.completed" or val == "task.assigned" or val == "task.moved" %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="{{ form.events.html_name }}"
+                                               id="id_events_{{ forloop.counter0 }}" value="{{ val }}"
+                                               {% if widget.data.selected %}checked{% endif %}>
+                                        <label class="form-check-label" for="id_events_{{ forloop.counter0 }}">
+                                            {{ widget.choice_label }}
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    {% endwith %}
+                                {% endfor %}
+                                <hr class="my-2">
+                                <p class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.05em;">Board &amp; Comment Events</p>
+                                {% for widget in form.events %}
+                                    {% with val=widget.data.value %}
+                                    {% if val == "comment.added" or val == "board.updated" %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="{{ form.events.html_name }}"
+                                               id="id_events_b_{{ forloop.counter0 }}" value="{{ val }}"
+                                               {% if widget.data.selected %}checked{% endif %}>
+                                        <label class="form-check-label" for="id_events_b_{{ forloop.counter0 }}">
+                                            {{ widget.choice_label }}
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    {% endwith %}
+                                {% endfor %}
+                            </div>
                             {% if form.events.errors %}
                             <div class="text-danger">{{ form.events.errors }}</div>
                             {% endif %}
                             <small class="form-text text-muted">{{ form.events.help_text }}</small>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <div class="form-check">
-                                {{ form.is_active }}
-                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
-                                    Active (webhook will receive events)
-                                </label>
-                            </div>
                         </div>
                         
                         <hr>
@@ -143,20 +203,113 @@
                     </ul>
                     
                     <p><strong>Payload format:</strong></p>
-                    <pre class="bg-light p-2"><code>{
-  "event": "task.created",
-  "timestamp": "2025-11-08T12:00:00Z",
+                    <p class="text-muted small mb-1">Example — <code>task.completed</code> event:</p>
+                    <pre class="bg-light p-2 small"><code>{
+  "event": "task.completed",
+  "timestamp": "2026-04-27T10:30:00Z",
   "delivery_id": 123,
   "data": {
     "id": 42,
-    "title": "Task title",
-    "board": {...},
-    ...
+    "title": "Design landing page",
+    "completed_by": "avishek@example.com",
+    "board": {
+      "id": 100,
+      "name": "Software Development"
+    }
   }
 }</code></pre>
+                    <details class="mt-2">
+                        <summary class="text-muted small" style="cursor:pointer;">Show <code>task.created</code> example</summary>
+                        <pre class="bg-light p-2 small mt-2"><code>{
+  "event": "task.created",
+  "timestamp": "2026-04-27T09:15:00Z",
+  "delivery_id": 124,
+  "data": {
+    "id": 43,
+    "title": "Write unit tests",
+    "created_by": "avishek@example.com",
+    "board": {
+      "id": 100,
+      "name": "Software Development"
+    }
+  }
+}</code></pre>
+                    </details>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+const PRESETS = {
+    slack: {
+        name: 'Slack Notifications',
+        events: ['task.completed', 'task.assigned'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-slack me-1"></i> How to get your Slack webhook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">api.slack.com/apps</a> and click <strong>Create New App</strong>.</li>
+                    <li>Choose <strong>From scratch</strong>, navigate to <strong>Incoming Webhooks</strong> in the left sidebar and activate it.</li>
+                    <li>Click <strong>Add New Webhook to Workspace</strong>, pick a channel, then copy the generated URL and paste it in the Webhook URL field below.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Pre-selected events: Task Completed, Task Assigned — you can adjust these below.</p>
+            </div>`
+    },
+    teams: {
+        name: 'MS Teams Notifications',
+        events: ['task.created', 'board.updated'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-microsoft-teams me-1"></i> How to get your MS Teams webhook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>In Teams, open the channel you want to notify, click <strong>···</strong> (More options) &gt; <strong>Connectors</strong>.</li>
+                    <li>Find <strong>Incoming Webhook</strong>, click <strong>Configure</strong>, give it a name, then click <strong>Create</strong>.</li>
+                    <li>Copy the webhook URL and paste it in the Webhook URL field below, then click <strong>Done</strong> in Teams.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Note: Microsoft is migrating to <a href="https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors" target="_blank" rel="noopener noreferrer">Workflows connectors</a> — use Power Automate for newer workspaces.</p>
+            </div>`
+    },
+    custom: {
+        name: '',
+        events: [],
+        guide: `
+            <div class="alert alert-secondary py-3 small">
+                <p class="fw-semibold mb-1"><i class="bi bi-gear me-1"></i> Custom integration</p>
+                <p class="mb-0">Enter any URL that accepts HTTP POST requests with a JSON body. See the <strong>Payload format</strong> section below for the exact structure your endpoint will receive.</p>
+            </div>`
+    }
+};
+
+function applyPreset(key) {
+    const preset = PRESETS[key];
+    if (!preset) return;
+
+    // Pre-fill name only if the field is currently blank
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    if (nameField && nameField.value.trim() === '' && preset.name) {
+        nameField.value = preset.name;
+    }
+
+    // Focus the URL field
+    const urlField = document.getElementById('{{ form.url.id_for_label }}');
+    if (urlField) urlField.focus();
+
+    // Pre-check the preset's suggested events (uncheck all others)
+    if (preset.events.length) {
+        document.querySelectorAll('input[name="{{ form.events.html_name }}"]').forEach(function(cb) {
+            cb.checked = preset.events.includes(cb.value);
+        });
+    }
+
+    // Show contextual guide
+    const guide = document.getElementById('preset-guide');
+    if (guide) {
+        guide.innerHTML = preset.guide;
+        guide.style.display = '';
+        guide.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+</script>
 {% endblock %}

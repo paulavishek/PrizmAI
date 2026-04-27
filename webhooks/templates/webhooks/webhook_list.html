@@ -39,7 +39,14 @@
                                 <span class="badge bg-danger">Failed</span>
                                 {% endif %}
                             </h5>
-                            <p class="card-text small text-muted">{{ webhook.url|truncatechars:50 }}</p>
+                            <p class="card-text small text-muted mb-1">{{ webhook.url|truncatechars:50 }}</p>
+                            <p class="card-text small text-muted">
+                                {% if webhook.last_triggered %}
+                                <i class="bi bi-clock me-1"></i>Last triggered: {{ webhook.last_triggered|timesince }} ago
+                                {% else %}
+                                <i class="bi bi-clock me-1"></i>Never triggered
+                                {% endif %}
+                            </p>
                         </div>
                     </div>
                     
@@ -75,7 +82,7 @@
                     
                     <div class="btn-group w-100">
                         <a href="{% url 'webhooks:webhook_detail' webhook.id %}" class="btn btn-sm btn-outline-primary">
-                            Details
+                            <i class="bi bi-journal-text me-1"></i>Activity Log
                         </a>
                         <a href="{% url 'webhooks:webhook_edit' webhook.id %}" class="btn btn-sm btn-outline-secondary">
                             Edit
@@ -90,18 +97,59 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="alert alert-info">
-        <h4><i class="bi bi-info-circle"></i> No webhooks configured</h4>
-        <p>Webhooks allow external services like Slack, MS Teams, or custom integrations to receive real-time notifications when events occur on this board.</p>
-        <a href="{% url 'webhooks:webhook_create' board.id %}" class="btn btn-primary">Create Your First Webhook</a>
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <div class="mb-3" style="font-size: 2.5rem; line-height: 1;">
+                <i class="bi bi-plug text-primary"></i>
+            </div>
+            <h4 class="fw-semibold mb-2">Connect PrizmAI to your team's tools</h4>
+            <p class="text-muted mb-4" style="max-width: 520px; margin: 0 auto 1.5rem;">
+                Get instant alerts when tasks are completed, auto-update your team channels when deadlines change, or trigger any custom automation workflow — all in real time.
+            </p>
+            <div class="d-flex justify-content-center align-items-center gap-3 mb-4">
+                <span class="d-flex align-items-center gap-1 text-muted small">
+                    <i class="bi bi-slack" style="font-size:1.25rem;"></i> Slack
+                </span>
+                <span class="text-muted">·</span>
+                <span class="d-flex align-items-center gap-1 text-muted small">
+                    <i class="bi bi-microsoft-teams" style="font-size:1.25rem;"></i> MS Teams
+                </span>
+                <span class="text-muted">·</span>
+                <span class="d-flex align-items-center gap-1 text-muted small">
+                    <i class="bi bi-gear" style="font-size:1.25rem;"></i> Custom integrations
+                </span>
+            </div>
+            <a href="{% url 'webhooks:webhook_create' board.id %}" class="btn btn-primary px-4">
+                <i class="bi bi-plus-circle me-1"></i> Create Your First Webhook
+            </a>
+        </div>
     </div>
     {% endif %}
 </div>
 
+{# Bootstrap toast container for test-webhook feedback #}
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">
+    <div id="webhookTestToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="8000">
+        <div class="d-flex">
+            <div class="toast-body" id="webhookTestToastBody">
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Sending test…
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
 <script>
 function testWebhook(webhookId) {
-    if (!confirm('Send a test webhook?')) return;
-    
+    const toastEl = document.getElementById('webhookTestToast');
+    const toastBody = document.getElementById('webhookTestToastBody');
+
+    // Show spinner state
+    toastBody.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Sending test…';
+    const toast = bootstrap.Toast.getOrCreateInstance(toastEl);
+    toast.show();
+
     fetch(`/webhooks/webhooks/${webhookId}/test/`, {
         method: 'POST',
         headers: {
@@ -111,14 +159,60 @@ function testWebhook(webhookId) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            alert('Test webhook sent! Check your endpoint for the delivery.');
-        } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
+        if (!data.success) {
+            toastBody.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-2"></i> ' +
+                'Error: ' + (data.error || 'Unknown error');
+            return;
         }
+
+        const deliveryId = data.delivery_id;
+        // Update toast to polling state
+        toastBody.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Test queued — checking result…';
+
+        // Poll up to 6 times, 1.5s apart (9s total)
+        let attempts = 0;
+        const poll = setInterval(function() {
+            attempts++;
+            fetch(`/webhooks/deliveries/${deliveryId}/status/`, {
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            })
+            .then(r => r.json())
+            .then(result => {
+                const done = result.status === 'success' || result.status === 'failed';
+                if (done || attempts >= 6) {
+                    clearInterval(poll);
+                    const activityUrl = `/webhooks/webhooks/${webhookId}/`;
+                    if (result.status === 'success') {
+                        toastBody.innerHTML =
+                            '<i class="bi bi-check-circle-fill text-success me-2"></i>' +
+                            'HTTP ' + (result.response_status_code || '2xx') +
+                            (result.response_time_ms ? ' &mdash; ' + result.response_time_ms + 'ms' : '') +
+                            ' &nbsp;<a href="' + activityUrl + '" class="text-white-50 small">View Activity Log &rarr;</a>';
+                    } else if (result.status === 'failed') {
+                        toastBody.innerHTML =
+                            '<i class="bi bi-x-circle-fill text-danger me-2"></i>' +
+                            'Failed' +
+                            (result.response_status_code ? ' (HTTP ' + result.response_status_code + ')' : '') +
+                            (result.error_message ? ': ' + result.error_message : '') +
+                            ' &nbsp;<a href="' + activityUrl + '" class="text-white-50 small">View Activity Log &rarr;</a>';
+                    } else {
+                        // Still pending after max attempts
+                        toastBody.innerHTML =
+                            '<i class="bi bi-hourglass-split me-2"></i>' +
+                            'Test queued — delivery is in progress. &nbsp;<a href="' + activityUrl + '" class="text-white-50 small">View Activity Log &rarr;</a>';
+                    }
+                }
+            })
+            .catch(function() {
+                if (attempts >= 6) {
+                    clearInterval(poll);
+                    toastBody.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i> Could not check result. <a href="/webhooks/webhooks/' + webhookId + '/" class="text-white-50 small">View Activity Log &rarr;</a>';
+                }
+            });
+        }, 1500);
     })
-    .catch(error => {
-        alert('Error sending test webhook: ' + error);
+    .catch(function(error) {
+        toastBody.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-2"></i> Error: ' + error;
     });
 }
 </script>

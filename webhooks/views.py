@@ -231,3 +231,22 @@ def webhook_events(request, board_id):
         'stats': stats
     }
     return render(request, 'webhooks/webhook_events.html', context)
+
+
+@login_required
+@require_http_methods(["GET"])
+def delivery_status(request, delivery_id):
+    """Return the current status of a single webhook delivery (used for test-result polling)."""
+    delivery = get_object_or_404(WebhookDelivery, id=delivery_id)
+    board = delivery.webhook.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        from django.http import Http404
+        raise Http404
+
+    return JsonResponse({
+        'status': delivery.status,
+        'response_status_code': delivery.response_status_code,
+        'response_time_ms': delivery.response_time_ms,
+        'error_message': delivery.error_message or '',
+    })
