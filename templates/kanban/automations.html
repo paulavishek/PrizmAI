@@ -422,7 +422,7 @@
           <div id="schedPriorityField" style="display:none;">
             <div class="mb-3">
               <label class="form-label text-muted small">Priority</label>
-              <select name="sched_action_value" id="schedPrioritySelect" class="form-select form-select-sm">
+              <select name="sched_action_value" id="schedPrioritySelect" class="form-select form-select-sm" disabled>
                 <option value="urgent">Urgent</option><option value="high">High</option>
                 <option value="medium">Medium</option><option value="low">Low</option>
               </select>
@@ -833,6 +833,12 @@ function onSchedActionChange() {
   const pf = document.getElementById('schedPriorityField');
   if (nf) nf.style.display = a === 'send_notification' ? 'block' : 'none';
   if (pf) pf.style.display = a === 'set_priority' ? 'block' : 'none';
+  // Disable the hidden select so it is NOT submitted when send_notification is chosen.
+  // Without this, both name="sched_action_value" fields submit and the priority value
+  // overrides the (empty) message, storing "urgent" as the action_value and breaking
+  // recipient resolution in _send_automation_notification.
+  const ps = document.getElementById('schedPrioritySelect');
+  if (ps) ps.disabled = (a !== 'set_priority');
 }
 
 function getSchedPreviewText() {
