@@ -147,6 +147,8 @@ class Notification(models.Model):
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications')
     notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=255, blank=True, null=True,
+                              help_text="Short headline for the notification")
     text = models.TextField()
     
     # AI-generated summary for concise notification display
