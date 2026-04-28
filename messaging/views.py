@@ -415,6 +415,81 @@ def mark_notification_read(request, notification_id):
 
 
 @login_required
+@require_http_methods(["POST"])
+def delete_notification(request, notification_id):
+    """Permanently delete a notification for the current user"""
+    notification = get_object_or_404(Notification, id=notification_id, recipient=request.user)
+    notification.delete()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': True})
+
+    return redirect('messaging:notifications')
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_all_notifications(request):
+    """Permanently delete all notifications for the current user"""
+    Notification.objects.filter(recipient=request.user).delete()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': True})
+
+    return redirect('messaging:notifications')
+
+
+@login_required
+@require_http_methods(["POST"])
+def ai_digest_notifications(request):
+    """Generate an AI digest summarising the user's recent notifications"""
+    workspace_boards = get_user_boards(request.user)
+    recent_notifications = Notification.objects.filter(
+        recipient=request.user
+    ).filter(
+        Q(chat_message__chat_room__board__in=workspace_boards)
+        | Q(task_thread_comment__task__column__board__in=workspace_boards)
+        | Q(chat_message__isnull=True, task_thread_comment__isnull=True)
+    ).order_by('-created_at')[:30]
+
+    if not recent_notifications:
+        return JsonResponse({'digest': 'You have no recent notifications to summarise.'})
+
+    lines = []
+    for n in recent_notifications:
+        label = n.title or n.ai_summary or n.text
+        lines.append(f"- [{n.get_notification_type_display()}] {label}")
+    notifications_text = "\n".join(lines)
+
+    try:
+        from kanban.utils.ai_utils import generate_ai_content
+        prompt = f"""You are an assistant for a project management tool called PrizmAI.
+Below is a list of recent notifications for a user. Write a concise digest (3–6 bullet points) 
+summarising the key things the user needs to know or act on. Be direct and actionable.
+
+Notifications:
+{notifications_text}
+
+Rules:
+- Focus on action items and important updates
+- Group related notifications if helpful
+- Keep total response under 200 words
+- Use bullet points starting with •"""
+
+        digest = generate_ai_content(prompt, task_type='simple')
+        if digest:
+            digest = digest.strip()
+        else:
+            digest = 'Unable to generate a digest right now. Please try again later.'
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"AI digest failed: {e}")
+        digest = 'Unable to generate a digest right now. Please try again later.'
+
+    return JsonResponse({'digest': digest})
+
+
+@login_required
 @require_http_methods(["GET"])
 def get_unread_notification_count(request):
     """API endpoint to get unread notification count"""

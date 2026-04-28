@@ -228,11 +228,14 @@ def _execute_scheduled_notification(sa, tasks):
         if sa.created_by:
             recipients.add(sa.created_by)
 
+    notification_title = f"{sa.name}: {sa.board.name}" if sa.name else f"Automation alert on {sa.board.name}"
+
     for recipient in recipients:
         Notification.objects.create(
             recipient=recipient,
             sender=sender,
             notification_type='ACTIVITY',
+            title=notification_title,
             text=message,
             action_url=board_url,
         )

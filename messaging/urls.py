@@ -29,6 +29,9 @@ urlpatterns = [
     # Notifications
     path('notifications/', views.notifications, name='notifications'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('notifications/<int:notification_id>/delete/', views.delete_notification, name='delete_notification'),
+    path('notifications/delete-all/', views.delete_all_notifications, name='delete_all_notifications'),
+    path('notifications/ai-digest/', views.ai_digest_notifications, name='ai_digest_notifications'),
     path('notifications/count/', views.get_unread_notification_count, name='get_unread_notification_count'),
     
     # Unread Messages
