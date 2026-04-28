@@ -214,12 +214,18 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Note: Django 5.x always uses USE_L10N=True and ignores custom DATE_INPUT_FORMATS
+# in settings.py (formats.get_format() is hardcoded to use locale-based formats).
+# To apply custom formats in Django 5.x, use FORMAT_MODULE_PATH or set input_formats
+# explicitly on form fields.
+
 # Indian date/time format (DD-MM-YYYY)
 DATE_FORMAT = 'd-m-Y'
 SHORT_DATE_FORMAT = 'd/m/Y'
 DATETIME_FORMAT = 'd-m-Y H:i'
 SHORT_DATETIME_FORMAT = 'd/m/Y H:i'
-DATE_INPUT_FORMATS = ['%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d']
+DATE_INPUT_FORMATS = ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y']
+DATETIME_INPUT_FORMATS = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M']
 
 
 # Static files (CSS, JavaScript, Images)
