@@ -1121,6 +1121,9 @@ def strategy_detail(request, mission_id, strategy_id):
         'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy),
         'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy),
         'can_create_child': request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request),
+        # Favorites
+        'favorite_type': 'strategy',
+        'is_favorited': _is_fav(request.user, 'strategy', strategy.pk),
     })
 
 

@@ -623,6 +623,7 @@ class UserFavorite(models.Model):
         ('board', 'Board'),
         ('goal', 'Goal'),
         ('mission', 'Mission'),
+        ('strategy', 'Strategy'),
         ('wiki_page', 'Wiki Page'),
         ('task', 'Task'),
         ('retrospective', 'Retrospective'),
@@ -636,6 +637,7 @@ class UserFavorite(models.Model):
         'board': 'fas fa-columns',
         'goal': 'fas fa-trophy',
         'mission': 'fas fa-bullseye',
+        'strategy': 'fas fa-chess',
         'wiki_page': 'fas fa-book-open',
         'task': 'fas fa-check-square',
         'retrospective': 'fas fa-history',
@@ -688,8 +690,10 @@ class UserFavorite(models.Model):
                 return reverse('goal_detail', args=[obj.pk])
             elif self.favorite_type == 'mission':
                 return reverse('mission_detail', args=[obj.pk])
+            elif self.favorite_type == 'strategy':
+                return reverse('strategy_detail', kwargs={'mission_id': obj.mission_id, 'strategy_id': obj.pk})
             elif self.favorite_type == 'wiki_page':
-                return reverse('wiki:wiki_page_detail', args=[obj.pk])
+                return reverse('wiki:page_detail', kwargs={'slug': obj.slug})
             elif self.favorite_type == 'task':
                 return reverse('board_detail', args=[obj.column.board.pk])
             elif self.favorite_type == 'retrospective':
