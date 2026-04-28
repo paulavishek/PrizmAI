@@ -73,17 +73,28 @@
 <div class="container-fluid px-4 automation-page">
 
   <!-- Header -->
-  <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
       <h1 class="h3 mb-0">
         <i class="fas fa-bolt me-2 text-warning"></i>Automation Engine
       </h1>
       <p class="text-muted mb-0">{{ board.name }} — visual rules that run automatically</p>
     </div>
-    <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
-      <i class="fas fa-columns me-1"></i> Back to Board
+    <a href="{% url 'workspace_automations' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-th-large me-1"></i>All Automations
     </a>
   </div>
+
+  <!-- Board view nav tabs (mirrors board_detail, Kanban/Gantt/Calendar/List/Automations) -->
+  <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+    {% if features.show_gantt %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+    {% endif %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+    <li class="nav-item"><a class="nav-link active" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-1"></i>Automations</a></li>
+  </ul>
 
   {% if messages %}
     {% for msg in messages %}

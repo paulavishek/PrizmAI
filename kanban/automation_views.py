@@ -63,6 +63,52 @@ def _build_simple_rule_definition(trigger_type, trigger_config,
 
 
 # ───────────────────────────────────────────────────────
+# Workspace-level automations hub (linked from sidebar)
+# ───────────────────────────────────────────────────────
+
+@login_required
+def workspace_automations(request):
+    """
+    Show an overview of all automation rules across every board the user
+    can access in the current workspace.  Groups by board and surfaces
+    active/inactive/scheduled counts so users get a bird's-eye view before
+    drilling into a specific board's automations page.
+    """
+    from kanban.utils.demo_protection import get_user_boards
+    from kanban.automation_models import AutomationRule, ScheduledAutomation
+
+    accessible_boards = get_user_boards(request.user).prefetch_related(
+        'automation_rules',
+    ).order_by('name')
+
+    # Build a summary card per board that has at least some rules, plus
+    # include boards with zero rules (so users can navigate to create their first)
+    board_summaries = []
+    for board in accessible_boards:
+        active_count = AutomationRule.objects.filter(board=board, is_active=True).count()
+        inactive_count = AutomationRule.objects.filter(board=board, is_active=False).count()
+        scheduled_count = ScheduledAutomation.objects.filter(board=board).count()
+        total_count = active_count + inactive_count
+        board_summaries.append({
+            'board': board,
+            'active_count': active_count,
+            'inactive_count': inactive_count,
+            'scheduled_count': scheduled_count,
+            'total_count': total_count,
+        })
+
+    # Sort: boards with automations first, then alphabetically
+    board_summaries.sort(key=lambda x: (-x['total_count'], x['board'].name.lower()))
+
+    context = {
+        'board_summaries': board_summaries,
+        'total_rules': sum(s['active_count'] + s['inactive_count'] for s in board_summaries),
+        'total_active': sum(s['active_count'] for s in board_summaries),
+    }
+    return render(request, 'kanban/workspace_automations.html', context)
+
+
+# ───────────────────────────────────────────────────────
 # Main automations page (four tabs)
 # ───────────────────────────────────────────────────────
 

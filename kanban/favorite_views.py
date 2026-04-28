@@ -203,7 +203,19 @@ def favorites_list_api(request):
     """Return current user's favorites as JSON for sidebar refresh.
     Filters out favorites that belong to the wrong workspace mode."""
     from kanban.utils.demo_protection import get_user_boards
+    from kanban.models import Board
+
+    profile = getattr(request.user, 'profile', None)
+    is_demo_mode = getattr(profile, 'is_viewing_demo', False)
+
     workspace_boards = set(get_user_boards(request.user).values_list('id', flat=True))
+
+    # In demo mode also allow official demo boards (consistent with _user_can_access)
+    if is_demo_mode:
+        demo_board_ids = set(
+            Board.objects.filter(is_official_demo_board=True).values_list('id', flat=True)
+        )
+        workspace_boards = workspace_boards | demo_board_ids
 
     favorites = (
         UserFavorite.objects

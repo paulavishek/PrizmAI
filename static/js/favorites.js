@@ -45,21 +45,30 @@ function toggleFavorite(btn) {
     })
     .then(function(response) {
         if (!response.ok) {
-            throw new Error('Toggle failed');
+            // Revert optimistic update on failure
+            icon.classList.toggle('favorited');
+            icon.classList.toggle('fas');
+            icon.classList.toggle('far');
+            btn.title = wasFavorited ? 'Remove from favorites' : 'Add to favorites';
+            return response.json().then(function(errData) {
+                _showFavToast(errData.error || 'Could not update favorite. Please try again.');
+            }).catch(function() {
+                _showFavToast('Could not update favorite. Please try again.');
+            });
         }
-        return response.json();
-    })
-    .then(function(data) {
-        // Update sidebar favorites list dynamically
-        updateSidebarFavorites();
+        return response.json().then(function(data) {
+            // Update sidebar favorites list dynamically
+            updateSidebarFavorites();
+        });
     })
     .catch(function(err) {
-        // Revert on failure
+        // Revert on network failure
         icon.classList.toggle('favorited');
         icon.classList.toggle('fas');
         icon.classList.toggle('far');
         btn.title = wasFavorited ? 'Remove from favorites' : 'Add to favorites';
         console.error('Favorite toggle error:', err);
+        _showFavToast('Could not update favorite. Please check your connection.');
     });
 }
 
@@ -106,4 +115,27 @@ function escapeHtml(str) {
     var div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
+}
+
+/**
+ * Show a brief inline toast/snackbar for favorites errors.
+ */
+function _showFavToast(message) {
+    var existing = document.getElementById('fav-toast');
+    if (existing) existing.remove();
+    var toast = document.createElement('div');
+    toast.id = 'fav-toast';
+    toast.style.cssText = [
+        'position:fixed', 'bottom:24px', 'left:50%', 'transform:translateX(-50%)',
+        'background:#1e293b', 'color:#f1f5f9', 'padding:10px 20px',
+        'border-radius:8px', 'font-size:0.875rem', 'z-index:9999',
+        'box-shadow:0 4px 16px rgba(0,0,0,0.3)', 'pointer-events:none',
+        'transition:opacity 0.3s',
+    ].join(';');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400);
+    }, 3500);
 }

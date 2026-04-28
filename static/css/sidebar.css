@@ -29,7 +29,7 @@
     z-index: 1040;
     transition: width var(--sidebar-transition);
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden; /* Each sub-section manages its own scroll */
     border-right: 1px solid var(--sidebar-border);
 }
 
@@ -89,6 +89,7 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    min-height: 0; /* required for flex child to scroll correctly */
     padding: 8px 0;
     scrollbar-width: thin;
     scrollbar-color: var(--sidebar-hover) transparent;
@@ -172,11 +173,21 @@
 .sidebar-badge-danger {
     background: #ef4444;
 }
+.sidebar-badge-new {
+    background: #10b981;
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
 
-/* ---- More Section ---- */
+/* ---- More Section (pinned — lives outside .sidebar-nav) ---- */
 .sidebar-more-section {
-    padding: 0 8px;
-    margin-top: 4px;
+    flex-shrink: 0;
+    padding: 0 8px 4px;
+    border-top: 1px solid var(--sidebar-border);
 }
 
 .sidebar-more-toggle {
@@ -221,7 +232,7 @@
     transition: max-height 0.25s ease;
 }
 .sidebar-more-list.show {
-    max-height: 300px;
+    max-height: 400px; /* more room now that Tools is not inside scrollable nav */
 }
 
 /* ---- Sidebar Bottom ---- */

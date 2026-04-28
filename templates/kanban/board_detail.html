@@ -730,6 +730,9 @@
     {% endif %}
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
     <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+    {% if features.show_automations %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-1"></i>Automations</a></li>
+    {% endif %}
 </ul>
 
 <!-- AI Resource Optimization moved to AI Tools panel -->

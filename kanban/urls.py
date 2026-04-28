@@ -244,6 +244,7 @@ urlpatterns = [
     path('boards/<int:board_id>/triple-constraint/record-signal/', triple_constraint_views.record_manual_signal, name='record_manual_signal'),
 
     # Board Automations (new engine)
+    path('automations/', automation_views.workspace_automations, name='workspace_automations'),
     path('boards/<int:board_id>/automations/', automation_views.automations_page, name='automations_list'),
     path('boards/<int:board_id>/automations/rules/create/', automation_views.rule_create, name='automation_rule_create'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/', automation_views.rule_detail, name='automation_rule_detail'),
