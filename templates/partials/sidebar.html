@@ -251,14 +251,27 @@
             {% endif %}
         </div>
 
-        <!-- Tools section (collapsible) -->
-        <div class="sidebar-more-section">
+    </nav>
+
+    <!-- Tools section (collapsible) — pinned below scrollable nav, always visible -->
+    <div class="sidebar-more-section">
             <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="Tools" aria-expanded="false">
                 <i class="fas fa-ellipsis-h sidebar-nav-icon"></i>
                 <span class="sidebar-label">Tools</span>
                 <i class="fas fa-chevron-down sidebar-more-arrow"></i>
             </button>
             <ul class="sidebar-more-list" id="sidebarMoreList">
+                {% if features.show_automations %}
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'workspace_automations' %}"
+                       class="sidebar-nav-link {% if request.resolver_match.url_name == 'workspace_automations' %}active{% endif %}"
+                       title="Automations">
+                        <i class="fas fa-bolt sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Automations</span>
+                        <span class="sidebar-badge sidebar-badge-new sidebar-label">New</span>
+                    </a>
+                </li>
+                {% endif %}
                 <li class="sidebar-nav-item">
                     <a href="{% url 'time_tracking_dashboard' %}" class="sidebar-nav-link" title="Time Tracking">
                         <i class="fas fa-clock sidebar-nav-icon"></i>
@@ -308,8 +321,7 @@
                 <!-- Demo access moved to topbar -->
                 {% endif %}
             </ul>
-        </div>
-    </nav>
+    </div>
 
     <!-- Sidebar Bottom: Ask Spectra + User -->
     <div class="sidebar-bottom">
