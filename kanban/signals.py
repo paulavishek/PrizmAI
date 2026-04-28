@@ -471,16 +471,26 @@ def _send_automation_notification(task, rule, config=None):
         if not sender:
             return
 
-        # Build a clickable link to the board
+        # Build a clickable link directly to the task detail page.
+        # Fall back to the board URL only if the task URL cannot be resolved.
         try:
-            board_url = reverse('board_detail', args=[board.id])
+            task_url = reverse('task_detail', args=[task.id])
         except Exception:
-            board_url = None
+            try:
+                task_url = reverse('board_detail', args=[board.id])
+            except Exception:
+                task_url = None
 
         # config['value'] takes precedence over rule.action_value
         recipient_key = ''
-        if config and config.get('value'):
+        if config and config.get('notify_target'):
+            # Scheduled rules store the target in config['notify_target']
+            recipient_key = config['notify_target'].strip().lower()
+        elif config and config.get('value'):
             recipient_key = config['value'].strip().lower()
+        elif hasattr(rule, 'notify_target') and rule.notify_target:
+            # Fallback: use the dedicated notify_target field on AutomationRule
+            recipient_key = rule.notify_target.strip().lower()
         elif rule.action_value:
             recipient_key = rule.action_value.strip().lower()
         recipients = []
@@ -494,17 +504,36 @@ def _send_automation_notification(task, rule, config=None):
             if board.created_by and board.created_by not in recipients:
                 recipients.append(board.created_by)
 
-        text = (
+        # Use the custom message if one was set on the rule, otherwise build a
+        # clean professional default.  config['value'] holds the custom message
+        # for scheduled rules (it is distinct from config['notify_target'] which
+        # holds the recipient key).
+        custom_message = ''
+        if config:
+            val = config.get('value', '').strip()
+            if val and val.lower() not in ('assignee', 'board_members', 'creator'):
+                custom_message = val
+
+        text = custom_message or (
             f'Automation "{rule.name}" was triggered for task "{task.title}" '
             f'on board "{board.name}".'
         )
+
+        # Set a consistent, professional ai_summary so the Notification model's
+        # background AI-generation thread never fires for automation notifications
+        # (it only generates when ai_summary is blank on creation).
+        ai_summary_text = f'{rule.name} — {task.title}'
+        if len(ai_summary_text) > 200:
+            ai_summary_text = ai_summary_text[:197] + '...'
+
         for recipient in recipients:
             Notification.objects.create(
                 recipient=recipient,
                 sender=sender,
                 notification_type='ACTIVITY',
                 text=text,
-                action_url=board_url,
+                action_url=task_url,
+                ai_summary=ai_summary_text,
             )
     except Exception:
         import logging

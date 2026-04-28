@@ -166,7 +166,10 @@ def _get_filtered_tasks(board, task_filter):
     """Return a queryset of tasks on *board* matching *task_filter*."""
     from kanban.models import Task
 
-    tasks = Task.objects.filter(column__board=board)
+    # Restrict to actual tasks only — milestones share the same table but
+    # should never be included in automation runs (the dashboard uses the
+    # same item_type='task' guard and users expect consistent counts).
+    tasks = Task.objects.filter(column__board=board, item_type='task')
 
     if task_filter == 'overdue':
         tasks = tasks.filter(due_date__lt=timezone.now(), progress__lt=100)
