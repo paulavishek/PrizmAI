@@ -36,6 +36,7 @@ ALLOWED_FAVORITE_TYPES = {
     'board': ('kanban', 'board'),
     'goal': ('kanban', 'organizationgoal'),
     'mission': ('kanban', 'mission'),
+    'strategy': ('kanban', 'strategy'),
     'wiki_page': ('wiki', 'wikipage'),
     'task': ('kanban', 'task'),
     'retrospective': ('kanban', 'projectretrospective'),
@@ -50,6 +51,7 @@ DISPLAY_NAME_FIELDS = {
     'board': 'name',
     'goal': 'title',
     'mission': 'title',
+    'strategy': 'name',
     'wiki_page': 'title',
     'task': 'title',
     'retrospective': 'title',
@@ -74,8 +76,8 @@ def _user_can_access(user, favorite_type, obj):
 
     if favorite_type == 'board':
         return _board_accessible(obj)
-    elif favorite_type in ('goal', 'mission'):
-        return True  # Goals/Missions are visible to all authenticated users
+    elif favorite_type in ('goal', 'mission', 'strategy'):
+        return True  # Goals/Missions/Strategies are visible to all authenticated users
     elif favorite_type == 'wiki_page':
         return True  # Wiki pages are shared within workspace
     elif favorite_type == 'task':
