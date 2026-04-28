@@ -127,10 +127,12 @@
     bar.innerHTML =
       '<input id="canvasRuleName" type="text" class="form-control form-control-sm" style="max-width:260px;" placeholder="Rule name" value="' + _esc(ruleName) + '">' +
       '<button id="canvasSaveBtn" class="btn btn-sm btn-primary"><i class="fas fa-save me-1"></i>Save Rule</button>' +
+      '<button id="canvasResetBtn" class="btn btn-sm btn-outline-info" title="Reset to logical top-down layout"><i class="fas fa-project-diagram me-1"></i>Reset Layout</button>' +
       '<button id="canvasCloseBtn" class="btn btn-sm btn-outline-secondary ms-auto"><i class="fas fa-times me-1"></i>Close</button>';
     canvas.insertBefore(bar, canvas.firstChild);
 
     document.getElementById('canvasSaveBtn').addEventListener('click', _saveRule);
+    document.getElementById('canvasResetBtn').addEventListener('click', function () { _autoLayout(); });
     document.getElementById('canvasCloseBtn').addEventListener('click', _closeCanvas);
   }
 
@@ -219,24 +221,29 @@
       else blocks[parentId].children.push(id);
     }
 
-    // Drag
+    // Drag — read blockId from DOM attribute so remapped ids still work
     el.addEventListener('mousedown', function (e) {
       if (e.target.dataset.action || e.target.closest('[data-action]')) return;
-      dragState = { blockId: id, offsetX: e.clientX - x, offsetY: e.clientY - y };
+      var currentId = el.dataset.blockId;
+      var currentBlock = blocks[currentId];
+      if (!currentBlock) return;
+      var rect = blocksLayer.getBoundingClientRect();
+      dragState = { blockId: currentId, offsetX: e.clientX - rect.left - currentBlock.x, offsetY: e.clientY - rect.top - currentBlock.y };
       el.style.cursor = 'grabbing';
       el.style.zIndex = 100;
       e.preventDefault();
     });
 
-    // Button actions
+    // Button actions — read blockId from DOM attribute so remapped ids still work
     el.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-action]');
       if (!btn) return;
+      var currentId = el.dataset.blockId;
       var action = btn.dataset.action;
-      if (action === 'delete') _removeBlock(id);
-      else if (action === 'add-child') _promptAddChild(id, false);
-      else if (action === 'add-else') _promptAddChild(id, true);
-      else if (action === 'configure') _openConfigModal(id);
+      if (action === 'delete') _removeBlock(currentId);
+      else if (action === 'add-child') _promptAddChild(currentId, false);
+      else if (action === 'add-else') _promptAddChild(currentId, true);
+      else if (action === 'configure') _openConfigModal(currentId);
     });
 
     _updateConfigSummary(id);
@@ -250,8 +257,9 @@
     if (!dragState) return;
     var b = blocks[dragState.blockId];
     if (!b) return;
-    b.x = e.clientX - dragState.offsetX;
-    b.y = e.clientY - dragState.offsetY;
+    var rect = blocksLayer.getBoundingClientRect();
+    b.x = Math.max(0, e.clientX - rect.left - dragState.offsetX);
+    b.y = Math.max(0, e.clientY - rect.top - dragState.offsetY);
     b.el.style.left = b.x + 'px';
     b.el.style.top = b.y + 'px';
     _redrawLines();
@@ -340,26 +348,41 @@
   /* ─── Prompt user to pick a child type ─── */
   function _promptAddChild(parentId, isElse) {
     var parentType = blocks[parentId].data.type;
-    var options = [];
+    var allOptions = [];
+    var sections = [];
+
     if (parentType === 'trigger' || parentType === 'condition') {
-      options = options.concat(
-        CONDITIONS.map(function (c) { return { type: 'condition', block_type: c.block_type, label: c.label }; }),
-        ACTIONS.map(function (a) { return { type: 'action', block_type: a.block_type, label: a.label }; })
-      );
+      var condOpts = CONDITIONS.map(function (c) { return { type: 'condition', block_type: c.block_type, label: c.label }; });
+      var actOpts = ACTIONS.map(function (a) { return { type: 'action', block_type: a.block_type, label: a.label }; });
+      sections = [
+        { header: 'Conditions', items: condOpts },
+        { header: 'Actions', items: actOpts },
+      ];
+      allOptions = condOpts.concat(actOpts);
     } else {
-      // Actions can chain to other actions only
-      options = ACTIONS.map(function (a) { return { type: 'action', block_type: a.block_type, label: a.label }; });
+      var actOpts2 = ACTIONS.map(function (a) { return { type: 'action', block_type: a.block_type, label: a.label }; });
+      sections = [{ header: 'Actions', items: actOpts2 }];
+      allOptions = actOpts2;
     }
 
-    // Simple dropdown picker via modal
-    var html = '<div class="list-group" style="max-height:300px;overflow-y:auto;">';
-    options.forEach(function (opt, i) {
-      var col = COLORS[opt.type];
-      html += '<button class="list-group-item list-group-item-action d-flex align-items-center gap-2" data-idx="' + i + '">' +
-        '<span style="width:10px;height:10px;border-radius:50%;background:' + col.border + ';flex-shrink:0;"></span>' +
-        '<span class="small">' + _esc(opt.label) + '</span>' +
-        '<span class="badge ms-auto" style="background:' + col.bg + ';color:' + col.text + ';font-size:.68rem;">' + opt.type + '</span>' +
-        '</button>';
+    var html = '<div style="max-height:320px;overflow-y:auto;">';
+    var globalIdx = 0;
+    sections.forEach(function (sec) {
+      if (sec.items.length === 0) return;
+      html += '<div class="px-3 py-1 fw-bold small text-uppercase" style="' +
+        'color:#6c757d;background:var(--bg-secondary,#f8f9fa);' +
+        'border-top:1px solid var(--border-color,#dee2e6);letter-spacing:.06em;">' +
+        _esc(sec.header) + '</div>';
+      html += '<div class="list-group list-group-flush">';
+      sec.items.forEach(function (opt) {
+        var col = COLORS[opt.type];
+        html += '<button class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-2" data-idx="' + globalIdx + '" style="border-left:none;border-right:none;">' +
+          '<span style="width:10px;height:10px;border-radius:50%;background:' + col.border + ';flex-shrink:0;"></span>' +
+          '<span class="small">' + _esc(opt.label) + '</span>' +
+          '</button>';
+        globalIdx++;
+      });
+      html += '</div>';
     });
     html += '</div>';
 
@@ -367,7 +390,7 @@
       modalEl.querySelectorAll('[data-idx]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var idx = parseInt(this.dataset.idx);
-          var opt = options[idx];
+          var opt = allOptions[idx];
           _addBlock(opt.type, opt.block_type, opt.label, {}, parentId, isElse);
           bootstrap.Modal.getInstance(modalEl).hide();
         });
@@ -375,61 +398,116 @@
     });
   }
 
-  /* ─── Config modal ─── */
+  /* ─── Friendly label for a block_type ─── */
+  function _friendlyLabel(block_type) {
+    var all = [].concat(TRIGGERS, CONDITIONS, ACTIONS);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].block_type === block_type) return all[i].label;
+    }
+    return block_type;
+  }
+
+  /* ─── Config modal — context-aware friendly UI ─── */
   function _openConfigModal(id) {
     var b = blocks[id];
     if (!b) return;
-    var config = b.data.config || {};
+    var cfg = b.data.config || {};
+    var bt = b.data.block_type;
+    var html = '';
 
-    var html = '<div class="mb-3">';
-    html += '<label class="form-label fw-semibold small">Block Type</label>';
-    html += '<input class="form-control form-control-sm" disabled value="' + _esc(b.data.block_type) + '">';
-    html += '</div>';
-
-    // Generic value field
-    html += '<div class="mb-3">';
-    html += '<label class="form-label fw-semibold small">Value</label>';
-    html += '<input id="configValue" class="form-control form-control-sm" value="' + _esc(config.value || '') + '" placeholder="e.g. high, Review, assignee">';
-    html += '</div>';
-
-    // Operator (for conditions)
-    if (b.data.type === 'condition') {
-      html += '<div class="mb-3">';
-      html += '<label class="form-label fw-semibold small">Operator</label>';
-      html += '<select id="configOperator" class="form-select form-select-sm">';
-      ['is', 'is_not', 'is_empty', 'is_not_empty'].forEach(function (op) {
-        html += '<option value="' + op + '"' + (config.operator === op ? ' selected' : '') + '>' + op + '</option>';
+    function _prioritySelect(currentVal) {
+      var s = '<select id="cfgValue" class="form-select form-select-sm">';
+      ['urgent', 'high', 'medium', 'low'].forEach(function (p) {
+        s += '<option value="' + p + '"' + (currentVal === p ? ' selected' : '') + '>' +
+          p.charAt(0).toUpperCase() + p.slice(1) + '</option>';
       });
-      html += '</select></div>';
+      return s + '</select>';
+    }
 
-      // Days field for due_date_within and stale_high_priority
-      if (b.data.block_type === 'due_date_within' || b.data.block_type === 'stale_high_priority') {
-        html += '<div class="mb-3"><label class="form-label fw-semibold small">Days</label>';
-        html += '<input id="configDays" type="number" class="form-control form-control-sm" value="' + (config.days || config.days_stale || 3) + '" min="1">';
-        html += '</div>';
+    if (b.data.type === 'trigger') {
+      if (bt === 'task_overdue' || bt === 'due_date_approaching') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Days threshold</label>' +
+          '<input id="cfgValue" type="number" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. 2" min="1">' +
+          '<div class="form-text">Fire when task is overdue / due within this many days.</div></div>';
+      } else if (bt === 'moved_to_column') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Target Column</label>' +
+          '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. Done"></div>';
+      } else {
+        html += '<p class="text-muted small mb-0">This trigger type has no extra configuration.</p>';
+      }
+
+    } else if (b.data.type === 'action') {
+      if (bt === 'set_priority') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Priority</label>' +
+          _prioritySelect(cfg.value) + '</div>';
+      } else if (bt === 'add_label' || bt === 'remove_label') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Label Name</label>' +
+          '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. Blocked"></div>';
+      } else if (bt === 'send_notification') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Message</label>' +
+          '<textarea id="cfgValue" class="form-control form-control-sm" rows="2" placeholder="e.g. Task {task_title} is overdue">' +
+          _esc(cfg.value || cfg.text || '') + '</textarea></div>';
+      } else if (bt === 'move_to_column') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Target Column</label>' +
+          '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. Done"></div>';
+      } else if (bt === 'assign_to_user') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Username</label>' +
+          '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. john"></div>';
+      } else if (bt === 'set_due_date') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Days from now</label>' +
+          '<input id="cfgValue" type="number" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. 7" min="1"></div>';
+      } else if (bt === 'create_comment') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Comment text</label>' +
+          '<textarea id="cfgValue" class="form-control form-control-sm" rows="2" placeholder="Enter comment">' +
+          _esc(cfg.value || cfg.text || '') + '</textarea></div>';
+      } else if (bt === 'log_time_entry') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Hours</label>' +
+          '<input id="cfgValue" type="number" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. 1" min="0.5" step="0.5"></div>';
+      } else if (bt === 'close_task') {
+        html += '<p class="text-muted small mb-0">This action has no additional configuration.</p>';
+      } else {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Value</label>' +
+          '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="Enter value"></div>';
+      }
+
+    } else {
+      // Condition
+      if (bt !== 'all_children_complete') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Operator</label>' +
+          '<select id="cfgOperator" class="form-select form-select-sm">';
+        ['is', 'is_not', 'is_empty', 'is_not_empty'].forEach(function (op) {
+          html += '<option value="' + op + '"' + (cfg.operator === op ? ' selected' : '') + '>' + op + '</option>';
+        });
+        html += '</select></div>';
+      }
+      if (bt === 'priority_equals') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Priority</label>' +
+          _prioritySelect(cfg.value) + '</div>';
+      } else if (bt === 'due_date_within' || bt === 'stale_high_priority') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Days</label>' +
+          '<input id="cfgDays" type="number" class="form-control form-control-sm" value="' + (cfg.days || cfg.days_stale || 3) + '" min="1"></div>';
+      } else if (bt === 'progress_gte') {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Minimum Progress (%)</label>' +
+          '<input id="cfgValue" type="number" class="form-control form-control-sm" value="' + (cfg.value || 80) + '" min="0" max="100"></div>';
+      } else if (bt === 'all_children_complete') {
+        html += '<p class="text-muted small mb-0">Checks that all subtasks are marked complete — no extra settings needed.</p>';
+      } else {
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Value</label>' +
+          '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="Enter value"></div>';
       }
     }
 
-    // Text field for create_comment
-    if (b.data.block_type === 'create_comment') {
-      html += '<div class="mb-3"><label class="form-label fw-semibold small">Comment text</label>';
-      html += '<textarea id="configText" class="form-control form-control-sm" rows="2">' + _esc(config.text || '') + '</textarea>';
-      html += '</div>';
-    }
-
-    _showModal('Configure: ' + _esc(b.data.block_type), html, function () {
+    _showModal('Configure: ' + _friendlyLabel(bt), html, function () {
       var newConfig = {};
-      var valEl = document.getElementById('configValue');
+      var valEl = document.getElementById('cfgValue');
       if (valEl) newConfig.value = valEl.value;
-      var opEl = document.getElementById('configOperator');
+      var opEl = document.getElementById('cfgOperator');
       if (opEl) newConfig.operator = opEl.value;
-      var daysEl = document.getElementById('configDays');
+      var daysEl = document.getElementById('cfgDays');
       if (daysEl) {
-        if (b.data.block_type === 'stale_high_priority') newConfig.days_stale = daysEl.value;
+        if (bt === 'stale_high_priority') newConfig.days_stale = daysEl.value;
         else newConfig.days = daysEl.value;
       }
-      var textEl = document.getElementById('configText');
-      if (textEl) newConfig.text = textEl.value;
       b.data.config = newConfig;
       _updateConfigSummary(id);
     });

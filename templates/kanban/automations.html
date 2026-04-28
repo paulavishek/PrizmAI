@@ -161,7 +161,7 @@
         <div class="d-flex justify-content-between align-items-start">
           <div class="flex-grow-1">
             <div class="d-flex align-items-center gap-2 mb-2">
-              <a href="{% url 'automation_rule_detail' board.id rule.id %}" class="text-decoration-none">
+              <a href="#" class="text-decoration-none rule-name-link" data-rule-id="{{ rule.id }}" title="Click to edit in canvas">
                 <strong>{{ rule.name }}</strong>
               </a>
               {% if rule.is_active %}
@@ -906,15 +906,26 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Click a rule card to load it in the canvas
+  // Click rule name link or double-click rule card to load it in the canvas
+  function _loadRuleInCanvas(rid) {
+    var canvasEl = document.getElementById('automationCanvas');
+    if (canvasEl && window.AutomationBuilder) {
+      AutomationBuilder.init(canvasEl, {{ board.id }});
+      AutomationBuilder.loadRule({{ board.id }}, rid);
+      canvasEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  document.querySelectorAll('.rule-name-link').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      _loadRuleInCanvas(this.dataset.ruleId);
+    });
+  });
+
   document.querySelectorAll('.auto-card[data-rule-id]').forEach(function(card) {
     card.addEventListener('dblclick', function() {
-      var rid = this.dataset.ruleId;
-      var canvasEl = document.getElementById('automationCanvas');
-      if (canvasEl && window.AutomationBuilder) {
-        AutomationBuilder.init(canvasEl, {{ board.id }});
-        AutomationBuilder.loadRule({{ board.id }}, rid);
-      }
+      _loadRuleInCanvas(this.dataset.ruleId);
     });
   });
 });
