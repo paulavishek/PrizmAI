@@ -525,7 +525,11 @@ class TaskForm(forms.ModelForm):
                     timezone.get_current_timezone()
                 ) if timezone.is_naive(datetime_type.combine(start_date, datetime_type.min.time())) else datetime_type.combine(start_date, datetime_type.min.time())
             if start_comparable > due_comparable:
-                self.add_error('start_date', 'Start date cannot be after the due date.')
+                # Format dates in a clear human-readable way to avoid DD-MM ambiguity
+                start_str = f"{start_date.day} {start_date.strftime('%b')} {start_date.year}" if hasattr(start_date, 'day') else str(start_date)
+                due_date_only = due_date.date() if hasattr(due_date, 'date') else due_date
+                due_str = f"{due_date_only.day} {due_date_only.strftime('%b')} {due_date_only.year}" if hasattr(due_date_only, 'day') else str(due_date_only)
+                self.add_error('start_date', f'Start date ({start_str}) cannot be after the due date ({due_str}). Please update both dates.')
 
         # Auto-calculate risk score if both likelihood and impact are provided
         if risk_likelihood is not None and risk_impact is not None:
