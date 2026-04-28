@@ -222,6 +222,25 @@
                     </span>
                 </a>
             </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'conflict_dashboard' %}"
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'conflict_dashboard' %}active{% endif %}"
+                   title="Conflicts">
+                    <i class="fas fa-exclamation-triangle sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Conflicts</span>
+                    {% if active_conflict_count > 0 %}
+                    <span class="sidebar-badge sidebar-badge-danger">{{ active_conflict_count }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'exit_protocol:cemetery' %}"
+                   class="sidebar-nav-link {% if 'exit_protocol' in request.path or 'cemetery' in request.path %}active{% endif %}"
+                   title="Project Cemetery">
+                    <i class="bi bi-moon-stars sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Project Cemetery</span>
+                </a>
+            </li>
         </ul>
 
         <!-- My Favorites section -->
@@ -253,14 +272,13 @@
 
     </nav>
 
-    <!-- Tools section (collapsible) — pinned below scrollable nav, always visible -->
+    <!-- Tools section (always visible, pinned below scrollable nav) -->
     <div class="sidebar-more-section">
-            <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="Tools" aria-expanded="false">
+            <div class="sidebar-more-header" title="Tools">
                 <i class="fas fa-ellipsis-h sidebar-nav-icon"></i>
                 <span class="sidebar-label">Tools</span>
-                <i class="fas fa-chevron-down sidebar-more-arrow"></i>
-            </button>
-            <ul class="sidebar-more-list" id="sidebarMoreList">
+            </div>
+            <ul class="sidebar-more-list show" id="sidebarMoreList">
                 {% if features.show_automations %}
                 <li class="sidebar-nav-item">
                     <a href="{% url 'workspace_automations' %}"
@@ -293,33 +311,6 @@
                         <span class="sidebar-label">Memory</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item">
-                    <a href="{% url 'conflict_dashboard' %}" class="sidebar-nav-link" title="Conflicts">
-                        <i class="fas fa-exclamation-triangle sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Conflicts</span>
-                        {% if active_conflict_count > 0 %}
-                        <span class="sidebar-badge sidebar-badge-danger">{{ active_conflict_count }}</span>
-                        {% endif %}
-                    </a>
-                </li>
-                <li class="sidebar-nav-item">
-                    <a href="{% url 'messaging:notifications' %}" class="sidebar-nav-link" title="Notifications">
-                        <i class="fas fa-bell sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Notifications</span>
-                        <span class="sidebar-badge" id="sidebar-notif-badge" style="display:none;">
-                            <span id="sidebar-notif-count">0</span>
-                        </span>
-                    </a>
-                </li>
-                <li class="sidebar-nav-item">
-                    <a href="{% url 'exit_protocol:cemetery' %}" class="sidebar-nav-link" title="Project Cemetery">
-                        <i class="bi bi-moon-stars sidebar-nav-icon"></i>
-                        <span class="sidebar-label">Project Cemetery</span>
-                    </a>
-                </li>
-                {% if not is_viewing_demo %}
-                <!-- Demo access moved to topbar -->
-                {% endif %}
             </ul>
     </div>
 

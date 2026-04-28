@@ -338,6 +338,15 @@
                     <i class="fas fa-share-alt"></i>
                 </button>
                 {% endif %}
+                <!-- Notification Bell -->
+                {% if user.is_authenticated %}
+                <a href="{% url 'messaging:notifications' %}" class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications" style="position:relative; text-decoration:none;">
+                    <i class="fas fa-bell"></i>
+                    <span class="topbar-badge" id="topbar-notif-badge" style="display:none;">
+                        <span id="topbar-notif-count">0</span>
+                    </span>
+                </a>
+                {% endif %}
                 <!-- Timezone Selector -->
                 {% if user.is_authenticated %}
                 <div id="timezone-dropdown">
