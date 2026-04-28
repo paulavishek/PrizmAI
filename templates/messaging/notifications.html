@@ -423,6 +423,13 @@ function generateAiDigest() {
     })
     .then(r => r.json())
     .then(data => {
+        if (data.skip) {
+            panel.classList.remove('show');
+            btn.disabled = false;
+            btn.title = 'Not enough notifications to summarise (need at least 3)';
+            btn.style.opacity = '0.5';
+            return;
+        }
         content.textContent = data.digest || 'No digest available.';
         btn.disabled = false;
     })

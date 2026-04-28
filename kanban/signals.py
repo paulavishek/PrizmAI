@@ -519,18 +519,25 @@ def _send_automation_notification(task, rule, config=None):
             f'on board "{board.name}".'
         )
 
-        # Set a consistent, professional ai_summary so the Notification model's
-        # background AI-generation thread never fires for automation notifications
+        # Build a fixed, programmatic title in the format '[Rule Name] — [Task Name]'.
+        # Setting `title` ensures the template uses it directly and never falls
+        # back to the AI-generated ai_summary, keeping all automation notifications
+        # from the same rule visually consistent.
+        notification_title = f'{rule.name} — {task.title}'
+        if len(notification_title) > 255:
+            notification_title = notification_title[:252] + '...'
+
+        # Also pre-fill ai_summary with the same value so the background
+        # AI-generation thread never fires for automation notifications
         # (it only generates when ai_summary is blank on creation).
-        ai_summary_text = f'{rule.name} — {task.title}'
-        if len(ai_summary_text) > 200:
-            ai_summary_text = ai_summary_text[:197] + '...'
+        ai_summary_text = notification_title[:200]
 
         for recipient in recipients:
             Notification.objects.create(
                 recipient=recipient,
                 sender=sender,
                 notification_type='ACTIVITY',
+                title=notification_title,
                 text=text,
                 action_url=task_url,
                 ai_summary=ai_summary_text,

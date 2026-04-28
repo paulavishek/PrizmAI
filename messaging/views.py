@@ -452,33 +452,43 @@ def ai_digest_notifications(request):
         | Q(chat_message__isnull=True, task_thread_comment__isnull=True)
     ).order_by('-created_at')[:30]
 
-    if not recent_notifications:
-        return JsonResponse({'digest': 'You have no recent notifications to summarise.'})
+    notification_count = recent_notifications.count()
+
+    if notification_count < 3:
+        return JsonResponse({'digest': None, 'skip': True})
 
     lines = []
     for n in recent_notifications:
         label = n.title or n.ai_summary or n.text
-        lines.append(f"- [{n.get_notification_type_display()}] {label}")
+        lines.append(f"[{n.get_notification_type_display()}] {label}")
     notifications_text = "\n".join(lines)
 
     try:
         from kanban.utils.ai_utils import generate_ai_content
-        prompt = f"""You are an assistant for a project management tool called PrizmAI.
-Below is a list of recent notifications for a user. Write a concise digest (3–6 bullet points) 
-summarising the key things the user needs to know or act on. Be direct and actionable.
+        prompt = f"""You are a professional project management assistant for PrizmAI.
+Below are {notification_count} recent notifications for a user. Write a short morning-briefing-style
+summary in plain prose — no bullet points, no asterisks, no lists. Maximum 4–5 sentences total.
+
+Group notifications by automation rule name or board where applicable. Mention the total count,
+highlight any patterns (e.g. all from the same board, all triggered by the same rule, all related
+to overdue tasks). Write as if you are a concise chief-of-staff handing the user a verbal briefing.
 
 Notifications:
 {notifications_text}
 
 Rules:
-- Focus on action items and important updates
-- Group related notifications if helpful
-- Keep total response under 200 words
-- Use bullet points starting with •"""
+- Plain sentences only — no bullet points, no dashes, no asterisks, no markdown formatting
+- Maximum 4–5 sentences regardless of notification count
+- Group by rule name or board, mention totals and patterns
+- Professional, direct tone — like a morning briefing, not a list"""
 
         digest = generate_ai_content(prompt, task_type='simple')
         if digest:
+            # Strip any residual bullet/asterisk formatting the model may produce
+            import re
             digest = digest.strip()
+            digest = re.sub(r'^\s*[\*\-•]\s+', '', digest, flags=re.MULTILINE)
+            digest = re.sub(r'\n+', ' ', digest).strip()
         else:
             digest = 'Unable to generate a digest right now. Please try again later.'
     except Exception as e:
