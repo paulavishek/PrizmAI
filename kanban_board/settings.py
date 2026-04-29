@@ -347,6 +347,22 @@ SOCIALACCOUNT_FORMS = {
 # AI Model API Keys
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
+
+# BYOK Encryption Key — used by AIRouter to encrypt/decrypt user and org BYOK API keys.
+# Must be a valid Fernet key. Generate one with:
+#   from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())
+# Store the generated value in your .env file only — NEVER commit the actual key.
+_raw_encryption_key = os.getenv('AI_KEY_ENCRYPTION_KEY', '')
+if not _raw_encryption_key:
+    import warnings
+    warnings.warn(
+        "AI_KEY_ENCRYPTION_KEY is not set. BYOK features will not work. "
+        "Generate a key with: from cryptography.fernet import Fernet; "
+        "print(Fernet.generate_key().decode()) and add it to your .env file.",
+        stacklevel=2,
+    )
+AI_KEY_ENCRYPTION_KEY = _raw_encryption_key
 
 # Google Custom Search API (for RAG - Retrieval Augmented Generation)
 GOOGLE_SEARCH_API_KEY = os.getenv('GOOGLE_SEARCH_API_KEY', '')

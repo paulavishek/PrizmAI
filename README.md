@@ -34,7 +34,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Triple Constraint Dashboard** — Visualize and analyze the Scope, Cost, and Time interplay for a project with AI-powered recommendations
 - **Mission & Strategy Management** — Define organizational missions and link strategies to projects and boards
 
-### AI Intelligence (Google Gemini)
+### AI Intelligence (Gemini · OpenAI · Anthropic)
 
 - **Spectra — AI Project Assistant** — Natural language queries with RAG technology and web search, scoped to your project data. Spectra operates in **read-only Q&A mode (v1.0)** — ask questions about tasks, deadlines, risks, team workload, strategic goals, wiki content, and more. Spectra enforces full RBAC, meaning it only surfaces data from boards you have explicit access to, and respects sandbox isolation in the Demo Workspace.
   - **Board Analysis** — "What tasks are overdue?" · "Summarize this board" · "Who's overloaded?"
@@ -45,6 +45,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
   - **Web Search** — Supplemental web context for research and strategic queries (when enabled)
   
   Spectra uses a **Tiered AI Architecture**: a lightweight Flash-Lite model handles most queries cheaply, upgrading to Flash for complex analysis — keeping AI costs low while delivering rich project insights. Action capabilities (creating tasks, sending messages, logging time, scheduling events, and more) are code-complete and will ship in **Spectra v2.0**.
+- **Multi-Provider AI** — PrizmAI supports **Google Gemini**, **OpenAI (GPT-4o)**, and **Anthropic Claude** as interchangeable AI providers. Org Admins choose the platform-wide default; individual users can optionally override it. **BYOK (Bring Your Own Key)** lets users and organisations supply their own API keys, stored encrypted (AES-256 Fernet) and never logged in plain text.
 - **AI Coach** — Proactive, personalized coaching with recommendations that learn from your feedback
 - **Explainable AI** — Every recommendation includes a transparent breakdown: confidence level, contributing factors, assumptions, limitations, and alternative perspectives
 - **Scope Creep Detection** — Automatic baseline tracking with alerts when scope expands beyond the original plan
@@ -571,6 +572,8 @@ pip install -r requirements.txt
 # Configure environment variables
 cp .env.example .env
 # Edit .env — add your SECRET_KEY and GEMINI_API_KEY at minimum
+# Optional: add OPENAI_API_KEY, ANTHROPIC_API_KEY for multi-provider support
+# Optional: add AI_KEY_ENCRYPTION_KEY to enable BYOK (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
 # Apply migrations
 python manage.py migrate
@@ -654,7 +657,11 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 - Django REST Framework
 - Django Channels 4 (WebSockets)
 - Celery + django-celery-beat (async and scheduled tasks)
-- Google Gemini API — `gemini-2.5-flash` (complex reasoning & analysis) and `gemini-2.5-flash-lite` (standard tasks, default)
+- **Multi-Provider AI Router** — `AIRouter` centrally resolves the correct provider and key per user; provider-specific calls are normalised to a consistent response format
+  - Google Gemini — `gemini-2.5-flash` / `gemini-2.5-flash-lite` (default platform provider)
+  - OpenAI — GPT-4o *(Phase 2)*
+  - Anthropic Claude — Claude Sonnet *(Phase 2)*
+  - BYOK support — user and org-level encrypted keys (AES-256 Fernet)
 - scikit-learn, numpy, scipy (ML pipeline for priority and deadline models)
 
 **Frontend**
@@ -699,7 +706,7 @@ graph TB
     end
 
     subgraph "External Services"
-        Gemini[Google Gemini API\nAI / ML Processing]
+        Gemini[AI Router\nGemini · OpenAI · Anthropic]
         ThirdParty[Slack · Teams · Jira]
     end
 
@@ -724,7 +731,7 @@ graph TB
     App --> Hooks
     API --> ExtApp
 
-    style Gemini fill:#4285f4,stroke:#333,stroke-width:2px,color:#fff
+    style Gemini fill:#6d28d9,stroke:#333,stroke-width:2px,color:#fff
     style App fill:#0c4b33,stroke:#333,stroke-width:2px,color:#fff
     style Worker fill:#ff6b6b,stroke:#333,stroke-width:2px,color:#fff
     style Cache fill:#dc382d,stroke:#333,stroke-width:2px,color:#fff
@@ -736,7 +743,7 @@ graph TB
 - **WebSocket Server** — Real-time collaboration and live updates via Django Channels
 - **Celery Workers** — Asynchronous task processing for AI operations and scheduled automations
 - **Redis** — Message broker for Celery and a shared caching layer
-- **Google Gemini API** — AI recommendations, forecasting, summaries, and coaching
+- **AI Router** — Central provider switchboard (`AIRouter`) resolving Gemini · OpenAI · Anthropic per user, with BYOK key decryption and normalised response format
 - **REST API** — Token-authenticated endpoints for third-party integrations and mobile clients
 - **Webhook System** — Event-driven automation with external tools
 
@@ -835,7 +842,8 @@ MIT License — free to use, modify, and deploy anywhere.
 PrizmAI is a **portfolio project** demonstrating:
 
 - Full-stack web development (Django + modern frontend)
-- AI/ML integration and prompt engineering (Google Gemini, scikit-learn)
+- AI/ML integration and prompt engineering (Gemini, OpenAI, Anthropic Claude, scikit-learn)
+- Multi-provider AI router with per-user/org provider selection and BYOK encrypted key management
 - Enterprise security implementation
 - REST API design and development
 - Real-time communication via WebSockets
