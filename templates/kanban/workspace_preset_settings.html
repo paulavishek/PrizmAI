@@ -72,8 +72,9 @@
     {% endfor %}
     {% endif %}
 
-    <form method="post">
+    <form method="post" id="preset-form">
         {% csrf_token %}
+        <input type="hidden" name="form_type" value="preset">
         <div class="row g-3 mb-4">
             {% for value, label in preset_choices %}
             <div class="col-12">
@@ -139,5 +140,160 @@
             </button>
         </div>
     </form>
+
+    {# ================================================================ #}
+    {# AI Provider Settings — Org Admins only                           #}
+    {# ================================================================ #}
+    {% if request.user.profile.is_admin %}
+    <form method="post" id="ai-settings-form" class="mt-4">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="ai_settings">
+
+        <div class="card">
+            <div class="card-header d-flex align-items-center" style="background:#f8f9fa; border-bottom:1px solid #dee2e6; padding:.75rem 1.25rem;">
+                <div>
+                    <h5 class="mb-0" style="font-size:.95rem; font-weight:600; color:#343a40;">
+                        <i class="fas fa-robot me-2" style="color:#5046e5;"></i>AI Provider Settings
+                    </h5>
+                    <small class="text-muted">Configure which AI model powers Spectra, AI Coach, and all AI features across your workspace.</small>
+                </div>
+            </div>
+            <div class="card-body">
+
+                {# Non-field errors (validation failures shown here) #}
+                {% if ai_settings_form.non_field_errors %}
+                <div class="alert alert-danger py-2 mb-3">
+                    {% for error in ai_settings_form.non_field_errors %}
+                    <div><i class="fas fa-exclamation-circle me-1"></i>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# ---- Section 1: Provider Selection ---- #}
+                <div class="mb-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="me-2 text-muted" style="font-size:.875rem;">Current Provider:</span>
+                        {% if current_ai_provider == 'Google Gemini' %}
+                            <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:.8rem;">{{ current_ai_provider }}</span>
+                        {% elif current_ai_provider == 'OpenAI' %}
+                            <span class="badge" style="background:#dcfce7;color:#15803d;font-size:.8rem;">{{ current_ai_provider }}</span>
+                        {% else %}
+                            <span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:.8rem;">{{ current_ai_provider }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_provider" class="form-label fw-semibold" style="font-size:.875rem;">Default AI Provider</label>
+                        <select name="provider" id="id_provider" class="form-select" style="max-width:320px;">
+                            {% for val, label in ai_settings_form.fields.provider.choices %}
+                            <option value="{{ val }}" {% if ai_settings_form.initial.provider == val or ai_settings_form.data.provider == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="allow_user_provider_override"
+                               id="id_allow_override"
+                               {% if ai_settings_form.initial.allow_user_provider_override or ai_settings_form.data.allow_user_provider_override %}checked{% endif %}>
+                        <label class="form-check-label" for="id_allow_override">
+                            {{ ai_settings_form.fields.allow_user_provider_override.label }}
+                        </label>
+                        <div class="form-text">When enabled, team members can choose their preferred AI provider from their profile settings.</div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                {# ---- Section 2: BYOK ---- #}
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#byok-collapse"
+                            aria-expanded="false" aria-controls="byok-collapse">
+                        <i class="fas fa-key me-1"></i>Use Your Own API Key (BYOK)
+                        <i class="fas fa-chevron-down ms-1" style="font-size:.75rem;"></i>
+                    </button>
+
+                    <div class="collapse mt-3" id="byok-collapse">
+                        <p class="text-muted" style="font-size:.875rem;">
+                            By default, PrizmAI uses its own API keys. You can provide your own key to use your own quota and billing.
+                        </p>
+
+                        {% if has_byok_key and ai_settings %}
+                        <div class="alert alert-info py-2 mb-3" style="font-size:.8rem;">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Current key: <strong>{{ ai_settings.key_last_four }}</strong>
+                            ({{ ai_settings.byok_provider|capfirst }})
+                            {% if ai_settings.key_validated_at %}
+                            — validated {{ ai_settings.key_validated_at|date:"M d, Y" }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3" style="max-width:320px;">
+                            <label for="id_byok_provider" class="form-label" style="font-size:.875rem;">{{ ai_settings_form.fields.byok_provider.label }}</label>
+                            <select name="byok_provider" id="id_byok_provider" class="form-select form-select-sm">
+                                {% for val, label in ai_settings_form.fields.byok_provider.choices %}
+                                <option value="{{ val }}" {% if ai_settings_form.initial.byok_provider == val or ai_settings_form.data.byok_provider == val %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3" style="max-width:420px;">
+                            <label for="id_raw_api_key" class="form-label" style="font-size:.875rem;">{{ ai_settings_form.fields.raw_api_key.label }}</label>
+                            <input type="password" name="raw_api_key" id="id_raw_api_key"
+                                   class="form-control form-control-sm" autocomplete="off"
+                                   placeholder="Paste API key here">
+                            <div class="form-text">{{ ai_settings_form.fields.raw_api_key.help_text }}</div>
+                        </div>
+
+                        {% if has_byok_key %}
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="remove_byok_key"
+                                   id="id_remove_byok_key">
+                            <label class="form-check-label text-danger" for="id_remove_byok_key">
+                                {{ ai_settings_form.fields.remove_byok_key.label }}
+                            </label>
+                        </div>
+                        {% endif %}
+
+                        <p class="text-muted mt-2" style="font-size:.8rem;">
+                            <i class="fas fa-lock me-1"></i>
+                            Your API key is encrypted before storage and is never logged or displayed after saving.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+            <div class="card-footer d-flex justify-content-end" style="background:#f8f9fa;">
+                <button type="submit" class="btn btn-primary" id="ai-settings-save-btn">
+                    <i class="fas fa-save me-1"></i> Save AI Settings
+                </button>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+
 </div>
+
+{% block extra_js %}
+<script>
+(function () {
+    var form = document.getElementById('ai-settings-form');
+    if (!form) return;
+    var btn = document.getElementById('ai-settings-save-btn');
+    form.addEventListener('submit', function () {
+        var keyField = document.getElementById('id_raw_api_key');
+        var hasKey = keyField && keyField.value.trim().length > 0;
+        btn.disabled = true;
+        btn.innerHTML = hasKey
+            ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Validating key…'
+            : '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving…';
+    });
+})();
+</script>
+{% endblock %}
 {% endblock %}

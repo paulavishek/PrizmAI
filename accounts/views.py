@@ -267,6 +267,13 @@ def create_organization(request):
 
 @login_required
 def profile_view(request):
+    from accounts.forms import UserAISettingsForm
+    from ai_assistant.models import UserAISettings, PROVIDER_CHOICES, OrganizationAISettings
+    from ai_assistant.utils.ai_router import AIRouter
+    from django.core.exceptions import ImproperlyConfigured
+    from django.utils import timezone as tz
+    from django.http import HttpResponseForbidden
+
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
@@ -280,19 +287,158 @@ def profile_view(request):
             onboarding_version=2,
             onboarding_status='pending',
         )
-    
+
+    # ------------------------------------------------------------------
+    # AI context variables — computed once, used for GET and all re-renders
+    # ------------------------------------------------------------------
+    org = profile.organization
+    allow_override = False
+    org_provider = 'gemini'
+    if org:
+        try:
+            org_ai = org.ai_settings
+            allow_override = org_ai.allow_user_provider_override
+            org_provider = org_ai.provider
+        except OrganizationAISettings.DoesNotExist:
+            pass
+
+    show_provider_override = profile.is_admin or allow_override
+    org_provider_display = dict(PROVIDER_CHOICES).get(org_provider, 'Google Gemini')
+
+    user_ai = None
+    try:
+        user_ai = request.user.ai_settings
+    except UserAISettings.DoesNotExist:
+        pass
+
+    # Always initialise both forms up front so they're always defined.
+    # POST handlers may replace them with bound versions.
+    profile_form = UserProfileForm(instance=profile)
+    ai_settings_form = None  # built lazily below
+
+    # ------------------------------------------------------------------
+    # POST handler
+    # ------------------------------------------------------------------
     if request.method == 'POST':
-        form = UserProfileForm(request.POST, request.FILES, instance=profile)
-        if form.is_valid():
-            form.save()
-            # Sync timezone session cache so middleware picks it up immediately
-            request.session['user_timezone'] = profile.timezone
-            messages.success(request, 'Profile updated successfully!')
-            return redirect('profile')
+        form_type = request.POST.get('form_type', 'profile')
+
+        if form_type == 'user_ai_settings':
+            ai_settings_form = UserAISettingsForm(request.POST)
+            if ai_settings_form.is_valid():
+                cd = ai_settings_form.cleaned_data
+                raw_key = cd.get('raw_api_key', '').strip()
+                byok_prov = cd.get('byok_provider', '')
+                remove_key = cd.get('remove_byok_key', False)
+                provider_override_val = cd.get('provider_override', 'inherit')
+
+                # RBAC: prevent API-level bypass of the org policy
+                if (
+                    provider_override_val != 'inherit'
+                    and not profile.is_admin
+                    and not allow_override
+                ):
+                    return HttpResponseForbidden()
+
+                user_ai_obj, _ = UserAISettings.objects.get_or_create(user=request.user)
+                user_ai_obj.provider_override = provider_override_val
+
+                save_ok = True
+
+                if remove_key:
+                    user_ai_obj.encrypted_api_key = None
+                    user_ai_obj.byok_provider = None
+                    user_ai_obj.key_last_four = None
+                    user_ai_obj.key_validated_at = None
+
+                elif raw_key:
+                    router = AIRouter()
+                    try:
+                        is_valid = router.validate_api_key(byok_prov, raw_key)
+                    except ImproperlyConfigured:
+                        ai_settings_form.add_error(
+                            None,
+                            'API key encryption is not configured on this server. '
+                            'Contact your administrator.'
+                        )
+                        save_ok = False
+                        is_valid = False
+
+                    if save_ok and not is_valid:
+                        ai_settings_form.add_error(
+                            None,
+                            'The API key could not be validated. '
+                            'Please check the key and try again.'
+                        )
+                        save_ok = False
+
+                    if save_ok:
+                        try:
+                            user_ai_obj.encrypted_api_key = router._encrypt_key(raw_key)
+                        except ImproperlyConfigured:
+                            ai_settings_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        user_ai_obj.key_last_four = '••••' + raw_key[-4:]
+                        user_ai_obj.byok_provider = byok_prov
+                        user_ai_obj.key_validated_at = tz.now()
+
+                if save_ok:
+                    user_ai_obj.save()
+                    messages.success(request, 'AI preferences saved.')
+                    return redirect('profile')
+                # Validation failed — fall through to re-render with errors in ai_settings_form
+
+        else:
+            # Profile form
+            profile_form = UserProfileForm(request.POST, request.FILES, instance=profile)
+            if profile_form.is_valid():
+                profile_form.save()
+                # Sync timezone session cache so middleware picks it up immediately
+                request.session['user_timezone'] = profile.timezone
+                messages.success(request, 'Profile updated successfully!')
+                return redirect('profile')
+            # Invalid — fall through to re-render with errors in profile_form
+
+    # ------------------------------------------------------------------
+    # Build AI form if not already bound (GET or failed AI settings POST)
+    # ------------------------------------------------------------------
+    if ai_settings_form is None:
+        if user_ai:
+            ai_settings_form = UserAISettingsForm(initial={
+                'provider_override': user_ai.provider_override,
+                'byok_provider': user_ai.byok_provider or '',
+            })
+        else:
+            ai_settings_form = UserAISettingsForm(initial={'provider_override': 'inherit'})
+
+    user_has_byok_key = bool(user_ai and user_ai.encrypted_api_key)
+
+    # effective_provider: only use the saved personal override when the user
+    # is actually allowed to override (show_provider_override is True).
+    # When the org flag is off, even a stale saved override must be ignored.
+    if show_provider_override and user_ai and user_ai.provider_override != 'inherit':
+        effective_provider = dict(PROVIDER_CHOICES).get(
+            user_ai.provider_override, user_ai.provider_override
+        )
     else:
-        form = UserProfileForm(instance=profile)
-    
-    return render(request, 'accounts/profile.html', {'form': form, 'profile': profile})
+        effective_provider = org_provider_display
+
+    context = {
+        'form': profile_form,
+        'profile': profile,
+        'user_ai_settings_form': ai_settings_form,
+        'user_has_byok_key': user_has_byok_key,
+        'show_provider_override': show_provider_override,
+        'effective_provider': effective_provider,
+        'org_provider_display': org_provider_display,
+        'user_ai': user_ai,
+    }
+    return render(request, 'accounts/profile.html', context)
 
 @login_required
 def organization_members(request):

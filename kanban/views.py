@@ -6262,10 +6262,19 @@ def task_update_fields(request, task_id):
 @login_required
 def workspace_preset_settings(request):
     """
-    GET  → render current workspace preset with radio buttons
-    POST → update the global preset (Org Admin only)
+    GET  → render workspace preset cards + AI provider settings card
+    POST (form_type=preset)      → update the global preset  (Org Admin only)
+    POST (form_type=ai_settings) → update AI provider settings (Org Admin only)
     """
     from kanban.preset_models import WorkspacePreset, PRESET_CHOICES, PRESET_ORDER
+    from kanban.permissions import is_user_org_admin
+    from kanban.forms.ai_forms import OrganizationAISettingsForm
+    from ai_assistant.models import OrganizationAISettings, PROVIDER_CHOICES
+    from ai_assistant.utils.ai_router import AIRouter
+    from django.core.exceptions import ImproperlyConfigured
+    from django.utils import timezone as tz
+    from django.http import HttpResponseForbidden
+
     profile = request.user.profile
     org = profile.organization
 
@@ -6273,7 +6282,6 @@ def workspace_preset_settings(request):
         messages.warning(request, "You don't belong to an organization yet.")
         return redirect('dashboard')
 
-    from kanban.permissions import is_user_org_admin
     if not is_user_org_admin(request.user):
         messages.error(request, "Only organization admins can change workspace settings.")
         return redirect('dashboard')
@@ -6283,23 +6291,135 @@ def workspace_preset_settings(request):
         defaults={'global_preset': 'lean'},
     )
 
+    # ai_form is set to a bound form only when we need to re-render with errors
+    ai_form = None
+
+    # -------------------------------------------------------------------
+    # POST handler
+    # -------------------------------------------------------------------
     if request.method == 'POST':
-        new_preset = request.POST.get('global_preset', '').strip()
-        if new_preset in PRESET_ORDER:
-            preset_obj.global_preset = new_preset
-            preset_obj.save()
-            messages.success(
-                request,
-                f"Workspace mode updated to {dict(PRESET_CHOICES).get(new_preset, new_preset)}."
-            )
+        form_type = request.POST.get('form_type', 'preset')
+
+        if form_type == 'ai_settings':
+            # Belt-and-suspenders RBAC check (top-level check already covers this)
+            if not is_user_org_admin(request.user):
+                return HttpResponseForbidden()
+
+            ai_form = OrganizationAISettingsForm(request.POST)
+            if ai_form.is_valid():
+                cd = ai_form.cleaned_data
+                raw_key = cd.get('raw_api_key', '').strip()
+                byok_prov = cd.get('byok_provider', '')
+                remove_key = cd.get('remove_byok_key', False)
+
+                ai_settings, _ = OrganizationAISettings.objects.get_or_create(
+                    organisation=org,
+                    defaults={'provider': 'gemini'},
+                )
+                ai_settings.provider = cd['provider']
+                ai_settings.allow_user_provider_override = cd['allow_user_provider_override']
+
+                save_ok = True
+
+                if remove_key:
+                    ai_settings.encrypted_api_key = None
+                    ai_settings.byok_provider = None
+                    ai_settings.key_last_four = None
+                    ai_settings.key_validated_at = None
+
+                elif raw_key:
+                    router = AIRouter()
+                    try:
+                        is_valid = router.validate_api_key(byok_prov, raw_key)
+                    except ImproperlyConfigured:
+                        ai_form.add_error(
+                            None,
+                            'API key encryption is not configured on this server. '
+                            'Contact your administrator.'
+                        )
+                        save_ok = False
+                        is_valid = False
+
+                    if save_ok and not is_valid:
+                        ai_form.add_error(
+                            None,
+                            'The API key could not be validated. '
+                            'Please check the key and try again.'
+                        )
+                        save_ok = False
+
+                    if save_ok:
+                        try:
+                            ai_settings.encrypted_api_key = router._encrypt_key(raw_key)
+                        except ImproperlyConfigured:
+                            ai_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+
+                    if save_ok:
+                        ai_settings.key_last_four = '••••' + raw_key[-4:]
+                        ai_settings.byok_provider = byok_prov
+                        ai_settings.key_validated_at = tz.now()
+
+                if save_ok:
+                    ai_settings.updated_by = request.user
+                    ai_settings.save()
+                    messages.success(request, 'AI provider settings saved.')
+                    return redirect('workspace_preset_settings')
+                # Validation failed — fall through to re-render with errors
+
         else:
-            messages.error(request, "Invalid preset selection.")
-        return redirect('workspace_preset_settings')
+            # Preset form (form_type='preset' or absent)
+            new_preset = request.POST.get('global_preset', '').strip()
+            if new_preset in PRESET_ORDER:
+                preset_obj.global_preset = new_preset
+                preset_obj.save()
+                messages.success(
+                    request,
+                    f"Workspace mode updated to "
+                    f"{dict(PRESET_CHOICES).get(new_preset, new_preset)}."
+                )
+            else:
+                messages.error(request, "Invalid preset selection.")
+            return redirect('workspace_preset_settings')
+
+    # -------------------------------------------------------------------
+    # GET context (also used when re-rendering after failed AI settings POST)
+    # -------------------------------------------------------------------
+    ai_settings_obj = None
+    try:
+        ai_settings_obj = org.ai_settings
+    except OrganizationAISettings.DoesNotExist:
+        pass
+
+    if ai_form is None:
+        # Fresh GET — pre-populate with saved values (or defaults)
+        if ai_settings_obj:
+            ai_form = OrganizationAISettingsForm(initial={
+                'provider': ai_settings_obj.provider,
+                'allow_user_provider_override': ai_settings_obj.allow_user_provider_override,
+                'byok_provider': ai_settings_obj.byok_provider or '',
+            })
+        else:
+            ai_form = OrganizationAISettingsForm(initial={'provider': 'gemini'})
+
+    has_byok_key = bool(ai_settings_obj and ai_settings_obj.encrypted_api_key)
+    current_ai_provider = dict(PROVIDER_CHOICES).get(
+        ai_settings_obj.provider if ai_settings_obj else 'gemini',
+        'Google Gemini',
+    )
 
     context = {
         'preset_obj': preset_obj,
         'preset_choices': PRESET_CHOICES,
         'current_preset': preset_obj.global_preset,
+        'ai_settings_form': ai_form,
+        'ai_settings': ai_settings_obj,
+        'has_byok_key': has_byok_key,
+        'current_ai_provider': current_ai_provider,
     }
     return render(request, 'kanban/workspace_preset_settings.html', context)
 

@@ -418,6 +418,42 @@ class AIRouter:
         return key_map.get(provider, '')
 
     # ------------------------------------------------------------------
+    # BYOK key validation
+    # ------------------------------------------------------------------
+
+    def validate_api_key(self, provider: str, raw_key: str) -> bool:
+        """
+        Validate a raw (unencrypted) API key by making a minimal test call
+        to the specified provider.
+
+        Used by the settings views before encrypting and storing a BYOK key.
+        This avoids any DB state changes — the key is tested directly, not
+        routed through _resolve_provider().
+
+        Args:
+            provider (str): 'gemini', 'openai', or 'anthropic'.
+            raw_key (str): Plain-text API key to test.
+
+        Returns:
+            bool: True if the key is valid and the provider responded,
+                  False on any failure (bad key, network error, quota, etc.).
+        """
+        probe = "Hi"
+        try:
+            if provider == 'gemini':
+                self._call_gemini(probe, raw_key)
+            elif provider == 'openai':
+                self._call_openai(probe, raw_key)
+            elif provider == 'anthropic':
+                self._call_anthropic(probe, raw_key)
+            else:
+                return False
+            return True
+        except (AIProviderError, NotImplementedError, ImproperlyConfigured,
+                Exception):
+            return False
+
+    # ------------------------------------------------------------------
     # Provider call methods
     # ------------------------------------------------------------------
 
