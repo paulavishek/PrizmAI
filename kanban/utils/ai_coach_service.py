@@ -21,17 +21,9 @@ class AICoachService:
     
     def __init__(self):
         """Initialize AI coach service"""
-        self.gemini_available = hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY
-        
-        if self.gemini_available:
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self.genai = genai
-                logger.info("AI Coach Service initialized with Gemini")
-            except Exception as e:
-                logger.error(f"Failed to initialize Gemini: {e}")
-                self.gemini_available = False
+        from ai_assistant.utils.ai_router import AIRouter
+        self.router = AIRouter()
+        self.gemini_available = True  # AIRouter handles availability internally
         
         # Initialize AI cache manager
         try:
@@ -66,34 +58,19 @@ class AICoachService:
             return None
             
         try:
-            model = self.genai.GenerativeModel('gemini-2.5-flash')
-            
-            # Token limits for coaching operations - generous to prevent JSON truncation
-            coaching_token_limits = {
-                'coaching_suggestion': 3072,  # Suggestion enhancement with actions + explainability
-                'coaching_advice': 4096,      # Detailed coaching response with full reasoning
-                'coaching_question': 3072,    # PM question response with context
-            }
-            
-            max_tokens = coaching_token_limits.get(operation, 3072)
-            
-            # Generation config for coaching - balanced for helpful advice
-            generation_config = {
-                'temperature': 0.5,  # Balanced for actionable but engaging advice
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': max_tokens,
-            }
-            
-            response = model.generate_content(prompt, generation_config=generation_config)
-            
-            if response and response.text:
-                result = response.text.strip()
+            result = self.router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )
+            response_text = result.get('text', '').strip()
+
+            if response_text:
                 # Cache the result
-                if self.ai_cache and result:
-                    self.ai_cache.set(prompt, result, operation, context_id)
+                if self.ai_cache and response_text:
+                    self.ai_cache.set(prompt, response_text, operation, context_id)
                     logger.debug(f"AI Coach response cached for operation: {operation}")
-                return result
+                return response_text
             return None
         except Exception as e:
             logger.error(f"AI generation failed: {e}")

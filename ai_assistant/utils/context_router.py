@@ -96,10 +96,8 @@ def _ai_classify(query, provider_tags):
     Returns list of provider names or empty list on failure.
     """
     try:
-        from ai_assistant.utils.ai_clients import GeminiClient
-        client = GeminiClient()
-        if not client.models and client.models is not None:
-            return []
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
 
         provider_list = '\n'.join(
             f'- {name}: {", ".join(tags[:8])}'
@@ -119,15 +117,15 @@ def _ai_classify(query, provider_tags):
             f'Available providers:\n{provider_list}'
         )
 
-        response = client.get_response(
+        response = router.complete(
             query,
-            system_prompt,
-            temperature=0.1,
-            model_name='gemini-2.5-flash-lite',
+            user=None,
+            system_prompt=system_prompt,
+            complexity='simple',
         )
 
-        if response and response.get('content'):
-            content = response['content'].strip()
+        if response and response.get('text'):
+            content = response['text'].strip()
             # Extract JSON array from response
             match = re.search(r'\[.*?\]', content, re.DOTALL)
             if match:

@@ -101,24 +101,18 @@ JSON array:"""
                 logger.debug("Skill extraction cache HIT")
                 return cached
         
-        model = get_model()
-        if not model:
-            return []
-
-        # Generation config for skill extraction - deterministic for reproducible gap results
-        generation_config = {
-            'temperature': 0.2,  # Very low for consistent, reproducible skill identification
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': 2048,  # Gemini 2.5 Flash thinking mode needs headroom
-            'response_mime_type': 'application/json',  # Force JSON output from Gemini
-        }
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
 
         max_attempts = 2
         for attempt in range(max_attempts):
             try:
-                response = model.generate_content(prompt, generation_config=generation_config)
-                response_text = response.text.strip()
+                result = router.complete(
+                    prompt=prompt,
+                    user=None,
+                    complexity='simple',
+                )
+                response_text = result.get('text', '').strip()
                 
                 # Try direct JSON parse first (response_mime_type should guarantee JSON)
                 try:
@@ -626,8 +620,10 @@ def generate_skill_gap_recommendations(gap_data: Dict, board) -> List[Dict]:
         List of recommendation dictionaries
     """
     try:
-        model = get_model()
-        if not model:
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
+
+        if not router:
             return _get_fallback_recommendations(gap_data)
         
         # Build context about the gap
@@ -688,10 +684,12 @@ JSON array:"""
             'max_output_tokens': 2048,  # More tokens for detailed recommendations
         }
 
-        response = model.generate_content(prompt, generation_config=generation_config)
-        response_text = response.text.strip()
-        
-        # Extract JSON
+        result = router.complete(
+            prompt=prompt,
+            user=None,
+            complexity='simple',
+        )
+        response_text = result.get('text', '').strip()
         json_match = re.search(r'\[[\s\S]*\]', response_text)
         if json_match:
             recommendations_json = json_match.group(0)

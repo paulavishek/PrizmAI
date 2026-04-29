@@ -595,11 +595,11 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
     Falls back to deterministic summary on failure.
     """
     try:
-        from ai_assistant.utils.ai_clients import GeminiClient
+        from ai_assistant.utils.ai_router import AIRouter
 
-        client = GeminiClient(default_model='gemini-2.5-flash-lite')
-        if client.models is None:
-            raise RuntimeError("Gemini API not initialised")
+        router = AIRouter()
+        if router is None:
+            raise RuntimeError("AIRouter not available")
 
         # Build prompt
         lines = []
@@ -630,13 +630,12 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
             "practical. Speak directly to the PM. No fluff. Return ONLY valid JSON."
         )
 
-        result = client.get_response(
+        result = router.complete(
             prompt=f"{system_prompt}\n\n{user_prompt}",
-            task_complexity='simple',
-            temperature=0.4,
-            use_cache=False,
+            user=None,  # Celery background task — no user context
+            complexity='simple',
         )
-        text = result if isinstance(result, str) else str(result)
+        text = result.get('text', '')
 
         # Parse JSON from response
         # Strip markdown code fences if present

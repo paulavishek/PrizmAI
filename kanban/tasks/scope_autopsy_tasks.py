@@ -267,12 +267,10 @@ def _get_past_scope_patterns(board, user):
 
 def _call_gemini_for_autopsy(board_snapshot, events, past_scope_notes, project_context):
     """
-    Call Gemini for forensic scope analysis.
+    Call AI router for forensic scope analysis.
     Returns parsed JSON dict with ai_summary, pattern_analysis, recommendations, etc.
     """
-    import google.generativeai as genai
-
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+    from ai_assistant.utils.ai_router import AIRouter
 
     system_prompt = (
         "You are a forensic project analyst specializing in scope creep analysis. "
@@ -345,29 +343,19 @@ def _call_gemini_for_autopsy(board_snapshot, events, past_scope_notes, project_c
         "}"
     )
 
-    model = genai.GenerativeModel(
-        'gemini-2.5-flash',
-        system_instruction=system_prompt,
-    )
-
-    generation_config = {
-        'temperature': 0.3,
-        'top_p': 0.8,
-        'top_k': 40,
-        'max_output_tokens': 4096,
-        'response_mime_type': 'application/json',
-    }
+    router = AIRouter()
 
     from kanban_board.ai_cache import get_cached_ai_response
 
     full_prompt = f"{system_prompt}\n---\n{user_prompt}"
     raw = get_cached_ai_response(
         prompt=full_prompt,
-        model_call=lambda: model.generate_content(
-            user_prompt,
-            generation_config=generation_config,
-            request_options={"timeout": 120},
-        ),
+        model_call=lambda: router.complete(
+            prompt=user_prompt,
+            user=None,  # Celery background task — no user context
+            system_prompt=system_prompt,
+            complexity='complex',
+        )['text'],
         operation='scope_autopsy',
     )
     if not raw:

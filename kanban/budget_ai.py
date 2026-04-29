@@ -597,43 +597,19 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 return cached
         
         try:
-            import google.generativeai as genai
+            from ai_assistant.utils.ai_router import AIRouter
             from django.conf import settings
-            
-            if not hasattr(settings, 'GEMINI_API_KEY') or not settings.GEMINI_API_KEY:
-                logger.error("GEMINI_API_KEY not configured")
-                return None
-            
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            
-            # Use Gemini 2.5 Flash for complex financial analysis
-            model_name = 'gemini-2.5-flash'
-            model = genai.GenerativeModel(model_name)
-            logger.debug(f"Using {model_name} for budget AI analysis")
-            
-            # Token limits for budget operations - generous to ensure complete responses with explainability
-            budget_token_limits = {
-                'budget_analysis': 6144,      # Comprehensive health analysis with recommendations + explainability
-                'budget_recommendations': 12288,  # Multiple detailed recommendations with reasoning (needs extra room)
-                'budget_prediction': 4096,    # Prediction with scenarios + confidence explanation
-                'budget_patterns': 4096,      # Pattern analysis with evidence
-                'budget_optimization': 4096,  # Resource optimization suggestions with reasoning
-            }
-            
-            max_tokens = budget_token_limits.get(cache_operation, 4096)
-            
-            # Generation config optimized for financial analysis
-            generation_config = {
-                'temperature': 0.4,  # Lower for consistent financial analysis
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': max_tokens,
-            }
-            
-            response = model.generate_content(prompt, generation_config=generation_config)
-            
-            if response and response.text:
-                result = response.text
+
+            router = AIRouter()
+            logger.debug(f"Using AIRouter for budget AI analysis (complexity=complex)")
+
+            result = router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )['text']  # TODO Phase 4 cleanup: update to result['text'] when alias is removed
+
+            if result:
                 # Cache the result
                 if use_cache and ai_cache and result:
                     ai_cache.set(prompt, result, cache_operation, context_id)
@@ -641,7 +617,7 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 return result
             return None
         except Exception as e:
-            logger.error(f"Error calling Gemini API: {str(e)}")
+            logger.error(f"Error calling AI router: {str(e)}")
             return None
     
     def _extract_json_text(self, text: str) -> str:

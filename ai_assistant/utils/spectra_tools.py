@@ -5,6 +5,11 @@ Each tool defines the bare minimum required parameters.  Optional fields
 have sensible defaults so Spectra keeps conversations short — users can
 fill the rest via the UI later.
 """
+# PHASE 4 EXCLUSION: This module builds genai.types.Tool / FunctionDeclaration objects
+# which are passed to GeminiClient.get_function_call_response() — a Gemini-native
+# function calling API with no direct equivalent in OpenAI/Anthropic tool formats.
+# This call site remains on GeminiClient intentionally.
+# See Phase 4 documentation for details.
 import logging
 
 logger = logging.getLogger(__name__)

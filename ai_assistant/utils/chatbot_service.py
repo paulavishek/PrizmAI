@@ -252,6 +252,10 @@ def detect_action_intent(message: str) -> str | None:
     return None
 
 
+# PHASE 4 EXCLUSION: classify_intent_with_ai calls GeminiClient.classify_intent() which relies
+# on Gemini-native JSON-mode output to extract structured intent + confidence scores.
+# This call site remains on GeminiClient intentionally.
+# See Phase 4 documentation for details.
 def classify_intent_with_ai(message: str, gemini_client=None) -> dict:
     """
     Tier-1 intent classification using Flash-Lite, with regex fallback.

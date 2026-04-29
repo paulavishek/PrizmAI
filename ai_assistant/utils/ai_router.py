@@ -88,8 +88,8 @@ class AIRouter:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def complete(self, prompt: str, user, system_prompt: str = None,
-                 conversation_history: list = None) -> dict:
+    def complete(self, prompt: str, user=None, system_prompt: str = None,
+                 conversation_history: list = None, complexity: str = 'simple') -> dict:
         """
         Make an AI completion call on behalf of a user.
 
@@ -99,6 +99,8 @@ class AIRouter:
         Args:
             prompt (str): The user's input or the feature's generated prompt.
             user: Django User object.  Used to look up provider / key settings.
+                Pass None for background/Celery tasks with no user context —
+                the router will fall back to org-level settings or Gemini.
             system_prompt (str, optional): System-level context prepended to
                 the call.
             conversation_history (list, optional): Prior conversation turns.
@@ -114,6 +116,10 @@ class AIRouter:
                 accepted.  The router converts this into each provider's
                 native message format before making the call.  Gemini
                 currently ignores history (stateless calls only).
+            complexity (str): 'simple' or 'complex'.  Maps to a cheaper/faster
+                model for light tasks, or the full model for heavy analysis.
+                Defaults to 'simple'.  Call sites should pass 'complex' for
+                multi-step AI analysis, document understanding, or code tasks.
 
         Returns:
             dict: Normalised response — see _normalise_response() for keys.
@@ -123,15 +129,24 @@ class AIRouter:
             ImproperlyConfigured: If AI_KEY_ENCRYPTION_KEY is missing and a
                 BYOK key needs to be decrypted.
         """
+        # Emergency rollback switch — if AI_ROUTER_ENABLED is False in settings,
+        # bypass all provider resolution and call Gemini directly.  This is an
+        # operator-level kill-switch for production incidents.
+        if not getattr(settings, 'AI_ROUTER_ENABLED', True):
+            logger.warning(
+                "AIRouter: AI_ROUTER_ENABLED=False — bypassing router, calling Gemini directly."
+            )
+            return self._emergency_gemini_fallback(prompt, system_prompt, conversation_history, complexity)
+
         provider, api_key, is_byok = self._resolve_provider(user)
 
         try:
             if provider == 'gemini':
-                raw = self._call_gemini(prompt, api_key, system_prompt, conversation_history)
+                raw = self._call_gemini(prompt, api_key, system_prompt, conversation_history, complexity)
             elif provider == 'openai':
-                raw = self._call_openai(prompt, api_key, system_prompt, conversation_history)
+                raw = self._call_openai(prompt, api_key, system_prompt, conversation_history, complexity)
             elif provider == 'anthropic':
-                raw = self._call_anthropic(prompt, api_key, system_prompt, conversation_history)
+                raw = self._call_anthropic(prompt, api_key, system_prompt, conversation_history, complexity)
             else:
                 raise AIProviderError(provider, ValueError(f"Unknown provider: '{provider}'"))
 
@@ -201,6 +216,42 @@ class AIRouter:
         # Import here (not at module top) to avoid circular imports, since
         # ai_router.py lives inside the ai_assistant app that owns these models.
         from ai_assistant.models import UserAISettings, OrganizationAISettings
+
+        # ==============================================================
+        # Background task path — user=None means no user context.
+        # Steps 1 (personal BYOK) and 2 (user override) are skipped.
+        # We still attempt org-level resolution (Steps 3-4) by scanning
+        # for any active OrganizationAISettings record.
+        # ==============================================================
+        if user is None:
+            # Try to find any org-level AI settings to use as context.
+            # For Celery tasks this gives the most-recently configured org.
+            try:
+                org_settings = OrganizationAISettings.objects.filter(
+                    provider__isnull=False
+                ).first()
+                if org_settings and org_settings.encrypted_api_key and org_settings.byok_provider:
+                    try:
+                        api_key = self._decrypt_key(org_settings.encrypted_api_key)
+                        logger.debug(
+                            "AIRouter (background task): using org BYOK key provider=%s",
+                            org_settings.byok_provider,
+                        )
+                        return (org_settings.byok_provider, api_key, True)
+                    except Exception:
+                        pass  # Decryption failure — fall through to platform key
+                if org_settings and org_settings.provider:
+                    api_key = self._platform_key(org_settings.provider)
+                    logger.debug(
+                        "AIRouter (background task): using org provider=%s",
+                        org_settings.provider,
+                    )
+                    return (org_settings.provider, api_key, False)
+            except Exception:
+                pass  # Table doesn't exist yet or any other error — fall through
+            # Final fallback for background tasks: Gemini with platform key.
+            logger.debug("AIRouter (background task): falling back to Gemini platform key")
+            return ('gemini', self._platform_key('gemini'), False)
 
         # ---- Fetch user AI settings (table starts empty — DoesNotExist is normal) ----
         user_settings = None
@@ -324,7 +375,7 @@ class AIRouter:
         # ==============================================================
         logger.debug(
             "AIRouter: no settings found for user=%s — falling back to Gemini",
-            getattr(user, 'username', '?'),
+            getattr(user, 'username', '?') if user is not None else '<background task>',
         )
         return ('gemini', self._platform_key('gemini'), False)
 
@@ -457,19 +508,41 @@ class AIRouter:
     # Provider call methods
     # ------------------------------------------------------------------
 
-    def _call_gemini(self, prompt: str, api_key: str, system_prompt: str = None,
-                     conversation_history: list = None) -> dict:
+    def _emergency_gemini_fallback(self, prompt: str, system_prompt: str = None,
+                                    conversation_history: list = None,
+                                    complexity: str = 'simple') -> dict:
         """
-        Call Google Gemini 2.5 Flash and return a raw response dictionary.
+        Emergency fallback path invoked when AI_ROUTER_ENABLED=False.
+
+        Bypasses all provider resolution and calls Gemini directly using the
+        platform key.  Returns a normalised response in the same format as
+        complete() so callers are unaware of the bypass.
+
+        This method should only ever be triggered by an operator setting
+        AI_ROUTER_ENABLED=false in production during an incident.
+        """
+        api_key = self._platform_key('gemini')
+        raw = self._call_gemini(prompt, api_key, system_prompt, conversation_history, complexity)
+        return self._normalise_response(
+            text=raw.get('text', ''),
+            provider='gemini',
+            model=raw.get('model', ''),
+            used_byok=False,
+            tokens_used=raw.get('tokens_used'),
+        )
+
+    def _call_gemini(self, prompt: str, api_key: str, system_prompt: str = None,
+                     conversation_history: list = None, complexity: str = 'simple') -> dict:
+        """
+        Call Google Gemini and return a raw response dictionary.
 
         This method is standalone — it does NOT use or modify the existing
         GeminiClient class, so no existing call sites are affected.
 
         NOTE ON THREAD SAFETY: google.generativeai uses a module-level global
         API key (genai.configure).  Concurrent requests that use different BYOK
-        keys may interfere with each other.  This is acceptable for Phase 1
-        because BYOK usage will be rare at this stage.  Phase 2 will address
-        thread safety using per-client instantiation.
+        keys may interfere with each other.  The _GEMINI_CONFIGURE_LOCK ensures
+        thread safety for BYOK scenarios.
 
         Args:
             prompt (str): The prompt to send.
@@ -477,6 +550,8 @@ class AIRouter:
             system_prompt (str, optional): Prepended as context before the prompt.
             conversation_history (list, optional): Accepted for interface
                 consistency but not used — Gemini is called statelessly.
+            complexity (str): 'simple' → gemini-2.5-flash-lite (faster/cheaper);
+                              'complex' → gemini-2.5-flash (full model).
 
         Returns:
             dict: {'text': str, 'model': str, 'tokens_used': int | None}
@@ -501,7 +576,13 @@ class AIRouter:
                 ),
             )
 
-        model_name = 'gemini-2.5-flash'
+        # Select model based on task complexity.
+        # 'simple' → Flash-Lite (faster, cheaper for lightweight classification/formatting)
+        # 'complex' → Flash (full model for analysis, generation, reasoning)
+        if complexity == 'complex':
+            model_name = getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash')
+        else:
+            model_name = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
 
         full_prompt = prompt
         if system_prompt:
@@ -559,21 +640,22 @@ class AIRouter:
         return {'text': text, 'model': model_name, 'tokens_used': tokens_used}
 
     def _call_openai(self, prompt: str, api_key: str, system_prompt: str = None,
-                     conversation_history: list = None) -> dict:
+                     conversation_history: list = None, complexity: str = 'simple') -> dict:
         """
-        Call OpenAI GPT-4o.  Not yet implemented — coming in Phase 2 (Task 4).
+        Call OpenAI GPT and return a raw response dictionary.
 
         Args:
             prompt (str): The prompt to send.
             api_key (str): OpenAI API key (platform or BYOK).
             system_prompt (str, optional): System context.
             conversation_history (list, optional): Prior turns.
+            complexity (str): 'simple' → gpt-4o-mini; 'complex' → gpt-4o.
 
         Returns:
             dict: {'text': str, 'model': str, 'tokens_used': int | None}
 
         Raises:
-            NotImplementedError: Always — implementation coming in Phase 2.
+            AIProviderError: On any OpenAI-side failure.
         """
         try:
             import openai
@@ -592,7 +674,11 @@ class AIRouter:
                 ),
             )
 
-        model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o')
+        # Select model based on task complexity.
+        if complexity == 'complex':
+            model = getattr(settings, 'OPENAI_MODEL_COMPLEX', getattr(settings, 'OPENAI_MODEL', 'gpt-4o'))
+        else:
+            model = getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
 
         # Build the messages list in OpenAI's native format.
         # Canonical conversation_history format: [{'role': 'user'|'assistant', 'content': str}]
@@ -652,21 +738,22 @@ class AIRouter:
         return {'text': text, 'model': model_used, 'tokens_used': tokens_used}
 
     def _call_anthropic(self, prompt: str, api_key: str, system_prompt: str = None,
-                        conversation_history: list = None) -> dict:
+                        conversation_history: list = None, complexity: str = 'simple') -> dict:
         """
-        Call Anthropic Claude Sonnet.  Not yet implemented — coming in Phase 2 (Task 5).
+        Call Anthropic Claude and return a raw response dictionary.
 
         Args:
             prompt (str): The prompt to send.
             api_key (str): Anthropic API key (platform or BYOK).
             system_prompt (str, optional): System context.
             conversation_history (list, optional): Prior turns.
+            complexity (str): 'simple' → claude-haiku-4-5; 'complex' → claude-sonnet-4-6.
 
         Returns:
             dict: {'text': str, 'model': str, 'tokens_used': int | None}
 
         Raises:
-            NotImplementedError: Always — implementation coming in Phase 2.
+            AIProviderError: On any Anthropic-side failure.
         """
         try:
             import anthropic
@@ -685,7 +772,11 @@ class AIRouter:
                 ),
             )
 
-        model = getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6')
+        # Select model based on task complexity.
+        if complexity == 'complex':
+            model = getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6'))
+        else:
+            model = getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5')
         max_tokens = getattr(settings, 'ANTHROPIC_MAX_TOKENS', 2048)
 
         # Build the messages list in Anthropic's native format.
@@ -798,10 +889,16 @@ class AIRouter:
                 provider,
                 ValueError("Provider returned an empty response."),
             )
-        return {
+        result = {
             'text': text,
             'provider': provider,
             'model': model,
             'used_byok': used_byok,
             'tokens_used': tokens_used,
         }
+        # Backward-compat alias: existing call sites read result['content'] after migrating
+        # from GeminiClient (which returned {'content': ...}).  This alias lets callers keep
+        # working before they are updated to use result['text'].
+        # TODO: Remove this alias once all Phase 4 call sites are updated to use result['text']
+        result['content'] = result['text']
+        return result

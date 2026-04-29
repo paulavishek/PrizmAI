@@ -1535,6 +1535,9 @@ class ConversationFlowManager:
         context = build_fc_context(user, board)
         tools = get_action_tools()
         client = GeminiClient()
+        # PHASE 4 EXCLUSION: get_function_call_response uses GeminiClient.get_function_call_response
+        # which relies on Gemini-native Tool/FunctionDeclaration API with no direct equivalent
+        # in OpenAI/Anthropic tool formats. This call site remains on GeminiClient intentionally.
         result = client.get_function_call_response(message, context, tools)
 
         if result.get('error'):
@@ -1681,6 +1684,9 @@ class ConversationFlowManager:
         history.append(f"User: {message}")
 
         client = GeminiClient()
+        # PHASE 4 EXCLUSION: get_function_call_response uses GeminiClient.get_function_call_response
+        # which relies on Gemini-native Tool/FunctionDeclaration API with no direct equivalent
+        # in OpenAI/Anthropic tool formats. This call site remains on GeminiClient intentionally.
         result = client.get_function_call_response(
             message, context, tools, conversation_history=history,
         )

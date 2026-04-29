@@ -102,10 +102,9 @@ Format your response as JSON:
 """
     
     try:
-        # Configure Gemini
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
+        # Use AI router for provider-agnostic AI call
+        from ai_assistant.utils.ai_router import AIRouter
+
         # Generation config for scope analysis
         generation_config = {
             'temperature': 0.4,  # Analytical task
@@ -113,11 +112,16 @@ Format your response as JSON:
             'top_k': 40,
             'max_output_tokens': 2048,  # Adequate for scope analysis JSON
         }
-        
+
+        router = AIRouter()
         # Generate analysis with caching
         response_text = get_cached_ai_response(
             prompt=prompt,
-            model_call=lambda: model.generate_content(prompt, generation_config=generation_config),
+            model_call=lambda: router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )['text'],
             operation='scope_analysis',
             context_id=f"board_{board.id}",
         )

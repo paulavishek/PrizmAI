@@ -1,8 +1,8 @@
 """
-AI-Powered Conflict Resolution using Google Gemini
+AI-Powered Conflict Resolution using AI Router
 Provides intelligent, context-aware resolution suggestions with reasoning.
 """
-import google.generativeai as genai
+from ai_assistant.utils.ai_router import AIRouter
 from django.conf import settings
 from typing import List, Dict
 import json
@@ -12,22 +12,13 @@ from kanban_board.ai_cache import ai_cache_manager
 
 class AIConflictResolutionEngine:
     """
-    Uses Google Gemini AI to generate intelligent conflict resolution suggestions.
+    Uses AI Router to generate intelligent conflict resolution suggestions.
     Provides context-aware, reasoning-backed recommendations.
     """
     
     def __init__(self):
-        """Initialize Gemini AI client."""
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        # Generation config for conflict resolution - needs detailed JSON responses
-        self.generation_config = {
-            'temperature': 0.4,  # Lower for consistent analytical output
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': 4096,  # Generous for resolution suggestions + deep analysis with full explainability
-        }
+        """Initialize AI router client."""
+        self.router = AIRouter()
     
     def generate_advanced_resolutions(self, conflict, user=None):
         """
@@ -67,13 +58,18 @@ class AIConflictResolutionEngine:
                 return suggestions
 
             # Generate AI response with proper config
-            response = self.model.generate_content(prompt, generation_config=self.generation_config)
+            response = self.router.complete(
+                prompt=prompt,
+                user=user,
+                complexity='complex',
+            )
+            ai_text = response.get('text', '')
             
             # Cache the raw response text
-            ai_cache_manager.set(prompt, response.text, 'conflict_suggestion', cache_context)
+            ai_cache_manager.set(prompt, ai_text, 'conflict_suggestion', cache_context)
             
             # Parse suggestions
-            suggestions = self._parse_ai_suggestions(response.text, conflict)
+            suggestions = self._parse_ai_suggestions(ai_text, conflict)
             
             # Track successful AI request
             if user:
@@ -402,8 +398,8 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
             cache_context = f"enhance_conflict_{conflict.id}"
             cached_text = ai_cache_manager.get(prompt, 'conflict_suggestion', cache_context)
             if cached_text is None:
-                response = self.model.generate_content(prompt, generation_config=self.generation_config)
-                cached_text = response.text
+                response = self.router.complete(prompt=prompt, user=None, complexity='complex')
+                cached_text = response.get('text', '')
                 ai_cache_manager.set(prompt, cached_text, 'conflict_suggestion', cache_context)
             
             # Parse and apply enhancements

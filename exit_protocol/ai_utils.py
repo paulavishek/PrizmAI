@@ -7,7 +7,7 @@ import json
 import logging
 import time
 
-from ai_assistant.utils.ai_clients import GeminiClient
+from ai_assistant.utils.ai_router import AIRouter
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 from .prompts import (
@@ -40,19 +40,19 @@ def _call_gemini(user, prompt, task_complexity, feature_name, board_id=None, tem
     if not has_quota:
         raise ValueError(f"AI quota exceeded for user {user.id}")
 
-    client = GeminiClient()
+    router = AIRouter()
     start_time = time.time()
 
     try:
-        response = client.get_response(
+        response = router.complete(
             prompt=prompt,
-            task_complexity=task_complexity,
-            temperature=temperature or (0.4 if task_complexity == 'complex' else 0.3),
+            user=user,
+            complexity=task_complexity,
         )
+        content = response.get('text', '')
 
         elapsed_ms = int((time.time() - start_time) * 1000)
-        tokens = response.get('tokens', 0) if isinstance(response, dict) else 0
-        content = response.get('content', '') if isinstance(response, dict) else str(response)
+        tokens = response.get('tokens', 0)
 
         track_ai_request(
             user=user,

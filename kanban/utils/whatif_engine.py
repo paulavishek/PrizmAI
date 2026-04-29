@@ -73,13 +73,12 @@ class WhatIfEngine:
 
     def analyze_with_ai(self, params: dict, simulation_results: dict) -> dict:
         """
-        Ask Gemini to evaluate a what-if scenario and provide strategic advice.
+        Ask AI to evaluate a what-if scenario and provide strategic advice.
 
         Returns a structured dict or an error dict on failure.
         """
         try:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            from ai_assistant.utils.ai_router import AIRouter
 
             baseline = simulation_results['baseline']
             projected = simulation_results['projected']
@@ -89,16 +88,14 @@ class WhatIfEngine:
 
             prompt = self._build_ai_prompt(params, baseline, projected, deltas, conflicts, feasibility)
 
-            config = {
-                'temperature': 0.4,
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': 4096,
-            }
-
+            router = AIRouter()
             raw = get_cached_ai_response(
                 prompt=prompt,
-                model_call=lambda: model.generate_content(prompt, generation_config=config),
+                model_call=lambda: router.complete(
+                    prompt=prompt,
+                    user=None,
+                    complexity='complex',
+                )['text'],
                 operation='whatif_analysis',
                 context_id=f"board_{self.board.id}",
             )
