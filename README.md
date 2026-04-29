@@ -573,6 +573,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env — add your SECRET_KEY and GEMINI_API_KEY at minimum
 # Optional: add OPENAI_API_KEY, ANTHROPIC_API_KEY for multi-provider support
+# Optional: set OPENAI_MODEL (default: gpt-4o) and ANTHROPIC_MODEL (default: claude-sonnet-4-6)
 # Optional: add AI_KEY_ENCRYPTION_KEY to enable BYOK (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
 # Apply migrations
@@ -658,10 +659,11 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 - Django Channels 4 (WebSockets)
 - Celery + django-celery-beat (async and scheduled tasks)
 - **Multi-Provider AI Router** — `AIRouter` centrally resolves the correct provider and key per user; provider-specific calls are normalised to a consistent response format
-  - Google Gemini — `gemini-2.5-flash` / `gemini-2.5-flash-lite` (default platform provider)
-  - OpenAI — GPT-4o *(Phase 2)*
-  - Anthropic Claude — Claude Sonnet *(Phase 2)*
-  - BYOK support — user and org-level encrypted keys (AES-256 Fernet)
+  - Google Gemini — `gemini-2.5-flash` (default platform provider) · thread-safe BYOK via `_GEMINI_CONFIGURE_LOCK`
+  - OpenAI — `gpt-4o` (configurable via `OPENAI_MODEL`; `gpt-4o-mini` for lower cost)
+  - Anthropic Claude — `claude-sonnet-4-6` (configurable via `ANTHROPIC_MODEL`; system prompt passed as top-level `system=` param)
+  - BYOK support — user and org-level AES-256 Fernet encrypted keys; exhausted-quota detection distinguishes billing issues from transient rate limits
+  - Canonical `conversation_history` format: `[{"role": "user"|"assistant", "content": str}]` — provider-specific conversion handled internally
 - scikit-learn, numpy, scipy (ML pipeline for priority and deadline models)
 
 **Frontend**
@@ -743,7 +745,7 @@ graph TB
 - **WebSocket Server** — Real-time collaboration and live updates via Django Channels
 - **Celery Workers** — Asynchronous task processing for AI operations and scheduled automations
 - **Redis** — Message broker for Celery and a shared caching layer
-- **AI Router** — Central provider switchboard (`AIRouter`) resolving Gemini · OpenAI · Anthropic per user, with BYOK key decryption and normalised response format
+- **AI Router** — Central provider switchboard (`AIRouter`) resolving Gemini · OpenAI · Anthropic per user, with BYOK key decryption, thread-safe Gemini calls, quota-aware error messages, and normalised response format
 - **REST API** — Token-authenticated endpoints for third-party integrations and mobile clients
 - **Webhook System** — Event-driven automation with external tools
 
@@ -825,6 +827,55 @@ python -m http.server 8080
 ## License
 
 MIT License — free to use, modify, and deploy anywhere.
+
+---
+
+## Multi-Provider AI — Implementation Status
+
+PrizmAI's AI layer is being built in phases. The table below tracks what is shipped.
+
+### Phase 1 — Router Foundation ✅ Complete
+
+| Item | Status | Detail |
+|---|---|---|
+| `OrganizationAISettings` model | ✅ | Per-org provider choice, BYOK key, `allow_user_provider_override` |
+| `UserAISettings` model | ✅ | Per-user provider override, personal BYOK key |
+| `AIRouter._resolve_provider()` | ✅ | 5-step resolution: personal BYOK → user override → org BYOK → org provider → Gemini fallback |
+| Fernet AES-256 key encryption | ✅ | `_encrypt_key()` / `_decrypt_key()` — keys never stored or logged in plain text |
+| Google Gemini integration | ✅ | `gemini-2.5-flash`, thread-safe via `_GEMINI_CONFIGURE_LOCK` |
+| Normalised response format | ✅ | `{text, provider, model, used_byok, tokens_used}` — identical for all providers |
+
+### Phase 2 — OpenAI + Anthropic Provider Integrations ✅ Complete
+
+| Item | Status | Detail |
+|---|---|---|
+| OpenAI integration | ✅ | `gpt-4o` default (overridable via `OPENAI_MODEL`); per-call client instantiation (thread-safe) |
+| Anthropic Claude integration | ✅ | `claude-sonnet-4-6` default (overridable via `ANTHROPIC_MODEL`); system prompt as top-level `system=` param |
+| Exhausted-quota detection | ✅ | `RateLimitError` with billing/quota keywords → distinct human-readable message (both providers) |
+| `conversation_history` contract | ✅ | Canonical `[{"role": "user"\|"assistant", "content": str}]` — converted to each provider's native format internally |
+| Gemini thread-safety fix | ✅ | `_GEMINI_CONFIGURE_LOCK` serialises `genai.configure()` calls; prevents concurrent BYOK key clobber |
+| Automated test suite | ✅ | 43 tests in `ai_assistant/tests/test_ai_router.py` covering all providers, error paths, and quota detection |
+
+#### Phase 2 Environment Variables
+
+```env
+# Model selection (defaults shown — change to lower-cost variants if needed)
+OPENAI_MODEL=gpt-4o           # or gpt-4o-mini for lower cost
+ANTHROPIC_MODEL=claude-sonnet-4-6  # or claude-haiku-4-5 for lower cost
+ANTHROPIC_MAX_TOKENS=2048     # maximum tokens per Anthropic response
+```
+
+### Phase 3 — Settings UI *(upcoming)*
+
+Admin and user-facing pages to configure provider, enter BYOK keys, and view key status — no shell access required.
+
+### Phase 4 — Usage Tracking *(upcoming)*
+
+Per-user and per-org token usage logging, cost estimation, and dashboard analytics.
+
+### Phase 5 — Advanced Features *(upcoming)*
+
+Streaming responses, fallback-on-failure between providers, and rate-limit circuit breaker.
 
 ---
 
