@@ -37,6 +37,16 @@ whitenoise==6.9.0
 
 # AI Integration - Google Gemini
 google-generativeai==0.8.5
+
+# AI Integration - OpenAI (GPT-4o)
+openai==2.33.0
+distro==1.9.0
+jiter==0.14.0
+sniffio==1.3.1
+
+# AI Integration - Anthropic Claude
+anthropic==0.97.0
+docstring-parser==0.18.0
 google-ai-generativelanguage==0.6.15
 google-api-core==2.25.1
 google-api-python-client==2.183.0

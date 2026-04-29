@@ -26,11 +26,18 @@ Provider resolution order (full detail in _resolve_provider):
 """
 
 import logging
+import threading
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 logger = logging.getLogger(__name__)
+
+# Lock used to serialise genai.configure() calls in _call_gemini.
+# google-generativeai 0.8.x uses a module-level global API key, so concurrent
+# BYOK requests from different users would clobber each other without this lock.
+# Replace with per-client instantiation when upgrading to google-genai >= 1.0.
+_GEMINI_CONFIGURE_LOCK = threading.Lock()
 
 # To generate a valid Fernet key for AI_KEY_ENCRYPTION_KEY, run in Python:
 #   from cryptography.fernet import Fernet
@@ -95,7 +102,18 @@ class AIRouter:
             system_prompt (str, optional): System-level context prepended to
                 the call.
             conversation_history (list, optional): Prior conversation turns.
-                Format is provider-dependent; the router passes it through.
+                Canonical format (all providers)::
+
+                    [
+                        {"role": "user",      "content": "Hello"},
+                        {"role": "assistant", "content": "Hi there!"},
+                        ...
+                    ]
+
+                Only ``role`` values of ``"user"`` and ``"assistant"`` are
+                accepted.  The router converts this into each provider's
+                native message format before making the call.  Gemini
+                currently ignores history (stateless calls only).
 
         Returns:
             dict: Normalised response — see _normalise_response() for keys.
@@ -448,7 +466,6 @@ class AIRouter:
             )
 
         model_name = 'gemini-2.5-flash'
-        genai.configure(api_key=api_key)
 
         full_prompt = prompt
         if system_prompt:
@@ -467,12 +484,16 @@ class AIRouter:
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT",  "threshold": "BLOCK_ONLY_HIGH"},
         ]
 
-        model = genai.GenerativeModel(
-            model_name,
-            generation_config=generation_config,
-            safety_settings=safety_settings,
-        )
-        response = model.generate_content(full_prompt)
+        # google-generativeai 0.8.x configures a module-level global API key.
+        # The lock ensures concurrent BYOK requests don't clobber each other.
+        with _GEMINI_CONFIGURE_LOCK:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(
+                model_name,
+                generation_config=generation_config,
+                safety_settings=safety_settings,
+            )
+            response = model.generate_content(full_prompt)
 
         # Guard against empty / safety-blocked responses
         if (
@@ -518,12 +539,81 @@ class AIRouter:
         Raises:
             NotImplementedError: Always — implementation coming in Phase 2.
         """
-        # TODO: Phase 2 Task 4 — OpenAI integration
-        # Install openai package and implement GPT-4o call here.
-        # Expected response format: {'text': str, 'model': str, 'tokens_used': int|None}
-        raise NotImplementedError(
-            "OpenAI integration not yet implemented — coming in Phase 2 (Task 4)"
-        )
+        try:
+            import openai
+        except ImportError as exc:
+            raise AIProviderError(
+                'openai',
+                ImportError("openai package is not installed. Run: pip install openai"),
+            ) from exc
+
+        if not api_key:
+            raise AIProviderError(
+                'openai',
+                ValueError(
+                    "No OpenAI API key is available. "
+                    "Set OPENAI_API_KEY in your .env file or enter a BYOK key."
+                ),
+            )
+
+        model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o')
+
+        # Build the messages list in OpenAI's native format.
+        # Canonical conversation_history format: [{'role': 'user'|'assistant', 'content': str}]
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        if conversation_history:
+            for turn in conversation_history:
+                role = turn.get('role', 'user')
+                content = turn.get('content', '')
+                if role in ('user', 'assistant') and content:
+                    messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            # Instantiate per-call — thread-safe, each BYOK user gets their own client.
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+            )
+        except openai.AuthenticationError as exc:
+            raise AIProviderError(
+                'openai',
+                Exception(
+                    "OpenAI API key is invalid or expired. "
+                    "Please check your API key."
+                ),
+            ) from exc
+        except openai.RateLimitError as exc:
+            # Distinguish quota/billing exhaustion from a transient rate limit.
+            err_body = str(exc).lower()
+            if 'insufficient_quota' in err_body or 'exceeded your current quota' in err_body:
+                raise AIProviderError(
+                    'openai',
+                    Exception(
+                        "Your OpenAI API key has reached its usage limit. "
+                        "Please check your billing on the OpenAI dashboard."
+                    ),
+                ) from exc
+            raise AIProviderError(
+                'openai',
+                Exception("OpenAI rate limit reached. Please try again shortly."),
+            ) from exc
+        except openai.APIError as exc:
+            raise AIProviderError(
+                'openai',
+                Exception(f"OpenAI API call failed: {exc}"),
+            ) from exc
+
+        text = response.choices[0].message.content
+        model_used = response.model
+        tokens_used = getattr(response.usage, 'total_tokens', None)
+        if tokens_used is not None:
+            tokens_used = int(tokens_used)
+
+        return {'text': text, 'model': model_used, 'tokens_used': tokens_used}
 
     def _call_anthropic(self, prompt: str, api_key: str, system_prompt: str = None,
                         conversation_history: list = None) -> dict:
@@ -542,12 +632,98 @@ class AIRouter:
         Raises:
             NotImplementedError: Always — implementation coming in Phase 2.
         """
-        # TODO: Phase 2 Task 5 — Anthropic Claude integration
-        # Install anthropic package and implement Claude Sonnet call here.
-        # Expected response format: {'text': str, 'model': str, 'tokens_used': int|None}
-        raise NotImplementedError(
-            "Anthropic integration not yet implemented — coming in Phase 2 (Task 5)"
-        )
+        try:
+            import anthropic
+        except ImportError as exc:
+            raise AIProviderError(
+                'anthropic',
+                ImportError("anthropic package is not installed. Run: pip install anthropic"),
+            ) from exc
+
+        if not api_key:
+            raise AIProviderError(
+                'anthropic',
+                ValueError(
+                    "No Anthropic API key is available. "
+                    "Set ANTHROPIC_API_KEY in your .env file or enter a BYOK key."
+                ),
+            )
+
+        model = getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6')
+        max_tokens = getattr(settings, 'ANTHROPIC_MAX_TOKENS', 2048)
+
+        # Build the messages list in Anthropic's native format.
+        # IMPORTANT: Anthropic does NOT accept role='system' inside the messages list.
+        # System context is passed as a separate top-level parameter (see api call below).
+        # Canonical conversation_history format: [{'role': 'user'|'assistant', 'content': str}]
+        messages = []
+        if conversation_history:
+            for turn in conversation_history:
+                role = turn.get('role', 'user')
+                content = turn.get('content', '')
+                if role in ('user', 'assistant') and content:
+                    messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            # Instantiate per-call — thread-safe, each BYOK user gets their own client.
+            client = anthropic.Anthropic(api_key=api_key)
+            create_kwargs = dict(
+                model=model,
+                max_tokens=max_tokens,
+                messages=messages,
+            )
+            # system is an optional top-level param; omit it if not provided.
+            if system_prompt:
+                create_kwargs['system'] = system_prompt
+            response = client.messages.create(**create_kwargs)
+        except anthropic.AuthenticationError as exc:
+            raise AIProviderError(
+                'anthropic',
+                Exception(
+                    "Anthropic API key is invalid or expired. "
+                    "Please check your API key."
+                ),
+            ) from exc
+        except anthropic.RateLimitError as exc:
+            # Distinguish quota/billing exhaustion from a transient rate limit.
+            err_body = str(exc).lower()
+            if 'credit' in err_body or 'billing' in err_body or 'quota' in err_body:
+                raise AIProviderError(
+                    'anthropic',
+                    Exception(
+                        "Your Anthropic API key has reached its usage limit. "
+                        "Please check your billing on the Anthropic dashboard."
+                    ),
+                ) from exc
+            raise AIProviderError(
+                'anthropic',
+                Exception("Anthropic rate limit reached. Please try again shortly."),
+            ) from exc
+        except anthropic.BadRequestError as exc:
+            raise AIProviderError(
+                'anthropic',
+                Exception(
+                    "Anthropic rejected the request. "
+                    "This may be due to content policy restrictions."
+                ),
+            ) from exc
+        except anthropic.APIError as exc:
+            raise AIProviderError(
+                'anthropic',
+                Exception(f"Anthropic API call failed: {exc}"),
+            ) from exc
+
+        text = response.content[0].text
+        model_used = response.model
+        tokens_used = None
+        if hasattr(response, 'usage') and response.usage:
+            tokens_used = (
+                getattr(response.usage, 'input_tokens', 0)
+                + getattr(response.usage, 'output_tokens', 0)
+            )
+
+        return {'text': text, 'model': model_used, 'tokens_used': tokens_used}
 
     # ------------------------------------------------------------------
     # Response normalisation

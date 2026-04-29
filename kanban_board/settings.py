@@ -349,6 +349,14 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 
+# AI Provider Model Configuration
+# Change OPENAI_MODEL to 'gpt-4o-mini' for lower cost at the expense of quality.
+OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o')
+# Change ANTHROPIC_MODEL to 'claude-haiku-4-5' for lower cost.
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6')
+# Maximum tokens Anthropic will generate per response. Anthropic requires this to be explicit.
+ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', '2048'))
+
 # BYOK Encryption Key — used by AIRouter to encrypt/decrypt user and org BYOK API keys.
 # Must be a valid Fernet key. Generate one with:
 #   from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())
