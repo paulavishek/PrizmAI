@@ -217,6 +217,7 @@ def stress_test_dashboard(request, board_id):
 def run_stress_test(request, board_id):
     """Run a new Red Team AI stress test session."""
     from kanban_board.ai_cache import get_cached_ai_response
+    from ai_assistant.utils.ai_router import AIRouter
 
     board = get_object_or_404(Board, id=board_id)
     board_data = build_board_stress_test_data(board, request.user)
@@ -225,21 +226,16 @@ def run_stress_test(request, board_id):
     user_prompt = build_stress_test_user_prompt(board_data)
 
     try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            'gemini-2.5-flash',
-            system_instruction=STRESS_TEST_SYSTEM_PROMPT,
-        )
-        gen_config = genai.GenerationConfig(
-            temperature=0.4,
-            max_output_tokens=16384,
-            response_mime_type="application/json",
-        )
-
+        router = AIRouter()
         full_prompt = f"{STRESS_TEST_SYSTEM_PROMPT}\n---\n{user_prompt}"
         raw = get_cached_ai_response(
             prompt=full_prompt,
-            model_call=lambda: model.generate_content(user_prompt, generation_config=gen_config),
+            model_call=lambda: router.complete(
+                prompt=user_prompt,
+                user=request.user,
+                system_prompt=STRESS_TEST_SYSTEM_PROMPT,
+                complexity='complex',
+            )['text'],
             operation='stress_test',
             context_id=f"board_{board.id}",
         )

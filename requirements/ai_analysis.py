@@ -324,15 +324,12 @@ Return ONLY valid JSON (no markdown fences):
                 return cached
 
         try:
-            import google.generativeai as genai
+            from ai_assistant.utils.ai_router import AIRouter
             from django.conf import settings
 
-            if not getattr(settings, 'GEMINI_API_KEY', None):
-                logger.error("GEMINI_API_KEY not configured")
+            if not getattr(settings, 'GEMINI_API_KEY', None) and not getattr(settings, 'OPENAI_API_KEY', None) and not getattr(settings, 'ANTHROPIC_API_KEY', None):
+                logger.error("No AI API key configured")
                 return None
-
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash')
 
             token_limits = {
                 'requirement_quality': 2048,
@@ -341,25 +338,21 @@ Return ONLY valid JSON (no markdown fences):
                 'requirement_impact': 2048,
                 'requirement_priority': 1024,
             }
-            max_tokens = token_limits.get(cache_operation, 2048)
 
-            generation_config = {
-                'temperature': 0.3,
-                'top_p': 0.8,
-                'top_k': 40,
-                'max_output_tokens': max_tokens,
-            }
+            router = AIRouter()
+            result = router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )['text']  # TODO Phase 4 cleanup: update to result['text'] when alias is removed
 
-            response = model.generate_content(prompt, generation_config=generation_config)
-
-            if response and response.text:
-                result = response.text
+            if result:
                 if ai_cache and result:
                     ai_cache.set(prompt, result, cache_operation, context_id)
                 return result
             return None
         except Exception as e:
-            logger.error("Requirements AI Gemini call failed: %s", e)
+            logger.error("Requirements AI call failed: %s", e)
             return None
 
     # ── Response Parsers ─────────────────────────────────────────────

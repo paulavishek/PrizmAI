@@ -62,16 +62,17 @@ def generate_memory_connections():
         ']}'
     )
 
-    from ai_assistant.utils.ai_clients import GeminiClient
-    client = GeminiClient(default_model='gemini-2.5-flash-lite')
+    from ai_assistant.utils.ai_router import AIRouter
+    router = AIRouter()
     start_time = time.time()
 
-    response = client.get_response(
+    response = router.complete(
         prompt=user_prompt,
+        user=None,  # Celery background task — no user context
         system_prompt=system_prompt,
-        task_complexity='simple',
-        temperature=0.3,
+        complexity='simple',
     )
+    response['content'] = response.get('content', response.get('text', ''))
 
     elapsed_ms = int((time.time() - start_time) * 1000)
     raw = response.get('content', '')

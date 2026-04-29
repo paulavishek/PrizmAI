@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.db.models import Avg, Count, Sum, Q, F, Max, Min
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from ai_assistant.utils.ai_clients import GeminiClient
+from ai_assistant.utils.ai_router import AIRouter
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class RetrospectiveGenerator:
         self.board = board
         self.period_start = period_start
         self.period_end = period_end
-        self.gemini_client = GeminiClient()
+        self.router = AIRouter()
     
     def collect_metrics(self):
         """
@@ -353,11 +353,13 @@ class RetrospectiveGenerator:
                     ai_cache.invalidate(prompt, 'retrospective', context_id)
         
         # Get AI response with complex task routing
-        response = self.gemini_client.get_response(
+        response = self.router.complete(
             prompt=prompt,
+            user=None,
             system_prompt="You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement.",
-            task_complexity='complex'
+            complexity='complex',
         )
+        response['content'] = response.get('content', response.get('text', ''))
         
         if response.get('error'):
             logger.error(f"Error generating AI insights: {response['error']}")

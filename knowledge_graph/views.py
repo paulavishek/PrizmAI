@@ -288,16 +288,17 @@ def organizational_memory_search(request):
         '}'
     )
 
-    from ai_assistant.utils.ai_clients import GeminiClient
+    from ai_assistant.utils.ai_router import AIRouter
     start_time = time.time()
 
-    client = GeminiClient()
-    response = client.get_response(
+    router = AIRouter()
+    response = router.complete(
         prompt=user_prompt,
+        user=request.user,
         system_prompt=system_prompt,
-        task_complexity='complex',
-        temperature=0.3,
+        complexity='complex',
     )
+    response['content'] = response.get('content', response.get('text', ''))
 
     elapsed_ms = int((time.time() - start_time) * 1000)
     raw_content = response.get('content', '')
@@ -488,16 +489,17 @@ def deja_vu_check(request, board_id):
         "Return maximum 3 matches. Return empty array if nothing is truly relevant."
     )
 
-    from ai_assistant.utils.ai_clients import GeminiClient
+    from ai_assistant.utils.ai_router import AIRouter
     start_time = time.time()
 
-    client = GeminiClient(default_model='gemini-2.5-flash-lite')
-    response = client.get_response(
+    router = AIRouter()
+    response = router.complete(
         prompt=user_prompt,
+        user=request.user,
         system_prompt=system_prompt,
-        task_complexity='simple',
-        temperature=0.3,
+        complexity='simple',
     )
+    response['content'] = response.get('content', response.get('text', ''))
 
     elapsed_ms = int((time.time() - start_time) * 1000)
 

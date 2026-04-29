@@ -357,6 +357,20 @@ ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6')
 # Maximum tokens Anthropic will generate per response. Anthropic requires this to be explicit.
 ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', '2048'))
 
+# Tiered model selection — AIRouter uses these to pick cheap vs. full models based on
+# task complexity.  Defaults preserve backward compatibility with existing OPENAI_MODEL
+# and ANTHROPIC_MODEL env vars already set in production.
+GEMINI_MODEL_SIMPLE = os.getenv('GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
+GEMINI_MODEL_COMPLEX = os.getenv('GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash')
+OPENAI_MODEL_SIMPLE = os.getenv('OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
+OPENAI_MODEL_COMPLEX = os.getenv('OPENAI_MODEL_COMPLEX', os.getenv('OPENAI_MODEL', 'gpt-4o'))
+ANTHROPIC_MODEL_SIMPLE = os.getenv('ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5')
+ANTHROPIC_MODEL_COMPLEX = os.getenv('ANTHROPIC_MODEL_COMPLEX', os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6'))
+
+# AI Router kill-switch — set AI_ROUTER_ENABLED=false in production to instantly bypass
+# the router and call Gemini directly.  Use this only during production incidents.
+AI_ROUTER_ENABLED = os.getenv('AI_ROUTER_ENABLED', 'true').lower() == 'true'
+
 # BYOK Encryption Key — used by AIRouter to encrypt/decrypt user and org BYOK API keys.
 # Must be a valid Fernet key. Generate one with:
 #   from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())

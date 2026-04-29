@@ -202,26 +202,21 @@ def _call_gemini(tasks, action_type, overdue_count, total_high_risk, now):
     per_task_list is a list of dicts with keys 'why' and 'next_action'.
     """
     try:
-        from ai_assistant.utils.ai_clients import GeminiClient
+        from ai_assistant.utils.ai_router import AIRouter
     except ImportError:
-        raise RuntimeError("GeminiClient not available")
+        raise RuntimeError("AIRouter not available")
 
-    client = GeminiClient(default_model='gemini-2.5-flash-lite')
-    if client.models is None:
-        raise RuntimeError("Gemini API not initialised (missing API key?)")
+    router = AIRouter()
 
     prompt = _build_ai_prompt(tasks, action_type, overdue_count, total_high_risk, now)
 
-    result = client.get_response(
+    result = router.complete(
         prompt=prompt,
-        task_complexity='simple',
-        temperature=0.35,          # Analytical, focused
-        use_cache=True,
-        cache_operation='analysis',
-        context_id=f"briefing_{action_type}_{','.join(str(t.id) for t in tasks)}",
+        user=None,
+        complexity='simple',
     )
 
-    raw = result.get('content', '')
+    raw = result.get('text', '')
     if not raw:
         raise ValueError("Empty response from Gemini")
 

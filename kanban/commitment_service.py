@@ -565,18 +565,18 @@ class CommitmentService:
     @staticmethod
     def _call_gemini_for_negotiation(prompt: str) -> dict:
         """
-        Call Gemini to get a negotiation package JSON.
+        Call AI to get a negotiation package JSON.
         Falls back gracefully if the API is unavailable.
         """
         try:
-            from ai_assistant.utils.ai_clients import GeminiClient
-            client = GeminiClient()
-            response = client.get_response(
+            from ai_assistant.utils.ai_router import AIRouter
+            router = AIRouter()
+            response = router.complete(
                 prompt=prompt,
-                task_complexity='complex',
-                temperature=0.4,
+                user=None,
+                complexity='complex',
             )
-            raw = response.strip()
+            raw = response.get('text', '').strip()
             if '```json' in raw:
                 raw = raw.split('```json')[1].split('```')[0].strip()
             elif raw.startswith('```'):
@@ -621,17 +621,18 @@ class CommitmentService:
 
     @staticmethod
     def _call_gemini_simple(prompt: str) -> str:
-        """Call Gemini for a simple text response. Returns raw text or empty string."""
+        """Call AI for a simple text response. Returns raw text or empty string."""
         try:
-            from ai_assistant.utils.ai_clients import GeminiClient
-            client = GeminiClient()
-            return client.get_response(
+            from ai_assistant.utils.ai_router import AIRouter
+            router = AIRouter()
+            response = router.complete(
                 prompt=prompt,
-                task_complexity='complex',
-                temperature=0.4,
+                user=None,
+                complexity='complex',
             )
+            return response.get('text', '')
         except Exception as e:
-            logger.error('Gemini simple call failed: %s', e, exc_info=True)
+            logger.error('AI simple call failed: %s', e, exc_info=True)
             return ''
 
     @staticmethod

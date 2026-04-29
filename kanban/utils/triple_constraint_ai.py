@@ -30,8 +30,7 @@ def analyze_triple_constraints(board, scope_data, budget_data, time_data):
         dict with AI analysis or a structured error dict on failure.
     """
     try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        from ai_assistant.utils.ai_router import AIRouter
 
         # --- build context strings ---
         project_name = board.name
@@ -136,9 +135,14 @@ Respond with ONLY valid JSON in the following exact schema (no markdown fences, 
             'max_output_tokens': 8192,  # Large schema needs ample room
         }
 
+        router = AIRouter()
         raw = get_cached_ai_response(
             prompt=prompt,
-            model_call=lambda: model.generate_content(prompt, generation_config=generation_config),
+            model_call=lambda: router.complete(
+                prompt=prompt,
+                user=None,
+                complexity='complex',
+            )['text'],
             operation='triple_constraint',
             context_id=f"board_{board.id}",
         )

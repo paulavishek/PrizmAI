@@ -289,50 +289,37 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
             return cached
     
     try:
-        model = get_model_for_task(task_type)
-        if not model:
-            logger.error("Gemini model not available")
-            return None
-        
-        # Get optimized temperature for this task type
-        temperature = get_temperature_for_task(task_type)
-        
-        # Get optimized token limit for this task type (reduces latency)
-        max_tokens = get_token_limit_for_task(task_type)
-        
-        # Create generation config with task-specific temperature and token limits
-        generation_config = {
-            'temperature': temperature,
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': max_tokens,
+        from ai_assistant.utils.ai_router import AIRouter
+        router = AIRouter()
+
+        # Map task_type to AIRouter complexity:
+        # Tasks that need deeper reasoning use 'complex' model; summaries/descriptions use 'simple'
+        complex_tasks = {
+            'complex', 'risk_assessment', 'analytics', 'critical_path',
+            'workspace_generation', 'board_generation', 'task_breakdown',
         }
-        
-        logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}, MaxTokens: {max_tokens}")
-        
-        # Scale timeout for large-output tasks (workspace_generation can take 60s+)
-        timeout = 120 if max_tokens >= 8192 else 60
-        
-        # Generate content with optimized settings
-        response = model.generate_content(
-            prompt,
-            generation_config=generation_config,
-            request_options={"timeout": timeout},
+        complexity = 'complex' if task_type in complex_tasks else 'simple'
+        logger.debug(f"Generating AI content - Task: {task_type}, complexity: {complexity}")
+
+        result_dict = router.complete(
+            prompt=prompt,
+            user=None,
+            complexity=complexity,
         )
-        
-        if response and response.text:
-            result = response.text.strip()
-            
+        result = result_dict.get('text', '')
+        if result:
+            result = result.strip()
+
+        if result:
             # Cache the result if caching is enabled
-            if use_cache and result:
+            if use_cache:
                 ai_cache_manager.set(prompt, result, task_type, context_id)
                 logger.debug(f"AI content cached for task_type: {task_type}")
-            
             return result
-        
-        logger.warning("Empty response from Gemini API")
+
+        logger.warning("Empty response from AI router")
         return None
-        
+
     except Exception as e:
         logger.error(f"Error generating AI content: {str(e)}")
         return None

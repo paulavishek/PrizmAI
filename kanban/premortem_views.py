@@ -207,30 +207,23 @@ def _build_gemini_prompt(snapshot):
 
 def _call_gemini(system_prompt, user_prompt):
     """
-    Call Gemini and return parsed JSON dict.
+    Call AI router and return parsed JSON dict.
     Raises on failure.
     """
-    import google.generativeai as genai
+    from ai_assistant.utils.ai_router import AIRouter
     from kanban_board.ai_cache import get_cached_ai_response
-
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        'gemini-2.5-flash-lite',
-        system_instruction=system_prompt,
-    )
-
-    generation_config = {
-        'temperature': 0.4,
-        'top_p': 0.8,
-        'top_k': 40,
-        'max_output_tokens': 4096,
-    }
 
     # Use combined prompt as cache key (system + user)
     full_prompt = f"{system_prompt}\n---\n{user_prompt}"
+    router = AIRouter()
     raw = get_cached_ai_response(
         prompt=full_prompt,
-        model_call=lambda: model.generate_content(user_prompt, generation_config=generation_config),
+        model_call=lambda: router.complete(
+            prompt=user_prompt,
+            user=None,
+            system_prompt=system_prompt,
+            complexity='complex',
+        )['text'],
         operation='premortem',
     )
     if not raw:
