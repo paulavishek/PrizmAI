@@ -574,6 +574,7 @@ cp .env.example .env
 # Edit .env — add your SECRET_KEY and GEMINI_API_KEY at minimum
 # Optional: add OPENAI_API_KEY, ANTHROPIC_API_KEY for multi-provider support
 # Optional: set OPENAI_MODEL (default: gpt-4o) and ANTHROPIC_MODEL (default: claude-sonnet-4-6)
+# Optional: set tiered models — GEMINI_MODEL_SIMPLE/COMPLEX, OPENAI_MODEL_SIMPLE/COMPLEX, ANTHROPIC_MODEL_SIMPLE/COMPLEX
 # Optional: add AI_KEY_ENCRYPTION_KEY to enable BYOK (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
 # Apply migrations
@@ -887,11 +888,50 @@ ANTHROPIC_MAX_TOKENS=2048     # maximum tokens per Anthropic response
 AI_KEY_ENCRYPTION_KEY=your-fernet-key-here
 ```
 
-### Phase 4 — Usage Tracking *(upcoming)*
+### Phase 4 — Universal AI Router Migration ✅ Complete
+
+Every AI call site in the codebase now routes through `AIRouter`, meaning the provider selection configured in Phases 1–3 (Gemini / OpenAI / Anthropic / BYOK) applies uniformly to every AI-powered feature. Previously, most features called `google.generativeai` directly, bypassing the router entirely.
+
+**22 call sites migrated across 4 waves:**
+
+| Wave | Files | Pattern replaced |
+|---|---|---|
+| Wave 1 | `kanban/premortem_views.py` · `kanban/stress_test_views.py` · `kanban/utils/whatif_engine.py` · `kanban/utils/triple_constraint_ai.py` · `kanban/utils/scope_analysis.py` · `kanban/tasks/scope_autopsy_tasks.py` · `requirements/ai_analysis.py` · `wiki/ai_utils.py` | Direct `genai.configure()` + `GenerativeModel.generate_content()` |
+| Wave 2 | `kanban/utils/retrospective_generator.py` · `knowledge_graph/views.py` · `knowledge_graph/tasks.py` · `exit_protocol/ai_utils.py` · `kanban/commitment_service.py` · `kanban/ai_briefing.py` · `kanban/utils/file_ai_utils.py` · `decision_center/tasks.py` · `ai_assistant/utils/context_router.py` | `GeminiClient.get_response()` wrapper |
+| Wave 3 | `kanban/budget_ai.py` · `kanban/utils/ai_utils.py` | High-traffic utilities with internal caching |
+| Wave 4 | `kanban/utils/ai_conflict_resolution.py` · `kanban/utils/skill_analysis.py` · `kanban/utils/ai_coach_service.py` | Stateful classes with `self.model` |
+
+**Additional hardening applied before migration:**
+
+| Item | Detail |
+|---|---|
+| `user=None` background-task path | `_resolve_provider()` gracefully handles Celery tasks with no user context — scans org-level settings, falls back to platform Gemini key |
+| `complexity` parameter | All call sites pass `'simple'` or `'complex'`; each provider selects its appropriate model tier automatically |
+| Tiered model settings | Six new env vars (`GEMINI_MODEL_SIMPLE/COMPLEX`, `OPENAI_MODEL_SIMPLE/COMPLEX`, `ANTHROPIC_MODEL_SIMPLE/COMPLEX`) with sensible defaults |
+| `AI_ROUTER_ENABLED` kill switch | If set to `false`, the router immediately falls back to Gemini (emergency mode without provider selection) |
+| `content` backward-compat alias | `_normalise_response()` now sets `result['content'] = result['text']` so call sites using the old key continue to work during the transition |
+| Spectra exclusions | `chatbot_service.py`, `spectra_tools.py`, and `conversation_flow.py` deliberately excluded — they use the multi-turn `GeminiClient` function-calling interface not yet supported by `AIRouter` |
+
+#### Phase 4 Environment Variables
+
+```env
+# Tiered model selection — separate models for simple vs complex tasks (defaults shown)
+GEMINI_MODEL_SIMPLE=gemini-2.5-flash-lite    # Fast/cheap — summaries, classifications
+GEMINI_MODEL_COMPLEX=gemini-2.5-flash        # Full reasoning — analysis, risk, finance
+OPENAI_MODEL_SIMPLE=gpt-4o-mini
+OPENAI_MODEL_COMPLEX=gpt-4o
+ANTHROPIC_MODEL_SIMPLE=claude-haiku-4-5
+ANTHROPIC_MODEL_COMPLEX=claude-sonnet-4-6
+
+# Emergency kill switch — set to 'false' to bypass router and fall back to raw Gemini
+AI_ROUTER_ENABLED=true
+```
+
+### Phase 5 — Usage Tracking *(upcoming)*
 
 Per-user and per-org token usage logging, cost estimation, and dashboard analytics.
 
-### Phase 5 — Advanced Features *(upcoming)*
+### Phase 6 — Advanced Features *(upcoming)*
 
 Streaming responses, fallback-on-failure between providers, and rate-limit circuit breaker.
 
