@@ -865,9 +865,27 @@ ANTHROPIC_MODEL=claude-sonnet-4-6  # or claude-haiku-4-5 for lower cost
 ANTHROPIC_MAX_TOKENS=2048     # maximum tokens per Anthropic response
 ```
 
-### Phase 3 — Settings UI *(upcoming)*
+### Phase 3 — Settings UI ✅ Complete
 
-Admin and user-facing pages to configure provider, enter BYOK keys, and view key status — no shell access required.
+| Item | Status | Detail |
+|---|---|---|
+| `OrganizationAISettingsForm` | ✅ | `kanban/forms/ai_forms.py` — provider select, allow-override toggle, BYOK provider + key fields, remove-key checkbox; cross-field `clean()` prevents key-without-provider and simultaneous add+remove |
+| `UserAISettingsForm` | ✅ | `accounts/forms/__init__.py` — provider override (inherit/gemini/openai/anthropic), personal BYOK fields; lazy import prevents circular imports |
+| Workspace AI Settings (Org Admin) | ✅ | New card on **Workspace Settings** page (Org Admins only); sets org-wide provider, allows/revokes user override, manages org BYOK key with last-four display and validated-at date |
+| Profile AI Preferences (all users) | ✅ | New card on **Profile** page; Scenario A (override allowed): personal provider dropdown + effective-provider display; Scenario B (override locked): read-only info box showing org provider |
+| BYOK key validation (synchronous) | ✅ | `AIRouter.validate_api_key(provider, raw_key)` — sends a live "Hi" probe to the provider before storing; returns `True`/`False`; called synchronously on save with a JS spinner UX |
+| Encrypted key storage | ✅ | Raw key validated → `_encrypt_key()` → stored; `key_last_four` set to `••••{last4}`; `key_validated_at` stamped; plain-text key never persisted |
+| Effective-provider guard | ✅ | `effective_provider` in profile view is gated on `show_provider_override`; when org disables override, UI always reflects org provider rather than a stale personal choice |
+| RBAC enforcement | ✅ | Workspace settings card rendered only to Org Admins (`profile.is_admin`); personal override blocked server-side if `allow_user_provider_override` is `False` |
+| JS spinner UX | ✅ | Submit button disables on form submit; shows "Validating key…" if BYOK key field is non-empty, otherwise "Saving…" — prevents double-submit during synchronous API call |
+
+#### Phase 3 Environment Variables
+
+```env
+# Required to enable BYOK key encryption — generate once and keep secret
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+AI_KEY_ENCRYPTION_KEY=your-fernet-key-here
+```
 
 ### Phase 4 — Usage Tracking *(upcoming)*
 
