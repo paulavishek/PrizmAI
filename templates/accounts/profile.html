@@ -150,6 +150,7 @@
             <div class="card-body">
                 <form method="post" enctype="multipart/form-data" id="profile-form">
                     {% csrf_token %}
+                    <input type="hidden" name="form_type" value="profile">
 
                     <!-- Styled Profile Picture Upload -->
                     <div class="mb-3">
@@ -276,6 +277,125 @@
 
             </div>
         </div>
+
+        {# ============================================================ #}
+        {# AI Provider Preferences card — visible to all logged-in users #}
+        {# ============================================================ #}
+        <form method="post" id="user-ai-settings-form" class="mt-4">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="user_ai_settings">
+
+            <div class="card shadow">
+                <div class="profile-section-header card-header">
+                    <h5><i class="fas fa-robot me-2" style="color:#5046e5;"></i>AI Provider Preferences</h5>
+                </div>
+                <div class="card-body">
+
+                    {# Non-field errors from the AI settings form #}
+                    {% if user_ai_settings_form.non_field_errors %}
+                    <div class="alert alert-danger py-2 mb-3">
+                        {% for error in user_ai_settings_form.non_field_errors %}
+                        <div><i class="fas fa-exclamation-circle me-1"></i>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {# ---- Scenario A: override allowed ---- #}
+                    {% if show_provider_override %}
+                    <div class="mb-3">
+                        <label for="id_provider_override" class="form-label fw-semibold" style="font-size:.875rem;">{{ user_ai_settings_form.fields.provider_override.label }}</label>
+                        <select name="provider_override" id="id_provider_override" class="form-select" style="max-width:320px;">
+                            {% for val, label in user_ai_settings_form.fields.provider_override.choices %}
+                            <option value="{{ val }}" {% if user_ai_settings_form.initial.provider_override == val or user_ai_settings_form.data.provider_override == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Choose which AI model powers your Spectra conversations and AI features.</div>
+                    </div>
+                    <p class="text-muted" style="font-size:.8rem;">
+                        <i class="fas fa-info-circle me-1"></i>Currently using: <strong>{{ effective_provider }}</strong>
+                    </p>
+                    {# ---- Scenario B: override not allowed ---- #}
+                    {% else %}
+                    <div class="alert alert-secondary py-2 mb-3" style="font-size:.875rem;">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Your workspace uses <strong>{{ org_provider_display }}</strong>.
+                        Contact your Org Admin to enable personal provider preferences.
+                    </div>
+                    {# Still need to submit provider_override as 'inherit' so the form validates #}
+                    <input type="hidden" name="provider_override" value="inherit">
+                    {% endif %}
+
+                    <hr class="my-3">
+
+                    {# ---- BYOK section: always shown ---- #}
+                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#user-byok-collapse"
+                            aria-expanded="false" aria-controls="user-byok-collapse">
+                        <i class="fas fa-key me-1"></i>Use Your Own API Key (BYOK)
+                        <i class="fas fa-chevron-down ms-1" style="font-size:.75rem;"></i>
+                    </button>
+
+                    <div class="collapse mt-3" id="user-byok-collapse">
+                        <p class="text-muted" style="font-size:.875rem;">
+                            Provide your own API key to use your own quota and billing instead of the workspace key.
+                        </p>
+
+                        {% if user_has_byok_key and user_ai %}
+                        <div class="alert alert-info py-2 mb-3" style="font-size:.8rem;">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Current key: <strong>{{ user_ai.key_last_four }}</strong>
+                            ({{ user_ai.byok_provider|capfirst }})
+                            {% if user_ai.key_validated_at %}
+                            &mdash; validated {{ user_ai.key_validated_at|date:"M d, Y" }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3" style="max-width:320px;">
+                            <label for="id_user_byok_provider" class="form-label" style="font-size:.875rem;">{{ user_ai_settings_form.fields.byok_provider.label }}</label>
+                            <select name="byok_provider" id="id_user_byok_provider" class="form-select form-select-sm">
+                                {% for val, label in user_ai_settings_form.fields.byok_provider.choices %}
+                                <option value="{{ val }}" {% if user_ai_settings_form.initial.byok_provider == val or user_ai_settings_form.data.byok_provider == val %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3" style="max-width:420px;">
+                            <label for="id_user_raw_api_key" class="form-label" style="font-size:.875rem;">{{ user_ai_settings_form.fields.raw_api_key.label }}</label>
+                            <input type="password" name="raw_api_key" id="id_user_raw_api_key"
+                                   class="form-control form-control-sm" autocomplete="off"
+                                   placeholder="Paste API key here">
+                            <div class="form-text">{{ user_ai_settings_form.fields.raw_api_key.help_text }}</div>
+                        </div>
+
+                        {% if user_has_byok_key %}
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="remove_byok_key"
+                                   id="id_user_remove_byok_key">
+                            <label class="form-check-label text-danger" for="id_user_remove_byok_key">
+                                {{ user_ai_settings_form.fields.remove_byok_key.label }}
+                            </label>
+                        </div>
+                        {% endif %}
+
+                        <p class="text-muted mt-2" style="font-size:.8rem;">
+                            <i class="fas fa-lock me-1"></i>
+                            Your API key is encrypted before storage and is never logged or displayed after saving.
+                        </p>
+                    </div>
+
+                </div>
+                <div class="card-footer d-flex justify-content-end" style="background:#f8f9fa;">
+                    <button type="submit" class="btn btn-primary" id="user-ai-save-btn">
+                        <i class="fas fa-save me-1"></i> Save AI Preferences
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -318,6 +438,21 @@ document.getElementById('id_profile_picture').addEventListener('change', functio
                 setTimeout(function(){ feedback.innerHTML = ''; }, 3000);
             }
         });
+    });
+})();
+
+// AI preferences form — disable button and show spinner on submit
+(function () {
+    var aiForm = document.getElementById('user-ai-settings-form');
+    if (!aiForm) return;
+    var btn = document.getElementById('user-ai-save-btn');
+    aiForm.addEventListener('submit', function () {
+        var keyField = document.getElementById('id_user_raw_api_key');
+        var hasKey = keyField && keyField.value.trim().length > 0;
+        btn.disabled = true;
+        btn.innerHTML = hasKey
+            ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Validating key\u2026'
+            : '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving\u2026';
     });
 })();
 </script>

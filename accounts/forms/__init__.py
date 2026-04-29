@@ -507,3 +507,88 @@ class SocialSignupForm(forms.Form):
         user.username = self.cleaned_data.get('username')
         user.save()
         return user
+
+
+# ======================================================================
+# AI Provider Settings — User Level
+# ======================================================================
+
+class UserAISettingsForm(forms.Form):
+    """
+    Form for individual users to configure their personal AI provider
+    preference and optional personal BYOK API key.
+
+    Rendered on: accounts/profile.html
+    Processed in: accounts.views.profile_view (POST, form_type='user_ai_settings')
+    """
+
+    provider_override = forms.ChoiceField(
+        # Choices injected in __init__ so we can relabel 'inherit'
+        choices=[],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Preferred AI Provider',
+        help_text="Select 'Use workspace default' to follow your organisation's setting.",
+    )
+
+    byok_provider = forms.ChoiceField(
+        choices=[('', '--- Select provider ---')],  # extended in __init__
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='BYOK Key Provider',
+    )
+
+    raw_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(
+            attrs={'class': 'form-control', 'autocomplete': 'off'},
+            render_value=False,
+        ),
+        label='API Key',
+        help_text=(
+            'Leave blank to keep your existing key. '
+            'Enter a new key to replace it.'
+        ),
+    )
+
+    remove_byok_key = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Remove my stored API key',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Lazy import to avoid circular dependency at module load time
+        from ai_assistant.models import PROVIDER_CHOICES
+        self.fields['provider_override'].choices = [
+            ('inherit', 'Use workspace default'),
+            ('gemini', 'Google Gemini'),
+            ('openai', 'OpenAI'),
+            ('anthropic', 'Anthropic Claude'),
+        ]
+        self.fields['byok_provider'].choices = (
+            [('', '--- Select provider ---')] + list(PROVIDER_CHOICES)
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        raw_key = cleaned.get('raw_api_key', '').strip()
+        byok_provider = cleaned.get('byok_provider', '').strip()
+        remove = cleaned.get('remove_byok_key', False)
+
+        if raw_key and not byok_provider:
+            raise forms.ValidationError(
+                'Please select which provider this API key belongs to.'
+            )
+
+        if remove and raw_key:
+            raise forms.ValidationError(
+                'You cannot enter a new key and remove the key at the same time.'
+            )
+
+        if not raw_key:
+            cleaned['raw_api_key'] = ''
+        else:
+            cleaned['raw_api_key'] = raw_key
+
+        return cleaned

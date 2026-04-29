@@ -4,6 +4,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime
 
+from .ai_forms import OrganizationAISettingsForm  # noqa: F401
+
 
 class LocalDateTimeInput(forms.DateTimeInput):
     """
