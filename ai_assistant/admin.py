@@ -7,6 +7,8 @@ from .models import (
     AITaskRecommendation,
     UserPreference,
     SpectraConversationState,
+    OrganizationAISettings,
+    UserAISettings,
 )
 
 
@@ -68,3 +70,47 @@ class SpectraConversationStateAdmin(admin.ModelAdmin):
     list_filter = ['mode', 'pending_action']
     search_fields = ['user__username', 'board__name']
     readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(OrganizationAISettings)
+class OrganizationAISettingsAdmin(admin.ModelAdmin):
+    """
+    Admin for organisation-wide AI provider settings.
+    encrypted_api_key is intentionally excluded — it must never be visible in admin.
+    """
+    list_display = [
+        'organisation',
+        'provider',
+        'allow_user_provider_override',
+        'byok_provider',
+        'key_last_four',
+        'key_validated_at',
+        'updated_at',
+        'updated_by',
+    ]
+    list_filter = ['provider', 'allow_user_provider_override', 'byok_provider']
+    search_fields = ['organisation__name', 'updated_by__username']
+    readonly_fields = ['updated_at']
+    # encrypted_api_key is excluded from fields entirely — never display it
+    exclude = ['encrypted_api_key']
+
+
+@admin.register(UserAISettings)
+class UserAISettingsAdmin(admin.ModelAdmin):
+    """
+    Admin for per-user AI provider settings.
+    encrypted_api_key is intentionally excluded — it must never be visible in admin.
+    """
+    list_display = [
+        'user',
+        'provider_override',
+        'byok_provider',
+        'key_last_four',
+        'key_validated_at',
+        'updated_at',
+    ]
+    list_filter = ['provider_override', 'byok_provider']
+    search_fields = ['user__username']
+    readonly_fields = ['updated_at']
+    # encrypted_api_key is excluded from fields entirely — never display it
+    exclude = ['encrypted_api_key']

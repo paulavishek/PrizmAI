@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from kanban.models import Board, Task
 from django.utils import timezone
+from accounts.models import Organization
 
 
 class AIAssistantSession(models.Model):
@@ -362,3 +363,221 @@ class SpectraConversationState(models.Model):
         self.collected_data = {}
         self.pending_action = ''
         self.save(update_fields=['mode', 'collected_data', 'pending_action', 'updated_at'])
+
+
+# ============================================================
+# AI PROVIDER SETTINGS — ORGANISATION LEVEL
+# ============================================================
+
+# RBAC RULES — AI Provider Settings (Organisation Level)
+# - View active provider: All roles (Viewer, Member, Owner, Org Admin)
+# - Change org-wide provider: Org Admin only
+# - Enter or remove org BYOK key: Org Admin only
+# - Change allow_user_provider_override: Org Admin only
+# - View key_last_four for display: Org Admin only
+
+PROVIDER_CHOICES = [
+    ('gemini', 'Google Gemini'),
+    ('openai', 'OpenAI'),
+    ('anthropic', 'Anthropic Claude'),
+]
+
+
+class OrganizationAISettings(models.Model):
+    """
+    Stores the organisation-wide AI provider configuration.
+
+    One record per organisation (OneToOne). Controls which AI provider
+    all users in the organisation use by default, whether users may
+    override it, and optionally holds an organisation-level BYOK API key
+    (stored encrypted — never plain text).
+
+    These settings are managed by an Org Admin. See the RBAC comment
+    block above for the full access rules enforced in views and the router.
+    """
+
+    organisation = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='ai_settings',
+    )
+
+    provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        default='gemini',
+        help_text=(
+            "Organisation-wide active AI provider. Applies to all users "
+            "unless overridden (when allow_user_provider_override is True)."
+        ),
+    )
+
+    allow_user_provider_override = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, Members and Owners may set their own personal provider "
+            "preference. When False, everyone uses the org-wide provider. "
+            "Only an Org Admin can change this field."
+        ),
+    )
+
+    byok_provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Which provider the stored BYOK key belongs to.",
+    )
+
+    # ============================================================
+    # SECURITY: encrypted_api_key MUST NEVER store a plain-text key.
+    # Always encrypt with Fernet (AES-256) via AIRouter._encrypt_key()
+    # before saving, and decrypt with AIRouter._decrypt_key() before use.
+    # Storing a raw API key here is a critical security violation.
+    # ============================================================
+    encrypted_api_key = models.TextField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Fernet-encrypted organisation BYOK API key. "
+            "NEVER store plain text here. Use AIRouter._encrypt_key() to write "
+            "and AIRouter._decrypt_key() to read."
+        ),
+    )
+
+    key_last_four = models.CharField(
+        max_length=8,
+        null=True,
+        blank=True,
+        help_text=(
+            "Last few visible characters of the BYOK key for safe UI display "
+            "(e.g. '••••1a3f'). Never store more than this."
+        ),
+    )
+
+    key_validated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when the BYOK key was last successfully validated.",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='org_ai_settings_changes',
+        help_text="Org Admin who last changed these settings.",
+    )
+
+    class Meta:
+        verbose_name = 'Organisation AI Settings'
+        verbose_name_plural = 'Organisation AI Settings'
+
+    def __str__(self):
+        return f"AI Settings for {self.organisation.name} — {self.provider}"
+
+
+# ============================================================
+# AI PROVIDER SETTINGS — USER LEVEL
+# ============================================================
+
+# RBAC RULES — AI Provider Settings (User Level)
+# - Set provider_override: Member, Owner, Org Admin
+#   BUT this is only respected by the router if org.allow_user_provider_override is True.
+#   Org Admins can always override regardless of the flag.
+# - Enter or remove personal BYOK key: Member, Owner, Org Admin (always permitted —
+#   personal BYOK is the user's own key and their own cost).
+# - Viewers cannot change any AI settings.
+
+USER_PROVIDER_CHOICES = [
+    ('inherit', 'Inherit from Organisation'),
+    ('gemini', 'Google Gemini'),
+    ('openai', 'OpenAI'),
+    ('anthropic', 'Anthropic Claude'),
+]
+
+
+class UserAISettings(models.Model):
+    """
+    Stores an individual user's personal AI provider preference.
+
+    One record per user (OneToOne). A user may choose a different provider
+    from the organisation default — but only when the organisation's
+    allow_user_provider_override is True (or the user is an Org Admin).
+
+    Users may always store their own personal BYOK key regardless of the
+    override flag — it is their own key on their own bill.
+
+    NOTE: Records in this table start empty (no record = use org/Gemini defaults).
+    The AIRouter handles UserAISettings.DoesNotExist gracefully at every point.
+    See the RBAC comment block above for the full access rules.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='ai_settings',
+    )
+
+    provider_override = models.CharField(
+        max_length=20,
+        choices=USER_PROVIDER_CHOICES,
+        default='inherit',
+        help_text=(
+            "User's preferred provider. 'inherit' means follow the org-wide setting. "
+            "Other values are respected only if org.allow_user_provider_override is True, "
+            "or this user is an Org Admin."
+        ),
+    )
+
+    byok_provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Which provider the user's personal BYOK key belongs to.",
+    )
+
+    # ============================================================
+    # SECURITY: encrypted_api_key MUST NEVER store a plain-text key.
+    # Always encrypt with Fernet (AES-256) via AIRouter._encrypt_key()
+    # before saving, and decrypt with AIRouter._decrypt_key() before use.
+    # Storing a raw API key here is a critical security violation.
+    # ============================================================
+    encrypted_api_key = models.TextField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Fernet-encrypted personal BYOK API key. "
+            "NEVER store plain text here. Use AIRouter._encrypt_key() to write "
+            "and AIRouter._decrypt_key() to read."
+        ),
+    )
+
+    key_last_four = models.CharField(
+        max_length=8,
+        null=True,
+        blank=True,
+        help_text=(
+            "Last few visible characters of the personal BYOK key for safe UI display "
+            "(e.g. '••••1a3f'). Never store more than this."
+        ),
+    )
+
+    key_validated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when the personal BYOK key was last successfully validated.",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User AI Settings'
+        verbose_name_plural = 'User AI Settings'
+
+    def __str__(self):
+        return f"AI Settings for {self.user.username} — {self.provider_override}"
