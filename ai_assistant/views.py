@@ -125,6 +125,14 @@ def chat_interface(request, session_id=None):
         'active_boards_count': active_boards_count,
         'is_demo_mode': is_demo_mode,
     }
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        _provider, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        context['spectra_provider_name'] = AIRouter.get_provider_display_name(_provider)
+        context['spectra_model_name'] = AIRouter.get_model_name(_provider, complexity='simple')
+    except Exception:
+        context['spectra_provider_name'] = 'Google Gemini'
+        context['spectra_model_name'] = 'gemini-2.5-flash-lite'
     return render(request, 'ai_assistant/chat.html', context)
 
 

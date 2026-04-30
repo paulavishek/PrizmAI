@@ -896,9 +896,34 @@ class AIRouter:
             'used_byok': used_byok,
             'tokens_used': tokens_used,
         }
-        # Backward-compat alias: existing call sites read result['content'] after migrating
-        # from GeminiClient (which returned {'content': ...}).  This alias lets callers keep
-        # working before they are updated to use result['text'].
-        # TODO: Remove this alias once all Phase 4 call sites are updated to use result['text']
-        result['content'] = result['text']
         return result
+
+    @staticmethod
+    def get_provider_display_name(provider_string):
+        """Returns a human-readable display name for a provider key."""
+        names = {
+            'gemini': 'Google Gemini',
+            'openai': 'OpenAI',
+            'anthropic': 'Anthropic Claude',
+        }
+        return names.get(provider_string, 'AI')
+
+    @staticmethod
+    def get_model_name(provider, complexity='simple'):
+        """Returns the default model name for a provider at a given complexity level."""
+        from django.conf import settings
+        mapping = {
+            'gemini': {
+                'simple': getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite'),
+                'complex': getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash'),
+            },
+            'openai': {
+                'simple': getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-4o-mini'),
+                'complex': getattr(settings, 'OPENAI_MODEL_COMPLEX', 'gpt-4o'),
+            },
+            'anthropic': {
+                'simple': getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5'),
+                'complex': getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', 'claude-sonnet-4-6'),
+            },
+        }
+        return mapping.get(provider, {}).get(complexity, 'unknown')

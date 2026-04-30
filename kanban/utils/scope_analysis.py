@@ -5,7 +5,6 @@ AI-powered scope creep detection and analysis
 
 from django.utils import timezone
 from django.db.models import Q, Sum
-import google.generativeai as genai
 from django.conf import settings
 from kanban_board.ai_cache import get_cached_ai_response
 

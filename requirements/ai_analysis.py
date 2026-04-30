@@ -344,7 +344,7 @@ Return ONLY valid JSON (no markdown fences):
                 prompt=prompt,
                 user=None,
                 complexity='complex',
-            )['text']  # TODO Phase 4 cleanup: update to result['text'] when alias is removed
+            )['text']
 
             if result:
                 if ai_cache and result:

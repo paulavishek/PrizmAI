@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import json
 import re
 
-import google.generativeai as genai
+import google.generativeai as genai  # genai retained: legacy direct-call path not yet migrated to AIRouter
 from django.conf import settings
 from django.db.models import Q, Count, Avg, Sum
 from django.contrib.auth import get_user_model

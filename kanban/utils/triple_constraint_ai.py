@@ -6,7 +6,6 @@ Follows the same pattern as kanban/utils/scope_analysis.py.
 import json
 import logging
 
-import google.generativeai as genai
 from django.conf import settings
 from kanban_board.ai_cache import get_cached_ai_response
 

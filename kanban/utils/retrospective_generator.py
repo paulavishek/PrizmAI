@@ -359,14 +359,12 @@ class RetrospectiveGenerator:
             system_prompt="You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement.",
             complexity='complex',
         )
-        response['content'] = response.get('content', response.get('text', ''))
-        
         if response.get('error'):
             logger.error(f"Error generating AI insights: {response['error']}")
             return self._generate_fallback_insights(metrics, patterns)
         
         # Parse AI response
-        ai_content = response.get('content', '')
+        ai_content = response.get('text', '')
         
         # Extract structured insights from AI response
         insights = self._parse_ai_response(ai_content, metrics, patterns)

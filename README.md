@@ -927,11 +927,51 @@ ANTHROPIC_MODEL_COMPLEX=claude-sonnet-4-6
 AI_ROUTER_ENABLED=true
 ```
 
-### Phase 5 — Usage Tracking *(upcoming)*
+### Phase 5 — Cleanup & Polish ✅ Complete
+
+Phase 5 removed all transitional scaffolding left by Phases 1–4 and made the UI provider-aware everywhere it previously showed hardcoded "Powered by Google Gemini" text.
+
+**Backward-compat alias removed:**
+
+The `result['content']` alias in `_normalise_response()` — added in Phase 4 to keep call sites working during migration — has been removed. All call sites now read `result['text']` directly. Four AIRouter call sites that were still using the defensive alias pattern (`knowledge_graph/views.py`, `knowledge_graph/tasks.py`, `kanban/utils/retrospective_generator.py`) were updated before the alias was dropped.
+
+**TODO comments cleaned up:**
+
+Three trailing `# TODO Phase 4 cleanup` comments removed from `kanban/budget_ai.py`, `wiki/ai_utils.py`, and `requirements/ai_analysis.py`.
+
+**Stale `google.generativeai` imports removed:**
+
+Five files that imported `genai` after their logic was migrated to `AIRouter` had the dead import removed: `kanban/stress_test_views.py`, `kanban/utils/whatif_engine.py`, `kanban/utils/triple_constraint_ai.py`, `kanban/utils/scope_analysis.py`, and a dead local import in `ai_assistant/tests/test_ai_router.py`. Two files that still call `genai` directly (`kanban/utils/ai_utils.py`, `kanban/utils/skill_analysis.py`) retain the import with an explanatory comment.
+
+**Provider-aware UI:**
+
+| Location | Before | After |
+|---|---|---|
+| Organizational Memory page | `Powered by Gemini AI` (hardcoded) | `Powered by {{ active_provider_name }}` (dynamic) |
+| Board Status Report page | `Powered by Google Gemini` (hardcoded) | `Powered by {{ active_provider_name }}` (dynamic) |
+| Welcome / landing page | `Powered by Google Gemini` (hardcoded) | `Powered by Gemini · OpenAI · Claude` (static multi-provider) |
+| Spectra chat header | No indicator | Provider badge showing active provider name + model |
+
+Each view that renders these templates calls `AIRouter()._resolve_provider(request.user)` inside a `try/except` block, falling back to `'Google Gemini'` silently if the user's settings are in any edge-case state. Display code never breaks page rendering.
+
+**Two new static helpers on `AIRouter`:**
+
+| Method | Purpose |
+|---|---|
+| `AIRouter.get_provider_display_name(provider_string)` | Maps `'gemini'` / `'openai'` / `'anthropic'` → human-readable name; returns `'AI'` for unknown values |
+| `AIRouter.get_model_name(provider, complexity='simple')` | Returns the configured model name for a provider/complexity pair, reading from the same settings vars as the router itself |
+
+**Spectra chat provider indicator:**
+
+A small pill-shaped badge is now visible in the Spectra chat header showing the active provider (e.g. `Google Gemini` with `gemini-2.5-flash-lite` in lighter text beneath). The badge colour matches the existing provider colour scheme used in Workspace Settings (blue for Gemini, green for OpenAI, purple for Anthropic). It is a static server-side render — a page refresh reflects any provider change made in settings.
+
+### Phase 6 — Usage Tracking *(upcoming)*
 
 Per-user and per-org token usage logging, cost estimation, and dashboard analytics.
 
-### Phase 6 — Advanced Features *(upcoming)*
+### Phase 7 — Advanced Features *(upcoming)*
+
+Streaming responses, fallback-on-failure between providers, and rate-limit circuit breaker.
 
 Streaming responses, fallback-on-failure between providers, and rate-limit circuit breaker.
 

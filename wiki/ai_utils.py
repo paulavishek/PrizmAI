@@ -86,7 +86,7 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
             prompt=prompt,
             user=None,
             complexity=complexity,
-        )['text']  # TODO Phase 4 cleanup: update to result['text'] when alias is removed
+        )['text']
 
         if result:
             # Cache the result

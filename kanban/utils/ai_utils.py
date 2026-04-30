@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import json
 
-import google.generativeai as genai
+import google.generativeai as genai  # genai retained: legacy direct-call path not yet migrated to AIRouter
 from django.conf import settings
 
 # Setup logging
