@@ -5988,6 +5988,12 @@ def board_status_report(request, board_id):
         'report_explainability': report_explainability if report_text else None,
         'error': error,
     }
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        _provider, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        context['active_provider_name'] = AIRouter.get_provider_display_name(_provider)
+    except Exception:
+        context['active_provider_name'] = 'Google Gemini'
     return render(request, 'kanban/status_report.html', context)
 
 

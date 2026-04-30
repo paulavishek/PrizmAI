@@ -72,10 +72,8 @@ def generate_memory_connections():
         system_prompt=system_prompt,
         complexity='simple',
     )
-    response['content'] = response.get('content', response.get('text', ''))
-
     elapsed_ms = int((time.time() - start_time) * 1000)
-    raw = response.get('content', '')
+    raw = response.get('text', '')
 
     try:
         cleaned = raw.strip()

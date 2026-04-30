@@ -206,6 +206,12 @@ def organizational_memory(request):
         'oldest_memory_date': oldest,
         'recent_queries': recent_queries,
     }
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        _provider, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        context['active_provider_name'] = AIRouter.get_provider_display_name(_provider)
+    except Exception:
+        context['active_provider_name'] = 'Google Gemini'
     return render(request, 'knowledge_graph/organizational_memory.html', context)
 
 
@@ -298,10 +304,8 @@ def organizational_memory_search(request):
         system_prompt=system_prompt,
         complexity='complex',
     )
-    response['content'] = response.get('content', response.get('text', ''))
-
     elapsed_ms = int((time.time() - start_time) * 1000)
-    raw_content = response.get('content', '')
+    raw_content = response.get('text', '')
     tokens = response.get('tokens', 0)
 
     track_ai_request(
@@ -499,8 +503,6 @@ def deja_vu_check(request, board_id):
         system_prompt=system_prompt,
         complexity='simple',
     )
-    response['content'] = response.get('content', response.get('text', ''))
-
     elapsed_ms = int((time.time() - start_time) * 1000)
 
     track_ai_request(
@@ -513,7 +515,7 @@ def deja_vu_check(request, board_id):
         response_time_ms=elapsed_ms,
     )
 
-    raw = response.get('content', '')
+    raw = response.get('text', '')
     try:
         cleaned = raw.strip()
         if cleaned.startswith('```'):

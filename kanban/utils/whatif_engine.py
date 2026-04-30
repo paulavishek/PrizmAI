@@ -12,7 +12,6 @@ import math
 from datetime import date, timedelta
 from decimal import Decimal
 
-import google.generativeai as genai
 from django.conf import settings
 from django.db.models import Sum, Avg
 

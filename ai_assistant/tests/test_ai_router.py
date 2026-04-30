@@ -651,8 +651,6 @@ class TestGeminiThreadSafety(SimpleTestCase):
         Verify that genai.configure is called with both keys (not just one),
         and the lock prevents the second from running before the first finishes.
         """
-        import google.generativeai as genai
-
         configure_calls = []
 
         def fake_configure(api_key):

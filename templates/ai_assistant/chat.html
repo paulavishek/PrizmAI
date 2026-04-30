@@ -523,6 +523,29 @@
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
+
+    .provider-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: .78rem;
+        font-weight: 500;
+        white-space: nowrap;
+        flex-shrink: 0;
+        line-height: 1.4;
+    }
+    .provider-badge-gemini    { background: #dbeafe; color: #1e40af; }
+    .provider-badge-openai    { background: #dcfce7; color: #15803d; }
+    .provider-badge-anthropic { background: #ede9fe; color: #5b21b6; }
+    .provider-model-sub {
+        display: block;
+        font-size: .68rem;
+        opacity: .75;
+        font-weight: 400;
+        line-height: 1;
+    }
 </style>
 {% endblock %}
 
@@ -554,6 +577,12 @@
                 <input type="text" class="chat-title-edit" id="chat-title-edit" value="{{ session.title }}">
                 <i class="fas fa-pencil-alt title-edit-icon" id="edit-title-btn" title="Rename chat"></i>
             </div>
+            {% if spectra_provider_name %}
+            <span class="provider-badge {% if spectra_provider_name == 'Google Gemini' %}provider-badge-gemini{% elif spectra_provider_name == 'OpenAI' %}provider-badge-openai{% else %}provider-badge-anthropic{% endif %}">
+                <i class="fas fa-robot"></i>
+                <span>{{ spectra_provider_name }}<small class="provider-model-sub">{{ spectra_model_name }}</small></span>
+            </span>
+            {% endif %}
             <div class="chat-toolbar">
                 <div class="btn-group">
                     <button class="btn btn-sm btn-outline-secondary" id="export-chat-btn" title="Export chat">
