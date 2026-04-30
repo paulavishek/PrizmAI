@@ -399,8 +399,8 @@ def goal_detail(request, goal_id):
         'proxy_metrics': proxy_metrics,
         'portfolio_narrative': goal.portfolio_narrative,
         # RBAC context
-        'can_edit': request.user.has_perm('prizmai.edit_goal', goal),
-        'can_delete': request.user.has_perm('prizmai.edit_goal', goal),
+        'can_edit': request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request),
+        'can_delete': request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request),
         'can_create_child': request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request),
     })
 
@@ -469,7 +469,7 @@ def edit_goal(request, goal_id):
     """Edit an existing Organization Goal with version history."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
 
-    if not request.user.has_perm('prizmai.edit_goal', goal):
+    if not (request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to edit this goal.')
         return redirect('goal_detail', goal_id=goal.id)
 
@@ -523,7 +523,7 @@ def delete_goal(request, goal_id):
     """Delete an Organization Goal. Linked Missions become unlinked (SET_NULL)."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
 
-    if not request.user.has_perm('prizmai.edit_goal', goal):
+    if not (request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to delete this goal.')
         return redirect('goal_detail', goal_id=goal.id)
 
@@ -571,7 +571,7 @@ def link_mission_to_goal(request, goal_id):
     """Link an existing Mission to this Organization Goal."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
 
-    if not request.user.has_perm('prizmai.edit_goal', goal):
+    if not (request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to modify this goal.')
         return redirect('goal_detail', goal_id=goal.id)
 
@@ -592,7 +592,7 @@ def unlink_mission_from_goal(request, goal_id, mission_id):
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
     mission = get_object_or_404(Mission, id=mission_id, organization_goal=goal)
 
-    if not request.user.has_perm('prizmai.edit_goal', goal):
+    if not (request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to modify this goal.')
         return redirect('goal_detail', goal_id=goal.id)
 
@@ -823,8 +823,8 @@ def mission_detail(request, mission_id):
         'portfolio': portfolio,
         'portfolio_narrative': mission.portfolio_narrative,
         # RBAC context
-        'can_edit': request.user.has_perm('prizmai.edit_mission', mission),
-        'can_delete': request.user.has_perm('prizmai.edit_mission', mission),
+        'can_edit': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
+        'can_delete': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
         'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
         # All goals for the "Link to Goal" sidebar widget — scoped to active workspace
         'all_goals': OrganizationGoal.objects.filter(
@@ -904,7 +904,7 @@ def edit_mission(request, mission_id):
     """Edit an existing mission with version history."""
     mission = get_object_or_404(Mission, id=mission_id)
 
-    if not request.user.has_perm('prizmai.edit_mission', mission):
+    if not (request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to edit this mission.')
         return redirect('mission_detail', mission_id=mission.id)
 
@@ -951,7 +951,7 @@ def delete_mission(request, mission_id):
     """Delete a mission (and cascade-delete its strategies; boards become unlinked)."""
     mission = get_object_or_404(Mission, id=mission_id)
 
-    if not request.user.has_perm('prizmai.edit_mission', mission):
+    if not (request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to delete this mission.')
         return redirect('mission_list')
 
@@ -1118,8 +1118,8 @@ def strategy_detail(request, mission_id, strategy_id):
         'portfolio': portfolio,
         'portfolio_narrative': strategy.portfolio_narrative,
         # RBAC context
-        'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy),
-        'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy),
+        'can_edit': request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request),
+        'can_delete': request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request),
         'can_create_child': request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request),
         # Favorites
         'favorite_type': 'strategy',
@@ -1134,7 +1134,7 @@ def edit_strategy(request, mission_id, strategy_id):
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
-    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+    if not (request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to edit this strategy.')
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
@@ -1183,7 +1183,7 @@ def delete_strategy(request, mission_id, strategy_id):
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
-    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+    if not (request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to delete this strategy.')
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
@@ -1206,7 +1206,7 @@ def link_board_to_strategy(request, mission_id, strategy_id):
     mission = get_object_or_404(Mission, id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
-    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+    if not (request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to modify this strategy.')
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
@@ -1231,7 +1231,7 @@ def unlink_board_from_strategy(request, mission_id, strategy_id, board_id):
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
     board = get_object_or_404(Board, id=board_id, strategy=strategy)
 
-    if not request.user.has_perm('prizmai.edit_strategy', strategy):
+    if not (request.user.has_perm('prizmai.edit_strategy', strategy) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to modify this strategy.')
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
@@ -1273,7 +1273,7 @@ def post_strategic_update(request, level, pk):
     record = get_object_or_404(model_cls, pk=pk)
 
     edit_perm = _LEVEL_EDIT_PERM.get(level)
-    if edit_perm and not request.user.has_perm(edit_perm, record):
+    if edit_perm and not (request.user.has_perm(edit_perm, record) or is_demo_context(request)):
         return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     if request.method != 'POST':
@@ -1346,7 +1346,7 @@ def regenerate_summary(request, level, pk):
 
     record = model_cls.objects.get(pk=pk)
     edit_perm = _LEVEL_EDIT_PERM.get(level)
-    if edit_perm and not request.user.has_perm(edit_perm, record):
+    if edit_perm and not (request.user.has_perm(edit_perm, record) or is_demo_context(request)):
         return JsonResponse({'success': False, 'error': 'Permission denied.'}, status=403)
 
     if request.method != 'POST':
