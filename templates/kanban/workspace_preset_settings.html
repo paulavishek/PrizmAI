@@ -228,6 +228,9 @@
                             {% if ai_settings.key_validated_at %}
                             — validated {{ ai_settings.key_validated_at|date:"M d, Y" }}
                             {% endif %}
+                            {% if ai_settings.byok_model %}
+                            — model: <strong>{{ ai_settings.byok_model }}</strong>
+                            {% endif %}
                         </div>
                         {% endif %}
 
@@ -242,12 +245,108 @@
                             </select>
                         </div>
 
+                        {# ---- Per-provider API key instructions ---- #}
+                        <div id="org-byok-instructions-gemini" class="org-byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#org-byok-guide-gemini"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get a Google Gemini API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="org-byok-guide-gemini">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">Google AI Studio</a></li>
+                                            <li>Sign in with your Google account</li>
+                                            <li>Click <strong>Get API Key</strong> &rarr; <strong>Create API key</strong></li>
+                                            <li>Copy the key and paste it in the field below</li>
+                                        </ol>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Free tier available. Paid plans at <a href="https://ai.google.dev/pricing" target="_blank" rel="noopener noreferrer">Google AI pricing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="org-byok-instructions-openai" class="org-byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#org-byok-guide-openai"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get an OpenAI API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="org-byok-guide-openai">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a></li>
+                                            <li>Sign in or create an account</li>
+                                            <li>Navigate to <strong>Settings &rarr; API Keys &rarr; Create new secret key</strong></li>
+                                            <li>Copy the key immediately and paste it below</li>
+                                        </ol>
+                                        <div class="alert alert-warning py-1 px-2 mb-1" style="font-size:.75rem;">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            <strong>Important:</strong> OpenAI only shows your API key once at creation time. If you navigate away without copying it, you will have to create a new key.
+                                        </div>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Requires a paid account with billing set up at <a href="https://platform.openai.com/settings/organization/billing" target="_blank" rel="noopener noreferrer">OpenAI billing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="org-byok-instructions-anthropic" class="org-byok-instructions d-none mb-3" style="max-width:500px;">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body py-2 px-3">
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold collapsed"
+                                            type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#org-byok-guide-anthropic"
+                                            aria-expanded="false">
+                                        <i class="fas fa-lightbulb me-1" style="color:#f59e0b;"></i>
+                                        How do I get an Anthropic Claude API key?
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:.7rem;"></i>
+                                    </button>
+                                    <div class="collapse mt-2" id="org-byok-guide-anthropic">
+                                        <ol class="mb-1 ps-3" style="font-size:.8rem;">
+                                            <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></li>
+                                            <li>Sign in or create an account</li>
+                                            <li>Navigate to <strong>Settings &rarr; API Keys &rarr; Create Key</strong></li>
+                                            <li>Copy the key and paste it below</li>
+                                        </ol>
+                                        <p class="mb-0 text-muted" style="font-size:.75rem;"><i class="fas fa-info-circle me-1"></i>Requires credits or a paid plan. Manage at <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer">Anthropic billing</a>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mb-3" style="max-width:420px;">
                             <label for="id_raw_api_key" class="form-label" style="font-size:.875rem;">{{ ai_settings_form.fields.raw_api_key.label }}</label>
                             <input type="password" name="raw_api_key" id="id_raw_api_key"
                                    class="form-control form-control-sm" autocomplete="off"
                                    placeholder="Paste API key here">
                             <div class="form-text">{{ ai_settings_form.fields.raw_api_key.help_text }}</div>
+                        </div>
+
+                        {# ---- Model selector ---- #}
+                        <div class="mb-3 d-none" id="org-byok-model-section" style="max-width:420px;">
+                            <label for="id_org_byok_model_select" class="form-label fw-semibold" style="font-size:.875rem;">
+                                <i class="fas fa-microchip me-1" style="color:#5046e5;"></i>Which model would you like to use?
+                            </label>
+                            <select id="id_org_byok_model_select" class="form-select form-select-sm mb-2">
+                                <option value="">--- Select model ---</option>
+                            </select>
+                            <div id="org-byok-model-custom-wrap" class="d-none">
+                                <input type="text" id="id_org_byok_model_custom"
+                                       class="form-control form-control-sm"
+                                       placeholder="e.g. gpt-4o-2024-11-20"
+                                       maxlength="100">
+                                <div class="form-text">Enter the exact model string from your provider's documentation.</div>
+                            </div>
+                            <input type="hidden" name="byok_model" id="id_org_byok_model_hidden"
+                                   value="{{ ai_settings_form.initial.byok_model|default:'' }}">
                         </div>
 
                         {% if has_byok_key %}
@@ -293,6 +392,114 @@
             ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Validating key…'
             : '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving…';
     });
+})();
+
+// BYOK provider instructions + model selector (org settings)
+(function () {
+    var BYOK_MODELS = {
+        gemini: [
+            {value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash \u2014 Fast, balanced (default)'},
+            {value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite \u2014 Lightweight, cheapest'},
+            {value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro \u2014 Most capable'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+        openai: [
+            {value: 'gpt-4o', label: 'GPT-4o \u2014 Latest flagship (default)'},
+            {value: 'gpt-4o-mini', label: 'GPT-4o Mini \u2014 Fast and cheap'},
+            {value: 'gpt-4-turbo', label: 'GPT-4 Turbo \u2014 Previous generation'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+        anthropic: [
+            {value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 \u2014 Balanced (default)'},
+            {value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 \u2014 Fast and cheap'},
+            {value: 'claude-opus-4-6', label: 'Claude Opus 4.6 \u2014 Most capable'},
+            {value: '__custom__', label: 'Other / Custom model\u2026'},
+        ],
+    };
+
+    var providerSelect   = document.getElementById('id_byok_provider');
+    var modelSection     = document.getElementById('org-byok-model-section');
+    var modelSelect      = document.getElementById('id_org_byok_model_select');
+    var modelCustomWrap  = document.getElementById('org-byok-model-custom-wrap');
+    var modelCustomInput = document.getElementById('id_org_byok_model_custom');
+    var modelHidden      = document.getElementById('id_org_byok_model_hidden');
+
+    function hideAllInstructions() {
+        document.querySelectorAll('.org-byok-instructions').forEach(function (el) {
+            el.classList.add('d-none');
+        });
+    }
+
+    function populateModelDropdown(provider, savedModel) {
+        modelSelect.innerHTML = '<option value="">--- Select model ---</option>';
+        var models = BYOK_MODELS[provider];
+        if (!models) return;
+        var hasMatch = false;
+        models.forEach(function (m) {
+            var opt = document.createElement('option');
+            opt.value = m.value;
+            opt.textContent = m.label;
+            if (savedModel && m.value === savedModel) {
+                opt.selected = true;
+                hasMatch = true;
+            }
+            modelSelect.appendChild(opt);
+        });
+        if (savedModel && !hasMatch) {
+            modelSelect.value = '__custom__';
+            modelCustomInput.value = savedModel;
+            modelCustomWrap.classList.remove('d-none');
+        } else {
+            modelCustomWrap.classList.add('d-none');
+            modelCustomInput.value = '';
+        }
+        syncHiddenModel();
+    }
+
+    function syncHiddenModel() {
+        if (!modelHidden) return;
+        var sel = modelSelect.value;
+        if (sel === '__custom__') {
+            modelHidden.value = modelCustomInput.value.trim();
+        } else {
+            modelHidden.value = sel;
+        }
+    }
+
+    function onProviderChange(savedModel) {
+        var provider = providerSelect ? providerSelect.value : '';
+        hideAllInstructions();
+        if (provider) {
+            var box = document.getElementById('org-byok-instructions-' + provider);
+            if (box) box.classList.remove('d-none');
+            modelSection.classList.remove('d-none');
+            populateModelDropdown(provider, savedModel !== undefined ? savedModel : (modelHidden ? modelHidden.value : ''));
+        } else {
+            modelSection.classList.add('d-none');
+        }
+    }
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function () { onProviderChange(); });
+        if (providerSelect.value) {
+            onProviderChange(modelHidden ? modelHidden.value : '');
+        }
+    }
+
+    if (modelSelect) {
+        modelSelect.addEventListener('change', function () {
+            if (modelSelect.value === '__custom__') {
+                modelCustomWrap.classList.remove('d-none');
+            } else {
+                modelCustomWrap.classList.add('d-none');
+                modelCustomInput.value = '';
+            }
+            syncHiddenModel();
+        });
+    }
+    if (modelCustomInput) {
+        modelCustomInput.addEventListener('input', syncHiddenModel);
+    }
 })();
 </script>
 {% endblock %}

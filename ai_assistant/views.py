@@ -127,7 +127,7 @@ def chat_interface(request, session_id=None):
     }
     try:
         from ai_assistant.utils.ai_router import AIRouter
-        _provider, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
         context['spectra_provider_name'] = AIRouter.get_provider_display_name(_provider)
         context['spectra_model_name'] = AIRouter.get_model_name(_provider, complexity='simple')
     except Exception:

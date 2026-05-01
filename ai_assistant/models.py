@@ -461,6 +461,17 @@ class OrganizationAISettings(models.Model):
         help_text="Timestamp when the BYOK key was last successfully validated.",
     )
 
+    byok_model = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text=(
+            "Model to use when a BYOK key is active. If null, the router falls back "
+            "to the complexity-based platform defaults (GEMINI_MODEL_COMPLEX/SIMPLE etc.). "
+            "Store the exact model string e.g. 'claude-sonnet-4-6', 'gpt-4o', 'gemini-2.5-pro'."
+        ),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     updated_by = models.ForeignKey(
@@ -571,6 +582,17 @@ class UserAISettings(models.Model):
         null=True,
         blank=True,
         help_text="Timestamp when the personal BYOK key was last successfully validated.",
+    )
+
+    byok_model = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text=(
+            "Model to use when a personal BYOK key is active. If null, the router falls back "
+            "to the complexity-based platform defaults (GEMINI_MODEL_COMPLEX/SIMPLE etc.). "
+            "Store the exact model string e.g. 'claude-sonnet-4-6', 'gpt-4o', 'gemini-2.5-flash'."
+        ),
     )
 
     updated_at = models.DateTimeField(auto_now=True)

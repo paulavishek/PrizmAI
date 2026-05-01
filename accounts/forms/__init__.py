@@ -556,6 +556,13 @@ class UserAISettingsForm(forms.Form):
         label='Remove my stored API key',
     )
 
+    byok_model = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        label='Preferred Model',
+        max_length=100,
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Lazy import to avoid circular dependency at module load time

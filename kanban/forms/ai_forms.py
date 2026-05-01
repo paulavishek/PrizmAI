@@ -63,6 +63,13 @@ class OrganizationAISettingsForm(forms.Form):
         label='Remove stored API key',
     )
 
+    byok_model = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        label='Preferred Model',
+        max_length=100,
+    )
+
     def clean(self):
         cleaned = super().clean()
         raw_key = cleaned.get('raw_api_key', '').strip()
