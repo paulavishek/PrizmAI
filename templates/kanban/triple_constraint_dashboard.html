@@ -71,6 +71,17 @@
                             <li class="breadcrumb-item active">Triple Constraint</li>
                         </ol>
                     </nav>
+                    <button class="btn btn-link btn-sm ps-0 mt-1 text-decoration-none fw-semibold"
+                            style="color: #0d6efd;"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#tripleConstraintGuide"
+                            aria-expanded="false"
+                            aria-controls="tripleConstraintGuide">
+                        <i class="fas fa-question-circle me-1"></i>
+                        <span id="triple-constraint-guide-label">How does this work?</span>
+                        <i class="fas fa-chevron-down ms-1 triple-constraint-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+                    </button>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
                     <a href="{% url 'board_detail' board.id %}" class="btn-prizm-back btn-sm">
@@ -102,6 +113,150 @@
                 Changing one constraint forces a trade-off in at least one of the others.
                 Use this page to understand the current balance and simulate what-if scenarios
                 before committing to a change.
+            </div>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ────────────────────────────────── -->
+    <div class="collapse mb-4" id="tripleConstraintGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-balance-scale text-primary me-2"></i>What is the Triple Constraint Dashboard?</h6>
+                        <p class="mb-0 small text-secondary">Every project is constrained by three forces: <strong>Scope</strong> (what you build), <strong>Cost</strong> (what you spend), and <strong>Time</strong> (when you deliver). Changing any one of them forces a trade-off in at least one of the others — this is the Iron Triangle. This dashboard visualises the live balance of all three, lets you simulate changes before committing, and auto-computes a <strong>Project Confidence score</strong> (0–100) that honestly answers: <em>"How likely is this project to land on time and on budget?"</em></p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Iron Triangle -->
+                    <div class="col-12">
+                        <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-draw-polygon me-1 text-primary"></i>The Iron Triangle — the fundamental trade-off</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #0d6efd !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-expand-arrows-alt text-primary"></i>
+                                        <strong class="small text-primary">Scope</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-1">What your team will build. Tracked via task count, completion rate, and scope change history.</p>
+                                    <p class="small text-secondary mb-0"><em>Expand scope → need more time or money (or both).</em></p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #198754 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-dollar-sign text-success"></i>
+                                        <strong class="small text-success">Cost</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-1">What you spend. Tracked via budget allocation vs actual spend and burn rate projection.</p>
+                                    <p class="small text-secondary mb-0"><em>Cut budget → must reduce scope or extend timeline.</em></p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #dc3545 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-clock text-danger"></i>
+                                        <strong class="small text-danger">Time</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-1">When you deliver. Tracked via burndown velocity, predicted completion date, and delay probability.</p>
+                                    <p class="small text-secondary mb-0"><em>Compress timeline → must reduce scope or add cost.</em></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Project Confidence Score -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-heartbeat fa-2x" style="color:#6f42c1;"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Project Confidence Score</h6>
+                                <p class="small mb-2 text-secondary">A composite score (0–100) that auto-computes from your three constraint dimensions in real time. No manual setup required. Three confidence bands:</p>
+                                <div class="d-flex flex-column gap-1 mb-2">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#198754; min-width:90px;">HEALTHY 70–100</span>
+                                        <span class="text-dark">Project on track, no intervention needed</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:90px;">AT RISK 40–69</span>
+                                        <span class="text-dark">One or more constraints under pressure</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:90px;">CRITICAL 0–39</span>
+                                        <span class="text-dark">Major constraint failure. AI proposes 3 recovery options.</span>
+                                    </div>
+                                </div>
+                                <div class="p-2 rounded bg-warning-subtle border-start border-warning border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-robot text-warning me-1"></i>When confidence drops below 40%, the AI Coach automatically proposes three concrete recovery options: reduce scope, extend timeline, or add resources.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Signal Log + Workflow -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-history fa-2x text-info"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Signal Log</h6>
+                                <p class="small mb-2 text-secondary">Every event that moves the confidence needle is recorded automatically. You can also log manual signals.</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-muted">Signal type</th>
+                                                <th class="text-muted">Auto-detected?</th>
+                                                <th class="text-muted">Score impact</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="text-dark">Task completions</td>
+                                                <td class="text-success"><i class="fas fa-check me-1"></i>Yes</td>
+                                                <td class="text-success">+</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-dark">Scope changes</td>
+                                                <td class="text-success"><i class="fas fa-check me-1"></i>Yes</td>
+                                                <td class="text-danger">−</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-dark">Budget changes</td>
+                                                <td class="text-success"><i class="fas fa-check me-1"></i>Yes</td>
+                                                <td class="text-muted">±</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-dark">Manual signal</td>
+                                                <td class="text-muted">You log it</td>
+                                                <td class="text-muted">±</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mt-3">
+                                    <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Workflow</h6>
+                                    <ol class="small ps-3 mb-0 text-secondary">
+                                        <li class="mb-1">View the three constraint cards — understand your current balance</li>
+                                        <li class="mb-1">Check the Project Confidence score — healthy, at risk, or critical?</li>
+                                        <li class="mb-1">Read the Signal Log — what moved the needle recently?</li>
+                                        <li class="mb-1">Use the What-If simulator to model trade-off scenarios</li>
+                                        <li>Log manual signals for events the system can't auto-detect</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
     </div>
@@ -1017,6 +1172,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     {% endif %}
+
+    // Guide toggle label
+    var tcGuide = document.getElementById('tripleConstraintGuide');
+    if (tcGuide) {
+        tcGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('triple-constraint-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.triple-constraint-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        tcGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('triple-constraint-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.triple-constraint-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
 });
 </script>
 {% endblock %}

@@ -197,6 +197,118 @@
       Answer 3 quick questions and PrizmBrief will pull live board data to generate
       structured slide content you can paste straight into Gamma or PowerPoint.
     </div>
+    <button class="btn btn-link btn-sm ps-0 mt-1 text-decoration-none fw-semibold"
+            style="color: #0d6efd;"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#prizmBriefGuide"
+            aria-expanded="false"
+            aria-controls="prizmBriefGuide">
+        <i class="fas fa-question-circle me-1"></i>
+        <span id="prizmbrief-guide-label">How does this work?</span>
+        <i class="fas fa-chevron-down ms-1 prizmbrief-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+    </button>
+  </div>
+
+  <!-- ── How It Works — Collapsible Guide ── -->
+  <div class="collapse mb-4" id="prizmBriefGuide">
+      <div class="card border shadow-sm">
+          <div class="card-body p-4">
+              <div class="row g-4">
+
+                  <!-- What is this? -->
+                  <div class="col-12">
+                      <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-presentation text-primary me-2"></i>What is PrizmBrief?</h6>
+                      <p class="mb-0 small text-secondary">PrizmBrief turns your live board data into audience-aware, slide-ready presentation content in 3 questions. It pulls real tasks, progress, blockers, and metrics — then structures them into titled slides with key points and supporting data. No copy-pasting from dashboards, no manual formatting. Just paste straight into Gamma, PowerPoint, or Google Slides.</p>
+                  </div>
+
+                  <div class="col-12"><hr class="my-0"></div>
+
+                  <!-- Three-step flow -->
+                  <div class="col-12">
+                      <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-map-signs me-1 text-info"></i>Three questions, one click, presentation-ready content</h6>
+                      <div class="row g-3">
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #0d6efd !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge rounded-circle bg-primary" style="width:24px;height:24px;font-size:0.8rem;display:flex;align-items:center;justify-content:center;">1</span>
+                                      <i class="fas fa-users text-primary"></i>
+                                      <strong class="small">Choose Audience</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">Client, Executive, or Internal Team. PrizmBrief adjusts the language, tone, and detail level automatically for each.</p>
+                              </div>
+                          </div>
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #0891b2 !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge rounded-circle" style="width:24px;height:24px;font-size:0.8rem;display:flex;align-items:center;justify-content:center;background:#0891b2;">2</span>
+                                      <i class="fas fa-bullseye" style="color:#0891b2;"></i>
+                                      <strong class="small">Set Purpose</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">Status update, kickoff, risk review, or milestone celebration. Each purpose determines which data gets pulled from your board.</p>
+                              </div>
+                          </div>
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #059669 !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge rounded-circle" style="width:24px;height:24px;font-size:0.8rem;display:flex;align-items:center;justify-content:center;background:#059669;">3</span>
+                                      <i class="fas fa-magic" style="color:#059669;"></i>
+                                      <strong class="small">Generate</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">PrizmBrief reads your live board and produces structured slide content with titles, key points, and supporting data. Copy one slide or the full deck.</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="col-12"><hr class="my-0"></div>
+
+                  <!-- Audience types vs What gets pulled -->
+                  <div class="col-md-12">
+                      <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>What changes by audience</h6>
+                      <div class="table-responsive">
+                          <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                              <thead class="table-light">
+                                  <tr>
+                                      <th class="text-muted">Dimension</th>
+                                      <th class="text-primary"><i class="fas fa-briefcase me-1"></i>Client</th>
+                                      <th class="text-warning"><i class="fas fa-chess-king me-1"></i>Executive</th>
+                                      <th class="text-success"><i class="fas fa-users me-1"></i>Internal Team</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Language style</td>
+                                      <td>Business, outcome-focused</td>
+                                      <td>Strategic, high-level</td>
+                                      <td>Technical, operational</td>
+                                  </tr>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Detail level</td>
+                                      <td>Medium — highlights &amp; milestones</td>
+                                      <td>Low — KPIs &amp; decisions only</td>
+                                      <td>High — tasks, blockers, owners</td>
+                                  </tr>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Key metrics shown</td>
+                                      <td>Progress %, delivery dates</td>
+                                      <td>Budget, timeline, risks</td>
+                                      <td>Velocity, blockers, assignments</td>
+                                  </tr>
+                                  <tr>
+                                      <td class="text-muted fw-semibold">Best for</td>
+                                      <td>Client status calls</td>
+                                      <td>Board / leadership updates</td>
+                                      <td>Sprint reviews, team standups</td>
+                                  </tr>
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+
+              </div>
+          </div>
+      </div>
   </div>
 
   <!-- Error -->
@@ -304,6 +416,25 @@
 
 {% block extra_js %}
 <script>
+  /* Guide toggle label */
+  document.addEventListener('DOMContentLoaded', function() {
+      var pbGuide = document.getElementById('prizmBriefGuide');
+      if (pbGuide) {
+          pbGuide.addEventListener('shown.bs.collapse', function() {
+              var label = document.getElementById('prizmbrief-guide-label');
+              if (label) label.textContent = 'Hide guide';
+              var chevron = document.querySelector('.prizmbrief-guide-chevron');
+              if (chevron) chevron.style.transform = 'rotate(180deg)';
+          });
+          pbGuide.addEventListener('hidden.bs.collapse', function() {
+              var label = document.getElementById('prizmbrief-guide-label');
+              if (label) label.textContent = 'How does this work?';
+              var chevron = document.querySelector('.prizmbrief-guide-chevron');
+              if (chevron) chevron.style.transform = 'rotate(0deg)';
+          });
+      }
+  });
+
   /* Highlight selected option card */
   function selectOption(label) {
     const group = label.closest('.pb-card');
