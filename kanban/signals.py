@@ -1070,3 +1070,62 @@ def create_board_preset_for_board(sender, instance, created, **kwargs):
             board=instance,
             defaults={'local_preset': None},
         )
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar sync — track due_date changes before save
+# ---------------------------------------------------------------------------
+
+@receiver(pre_save, sender=Task)
+def track_due_date_change(sender, instance, **kwargs):
+    """
+    Store the old due_date on the instance so the post_save signal can decide
+    whether to trigger a Calendar sync.
+    """
+    if instance.pk:
+        try:
+            old = Task.objects.get(pk=instance.pk)
+            instance._old_due_date = old.due_date
+        except Task.DoesNotExist:
+            instance._old_due_date = None
+    else:
+        instance._old_due_date = None
+
+
+@receiver(post_save, sender=Task)
+def sync_due_date_to_google_calendar(sender, instance, created, **kwargs):
+    """
+    Queue a Celery task to sync this task's due_date to Google Calendar
+    when the due_date has changed (or been set for the first time).
+
+    Only fires when:
+      - The task has an assigned user.
+      - The due_date actually changed (or was just set on a new task).
+      - The assigned user has an active GoogleCalendarToken with sync_enabled=True.
+    """
+    if not instance.assigned_to_id:
+        return
+
+    old_due_date = getattr(instance, '_old_due_date', None)
+    new_due_date = instance.due_date
+
+    due_date_changed = (created and new_due_date) or (old_due_date != new_due_date)
+    if not due_date_changed:
+        return
+
+    try:
+        from accounts.models import GoogleCalendarToken
+        has_token = GoogleCalendarToken.objects.filter(
+            user_id=instance.assigned_to_id, sync_enabled=True
+        ).exists()
+        if not has_token:
+            return
+
+        from accounts.tasks import sync_task_to_calendar
+        sync_task_to_calendar.delay(instance.pk)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"sync_due_date_to_google_calendar: could not queue for task {instance.pk}: {exc}"
+        )
+

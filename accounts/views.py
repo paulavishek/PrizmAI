@@ -867,3 +867,130 @@ def update_display_mode(request):
     profile.save(update_fields=['display_mode'])
 
     return JsonResponse({'status': 'ok', 'display_mode': mode})
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar OAuth 2.0 — Connect / Callback / Disconnect
+# ---------------------------------------------------------------------------
+
+@login_required
+def google_calendar_connect(request):
+    """
+    Step 1 of the OAuth 2.0 flow: redirect the user to Google's consent screen.
+    Requests calendar.events scope so PrizmAI can create/update/delete events.
+    """
+    try:
+        from google_auth_oauthlib.flow import Flow
+        from django.conf import settings
+
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=settings.GOOGLE_CALENDAR_SCOPES,
+        )
+        flow.redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+
+        authorization_url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",  # force consent to always get a refresh_token
+        )
+        request.session["google_calendar_oauth_state"] = state
+        return redirect(authorization_url)
+
+    except Exception:
+        messages.error(request, "Could not initiate Google Calendar connection. Check that GOOGLE_OAUTH2_CLIENT_ID and GOOGLE_OAUTH2_CLIENT_SECRET are configured.")
+        return redirect("profile")
+
+
+@login_required
+def google_calendar_callback(request):
+    """
+    Step 2: Google redirects back here with an authorization code.
+    Exchange for tokens and store in GoogleCalendarToken.
+    """
+    try:
+        from google_auth_oauthlib.flow import Flow
+        from django.conf import settings
+        from accounts.models import GoogleCalendarToken
+
+        state = request.session.pop("google_calendar_oauth_state", None)
+        if not state:
+            messages.error(request, "Invalid OAuth state. Please try connecting again.")
+            return redirect("profile")
+
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=settings.GOOGLE_CALENDAR_SCOPES,
+            state=state,
+        )
+        flow.redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+
+        # Allow HTTP for local dev. Production must use HTTPS.
+        import os
+        if os.getenv("DJANGO_DEBUG", "True").lower() == "true":
+            os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
+        flow.fetch_token(authorization_response=request.build_absolute_uri())
+        creds = flow.credentials
+
+        token_obj, _ = GoogleCalendarToken.objects.update_or_create(
+            user=request.user,
+            defaults={
+                "access_token": creds.token,
+                "refresh_token": creds.refresh_token or "",
+                "token_expiry": creds.expiry,
+                "sync_enabled": True,
+            },
+        )
+        messages.success(request, "Google Calendar connected. Tasks with due dates will now sync automatically.")
+
+    except Exception as exc:
+        messages.error(request, f"Google Calendar connection failed: {exc}")
+
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def google_calendar_disconnect(request):
+    """
+    Remove the user's GoogleCalendarToken.
+    Future task saves will no longer trigger calendar sync.
+    """
+    from accounts.models import GoogleCalendarToken
+    GoogleCalendarToken.objects.filter(user=request.user).delete()
+    messages.success(request, "Google Calendar disconnected.")
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def google_calendar_toggle_sync(request):
+    """
+    Toggle the master sync_enabled flag without fully disconnecting.
+    """
+    from accounts.models import GoogleCalendarToken
+    try:
+        token_obj = GoogleCalendarToken.objects.get(user=request.user)
+        token_obj.sync_enabled = not token_obj.sync_enabled
+        token_obj.save(update_fields=["sync_enabled", "updated_at"])
+        state = "enabled" if token_obj.sync_enabled else "paused"
+        messages.success(request, f"Google Calendar sync {state}.")
+    except GoogleCalendarToken.DoesNotExist:
+        messages.error(request, "Google Calendar is not connected.")
+    return redirect("profile")
+

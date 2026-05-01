@@ -18,6 +18,8 @@ class WebhookForm(forms.ModelForm):
         ('task.moved', 'Task Moved'),
         ('comment.added', 'Comment Added'),
         ('board.updated', 'Board Updated'),
+        ('board.member_added', 'Board Member Added'),
+        ('board.member_removed', 'Board Member Removed'),
     ]
     
     events = forms.MultipleChoiceField(

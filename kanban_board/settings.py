@@ -108,6 +108,7 @@ INSTALLED_APPS = [
     'decision_center',  # Decision Batch Dashboard — unified decision queue
     'exit_protocol',  # Exit Protocol — Project Hospice, Organ Transplant, Cemetery
     'requirements',  # Requirement Analysis — lifecycle tracking, traceability, AI gap analysis
+    'integrations',  # Inbound receiver integrations (GitHub, and future: GitLab, Salesforce, Figma)
 ]
 
 MIDDLEWARE = [
@@ -330,6 +331,18 @@ SOCIALACCOUNT_PROVIDERS = {
 # Google OAuth2 credentials (to be set in .env file)
 GOOGLE_OAUTH2_CLIENT_ID = os.getenv('GOOGLE_OAUTH2_CLIENT_ID', '')
 GOOGLE_OAUTH2_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH2_CLIENT_SECRET', '')
+
+# Google Calendar OAuth — reuses the same client credentials as Google login.
+# The redirect URI must be added to the Authorized Redirect URIs list in
+# Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID.
+GOOGLE_CALENDAR_REDIRECT_URI = os.getenv(
+    'GOOGLE_CALENDAR_REDIRECT_URI',
+    'http://localhost:8000/accounts/google-calendar/callback/',
+)
+# OAuth 2.0 scopes requested for Calendar access (read + write)
+GOOGLE_CALENDAR_SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+]
 
 # Custom adapters for handling organization assignment
 ACCOUNT_ADAPTER = 'accounts.adapters.CustomAccountAdapter'
