@@ -138,15 +138,15 @@ class AIRouter:
             )
             return self._emergency_gemini_fallback(prompt, system_prompt, conversation_history, complexity)
 
-        provider, api_key, is_byok = self._resolve_provider(user)
+        provider, api_key, is_byok, byok_model = self._resolve_provider(user)
 
         try:
             if provider == 'gemini':
-                raw = self._call_gemini(prompt, api_key, system_prompt, conversation_history, complexity)
+                raw = self._call_gemini(prompt, api_key, system_prompt, conversation_history, complexity, model_override=byok_model)
             elif provider == 'openai':
-                raw = self._call_openai(prompt, api_key, system_prompt, conversation_history, complexity)
+                raw = self._call_openai(prompt, api_key, system_prompt, conversation_history, complexity, model_override=byok_model)
             elif provider == 'anthropic':
-                raw = self._call_anthropic(prompt, api_key, system_prompt, conversation_history, complexity)
+                raw = self._call_anthropic(prompt, api_key, system_prompt, conversation_history, complexity, model_override=byok_model)
             else:
                 raise AIProviderError(provider, ValueError(f"Unknown provider: '{provider}'"))
 
@@ -208,10 +208,11 @@ class AIRouter:
             user: Django User object.
 
         Returns:
-            tuple: (provider_str, api_key_str, is_byok_bool)
-                provider_str  — 'gemini', 'openai', or 'anthropic'
-                api_key_str   — API key to pass to the provider call
-                is_byok_bool  — True if a user-supplied key is being used
+            tuple: (provider_str, api_key_str, is_byok_bool, byok_model_or_none)
+                provider_str      — 'gemini', 'openai', or 'anthropic'
+                api_key_str       — API key to pass to the provider call
+                is_byok_bool      — True if a user-supplied key is being used
+                byok_model_or_none — model string if the BYOK user chose one, else None
         """
         # Import here (not at module top) to avoid circular imports, since
         # ai_router.py lives inside the ai_assistant app that owns these models.
@@ -237,7 +238,7 @@ class AIRouter:
                             "AIRouter (background task): using org BYOK key provider=%s",
                             org_settings.byok_provider,
                         )
-                        return (org_settings.byok_provider, api_key, True)
+                        return (org_settings.byok_provider, api_key, True, org_settings.byok_model or None)
                     except Exception:
                         pass  # Decryption failure — fall through to platform key
                 if org_settings and org_settings.provider:
@@ -246,17 +247,17 @@ class AIRouter:
                         "AIRouter (background task): using org provider=%s",
                         org_settings.provider,
                     )
-                    return (org_settings.provider, api_key, False)
+                    return (org_settings.provider, api_key, False, None)
             except Exception:
                 pass  # Table doesn't exist yet or any other error — fall through
             # Final fallback for background tasks: Gemini with platform key.
             logger.debug("AIRouter (background task): falling back to Gemini platform key")
-            return ('gemini', self._platform_key('gemini'), False)
+            return ('gemini', self._platform_key('gemini'), False, None)
 
-        # ---- Fetch user AI settings (table starts empty — DoesNotExist is normal) ----
+        # ---- Fetch user AI settings (starts empty for new users) ----
         user_settings = None
         try:
-            user_settings = user.ai_settings  # OneToOne reverse accessor
+            user_settings = user.ai_settings
         except UserAISettings.DoesNotExist:
             pass  # No personal settings yet — continue resolution
         except AttributeError:
@@ -297,7 +298,7 @@ class AIRouter:
                     getattr(user, 'username', '?'),
                     user_settings.byok_provider,
                 )
-                return (user_settings.byok_provider, api_key, True)
+                return (user_settings.byok_provider, api_key, True, user_settings.byok_model or None)
             except (ImproperlyConfigured, AIProviderError):
                 raise  # already descriptive — pass through
             except Exception as exc:
@@ -328,7 +329,7 @@ class AIRouter:
                     user_settings.provider_override,
                     getattr(user, 'username', '?'),
                 )
-                return (user_settings.provider_override, api_key, False)
+                return (user_settings.provider_override, api_key, False, None)
             # Override present but not permitted — fall through silently
 
         # ==============================================================
@@ -345,7 +346,7 @@ class AIRouter:
                     "AIRouter: using org BYOK key for provider=%s",
                     org_settings.byok_provider,
                 )
-                return (org_settings.byok_provider, api_key, True)
+                return (org_settings.byok_provider, api_key, True, org_settings.byok_model or None)
             except (ImproperlyConfigured, AIProviderError):
                 raise
             except Exception as exc:
@@ -367,7 +368,7 @@ class AIRouter:
                 "AIRouter: using org provider=%s (platform key)",
                 org_settings.provider,
             )
-            return (org_settings.provider, api_key, False)
+            return (org_settings.provider, api_key, False, None)
 
         # ==============================================================
         # Step 5: Fallback — Gemini with platform key
@@ -377,7 +378,7 @@ class AIRouter:
             "AIRouter: no settings found for user=%s — falling back to Gemini",
             getattr(user, 'username', '?') if user is not None else '<background task>',
         )
-        return ('gemini', self._platform_key('gemini'), False)
+        return ('gemini', self._platform_key('gemini'), False, None)
 
     # ------------------------------------------------------------------
     # Encryption helpers
@@ -472,7 +473,7 @@ class AIRouter:
     # BYOK key validation
     # ------------------------------------------------------------------
 
-    def validate_api_key(self, provider: str, raw_key: str) -> bool:
+    def validate_api_key(self, provider: str, raw_key: str, model: str = None) -> bool:
         """
         Validate a raw (unencrypted) API key by making a minimal test call
         to the specified provider.
@@ -484,19 +485,22 @@ class AIRouter:
         Args:
             provider (str): 'gemini', 'openai', or 'anthropic'.
             raw_key (str): Plain-text API key to test.
+            model (str, optional): If provided, test the call with this exact
+                model string.  Used to validate custom model names before saving.
 
         Returns:
             bool: True if the key is valid and the provider responded,
-                  False on any failure (bad key, network error, quota, etc.).
+                  False on any failure (bad key, network error, quota,
+                  unrecognised model name, etc.).
         """
         probe = "Hi"
         try:
             if provider == 'gemini':
-                self._call_gemini(probe, raw_key)
+                self._call_gemini(probe, raw_key, model_override=model)
             elif provider == 'openai':
-                self._call_openai(probe, raw_key)
+                self._call_openai(probe, raw_key, model_override=model)
             elif provider == 'anthropic':
-                self._call_anthropic(probe, raw_key)
+                self._call_anthropic(probe, raw_key, model_override=model)
             else:
                 return False
             return True
@@ -532,7 +536,8 @@ class AIRouter:
         )
 
     def _call_gemini(self, prompt: str, api_key: str, system_prompt: str = None,
-                     conversation_history: list = None, complexity: str = 'simple') -> dict:
+                     conversation_history: list = None, complexity: str = 'simple',
+                     model_override: str = None) -> dict:
         """
         Call Google Gemini and return a raw response dictionary.
 
@@ -576,10 +581,12 @@ class AIRouter:
                 ),
             )
 
-        # Select model based on task complexity.
+        # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
         # 'simple' → Flash-Lite (faster, cheaper for lightweight classification/formatting)
         # 'complex' → Flash (full model for analysis, generation, reasoning)
-        if complexity == 'complex':
+        if model_override:
+            model_name = model_override
+        elif complexity == 'complex':
             model_name = getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash')
         else:
             model_name = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
@@ -640,7 +647,8 @@ class AIRouter:
         return {'text': text, 'model': model_name, 'tokens_used': tokens_used}
 
     def _call_openai(self, prompt: str, api_key: str, system_prompt: str = None,
-                     conversation_history: list = None, complexity: str = 'simple') -> dict:
+                     conversation_history: list = None, complexity: str = 'simple',
+                     model_override: str = None) -> dict:
         """
         Call OpenAI GPT and return a raw response dictionary.
 
@@ -674,8 +682,10 @@ class AIRouter:
                 ),
             )
 
-        # Select model based on task complexity.
-        if complexity == 'complex':
+        # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
+        if model_override:
+            model = model_override
+        elif complexity == 'complex':
             model = getattr(settings, 'OPENAI_MODEL_COMPLEX', getattr(settings, 'OPENAI_MODEL', 'gpt-4o'))
         else:
             model = getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
@@ -738,7 +748,8 @@ class AIRouter:
         return {'text': text, 'model': model_used, 'tokens_used': tokens_used}
 
     def _call_anthropic(self, prompt: str, api_key: str, system_prompt: str = None,
-                        conversation_history: list = None, complexity: str = 'simple') -> dict:
+                        conversation_history: list = None, complexity: str = 'simple',
+                        model_override: str = None) -> dict:
         """
         Call Anthropic Claude and return a raw response dictionary.
 
@@ -772,8 +783,10 @@ class AIRouter:
                 ),
             )
 
-        # Select model based on task complexity.
-        if complexity == 'complex':
+        # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
+        if model_override:
+            model = model_override
+        elif complexity == 'complex':
             model = getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6'))
         else:
             model = getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5')

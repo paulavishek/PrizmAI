@@ -208,7 +208,7 @@ def organizational_memory(request):
     }
     try:
         from ai_assistant.utils.ai_router import AIRouter
-        _provider, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
         context['active_provider_name'] = AIRouter.get_provider_display_name(_provider)
     except Exception:
         context['active_provider_name'] = 'Google Gemini'

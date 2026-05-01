@@ -5990,7 +5990,7 @@ def board_status_report(request, board_id):
     }
     try:
         from ai_assistant.utils.ai_router import AIRouter
-        _provider, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
+        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
         context['active_provider_name'] = AIRouter.get_provider_display_name(_provider)
     except Exception:
         context['active_provider_name'] = 'Google Gemini'
@@ -6317,6 +6317,7 @@ def workspace_preset_settings(request):
                 raw_key = cd.get('raw_api_key', '').strip()
                 byok_prov = cd.get('byok_provider', '')
                 remove_key = cd.get('remove_byok_key', False)
+                byok_model_val = (cd.get('byok_model') or '').strip() or None
 
                 ai_settings, _ = OrganizationAISettings.objects.get_or_create(
                     organisation=org,
@@ -6332,27 +6333,41 @@ def workspace_preset_settings(request):
                     ai_settings.byok_provider = None
                     ai_settings.key_last_four = None
                     ai_settings.key_validated_at = None
+                    ai_settings.byok_model = None
 
                 elif raw_key:
                     router = AIRouter()
-                    try:
-                        is_valid = router.validate_api_key(byok_prov, raw_key)
-                    except ImproperlyConfigured:
-                        ai_form.add_error(
-                            None,
-                            'API key encryption is not configured on this server. '
-                            'Contact your administrator.'
-                        )
-                        save_ok = False
-                        is_valid = False
+                    # If user entered a custom model name, validate it against
+                    # the provider before encrypting and storing the key.
+                    if byok_model_val and save_ok:
+                        is_model_valid = router.validate_api_key(byok_prov, raw_key, model=byok_model_val)
+                        if not is_model_valid:
+                            ai_form.add_error(
+                                None,
+                                'The custom model name was not recognised by the provider. '
+                                'Please check the model name and try again.'
+                            )
+                            save_ok = False
 
-                    if save_ok and not is_valid:
-                        ai_form.add_error(
-                            None,
-                            'The API key could not be validated. '
-                            'Please check the key and try again.'
-                        )
-                        save_ok = False
+                    if save_ok:
+                        try:
+                            is_valid = router.validate_api_key(byok_prov, raw_key)
+                        except ImproperlyConfigured:
+                            ai_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+                            is_valid = False
+
+                        if save_ok and not is_valid:
+                            ai_form.add_error(
+                                None,
+                                'The API key could not be validated. '
+                                'Please check the key and try again.'
+                            )
+                            save_ok = False
 
                     if save_ok:
                         try:
@@ -6369,6 +6384,11 @@ def workspace_preset_settings(request):
                         ai_settings.key_last_four = '••••' + raw_key[-4:]
                         ai_settings.byok_provider = byok_prov
                         ai_settings.key_validated_at = tz.now()
+                        ai_settings.byok_model = byok_model_val
+
+                elif byok_model_val is not None:
+                    # No new key submitted but model preference changed — update model only
+                    ai_settings.byok_model = byok_model_val
 
                 if save_ok:
                     ai_settings.updated_by = request.user
@@ -6408,6 +6428,7 @@ def workspace_preset_settings(request):
                 'provider': ai_settings_obj.provider,
                 'allow_user_provider_override': ai_settings_obj.allow_user_provider_override,
                 'byok_provider': ai_settings_obj.byok_provider or '',
+                'byok_model': ai_settings_obj.byok_model or '',
             })
         else:
             ai_form = OrganizationAISettingsForm(initial={'provider': 'gemini'})

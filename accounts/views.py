@@ -330,6 +330,7 @@ def profile_view(request):
                 byok_prov = cd.get('byok_provider', '')
                 remove_key = cd.get('remove_byok_key', False)
                 provider_override_val = cd.get('provider_override', 'inherit')
+                byok_model_val = (cd.get('byok_model') or '').strip() or None
 
                 # RBAC: prevent API-level bypass of the org policy
                 if (
@@ -349,27 +350,41 @@ def profile_view(request):
                     user_ai_obj.byok_provider = None
                     user_ai_obj.key_last_four = None
                     user_ai_obj.key_validated_at = None
+                    user_ai_obj.byok_model = None
 
                 elif raw_key:
                     router = AIRouter()
-                    try:
-                        is_valid = router.validate_api_key(byok_prov, raw_key)
-                    except ImproperlyConfigured:
-                        ai_settings_form.add_error(
-                            None,
-                            'API key encryption is not configured on this server. '
-                            'Contact your administrator.'
-                        )
-                        save_ok = False
-                        is_valid = False
+                    # If user entered a custom model name, validate it against
+                    # the provider before encrypting and storing the key.
+                    if byok_model_val and save_ok:
+                        is_model_valid = router.validate_api_key(byok_prov, raw_key, model=byok_model_val)
+                        if not is_model_valid:
+                            ai_settings_form.add_error(
+                                None,
+                                'The custom model name was not recognised by the provider. '
+                                'Please check the model name and try again.'
+                            )
+                            save_ok = False
 
-                    if save_ok and not is_valid:
-                        ai_settings_form.add_error(
-                            None,
-                            'The API key could not be validated. '
-                            'Please check the key and try again.'
-                        )
-                        save_ok = False
+                    if save_ok:
+                        try:
+                            is_valid = router.validate_api_key(byok_prov, raw_key)
+                        except ImproperlyConfigured:
+                            ai_settings_form.add_error(
+                                None,
+                                'API key encryption is not configured on this server. '
+                                'Contact your administrator.'
+                            )
+                            save_ok = False
+                            is_valid = False
+
+                        if save_ok and not is_valid:
+                            ai_settings_form.add_error(
+                                None,
+                                'The API key could not be validated. '
+                                'Please check the key and try again.'
+                            )
+                            save_ok = False
 
                     if save_ok:
                         try:
@@ -386,6 +401,11 @@ def profile_view(request):
                         user_ai_obj.key_last_four = '••••' + raw_key[-4:]
                         user_ai_obj.byok_provider = byok_prov
                         user_ai_obj.key_validated_at = tz.now()
+                        user_ai_obj.byok_model = byok_model_val
+
+                elif byok_model_val is not None:
+                    # No new key submitted but model preference changed — update model only
+                    user_ai_obj.byok_model = byok_model_val
 
                 if save_ok:
                     user_ai_obj.save()
@@ -412,6 +432,7 @@ def profile_view(request):
             ai_settings_form = UserAISettingsForm(initial={
                 'provider_override': user_ai.provider_override,
                 'byok_provider': user_ai.byok_provider or '',
+                'byok_model': user_ai.byok_model or '',
             })
         else:
             ai_settings_form = UserAISettingsForm(initial={'provider_override': 'inherit'})
@@ -428,6 +449,18 @@ def profile_view(request):
     else:
         effective_provider = org_provider_display
 
+    # effective_model: the model non-BYOK users are actually using (for the read-only note)
+    from ai_assistant.utils.ai_router import AIRouter as _AIRouter
+    try:
+        _eff_prov_key = (
+            user_ai.provider_override
+            if (show_provider_override and user_ai and user_ai.provider_override != 'inherit')
+            else org_provider
+        )
+        effective_model = _AIRouter.get_model_name(_eff_prov_key, complexity='simple')
+    except Exception:
+        effective_model = 'gemini-2.5-flash-lite'
+
     context = {
         'form': profile_form,
         'profile': profile,
@@ -435,6 +468,7 @@ def profile_view(request):
         'user_has_byok_key': user_has_byok_key,
         'show_provider_override': show_provider_override,
         'effective_provider': effective_provider,
+        'effective_model': effective_model,
         'org_provider_display': org_provider_display,
         'user_ai': user_ai,
     }

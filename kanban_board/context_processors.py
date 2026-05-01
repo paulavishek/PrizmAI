@@ -36,7 +36,7 @@ def user_preferences(request):
         nav_ai_provider_name = ''
         try:
             from ai_assistant.utils.ai_router import AIRouter
-            _provider, _, _ = AIRouter()._resolve_provider(request.user)
+            _provider, _, _, _ = AIRouter()._resolve_provider(request.user)
             nav_ai_provider_key = _provider  # 'gemini', 'openai', 'anthropic'
             _short_names = {'gemini': 'Gemini', 'openai': 'OpenAI', 'anthropic': 'Claude'}
             nav_ai_provider_name = _short_names.get(_provider, _provider.title())

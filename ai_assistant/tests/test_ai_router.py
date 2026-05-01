@@ -500,7 +500,7 @@ class TestCompleteRouting(SimpleTestCase):
         call_method = f"_call_{provider}"
 
         with patch.object(self.router, "_resolve_provider",
-                          return_value=(provider, api_key, is_byok)):
+                          return_value=(provider, api_key, is_byok, None)):
             with patch.object(self.router, call_method, return_value=raw) as mock_call:
                 result = self.router.complete(
                     prompt, user=self.mock_user,
@@ -582,7 +582,7 @@ class TestCompleteRouting(SimpleTestCase):
         """AIProviderError raised by a provider call method surfaces unchanged."""
         original_error = Exception("API down")
         with patch.object(self.router, "_resolve_provider",
-                          return_value=("openai", "sk-test", False)):
+                          return_value=("openai", "sk-test", False, None)):
             with patch.object(self.router, "_call_openai",
                               side_effect=AIProviderError("openai", original_error)):
                 with self.assertRaises(AIProviderError) as ctx:
@@ -592,7 +592,7 @@ class TestCompleteRouting(SimpleTestCase):
     def test_unexpected_exception_wrapped_in_ai_provider_error(self):
         """An unhandled exception from a provider call is wrapped as AIProviderError."""
         with patch.object(self.router, "_resolve_provider",
-                          return_value=("openai", "sk-test", False)):
+                          return_value=("openai", "sk-test", False, None)):
             with patch.object(self.router, "_call_openai",
                               side_effect=RuntimeError("Unexpected crash")):
                 with self.assertRaises(AIProviderError):
