@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('kanban', '0117_fix_orphaned_board_workspaces'),
-        ('accounts', '__latest__'),
+        ('accounts', '0013_workspace_model_and_fks'),
         ('auth', '__latest__'),
     ]
 

@@ -99,7 +99,10 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 ### Integrations & Platform
 
 - **RESTful API** — Token-authenticated REST API for third-party integrations and mobile clients
-- **Webhook Integration** — Event-driven automation with external applications
+- **Webhook Integration** — Event-driven automation with external applications; one-click quick-setup presets for Slack, MS Teams, Google Chat, Discord, and Zapier
+- **GitHub Webhook Receiver** — Automatically moves tasks to "In Review" when a GitHub pull request mentions a task ID (e.g., `SD-101`) in its title or description. Per-board configuration with HMAC-SHA256 secret verification. See [External Integrations](#external-integrations)
+- **Zapier Integration** — Native Zapier REST polling endpoints (New Task, Task Completed, Task Assigned triggers; Create Task and Update Status actions); ships with a ready-to-publish Zapier CLI app in `zapier-app/`. See [External Integrations](#external-integrations)
+- **Google Calendar Sync** — OAuth 2.0-based two-way sync; tasks assigned to you with a due date automatically appear in Google Calendar and update whenever the due date changes. Master toggle in Profile Settings. See [External Integrations](#external-integrations)
 - **Mobile PWA** — Progressive Web App with offline support and home-screen installation
 - **Board Import / Export** — Import boards from Jira (CSV/JSON export) and Monday.com (Excel export), or use PrizmAI's own JSON format for full round-trip import/export. Imported boards are automatically assigned to the importer's workspace; an organisation and Org Admin role are created automatically if the user does not yet have one.
 - **Lean Six Sigma Classifications** — Built-in LSS task labels (Value-Added, NVA, Waste)
@@ -546,6 +549,78 @@ Three quick-reply options map the answer to a preset and save it immediately, wi
 
 ---
 
+## External Integrations
+
+### GitHub Webhook Receiver
+
+PrizmAI can receive GitHub webhook events and automatically move tasks to an "In Review" column when a pull request mentions a task ID.
+
+**How it works**
+
+1. Open any board → **Board Settings (⚙️) → GitHub Integration**.
+2. Enter the GitHub repository name (e.g., `org/repo`), choose which column counts as "In Review", and save.
+3. Copy the generated **Receiver URL** and **Secret** into a GitHub webhook (repo → Settings → Webhooks → Add webhook, content type `application/json`, event: *Pull requests*).
+4. From that point on, opening or updating a PR whose title or body contains `SD-101` (or any `PREFIX-NUMBER` matching a board's task prefix) automatically moves that task to your chosen column.
+
+**Notes**
+- Mismatched task IDs are silently ignored — no noise from unrelated repos.
+- Each board has its own independent webhook secret; regenerate it at any time from the settings page.
+- Receiver endpoint: `POST /api/integrations/github/`
+
+---
+
+### Zapier Integration
+
+PrizmAI ships a full Zapier integration: Django REST polling endpoints on the server side and a self-contained Zapier CLI app in the `zapier-app/` directory.
+
+**Zapier REST endpoints** (all require an API token in `Authorization: Token <key>`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/zapier/tasks/` | New Task trigger (newest-first, `?since=<id>` dedup) |
+| GET | `/api/v1/zapier/tasks/completed/` | Task Completed trigger |
+| GET | `/api/v1/zapier/tasks/assigned/` | Task Assigned to Me trigger |
+| POST | `/api/v1/zapier/tasks/create/` | Create Task action |
+| PATCH | `/api/v1/zapier/tasks/<id>/status/` | Update Task Status action |
+| GET | `/api/v1/zapier/boards/` | Board dropdown source |
+| GET | `/api/v1/zapier/boards/<id>/columns/` | Column dropdown source |
+
+**Local Zapier CLI app**
+
+```bash
+cd zapier-app
+npm install
+# Set your server URL in a .env file or environment variable:
+PRIZMAI_BASE_URL=http://localhost:8000 zapier test
+```
+
+The app is configured for private/internal use. To publish to the Zapier marketplace, see the checklist in `zapier-app/index.js`.
+
+---
+
+### Google Calendar Sync
+
+PrizmAI syncs tasks that have a due date and an assigned user directly into that user's Google Calendar.
+
+**Setup (per user)**
+
+1. Go to **Profile → Google Calendar Sync → Connect Google Calendar**.
+2. Approve the calendar access on Google's consent screen.
+3. Done — PrizmAI will create or update a Calendar event automatically whenever a task assigned to you has its due date set or changed.
+
+**Master toggle** — Use the Pause/Resume button on the Profile page to temporarily stop syncing without disconnecting. Disconnect removes the OAuth token entirely.
+
+**Server-side requirements** (`.env`)
+
+```
+# Must match an Authorised Redirect URI in Google Cloud Console
+GOOGLE_CALENDAR_REDIRECT_URI=https://yourdomain.com/accounts/google-calendar/callback/
+```
+
+The Google Cloud OAuth client must have **Google Calendar API** enabled and the redirect URI whitelisted. The existing `GOOGLE_OAUTH2_CLIENT_ID` and `GOOGLE_OAUTH2_CLIENT_SECRET` credentials from the Gemini/login setup are reused.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -576,6 +651,7 @@ cp .env.example .env
 # Optional: set OPENAI_MODEL (default: gpt-4o) and ANTHROPIC_MODEL (default: claude-sonnet-4-6)
 # Optional: set tiered models — GEMINI_MODEL_SIMPLE/COMPLEX, OPENAI_MODEL_SIMPLE/COMPLEX, ANTHROPIC_MODEL_SIMPLE/COMPLEX
 # Optional: add AI_KEY_ENCRYPTION_KEY to enable BYOK (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# Optional: set GOOGLE_CALENDAR_REDIRECT_URI to override the default Calendar OAuth callback URL (production only)
 
 # Apply migrations
 python manage.py migrate

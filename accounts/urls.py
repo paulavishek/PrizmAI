@@ -78,4 +78,10 @@ urlpatterns = [
              template_name='accounts/password_change_done.html'
          ),
          name='password_change_done'),
+
+    # Google Calendar OAuth
+    path('google-calendar/connect/', views.google_calendar_connect, name='google_calendar_connect'),
+    path('google-calendar/callback/', views.google_calendar_callback, name='google_calendar_callback'),
+    path('google-calendar/disconnect/', views.google_calendar_disconnect, name='google_calendar_disconnect'),
+    path('google-calendar/toggle/', views.google_calendar_toggle_sync, name='google_calendar_toggle_sync'),
 ]

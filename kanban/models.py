@@ -1381,6 +1381,14 @@ class Task(models.Model):
         help_text="For milestones: which task this milestone appears after in the Gantt chart rows"
     )
 
+    # Google Calendar sync
+    google_calendar_event_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Google Calendar event ID if this task has been synced to a user's calendar.",
+    )
+
     class Meta:
         ordering = ['position']
         indexes = [

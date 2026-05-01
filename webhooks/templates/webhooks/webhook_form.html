@@ -34,6 +34,15 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('teams')">
                                     <i class="bi bi-microsoft-teams me-1"></i> MS Teams
                                 </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('googlechat')">
+                                    <i class="bi bi-chat-dots me-1"></i> Google Chat
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('discord')">
+                                    <i class="bi bi-discord me-1"></i> Discord
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('zapier')">
+                                    <i class="bi bi-lightning me-1"></i> Zapier
+                                </button>
                                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('custom')">
                                     <i class="bi bi-gear me-1"></i> Custom
                                 </button>
@@ -110,7 +119,7 @@
                                 <p class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.05em;">Board &amp; Comment Events</p>
                                 {% for widget in form.events %}
                                     {% with val=widget.data.value %}
-                                    {% if val == "comment.added" or val == "board.updated" %}
+                                    {% if val == "comment.added" or val == "board.updated" or val == "board.member_added" or val == "board.member_removed" %}
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" name="{{ form.events.html_name }}"
                                                id="id_events_b_{{ forloop.counter0 }}" value="{{ val }}"
@@ -269,6 +278,51 @@ const PRESETS = {
                     <li>Copy the webhook URL and paste it in the Webhook URL field below, then click <strong>Done</strong> in Teams.</li>
                 </ol>
                 <p class="mb-0 text-muted small">Note: Microsoft is migrating to <a href="https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors" target="_blank" rel="noopener noreferrer">Workflows connectors</a> — use Power Automate for newer workspaces.</p>
+            </div>`
+    },
+    googlechat: {
+        name: 'Google Chat Notifications',
+        events: ['task.completed', 'task.assigned'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-chat-dots me-1"></i> How to get your Google Chat webhook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Open the Google Chat Space you want to post to.</li>
+                    <li>Click the Space name at the top &gt; <strong>Apps &amp; Integrations</strong> &gt; <strong>Add webhooks</strong>.</li>
+                    <li>Give the webhook a name (e.g. "PrizmAI"), optionally add an avatar URL, then click <strong>Save</strong>.</li>
+                    <li>Copy the generated URL and paste it in the Webhook URL field below.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Pre-selected events: Task Completed, Task Assigned — you can adjust these below.</p>
+            </div>`
+    },
+    discord: {
+        name: 'Discord Notifications',
+        events: ['task.completed', 'task.created'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-discord me-1"></i> How to get your Discord webhook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Open your Discord server and go to the channel you want to receive notifications.</li>
+                    <li>Click the <strong>Edit Channel</strong> (gear icon) &gt; <strong>Integrations</strong> &gt; <strong>Webhooks</strong>.</li>
+                    <li>Click <strong>New Webhook</strong>, give it a name (e.g. "PrizmAI"), then click <strong>Copy Webhook URL</strong>.</li>
+                    <li>Paste the URL in the Webhook URL field below.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Pre-selected events: Task Completed, Task Created — you can adjust these below.</p>
+            </div>`
+    },
+    zapier: {
+        name: 'Zapier Integration',
+        events: ['task.created', 'task.updated', 'task.deleted', 'task.completed', 'task.assigned', 'task.moved', 'comment.added', 'board.updated', 'board.member_added', 'board.member_removed'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-lightning me-1"></i> How to get your Zapier Catch Hook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Log in to <a href="https://zapier.com" target="_blank" rel="noopener noreferrer">Zapier</a> and click <strong>Create Zap</strong>.</li>
+                    <li>Search for <strong>Webhooks by Zapier</strong> as the trigger app and select the <strong>Catch Hook</strong> event.</li>
+                    <li>Copy the generated webhook URL from Zapier and paste it in the Webhook URL field below.</li>
+                    <li>All PrizmAI events are pre-selected so Zapier receives everything — you can then filter inside your Zap using the <code>event</code> field in the payload.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Tip: PrizmAI also has a native Zapier integration with pre-built triggers and actions — ask your admin about the API token setup.</p>
             </div>`
     },
     custom: {

@@ -279,3 +279,49 @@ class OrganizationInvitation(models.Model):
 
     def __str__(self):
         return f"OrgInvite: {self.email} → {self.organization.name} ({self.status})"
+
+
+class GoogleCalendarToken(models.Model):
+    """
+    Stores OAuth 2.0 credentials for a user's Google Calendar connection.
+
+    One token per user (OneToOneField). The `sync_enabled` flag is the
+    master on/off toggle — when False, no Calendar events will be created or
+    updated even if the token is valid.
+
+    Token refresh is handled transparently in accounts/tasks.py using
+    google.oauth2.credentials.Credentials.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="google_calendar_token",
+    )
+    access_token = models.TextField(help_text="Google OAuth 2.0 access token.")
+    refresh_token = models.TextField(help_text="Google OAuth 2.0 refresh token (long-lived).")
+    token_expiry = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the current access token expires.",
+    )
+    calendar_id = models.CharField(
+        max_length=255,
+        default="primary",
+        help_text='Google Calendar ID to sync tasks to. "primary" uses the user\'s main calendar.',
+    )
+    sync_enabled = models.BooleanField(
+        default=True,
+        help_text="Master toggle. When False, no sync happens even if the token is valid.",
+    )
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Google Calendar Token"
+        verbose_name_plural = "Google Calendar Tokens"
+
+    def __str__(self):
+        status = "active" if self.sync_enabled else "paused"
+        return f"GoogleCalendar({self.user.username}, {status})"
+

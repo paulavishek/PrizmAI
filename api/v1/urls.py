@@ -3,7 +3,7 @@ API v1 URL Configuration
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from api.v1 import views, auth_views
+from api.v1 import views, auth_views, zapier_views
 
 # Create router for viewsets
 router = DefaultRouter()
@@ -34,4 +34,19 @@ urlpatterns = [
     
     # ViewSet routes
     path('', include(router.urls)),
+
+    # -----------------------------------------------------------------------
+    # Zapier integration endpoints
+    # See api/v1/zapier_views.py for full documentation.
+    # -----------------------------------------------------------------------
+    # Polling triggers (GET — flat array, no pagination wrapper)
+    path('zapier/tasks/', zapier_views.zapier_task_list, name='zapier_task_list'),
+    path('zapier/tasks/completed/', zapier_views.zapier_task_completed, name='zapier_task_completed'),
+    path('zapier/tasks/assigned/', zapier_views.zapier_task_assigned, name='zapier_task_assigned'),
+    # Actions (POST / PATCH)
+    path('zapier/tasks/create/', zapier_views.zapier_task_create, name='zapier_task_create'),
+    path('zapier/tasks/<int:task_id>/status/', zapier_views.zapier_task_update_status, name='zapier_task_update_status'),
+    # Dynamic dropdowns
+    path('zapier/boards/', zapier_views.zapier_board_list, name='zapier_board_list'),
+    path('zapier/boards/<int:board_id>/columns/', zapier_views.zapier_column_list, name='zapier_column_list'),
 ]

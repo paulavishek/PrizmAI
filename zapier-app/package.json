@@ -1,0 +1,16 @@
+{
+  "name": "prizmai",
+  "version": "1.0.0",
+  "description": "PrizmAI Zapier integration — connect PrizmAI tasks to 6,000+ apps.",
+  "main": "index.js",
+  "scripts": {
+    "test": "zapier test"
+  },
+  "dependencies": {
+    "zapier-platform-core": "15.5.0"
+  },
+  "devDependencies": {},
+  "keywords": ["zapier", "project-management", "tasks"],
+  "license": "MIT",
+  "private": true
+}
