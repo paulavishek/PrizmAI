@@ -535,6 +535,12 @@
         white-space: nowrap;
         flex-shrink: 0;
         line-height: 1.4;
+        text-decoration: none !important;
+        transition: opacity 0.15s, box-shadow 0.15s;
+    }
+    a.provider-badge:hover {
+        opacity: 0.85;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .provider-badge-gemini    { background: #dbeafe; color: #1e40af; }
     .provider-badge-openai    { background: #dcfce7; color: #15803d; }
@@ -578,10 +584,13 @@
                 <i class="fas fa-pencil-alt title-edit-icon" id="edit-title-btn" title="Rename chat"></i>
             </div>
             {% if spectra_provider_name %}
-            <span class="provider-badge {% if spectra_provider_name == 'Google Gemini' %}provider-badge-gemini{% elif spectra_provider_name == 'OpenAI' %}provider-badge-openai{% else %}provider-badge-anthropic{% endif %}">
+            <a href="{% url 'profile' %}#ai-provider-preferences"
+               class="provider-badge {% if spectra_provider_name == 'Google Gemini' %}provider-badge-gemini{% elif spectra_provider_name == 'OpenAI' %}provider-badge-openai{% else %}provider-badge-anthropic{% endif %}"
+               title="Powered by {{ spectra_provider_name }} — click to change AI provider">
                 <i class="fas fa-robot"></i>
                 <span>{{ spectra_provider_name }}<small class="provider-model-sub">{{ spectra_model_name }}</small></span>
-            </span>
+                <i class="fas fa-cog" style="opacity:.55;font-size:.68rem;margin-left:2px;"></i>
+            </a>
             {% endif %}
             <div class="chat-toolbar">
                 <div class="btn-group">
