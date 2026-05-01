@@ -284,7 +284,7 @@
             </div>
             {% endif %}
 
-            <button type="submit" class="auth-submit-btn">Login</button>
+            <button type="submit" class="auth-submit-btn" id="login-submit-btn">Login</button>
         </form>
 
         <div class="auth-footer">
@@ -307,6 +307,18 @@ document.addEventListener('DOMContentLoaded', function () {
             field.setAttribute('type', isPassword ? 'text' : 'password');
             icon.classList.toggle('fa-eye', !isPassword);
             icon.classList.toggle('fa-eye-slash', isPassword);
+        });
+    }
+
+    // Disable submit button on first click to prevent double-submission
+    // (double-click causes CSRF token mismatch: first POST rotates the token,
+    // second POST arrives with the stale token → 403 Forbidden)
+    const loginForm = document.querySelector('form[method="post"]');
+    const loginSubmitBtn = document.getElementById('login-submit-btn');
+    if (loginForm && loginSubmitBtn) {
+        loginForm.addEventListener('submit', function () {
+            loginSubmitBtn.disabled = true;
+            loginSubmitBtn.textContent = 'Signing in…';
         });
     }
 
