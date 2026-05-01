@@ -627,6 +627,33 @@
     white-space: nowrap;
     box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
 }
+
+/* AI Provider pill in topbar */
+.tws-ai-provider-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-decoration: none !important;
+    margin-left: 6px;
+    transition: opacity 0.15s, box-shadow 0.15s;
+    cursor: pointer;
+}
+.tws-ai-provider-pill:hover {
+    opacity: 0.85;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    text-decoration: none !important;
+}
+.nav-ai-gemini    { background: #dbeafe; color: #1e40af; border: 1.5px solid #bfdbfe; }
+.nav-ai-openai    { background: #dcfce7; color: #15803d; border: 1.5px solid #bbf7d0; }
+.nav-ai-anthropic { background: #ede9fe; color: #5b21b6; border: 1.5px solid #ddd6fe; }
+[data-bs-theme="dark"] .nav-ai-gemini    { background: #1e3a5f; color: #93c5fd; border-color: #1e40af; }
+[data-bs-theme="dark"] .nav-ai-openai    { background: #14532d; color: #86efac; border-color: #15803d; }
+[data-bs-theme="dark"] .nav-ai-anthropic { background: #2e1065; color: #c4b5fd; border-color: #5b21b6; }
 /* Reset button inside workspace switcher */
 .tws-btn-reset {
     background: #fef2f2 !important;
