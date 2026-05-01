@@ -403,6 +403,159 @@
                 <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="coachDashboard">Generating coaching insights…</span>
             </div>
         </div>
+        <div class="mt-2">
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#aiCoachGuide"
+                    aria-expanded="false"
+                    aria-controls="aiCoachGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="ai-coach-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 ai-coach-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="aiCoachGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-user-graduate text-primary me-2"></i>What is the AI Coach?</h6>
+                        <p class="mb-0 small text-secondary">A proactive AI mentor that reads your live board data daily and surfaces the highest-priority coaching interventions before small issues become crises. It doesn’t wait for you to ask — it automatically detects blockers, overloaded team members, missed dependencies, overdue tasks, and scope drift, then gives you concrete next steps to fix each one.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Two columns -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-exclamation-circle fa-2x text-danger"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Issues Detected</h6>
+                                <p class="small mb-2 text-secondary">The AI scans your board and classifies every problem it finds into one of four categories:</p>
+                                <div class="d-flex flex-column gap-1">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:80px;">OVERDUE</span>
+                                        <span class="text-dark">Tasks past their deadline, blocking progress</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:80px;">BLOCKER</span>
+                                        <span class="text-dark">Dependency or resource preventing forward movement</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#ca8a04; min-width:80px;">RISK</span>
+                                        <span class="text-dark">Likely problem in the next 1–2 weeks if unaddressed</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#7c3aed; min-width:80px;">DRIFT</span>
+                                        <span class="text-dark">Scope or direction diverging from the original plan</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-comment-alt fa-2x text-success"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Coaching Actions</h6>
+                                <p class="small mb-2 text-secondary">For each issue, the AI prescribes a concrete action — not vague advice, but a specific next step:</p>
+                                <ul class="small text-secondary ps-3 mb-2">
+                                    <li class="mb-1"><strong>Reassign</strong> — move a task to a less loaded team member</li>
+                                    <li class="mb-1"><strong>Negotiate deadline</strong> — propose a revised due date with rationale</li>
+                                    <li class="mb-1"><strong>Split task</strong> — break an overloaded item into smaller deliverables</li>
+                                    <li><strong>Escalate</strong> — flag to stakeholders when a blocker needs external resolution</li>
+                                </ul>
+                                <h6 class="mb-1 fw-semibold text-dark mt-2"><i class="fas fa-shield-alt me-1 text-info"></i>Project health bands</h6>
+                                <div class="d-flex flex-column gap-1">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:80px;">CRITICAL</span>
+                                        <span class="text-dark">Immediate action required today</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:80px;">AT RISK</span>
+                                        <span class="text-dark">Address this week before it escalates</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#ca8a04; min-width:80px;">WATCH</span>
+                                        <span class="text-dark">Monitor — could develop into a problem</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#059669; min-width:80px;">HEALTHY</span>
+                                        <span class="text-dark">No action needed, project is on track</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Comparison table + Workflow -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>What the AI Coach does</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted">Dimension</th>
+                                        <th class="text-dark">What it does</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">What it identifies</td>
+                                        <td class="text-dark">Blockers, delays, overloads, drift, missed dependencies</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">What it recommends</td>
+                                        <td class="text-dark">Specific actions: reassign, renegotiate, split, escalate</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">How often it runs</td>
+                                        <td class="text-dark">On demand (click Refresh Suggestions)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Who it helps</td>
+                                        <td class="text-dark">Board owners and project managers</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Learns from feedback</td>
+                                        <td class="text-dark">Yes — mark suggestions helpful/unhelpful to improve it</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-3 text-secondary">
+                            <li class="mb-1">Click <strong>Refresh Suggestions</strong> to get a fresh set of coaching insights</li>
+                            <li class="mb-1">Start with <strong>Critical</strong> cards — these need immediate action</li>
+                            <li class="mb-1">Drill into each card to see the affected tasks and the recommended action</li>
+                            <li class="mb-1">Take the action on your board, then come back and mark it resolved</li>
+                            <li>Mark suggestions as <strong>Helpful / Not helpful</strong> to train the AI over time</li>
+                        </ol>
+                        <div class="p-2 rounded bg-primary bg-opacity-10 border-start border-primary border-3">
+                            <p class="small mb-0 text-dark"><i class="fas fa-lightbulb text-primary me-1"></i><strong>Tip:</strong> The coaching effectiveness score improves as you interact with suggestions. The more you use it, the more targeted it becomes for your project style.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Effectiveness Stats -->
@@ -636,5 +789,24 @@ function goBack() {
         window.location.href = '{% url "board_detail" board.id %}';
     }
 }
+
+// Guide toggle label
+document.addEventListener('DOMContentLoaded', function() {
+    var coachGuide = document.getElementById('aiCoachGuide');
+    if (coachGuide) {
+        coachGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('ai-coach-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.ai-coach-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        coachGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('ai-coach-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.ai-coach-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
+});
 </script>
 {% endblock %}

@@ -18,12 +18,146 @@
     <div class="row mb-4">
         <div class="col-md-8">
             <h2><i class="fas fa-microscope text-warning"></i> Scope Autopsy {% feature_help "scope_autopsy" %}</h2>
-            <p class="text-muted">{{ board.name }} — Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>
-        </div>
+            <p class="text-muted">{{ board.name }} — Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#scopeAutopsyGuide"
+                    aria-expanded="false"
+                    aria-controls="scopeAutopsyGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="scope-autopsy-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 scope-autopsy-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>        </div>
         <div class="col-md-4 text-end">
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
             </a>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="scopeAutopsyGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-microscope text-warning me-2"></i>What is Scope Autopsy?</h6>
+                        <p class="mb-0 small text-secondary">A forensic post-mortem that traces every scope expansion in your project to its exact cause, contributor, date, and cost. Like a detective reconstructing a crime scene, the Scope Autopsy builds a timeline of how your project grew beyond its original boundaries — then generates exportable PDF reports that turn scope history into actionable lessons for future projects.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Four forensic dimensions -->
+                    <div class="col-12">
+                        <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-search me-1 text-warning"></i>Four forensic dimensions analysed for every scope change</h6>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #0891b2 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-calendar-alt" style="color:#0891b2;"></i>
+                                        <strong class="small">When</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">The exact date each scope change was introduced, building a chronological timeline of drift.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #7c3aed !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-user" style="color:#7c3aed;"></i>
+                                        <strong class="small">Who</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Which team member introduced or approved the change, enabling honest accountability.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #d97706 !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-question-circle text-warning"></i>
+                                        <strong class="small">Why</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">The root cause category: requirement change, stakeholder request, discovered complexity, or gold plating.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-3 rounded border h-100" style="border-left: 4px solid #c0392b !important;">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-dollar-sign text-danger"></i>
+                                        <strong class="small">Cost</strong>
+                                    </div>
+                                    <p class="small text-secondary mb-0">The quantified impact: days delayed or budget overrun attributable to this specific change.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Change categories vs What you get -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Scope change categories</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted">Category</th>
+                                        <th class="text-muted">Typical frequency</th>
+                                        <th class="text-muted">Preventable?</th>
+                                        <th class="text-muted">Best action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="badge bg-danger" style="font-size:0.65rem;">Requirement Change</span></td>
+                                        <td class="text-dark">High</td>
+                                        <td class="text-dark">Partially</td>
+                                        <td class="text-dark">Better upfront specs</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-warning text-dark" style="font-size:0.65rem;">Stakeholder Request</span></td>
+                                        <td class="text-dark">Medium</td>
+                                        <td class="text-dark">Yes — via change control</td>
+                                        <td class="text-dark">Formal change request process</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-info text-dark" style="font-size:0.65rem;">Discovered Complexity</span></td>
+                                        <td class="text-dark">Low–Medium</td>
+                                        <td class="text-dark">Partially</td>
+                                        <td class="text-dark">Better Pre-Mortem analysis</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-secondary" style="font-size:0.65rem;">Gold Plating</span></td>
+                                        <td class="text-dark">Low</td>
+                                        <td class="text-dark">Yes</td>
+                                        <td class="text-dark">Strict scope discipline</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-file-export me-1 text-primary"></i>What you get from an autopsy</h6>
+                        <ul class="small text-secondary ps-3 mb-3">
+                            <li class="mb-1"><strong>Forensic timeline</strong> — every scope change plotted chronologically</li>
+                            <li class="mb-1"><strong>AI root cause analysis</strong> — the dominant pattern driving your drift</li>
+                            <li class="mb-1"><strong>Cost attribution</strong> — total delay and budget impact quantified</li>
+                            <li><strong>Exportable PDF report</strong> — share findings with stakeholders</li>
+                        </ul>
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-0 text-secondary">
+                            <li class="mb-1">Run the Autopsy — AI reconstructs your scope history</li>
+                            <li class="mb-1">Read the forensic timeline — spot the inflection points</li>
+                            <li class="mb-1">Identify the dominant change category driving drift</li>
+                            <li class="mb-1">Act on the root cause pattern for future projects</li>
+                            <li>Export the PDF report for stakeholder review</li>
+                        </ol>
+                    </div>
+
+                </div>
+            </div>
         </div>
     </div>
 
@@ -528,5 +662,22 @@ document.addEventListener('DOMContentLoaded', function() {
     pollStatus();
 });
 {% endif %}
+
+// Guide toggle label
+var saGuide = document.getElementById('scopeAutopsyGuide');
+if (saGuide) {
+    saGuide.addEventListener('shown.bs.collapse', function() {
+        var label = document.getElementById('scope-autopsy-guide-label');
+        if (label) label.textContent = 'Hide guide';
+        var chevron = document.querySelector('.scope-autopsy-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    });
+    saGuide.addEventListener('hidden.bs.collapse', function() {
+        var label = document.getElementById('scope-autopsy-guide-label');
+        if (label) label.textContent = 'How does this work?';
+        var chevron = document.querySelector('.scope-autopsy-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    });
+}
 </script>
 {% endblock %}

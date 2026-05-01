@@ -118,8 +118,21 @@
         </ol>
     </nav>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="mb-0"><i class="fas fa-flask text-info me-2"></i>What-If Scenario Analyzer {% feature_help "whatif" %}</h3>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+            <h3 class="mb-0"><i class="fas fa-flask text-info me-2"></i>What-If Scenario Analyzer {% feature_help "whatif" %}</h3>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#whatIfGuide"
+                    aria-expanded="false"
+                    aria-controls="whatIfGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="whatif-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 whatif-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
+        </div>
         <div>
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
@@ -129,7 +142,132 @@
             </a>
         </div>
     </div>
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-3" id="whatIfGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
 
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-flask text-info me-2"></i>What is the What-If Scenario Analyzer?</h6>
+                        <p class="mb-0 small text-secondary">A safe sandbox where you can simulate the cascading impact of scope changes, team size adjustments, and deadline shifts — <em>before</em> committing to them. PrizmAI computes your live project baseline, then models what would happen under your hypothetical. You get a feasibility score, detected conflicts, and an AI strategic recommendation — all without touching your real board.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Three levers -->
+                    <div class="col-12">
+                        <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-sliders-h me-1 text-info"></i>The three levers you can pull</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border bg-light h-100">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-tasks fa-lg text-primary"></i>
+                                        <strong class="small">Scope</strong>
+                                        <span class="badge bg-primary ms-auto" style="font-size:0.65rem;">±20 tasks</span>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Add or remove up to 20 tasks from the baseline. Affects velocity, timeline, and workload distribution.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border bg-light h-100">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-users fa-lg text-success"></i>
+                                        <strong class="small">Team Size</strong>
+                                        <span class="badge bg-success ms-auto" style="font-size:0.65rem;">±5 members</span>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Add or remove up to 5 team members. <strong>Warning:</strong> Brooks’s Law — adding people late can slow things down before they help.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded border bg-light h-100">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="fas fa-calendar-alt fa-lg text-danger"></i>
+                                        <strong class="small">Deadline</strong>
+                                        <span class="badge bg-danger ms-auto" style="font-size:0.65rem;">±8 weeks</span>
+                                    </div>
+                                    <p class="small text-secondary mb-0">Shift the deadline forward or back by up to 8 weeks. Affects schedule pressure, budget burn rate, and feasibility.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Results vs Conflicts + Feasibility bands -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-chart-bar fa-2x text-success"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">What you get after analyzing</h6>
+                                <ul class="small text-secondary ps-3 mb-2">
+                                    <li class="mb-1"><strong>Feasibility Score</strong> (0–100) — how likely the simulated scenario is to succeed</li>
+                                    <li class="mb-1"><strong>Before / After comparison</strong> — baseline vs scenario side-by-side</li>
+                                    <li class="mb-1"><strong>Detected Conflicts</strong> — any resource overloads, deadline issues, or budget overruns</li>
+                                    <li><strong>AI Recommendation</strong> — Gemini’s strategic take on the trade-offs</li>
+                                </ul>
+                                <h6 class="mb-2 fw-semibold text-dark mt-2"><i class="fas fa-shield-alt me-1 text-info"></i>Feasibility bands</h6>
+                                <div class="d-flex flex-column gap-1">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#059669; min-width:90px;">FEASIBLE</span>
+                                        <span class="text-dark">80–100 &bull; Plan is solid, proceed with confidence</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#0891b2; min-width:90px;">VIABLE</span>
+                                        <span class="text-dark">60–79 &bull; Achievable with careful management</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:90px;">RISKY</span>
+                                        <span class="text-dark">40–59 &bull; Significant constraints, address conflicts</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:90px;">INFEASIBLE</span>
+                                        <span class="text-dark">0–39 &bull; Major rework required before proceeding</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Detected Conflicts</h6>
+                                <p class="small mb-2 text-secondary">Conflicts are structural problems the AI found in your simulated scenario. They must be resolved for the plan to be viable.</p>
+                                <div class="p-2 rounded mb-2 bg-danger-subtle border-start border-danger border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-user-clock text-danger me-1"></i><strong>Resource Overload</strong> — team members assigned more hours than they can work in the timeline.</p>
+                                </div>
+                                <div class="p-2 rounded mb-2 bg-warning-subtle border-start border-warning border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-calendar-times text-warning me-1"></i><strong>Deadline Infeasibility</strong> — remaining work cannot be completed in the available time at current velocity.</p>
+                                </div>
+                                <div class="p-2 rounded bg-danger-subtle border-start border-danger border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-dollar-sign text-danger me-1"></i><strong>Budget Overrun</strong> — projected spend exceeds the allocated budget under this scenario.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                            <ol class="small ps-3 mb-0 text-secondary">
+                                <li class="mb-1">Adjust the three sliders to model your scenario</li>
+                                <li class="mb-1">Click <strong>Analyze Impact</strong> — get feasibility score + conflicts</li>
+                                <li class="mb-1">Review the AI strategic recommendation</li>
+                                <li class="mb-1"><strong class="text-success">Save</strong> interesting scenarios for comparison</li>
+                                <li><strong class="text-primary">Promote to Shadow Branch</strong> to make it a living parallel simulation</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- ── What-If → Shadow Board bridge callout ──────────────── -->
     <div class="alert alert-info border-0 py-2 px-3 mb-3 d-flex align-items-center gap-2" style="background:#eef4ff;">
         <i class="fas fa-info-circle text-primary flex-shrink-0"></i>
@@ -423,6 +561,24 @@
 
 {% block extra_js %}
 <script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>
+    // Guide toggle label
+    var wiGuide = document.getElementById('whatIfGuide');
+    if (wiGuide) {
+        wiGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('whatif-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.whatif-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        wiGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('whatif-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.whatif-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
+</script>
 <script>
     // Pass data from Django to JS — must be defined BEFORE whatif_analyzer.js executes
     window.WHATIF_CONFIG = {

@@ -258,12 +258,137 @@
     <div class="d-flex justify-content-between align-items-center mt-2">
       <div>
         <h1><i class="fas fa-door-open me-2" style="color: #f6ad55;"></i>Exit Protocol {% feature_help "exit_protocol" %}</h1>
-        <p class="subtitle mb-0">{{ board.name }} — Manage project wind-down, knowledge preservation, and archival</p>
+        <p class="subtitle mb-1">{{ board.name }} — Manage project wind-down, knowledge preservation, and archival</p>
+        <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                style="color: #0d6efd;"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#exitProtocolGuide"
+                aria-expanded="false"
+                aria-controls="exitProtocolGuide">
+            <i class="fas fa-question-circle me-1"></i>
+            <span id="exit-protocol-guide-label">How does this work?</span>
+            <i class="fas fa-chevron-down ms-1 exit-protocol-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+        </button>
       </div>
       <a href="{% url 'board_detail' board.id %}" class="btn btn-back">
         <i class="fas fa-arrow-left me-1"></i> Back to Board
       </a>
     </div>
+  </div>
+
+  <!-- ── How It Works — Collapsible Guide ── -->
+  <div class="collapse mb-4" id="exitProtocolGuide">
+      <div class="card border shadow-sm">
+          <div class="card-body p-4">
+              <div class="row g-4">
+
+                  <!-- What is this? -->
+                  <div class="col-12">
+                      <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-door-open me-2" style="color:#f6ad55;"></i>What is Exit Protocol?</h6>
+                      <p class="mb-0 small text-secondary">A structured system for ending projects deliberately instead of letting them die quietly. Rather than simply archiving tasks, Exit Protocol guides the team through knowledge extraction, transition memos, component preservation, and a searchable Project Cemetery — so the lessons and reusable parts from every project survive to benefit future ones.</p>
+                  </div>
+
+                  <div class="col-12"><hr class="my-0"></div>
+
+                  <!-- Three-stage pipeline -->
+                  <div class="col-12">
+                      <h6 class="mb-3 fw-semibold text-dark"><i class="fas fa-route me-1 text-info"></i>The three stages of a deliberate project ending</h6>
+                      <div class="row g-3">
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #e53e3e !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge" style="background:#e53e3e;">Stage 1</span>
+                                      <i class="fas fa-heartbeat text-danger"></i>
+                                      <strong class="small">Project Hospice</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">PrizmAI monitors project health nightly. When the risk score crosses 75%, it initiates a structured review — generating an AI assessment, knowledge extraction checklist, and personalised transition memos for each team member.</p>
+                              </div>
+                          </div>
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #059669 !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge" style="background:#059669;">Stage 2</span>
+                                      <i class="fas fa-recycle text-success"></i>
+                                      <strong class="small">Organ Transplant</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">Reusable components — templates, workflows, automation rules, knowledge entries — are extracted and scored for compatibility. Browse the Organ Library to transplant proven parts into new projects with one click.</p>
+                              </div>
+                          </div>
+                          <div class="col-md-4">
+                              <div class="p-3 rounded border h-100" style="border-left: 4px solid #6c757d !important;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                      <span class="badge bg-secondary">Stage 3</span>
+                                      <i class="fas fa-archive text-secondary"></i>
+                                      <strong class="small">Project Cemetery</strong>
+                                  </div>
+                                  <p class="small text-secondary mb-0">The completed or cancelled project is archived with all its knowledge, decisions, lessons, and risk history preserved in a searchable Cemetery — available for future reference across the organisation.</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="col-12"><hr class="my-0"></div>
+
+                  <!-- Hospice trigger bands vs What survives -->
+                  <div class="col-md-6">
+                      <div class="d-flex align-items-start gap-3">
+                          <div class="flex-shrink-0 text-center" style="width:42px;">
+                              <i class="fas fa-heartbeat fa-2x text-danger"></i>
+                          </div>
+                          <div>
+                              <h6 class="mb-1 fw-semibold text-dark">When Hospice Triggers</h6>
+                              <p class="small mb-2 text-secondary">The risk score is computed nightly from schedule health, budget burn, team capacity, and scope drift. Three states:</p>
+                              <div class="d-flex flex-column gap-1 mb-2">
+                                  <div class="d-flex align-items-center gap-2 small">
+                                      <span class="badge" style="background:#059669; min-width:90px;">&lt; 50% — HEALTHY</span>
+                                      <span class="text-dark">Project is stable. No action needed.</span>
+                                  </div>
+                                  <div class="d-flex align-items-center gap-2 small">
+                                      <span class="badge" style="background:#d97706; min-width:90px;">50–75% — WATCH</span>
+                                      <span class="text-dark">Degrading health. AI starts preparing knowledge extraction.</span>
+                                  </div>
+                                  <div class="d-flex align-items-center gap-2 small">
+                                      <span class="badge" style="background:#e53e3e; min-width:90px;">&gt; 75% — HOSPICE</span>
+                                      <span class="text-dark">Critical. Structured wind-down initiated automatically.</span>
+                                  </div>
+                              </div>
+                              <div class="p-2 rounded bg-danger-subtle border-start border-danger border-3">
+                                  <p class="small mb-0 text-dark"><i class="fas fa-info-circle text-danger me-1"></i>You can also initiate wind-down manually at any time — the score is a trigger, not a gate.</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="col-md-6">
+                      <div class="d-flex align-items-start gap-3">
+                          <div class="flex-shrink-0 text-center" style="width:42px;">
+                              <i class="fas fa-seedling fa-2x text-success"></i>
+                          </div>
+                          <div>
+                              <h6 class="mb-1 fw-semibold text-dark">What Survives the Project</h6>
+                              <p class="small mb-2 text-secondary">The following are automatically extracted and preserved during wind-down:</p>
+                              <ul class="small text-secondary ps-3 mb-3">
+                                  <li class="mb-1"><strong>Templates &amp; workflows</strong> — reusable process templates scored by compatibility</li>
+                                  <li class="mb-1"><strong>Automation rules</strong> — proven automation logic extracted for reuse</li>
+                                  <li class="mb-1"><strong>Knowledge entries</strong> — decisions, lessons, and risk patterns preserved</li>
+                                  <li><strong>Transition memos</strong> — personalised handover docs for each team member</li>
+                              </ul>
+                              <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Workflow</h6>
+                              <ol class="small ps-3 mb-0 text-secondary">
+                                  <li class="mb-1">Monitor the risk score — or initiate wind-down manually</li>
+                                  <li class="mb-1">AI generates assessment + knowledge checklist</li>
+                                  <li class="mb-1">Review transplant candidates in the Organ Library</li>
+                                  <li class="mb-1">Commit reusable parts to the library for future projects</li>
+                                  <li>Archive the project — it enters the searchable Cemetery</li>
+                              </ol>
+                          </div>
+                      </div>
+                  </div>
+
+              </div>
+          </div>
+      </div>
   </div>
 
   {% if messages %}
@@ -717,6 +842,23 @@ if (recalcBtn) {
       status.textContent = 'Failed. Try again.';
     });
   });
+}
+
+// Guide toggle label
+var epGuide = document.getElementById('exitProtocolGuide');
+if (epGuide) {
+    epGuide.addEventListener('shown.bs.collapse', function() {
+        var label = document.getElementById('exit-protocol-guide-label');
+        if (label) label.textContent = 'Hide guide';
+        var chevron = document.querySelector('.exit-protocol-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    });
+    epGuide.addEventListener('hidden.bs.collapse', function() {
+        var label = document.getElementById('exit-protocol-guide-label');
+        if (label) label.textContent = 'How does this work?';
+        var chevron = document.querySelector('.exit-protocol-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    });
 }
 </script>
 <style>

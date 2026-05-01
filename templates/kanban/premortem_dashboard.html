@@ -19,11 +19,140 @@
         <div class="col-md-8">
             <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis {% feature_help "premortem" %}</h2>
             <p class="text-muted">{{ board.name }} — Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#preMortemGuide"
+                    aria-expanded="false"
+                    aria-controls="preMortemGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="premortem-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 premortem-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
         </div>
         <div class="col-md-4 text-end">
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i> Back to Board
             </a>
+        </div>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="preMortemGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-shield-alt text-danger me-2"></i>What is Pre-Mortem Analysis?</h6>
+                        <p class="mb-0 small text-secondary">Before a single line of code is written or a task is started, the AI imagines your project has already failed — then works backwards to explain exactly how it happened. You get five distinct failure scenarios specific to your project, each with a risk level, root-cause explanation, and a concrete mitigation strategy. Think of it as buying insurance before you need it.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Two columns: Scenarios vs Acknowledgment -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-skull fa-2x text-danger"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Failure Scenarios <span class="badge bg-danger ms-1" style="font-size:0.65rem;">AI-generated</span></h6>
+                                <p class="small mb-2 text-secondary">Five plausible ways your specific project could collapse — invented by the AI by analysing your tasks, deadlines, dependencies, and team allocation. None of these have happened yet.</p>
+                                <div class="d-flex flex-column gap-1 mt-2">
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#c0392b; min-width:70px;">HIGH</span>
+                                        <span class="text-dark">Severe, likely to derail the project</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#d97706; min-width:70px;">MEDIUM</span>
+                                        <span class="text-dark">Significant, needs active monitoring</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small">
+                                        <span class="badge" style="background:#16a34a; min-width:70px;">LOW</span>
+                                        <span class="text-dark">Minor, manageable with awareness</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-users fa-2x text-info"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Team Acknowledgment <span class="badge bg-info ms-1" style="font-size:0.65rem;">Sign-off tracking</span></h6>
+                                <p class="small mb-2 text-secondary">Each team member signs off on scenarios they've read and understood. The dashboard tracks who has acknowledged which risks — so no critical warning goes unseen.</p>
+                                <div class="p-2 rounded mb-1 bg-danger-subtle border-start border-danger border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-eye-slash text-danger me-1"></i><strong>Unacknowledged</strong> — this risk is invisible to your team. Nobody is watching for it.</p>
+                                </div>
+                                <div class="p-2 rounded bg-info-subtle border-start border-info border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-eye text-info me-1"></i><strong>Acknowledged</strong> — team is actively watching for this risk. Early warning system is armed.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Comparison table + Workflow -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted"></th>
+                                        <th class="text-danger"><i class="fas fa-eye-slash me-1"></i>Unacknowledged</th>
+                                        <th class="text-info"><i class="fas fa-eye me-1"></i>Acknowledged</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Team visibility</td>
+                                        <td class="text-dark">Nobody watching</td>
+                                        <td class="text-dark">Team is watching</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Score impact</td>
+                                        <td class="text-dark">No impact</td>
+                                        <td class="fw-semibold text-info">Counts towards coverage</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">AI next run</td>
+                                        <td class="text-dark">Still flags as gap</td>
+                                        <td class="text-dark">Tracks mitigation progress</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Analogy</td>
+                                        <td class="text-dark">Unlit road at night</td>
+                                        <td class="text-dark">Headlights on, driving carefully</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-3 text-secondary">
+                            <li class="mb-1">Run the Pre-Mortem analysis — AI reads your live board data</li>
+                            <li class="mb-1">Read all 5 failure scenarios carefully, including the mitigation strategy</li>
+                            <li class="mb-1"><strong class="text-info">Team members acknowledge</strong> each scenario they've understood</li>
+                            <li class="mb-1">Implement the mitigation strategies for HIGH-risk scenarios</li>
+                            <li>Feed results into the <strong>Stress Test</strong> for deeper resilience analysis</li>
+                        </ol>
+                        <div class="p-2 rounded bg-warning-subtle border-start border-warning border-3">
+                            <p class="small mb-0 text-dark"><i class="fas fa-lightbulb text-warning me-1"></i><strong>Tip:</strong> Run Pre-Mortem before scope locks in. A 15-minute review now can prevent weeks of damage later.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
         </div>
     </div>
 
@@ -376,6 +505,23 @@ function acknowledgeScenario(premortemId, scenarioIndex, btnEl) {
     .catch(() => {
         alert('Network error.');
         btnEl.disabled = false;
+    });
+}
+
+// Guide toggle label
+var pmGuide = document.getElementById('preMortemGuide');
+if (pmGuide) {
+    pmGuide.addEventListener('shown.bs.collapse', function() {
+        var label = document.getElementById('premortem-guide-label');
+        if (label) label.textContent = 'Hide guide';
+        var chevron = document.querySelector('.premortem-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    });
+    pmGuide.addEventListener('hidden.bs.collapse', function() {
+        var label = document.getElementById('premortem-guide-label');
+        if (label) label.textContent = 'How does this work?';
+        var chevron = document.querySelector('.premortem-guide-chevron');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
     });
 }
 </script>

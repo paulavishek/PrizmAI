@@ -154,14 +154,146 @@
     </div>
 
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
             <h1><i class="fas fa-atom me-2" style="color: #0d6efd;"></i>Shadow Board {% feature_help "shadow_board" %}</h1>
-            <p class="text-muted mb-0">{{ board.name }} — Living parallel project simulations</p>
+            <p class="text-muted mb-1">{{ board.name }} — Living parallel project simulations</p>
+            <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
+                    style="color: #0d6efd;"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#shadowBoardGuide"
+                    aria-expanded="false"
+                    aria-controls="shadowBoardGuide">
+                <i class="fas fa-question-circle me-1"></i>
+                <span id="shadow-board-guide-label">How does this work?</span>
+                <i class="fas fa-chevron-down ms-1 shadow-board-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+            </button>
         </div>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createBranchModal">
             <i class="fas fa-plus me-2"></i>Create Branch
         </button>
+    </div>
+
+    <!-- ── How It Works — Collapsible Guide ── -->
+    <div class="collapse mb-4" id="shadowBoardGuide">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What is this? -->
+                    <div class="col-12">
+                        <h6 class="fw-bold mb-2 text-dark"><i class="fas fa-atom text-primary me-2"></i>What is the Shadow Board?</h6>
+                        <p class="mb-0 small text-secondary">Shadow Board lets you run multiple “what-if” scenarios as <em>living, parallel branches</em> of your project. Unlike the What-If Analyzer (which gives you a one-time snapshot), Shadow Board branches update <strong>automatically</strong> as real work progresses — so you’re always comparing live feasibility scores, not stale calculations. When one branch clearly wins, commit it to reality and archive the rest.</p>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Two columns: What-If vs Shadow Board -->
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-camera fa-2x text-secondary"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">What-If Analyzer <span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Static snapshot</span></h6>
+                                <p class="small mb-2 text-secondary">A calculator. You adjust sliders, get a feasibility score, and save the result. It doesn’t know what happened on your board yesterday.</p>
+                                <div class="p-2 rounded bg-secondary bg-opacity-10 border-start border-secondary border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-pause-circle text-secondary me-1"></i><em>Snapshot in time. Doesn’t update. Good for quick exploration and saving interesting numbers.</em></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-atom fa-2x text-primary"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1 fw-semibold text-dark">Shadow Branch <span class="badge bg-primary ms-1" style="font-size:0.65rem;">Living simulation</span></h6>
+                                <p class="small mb-2 text-secondary">A living clone of your project running a different set of assumptions. Every time someone completes a task or a deadline moves on the real board, all branches recalculate instantly.</p>
+                                <div class="p-2 rounded bg-primary bg-opacity-10 border-start border-primary border-3">
+                                    <p class="small mb-0 text-dark"><i class="fas fa-sync-alt text-primary me-1"></i><em>Live branch. Recalculates every time real work changes. Shows current feasibility, always up to date.</em></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Comparison table + Branch states -->
+                    <div class="col-md-7">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-table me-1 text-info"></i>Side-by-side comparison</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-muted"></th>
+                                        <th class="text-secondary"><i class="fas fa-camera me-1"></i>What-If Analyzer</th>
+                                        <th class="text-primary"><i class="fas fa-atom me-1"></i>Shadow Branch</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Updates automatically</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> No</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Yes, in real-time</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Tracks real progress</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> No</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Yes</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Can be committed</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> No</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Yes, replaces reality</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Multiple at once</td>
+                                        <td class="text-dark">Yes (saved scenarios)</td>
+                                        <td class="text-dark fw-semibold text-primary">Yes (live branches)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted fw-semibold">Quantum Standup</td>
+                                        <td class="text-dark"><i class="fas fa-times text-danger"></i> Not available</td>
+                                        <td class="text-dark"><i class="fas fa-check text-success"></i> Shows daily impact</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-shield-alt me-1 text-info"></i>Branch states</h6>
+                        <div class="d-flex flex-column gap-1 mb-3">
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#0d6efd; min-width:90px;">ACTIVE</span>
+                                <span class="text-dark">Branch is live, recalculating, available for comparison</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#059669; min-width:90px;">COMMITTED</span>
+                                <span class="text-dark">This branch won — its assumptions are now the reality</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 small">
+                                <span class="badge" style="background:#6c757d; min-width:90px;">ARCHIVED</span>
+                                <span class="text-dark">Branch closed, full audit trail preserved for reference</span>
+                            </div>
+                        </div>
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-list-ol me-1 text-info"></i>Recommended workflow</h6>
+                        <ol class="small ps-3 mb-0 text-secondary">
+                            <li class="mb-1">Run a What-If scenario with the sliders</li>
+                            <li class="mb-1">Click <strong>Promote to Shadow Branch</strong></li>
+                            <li class="mb-1">Repeat for each option you want to compare live</li>
+                            <li class="mb-1">Watch the Quantum Standup — it shows how today’s real work changed each branch</li>
+                            <li>Click <strong>Commit</strong> when one branch clearly wins</li>
+                        </ol>
+                    </div>
+
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Quantum Standup Section -->
@@ -489,6 +621,23 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
         new bootstrap.Tooltip(el, { boundary: 'window' });
     });
+
+    // Guide toggle label
+    var sbGuide = document.getElementById('shadowBoardGuide');
+    if (sbGuide) {
+        sbGuide.addEventListener('shown.bs.collapse', function() {
+            var label = document.getElementById('shadow-board-guide-label');
+            if (label) label.textContent = 'Hide guide';
+            var chevron = document.querySelector('.shadow-board-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        });
+        sbGuide.addEventListener('hidden.bs.collapse', function() {
+            var label = document.getElementById('shadow-board-guide-label');
+            if (label) label.textContent = 'How does this work?';
+            var chevron = document.querySelector('.shadow-board-guide-chevron');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        });
+    }
 });
 </script>
 {% endblock %}
