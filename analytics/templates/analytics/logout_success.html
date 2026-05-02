@@ -2,7 +2,7 @@
 {% load static %}
 {% load kanban_filters %}
 
-{% block title %}Thanks for trying Pri<span class="stylish-z">z</span>mAI{% endblock %}
+{% block title %}Thanks for trying PrizmAI{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -69,7 +69,7 @@
     
     .star-rating {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         justify-content: center;
         margin: 20px 0;
     }
@@ -77,14 +77,25 @@
     .star {
         font-size: 2rem;
         cursor: pointer;
-        color: #ddd;
-        transition: color 0.2s, transform 0.2s;
+        color: #d1d5db;
+        transition: color 0.15s, transform 0.15s;
+        line-height: 1;
     }
     
     .star:hover,
     .star.active {
         color: #fbbf24;
-        transform: scale(1.2);
+        transform: scale(1.15);
+    }
+    
+    .star-rating-hint {
+        font-size: 0.82rem;
+        color: #9ca3af;
+        text-align: center;
+        margin-top: -8px;
+        margin-bottom: 8px;
+        min-height: 1.2em;
+        transition: color 0.15s;
     }
     
     .feedback-form {
@@ -153,7 +164,11 @@
                     Thanks for checking out Pri<span class="stylish-z">z</span>mAI!
                 {% endif %}
                 <span class="engagement-badge badge-{{ engagement_level }}">
-                    {{ engagement_level|upper|replace:"_, " }}
+                    {% if engagement_level == 'very_high' %}Power User
+                    {% elif engagement_level == 'high' %}Deep Dive
+                    {% elif engagement_level == 'medium' %}Good Exploration
+                    {% else %}Quick Visit
+                    {% endif %}
                 </span>
             </p>
         </div>
@@ -161,26 +176,30 @@
         <div class="row g-3 mt-3">
             <div class="col-md-3 col-6">
                 <div class="stat-card">
+                    <i class="fas fa-clock fa-lg d-block mb-2 opacity-75"></i>
                     <div class="stat-number">{{ session_stats.duration_minutes }}</div>
-                    <div class="stat-label">Minutes</div>
+                    <div class="stat-label">Minute{{ session_stats.duration_minutes|pluralize }}</div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
                 <div class="stat-card">
+                    <i class="fas fa-check-circle fa-lg d-block mb-2 opacity-75"></i>
                     <div class="stat-number">{{ session_stats.tasks_created }}</div>
-                    <div class="stat-label">Tasks Created</div>
+                    <div class="stat-label">Task{{ session_stats.tasks_created|pluralize }} Created</div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
                 <div class="stat-card">
+                    <i class="fas fa-robot fa-lg d-block mb-2 opacity-75"></i>
                     <div class="stat-number">{{ session_stats.ai_features_used }}</div>
-                    <div class="stat-label">AI Features Used</div>
+                    <div class="stat-label">AI Feature{{ session_stats.ai_features_used|pluralize }} Used</div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
                 <div class="stat-card">
+                    <i class="fas fa-columns fa-lg d-block mb-2 opacity-75"></i>
                     <div class="stat-number">{{ session_stats.boards_viewed }}</div>
-                    <div class="stat-label">Boards Viewed</div>
+                    <div class="stat-label">Board{{ session_stats.boards_viewed|pluralize }} Viewed</div>
                 </div>
             </div>
         </div>
@@ -209,13 +228,14 @@
             <!-- Rating -->
             <div class="mb-4">
                 <label class="form-label text-center d-block">How would you rate your experience?</label>
-                <div class="star-rating" id="star-rating">
-                    <span class="star" data-rating="1">⭐</span>
-                    <span class="star" data-rating="2">⭐</span>
-                    <span class="star" data-rating="3">⭐</span>
-                    <span class="star" data-rating="4">⭐</span>
-                    <span class="star" data-rating="5">⭐</span>
+                <div class="star-rating" id="star-rating" role="radiogroup" aria-label="Star rating">
+                    <i class="far fa-star star" data-rating="1" title="1 star" tabindex="0" role="radio" aria-label="1 star"></i>
+                    <i class="far fa-star star" data-rating="2" title="2 stars" tabindex="0" role="radio" aria-label="2 stars"></i>
+                    <i class="far fa-star star" data-rating="3" title="3 stars" tabindex="0" role="radio" aria-label="3 stars"></i>
+                    <i class="far fa-star star" data-rating="4" title="4 stars" tabindex="0" role="radio" aria-label="4 stars"></i>
+                    <i class="far fa-star star" data-rating="5" title="5 stars" tabindex="0" role="radio" aria-label="5 stars"></i>
                 </div>
+                <p class="star-rating-hint" id="star-hint">Click a star to rate your experience</p>
                 <input type="hidden" id="rating-input" name="rating" value="">
             </div>
             
@@ -392,42 +412,60 @@
     let selectedRating = 0;
     
     // Star rating interaction
+    const LABELS = ['Terrible', 'Poor', 'Okay', 'Good', 'Excellent'];
+
+    function setStars(count, isHover) {
+        stars.forEach((s, i) => {
+            if (i < count) {
+                s.classList.remove('far');
+                s.classList.add('fas');
+                s.classList.add('active');
+            } else {
+                s.classList.remove('fas');
+                s.classList.add('far');
+                if (!isHover) s.classList.remove('active');
+            }
+        });
+    }
+
+    const hintEl = document.getElementById('star-hint');
+
     if (stars.length > 0) {
         stars.forEach(star => {
             star.addEventListener('click', function() {
-                selectedRating = this.getAttribute('data-rating');
+                selectedRating = parseInt(this.getAttribute('data-rating'));
                 ratingInput.value = selectedRating;
-                
-                // Update star display
-                stars.forEach((s, index) => {
-                    if (index < selectedRating) {
-                        s.classList.add('active');
-                    } else {
-                        s.classList.remove('active');
-                    }
-                });
+                setStars(selectedRating, false);
+                if (hintEl) {
+                    hintEl.textContent = LABELS[selectedRating - 1] + ' — ' + selectedRating + ' star' + (selectedRating > 1 ? 's' : '');
+                    hintEl.style.color = '#6b7280';
+                }
+                if (errorMessage) errorMessage.style.display = 'none';
             });
-            
+
             star.addEventListener('mouseenter', function() {
-                const rating = this.getAttribute('data-rating');
-                stars.forEach((s, index) => {
-                    if (index < rating) {
-                        s.style.color = '#fbbf24';
-                    } else {
-                        s.style.color = '#ddd';
-                    }
-                });
+                const rating = parseInt(this.getAttribute('data-rating'));
+                setStars(rating, true);
+                if (hintEl) {
+                    hintEl.textContent = LABELS[rating - 1];
+                    hintEl.style.color = '#fbbf24';
+                }
+            });
+
+            star.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.click();
+                }
             });
         });
         
         document.querySelector('.star-rating').addEventListener('mouseleave', function() {
-            stars.forEach((s, index) => {
-                if (index < selectedRating) {
-                    s.style.color = '#fbbf24';
-                } else {
-                    s.style.color = '#ddd';
-                }
-            });
+            setStars(selectedRating, false);
+            if (hintEl) {
+                hintEl.textContent = selectedRating ? LABELS[selectedRating - 1] + ' — ' + selectedRating + ' star' + (selectedRating > 1 ? 's' : '') : 'Click a star to rate your experience';
+                hintEl.style.color = '#9ca3af';
+            }
         });
     }
     

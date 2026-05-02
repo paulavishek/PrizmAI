@@ -2,6 +2,8 @@
 Session tracking middleware for analytics.
 Tracks user behavior throughout their session automatically.
 """
+from datetime import timedelta
+
 from django.utils.deprecation import MiddlewareMixin
 from django.utils import timezone
 from .models import UserSession, AnalyticsEvent
@@ -27,15 +29,19 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         '/favicon.ico',
     ]
     
-    # AI feature paths to track
+    # AI feature paths to track — these must match actual URL path segments
     AI_PATHS = [
-        'ai-recommend',
-        'ai-forecast', 
-        'gemini',
-        'ai-coach',
-        'ai-detect',
-        'ai-suggest',
-        'ai_assistant',
+        '/assistant/',
+        '/coach/',
+        '/forecast/',
+        '/what-if/',
+        '/retro',
+        '/skill-gap',
+        '/recommendations/',
+        '/ai-analyze',
+        '/ai-create-tasks',
+        '/spectra',
+        '/gap-analysis',
     ]
     
     def process_request(self, request):
@@ -53,6 +59,15 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         # Get or create UserSession
         try:
             if request.user.is_authenticated:
+                # Close any stale open sessions (inactive for > 4 hours) to prevent
+                # inflated duration_minutes on the logout page
+                stale_cutoff = timezone.now() - timedelta(hours=4)
+                UserSession.objects.filter(
+                    user=request.user,
+                    session_end__isnull=True,
+                    last_activity__lt=stale_cutoff,
+                ).update(session_end=stale_cutoff, exit_reason='stale')
+
                 # For authenticated users, get or create active session
                 user_session, created = UserSession.objects.get_or_create(
                     user=request.user,
@@ -117,10 +132,17 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                 session.pages_visited += 1
             
             # Track board views (GET requests to board detail pages)
-            if 'board' in path and method == 'GET':
-                # Check if it's a detail view (has ID in path)
-                if re.search(r'/board[s]?/\d+', path):
-                    session.boards_viewed += 1
+            # Deduplicate: only count each unique board ID once per session
+            if method == 'GET':
+                board_match = re.search(r'/boards?/(\d+)(?:/|$)', path)
+                if board_match:
+                    board_id = board_match.group(1)
+                    visited_boards = request.session.get('_visited_board_ids', [])
+                    if board_id not in visited_boards:
+                        session.boards_viewed += 1
+                        visited_boards.append(board_id)
+                        request.session['_visited_board_ids'] = visited_boards
+                        request.session.modified = True
             
             # Track board creation (POST to board create endpoint)
             if 'board' in path and method == 'POST' and ('create' in path or path.endswith('/boards/')):
@@ -132,8 +154,15 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                     'timestamp': timezone.now()
                 })
             
-            # Track task creation
-            if 'task' in path and method == 'POST':
+            # Track task creation — only match explicit create-task endpoints,
+            # not every POST that happens to contain 'task' in the URL
+            _TASK_CREATE_PATTERNS = [
+                r'/create-task/',
+                r'/boards/\d+/tasks/$',
+                r'/api/wizard/create-task/',
+                r'/calendar/create-task/',
+            ]
+            if method == 'POST' and any(re.search(p, path) for p in _TASK_CREATE_PATTERNS):
                 session.tasks_created += 1
                 request._pending_events.append({
                     'user_session': session,
@@ -155,18 +184,24 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                         'timestamp': timezone.now()
                     })
             
-            # Track AI feature usage
-            if any(ai_path in path for ai_path in self.AI_PATHS):
-                session.ai_features_used += 1
-                # Extract which AI feature
-                feature_name = next((ai for ai in self.AI_PATHS if ai in path), 'unknown')
-                request._pending_events.append({
-                    'user_session': session,
-                    'event_name': 'ai_feature_used',
-                    'event_category': 'ai_features',
-                    'event_label': feature_name,
-                    'timestamp': timezone.now()
-                })
+            # Track AI feature usage — only count GET requests to AI feature pages
+            # (not every sub-API call within the same feature)
+            if method == 'GET' and any(ai_path in path for ai_path in self.AI_PATHS):
+                # Deduplicate: count each AI feature type only once per session
+                ai_feature = next((ai for ai in self.AI_PATHS if ai in path), 'unknown')
+                used_ai = request.session.get('_used_ai_features', [])
+                if ai_feature not in used_ai:
+                    session.ai_features_used += 1
+                    used_ai.append(ai_feature)
+                    request.session['_used_ai_features'] = used_ai
+                    request.session.modified = True
+                    request._pending_events.append({
+                        'user_session': session,
+                        'event_name': 'ai_feature_used',
+                        'event_category': 'ai_features',
+                        'event_label': ai_feature,
+                        'timestamp': timezone.now()
+                    })
             
             # Save updates (batch save for performance)
             session.save(update_fields=[
