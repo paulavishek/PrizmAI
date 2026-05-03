@@ -131,9 +131,10 @@ MIDDLEWARE = [
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
-    # Analytics tracking middleware - SessionTrackingMiddleware must come before SessionTimeoutMiddleware
-    'analytics.middleware.SessionTrackingMiddleware',
+    # Analytics tracking middleware - SessionTimeoutMiddleware MUST come before SessionTrackingMiddleware
+    # so it can check last_activity BEFORE the tracking middleware refreshes it to now().
     'analytics.middleware.SessionTimeoutMiddleware',  # Auto-end inactive sessions
+    'analytics.middleware.SessionTrackingMiddleware',
     'kanban.audit_middleware.SecurityMonitoringMiddleware',
     'axes.middleware.AxesMiddleware',  # Brute force protection
 ]

@@ -12,7 +12,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.db.models import Count, Avg, Sum, Q
-from django.db.models.functions import TruncDate, TruncWeek
+from django.db.models.functions import TruncDate
 from django.core.cache import cache
 from datetime import timedelta
 import json
@@ -357,20 +357,22 @@ def collect_demo_email(request):
     """
     Collect email from demo user for sending reminders.
     Called when user optionally provides email during demo.
+    Stores in DemoEmailCapture (standalone model) rather than on DemoSession
+    so email capture is decoupled from session lifecycle.
     """
-    from .models import DemoSession
-    
+    from .models import DemoSession, DemoEmailCapture
+
     try:
         data = json.loads(request.body)
         email = data.get('email', '').strip()
         session_id = data.get('session_id') or request.session.session_key
-        
+
         if not email:
             return JsonResponse({
                 'success': False,
                 'message': 'Email is required'
             }, status=400)
-        
+
         # Basic email validation
         import re
         if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
@@ -378,30 +380,36 @@ def collect_demo_email(request):
                 'success': False,
                 'message': 'Invalid email format'
             }, status=400)
-        
+
         if not session_id:
             return JsonResponse({
                 'success': False,
                 'message': 'No session found'
             }, status=400)
-        
+
+        # Resolve the demo session (optional — capture is still stored even if not found)
+        demo_session = None
         try:
-            session = DemoSession.objects.get(session_id=session_id)
-            session.demo_user_email = email
-            session.save(update_fields=['demo_user_email'])
-            
-            logger.info(f"Demo email collected for session {session_id[:8]}: {email}")
-            
-            return JsonResponse({
-                'success': True,
-                'message': 'Email saved! We\'ll send you helpful reminders.'
-            })
+            demo_session = DemoSession.objects.get(session_id=session_id)
         except DemoSession.DoesNotExist:
             return JsonResponse({
                 'success': False,
                 'message': 'Demo session not found'
             }, status=404)
-    
+
+        DemoEmailCapture.objects.create(
+            session_id=session_id,
+            demo_session=demo_session,
+            email=email,
+        )
+
+        logger.info(f"Demo email collected for session {session_id[:8]}: {email}")
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Email saved! We\'ll send you helpful reminders.'
+        })
+
     except Exception as e:
         logger.error(f"Error collecting demo email: {e}", exc_info=True)
         return JsonResponse({
@@ -550,8 +558,12 @@ def analytics_dashboard(request):
             ai_features_used__gt=0
         ).count(),
         'feedback_givers': total_feedback,
+        # Default conversion rates to 0; overwritten below if visitors > 0
+        'task_conversion': 0,
+        'ai_conversion': 0,
+        'feedback_conversion': 0,
     }
-    
+
     # Calculate conversion rates
     if funnel['visitors'] > 0:
         funnel['task_conversion'] = (funnel['task_creators'] / funnel['visitors']) * 100
