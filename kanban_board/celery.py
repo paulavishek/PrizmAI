@@ -132,6 +132,17 @@ app.conf.beat_schedule = {
         'task': 'kanban.compute_all_board_confidence',
         'schedule': crontab(minute=30, hour='*/6'),  # Every 6 hours at :30
     },
+    # --- Analytics Tasks ---
+    # Clean up user sessions older than 90 days (daily at 4:30 AM)
+    'analytics-cleanup-old-sessions': {
+        'task': 'analytics.tasks.cleanup_old_sessions',
+        'schedule': crontab(hour=4, minute=30),
+    },
+    # Generate daily analytics report (daily at 5:00 AM)
+    'analytics-daily-report': {
+        'task': 'analytics.tasks.generate_daily_analytics_report',
+        'schedule': crontab(hour=5, minute=0),
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never
