@@ -29,20 +29,25 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         '/favicon.ico',
     ]
     
-    # AI feature paths to track — these must match actual URL path segments
-    AI_PATHS = [
-        '/assistant/',
-        '/coach/',
-        '/forecast/',
-        '/what-if/',
-        '/retro',
-        '/skill-gap',
-        '/recommendations/',
-        '/ai-analyze',
-        '/ai-create-tasks',
-        '/spectra',
-        '/gap-analysis',
-    ]
+    # AI feature paths → named feature key (used for FeatureAdoptionEvent + deduplication)
+    AI_PATH_FEATURES = {
+        '/assistant/':        ('spectra_query',    'ai'),
+        '/coach/':            ('ai_coach',         'ai'),
+        '/forecast/':         ('burndown_chart',   'core'),
+        '/what-if/':          ('what_if',          'enterprise_ai'),
+        '/retro':             ('ai_retrospective', 'ai'),
+        '/skill-gap':         ('skill_gap',        'ai'),
+        '/recommendations/':  ('ai_bubble_up',     'ai'),
+        '/ai-analyze':        ('requirements_ai',  'ai'),
+        '/ai-create-tasks':   ('requirements_ai',  'ai'),
+        '/spectra':           ('spectra_query',    'ai'),
+        '/gap-analysis':      ('skill_gap',        'ai'),
+    }
+
+    # Keep a flat path list for quick "any match" checks (backwards compat)
+    @property
+    def AI_PATHS(self):
+        return list(self.AI_PATH_FEATURES.keys())
     
     def process_request(self, request):
         """Initialize or retrieve user session"""
@@ -79,6 +84,7 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                         'user_agent': request.META.get('HTTP_USER_AGENT', '')[:500],
                         'referrer': request.META.get('HTTP_REFERER', '')[:500],
                         'device_type': self.detect_device_type(request),
+                        **self._workspace_context(request.user),
                     }
                 )
             else:
@@ -186,22 +192,33 @@ class SessionTrackingMiddleware(MiddlewareMixin):
             
             # Track AI feature usage — only count GET requests to AI feature pages
             # (not every sub-API call within the same feature)
-            if method == 'GET' and any(ai_path in path for ai_path in self.AI_PATHS):
-                # Deduplicate: count each AI feature type only once per session
-                ai_feature = next((ai for ai in self.AI_PATHS if ai in path), 'unknown')
+            if method == 'GET' and any(ai_path in path for ai_path in self.AI_PATH_FEATURES):
+                # Determine feature name and category
+                matched_path = next((p for p in self.AI_PATH_FEATURES if p in path), None)
+                feature_name, feature_cat = self.AI_PATH_FEATURES.get(matched_path, ('unknown', 'ai'))
                 used_ai = request.session.get('_used_ai_features', [])
-                if ai_feature not in used_ai:
+                if matched_path not in used_ai:
                     session.ai_features_used += 1
-                    used_ai.append(ai_feature)
+                    used_ai.append(matched_path)
                     request.session['_used_ai_features'] = used_ai
                     request.session.modified = True
                     request._pending_events.append({
                         'user_session': session,
                         'event_name': 'ai_feature_used',
                         'event_category': 'ai_features',
-                        'event_label': ai_feature,
+                        'event_label': feature_name,
                         'timestamp': timezone.now()
                     })
+                    # Record FeatureAdoptionEvent for authenticated users
+                    if request.user.is_authenticated and feature_name != 'unknown':
+                        try:
+                            from analytics.signals import _record_feature
+                            _record_feature(
+                                request.user, feature_name, feature_cat,
+                                session=session
+                            )
+                        except Exception:
+                            pass
             
             # Save updates (batch save for performance)
             session.save(update_fields=[
@@ -267,6 +284,36 @@ class SessionTrackingMiddleware(MiddlewareMixin):
             return 'desktop'
         else:
             return 'unknown'
+
+    @staticmethod
+    def _workspace_context(user):
+        """
+        Return a dict with workspace_preset, byok_active, ai_provider_used
+        for the given authenticated user.  Never raises — returns empty defaults.
+        """
+        ctx = {'workspace_preset': '', 'byok_active': False, 'ai_provider_used': ''}
+        try:
+            # Workspace preset from the user's primary org
+            from kanban.preset_models import WorkspacePreset
+            from accounts.models import OrganizationMembership
+            membership = OrganizationMembership.objects.filter(user=user).select_related('organization').first()
+            if membership:
+                preset_obj = WorkspacePreset.objects.filter(organization=membership.organization).first()
+                if preset_obj:
+                    ctx['workspace_preset'] = preset_obj.global_preset
+        except Exception:
+            pass
+        try:
+            from ai_assistant.models import UserAISettings
+            settings_obj = UserAISettings.objects.filter(user=user).first()
+            if settings_obj and settings_obj.encrypted_api_key:
+                ctx['byok_active'] = True
+                ctx['ai_provider_used'] = getattr(settings_obj, 'byok_provider', '') or ''
+            elif settings_obj:
+                ctx['ai_provider_used'] = getattr(settings_obj, 'provider_override', '') or ''
+        except Exception:
+            pass
+        return ctx
 
 
 class SessionTimeoutMiddleware(MiddlewareMixin):

@@ -18,7 +18,7 @@ from datetime import timedelta
 import json
 import logging
 
-from .models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent
+from .models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent, FeatureAdoptionEvent, AIQuotaEvent, WorkspacePresetEvent
 from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
@@ -614,44 +614,118 @@ def analytics_dashboard(request):
     else:
         demo_stats['conversion_rate'] = 0
     
+    # === FEATURE ADOPTION MATRIX (top 15 by unique user count) ===
+    total_users_count = User.objects.count()
+    feature_adoption_matrix = (
+        FeatureAdoptionEvent.objects
+        .filter(timestamp__gte=start_date)
+        .values('feature')
+        .annotate(unique_users=Count('user', distinct=True))
+        .order_by('-unique_users')[:15]
+    )
+    for row in feature_adoption_matrix:
+        row['pct'] = round((row['unique_users'] / total_users_count) * 100, 1) if total_users_count else 0
+
+    # Avg distinct features per active user in the period (feature depth score)
+    active_user_ids = set(
+        FeatureAdoptionEvent.objects.filter(timestamp__gte=start_date).values_list('user_id', flat=True)
+    )
+    if active_user_ids:
+        per_user_feature_counts = [
+            FeatureAdoptionEvent.objects.filter(user_id=uid, timestamp__gte=start_date)
+            .values('feature').distinct().count()
+            for uid in active_user_ids
+        ]
+        feature_depth_score = round(sum(per_user_feature_counts) / len(per_user_feature_counts), 1)
+    else:
+        feature_depth_score = 0
+
+    # === AI QUOTA FUNNEL ===
+    total_quota_users = User.objects.filter(ai_quota__isnull=False).count()
+    quota_hit_limit = AIQuotaEvent.objects.filter(
+        event_type='quota_exhausted', timestamp__gte=start_date
+    ).values('user').distinct().count()
+    quota_byok_after = AIQuotaEvent.objects.filter(
+        event_type='byok_configured', timestamp__gte=start_date
+    ).values('user').distinct().count()
+    ai_quota_funnel = {
+        'total_quota_users': total_quota_users,
+        'hit_limit': quota_hit_limit,
+        'hit_limit_pct': round((quota_hit_limit / total_quota_users) * 100, 1) if total_quota_users else 0,
+        'configured_byok_after': quota_byok_after,
+        'byok_conversion_pct': round((quota_byok_after / quota_hit_limit) * 100, 1) if quota_hit_limit else 0,
+    }
+
+    # === BYOK STATS ===
+    byok_total = AIQuotaEvent.objects.filter(event_type='byok_configured').values('user').distinct().count()
+    byok_by_provider = list(
+        AIQuotaEvent.objects
+        .filter(event_type='byok_configured')
+        .exclude(provider_configured='')
+        .values('provider_configured')
+        .annotate(users=Count('user', distinct=True))
+        .order_by('-users')
+    )
+    byok_stats = {
+        'total_byok_users': byok_total,
+        'by_provider': byok_by_provider,
+    }
+
+    # === WORKSPACE TIER DISTRIBUTION ===
+    from kanban.preset_models import WorkspacePreset
+    tier_distribution = list(
+        WorkspacePreset.objects.values('global_preset')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    tier_upgrades = WorkspacePresetEvent.objects.filter(timestamp__gte=start_date).count()
+
     context = {
         'days': days,
         'start_date': start_date,
-        
+
         # Summary stats
         'total_sessions': total_sessions,
         'total_users': total_users,
         'total_feedback': total_feedback,
         'registrations': registrations,
         'return_visitors': return_visitors,
-        
+
         # Engagement
         'engagement_breakdown': engagement_breakdown,
         'avg_metrics': avg_metrics,
-        
+
         # Features
         'feature_usage': feature_usage,
         'ai_events': ai_events,
-        
+
         # Trends
         'daily_sessions': list(daily_sessions),
-        
+
         # Feedback
         'feedback_stats': feedback_stats,
         'sentiment_breakdown': sentiment_list,
         'rating_distribution': rating_distribution,
-        
+
         # Funnel
         'funnel': funnel,
-        
+
         # Recent activity
         'recent_feedback': recent_feedback,
         'high_engagement_users': high_engagement_users,
-        
-        # Abuse prevention (NEW)
+
+        # Abuse prevention
         'abuse_stats': abuse_stats,
         'demo_stats': demo_stats,
         'high_risk_visitors': high_risk_visitors,
+
+        # Phase 5 — Feature adoption & AI quota analytics
+        'feature_adoption_matrix': list(feature_adoption_matrix),
+        'feature_depth_score': feature_depth_score,
+        'ai_quota_funnel': ai_quota_funnel,
+        'byok_stats': byok_stats,
+        'tier_distribution': tier_distribution,
+        'tier_upgrades': tier_upgrades,
     }
-    
+
     return render(request, 'analytics/dashboard.html', context)

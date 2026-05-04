@@ -8,7 +8,4 @@ class AnalyticsConfig(AppConfig):
     
     def ready(self):
         """Import signals when app is ready"""
-        try:
-            import analytics.signals  # noqa
-        except ImportError:
-            pass
+        import analytics.signals  # noqa: F401  — registers all post_save receivers
