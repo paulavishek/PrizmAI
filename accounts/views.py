@@ -183,6 +183,11 @@ def register_view(request, org_id=None):
     Organization field is now optional.
     """
     if request.user.is_authenticated:
+        messages.info(
+            request,
+            f'You are already signed in as <strong>{request.user.username}</strong>. '
+            'Please <a href="/accounts/logout/">log out</a> first if you want to create a new account.'
+        )
         return redirect('dashboard')
 
     # org_id parameter is kept for backward compatibility but ignored
