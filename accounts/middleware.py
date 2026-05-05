@@ -133,7 +133,8 @@ class WorkspaceMiddleware:
                     created_by=profile.user, is_demo=False, is_active=True,
                 ).order_by('-created_at').first()
                 real_org = (
-                    real_ws.organization if real_ws and real_ws.organization
+                    real_ws.organization
+                    if real_ws and real_ws.organization and not getattr(real_ws.organization, 'is_demo', False)
                     else Organization.objects.filter(
                         created_by=profile.user, is_demo=False,
                     ).order_by('-id').first()

@@ -488,11 +488,34 @@ def onboarding_commit(request):
             'commit_error': 'Something went wrong while creating your workspace. Please try again.',
         })
 
-    # Switch out of demo mode so the dashboard shows the user's own workspace
+    # Switch out of demo mode so the dashboard shows the user's own workspace.
+    # Also sync profile.organization to the newly-created real org (it may still
+    # point at the shared demo org if the user was in demo mode during onboarding).
     profile = request.user.profile
+    profile.refresh_from_db()  # pick up org change made inside commit_onboarding_workspace
+    save_fields = []
     if profile.is_viewing_demo:
         profile.is_viewing_demo = False
-        profile.save(update_fields=['is_viewing_demo'])
+        save_fields.append('is_viewing_demo')
+    if profile.organization and getattr(profile.organization, 'is_demo', False):
+        # commit_onboarding_workspace created a new real org; find it
+        from kanban.models import Workspace
+        from accounts.models import Organization
+        real_ws = Workspace.objects.filter(
+            created_by=request.user, is_demo=False, is_active=True,
+        ).order_by('-created_at').first()
+        real_org = (
+            real_ws.organization
+            if real_ws and real_ws.organization and not real_ws.organization.is_demo
+            else Organization.objects.filter(
+                created_by=request.user, is_demo=False,
+            ).order_by('-id').first()
+        )
+        if real_org:
+            profile.organization = real_org
+            save_fields.append('organization')
+    if save_fields:
+        profile.save(update_fields=save_fields)
 
     # Show a one-time banner on the dashboard reminding the user to assign tasks
     request.session['show_onboarding_assign_banner'] = True
@@ -544,8 +567,9 @@ def onboarding_skip(request):
     if not _is_v2(profile):
         return redirect('dashboard')
 
-    # Auto-create an Organization even when skipping, so user has a workspace
-    if not profile.organization:
+    # Auto-create an Organization even when skipping, so user has a workspace.
+    # Also create a new org if the user's current org is the shared demo org.
+    if not profile.organization or getattr(profile.organization, 'is_demo', False):
         from accounts.models import Organization
         first_name = (request.user.first_name or request.user.username).strip()
         org_name = f"{first_name}'s Workspace"
@@ -593,9 +617,9 @@ def onboarding_invite(request):
     if request.method == 'POST':
         action = request.POST.get('action', 'invite')
 
-        # Handle workspace rename (inline)
+        # Handle workspace rename (inline) — never rename the shared demo org
         new_name = request.POST.get('workspace_name', '').strip()
-        if new_name and new_name != org.name:
+        if new_name and new_name != org.name and not getattr(org, 'is_demo', False):
             org.name = new_name[:100]
             org.save(update_fields=['name'])
             # Keep the active workspace name in sync
@@ -624,12 +648,30 @@ def onboarding_invite(request):
                 skipped_list.append(f"{email} (invalid format)")
                 continue
 
-            # Already an org member?
+            # Already an org member? Add directly as workspace member instead of skipping.
             from accounts.models import UserProfile
-            if UserProfile.objects.filter(
+            from kanban.models import WorkspaceMembership, Workspace
+            existing_profile = UserProfile.objects.filter(
                 organization=org, user__email__iexact=email
-            ).exists():
-                skipped_list.append(f"{email} (already a member)")
+            ).select_related('user').first()
+            if existing_profile:
+                active_ws = getattr(profile, 'active_workspace', None)
+                if not active_ws:
+                    active_ws = Workspace.objects.filter(
+                        organization=org, is_demo=False, is_active=True,
+                    ).first()
+                if active_ws:
+                    _, created = WorkspaceMembership.objects.get_or_create(
+                        workspace=active_ws,
+                        user=existing_profile.user,
+                        defaults={'role': 'member', 'added_by': request.user},
+                    )
+                    if created:
+                        sent_list.append(email)
+                    else:
+                        skipped_list.append(f"{email} (already a workspace member)")
+                else:
+                    skipped_list.append(f"{email} (already a member)")
                 continue
 
             # Revoke any previous pending invite for this email+org
@@ -648,7 +690,7 @@ def onboarding_invite(request):
 
             # Also create a workspace-level invitation so accepted users
             # get WorkspaceMembership (with board sync) in addition to org access.
-            from kanban.models import WorkspaceInvitation, Workspace
+            from kanban.models import WorkspaceInvitation
             active_ws = getattr(profile, 'active_workspace', None)
             if not active_ws:
                 active_ws = Workspace.objects.filter(
