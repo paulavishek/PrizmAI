@@ -1,8 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth import login, authenticate, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.contrib.auth.views import PasswordResetView
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from .forms import LoginForm, RegistrationForm, UserProfileForm
@@ -11,6 +12,31 @@ import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class CustomPasswordResetView(PasswordResetView):
+    """Override PasswordResetView to handle OAuth-only accounts gracefully.
+
+    Django's default silently skips users with no usable password, showing the
+    success page anyway. This gives a clear, actionable message instead.
+    """
+    template_name = 'accounts/password_reset.html'
+    email_template_name = 'accounts/password_reset_email.html'
+    subject_template_name = 'accounts/password_reset_subject.txt'
+    success_url = '/accounts/password-reset/done/'
+
+    def form_valid(self, form):
+        email = form.cleaned_data.get('email')
+        UserModel = get_user_model()
+        users = UserModel.objects.filter(email__iexact=email, is_active=True)
+        if users.exists() and all(not u.has_usable_password() for u in users):
+            form.add_error(
+                'email',
+                'This account was created with Google sign-in and does not have a password. '
+                'Please use the "Continue with Google" button on the login page.'
+            )
+            return self.form_invalid(form)
+        return super().form_valid(form)
 
 
 def _resolve_post_login_redirect(user):
