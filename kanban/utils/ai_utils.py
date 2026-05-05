@@ -5406,14 +5406,28 @@ Before generating, evaluate the goal text:
 ## PrizmAI hierarchy (you must produce every level)
 
 1. **Organization Goal** — the apex strategic objective.
-2. **Missions** (2-3 per goal) — major focus areas that serve the goal.
-3. **Strategies** (1-2 per mission) — concrete approaches to fulfil each mission.
-4. **Boards** (1 per strategy) — Kanban boards where the work happens.
+2. **Missions** (2-4 per goal, scaled to goal complexity) — major focus areas that serve the goal.
+   - A narrow, focused goal (single product, single market) → 2 missions.
+   - A moderately broad goal (two or three distinct focus areas) → 3 missions.
+   - A wide, multi-domain goal (multiple products, markets, or departments) → 4 missions.
+3. **Strategies** (1-3 per mission, scaled to mission scope) — concrete approaches to fulfil each mission.
+   - A tightly-scoped, single-track mission → 1 strategy.
+   - A mission with two distinct approaches or workstreams → 2 strategies.
+   - A complex mission covering several parallel tracks → 3 strategies.
+4. **Boards** (1-2 per strategy) — Kanban boards where the work happens.
+   - A straightforward strategy with a single workstream → 1 board.
+   - A strategy with two clearly distinct parallel workstreams → 2 boards.
    Each board has 4-7 **columns** (the first column MUST be "To Do").
 5. **Tasks** (3-5 per board) — actionable starter items placed in the
    first column ("To Do").  Each task needs a priority and item_type.
 
 ## Rules
+- **Scale to the goal, not to the maximum.** Do NOT always use the highest
+  number of missions, strategies, or boards. A simple, focused goal with
+  2 missions and 1-2 strategies each produces a cleaner, more useful workspace
+  than inflating every workspace to the maximum. Let the goal's actual scope
+  and complexity drive the counts — variety across workspaces is expected
+  and desirable.
 - Missions, strategies and boards must feel **surprisingly specific and
   useful** — avoid generic corporate buzzwords.
 - Task titles should be concrete actions a team member could start today.
