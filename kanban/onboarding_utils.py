@@ -81,8 +81,9 @@ def commit_onboarding_workspace(user, preview):
 
     org = getattr(user, 'profile', None) and user.profile.organization
 
-    # Auto-create an Organization if the user doesn't have one yet
-    if not org:
+    # Auto-create an Organization if the user doesn't have one yet,
+    # or if their current org is the shared demo org (must never use demo org for real workspaces).
+    if not org or getattr(org, 'is_demo', False):
         from accounts.models import Organization
         first_name = (user.first_name or user.username).strip()
         org_name = f"{first_name}'s Workspace"
