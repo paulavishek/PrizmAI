@@ -465,7 +465,7 @@ def get_spectra_denial_context(user, board, trigger='board_view'):
 
     if has_pending:
         spectra_message = (
-            f"I see you're trying to access the **{board.name}** board. "
+            f"I see you're trying to access the <strong>{board.name}</strong> board. "
             f"You already have a pending access request — "
             f"{owner_name} will be notified and can approve it from their dashboard. "
             f"I'll let you know as soon as there's an update!"
@@ -473,7 +473,7 @@ def get_spectra_denial_context(user, board, trigger='board_view'):
         can_request = False
     else:
         spectra_message = (
-            f"You don't currently have access to the **{board.name}** board. "
+            f"You don't currently have access to the <strong>{board.name}</strong> board. "
             f"Would you like me to send an automated access request to "
             f"{owner_name}? They'll receive a notification and can approve "
             f"it with one click."

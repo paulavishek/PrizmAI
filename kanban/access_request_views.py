@@ -96,7 +96,7 @@ def submit_access_request(request):
         'success': True,
         'request_id': access_request.id,
         'spectra_message': (
-            f"Done! I've sent an access request to **{owner_name}**. "
+            f"Done! I've sent an access request to <strong>{owner_name}</strong>. "
             f"They'll receive a notification and can approve your request "
             f"from their dashboard. I'll let you know as soon as they respond!"
         ),
