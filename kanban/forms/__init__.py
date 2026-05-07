@@ -770,12 +770,25 @@ class TaskSearchForm(forms.Form):
     
     def __init__(self, *args, **kwargs):
         board = kwargs.pop('board', None)
+        current_user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         
         if board:
             self.fields['column'].queryset = Column.objects.filter(board=board)
-            # Show all users instead of just board members
-            self.fields['assignee'].queryset = User.objects.all().order_by('username')
+            # For demo boards: show only demo users + the current logged-in user.
+            # For regular boards: show only actual board members (RBAC).
+            from django.db.models import Q
+            if getattr(board, 'is_official_demo_board', False):
+                demo_q = Q(username__endswith='_demo')
+                if current_user:
+                    demo_q |= Q(id=current_user.id)
+                self.fields['assignee'].queryset = User.objects.filter(
+                    demo_q
+                ).distinct().order_by('username')
+            else:
+                self.fields['assignee'].queryset = User.objects.filter(
+                    Q(board_memberships__board=board) | Q(id=board.created_by_id)
+                ).distinct().order_by('username')
 
 
 

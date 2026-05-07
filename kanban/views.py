@@ -2210,7 +2210,7 @@ def board_detail(request, board_id):
         columns = Column.objects.filter(board=board).order_by('position')
     
     # Initialize the search form
-    search_form = TaskSearchForm(request.GET or None, board=board)
+    search_form = TaskSearchForm(request.GET or None, board=board, user=request.user)
     
     # Get all tasks for this board (with filtering if search is active)
     # Exclude milestones (item_type='milestone') — they are Gantt-only items
