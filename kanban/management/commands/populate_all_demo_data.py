@@ -254,6 +254,15 @@ class Command(BaseCommand):
                 f'{retro_stats["metrics"]} metrics'
             ))
 
+            # 13. PrizmDiscovery Demo Data
+            self.stdout.write(self.style.NOTICE('\n💡 PHASE 13: Creating PrizmDiscovery Demo Data...'))
+            try:
+                from django.core.management import call_command as _call_disc
+                _call_disc('populate_discovery_demo_data')
+                self.stdout.write(self.style.SUCCESS('   ✅ Discovery demo ideas seeded.'))
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'   ⚠️ Discovery demo data: {e}'))
+
         # Final Summary
         self.print_final_summary()
 

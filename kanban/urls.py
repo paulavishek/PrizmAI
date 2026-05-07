@@ -23,6 +23,7 @@ from . import commitment_views
 from . import favorite_views
 from . import sandbox_views
 from . import access_request_views
+from . import discovery_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -56,6 +57,22 @@ urlpatterns = [
     
     path('boards/', views.board_list, name='board_list'),
     path('boards/create/', views.create_board, name='create_board'),
+
+    # -----------------------------------------------------------------------
+    # PrizmDiscovery — ideas inbox, AI scoring, 2×2 matrix, promotions
+    # Gated to Professional+ tier in the views themselves.
+    # -----------------------------------------------------------------------
+    path('discovery/', discovery_views.discovery_dashboard, name='discovery_dashboard'),
+    path('discovery/matrix/', discovery_views.discovery_matrix, name='discovery_matrix'),
+    path('discovery/create/', discovery_views.idea_create, name='idea_create'),
+    path('discovery/<int:idea_id>/', discovery_views.idea_detail, name='idea_detail'),
+    path('discovery/<int:idea_id>/edit/', discovery_views.idea_edit, name='idea_edit'),
+    path('discovery/<int:idea_id>/stage/', discovery_views.idea_update_stage, name='idea_update_stage'),
+    path('discovery/<int:idea_id>/score/', discovery_views.idea_ai_score, name='idea_ai_score'),
+    path('discovery/<int:idea_id>/promote/', discovery_views.idea_promote, name='idea_promote'),
+    path('discovery/<int:idea_id>/comment/', discovery_views.add_idea_comment, name='add_idea_comment'),
+    path('api/boards/<int:board_id>/discovery-link/', discovery_views.board_discovery_link, name='board_discovery_link'),
+    # -----------------------------------------------------------------------
 
     # -----------------------------------------------------------------------
     # Organization Goal hierarchy  (Goal → Mission → Strategy → Board → Task)

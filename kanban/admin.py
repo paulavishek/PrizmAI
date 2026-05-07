@@ -31,6 +31,7 @@ from .stress_test_models import StressTestSession, ImmunityScore, StressTestScen
 from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 from .whatif_models import WhatIfScenario
 from .access_request_models import AccessRequest
+from .discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
 
 # Import resource leveling admin
 from .resource_leveling_admin import (
@@ -1302,3 +1303,42 @@ class FeatureGuideAdmin(admin.ModelAdmin):
         }),
     )
 
+
+# ── PrizmDiscovery ────────────────────────────────────────────────────────────
+
+class IdeaCommentInline(admin.TabularInline):
+    model = IdeaComment
+    extra = 0
+    readonly_fields = ('created_at',)
+    fields = ('author', 'content', 'created_at')
+
+
+@admin.register(DiscoveryIdea)
+class DiscoveryIdeaAdmin(admin.ModelAdmin):
+    list_display = ('title', 'organization', 'stage', 'source', 'submitted_by', 'is_scored', 'is_demo', 'created_at')
+    list_filter = ('stage', 'source', 'is_demo', 'created_at')
+    search_fields = ('title', 'description', 'organization__name', 'submitted_by__username')
+    readonly_fields = ('created_at', 'updated_at', 'ai_scored_at', 'promoted_at')
+    inlines = [IdeaCommentInline]
+
+    def is_scored(self, obj):
+        return obj.is_scored
+    is_scored.boolean = True
+    is_scored.short_description = 'AI Scored?'
+
+
+@admin.register(IdeaComment)
+class IdeaCommentAdmin(admin.ModelAdmin):
+    list_display = ('idea', 'author', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('idea__title', 'author__username', 'content')
+    readonly_fields = ('created_at',)
+
+
+@admin.register(IdeaPromotion)
+class IdeaPromotionAdmin(admin.ModelAdmin):
+    list_display = ('idea', 'board', 'promoted_by', 'promoted_at')
+    list_filter = ('promoted_at',)
+    search_fields = ('idea__title', 'board__name', 'promoted_by__username')
+    readonly_fields = ('promoted_at',)
+    filter_horizontal = ('tasks',)

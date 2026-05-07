@@ -49,6 +49,9 @@ from kanban.preset_models import WorkspacePreset, BoardPreset, build_feature_fla
 # Import PrizmBrief models
 from kanban.prizmbrief_models import SavedBrief
 
+# Import PrizmDiscovery models
+from kanban.discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
+
 
 # ---------------------------------------------------------------------------
 # WORKSPACE — the isolation boundary for multi-workspace support.

@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ idea.title }} — Discovery{% endblock %}
+{% block page_title %}Idea Detail{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Idea Detail ───────────────────────────────────────────────────── */
+.idea-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 1.5rem;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .idea-detail-layout { grid-template-columns: 1fr; }
+}
+.idea-detail-card, .ai-score-card, .promote-card, .comment-card {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1.25rem;
+    background: var(--card-bg, #fff);
+    margin-bottom: 1rem;
+}
+.idea-detail-card h5 { font-weight: 700; margin-bottom: 0.3rem; }
+.idea-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary, #6b7280);
+}
+.stage-action-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+
+/* Score card */
+.score-bar-label { font-size: 0.8rem; margin-bottom: 2px; font-weight: 600; }
+.score-value-label { font-size: 0.78rem; color: var(--text-secondary, #6b7280); margin-bottom: 6px; }
+.score-reasoning { font-size: 0.83rem; color: var(--text-secondary, #6b7280); margin-top: 0.6rem; border-top: 1px dashed var(--border-color, #e5e7eb); padding-top: 0.6rem; }
+
+/* Comments */
+.comment-item {
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+.comment-item:last-child { border-bottom: none; }
+.comment-author { font-weight: 600; font-size: 0.82rem; }
+.comment-time { font-size: 0.75rem; color: var(--text-secondary, #6b7280); margin-left: 0.4rem; }
+.comment-text { font-size: 0.875rem; margin-top: 0.25rem; }
+
+/* Promotion */
+.promote-card { border-top: 3px solid #16a34a; }
+
+/* Stage badges */
+.badge-stage-new { background: #dbeafe; color: #1d4ed8; }
+.badge-stage-under_review { background: #fef3c7; color: #92400e; }
+.badge-stage-approved { background: #dcfce7; color: #166534; }
+.badge-stage-rejected { background: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'discovery_dashboard' %}">Discovery</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ idea.title|truncatechars:50 }}</li>
+        </ol>
+    </nav>
+
+    <div class="idea-detail-layout">
+
+        <!-- ── LEFT: Idea content & comments ── -->
+        <div>
+            <div class="idea-detail-card">
+                <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
+                    <h5>{{ idea.title }}</h5>
+                    <span class="badge badge-stage-{{ idea.stage }} flex-shrink-0">{{ idea.get_stage_display }}</span>
+                </div>
+                <div class="idea-meta-row">
+                    <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display }}</span>
+                    <span><i class="fas fa-user me-1"></i>{{ idea.submitted_by.get_full_name|default:idea.submitted_by.username }}</span>
+                    <span><i class="fas fa-clock me-1"></i>Submitted {{ idea.created_at|timesince }} ago</span>
+                    {% if idea.updated_at != idea.created_at %}
+                    <span class="text-muted">· Updated {{ idea.updated_at|timesince }} ago</span>
+                    {% endif %}
+                </div>
+                {% if idea.description %}
+                <p style="font-size:0.9rem; white-space:pre-wrap;">{{ idea.description }}</p>
+                {% else %}
+                <p class="text-muted" style="font-size:0.875rem;"><em>No description provided.</em></p>
+                {% endif %}
+
+                <!-- Edit button — only submitter or admin; not viewers -->
+                {% if not is_viewer %}
+                {% if is_admin or idea.submitted_by == request.user %}
+                <a href="{% url 'idea_edit' idea_id=idea.pk %}" class="btn btn-outline-secondary btn-sm mt-2">
+                    <i class="fas fa-pencil me-1"></i>Edit
+                </a>
+                {% endif %}
+                {% endif %}
+
+                <!-- Stage action buttons (admin only) -->
+                {% if is_admin %}
+                <div class="stage-action-buttons">
+                    {% if idea.stage != 'under_review' and idea.stage != 'approved' and idea.stage != 'rejected' %}
+                    <button class="btn btn-outline-warning btn-sm" onclick="changeStage('under_review')">
+                        <i class="fas fa-search me-1"></i>Move to Under Review
+                    </button>
+                    {% endif %}
+                    {% if idea.stage != 'approved' %}
+                    <button class="btn btn-outline-success btn-sm" onclick="changeStage('approved')">
+                        <i class="fas fa-check me-1"></i>Approve
+                    </button>
+                    {% endif %}
+                    {% if idea.stage != 'rejected' %}
+                    <button class="btn btn-outline-danger btn-sm" onclick="changeStage('rejected')">
+                        <i class="fas fa-times me-1"></i>Reject
+                    </button>
+                    {% endif %}
+                    {% if idea.stage != 'new' %}
+                    <button class="btn btn-outline-secondary btn-sm" onclick="changeStage('new')">
+                        <i class="fas fa-undo me-1"></i>Reset to New
+                    </button>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Promotion info (if already promoted) -->
+            {% if promotion %}
+            <div class="promote-card">
+                <h6 class="fw-bold mb-2"><i class="fas fa-arrow-circle-up me-1 text-success"></i>Promoted to Board</h6>
+                {% if promotion.board %}
+                <p style="font-size:0.875rem;" class="mb-1">
+                    Board: <strong>{{ promotion.board.name }}</strong>
+                </p>
+                {% endif %}
+                <p style="font-size:0.8rem;" class="text-muted mb-0">
+                    Promoted by {{ promotion.promoted_by.get_full_name|default:promotion.promoted_by.username }}
+                    on {{ promotion.promoted_at|date:"N j, Y" }}
+                </p>
+                {% if promotion.tasks.all %}
+                <div class="mt-2">
+                    <div style="font-size:0.8rem; font-weight:600; margin-bottom:4px;">Linked tasks:</div>
+                    {% for task in promotion.tasks.all %}
+                    <span class="badge bg-secondary me-1" style="font-size:0.75rem;">{{ task.title|truncatechars:30 }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Promote form — admin, approved, not yet promoted -->
+            {% if is_admin and idea.stage == 'approved' and not promotion %}
+            <div class="idea-detail-card">
+                <h6 class="fw-bold mb-2"><i class="fas fa-arrow-up me-1 text-primary"></i>Promote to Board</h6>
+                <form id="promoteForm" method="post" action="{% url 'idea_promote' idea_id=idea.pk %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <label for="boardSelect" style="font-size:0.82rem;" class="fw-semibold">Link to a board (optional)</label>
+                        <select id="boardSelect" name="board_id" class="form-select form-select-sm mt-1">
+                            <option value="">— No board —</option>
+                            {% for board in request.user.profile.organization.board_set.all %}
+                            <option value="{{ board.pk }}">{{ board.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="fas fa-arrow-up me-1"></i>Promote Idea
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- Comments -->
+            <div class="comment-card">
+                <h6 class="fw-bold mb-3"><i class="fas fa-comments me-1"></i>Comments ({{ comments.count }})</h6>
+                {% if comments %}
+                    {% for comment in comments %}
+                    <div class="comment-item">
+                        <span class="comment-author">{{ comment.author.get_full_name|default:comment.author.username }}</span>
+                        <span class="comment-time">{{ comment.created_at|timesince }} ago</span>
+                        <div class="comment-text">{{ comment.content }}</div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted" style="font-size:0.85rem;">No comments yet.</p>
+                {% endif %}
+
+                {% if not is_viewer %}
+                <div class="mt-3">
+                    <textarea id="commentInput" class="form-control form-control-sm mb-2" rows="2"
+                              placeholder="Add a comment…" style="font-size:0.875rem;"></textarea>
+                    <button class="btn btn-primary btn-sm" onclick="submitComment()">
+                        <i class="fas fa-paper-plane me-1"></i>Post Comment
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ── RIGHT: AI Score card ── -->
+        <div>
+            <div class="ai-score-card">
+                <h6 class="fw-bold mb-3"><i class="fas fa-robot me-1 text-primary"></i>Spectra AI Score</h6>
+                {% if idea.is_scored %}
+                    <!-- Impact -->
+                    <div class="score-bar-label">Impact <span class="float-end">{{ idea.ai_score_impact }}/100</span></div>
+                    <div class="progress mb-1" style="height:8px;">
+                        <div class="progress-bar bg-warning" style="width:{{ idea.ai_score_impact }}%"></div>
+                    </div>
+                    <div class="score-value-label">How much business value will this deliver?</div>
+
+                    <!-- Effort -->
+                    <div class="score-bar-label">Effort <span class="float-end">{{ idea.ai_score_effort }}/100</span></div>
+                    <div class="progress mb-1" style="height:8px;">
+                        <div class="progress-bar bg-info" style="width:{{ idea.ai_score_effort }}%"></div>
+                    </div>
+                    <div class="score-value-label">How much work is required? (higher = harder)</div>
+
+                    <!-- Confidence -->
+                    <div class="score-bar-label">Confidence <span class="float-end">{{ idea.ai_score_confidence }}%</span></div>
+                    <div class="progress mb-1" style="height:8px;">
+                        <div class="progress-bar bg-success" style="width:{{ idea.ai_score_confidence }}%"></div>
+                    </div>
+                    <div class="score-value-label">How confident is Spectra in this assessment?</div>
+
+                    {% if idea.quadrant_label %}
+                    <div class="mt-2 p-2 rounded" style="background:var(--bg-secondary, #f9fafb); font-size:0.82rem;">
+                        <strong>Matrix quadrant:</strong> {{ idea.quadrant_label }}
+                    </div>
+                    {% endif %}
+
+                    {% if idea.ai_score_recommendation %}
+                    <div class="mt-2 p-2 rounded" style="background:var(--bg-secondary, #f9fafb); font-size:0.82rem;">
+                        <strong>Recommendation:</strong> {{ idea.ai_score_recommendation }}
+                    </div>
+                    {% endif %}
+
+                    {% if idea.ai_score_reasoning %}
+                    <div class="score-reasoning">
+                        <strong>Spectra's reasoning:</strong><br>
+                        {{ idea.ai_score_reasoning }}
+                    </div>
+                    {% endif %}
+
+                    <div style="font-size:0.72rem; color:var(--text-secondary, #6b7280); margin-top:0.5rem;">
+                        Scored {{ idea.ai_scored_at|timesince }} ago
+                    </div>
+
+                    {% if not is_viewer %}
+                    <button class="btn btn-outline-secondary btn-sm mt-2 w-100" id="scoreBtn" onclick="rescoreIdea()">
+                        <i class="fas fa-sync me-1"></i>Re-score with Spectra
+                    </button>
+                    {% endif %}
+
+                {% else %}
+                    <!-- Unscored state -->
+                    <p class="text-muted mb-3" style="font-size:0.875rem;">
+                        This idea hasn't been scored by Spectra yet. Click below to get AI-powered impact, effort, and confidence estimates.
+                    </p>
+                    {% if not is_viewer %}
+                    <button class="btn btn-primary btn-sm w-100" id="scoreBtn" onclick="rescoreIdea()">
+                        <i class="fas fa-robot me-1"></i>Score with Spectra
+                    </button>
+                    {% else %}
+                    <p class="text-muted" style="font-size:0.8rem;"><em>Viewers cannot trigger AI scoring.</em></p>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- /idea-detail-layout -->
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const IDEA_ID = {{ idea.pk }};
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+function changeStage(newStage) {
+    if (!confirm(`Change stage to "${newStage}"?`)) return;
+    fetch(`/discovery/${IDEA_ID}/stage/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: newStage }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) window.location.reload();
+        else alert(data.error || 'Failed to update stage.');
+    })
+    .catch(() => alert('Network error.'));
+}
+
+function rescoreIdea() {
+    const btn = document.getElementById('scoreBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scoring…';
+    fetch(`/discovery/${IDEA_ID}/score/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) window.location.reload();
+        else { btn.disabled = false; btn.innerHTML = '<i class="fas fa-robot me-1"></i>Score with Spectra'; alert(data.error || 'Scoring failed.'); }
+    })
+    .catch(() => { btn.disabled = false; alert('Network error.'); });
+}
+
+function submitComment() {
+    const input = document.getElementById('commentInput');
+    const content = input.value.trim();
+    if (!content) return;
+    fetch(`/discovery/${IDEA_ID}/comment/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) window.location.reload();
+        else alert(data.error || 'Could not post comment.');
+    })
+    .catch(() => alert('Network error.'));
+}
+</script>
+{% endblock %}
