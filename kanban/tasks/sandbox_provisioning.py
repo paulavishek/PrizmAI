@@ -178,6 +178,13 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception:
         pass
 
+    # Seed PrizmDiscovery demo ideas for the demo org (idempotent).
+    try:
+        from django.core.management import call_command
+        call_command('populate_discovery_demo_data')
+    except Exception as e:
+        logger.warning("Could not seed Discovery demo ideas after sandbox provision: %s", e)
+
     redirect_url = '/dashboard/'
     _send_provision_status(user_id, 'Your workspace is ready!', 100)
     _send_provision_result(user_id, {

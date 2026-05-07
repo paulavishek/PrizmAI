@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if action == 'edit' %}Edit Idea{% else %}Submit Idea{% endif %} — Discovery{% endblock %}
+{% block page_title %}{% if action == 'edit' %}Edit Idea{% else %}Submit New Idea{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.idea-form-card {
+    max-width: 680px;
+    margin: 0 auto;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1.75rem;
+    background: var(--card-bg, #fff);
+}
+.idea-form-card h5 { font-weight: 700; margin-bottom: 0.2rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'discovery_dashboard' %}">Discovery</a></li>
+            {% if action == 'edit' %}
+            <li class="breadcrumb-item"><a href="{% url 'idea_detail' idea_id=idea.pk %}">{{ idea.title|truncatechars:40 }}</a></li>
+            <li class="breadcrumb-item active">Edit</li>
+            {% else %}
+            <li class="breadcrumb-item active">Submit Idea</li>
+            {% endif %}
+        </ol>
+    </nav>
+
+    <div class="idea-form-card">
+        <h5 class="mb-1">
+            {% if action == 'edit' %}
+            <i class="fas fa-pencil me-2"></i>Edit Idea
+            {% else %}
+            <i class="fas fa-lightbulb me-2 text-warning"></i>Submit a New Idea
+            {% endif %}
+        </h5>
+        <p class="text-muted mb-4" style="font-size:0.875rem;">
+            {% if action == 'edit' %}
+            Update the idea details. Changes are saved immediately.
+            {% else %}
+            Describe the idea clearly. Spectra AI will score it after submission.
+            {% endif %}
+        </p>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label for="ideaTitle" class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="ideaTitle" name="title"
+                       value="{% if action == 'edit' %}{{ idea.title }}{% endif %}"
+                       placeholder="e.g. Mobile app for APAC market expansion"
+                       maxlength="255" required autofocus>
+                <div class="form-text">Keep it concise — one sentence is ideal.</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="ideaDescription" class="form-label fw-semibold">Description</label>
+                <textarea class="form-control" id="ideaDescription" name="description" rows="5"
+                          placeholder="What problem does this solve? What does success look like? Any initial thoughts on approach?">{% if action == 'edit' %}{{ idea.description }}{% endif %}</textarea>
+            </div>
+
+            <div class="mb-4">
+                <label for="ideaSource" class="form-label fw-semibold">Source</label>
+                <select class="form-select" id="ideaSource" name="source">
+                    {% for value, label in source_choices %}
+                    <option value="{{ value }}"
+                        {% if action == 'edit' and idea.source == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Where did this idea originate?</div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    {% if action == 'edit' %}
+                    <i class="fas fa-save me-1"></i>Save Changes
+                    {% else %}
+                    <i class="fas fa-paper-plane me-1"></i>Submit Idea
+                    {% endif %}
+                </button>
+                {% if action == 'edit' %}
+                <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                {% else %}
+                <a href="{% url 'discovery_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

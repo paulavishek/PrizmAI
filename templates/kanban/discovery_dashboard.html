@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+
+{% block title %}Discovery Inbox — PrizmAI{% endblock %}
+{% block page_title %}PrizmDiscovery{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Discovery Dashboard ─────────────────────────────────────────── */
+.discovery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.discovery-header h4 {
+    margin: 0;
+    font-weight: 600;
+}
+.discovery-tabs .nav-link {
+    color: var(--text-secondary, #6b7280);
+    border-radius: 6px 6px 0 0;
+    font-size: 0.875rem;
+    padding: 0.45rem 1rem;
+}
+.discovery-tabs .nav-link.active {
+    font-weight: 600;
+    color: var(--accent-blue, #378ADD);
+    border-bottom: 2px solid var(--accent-blue, #378ADD);
+    background: transparent;
+}
+.idea-card {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    background: var(--card-bg, #fff);
+    transition: box-shadow 0.2s, transform 0.2s;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+.idea-card:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+    color: inherit;
+}
+.idea-card-title {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.3rem;
+}
+.idea-card-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #6b7280);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.idea-card-description {
+    font-size: 0.88rem;
+    color: var(--text-secondary, #6b7280);
+    margin-top: 0.3rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.idea-score-preview {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+}
+.score-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--bg-secondary, #f3f4f6);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-weight: 600;
+}
+/* Stage badge colours */
+.badge-stage-new { background: #dbeafe; color: #1d4ed8; }
+.badge-stage-under_review { background: #fef3c7; color: #92400e; }
+.badge-stage-approved { background: #dcfce7; color: #166534; }
+.badge-stage-rejected { background: #fee2e2; color: #991b1b; }
+
+/* Discovery empty state */
+.discovery-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #6b7280);
+}
+.discovery-empty i {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: #cbd5e1;
+}
+
+/* Widget counts at top */
+.discovery-stat-bar {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.discovery-stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--bg-secondary, #f3f4f6);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.discovery-stat-pill.needs-action { background: #fef3c7; color: #92400e; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <div class="discovery-header">
+        <div>
+            <h4><i class="fas fa-lightbulb me-2 text-warning"></i>Discovery Inbox</h4>
+            <p class="text-muted mb-0" style="font-size:0.875rem;">Ideas being evaluated before becoming tasks. <em>What should we build next?</em></p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'discovery_matrix' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-th me-1"></i>Matrix View
+            </a>
+            {% if not is_viewer %}
+            <a href="{% url 'idea_create' %}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus me-1"></i>Submit Idea
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if ideas_to_score > 0 or ideas_to_promote > 0 %}
+    <div class="discovery-stat-bar">
+        {% if ideas_to_score > 0 %}
+        <span class="discovery-stat-pill needs-action">
+            <i class="fas fa-robot"></i> {{ ideas_to_score }} idea{{ ideas_to_score|pluralize }} awaiting AI score
+        </span>
+        {% endif %}
+        {% if ideas_to_promote > 0 %}
+        <span class="discovery-stat-pill needs-action">
+            <i class="fas fa-arrow-up"></i> {{ ideas_to_promote }} idea{{ ideas_to_promote|pluralize }} ready to promote
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Stage filter tabs -->
+    <ul class="nav discovery-tabs border-bottom mb-3">
+        <li class="nav-item">
+            <a class="nav-link {% if stage_filter == 'all' %}active{% endif %}" href="?stage=all">
+                All <span class="badge bg-secondary ms-1">{{ stage_counts.new|add:stage_counts.under_review|add:stage_counts.approved|add:stage_counts.rejected }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if stage_filter == 'new' %}active{% endif %}" href="?stage=new">
+                💡 New <span class="badge badge-stage-new ms-1">{{ stage_counts.new }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if stage_filter == 'under_review' %}active{% endif %}" href="?stage=under_review">
+                🔍 Under Review <span class="badge badge-stage-under_review ms-1">{{ stage_counts.under_review }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if stage_filter == 'approved' %}active{% endif %}" href="?stage=approved">
+                ✅ Approved <span class="badge badge-stage-approved ms-1">{{ stage_counts.approved }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if stage_filter == 'rejected' %}active{% endif %}" href="?stage=rejected">
+                ❌ Rejected <span class="badge badge-stage-rejected ms-1">{{ stage_counts.rejected }}</span>
+            </a>
+        </li>
+    </ul>
+
+    <!-- Idea cards -->
+    {% if ideas %}
+        {% for idea in ideas %}
+        <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="idea-card">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+                <div class="idea-card-title">{{ idea.title }}</div>
+                <span class="badge badge-stage-{{ idea.stage }} flex-shrink-0">{{ idea.get_stage_display }}</span>
+            </div>
+            <div class="idea-card-meta">
+                <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display }}</span>
+                <span><i class="fas fa-user me-1"></i>{{ idea.submitted_by.get_full_name|default:idea.submitted_by.username }}</span>
+                <span><i class="fas fa-clock me-1"></i>{{ idea.created_at|timesince }} ago</span>
+            </div>
+            {% if idea.description %}
+            <div class="idea-card-description">{{ idea.description }}</div>
+            {% endif %}
+            {% if idea.is_scored %}
+            <div class="idea-score-preview">
+                <span class="score-chip" title="Impact"><i class="fas fa-bolt text-warning"></i> Impact {{ idea.ai_score_impact }}</span>
+                <span class="score-chip" title="Effort"><i class="fas fa-dumbbell text-info"></i> Effort {{ idea.ai_score_effort }}</span>
+                <span class="score-chip" title="Confidence"><i class="fas fa-check-circle text-success"></i> {{ idea.ai_score_confidence }}% confident</span>
+                {% if idea.quadrant_label %}
+                <span class="score-chip" title="Matrix quadrant"><i class="fas fa-th me-1"></i>{{ idea.quadrant_label }}</span>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="idea-score-preview" style="opacity:0.5;">
+                <span class="score-chip"><i class="fas fa-robot me-1"></i>Not yet scored by Spectra</span>
+            </div>
+            {% endif %}
+        </a>
+        {% endfor %}
+    {% else %}
+    <div class="discovery-empty">
+        <i class="fas fa-lightbulb d-block"></i>
+        {% if stage_filter == 'all' %}
+            <p class="mb-2">No ideas in the inbox yet.</p>
+            {% if not is_viewer %}
+            <a href="{% url 'idea_create' %}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus me-1"></i>Submit the first idea
+            </a>
+            {% endif %}
+        {% else %}
+            <p class="mb-2">No ideas with this stage.</p>
+            <a href="?stage=all" class="btn btn-outline-secondary btn-sm">View all ideas</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

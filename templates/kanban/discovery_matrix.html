@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+
+{% block title %}Discovery Matrix — PrizmAI{% endblock %}
+{% block page_title %}Discovery Matrix{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Discovery Matrix ──────────────────────────────────────────────── */
+.matrix-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.matrix-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.matrix-quadrant {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    background: var(--card-bg, #fff);
+    min-height: 160px;
+}
+.matrix-quadrant-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+/* Quadrant colours */
+.q-quick-win  { border-top: 3px solid #16a34a; }
+.q-quick-win .matrix-quadrant-title { color: #16a34a; }
+.q-strategic  { border-top: 3px solid #2563eb; }
+.q-strategic .matrix-quadrant-title { color: #2563eb; }
+.q-fill-in    { border-top: 3px solid #d97706; }
+.q-fill-in .matrix-quadrant-title { color: #d97706; }
+.q-deprio     { border-top: 3px solid #9ca3af; }
+.q-deprio .matrix-quadrant-title { color: #9ca3af; }
+
+.matrix-axis-labels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #6b7280);
+    text-align: center;
+    margin-bottom: 0.25rem;
+}
+.matrix-y-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #6b7280);
+    text-align: center;
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.5px;
+}
+.idea-chip {
+    display: block;
+    background: var(--bg-secondary, #f9fafb);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.82rem;
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.15s;
+}
+.idea-chip:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); color: inherit; }
+.idea-chip-scores {
+    font-size: 0.72rem;
+    color: var(--text-secondary, #6b7280);
+    margin-top: 2px;
+}
+.idea-chip-stage {
+    font-size: 0.7rem;
+    border-radius: 4px;
+    padding: 0 5px;
+    font-weight: 600;
+}
+.badge-stage-approved { background: #dcfce7; color: #166534; }
+.badge-stage-under_review { background: #fef3c7; color: #92400e; }
+.badge-stage-new { background: #dbeafe; color: #1d4ed8; }
+/* Awaiting score section */
+.awaiting-score-section {
+    margin-top: 1.5rem;
+}
+.awaiting-score-section h6 {
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-bottom: 1px dashed var(--border-color, #e5e7eb);
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.75rem;
+}
+.unscored-idea-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary, #f9fafb);
+    border-radius: 8px;
+    margin-bottom: 0.4rem;
+    font-size: 0.85rem;
+}
+.unscored-idea-row a { text-decoration: none; color: inherit; font-weight: 500; }
+.unscored-idea-row a:hover { color: var(--accent-blue, #378ADD); }
+
+/* Matrix axis legend */
+.matrix-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-secondary, #6b7280);
+    margin-top: 0.25rem;
+    padding: 0 0.25rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <div class="matrix-page-header">
+        <div>
+            <h4><i class="fas fa-th me-2 text-primary"></i>Impact vs Effort Matrix</h4>
+            <p class="text-muted mb-0" style="font-size:0.875rem;">Ideas scored by Spectra, plotted by strategic value and implementation effort.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'discovery_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-list me-1"></i>Back to Inbox
+            </a>
+            {% if not is_viewer %}
+            <a href="{% url 'idea_create' %}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus me-1"></i>Submit Idea
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Y-axis label -->
+    <div class="matrix-y-label text-uppercase fw-semibold" style="letter-spacing:0.05em;">
+        ▲ High Impact &nbsp;|&nbsp; Low Impact ▼
+    </div>
+
+    <!-- 2×2 grid -->
+    <div class="matrix-grid">
+        <!-- Top-left: Quick Win (high impact, low effort) -->
+        <div class="matrix-quadrant q-quick-win">
+            <div class="matrix-quadrant-title">
+                <i class="fas fa-rocket"></i> Quick Wins
+                <small class="text-muted fw-normal ms-1">(High impact · Low effort)</small>
+            </div>
+            {% if quadrants.quick_win %}
+                {% for idea in quadrants.quick_win %}
+                <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="idea-chip">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>{{ idea.title|truncatechars:55 }}</span>
+                        <span class="idea-chip-stage badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
+                    </div>
+                    <div class="idea-chip-scores">
+                        Impact {{ idea.ai_score_impact }} · Effort {{ idea.ai_score_effort }} · Confidence {{ idea.ai_score_confidence }}%
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted" style="font-size:0.82rem;opacity:0.7;">No ideas in this quadrant yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Top-right: Strategic Bets (high impact, high effort) -->
+        <div class="matrix-quadrant q-strategic">
+            <div class="matrix-quadrant-title">
+                <i class="fas fa-chess-king"></i> Strategic Bets
+                <small class="text-muted fw-normal ms-1">(High impact · High effort)</small>
+            </div>
+            {% if quadrants.strategic_bet %}
+                {% for idea in quadrants.strategic_bet %}
+                <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="idea-chip">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>{{ idea.title|truncatechars:55 }}</span>
+                        <span class="idea-chip-stage badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
+                    </div>
+                    <div class="idea-chip-scores">
+                        Impact {{ idea.ai_score_impact }} · Effort {{ idea.ai_score_effort }} · Confidence {{ idea.ai_score_confidence }}%
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted" style="font-size:0.82rem;opacity:0.7;">No ideas in this quadrant yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Bottom-left: Fill-ins (low impact, low effort) -->
+        <div class="matrix-quadrant q-fill-in">
+            <div class="matrix-quadrant-title">
+                <i class="fas fa-tasks"></i> Fill-ins
+                <small class="text-muted fw-normal ms-1">(Low impact · Low effort)</small>
+            </div>
+            {% if quadrants.fill_in %}
+                {% for idea in quadrants.fill_in %}
+                <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="idea-chip">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>{{ idea.title|truncatechars:55 }}</span>
+                        <span class="idea-chip-stage badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
+                    </div>
+                    <div class="idea-chip-scores">
+                        Impact {{ idea.ai_score_impact }} · Effort {{ idea.ai_score_effort }} · Confidence {{ idea.ai_score_confidence }}%
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted" style="font-size:0.82rem;opacity:0.7;">No ideas in this quadrant yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Bottom-right: Deprioritize (low impact, high effort) -->
+        <div class="matrix-quadrant q-deprio">
+            <div class="matrix-quadrant-title">
+                <i class="fas fa-pause-circle"></i> Deprioritize
+                <small class="text-muted fw-normal ms-1">(Low impact · High effort)</small>
+            </div>
+            {% if quadrants.deprioritize %}
+                {% for idea in quadrants.deprioritize %}
+                <a href="{% url 'idea_detail' idea_id=idea.pk %}" class="idea-chip">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>{{ idea.title|truncatechars:55 }}</span>
+                        <span class="idea-chip-stage badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
+                    </div>
+                    <div class="idea-chip-scores">
+                        Impact {{ idea.ai_score_impact }} · Effort {{ idea.ai_score_effort }} · Confidence {{ idea.ai_score_confidence }}%
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted" style="font-size:0.82rem;opacity:0.7;">No ideas in this quadrant yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- X-axis labels -->
+    <div class="matrix-legend">
+        <span>◄ Low Effort</span>
+        <span>High Effort ►</span>
+    </div>
+
+    <!-- Awaiting Score holding area (not hidden — always shown when ideas exist) -->
+    {% if unscored %}
+    <div class="awaiting-score-section">
+        <h6><i class="fas fa-hourglass-half me-1"></i>Awaiting AI Score ({{ unscored.count }} idea{{ unscored.count|pluralize }})</h6>
+        <p style="font-size:0.8rem;" class="text-muted mb-2">These ideas have not been scored by Spectra yet — they cannot be placed on the matrix.</p>
+        {% for idea in unscored %}
+        <div class="unscored-idea-row">
+            <a href="{% url 'idea_detail' idea_id=idea.pk %}">{{ idea.title|truncatechars:70 }}</a>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge badge-stage-{{ idea.stage }}" style="font-size:0.7rem;">{{ idea.get_stage_display }}</span>
+                {% if not is_viewer %}
+                <button class="btn btn-outline-primary btn-sm py-0 px-2"
+                        style="font-size:0.75rem;"
+                        onclick="scoreIdea({{ idea.pk }}, this); return false;">
+                    <i class="fas fa-robot me-1"></i>Score
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not unscored and not quadrants.quick_win and not quadrants.strategic_bet and not quadrants.fill_in and not quadrants.deprioritize %}
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-th d-block mb-2" style="font-size:2rem;opacity:0.3;"></i>
+        <p>No scored ideas yet. Use the inbox to submit ideas and score them with Spectra.</p>
+        <a href="{% url 'discovery_dashboard' %}" class="btn btn-outline-primary btn-sm">Go to Inbox</a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function scoreIdea(ideaId, btn) {
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scoring…';
+    fetch(`/discovery/${ideaId}/score/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            window.location.reload();
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = original;
+            alert(data.error || 'Scoring failed.');
+        }
+    })
+    .catch(() => {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        alert('Network error.');
+    });
+}
+</script>
+{% endblock %}

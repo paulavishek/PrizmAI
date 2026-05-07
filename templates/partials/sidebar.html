@@ -195,6 +195,16 @@
                     <span class="sidebar-label">Boards</span>
                 </a>
             </li>
+            {% if features.show_discovery %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'discovery_dashboard' %}"
+                   class="sidebar-nav-link {% if 'discovery' in request.path %}active{% endif %}"
+                   title="Discovery">
+                    <i class="fas fa-lightbulb sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Discovery</span>
+                </a>
+            </li>
+            {% endif %}
             <li class="sidebar-nav-item">
                 <a href="{% url 'unified_calendar' %}" 
                    class="sidebar-nav-link {% if request.resolver_match.url_name == 'unified_calendar' %}active{% endif %}"

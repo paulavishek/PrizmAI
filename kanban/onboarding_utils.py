@@ -226,4 +226,26 @@ def commit_onboarding_workspace(user, preview):
         profile.save(update_fields=['onboarding_status', 'active_workspace', 'is_viewing_demo'])
 
     logger.info(f"Onboarding workspace committed for {user.username} (Goal #{org_goal.pk})")
+
+    # ── Seed PrizmDiscovery inbox with AI-suggested ideas ─────────────
+    try:
+        from kanban.discovery_ai import DiscoveryAIScorer
+        from kanban.discovery_models import DiscoveryIdea
+        goal_text = (goal_data.get('name', '') + ' ' + (goal_data.get('description', '') or '')).strip()
+        scorer = DiscoveryAIScorer()
+        seed_ideas = scorer.suggest_ideas_for_goal(goal_text, n=4)
+        for idea_data in seed_ideas:
+            DiscoveryIdea.objects.create(
+                organization=org,
+                title=idea_data['title'],
+                description=idea_data['description'],
+                source=idea_data.get('source', 'other'),
+                stage='new',
+                submitted_by=user,
+            )
+        if seed_ideas:
+            logger.info(f"Seeded {len(seed_ideas)} Discovery ideas for {org.name}")
+    except Exception as exc:
+        logger.warning(f"Failed to seed Discovery ideas during onboarding: {exc}")
+
     return org_goal

@@ -29,6 +29,34 @@ from .favorite_views import is_user_favorite as _is_fav
 from .ai_briefing import build_action_plan as _build_action_plan
 from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
+
+def _get_discovery_widget_counts(user, organization):
+    """Return discovery widget context vars for the dashboard.
+    Returns zero values if the feature is not enabled or org is missing."""
+    try:
+        from kanban.preset_models import build_feature_flags
+        from kanban.discovery_models import DiscoveryIdea
+        if organization is None:
+            return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+        org_preset = getattr(getattr(organization, 'workspace_preset', None), 'global_preset', 'lean')
+        features = build_feature_flags(org_preset)
+        if not features.get('show_discovery'):
+            return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+        to_score = DiscoveryIdea.objects.filter(
+            organization=organization, stage__in=['new', 'under_review'], ai_score_impact__isnull=True
+        ).count()
+        to_promote = DiscoveryIdea.objects.filter(
+            organization=organization, stage='approved'
+        ).exclude(promotion__isnull=False).count()
+        return {
+            'discovery_enabled': True,
+            'discovery_ideas_to_score': to_score,
+            'discovery_ideas_to_promote': to_promote,
+        }
+    except Exception:
+        return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+
+
 @login_required
 def dashboard(request):
     # Ensure user has a profile (MVP mode: auto-create without organization)
@@ -1441,6 +1469,8 @@ def dashboard(request):
         'dc_awareness_count': dc_awareness_count,
         'dc_quickwin_count': dc_quickwin_count,
         'dc_total_count': dc_total_count,
+        # PrizmDiscovery widget counts (only if feature is enabled)
+        **_get_discovery_widget_counts(request.user, organization),
         })
 
 
