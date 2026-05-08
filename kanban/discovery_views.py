@@ -70,9 +70,19 @@ def _require_discovery(request):
 
 
 def _is_org_admin(user):
-    """True if the user is an org admin (can approve/reject/promote)."""
+    """True if the user is an org admin (can approve/reject/promote).
+    In demo/sandbox mode RBAC is disabled so all sandbox users get admin access.
+    """
     try:
-        return bool(user.profile.is_admin or user.is_superuser)
+        profile = user.profile
+        if user.is_superuser:
+            return True
+        if profile.is_admin:
+            return True
+        # Demo sandbox: RBAC disabled — treat user as admin so they can explore
+        if getattr(profile, 'is_viewing_demo', False):
+            return True
+        return False
     except Exception:
         return False
 
@@ -158,6 +168,20 @@ def idea_detail(request, idea_id):
     is_admin = _is_org_admin(request.user)
     is_viewer = _is_viewer(request.user, org)
 
+    # Boards available for the promote form.
+    # In demo mode each user has their own sandbox copies — scope to the current
+    # user's owned boards so we don't leak other users' sandbox boards.
+    from kanban.models import Board
+    demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if demo_mode:
+        org_boards = Board.objects.filter(
+            owner=request.user, is_sandbox_copy=True, is_archived=False
+        ).order_by('name').values('id', 'name')
+    else:
+        org_boards = Board.objects.filter(
+            organization=org, is_archived=False
+        ).order_by('name').values('id', 'name')
+
     return render(request, 'kanban/idea_detail.html', {
         'idea': idea,
         'comments': comments,
@@ -166,6 +190,7 @@ def idea_detail(request, idea_id):
         'is_viewer': is_viewer,
         'features': features,
         'org': org,
+        'org_boards': org_boards,
     })
 
 
@@ -363,7 +388,12 @@ def idea_promote(request, idea_id):
     board = None
     if board_id:
         from kanban.models import Board
-        board = Board.objects.filter(pk=board_id).first()
+        demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+        if demo_mode:
+            # Restrict to the current user's sandbox boards to prevent cross-user promotion
+            board = Board.objects.filter(pk=board_id, owner=request.user, is_sandbox_copy=True).first()
+        else:
+            board = Board.objects.filter(pk=board_id, organization=org).first()
 
     # Idempotent — if a promotion already exists, just update it
     promotion, _ = IdeaPromotion.objects.get_or_create(
@@ -383,10 +413,37 @@ def idea_promote(request, idea_id):
     idea.promoted_by = request.user
     idea.save(update_fields=['stage', 'promoted_at', 'promoted_by', 'updated_at'])
 
+    # Create a Task on the target board so the idea surfaces as real work
+    task = None
+    if board:
+        try:
+            from kanban.models import Column, Task
+            import re
+            # Try to find an intake column by common names; fall back to position=0
+            _intake_names = re.compile(r'\b(to.?do|backlog|inbox|todo|open|new|ideas?|ready)\b', re.I)
+            all_cols = list(Column.objects.filter(board=board).order_by('position'))
+            first_col = next((c for c in all_cols if _intake_names.search(c.name)), None) or (all_cols[0] if all_cols else None)
+            if first_col:
+                task = Task.objects.create(
+                    title=idea.title,
+                    description=(
+                        f'Promoted from PrizmDiscovery.\n\n{idea.description}'
+                        if idea.description
+                        else 'Promoted from PrizmDiscovery.'
+                    ),
+                    column=first_col,
+                    created_by=request.user,
+                    position=Task.objects.filter(column=first_col).count(),
+                )
+                promotion.tasks.add(task)
+        except Exception as e:
+            logger.warning('Could not create task for promoted idea %s: %s', idea.pk, e)
+
     return JsonResponse({
         'ok': True,
         'promotion_id': promotion.pk,
         'board_name': board.name if board else None,
+        'task_id': task.pk if task else None,
     })
 
 

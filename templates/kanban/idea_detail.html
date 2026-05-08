@@ -77,12 +77,17 @@
             <div class="idea-detail-card">
                 <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
                     <h5>{{ idea.title }}</h5>
-                    <span class="badge badge-stage-{{ idea.stage }} flex-shrink-0">{{ idea.get_stage_display }}</span>
+                    <div class="d-flex gap-1 flex-shrink-0">
+                        <span class="badge badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
+                        {% if not idea.is_scored %}
+                        <span class="badge" style="background:#e5e7eb;color:#6b7280;">Unscored</span>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="idea-meta-row">
                     <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display }}</span>
-                    <span><i class="fas fa-user me-1"></i>{{ idea.submitted_by.get_full_name|default:idea.submitted_by.username }}</span>
-                    <span><i class="fas fa-clock me-1"></i>Submitted {{ idea.created_at|timesince }} ago</span>
+                    <span><i class="fas fa-pen me-1"></i>Submitted by {{ idea.submitted_by.get_full_name|default:idea.submitted_by.username }}</span>
+                    <span><i class="fas fa-clock me-1"></i>{{ idea.created_at|timesince }} ago</span>
                     {% if idea.updated_at != idea.created_at %}
                     <span class="text-muted">· Updated {{ idea.updated_at|timesince }} ago</span>
                     {% endif %}
@@ -137,18 +142,27 @@
                 <p style="font-size:0.875rem;" class="mb-1">
                     Board: <strong>{{ promotion.board.name }}</strong>
                 </p>
+                <a href="{% url 'board_detail' promotion.board.id %}" class="btn btn-sm btn-outline-success mb-2">
+                    <i class="fas fa-columns me-1"></i>Go to Board
+                </a>
                 {% endif %}
-                <p style="font-size:0.8rem;" class="text-muted mb-0">
+                <p style="font-size:0.8rem;" class="text-muted mb-1">
                     Promoted by {{ promotion.promoted_by.get_full_name|default:promotion.promoted_by.username }}
                     on {{ promotion.promoted_at|date:"N j, Y" }}
                 </p>
                 {% if promotion.tasks.all %}
                 <div class="mt-2">
-                    <div style="font-size:0.8rem; font-weight:600; margin-bottom:4px;">Linked tasks:</div>
+                    <div style="font-size:0.8rem; font-weight:600; margin-bottom:4px;">Task created on board:</div>
                     {% for task in promotion.tasks.all %}
-                    <span class="badge bg-secondary me-1" style="font-size:0.75rem;">{{ task.title|truncatechars:30 }}</span>
+                    <a href="{% url 'board_detail' promotion.board.id %}"
+                       class="badge bg-success text-decoration-none me-1" style="font-size:0.75rem;">
+                        <i class="fas fa-check-circle me-1"></i>{{ task.title|truncatechars:30 }}
+                    </a>
+                    <div style="font-size:0.75rem; color:#6b7280; margin-top:3px;">In column: <strong>{{ task.column.name }}</strong></div>
                     {% endfor %}
                 </div>
+                {% else %}
+                <p style="font-size:0.8rem;" class="text-muted mb-0"><em>No task created yet.</em></p>
                 {% endif %}
             </div>
             {% endif %}
@@ -157,19 +171,23 @@
             {% if is_admin and idea.stage == 'approved' and not promotion %}
             <div class="idea-detail-card">
                 <h6 class="fw-bold mb-2"><i class="fas fa-arrow-up me-1 text-primary"></i>Promote to Board</h6>
-                <form id="promoteForm" method="post" action="{% url 'idea_promote' idea_id=idea.pk %}">
+                <p style="font-size:0.82rem;" class="text-muted mb-3">
+                    Promoting creates a task on the chosen board so the idea enters the delivery pipeline.
+                </p>
+                <form id="promoteForm" onsubmit="submitPromote(event)">
                     {% csrf_token %}
-                    <div class="mb-2">
-                        <label for="boardSelect" style="font-size:0.82rem;" class="fw-semibold">Link to a board (optional)</label>
-                        <select id="boardSelect" name="board_id" class="form-select form-select-sm mt-1">
-                            <option value="">— No board —</option>
-                            {% for board in request.user.profile.organization.board_set.all %}
-                            <option value="{{ board.pk }}">{{ board.name }}</option>
+                    <div class="mb-3">
+                        <label for="boardSelect" class="fw-semibold" style="font-size:0.82rem;">Target Board <span class="text-danger">*</span></label>
+                        <select id="boardSelect" name="board_id" class="form-select form-select-sm mt-1" required>
+                            <option value="">— Select a board —</option>
+                            {% for board in org_boards %}
+                            <option value="{{ board.id }}">{{ board.name }}</option>
                             {% endfor %}
                         </select>
+                        <div class="form-text">A new task will be created in the first column of this board.</div>
                     </div>
-                    <button type="submit" class="btn btn-success btn-sm">
-                        <i class="fas fa-arrow-up me-1"></i>Promote Idea
+                    <button type="submit" class="btn btn-success btn-sm" id="promoteBtn">
+                        <i class="fas fa-arrow-up me-1"></i>Promote &amp; Create Task
                     </button>
                 </form>
             </div>
@@ -281,6 +299,24 @@
 <script>
 const IDEA_ID = {{ idea.pk }};
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+function submitPromote(e) {
+    e.preventDefault();
+    const boardId = document.getElementById('boardSelect').value;
+    const btn = document.getElementById('promoteBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Promoting…';
+    const fd = new FormData();
+    fd.append('board_id', boardId);
+    fd.append('csrfmiddlewaretoken', CSRF);
+    fetch(`/discovery/${IDEA_ID}/promote/`, { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) window.location.reload();
+        else { btn.disabled = false; btn.innerHTML = '<i class=\"fas fa-arrow-up me-1\"></i>Promote &amp; Create Task'; alert(data.error || 'Promotion failed.'); }
+    })
+    .catch(() => { btn.disabled = false; alert('Network error.'); });
+}
 
 function changeStage(newStage) {
     if (!confirm(`Change stage to "${newStage}"?`)) return;
