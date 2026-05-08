@@ -349,7 +349,9 @@
                 {% if not is_demo_account %}
                     {% if user.profile.is_admin %}
                     <li><a class="dropdown-item" href="{% url 'organization_members' %}"><i class="fas fa-building me-2"></i>Organization</a></li>
-                    <li><a class="dropdown-item" href="{% url 'manage_roles' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    {% if can_manage_ws_members %}
+                    <li><a class="dropdown-item" href="{% url 'manage_workspace_members' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    {% endif %}
                     <li><a class="dropdown-item" href="{% url 'workspace_preset_settings' %}"><i class="fas fa-sliders-h me-2"></i>Workspace Settings</a></li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
