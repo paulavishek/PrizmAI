@@ -146,6 +146,7 @@ class TimeEntryForm(forms.ModelForm):
             'hours_spent',
             'work_date',
             'description',
+            'is_billable',
         ]
         widgets = {
             'hours_spent': forms.NumberInput(attrs={
@@ -164,6 +165,9 @@ class TimeEntryForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'What did you work on? (optional)',
                 'rows': 3,
+            }),
+            'is_billable': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
             }),
         }
         help_texts = {
@@ -346,5 +350,13 @@ class QuickTimeEntryForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control form-control-sm',
             'placeholder': 'What did you work on?',
+        }),
+    )
+
+    is_billable = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={
+            'class': 'form-check-input',
         }),
     )

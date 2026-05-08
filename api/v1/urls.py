@@ -36,6 +36,11 @@ urlpatterns = [
     path('', include(router.urls)),
 
     # -----------------------------------------------------------------------
+    # Global workspace search
+    # -----------------------------------------------------------------------
+    path('search/global/', views.global_search, name='global_search'),
+
+    # -----------------------------------------------------------------------
     # Zapier integration endpoints
     # See api/v1/zapier_views.py for full documentation.
     # -----------------------------------------------------------------------

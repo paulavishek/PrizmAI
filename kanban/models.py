@@ -1541,6 +1541,11 @@ class Task(models.Model):
     
     def save(self, *args, **kwargs):
         """Override save to track completion and update predictions"""
+        # Sanitize rich-text HTML description to prevent XSS before persisting
+        if self.description:
+            from kanban.utils.sanitize import sanitize_html
+            self.description = sanitize_html(self.description)
+
         # Track completion timestamp
         if self.progress == 100 and not self.completed_at:
             self.completed_at = timezone.now()

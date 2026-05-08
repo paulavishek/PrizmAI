@@ -159,6 +159,12 @@ function initAITaskDescription() {
                         descriptionText = data.description;
                     }
                     descriptionTextarea.value = descriptionText;
+                    // If the Tiptap editor is active, load the generated text into it too.
+                    // The text is plain, so wrap it in paragraph HTML for Tiptap.
+                    if (window.tiptapDescriptionEditor) {
+                        var htmlContent = '<p>' + descriptionText.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+                        window.tiptapDescriptionEditor.commands.setContent(htmlContent, true);
+                    }
                 } else {
                     alert('Could not generate description. Please try again or enter description manually.');
                 }
