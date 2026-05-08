@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load kanban_filters %}
 
 {% block title %}Discovery Inbox — PrizmAI{% endblock %}
 {% block page_title %}PrizmDiscovery{% endblock %}
@@ -196,7 +197,7 @@
                 <span class="badge badge-stage-{{ idea.stage }} flex-shrink-0">{{ idea.get_stage_display }}</span>
             </div>
             <div class="idea-card-meta">
-                <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display }}</span>
+                <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display|humanize_slug }}</span>
                 <span><i class="fas fa-user me-1"></i>{{ idea.submitted_by.get_full_name|default:idea.submitted_by.username }}</span>
                 <span><i class="fas fa-clock me-1"></i>{{ idea.created_at|timesince }} ago</span>
             </div>
@@ -212,6 +213,11 @@
                 <span class="score-chip" title="Matrix quadrant"><i class="fas fa-th me-1"></i>{{ idea.quadrant_label }}</span>
                 {% endif %}
             </div>
+            {% if idea.ai_score_recommendation %}
+            <div style="font-size:0.78rem; color:var(--text-secondary,#6b7280); margin-top:4px; font-style:italic;">
+                <i class="fas fa-lightbulb me-1 text-warning"></i>{{ idea.ai_score_recommendation }}
+            </div>
+            {% endif %}
             {% else %}
             <div class="idea-score-preview" style="opacity:0.5;">
                 <span class="score-chip"><i class="fas fa-robot me-1"></i>Not yet scored by Spectra</span>

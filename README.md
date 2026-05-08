@@ -27,6 +27,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Board Automations** — Trigger-based rules for repetitive workflows *(Professional mode and above)*; scheduled recurring automations *(Enterprise mode)*
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
 - **Requirements Analysis** — AI-powered requirement lifecycle management with full traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. AI capabilities include: **Quality Scoring** (per-requirement analysis across clarity, completeness, testability, unambiguity, and feasibility dimensions), **Gap Detection** (identify uncovered objectives, orphaned tasks, and missing requirement areas), **Acceptance Criteria Generation** (auto-generate Given/When/Then criteria from requirement descriptions), and **Impact Analysis** (downstream impact assessment for linked tasks, child requirements, and objectives). Spectra AI can answer questions about requirement status, coverage gaps, quality scores, and traceability. Accessible from the AI Tools panel → Manage section on the board page. *(Professional mode and above)*
+- **PrizmDiscovery — Idea Inbox** — A structured idea pipeline for capturing, discussing, and prioritising product ideas before they enter the delivery pipeline. Submit ideas with a title, description, and source label; move them through four stages (New → Under Review → Approved → Rejected); and promote approved ideas directly to a Kanban board as tasks. Spectra AI scores each idea on **Impact** (0–100), **Effort** (0–100), and **Confidence** (0–100), assigns a quadrant (Quick Win / Strategic Bet / Fill-in / Deprioritize), and generates a reasoning paragraph. Scored ideas are visualised on an interactive **Discovery Matrix** scatter chart. Rejected ideas remain on the matrix with a muted, strikethrough style so prioritisation decisions are always explainable. *(Professional mode and above)*
 
 ### Strategic Alignment
 
@@ -398,6 +399,85 @@ These appear as recovery cards in the coaching panel, each with a clear descript
 
 ---
 
+## PrizmDiscovery — Idea Inbox
+
+> **In plain English:** Product ideas come from everywhere — customer calls, internal brainstorms, competitor analysis, sales feedback. PrizmDiscovery gives your team a single structured inbox to capture all of them, score them with AI, and decide what to build — before anything touches a Kanban board.
+
+### Why it exists
+
+Most product backlogs are either a graveyard of unreviewed ideas or a running argument about what to prioritise. PrizmDiscovery solves both: every idea gets an AI-scored assessment on Impact and Effort so the conversation is grounded in objective reasoning, and the best ideas move directly into the delivery pipeline with a single click.
+
+### The idea lifecycle
+
+Ideas move through four stages:
+
+| Stage | What it means |
+|---|---|
+| **New** | Just submitted — awaiting review |
+| **Under Review** | Actively being evaluated; team is discussing and gathering context |
+| **Approved** | Prioritised for delivery; can be promoted to a Kanban board |
+| **Rejected** | Consciously deprioritised; still visible on the Discovery Matrix for reference |
+
+Stage changes require a confirmation step, ensuring no idea is accidentally moved without intent.
+
+### Scoring with Spectra
+
+Any team member can trigger an AI scoring session on any unscored idea. Spectra analyses the idea across three dimensions:
+
+| Dimension | What it measures | Scale |
+|---|---|---|
+| **Impact** | Expected value delivered — user benefit, revenue potential, strategic alignment | 0–100 |
+| **Effort** | Engineering and operational complexity to ship | 0–100 |
+| **Confidence** | How certain Spectra is about its scores, based on available context | 0–100 |
+
+Spectra also produces a one-line **recommendation** (e.g. *"Quick Win — high impact with relatively low implementation effort"*) and a detailed **reasoning** paragraph explaining the score. Both are shown on the idea's detail page and as a preview card in the inbox list.
+
+### The Discovery Matrix
+
+Scored ideas are plotted on an interactive 2D scatter chart — **Impact on the Y-axis, Effort on the X-axis** — divided into four quadrants:
+
+| Quadrant | Impact | Effort | Meaning |
+|---|---|---|---|
+| **Quick Win** | High (≥50) | Low (<50) | Deliver first — strong return for low cost |
+| **Strategic Bet** | High (≥50) | High (≥50) | Worth the investment; plan and resource carefully |
+| **Fill-in** | Low (<50) | Low (<50) | Nice-to-haves; good candidates for quiet sprints |
+| **Deprioritize** | Low (<50) | High (≥50) | Poor ROI — deprioritise unless strategic context changes |
+
+Hovering over any dot on the matrix shows a tooltip with the idea's title, Impact score, Effort score, and Spectra's confidence. **Rejected ideas remain visible on the matrix** with a muted, strikethrough appearance — so the full prioritisation picture is preserved and every rejection is explainable.
+
+### Promoting ideas to boards
+
+When an idea is approved, an Owner or Org Admin can promote it to any Kanban board. Promotion creates a task on the target board with the idea's title and description pre-filled. A chip badge on the idea's detail page links back to the created task, providing a clear audit trail from initial idea to delivered work.
+
+### Source tracking
+
+Every idea carries a source label:
+
+- **Customer Feedback** · **Internal Brainstorm** · **Market Research** · **User Feedback** · **Sales Team** · **Finance Team** · **Other**
+
+Source labels help teams understand where high-value ideas originate and which input channels to invest in.
+
+### Discussion & comments
+
+Each idea has a threaded comment section. Team members can debate, add context, and record the reasoning behind stage changes before committing to a decision. For unscored ideas with no comments yet, PrizmDiscovery prompts the team to score the idea with Spectra to kick off the conversation.
+
+### Getting to PrizmDiscovery
+
+- Click **Discovery** in the sidebar (or navigate to `/discovery/`)
+- The **Idea Inbox** is the default view — a filterable list of all ideas, grouped by stage tab
+- Switch to the **Discovery Matrix** tab to see the full Impact vs Effort scatter plot
+- Individual idea detail pages are at `/discovery/<idea-id>/`
+
+### Demo data
+
+The demo workspace ships with 8 pre-populated ideas spanning all four quadrants and all stages, including realistic comment threads and promotion records. To seed them:
+
+```bash
+python manage.py populate_discovery_demo_data
+```
+
+---
+
 ## Role-Based Access Control (RBAC)
 
 > **In plain English:** Not everyone on a project should be able to do everything. A new contractor shouldn't be able to delete the entire board, and a client observer shouldn't be able to edit the budget. RBAC gives each person exactly the level of access they need — no more, no less.
@@ -509,6 +589,7 @@ While you are in the demo workspace, a dismissible banner appears at the top of 
 | **Full Analytics (all 4 charts)** | — | ✅ | ✅ |
 | **Skill Gap Analysis** | — | ✅ | ✅ |
 | **Trigger-Based Automations** | — | ✅ | ✅ |
+| **PrizmDiscovery Idea Inbox** | — | ✅ | ✅ |
 | **Spectra Agentic Mode** | — | _v2.0_ | _v2.0_ |
 | **Shadow Board & What-If** | — | — | ✅ |
 | **Pre-Mortem & Stress Test** | — | — | ✅ |
@@ -659,6 +740,9 @@ python manage.py migrate
 # (Optional) Populate demo boards with sample data
 python manage.py populate_test_data
 
+# (Optional) Populate PrizmDiscovery with demo ideas
+python manage.py populate_discovery_demo_data
+
 # Start the development server
 python manage.py runserver
 ```
@@ -671,10 +755,14 @@ Open [http://localhost:8000](http://localhost:8000) and sign up to get started.
 
 PrizmAI ships with a demo-mode toggle that gives you access to pre-populated demo boards — a software development sprint, a bug-tracking workflow, and a marketing campaign — each populated with realistic tasks, milestones, budgets, and dependencies. All demo dates are calculated relative to today so the boards always appear current.
 
-To populate the demo data, run the setup command first:
+To populate the demo data, run the setup commands first:
 
 ```bash
+# Core demo boards (software sprint, bug tracker, marketing campaign)
 python manage.py populate_test_data
+
+# PrizmDiscovery inbox with 8 scored demo ideas across all four quadrants
+python manage.py populate_discovery_demo_data
 ```
 
 After signing up, activate **demo mode** from the UI to explore the sample boards.

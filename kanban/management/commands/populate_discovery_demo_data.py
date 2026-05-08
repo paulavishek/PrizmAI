@@ -28,8 +28,8 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR('No demo organisation found. Run create_demo_organization first.'))
             return
 
-        # Idempotency guard
-        if DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True).exists():
+        # Idempotency guard — skip if all 8 demo ideas already exist
+        if DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True).count() >= 8:
             self.stdout.write(self.style.NOTICE('Discovery demo ideas already exist — skipping.'))
             return
 
@@ -265,6 +265,34 @@ class Command(BaseCommand):
             board=software_board,
             promoted_at=now,
             promoted_by=alex,
+        )
+
+        # ── Idea 8: Update FAQ & Help Centre copy (fill-in) ──────────
+        DiscoveryIdea.objects.get_or_create(
+            organization=demo_org,
+            title='Update FAQ & Help Centre Copy',
+            defaults=dict(
+                description=(
+                    'Refresh the FAQ page and in-app help tooltips with accurate '
+                    'content covering new APAC features, local payment methods, '
+                    'and updated onboarding steps. '
+                    'Current content is 18 months out of date.'
+                ),
+                source='internal_team',
+                stage='new',
+                submitted_by=jordan,
+                ai_score_impact=32,
+                ai_score_effort=18,
+                ai_score_confidence=88,
+                ai_score_recommendation='Fill-in — quick to ship, low risk, clears a persistent support burden.',
+                ai_score_reasoning=(
+                    'Content updates require no engineering work — only technical writing '
+                    'and a review cycle. Impact is modest but avoids ongoing support tickets '
+                    'from confused users. High confidence because scope is fully defined.'
+                ),
+                ai_scored_at=now,
+                is_demo=True,
+            ),
         )
 
         count = DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True).count()

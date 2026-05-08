@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load kanban_filters %}
 
 {% block title %}{{ idea.title }} — Discovery{% endblock %}
 {% block page_title %}Idea Detail{% endblock %}
@@ -56,6 +57,9 @@
 .badge-stage-under_review { background: #fef3c7; color: #92400e; }
 .badge-stage-approved { background: #dcfce7; color: #166534; }
 .badge-stage-rejected { background: #fee2e2; color: #991b1b; }
+
+/* Confirmation modal */
+.confirm-modal-stage { text-transform: capitalize; font-weight: 600; }
 </style>
 {% endblock %}
 
@@ -85,7 +89,7 @@
                     </div>
                 </div>
                 <div class="idea-meta-row">
-                    <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display }}</span>
+                    <span><i class="fas fa-tag me-1"></i>{{ idea.get_source_display|humanize_slug }}</span>
                     <span><i class="fas fa-pen me-1"></i>Submitted by {{ idea.submitted_by.get_full_name|default:idea.submitted_by.username }}</span>
                     <span><i class="fas fa-clock me-1"></i>{{ idea.created_at|timesince }} ago</span>
                     {% if idea.updated_at != idea.created_at %}
@@ -155,7 +159,8 @@
                     <div style="font-size:0.8rem; font-weight:600; margin-bottom:4px;">Task created on board:</div>
                     {% for task in promotion.tasks.all %}
                     <a href="{% url 'board_detail' promotion.board.id %}"
-                       class="badge bg-success text-decoration-none me-1" style="font-size:0.75rem;">
+                       class="badge bg-success text-decoration-none me-1" style="font-size:0.75rem;"
+                       title="{{ task.title }}">
                         <i class="fas fa-check-circle me-1"></i>{{ task.title|truncatechars:30 }}
                     </a>
                     <div style="font-size:0.75rem; color:#6b7280; margin-top:3px;">In column: <strong>{{ task.column.name }}</strong></div>
@@ -172,7 +177,7 @@
             <div class="idea-detail-card">
                 <h6 class="fw-bold mb-2"><i class="fas fa-arrow-up me-1 text-primary"></i>Promote to Board</h6>
                 <p style="font-size:0.82rem;" class="text-muted mb-3">
-                    Promoting creates a task on the chosen board so the idea enters the delivery pipeline.
+                    Promoting creates a task on the chosen board so the idea enters the delivery pipeline. The task title and description will be copied from this idea.
                 </p>
                 <form id="promoteForm" onsubmit="submitPromote(event)">
                     {% csrf_token %}
@@ -205,7 +210,10 @@
                     </div>
                     {% endfor %}
                 {% else %}
-                    <p class="text-muted" style="font-size:0.85rem;">No comments yet.</p>
+                    <p class="text-muted" style="font-size:0.875rem; margin-bottom:0.25rem;">No comments yet.</p>
+                    {% if not is_viewer %}
+                    <p class="text-muted" style="font-size:0.8rem; opacity:0.7;">Be the first to comment{% if not idea.is_scored %}, or score this idea with Spectra to kick off the conversation{% endif %}.</p>
+                    {% endif %}
                 {% endif %}
 
                 {% if not is_viewer %}
@@ -218,6 +226,13 @@
                 </div>
                 {% endif %}
             </div>
+
+            {% if not idea.is_scored and not comments %}
+            <div style="border:1px dashed var(--border-color,#e5e7eb); border-radius:10px; padding:1.25rem; background:var(--bg-secondary,#f9fafb); text-align:center; color:var(--text-secondary,#6b7280); font-size:0.875rem;">
+                <i class="fas fa-lightbulb d-block mb-2" style="font-size:1.5rem; color:#fbbf24;"></i>
+                This idea hasn&rsquo;t been discussed yet &mdash; be the first to comment, or score it with Spectra to get the conversation started.
+            </div>
+            {% endif %}
         </div>
 
         <!-- ── RIGHT: AI Score card ── -->
@@ -293,6 +308,26 @@
 
     </div><!-- /idea-detail-layout -->
 </div>
+
+<!-- ── Stage Change Confirmation Modal ──────────────────────────── -->
+<div class="modal fade" id="stageConfirmModal" tabindex="-1" aria-labelledby="stageConfirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="stageConfirmModalLabel"><i class="fas fa-exchange-alt me-2"></i>Change Stage</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-3" style="font-size:0.9rem;">
+        Change stage to <span id="stageConfirmTarget" class="confirm-modal-stage"></span>?
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="stageConfirmOkBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -318,20 +353,36 @@ function submitPromote(e) {
     .catch(() => { btn.disabled = false; alert('Network error.'); });
 }
 
+let _pendingStage = null;
+
 function changeStage(newStage) {
-    if (!confirm(`Change stage to "${newStage}"?`)) return;
+    _pendingStage = newStage;
+    const label = newStage.replace(/_/g, ' ');
+    document.getElementById('stageConfirmTarget').textContent = label;
+    const modal = new bootstrap.Modal(document.getElementById('stageConfirmModal'));
+    modal.show();
+}
+
+document.getElementById('stageConfirmOkBtn').addEventListener('click', function () {
+    const btn = this;
+    if (!_pendingStage) return;
+    btn.disabled = true;
+    btn.textContent = 'Updating…';
+    const stageToSet = _pendingStage;
+    _pendingStage = null;
+    bootstrap.Modal.getInstance(document.getElementById('stageConfirmModal')).hide();
     fetch(`/discovery/${IDEA_ID}/stage/`, {
         method: 'POST',
         headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: newStage }),
+        body: JSON.stringify({ stage: stageToSet }),
     })
     .then(r => r.json())
     .then(data => {
         if (data.ok) window.location.reload();
-        else alert(data.error || 'Failed to update stage.');
+        else { btn.disabled = false; btn.textContent = 'Confirm'; alert(data.error || 'Failed to update stage.'); }
     })
-    .catch(() => alert('Network error.'));
-}
+    .catch(() => { btn.disabled = false; btn.textContent = 'Confirm'; alert('Network error.'); });
+});
 
 function rescoreIdea() {
     const btn = document.getElementById('scoreBtn');
@@ -366,4 +417,4 @@ function submitComment() {
     .catch(() => alert('Network error.'));
 }
 </script>
-{% endblock %}
+{% endblock extra_js %}
