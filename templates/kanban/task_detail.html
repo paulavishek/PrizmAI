@@ -119,38 +119,10 @@
                                     <i class="fas fa-robot me-1"></i> Generate with AI
                                 </button>
                             </div>
-                            {# Hidden textarea — Tiptap syncs its HTML content here on form submit #}
+                            {# Hidden textarea — Quill syncs its HTML content here on form submit #}
                             <div style="display:none;">{{ form.description }}</div>
-                            {# Tiptap toolbar #}
-                            <div id="tiptap-toolbar" class="tiptap-toolbar border rounded-top bg-light px-2 py-1 d-flex flex-wrap gap-1">
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="bold" title="Bold"><i class="fas fa-bold"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="italic" title="Italic"><i class="fas fa-italic"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="underline" title="Underline"><i class="fas fa-underline"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="strike" title="Strikethrough"><i class="fas fa-strikethrough"></i></button>
-                                <span class="vr mx-1"></span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="h2" title="Heading 2"><i class="fas fa-heading"></i><small>2</small></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="h3" title="Heading 3"><i class="fas fa-heading"></i><small>3</small></button>
-                                <span class="vr mx-1"></span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="bulletList" title="Bullet List"><i class="fas fa-list-ul"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="orderedList" title="Ordered List"><i class="fas fa-list-ol"></i></button>
-                                <span class="vr mx-1"></span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="code" title="Inline Code"><i class="fas fa-code"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="codeBlock" title="Code Block"><i class="fas fa-file-code"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="blockquote" title="Blockquote"><i class="fas fa-quote-right"></i></button>
-                                <span class="vr mx-1"></span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" data-tiptap-cmd="highlight" title="Highlight"><i class="fas fa-highlighter"></i></button>
-                            </div>
-                            {# Tiptap editor mount point #}
-                            <div id="tiptap-description-editor" class="form-control tiptap-editor-content border rounded-bottom rounded-top-0" style="min-height:120px;"></div>
-                            <style>
-                            .tiptap-editor-content { outline: none; }
-                            .tiptap-editor-content:focus-within { border-color: #0d6efd; box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); }
-                            .tiptap-editor-content p { margin-bottom: 0.25rem; }
-                            .tiptap-editor-content pre { background: #f8f9fa; padding: 0.5rem; border-radius: 4px; }
-                            .tiptap-editor-content blockquote { border-left: 3px solid #dee2e6; padding-left: 0.75rem; color: #6c757d; }
-                            .tiptap-editor-content mark { background-color: #fff3cd; }
-                            .tiptap-toolbar .btn.is-active { background-color: #0d6efd; color: #fff; border-color: #0d6efd; }
-                            </style>
+                            {# Quill editor mount point — Quill injects its toolbar + editable area here #}
+                            <div id="quill-editor-container"></div>
                             <div id="ai-spinner" class="d-none text-center mt-2">
                                 <div class="spinner-border spinner-border-sm text-primary" role="status">
                                     <span class="visually-hidden">Loading...</span>
@@ -4370,115 +4342,78 @@ function updateChecklistProgress(progress) {
 {% endblock %}
 
 {% block extra_js %}
-{# Tiptap CDN — loaded after the page so DOMContentLoaded has already fired #}
-<script src="https://cdn.jsdelivr.net/npm/@tiptap/core@2/dist/tiptap-core.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tiptap/pm@2/dist/tiptap-pm.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@2/dist/tiptap-starter-kit.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tiptap/extension-underline@2/dist/tiptap-extension-underline.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tiptap/extension-highlight@2/dist/tiptap-extension-highlight.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tiptap/extension-link@2/dist/tiptap-extension-link.umd.min.js"></script>
+{# Quill rich-text editor — single self-contained CDN file (no cross-package UMD issues) #}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css">
+<style>
+/* Scope Quill Snow styles so the toolbar sits flush with the editor */
+#quill-editor-container { border: 1px solid #dee2e6; border-radius: 0.375rem; background: #fff; }
+#quill-editor-container .ql-toolbar { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0.375rem 0.375rem 0 0; background: #f8f9fa; }
+#quill-editor-container .ql-container { border: none; border-radius: 0 0 0.375rem 0.375rem; font-size: 0.925rem; min-height: 120px; }
+#quill-editor-container .ql-editor { min-height: 120px; }
+#quill-editor-container.ql-focused,
+#quill-editor-container:focus-within { border-color: #0d6efd; box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
 <script>
 (function () {
     'use strict';
 
-    var editorEl = document.getElementById('tiptap-description-editor');
     var hiddenTextarea = document.getElementById('id_description');
-    var toolbar = document.getElementById('tiptap-toolbar');
+    var editorContainer = document.getElementById('quill-editor-container');
 
-    if (!editorEl || !hiddenTextarea || typeof tiptap === 'undefined') {
-        // Tiptap not available — reveal the plain textarea as fallback
+    if (!editorContainer || !hiddenTextarea || typeof Quill === 'undefined') {
+        // Quill not available — reveal the plain textarea as fallback
         if (hiddenTextarea) {
             hiddenTextarea.parentElement.style.display = '';
             hiddenTextarea.className = 'form-control';
         }
-        if (editorEl) editorEl.style.display = 'none';
-        if (toolbar) toolbar.style.display = 'none';
+        if (editorContainer) editorContainer.style.display = 'none';
         return;
     }
 
-    // Existing content may be plain text (legacy) or HTML (new).
-    // If it looks like HTML, load it directly; otherwise wrap in <p> tags.
-    var existingContent = hiddenTextarea.value || '';
-    var initialContent = existingContent.trim().startsWith('<')
-        ? existingContent
-        : (existingContent ? '<p>' + existingContent.replace(/\n/g, '</p><p>') + '</p>' : '<p></p>');
-
-    var extensions = [
-        tiptap.StarterKit,
-        tiptap.Underline,
-        tiptap.Highlight.configure({ multicolor: false }),
-        tiptap.Link.configure({ openOnClick: false }),
-    ];
-
-    var editor = new tiptap.Editor({
-        element: editorEl,
-        extensions: extensions,
-        content: initialContent,
-        onUpdate: function (_ref) {
-            // Keep hidden textarea in sync so form submits current content
-            hiddenTextarea.value = editor.getHTML();
-        },
+    var quill = new Quill(editorContainer, {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ header: 2 }, { header: 3 }],
+                [{ list: 'ordered' }, { list: 'bullet' }],
+                ['code-block', 'blockquote'],
+                ['link'],
+                ['clean']
+            ]
+        }
     });
 
-    // Expose editor globally so ai_features.js can set content after AI generation
-    window.tiptapDescriptionEditor = editor;
-
-    // Toolbar button click handlers
-    if (toolbar) {
-        toolbar.addEventListener('click', function (e) {
-            var btn = e.target.closest('[data-tiptap-cmd]');
-            if (!btn) return;
-            e.preventDefault();
-            var cmd = btn.getAttribute('data-tiptap-cmd');
-            switch (cmd) {
-                case 'bold':        editor.chain().focus().toggleBold().run(); break;
-                case 'italic':      editor.chain().focus().toggleItalic().run(); break;
-                case 'underline':   editor.chain().focus().toggleUnderline().run(); break;
-                case 'strike':      editor.chain().focus().toggleStrike().run(); break;
-                case 'h2':          editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
-                case 'h3':          editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
-                case 'bulletList':  editor.chain().focus().toggleBulletList().run(); break;
-                case 'orderedList': editor.chain().focus().toggleOrderedList().run(); break;
-                case 'code':        editor.chain().focus().toggleCode().run(); break;
-                case 'codeBlock':   editor.chain().focus().toggleCodeBlock().run(); break;
-                case 'blockquote':  editor.chain().focus().toggleBlockquote().run(); break;
-                case 'highlight':   editor.chain().focus().toggleHighlight().run(); break;
-            }
-            updateToolbarState();
-        });
+    // Load existing content (may be plain text from legacy or HTML from new saves)
+    var existingContent = hiddenTextarea.value || '';
+    if (existingContent.trim()) {
+        quill.root.innerHTML = existingContent.trim().startsWith('<')
+            ? existingContent
+            : existingContent.replace(/\n/g, '<br>');
     }
 
-    function updateToolbarState() {
-        if (!toolbar) return;
-        toolbar.querySelectorAll('[data-tiptap-cmd]').forEach(function (btn) {
-            var cmd = btn.getAttribute('data-tiptap-cmd');
-            var active = false;
-            switch (cmd) {
-                case 'bold':        active = editor.isActive('bold'); break;
-                case 'italic':      active = editor.isActive('italic'); break;
-                case 'underline':   active = editor.isActive('underline'); break;
-                case 'strike':      active = editor.isActive('strike'); break;
-                case 'h2':          active = editor.isActive('heading', { level: 2 }); break;
-                case 'h3':          active = editor.isActive('heading', { level: 3 }); break;
-                case 'bulletList':  active = editor.isActive('bulletList'); break;
-                case 'orderedList': active = editor.isActive('orderedList'); break;
-                case 'code':        active = editor.isActive('code'); break;
-                case 'codeBlock':   active = editor.isActive('codeBlock'); break;
-                case 'blockquote':  active = editor.isActive('blockquote'); break;
-                case 'highlight':   active = editor.isActive('highlight'); break;
+    // Keep hidden textarea in sync so the form submits current content
+    quill.on('text-change', function () {
+        hiddenTextarea.value = quill.root.innerHTML;
+    });
+
+    // Expose a compatibility shim so ai_features.js can call
+    // window.tiptapDescriptionEditor.commands.setContent(html)
+    window.tiptapDescriptionEditor = {
+        commands: {
+            setContent: function (html) {
+                quill.root.innerHTML = html || '';
+                hiddenTextarea.value = quill.root.innerHTML;
             }
-            btn.classList.toggle('is-active', active);
-        });
-    }
+        }
+    };
 
-    editor.on('selectionUpdate', updateToolbarState);
-    editor.on('transaction', updateToolbarState);
-
-    // Ensure hidden textarea is synced before the form submits
-    var taskForm = editorEl.closest('form');
+    // Belt-and-suspenders sync just before the form submits
+    var taskForm = editorContainer.closest('form');
     if (taskForm) {
         taskForm.addEventListener('submit', function () {
-            hiddenTextarea.value = editor.getHTML();
+            hiddenTextarea.value = quill.root.innerHTML;
         }, true);
     }
 }());
