@@ -156,6 +156,7 @@ class WikiPage(models.Model):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach
         import re
+        from kanban.utils.sanitize import sanitize_html
         
         # Convert markdown to HTML with TOC extension
         md = markdown.Markdown(
@@ -175,44 +176,10 @@ class WikiPage(models.Model):
         
         html = md.convert(self.content)
         
-        # Define allowed HTML tags and attributes (security whitelist)
-        allowed_tags = [
-            'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li',
-            'a', 'code', 'pre', 'blockquote',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td',
-            'hr', 'img', 'div', 'span'
-        ]
+        # Sanitize using shared utility (prevents XSS, allows standard tags)
+        clean_html = sanitize_html(html)
         
-        allowed_attributes = {
-            'a': ['href', 'title', 'rel'],
-            'img': ['src', 'alt', 'title', 'width', 'height'],
-            'code': ['class'],  # For syntax highlighting
-            'pre': ['class'],
-            'div': ['class'],
-            'span': ['class'],
-            'h1': ['id'],  # Allow id for anchor links
-            'h2': ['id'],
-            'h3': ['id'],
-            'h4': ['id'],
-            'h5': ['id'],
-            'h6': ['id'],
-        }
-        
-        # Allowed protocols for links (prevent javascript: and data: URLs)
-        allowed_protocols = ['http', 'https', 'mailto']
-        
-        # Sanitize HTML to prevent XSS attacks
-        clean_html = bleach.clean(
-            html,
-            tags=allowed_tags,
-            attributes=allowed_attributes,
-            protocols=allowed_protocols,
-            strip=True
-        )
-        
-        # Linkify URLs (optional - converts plain URLs to clickable links)
+        # Linkify URLs (converts plain URLs to clickable links)
         clean_html = bleach.linkify(
             clean_html,
             parse_email=True,
@@ -377,6 +344,7 @@ class MeetingNotes(models.Model):
     def get_html_content(self):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach
+        from kanban.utils.sanitize import sanitize_html
         
         # Convert markdown to HTML with TOC extension
         md = markdown.Markdown(
@@ -396,42 +364,8 @@ class MeetingNotes(models.Model):
         
         html = md.convert(self.content)
         
-        # Define allowed HTML tags and attributes (security whitelist)
-        allowed_tags = [
-            'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li',
-            'a', 'code', 'pre', 'blockquote',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td',
-            'hr', 'img', 'div', 'span'
-        ]
-        
-        allowed_attributes = {
-            'a': ['href', 'title', 'rel'],
-            'img': ['src', 'alt', 'title', 'width', 'height'],
-            'code': ['class'],
-            'pre': ['class'],
-            'div': ['class'],
-            'span': ['class'],
-            'h1': ['id'],  # Allow id for anchor links
-            'h2': ['id'],
-            'h3': ['id'],
-            'h4': ['id'],
-            'h5': ['id'],
-            'h6': ['id'],
-        }
-        
-        # Allowed protocols for links (prevent javascript: and data: URLs)
-        allowed_protocols = ['http', 'https', 'mailto']
-        
-        # Sanitize HTML to prevent XSS attacks
-        clean_html = bleach.clean(
-            html,
-            tags=allowed_tags,
-            attributes=allowed_attributes,
-            protocols=allowed_protocols,
-            strip=True
-        )
+        # Sanitize using shared utility (prevents XSS, allows standard tags)
+        clean_html = sanitize_html(html)
         
         # Linkify URLs
         clean_html = bleach.linkify(

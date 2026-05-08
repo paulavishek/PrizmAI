@@ -273,7 +273,13 @@ class TimeEntry(models.Model):
         blank=True,
         help_text="Description of work performed"
     )
-    
+
+    # Billable flag
+    is_billable = models.BooleanField(
+        default=True,
+        help_text="Mark whether time is billable to a client"
+    )
+
     # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

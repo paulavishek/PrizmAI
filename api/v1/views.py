@@ -372,6 +372,69 @@ def api_status(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def global_search(request):
+    """
+    Workspace-wide search across all boards the requesting user has access to.
+
+    GET /api/v1/search/global/?q=<query>
+
+    Returns up to 20 task results and 5 board results, grouped by type.
+    RBAC-safe: results are scoped through get_user_boards().
+    """
+    query = request.GET.get('q', '').strip()
+    if not query or len(query) < 2:
+        return Response({'tasks': [], 'boards': []})
+
+    accessible_boards = get_user_boards(request.user)
+
+    # Board matches (max 5)
+    matching_boards = accessible_boards.filter(
+        name__icontains=query
+    ).values('id', 'name')[:5]
+
+    # Task matches across all accessible boards (max 20)
+    matching_tasks = Task.objects.filter(
+        column__board__in=accessible_boards,
+        item_type='task',
+    ).filter(
+        Q(title__icontains=query) | Q(description__icontains=query)
+    ).select_related(
+        'column', 'column__board', 'assigned_to'
+    ).order_by('-updated_at')[:20]
+
+    from django.urls import reverse
+
+    task_results = []
+    for task in matching_tasks:
+        try:
+            url = reverse('task_detail', args=[task.id])
+        except Exception:
+            url = '#'
+        task_results.append({
+            'id': task.id,
+            'title': task.title,
+            'board_id': task.column.board_id,
+            'board_name': task.column.board.name,
+            'column': task.column.name,
+            'priority': task.priority,
+            'assignee': task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else None,
+            'url': url,
+        })
+
+    board_results = [
+        {
+            'id': b['id'],
+            'name': b['name'],
+            'url': '/boards/{}/'.format(b['id']),
+        }
+        for b in matching_boards
+    ]
+
+    return Response({'tasks': task_results, 'boards': board_results})
+
+
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 

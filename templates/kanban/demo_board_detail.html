@@ -692,8 +692,19 @@ kbd {
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
-                    <div class="btn-group" role="group">
+                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0 flex-wrap">
+                    {# Scope toggle: This Board / All Boards #}
+                    <div class="btn-group" role="group" aria-label="Search scope">
+                        <input type="radio" class="btn-check" name="searchScope" id="scopeThisBoard" value="this_board" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="scopeThisBoard">
+                            <i class="fas fa-columns me-1"></i>This Board
+                        </label>
+                        <input type="radio" class="btn-check" name="searchScope" id="scopeAllBoards" value="all_boards">
+                        <label class="btn btn-outline-primary btn-sm" for="scopeAllBoards">
+                            <i class="fas fa-globe me-1"></i>All Boards
+                        </label>
+                    </div>
+                    <div class="btn-group" role="group" id="searchModeGroup">
                         <input type="radio" class="btn-check" name="searchMode" id="keywordMode" value="keyword" checked>
                         <label class="btn btn-outline-secondary btn-sm" for="keywordMode">
                             <i class="fas fa-keyboard me-1"></i> Keyword
@@ -711,6 +722,8 @@ kbd {
             <i class="fas fa-lightbulb text-warning me-1"></i>
             <strong>AI Tip:</strong> Try natural language like "video content", "social media tasks", or "urgent deadlines"
         </div>
+        {# Dropdown for All Boards results #}
+        <div id="globalSearchResults" class="mt-2" style="display:none;"></div>
     </div>
 </div>
 

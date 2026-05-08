@@ -10,6 +10,7 @@ if (typeof window.taskSearchInitialized === 'undefined') {
     // Initialize search state
     var searchState = {
         searchMode: 'keyword', // 'ai' or 'keyword'
+        searchScope: 'this_board', // 'this_board' or 'all_boards'
         allTasks: [],
         filteredTasks: [],
         searchTimeout: null,
@@ -80,7 +81,29 @@ function initializeTaskSearch() {
             }
         });
     }
-    
+
+    // Scope toggle: This Board / All Boards
+    const scopeThisBoard = document.getElementById('scopeThisBoard');
+    const scopeAllBoards = document.getElementById('scopeAllBoards');
+    const searchModeGroup = document.getElementById('searchModeGroup');
+    const globalSearchResultsEl = document.getElementById('globalSearchResults');
+
+    function onScopeChange() {
+        const allBoardsActive = scopeAllBoards && scopeAllBoards.checked;
+        searchState.searchScope = allBoardsActive ? 'all_boards' : 'this_board';
+        // Hide AI/keyword toggle when All Boards is active (global search is always keyword)
+        if (searchModeGroup) searchModeGroup.style.display = allBoardsActive ? 'none' : '';
+        if (globalSearchResultsEl) globalSearchResultsEl.style.display = 'none';
+        if (searchState.currentQuery) {
+            handleLiveSearch({ target: document.getElementById('liveSearchInput') });
+        } else {
+            clearSearch();
+        }
+    }
+
+    if (scopeThisBoard) scopeThisBoard.addEventListener('change', onScopeChange);
+    if (scopeAllBoards) scopeAllBoards.addEventListener('change', onScopeChange);
+
     console.log('Task Search: Initialized successfully!');
 }
 
@@ -158,9 +181,12 @@ function handleLiveSearch(e) {
     // Show clear button
     if (clearBtn) clearBtn.style.display = 'block';
     
-    if (searchState.searchMode === 'ai' && query.length >= 3) {
-        // AI semantic search
+    if (searchState.searchMode === 'ai' && query.length >= 3 && searchState.searchScope !== 'all_boards') {
+        // AI semantic search (board scope only)
         performAISearch(query);
+    } else if (searchState.searchScope === 'all_boards' && query.length >= 2) {
+        // Global cross-board keyword search
+        performGlobalSearch(query);
     } else {
         // Quick keyword search - instant filtering
         performKeywordFilter(query);
@@ -330,6 +356,107 @@ function removeAIMatchBadge(element) {
 }
 
 /**
+ * Perform global cross-board search via the REST API.
+ * Results are shown in a dropdown panel; board cards are not filtered.
+ */
+function performGlobalSearch(query) {
+    const resultCount = document.getElementById('searchResultCount');
+    const globalResultsEl = document.getElementById('globalSearchResults');
+
+    if (resultCount) {
+        resultCount.textContent = 'Searching…';
+        resultCount.style.display = 'inline-block';
+    }
+
+    // Show all board cards (not filtered) since we display results externally
+    searchState.allTasks.forEach(task => {
+        task.element.classList.remove('filtered-out');
+        removeAIMatchBadge(task.element);
+    });
+    updateColumnTaskCounts();
+
+    fetch('/api/v1/search/global/?q=' + encodeURIComponent(query), {
+        method: 'GET',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        var tasks = data.tasks || [];
+        var boards = data.boards || [];
+        var totalCount = tasks.length + boards.length;
+
+        if (resultCount) {
+            resultCount.textContent = totalCount + ' results (all boards)';
+            resultCount.style.display = 'inline-block';
+        }
+
+        if (!globalResultsEl) return;
+
+        if (totalCount === 0) {
+            globalResultsEl.innerHTML = '<p class="text-muted small mb-0 py-1">No results found across your boards.</p>';
+            globalResultsEl.style.display = 'block';
+            return;
+        }
+
+        var html = '<div class="global-search-results border rounded bg-white shadow-sm p-2" style="max-height:340px;overflow-y:auto;">';
+
+        if (boards.length > 0) {
+            html += '<div class="fw-semibold text-muted small px-1 mb-1" style="text-transform:uppercase;letter-spacing:.05em;">Boards</div>';
+            boards.forEach(function(b) {
+                html += '<a href="' + escapeAttr(b.url) + '" class="d-flex align-items-center gap-2 text-decoration-none text-dark px-2 py-1 rounded hover-bg" style="cursor:pointer;">'
+                    + '<i class="fas fa-columns text-primary me-1" style="width:16px;"></i>'
+                    + '<span>' + escapeHtml(b.name) + '</span>'
+                    + '</a>';
+            });
+            if (tasks.length > 0) html += '<hr class="my-1">';
+        }
+
+        if (tasks.length > 0) {
+            html += '<div class="fw-semibold text-muted small px-1 mb-1" style="text-transform:uppercase;letter-spacing:.05em;">Tasks</div>';
+            tasks.forEach(function(t) {
+                var priorityClass = t.priority === 'high' ? 'text-danger' : t.priority === 'medium' ? 'text-warning' : 'text-secondary';
+                html += '<a href="' + escapeAttr(t.url) + '" class="d-flex align-items-start gap-2 text-decoration-none text-dark px-2 py-1 rounded hover-bg" style="cursor:pointer;">'
+                    + '<i class="fas fa-check-square ' + priorityClass + ' mt-1" style="width:16px;"></i>'
+                    + '<div style="min-width:0;">'
+                    + '<div class="text-truncate fw-medium">' + escapeHtml(t.title) + '</div>'
+                    + '<div class="small text-muted">'
+                    + '<span class="badge bg-light text-dark border me-1">' + escapeHtml(t.board_name) + '</span>'
+                    + escapeHtml(t.column)
+                    + (t.assignee ? ' &middot; ' + escapeHtml(t.assignee) : '')
+                    + '</div></div></a>';
+            });
+        }
+
+        html += '</div>';
+        globalResultsEl.innerHTML = html;
+        globalResultsEl.style.display = 'block';
+    })
+    .catch(function(err) {
+        console.error('Global search error:', err);
+        if (resultCount) resultCount.style.display = 'none';
+        if (globalResultsEl) globalResultsEl.style.display = 'none';
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(url) {
+    if (!url) return '#';
+    // Only allow relative paths and safe absolute URLs
+    if (/^https?:\/\//i.test(url) || url.startsWith('/')) return escapeHtml(url);
+    return '#';
+}
+
+/**
  * Clear search and show all tasks
  */
 function clearSearch() {
@@ -349,6 +476,10 @@ function clearSearch() {
         removeAIMatchBadge(task.element);
     });
     
+    // Hide global search results panel
+    const globalResultsEl = document.getElementById('globalSearchResults');
+    if (globalResultsEl) globalResultsEl.style.display = 'none';
+
     // Update column task counts
     updateColumnTaskCounts();
     

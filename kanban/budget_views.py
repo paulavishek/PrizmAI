@@ -992,7 +992,13 @@ def my_timesheet(request, board_id=None):
         daily_totals.append(round(total, 2))
     
     week_total = round(sum(daily_totals, Decimal('0.00')), 2)
-    
+
+    # Billable / non-billable split for the week
+    billable_total = round(
+        entries.filter(is_billable=True).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00'), 2
+    )
+    non_billable_total = round(week_total - billable_total, 2)
+
     # Previous/next week dates
     prev_week = week_offset - 1
     next_week = week_offset + 1
@@ -1005,6 +1011,8 @@ def my_timesheet(request, board_id=None):
         'week_days': week_days,
         'daily_totals': daily_totals,
         'week_total': week_total,
+        'billable_total': billable_total,
+        'non_billable_total': non_billable_total,
         'start_of_week': start_of_week,
         'end_of_week': end_of_week,
         'prev_week': prev_week,
@@ -1311,6 +1319,7 @@ def quick_time_entry(request, task_id):
         description = request.POST.get('description', '').strip()
         work_date_str = request.POST.get('work_date', timezone.now().date().isoformat())
         work_date = timezone.datetime.fromisoformat(work_date_str).date()
+        is_billable = request.POST.get('is_billable', 'true').lower() not in ('false', '0', '')
         
         if hours <= 0:
             return JsonResponse({'success': False, 'error': 'Hours must be greater than 0'}, status=400)
@@ -1338,7 +1347,8 @@ def quick_time_entry(request, task_id):
             user=request.user,
             hours_spent=hours,
             work_date=work_date,
-            description=description
+            description=description,
+            is_billable=is_billable,
         )
         
         # Calculate total time logged on task
@@ -1350,6 +1360,7 @@ def quick_time_entry(request, task_id):
             'success': True,
             'entry_id': entry.id,
             'hours': float(entry.hours_spent),
+            'is_billable': entry.is_billable,
             'total_time': float(total_time),
             'message': f'{entry.hours_spent}h logged successfully'
         })
