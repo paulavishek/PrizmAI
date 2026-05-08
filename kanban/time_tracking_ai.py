@@ -419,7 +419,8 @@ class TimeTrackingAIService:
         ).order_by('due_date')[:2]
         
         for task in deadline_tasks:
-            days_left = (task.due_date - today).days
+            due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+            days_left = (due - today).days
             suggestions.append({
                 'task': task,
                 'reason': 'deadline',
