@@ -460,10 +460,10 @@ def discovery_matrix(request):
     if blocked:
         return blocked
 
-    all_ideas = DiscoveryIdea.objects.filter(organization=org).exclude(stage='rejected')
+    all_ideas = DiscoveryIdea.objects.filter(organization=org)
 
     scored = all_ideas.filter(ai_score_impact__isnull=False)
-    unscored = all_ideas.filter(ai_score_impact__isnull=True)
+    unscored = all_ideas.filter(ai_score_impact__isnull=True).exclude(stage='rejected')
 
     quadrants = {
         'quick_win': [],
@@ -480,6 +480,7 @@ def discovery_matrix(request):
 
     return render(request, 'kanban/discovery_matrix.html', {
         'quadrants': quadrants,
+        'scored_list': list(scored),
         'unscored': unscored,
         'is_viewer': is_viewer,
         'features': features,
