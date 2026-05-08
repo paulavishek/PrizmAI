@@ -913,6 +913,14 @@ def google_calendar_connect(request):
     try:
         from google_auth_oauthlib.flow import Flow
         from django.conf import settings
+        from django.urls import reverse
+
+        # Build the redirect URI from the current request so the OAuth
+        # round-trip always returns to the same origin (host + scheme) the
+        # user is browsing on.  Hard-coding a setting (e.g. localhost) while
+        # the user visits 127.0.0.1 causes a cookie-domain mismatch that
+        # silently drops the session before the callback is reached.
+        redirect_uri = request.build_absolute_uri(reverse("google_calendar_callback"))
 
         flow = Flow.from_client_config(
             {
@@ -925,7 +933,7 @@ def google_calendar_connect(request):
             },
             scopes=settings.GOOGLE_CALENDAR_SCOPES,
         )
-        flow.redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+        flow.redirect_uri = redirect_uri
 
         authorization_url, state = flow.authorization_url(
             access_type="offline",
@@ -933,6 +941,11 @@ def google_calendar_connect(request):
             prompt="consent",  # force consent to always get a refresh_token
         )
         request.session["google_calendar_oauth_state"] = state
+        # Store the PKCE code_verifier so the callback can send it during
+        # token exchange (google-auth-oauthlib auto-generates one by default).
+        request.session["google_calendar_code_verifier"] = flow.code_verifier
+        # Persist the redirect_uri so the callback uses exactly the same value.
+        request.session["google_calendar_redirect_uri"] = redirect_uri
         return redirect(authorization_url)
 
     except Exception:
@@ -949,9 +962,17 @@ def google_calendar_callback(request):
     try:
         from google_auth_oauthlib.flow import Flow
         from django.conf import settings
+        from django.urls import reverse
         from accounts.models import GoogleCalendarToken
 
         state = request.session.pop("google_calendar_oauth_state", None)
+        code_verifier = request.session.pop("google_calendar_code_verifier", None)
+        # Reuse the exact redirect_uri that was registered with Google during
+        # the connect step; it must be identical for the token exchange.
+        redirect_uri = request.session.pop(
+            "google_calendar_redirect_uri",
+            request.build_absolute_uri(reverse("google_calendar_callback")),
+        )
         if not state:
             messages.error(request, "Invalid OAuth state. Please try connecting again.")
             return redirect("profile")
@@ -968,11 +989,13 @@ def google_calendar_callback(request):
             scopes=settings.GOOGLE_CALENDAR_SCOPES,
             state=state,
         )
-        flow.redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+        flow.redirect_uri = redirect_uri
+        # Restore the PKCE code_verifier so fetch_token sends it to Google.
+        flow.code_verifier = code_verifier
 
         # Allow HTTP for local dev. Production must use HTTPS.
         import os
-        if os.getenv("DJANGO_DEBUG", "True").lower() == "true":
+        if settings.DEBUG:
             os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
 
         flow.fetch_token(authorization_response=request.build_absolute_uri())
