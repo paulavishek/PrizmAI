@@ -20,7 +20,7 @@ from accounts.models import Organization
 # ── Stage & source choices ────────────────────────────────────────────────────
 
 IDEA_STAGE_CHOICES = [
-    ('new', 'New / Unscored'),
+    ('new', 'New'),
     ('under_review', 'Under Review'),
     ('approved', 'Approved'),
     ('rejected', 'Rejected'),
