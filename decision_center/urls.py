@@ -36,6 +36,16 @@ urlpatterns = [
         name='dismiss_decision_item',
     ),
     path(
+        'decision-center/item/<int:item_id>/restore/',
+        views.restore_decision_item,
+        name='restore_decision_item',
+    ),
+    path(
+        'decision-center/item/<int:item_id>/change-snooze/',
+        views.change_snooze_decision_item,
+        name='change_snooze_decision_item',
+    ),
+    path(
         'decision-center/resolve-all-quick-wins/',
         views.resolve_all_quick_wins,
         name='resolve_all_quick_wins',
