@@ -1122,10 +1122,21 @@ def sync_due_date_to_google_calendar(sender, instance, created, **kwargs):
             return
 
         from accounts.tasks import sync_task_to_calendar
-        sync_task_to_calendar.delay(instance.pk)
+        try:
+            # Dispatch asynchronously when a Celery worker is running.
+            sync_task_to_calendar.delay(instance.pk)
+        except Exception as celery_exc:
+            # Celery / Redis not reachable — run synchronously so the calendar
+            # event is created immediately (Daphne-only / no-worker setup).
+            import logging
+            logging.getLogger(__name__).info(
+                f"sync_due_date_to_google_calendar: Celery unavailable "
+                f"({celery_exc}), running synchronously for task {instance.pk}."
+            )
+            sync_task_to_calendar(instance.pk)
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning(
-            f"sync_due_date_to_google_calendar: could not queue for task {instance.pk}: {exc}"
+            f"sync_due_date_to_google_calendar: could not sync for task {instance.pk}: {exc}"
         )
 
