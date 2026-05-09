@@ -11,6 +11,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
@@ -71,13 +72,18 @@ def _ensure_item(*, user, board, item_type, priority_level, title,
     """
     Create or update a DecisionItem, avoiding duplicates.
 
-    For board-grouped items (overdue_task, unassigned_task, stale_task)
-    the source object is the Board itself — we use update_or_create so
-    context_data is refreshed on each run.
+    Looks up items WITHOUT filtering on status so that snoozed or archived
+    items are found and never duplicated back into the inbox.
+
+    Behaviour by status of the found item:
+    - pending:  update content fields (title, description, etc.)
+    - snoozed:  leave it alone — it will wake up naturally
+    - resolved/dismissed: do nothing — the user already actioned it
+    - no item:  create a new pending item
     """
     from decision_center.models import DecisionItem
 
-    defaults = {
+    content_fields = {
         'priority_level': priority_level,
         'title': title,
         'description': description,
@@ -85,23 +91,51 @@ def _ensure_item(*, user, board, item_type, priority_level, title,
         'estimated_minutes': estimated_minutes,
         'context_data': context_data or {},
     }
+    # Uniqueness lookup — intentionally excludes 'status' so we find items
+    # regardless of whether they are pending, snoozed, resolved, or dismissed.
     lookup = {
         'created_for': user,
         'item_type': item_type,
-        'status': 'pending',
     }
 
     if source_obj is not None:
         ct = ContentType.objects.get_for_model(source_obj)
         lookup['source_content_type'] = ct
         lookup['source_object_id'] = source_obj.pk
-        defaults['board'] = board
+        content_fields['board'] = board
     else:
         lookup['board'] = board
         lookup['source_content_type'] = None
         lookup['source_object_id'] = None
 
-    DecisionItem.objects.update_or_create(defaults=defaults, **lookup)
+    # Prioritise active items (pending > snoozed) when duplicates exist from
+    # the old code, then fall back to the most recent record.
+    existing = (
+        DecisionItem.objects.filter(**lookup)
+        .order_by(
+            # pending=0, snoozed=1, resolved=2, dismissed=3
+            models.Case(
+                models.When(status='pending', then=0),
+                models.When(status='snoozed', then=1),
+                models.When(status='resolved', then=2),
+                models.When(status='dismissed', then=3),
+                default=4,
+                output_field=models.IntegerField(),
+            ),
+            '-id',
+        )
+        .first()
+    )
+
+    if existing is None:
+        # No item exists at all — create a fresh pending one.
+        DecisionItem.objects.create(**lookup, **content_fields, status='pending')
+    elif existing.status == 'pending':
+        # Update content fields to reflect the latest scan; leave status alone.
+        for key, val in content_fields.items():
+            setattr(existing, key, val)
+        existing.save(update_fields=list(content_fields.keys()))
+    # snoozed / resolved / dismissed → leave the item exactly as-is.
 
 
 def collect_for_user(user):

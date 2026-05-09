@@ -86,6 +86,13 @@ class DecisionItem(models.Model):
         related_name='resolved_decisions',
     )
     snoozed_until = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archive_reason = models.CharField(
+        max_length=20,
+        choices=[('resolved', 'Resolved'), ('dismissed', 'Dismissed')],
+        null=True,
+        blank=True,
+    )
     estimated_minutes = models.PositiveSmallIntegerField(default=2)
 
     class Meta:
