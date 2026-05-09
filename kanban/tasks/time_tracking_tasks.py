@@ -23,7 +23,7 @@ def send_time_tracking_reminders():
     
     logger.info("Starting time tracking reminder task...")
     
-    today = timezone.now().date()
+    today = timezone.localdate()
     now = timezone.now()
     
     # Skip weekends
@@ -86,7 +86,7 @@ def detect_time_anomalies():
     
     logger.info("Starting time anomaly detection task...")
     
-    today = timezone.now().date()
+    today = timezone.localdate()
     yesterday = today - timedelta(days=1)
     
     # Get all users who logged time yesterday
@@ -140,7 +140,7 @@ def send_weekly_time_summary():
     
     logger.info("Starting weekly time summary task...")
     
-    today = timezone.now().date()
+    today = timezone.localdate()
     
     # Only run on Mondays
     if today.weekday() != 0:

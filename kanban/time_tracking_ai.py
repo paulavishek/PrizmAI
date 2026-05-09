@@ -27,16 +27,18 @@ class TimeTrackingAIService:
     RECOMMENDED_DAILY_MAX = Decimal('8.00')  # Recommended max hours per day
     SPLIT_TRIGGER_THRESHOLD = Decimal('10.00')  # Trigger split suggestion when this is exceeded
     
-    def __init__(self, user: User, board=None):
+    def __init__(self, user: User, board=None, boards=None):
         """
-        Initialize with user and optional board
+        Initialize with user and optional board(s)
         
         Args:
             user: User instance to analyze
-            board: Optional Board instance to filter by
+            board: Optional single Board instance to filter by
+            boards: Optional queryset/list of boards to scope to (used when no single board is set)
         """
         self.user = user
         self.board = board
+        self.boards = boards
     
     def validate_time_entry(self, task, hours: Decimal, work_date: date) -> Dict:
         """
@@ -264,7 +266,7 @@ class TimeTrackingAIService:
         from kanban.budget_models import TimeEntry
         
         alerts = []
-        today = timezone.now().date()
+        today = timezone.localdate()
         start_date = today - timedelta(days=days_back)
         
         # Get entries for the period
@@ -368,19 +370,24 @@ class TimeTrackingAIService:
         from kanban.budget_models import TimeEntry
         
         suggestions = []
-        today = timezone.now().date()
+        today = timezone.localdate()
         
-        # Build base task queryset
+        # Build base task queryset - scoped to boards in current context
         task_qs = Task.objects.filter(assigned_to=self.user)
         if self.board:
             task_qs = task_qs.filter(column__board=self.board)
+        elif self.boards is not None:
+            task_qs = task_qs.filter(column__board__in=self.boards)
         
         task_qs = task_qs.select_related('column', 'column__board')
         
-        # 1. Last logged task (most likely to continue working on)
-        last_entry = TimeEntry.objects.filter(
-            user=self.user
-        ).select_related('task').order_by('-created_at').first()
+        # 1. Last logged task (most likely to continue working on) - scoped to boards in context
+        last_entry_qs = TimeEntry.objects.filter(user=self.user)
+        if self.board:
+            last_entry_qs = last_entry_qs.filter(task__column__board=self.board)
+        elif self.boards is not None:
+            last_entry_qs = last_entry_qs.filter(task__column__board__in=self.boards)
+        last_entry = last_entry_qs.select_related('task').order_by('-created_at').first()
         
         if last_entry and last_entry.task.progress < 100:
             suggestions.append({
@@ -464,7 +471,7 @@ class TimeTrackingAIService:
         """
         from kanban.budget_models import TimeEntry
         
-        today = timezone.now().date()
+        today = timezone.localdate()
         now = timezone.now()
         
         # Skip weekends
@@ -507,7 +514,7 @@ class TimeTrackingAIService:
         """
         from kanban.budget_models import TimeEntry
         
-        today = timezone.now().date()
+        today = timezone.localdate()
         week_start = today - timedelta(days=today.weekday())
         month_start = today.replace(day=1)
         
