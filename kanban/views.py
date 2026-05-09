@@ -2220,7 +2220,9 @@ def board_detail(request, board_id):
         return redirect('dashboard')
     
     # RBAC: check view permission
-    if not request.user.has_perm('prizmai.view_board', board):
+    # Demo bypass: skip RBAC when the board lives in a demo workspace.
+    from kanban.permissions import is_demo_context as _is_demo_ctx
+    if not _is_demo_ctx(request, board=board) and not request.user.has_perm('prizmai.view_board', board):
         from kanban.simple_access import get_spectra_denial_context
         ctx = get_spectra_denial_context(request.user, board, trigger='board_view')
         return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
@@ -2489,8 +2491,12 @@ def task_detail(request, task_id):
     )
     board = task.column.board
 
-    # RBAC: check view permission on the parent board
-    if not request.user.has_perm('prizmai.view_board', board):
+    # RBAC: check view permission on the parent board.
+    # Demo bypass: skip RBAC when the board lives in a demo workspace so that
+    # sample-data tasks (e.g. from alex_chen_demo shown on the time tracking
+    # dashboard) remain accessible to users browsing in demo mode.
+    from kanban.permissions import is_demo_context
+    if not is_demo_context(request, board=board) and not request.user.has_perm('prizmai.view_board', board):
         from kanban.simple_access import get_spectra_denial_context
         ctx = get_spectra_denial_context(request.user, board, trigger='task_view')
         return render(request, 'kanban/spectra_access_denied.html', ctx, status=403)
