@@ -1,0 +1,71 @@
+{% if not cards_only %}
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+    <span class="text-muted small">
+        {% if total == 0 %}No memories
+        {% elif total == 1 %}1 memory
+        {% else %}{{ total }} memories
+        {% endif %}{% if active_project %} in selected project{% endif %}
+    </span>
+    <div class="ms-auto d-flex gap-1">
+        <button class="btn btn-sm {% if sort == 'newest' %}btn-primary{% else %}btn-outline-secondary{% endif %} browse-sort-btn"
+                data-sort="newest">Newest</button>
+        <button class="btn btn-sm {% if sort == 'oldest' %}btn-primary{% else %}btn-outline-secondary{% endif %} browse-sort-btn"
+                data-sort="oldest">Oldest</button>
+    </div>
+</div>
+
+{% if active_project %}
+<div class="mb-3">
+    <button class="btn btn-sm btn-outline-secondary browse-clear-project">
+        <i class="fas fa-times me-1"></i>Clear project filter
+    </button>
+</div>
+{% elif projects %}
+<div class="mb-3">
+    <p class="text-muted small mb-2 fw-semibold">Filter by project:</p>
+    <div class="d-flex flex-wrap gap-1">
+        {% for project in projects %}
+        <button class="btn btn-sm btn-outline-secondary browse-project-btn"
+                data-project-id="{{ project.id }}"
+                title="{{ project.name }}">
+            {{ project.name|truncatechars:22 }}<span class="badge bg-secondary ms-1">{{ project.memory_count }}</span>
+        </button>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if not nodes %}
+<div class="text-center py-5 text-muted">
+    <i class="fas fa-brain fa-2x mb-3 d-block opacity-50"></i>
+    <p class="mb-0 px-2">No memories captured yet — memories are recorded automatically as your team makes decisions and logs risks.</p>
+</div>
+{% endif %}
+{% endif %}{# end not cards_only #}
+
+{% for node in nodes %}
+<div class="card mb-2 browse-memory-card">
+    <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge bg-secondary" style="font-size:0.65rem;white-space:nowrap;">{{ node.get_node_type_display }}</span>
+            <small class="text-muted ms-auto" style="white-space:nowrap;">{{ node.created_at|date:"M d, Y" }}</small>
+        </div>
+        <div class="fw-semibold small mb-1 browse-card-title" style="cursor:pointer;" data-title="{{ node.title }}">
+            {{ node.title|truncatechars:80 }}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem;">{{ node.content|truncatechars:120 }}</div>
+        {% if node.board %}
+        <div class="mt-1">
+            <small class="text-muted"><i class="fas fa-folder me-1 opacity-50"></i>{{ node.board.name|truncatechars:35 }}</small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% if has_more %}
+<button class="btn btn-outline-secondary btn-sm w-100 mt-2" id="browseLoadMore"
+        data-page="{{ next_page }}" data-sort="{{ sort }}" data-project="{{ active_project }}">
+    <i class="fas fa-chevron-down me-1"></i>Load more
+</button>
+{% endif %}

@@ -187,24 +187,32 @@ def organizational_memory(request):
     board_ids = _get_user_boards(request.user)
 
     total_nodes = MemoryNode.objects.filter(
-        Q(board__isnull=True) | Q(board_id__in=board_ids)
+        board_id__in=board_ids
     ).count()
 
     boards_count = Board.objects.filter(id__in=board_ids).count()
 
     oldest = MemoryNode.objects.filter(
-        Q(board__isnull=True) | Q(board_id__in=board_ids)
+        board_id__in=board_ids
     ).order_by('created_at').values_list('created_at', flat=True).first()
 
     recent_queries = OrganizationalMemoryQuery.objects.filter(
         asked_by=request.user
     ).order_by('-asked_at')[:5]
 
+    recent_nodes = (
+        MemoryNode.objects
+        .filter(board_id__in=board_ids)
+        .select_related('board', 'created_by')
+        .order_by('-created_at')[:5]
+    )
+
     context = {
         'total_nodes': total_nodes,
         'boards_count': boards_count,
         'oldest_memory_date': oldest,
         'recent_queries': recent_queries,
+        'recent_nodes': recent_nodes,
     }
     try:
         from ai_assistant.utils.ai_router import AIRouter
@@ -213,6 +221,65 @@ def organizational_memory(request):
     except Exception:
         context['active_provider_name'] = 'Google Gemini'
     return render(request, 'knowledge_graph/organizational_memory.html', context)
+
+
+# ── View 3b: Memory Browse (AJAX offcanvas panel) ────────────────────────────
+
+@login_required
+@require_GET
+def memory_browse(request):
+    """AJAX: return HTML partial for the browse-memories offcanvas panel."""
+    board_ids = _get_user_boards(request.user)
+    base_qs = (
+        MemoryNode.objects
+        .filter(board_id__in=board_ids)
+        .select_related('board')
+    )
+
+    sort = request.GET.get('sort', 'newest')
+    project_id = request.GET.get('project', '').strip()
+    cards_only = request.GET.get('cards_only') == '1'
+    try:
+        page = max(1, int(request.GET.get('page') or 1))
+    except (ValueError, TypeError):
+        page = 1
+
+    PER_PAGE = 20
+    nodes_qs = base_qs
+    if project_id:
+        try:
+            nodes_qs = nodes_qs.filter(board_id=int(project_id))
+        except (ValueError, TypeError):
+            pass
+
+    if sort == 'oldest':
+        nodes_qs = nodes_qs.order_by('created_at')
+    else:
+        nodes_qs = nodes_qs.order_by('-created_at')
+
+    total = nodes_qs.count()
+    offset = (page - 1) * PER_PAGE
+    nodes = nodes_qs[offset:offset + PER_PAGE]
+    has_more = (offset + PER_PAGE) < total
+
+    projects_qs = (
+        Board.objects.filter(id__in=board_ids)
+        .annotate(memory_count=Count('memorynode'))
+        .filter(memory_count__gt=0)
+        .order_by('-memory_count', 'name')
+    )
+
+    context = {
+        'nodes': nodes,
+        'projects': projects_qs,
+        'has_more': has_more,
+        'next_page': page + 1,
+        'total': total,
+        'sort': sort,
+        'active_project': project_id,
+        'cards_only': cards_only,
+    }
+    return render(request, 'knowledge_graph/_memory_browse_panel.html', context)
 
 
 # ── View 4: Organizational Memory Search (AJAX) ─────────────────────────────
@@ -240,7 +307,7 @@ def organizational_memory_search(request):
     board_ids = _get_user_boards(request.user)
     nodes = (
         MemoryNode.objects
-        .filter(Q(board__isnull=True) | Q(board_id__in=board_ids))
+        .filter(board_id__in=board_ids)
         .select_related('board')
         .order_by('-importance_score', '-created_at')[:100]
     )
@@ -333,11 +400,24 @@ def organizational_memory_search(request):
             'no_data_found': False,
         }
 
-    query_record = OrganizationalMemoryQuery.objects.create(
+    from django.utils import timezone as tz
+    today = tz.now().date()
+    existing_query = OrganizationalMemoryQuery.objects.filter(
         asked_by=request.user,
         query_text=query_text,
-        response_json=result,
-    )
+        asked_at__date=today,
+    ).first()
+    if existing_query:
+        existing_query.response_json = result
+        existing_query.asked_at = tz.now()
+        existing_query.save(update_fields=['response_json', 'asked_at'])
+        query_record = existing_query
+    else:
+        query_record = OrganizationalMemoryQuery.objects.create(
+            asked_by=request.user,
+            query_text=query_text,
+            response_json=result,
+        )
 
     source_ids = result.get('source_node_ids', [])
     if source_ids:
@@ -443,7 +523,7 @@ def deja_vu_check(request, board_id):
     past_nodes = (
         MemoryNode.objects
         .filter(
-            Q(board__isnull=True) | Q(board_id__in=board_ids),
+            board_id__in=board_ids,
             node_type__in=['outcome', 'lesson', 'risk_event', 'scope_change'],
             importance_score__gte=0.6,
         )
