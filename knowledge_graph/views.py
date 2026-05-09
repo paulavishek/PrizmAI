@@ -196,16 +196,29 @@ def organizational_memory(request):
         board_id__in=board_ids
     ).order_by('created_at').values_list('created_at', flat=True).first()
 
-    recent_queries = OrganizationalMemoryQuery.objects.filter(
-        asked_by=request.user
-    ).order_by('-asked_at')[:5]
+    recent_queries = (
+        OrganizationalMemoryQuery.objects.filter(
+            asked_by=request.user
+        ).order_by('-asked_at')[:5]
+        if total_nodes > 0 else []
+    )
 
-    recent_nodes = (
+    # Fetch more than 5 then deduplicate by title so repeated auto-captured
+    # memories with identical titles don't fill all slots.
+    _raw_nodes = (
         MemoryNode.objects
         .filter(board_id__in=board_ids)
         .select_related('board', 'created_by')
-        .order_by('-created_at')[:5]
+        .order_by('-created_at')[:30]
     )
+    _seen_titles = set()
+    recent_nodes = []
+    for _n in _raw_nodes:
+        if _n.title not in _seen_titles:
+            _seen_titles.add(_n.title)
+            recent_nodes.append(_n)
+            if len(recent_nodes) >= 5:
+                break
 
     context = {
         'total_nodes': total_nodes,
@@ -264,7 +277,7 @@ def memory_browse(request):
 
     projects_qs = (
         Board.objects.filter(id__in=board_ids)
-        .annotate(memory_count=Count('memorynode'))
+        .annotate(memory_count=Count('memory_nodes'))
         .filter(memory_count__gt=0)
         .order_by('-memory_count', 'name')
     )
