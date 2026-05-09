@@ -210,9 +210,7 @@
                                 {% if my_tasks %}
                                 <optgroup label="My Assigned Tasks">
                                 {% for task in my_tasks %}
-                                {% if task.id not in suggested_task_ids %}
                                 <option value="{{ task.id }}">{{ task.title|truncatechars:50 }}</option>
-                                {% endif %}
                                 {% endfor %}
                                 </optgroup>
                                 {% endif %}
@@ -246,7 +244,7 @@
                         <div class="mb-3">
                             <label class="form-label">Date</label>
                             <input type="date" class="form-control" id="quick-date" 
-                                   value="{{ "now"|date:"Y-m-d" }}" required>
+                                   value="{{ today_date }}" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>

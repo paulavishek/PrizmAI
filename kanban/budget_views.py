@@ -209,7 +209,7 @@ def time_entry_create(request, task_id):
                 })
             return redirect('budget_dashboard', board_id=board.id)
     else:
-        form = TimeEntryForm(initial={'work_date': timezone.now().date()}, user=request.user)
+        form = TimeEntryForm(initial={'work_date': timezone.localdate()}, user=request.user)
     
     context = {
         'task': task,
@@ -876,17 +876,30 @@ def my_timesheet(request, board_id=None):
     
     # Get week parameter or default to current week
     week_offset = int(request.GET.get('week', 0))
-    today = timezone.now().date()
+    today = timezone.localdate()
     # Start of week (Monday)
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
-    # Check if user has any time entries; only fall back to demo data in demo mode
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    # Check if user has any time entries on demo/sandbox boards in demo mode,
+    # or on real workspace boards otherwise. This prevents a real-workspace entry
+    # from collapsing demo mode and exposing real workspace tasks in the timesheet.
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if is_demo_mode:
+        from accounts.models import Organization as _Org
+        _demo_org = _Org.objects.filter(is_demo=True).first()
+        _demo_board_qs = Board.objects.filter(
+            models.Q(is_sandbox_copy=True) | models.Q(organization=_demo_org)
+        ) if _demo_org else Board.objects.filter(is_sandbox_copy=True)
+        user_has_entries = TimeEntry.objects.filter(
+            user=request.user,
+            task__column__board__in=_demo_board_qs,
+        ).exists()
+    else:
+        user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
-    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
-    
+
     if not user_has_entries and is_demo_mode:
         # Only show demo user data when explicitly in demo mode
         demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
@@ -932,11 +945,12 @@ def my_timesheet(request, board_id=None):
             assigned_to=display_user
         ).select_related('column', 'column__board')
     
-    # Get time entries for the week (for display_user)
+    # Get time entries for the week - scoped to visible boards to prevent cross-workspace bleed
     entries = TimeEntry.objects.filter(
         user=display_user,
         work_date__gte=start_of_week,
-        work_date__lte=end_of_week
+        work_date__lte=end_of_week,
+        task__column__board__in=boards,
     ).select_related('task', 'task__column', 'task__column__board')
     
     # Organize entries by task and date (support multiple entries per task/date)
@@ -1036,12 +1050,24 @@ def time_tracking_dashboard(request, board_id=None):
     from django.db.models import Sum, Count, Avg
     from accounts.models import Organization
     
-    # Check if user has any time entries; only fall back to demo data in demo mode
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    # Check if user has any time entries; only fall back to demo data in demo mode.
+    # In demo mode, only count entries on demo/sandbox boards so a real-workspace
+    # entry doesn't collapse demo mode and expose real workspace data.
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+    if is_demo_mode:
+        _demo_org = Organization.objects.filter(is_demo=True).first()
+        _demo_board_qs = Board.objects.filter(
+            models.Q(is_sandbox_copy=True) | models.Q(organization=_demo_org)
+        ) if _demo_org else Board.objects.filter(is_sandbox_copy=True)
+        user_has_entries = TimeEntry.objects.filter(
+            user=request.user,
+            task__column__board__in=_demo_board_qs,
+        ).exists()
+    else:
+        user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     showing_demo_data = False
     display_user = request.user
-    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
-    
+
     if not user_has_entries and is_demo_mode:
         # Only show demo user data when explicitly in demo mode
         demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
@@ -1086,7 +1112,7 @@ def time_tracking_dashboard(request, board_id=None):
         entries = entries.filter(task__column__board=board)
     
     # Date ranges
-    today = timezone.now().date()
+    today = timezone.localdate()
     week_start = today - timedelta(days=today.weekday())
     month_start = today.replace(day=1)
     
@@ -1148,10 +1174,11 @@ def time_tracking_dashboard(request, board_id=None):
             'hours': float(round(daily_hours, 2)),
         })
     
-    # My tasks needing time entry (assigned and not done)
+    # My tasks needing time entry (assigned and not done) - scoped to boards in current context
     my_tasks = Task.objects.filter(
         assigned_to=request.user,
-        progress__lt=100
+        progress__lt=100,
+        column__board__in=boards
     )
     if board_id:
         my_tasks = my_tasks.filter(column__board=board)
@@ -1160,7 +1187,7 @@ def time_tracking_dashboard(request, board_id=None):
     
     # AI-powered features
     from kanban.time_tracking_ai import TimeTrackingAIService
-    ai_service = TimeTrackingAIService(request.user, board)
+    ai_service = TimeTrackingAIService(request.user, board, boards=boards)
     
     # Get anomaly alerts (warnings about unusual time patterns)
     time_alerts = ai_service.detect_anomalies(days_back=14)
@@ -1168,6 +1195,10 @@ def time_tracking_dashboard(request, board_id=None):
     # Get smart task suggestions
     smart_suggestions = ai_service.suggest_tasks(limit=5)
     suggested_task_ids = [s['task'].id for s in smart_suggestions]
+    suggested_task_ids_set = set(suggested_task_ids)
+
+    # Filter my_tasks to exclude tasks already shown in AI suggestions
+    my_tasks = [t for t in my_tasks if t.id not in suggested_task_ids_set]
     
     # Get missing time reminder (if applicable)
     missing_time_alert = ai_service.get_missing_time_alerts()
@@ -1216,7 +1247,7 @@ def team_timesheet(request, board_id):
     
     # Get week parameter
     week_offset = int(request.GET.get('week', 0))
-    today = timezone.now().date()
+    today = timezone.localdate()
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
@@ -1317,7 +1348,7 @@ def quick_time_entry(request, task_id):
     try:
         hours = Decimal(request.POST.get('hours', '0'))
         description = request.POST.get('description', '').strip()
-        work_date_str = request.POST.get('work_date', timezone.now().date().isoformat())
+        work_date_str = request.POST.get('work_date', timezone.localdate().isoformat())
         work_date = timezone.datetime.fromisoformat(work_date_str).date()
         is_billable = request.POST.get('is_billable', 'true').lower() not in ('false', '0', '')
         
@@ -1478,7 +1509,7 @@ def time_entries_by_period(request):
     if period not in ['today', 'week', 'month', 'all']:
         return JsonResponse({'success': False, 'error': 'Invalid period'}, status=400)
     
-    today = timezone.now().date()
+    today = timezone.localdate()
     
     # Determine date range
     if period == 'today':
@@ -1593,8 +1624,6 @@ def search_tasks_for_time_entry(request):
         column__board__in=boards,
         progress__lt=100,
         title__icontains=query
-    ).exclude(
-        assigned_to=request.user  # Don't show assigned tasks here
     ).select_related('column', 'column__board').order_by('title')[:20]
     
     tasks_data = [
