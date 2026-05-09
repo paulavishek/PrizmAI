@@ -61,6 +61,15 @@ def sync_task_to_calendar(self, task_id):
         # -----------------------------------------------------------------
         # Build credentials and refresh if needed
         # -----------------------------------------------------------------
+        # google-auth uses datetime.utcnow() (naive UTC) internally to check
+        # expiry. Django stores token_expiry as timezone-aware. We must
+        # convert to naive UTC before passing to Credentials, otherwise
+        # comparing aware vs naive datetimes raises TypeError.
+        expiry = token_obj.token_expiry
+        if expiry is not None and expiry.tzinfo is not None:
+            from datetime import timezone as _stdlib_tz
+            expiry = expiry.astimezone(_stdlib_tz.utc).replace(tzinfo=None)
+
         creds = Credentials(
             token=token_obj.access_token,
             refresh_token=token_obj.refresh_token,
@@ -68,12 +77,17 @@ def sync_task_to_calendar(self, task_id):
             client_id=settings.GOOGLE_OAUTH2_CLIENT_ID,
             client_secret=settings.GOOGLE_OAUTH2_CLIENT_SECRET,
             scopes=settings.GOOGLE_CALENDAR_SCOPES,
+            expiry=expiry,  # naive UTC — required by google-auth
         )
-        if creds.expired and creds.refresh_token:
+        if not creds.valid and creds.refresh_token:
             creds.refresh(GoogleRequest())
-            # Persist refreshed token
+            # Persist refreshed token — store as aware UTC for Django
+            from datetime import timezone as _stdlib_tz
+            new_expiry = creds.expiry
+            if new_expiry is not None and new_expiry.tzinfo is None:
+                new_expiry = new_expiry.replace(tzinfo=_stdlib_tz.utc)
             token_obj.access_token = creds.token
-            token_obj.token_expiry = creds.expiry
+            token_obj.token_expiry = new_expiry
             token_obj.save(update_fields=["access_token", "token_expiry", "updated_at"])
 
         service = build("calendar", "v3", credentials=creds)
@@ -100,10 +114,18 @@ def sync_task_to_calendar(self, task_id):
         # Create / update event
         # -----------------------------------------------------------------
         due_dt = task.due_date
+        from datetime import timedelta
+        from django.utils import timezone as tz
+
+        # Ensure due_dt is timezone-aware — Google Calendar API requires
+        # either a timezone offset in the dateTime string or a separate
+        # timeZone field.  If the stored value is naive, attach UTC.
+        if due_dt.tzinfo is None:
+            due_dt = tz.make_aware(due_dt, tz.utc)
+
         # Google Calendar requires RFC 3339 datetime strings.
         start_str = due_dt.isoformat()
         # Make end = start + 1 hour (Calendar requires a non-zero duration).
-        from datetime import timedelta
         end_str = (due_dt + timedelta(hours=1)).isoformat()
 
         board_name = task.column.board.name if task.column_id else ""
@@ -138,5 +160,43 @@ def sync_task_to_calendar(self, task_id):
             task.save(update_fields=["google_calendar_event_id"])
 
     except Exception as exc:
-        logger.error(f"sync_task_to_calendar task={task_id} failed: {exc}", exc_info=True)
-        raise self.retry(exc=exc)
+        error_msg = str(exc)
+        logger.error(f"sync_task_to_calendar task={task_id} failed: {error_msg}", exc_info=True)
+
+        # If the Google Calendar API itself is disabled in the Cloud project,
+        # or the OAuth scope was rejected, retrying won't help — mark the token
+        # as broken so the user sees a clear status on their profile page.
+        non_retryable_phrases = [
+            "has not been used in project",
+            "it is disabled",
+            "accessNotConfigured",
+            "disabled for your project",
+            "insufficientPermissions",
+            "unauthorized_client",
+        ]
+        if any(phrase in error_msg for phrase in non_retryable_phrases):
+            try:
+                from accounts.models import GoogleCalendarToken
+                from kanban.models import Task as _Task
+                task_obj = _Task.objects.select_related("assigned_to").get(pk=task_id)
+                GoogleCalendarToken.objects.filter(user=task_obj.assigned_to).update(
+                    sync_enabled=False
+                )
+            except Exception:
+                pass
+            logger.error(
+                f"sync_task_to_calendar: non-retryable Google API error for task {task_id} — "
+                f"calendar sync disabled for user. Error: {error_msg}"
+            )
+            return  # Do not retry
+
+        try:
+            # self.retry() only works when running inside a Celery worker.
+            # When called synchronously (no worker), skip the retry to avoid
+            # a MaxRetriesExceededError / no-request-context crash.
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            raise
+        except Exception:
+            # Not in a Celery context — just re-raise the original error.
+            raise exc

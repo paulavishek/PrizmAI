@@ -937,7 +937,7 @@ def google_calendar_connect(request):
 
         authorization_url, state = flow.authorization_url(
             access_type="offline",
-            include_granted_scopes="true",
+            include_granted_scopes="false",
             prompt="consent",  # force consent to always get a refresh_token
         )
         request.session["google_calendar_oauth_state"] = state
@@ -997,6 +997,10 @@ def google_calendar_callback(request):
         import os
         if settings.DEBUG:
             os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+        # Google may return additional scopes (e.g. openid) that were previously
+        # granted by the user.  Suppress the oauthlib scope-mismatch check so
+        # the token exchange succeeds as long as the calendar scope is included.
+        os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         creds = flow.credentials
