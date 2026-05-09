@@ -14,6 +14,12 @@
 .source-chip { font-size: 0.8rem; cursor: default; }
 .feedback-btn { cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
 .feedback-btn:hover, .feedback-btn.active { opacity: 1; }
+.org-mem-stat-btn { background: none; border: none; color: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer; display: block; width: 100%; transition: background 0.15s; text-align: center; }
+.org-mem-stat-btn:hover { background: rgba(255,255,255,0.18); }
+.recent-memory-card { transition: box-shadow 0.15s; border-left: 3px solid #667eea; }
+.recent-memory-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.browse-memory-card { transition: box-shadow 0.15s; }
+.browse-memory-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
 </style>
 {% endblock %}
 
@@ -34,20 +40,28 @@
             <div class="col-md-5">
                 <div class="row text-center">
                     <div class="col-4">
-                        <div class="org-mem-stat">{{ total_nodes }}</div>
-                        <small class="opacity-75">Memories</small>
+                        <button class="org-mem-stat-btn" id="statMemoriesBtn" title="Browse all memories">
+                            <div class="org-mem-stat">{{ total_nodes }}</div>
+                            <small class="opacity-75">Memories</small>
+                        </button>
                     </div>
                     <div class="col-4">
-                        <div class="org-mem-stat">{{ boards_count }}</div>
-                        <small class="opacity-75">Projects</small>
+                        <button class="org-mem-stat-btn" id="statProjectsBtn" title="Browse by project">
+                            <div class="org-mem-stat">{{ boards_count }}</div>
+                            <small class="opacity-75">Projects</small>
+                        </button>
                     </div>
                     <div class="col-4">
                         {% if oldest_memory_date %}
-                        <div class="org-mem-stat" style="font-size:1.1rem;">{{ oldest_memory_date|date:"M Y" }}</div>
-                        <small class="opacity-75">Earliest</small>
+                        <button class="org-mem-stat-btn" id="statEarliestBtn" title="Browse oldest memories first">
+                            <div class="org-mem-stat" style="font-size:1.1rem;">{{ oldest_memory_date|date:"M Y" }}</div>
+                            <small class="opacity-75">Earliest</small>
+                        </button>
                         {% else %}
-                        <div class="org-mem-stat">—</div>
-                        <small class="opacity-75">Earliest</small>
+                        <div style="padding:6px 8px;text-align:center;">
+                            <div class="org-mem-stat">—</div>
+                            <small class="opacity-75">Earliest</small>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -70,6 +84,37 @@
             <small class="text-muted mt-1 d-block">Powered by {{ active_provider_name }}. Your question is matched against all project memories you have access to.</small>
         </div>
     </div>
+
+    <!-- Recent Memories -->
+    {% if recent_nodes %}
+    <div id="recentMemoriesSection" class="mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="text-muted mb-0"><i class="fas fa-clock me-1"></i>Recent Memories</h6>
+            <button class="btn btn-sm btn-outline-secondary" id="browseAllBtn">
+                Browse all <i class="fas fa-arrow-right ms-1"></i>
+            </button>
+        </div>
+        <div class="row g-3">
+            {% for node in recent_nodes %}
+            <div class="col-md-6">
+                <div class="card h-100 recent-memory-card" style="cursor:pointer;" data-title="{{ node.title }}">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-secondary" style="font-size:0.65rem;">{{ node.get_node_type_display }}</span>
+                            <small class="text-muted ms-auto">{{ node.created_at|date:"M d" }}</small>
+                        </div>
+                        <div class="fw-semibold small mb-1">{{ node.title|truncatechars:60 }}</div>
+                        <div class="text-muted" style="font-size:0.78rem;">{{ node.content|truncatechars:100 }}</div>
+                        {% if node.board %}
+                        <div class="mt-1"><small class="text-muted"><i class="fas fa-folder me-1 opacity-50"></i>{{ node.board.name|truncatechars:30 }}</small></div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Loading -->
     <div id="orgMemoryLoading" class="text-center py-5" style="display:none;">
@@ -115,6 +160,16 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Memory Browse Offcanvas -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="memoryBrowsePanel" style="width:440px;max-width:100vw;">
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title"><i class="fas fa-layer-group me-2 text-primary"></i>Browse Memories</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" id="browsePanelBody" style="overflow-y:auto;"></div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -138,6 +193,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const query = queryInput.value.trim();
         if (!query) return;
 
+        const recentSection = document.getElementById('recentMemoriesSection');
+        if (recentSection) recentSection.style.display = 'none';
         loadingDiv.style.display = 'block';
         resultDiv.style.display = 'none';
         errorDiv.classList.add('d-none');
@@ -224,6 +281,125 @@ document.addEventListener('DOMContentLoaded', function() {
             doSearch();
         });
     });
+
+    // Show recent section again when input is cleared
+    queryInput.addEventListener('input', function() {
+        if (!this.value.trim()) {
+            const recentSection = document.getElementById('recentMemoriesSection');
+            if (recentSection) recentSection.style.display = '';
+            resultDiv.style.display = 'none';
+            errorDiv.classList.add('d-none');
+        }
+    });
+
+    // Recent memory cards — click to pre-fill search and run it
+    document.querySelectorAll('.recent-memory-card').forEach(card => {
+        card.addEventListener('click', function() {
+            queryInput.value = this.dataset.title;
+            queryInput.focus();
+            doSearch();
+        });
+    });
+
+    // ── Browse Panel ──────────────────────────────────────────────────────────────────────
+    let browseSort = 'newest';
+    let browseProject = '';
+
+    function openBrowsePanel(sort, project) {
+        browseSort = sort || 'newest';
+        browseProject = (project !== undefined) ? project : '';
+        const panelEl = document.getElementById('memoryBrowsePanel');
+        let offcanvas = bootstrap.Offcanvas.getInstance(panelEl);
+        if (!offcanvas) offcanvas = new bootstrap.Offcanvas(panelEl);
+        offcanvas.show();
+    }
+
+    function loadBrowsePanel(cardsOnly, page) {
+        const body = document.getElementById('browsePanelBody');
+        const params = new URLSearchParams({
+            sort: browseSort,
+            project: browseProject,
+            page: page || 1,
+            cards_only: cardsOnly ? '1' : '0'
+        });
+        if (!cardsOnly) {
+            body.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+        }
+        fetch('/memory/browse/?' + params.toString(), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.text())
+        .then(html => {
+            if (cardsOnly) {
+                const oldBtn = document.getElementById('browseLoadMore');
+                if (oldBtn) oldBtn.remove();
+                body.insertAdjacentHTML('beforeend', html);
+            } else {
+                body.innerHTML = html;
+            }
+            attachBrowsePanelEvents();
+        })
+        .catch(() => {
+            if (!cardsOnly) body.innerHTML = '<p class="text-danger p-3">Failed to load memories. Please try again.</p>';
+        });
+    }
+
+    function attachBrowsePanelEvents() {
+        document.querySelectorAll('.browse-sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                browseSort = this.dataset.sort;
+                loadBrowsePanel(false, 1);
+            });
+        });
+        document.querySelectorAll('.browse-project-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                browseProject = this.dataset.projectId;
+                loadBrowsePanel(false, 1);
+            });
+        });
+        const clearBtn = document.querySelector('.browse-clear-project');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                browseProject = '';
+                loadBrowsePanel(false, 1);
+            });
+        }
+        const loadMoreBtn = document.getElementById('browseLoadMore');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', function() {
+                const page = this.dataset.page;
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…';
+                loadBrowsePanel(true, page);
+            });
+        }
+        document.querySelectorAll('.browse-card-title').forEach(el => {
+            el.addEventListener('click', function() {
+                const title = this.dataset.title;
+                const panel = bootstrap.Offcanvas.getInstance(document.getElementById('memoryBrowsePanel'));
+                if (panel) panel.hide();
+                queryInput.value = title;
+                queryInput.focus();
+            });
+        });
+    }
+
+    // Load panel content when offcanvas is opened
+    document.getElementById('memoryBrowsePanel').addEventListener('show.bs.offcanvas', function() {
+        loadBrowsePanel(false, 1);
+    });
+
+    const statMemoriesBtn = document.getElementById('statMemoriesBtn');
+    if (statMemoriesBtn) statMemoriesBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
+
+    const statProjectsBtn = document.getElementById('statProjectsBtn');
+    if (statProjectsBtn) statProjectsBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
+
+    const statEarliestBtn = document.getElementById('statEarliestBtn');
+    if (statEarliestBtn) statEarliestBtn.addEventListener('click', () => openBrowsePanel('oldest', ''));
+
+    const browseAllBtn = document.getElementById('browseAllBtn');
+    if (browseAllBtn) browseAllBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
 });
 </script>
 {% endblock %}

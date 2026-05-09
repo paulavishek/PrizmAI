@@ -8,6 +8,7 @@ urlpatterns = [
     path('boards/<int:board_id>/deja-vu/', views.deja_vu_check, name='deja_vu_check'),
     # Global organizational memory
     path('memory/', views.organizational_memory, name='organizational_memory'),
+    path('memory/browse/', views.memory_browse, name='memory_browse'),
     path('memory/search/', views.organizational_memory_search, name='organizational_memory_search'),
     path('memory/feedback/<int:query_id>/', views.memory_feedback, name='memory_feedback'),
 ]
