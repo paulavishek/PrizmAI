@@ -458,7 +458,7 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 // Trigger detection for all boards
 function triggerDetection() {
     if (confirm('This will scan all boards for conflicts. Continue?')) {
-        showLoading('Scanning for conflicts...');
+        var scanHandle = showScanOverlay('Scanning all boards for conflicts\u2026');
         // In production, trigger via API
         fetch('/conflicts/trigger/all/', {
             method: 'POST',
@@ -467,15 +467,15 @@ function triggerDetection() {
             }
         }).then(response => response.json())
           .then(data => {
-              hideLoading();
               if (data.success) {
-                  alert('Conflict detection started! Page will refresh shortly.');
-                  setTimeout(() => location.reload(), 3000);
+                  // Keep overlay running — backend scan takes ~30s; reload when ready
+                  setTimeout(() => location.reload(), 32000);
               } else {
+                  scanHandle.remove();
                   alert('Error: ' + data.error);
               }
           }).catch(error => {
-              hideLoading();
+              scanHandle.remove();
               alert('Error starting detection');
           });
     }
@@ -488,8 +488,11 @@ function scanBoard() {
         alert('Please select a board');
         return;
     }
-    
-    showLoading('Scanning board...');
+
+    const boardSelect = document.getElementById('boardSelect');
+    const boardName = boardSelect.options[boardSelect.selectedIndex].text;
+    var scanHandle = showScanOverlay('Scanning \u201c' + boardName + '\u201d for conflicts\u2026');
+
     fetch(`/conflicts/trigger/${boardId}/`, {
         method: 'POST',
         headers: {
@@ -497,16 +500,15 @@ function scanBoard() {
         }
     }).then(response => response.json())
       .then(data => {
-          hideLoading();
           if (data.success) {
-              alert(data.message);
-              // Redirect to filtered view showing only this board's conflicts
-              window.location.href = `/conflicts/?board_id=${data.board_id}`;
+              // Keep overlay running — redirect when scan results are ready
+              setTimeout(() => { window.location.href = `/conflicts/?board_id=${data.board_id}`; }, 25000);
           } else {
+              scanHandle.remove();
               alert('Error: ' + data.error);
           }
       }).catch(error => {
-          hideLoading();
+          scanHandle.remove();
           alert('Error scanning board');
       });
 }
@@ -564,16 +566,42 @@ function viewConflict(conflictId, notificationId) {
 
 // Loading helpers
 var _conflictLoadingHandle = null;
-function showLoading(message) {
-    _conflictLoadingHandle = PrizmLoading.showOverlay(null, {
-        messages: PrizmLoading.messages.conflicts
-    });
+
+function showScanOverlay(titleText) {
+    if (_conflictLoadingHandle) {
+        _conflictLoadingHandle.remove();
+    }
+    var overlay = document.createElement('div');
+    overlay.className = 'prizm-loading-overlay';
+    overlay.innerHTML =
+        '<div class="prizm-loading-container">' +
+            '<div class="prizm-spinner prizm-spinner--lg"></div>' +
+            '<p class="prizm-scan-title"></p>' +
+            '<p class="prizm-loading-message"></p>' +
+        '</div>';
+    overlay.querySelector('.prizm-scan-title').textContent = titleText;
+    document.body.appendChild(overlay);
+
+    var msgEl = overlay.querySelector('.prizm-loading-message');
+    var rotateHandle = PrizmLoading.rotateMessages(
+        msgEl,
+        PrizmLoading.messages.conflictScan,
+        32000
+    );
+
+    _conflictLoadingHandle = {
+        remove: function () {
+            rotateHandle.stop();
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            _conflictLoadingHandle = null;
+        }
+    };
+    return _conflictLoadingHandle;
 }
 
 function hideLoading() {
     if (_conflictLoadingHandle) {
         _conflictLoadingHandle.remove();
-        _conflictLoadingHandle = null;
     }
 }
 </script>
