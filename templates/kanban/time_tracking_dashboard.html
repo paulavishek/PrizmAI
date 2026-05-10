@@ -251,6 +251,10 @@
                             <textarea class="form-control" id="quick-description" 
                                       rows="2" placeholder="What did you work on?"></textarea>
                         </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="quick-is-billable" checked>
+                            <label class="form-check-label" for="quick-is-billable">Billable</label>
+                        </div>
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-plus"></i> Log Time
                         </button>
@@ -512,10 +516,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Submit time entry directly
     function submitTimeEntry(taskId, hours, date, description) {
+        const isBillable = document.getElementById('quick-is-billable')?.checked !== false;
         const formData = new FormData();
         formData.append('hours', hours);
         formData.append('description', description);
         formData.append('work_date', date);
+        formData.append('is_billable', isBillable ? 'true' : 'false');
         formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
         
         fetch(`/task/${taskId}/time/quick-log/`, {
