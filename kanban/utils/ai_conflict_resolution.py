@@ -252,9 +252,11 @@ For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) 
     def _parse_ai_suggestions(self, ai_response: str, conflict) -> List[Dict]:
         """Parse AI response and create ConflictResolution objects."""
         from kanban.conflict_models import ConflictResolution
-        
+        import logging
+        _logger = logging.getLogger(__name__)
+
         suggestions = []
-        
+
         try:
             # Strip markdown code fences if the AI wrapped the response (e.g. ```json ... ```)
             clean_response = ai_response.strip()
@@ -267,11 +269,11 @@ For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) 
             # Try to extract JSON from response
             json_start = clean_response.find('{')
             json_end = clean_response.rfind('}') + 1
-            
+
             if json_start >= 0 and json_end > json_start:
                 json_str = clean_response[json_start:json_end]
                 data = json.loads(json_str)
-                
+
                 # Track seen (type, normalised_title) pairs to deduplicate within this AI response
                 seen_suggestions = set()
                 # Pre-populate with suggestions already persisted for this conflict
@@ -279,68 +281,56 @@ For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) 
                     seen_suggestions.add((existing['resolution_type'], existing['title'].strip().lower()))
 
                 for res_data in data.get('resolutions', []):
-                    # Map AI type to model type
-                    resolution_type = self._map_resolution_type(res_data.get('type', 'custom'))
-                    title = res_data.get('title', 'AI Suggested Resolution')[:255]
+                    try:
+                        # Map AI type to model type
+                        resolution_type = self._map_resolution_type(res_data.get('type', 'custom'))
+                        title = res_data.get('title', 'AI Suggested Resolution')[:255]
 
-                    # Deduplicate: skip if same resolution_type + title (case-insensitive)
-                    # was already seen in this batch OR already exists in the DB.
-                    dedup_key = (resolution_type, title.strip().lower())
-                    if dedup_key in seen_suggestions:
+                        # Deduplicate: skip if same resolution_type + title (case-insensitive)
+                        # was already seen in this batch OR already exists in the DB.
+                        dedup_key = (resolution_type, title.strip().lower())
+                        if dedup_key in seen_suggestions:
+                            continue
+                        seen_suggestions.add(dedup_key)
+
+                        # Safely convert confidence — AI may return None, floats, or strings
+                        try:
+                            confidence = int(float(res_data.get('confidence') or 70))
+                        except (TypeError, ValueError):
+                            confidence = 70
+
+                        # Create resolution
+                        resolution = ConflictResolution.objects.create(
+                            conflict=conflict,
+                            resolution_type=resolution_type,
+                            title=title,
+                            description=res_data.get('description', ''),
+                            ai_confidence=min(100, max(0, confidence)),
+                            ai_reasoning=res_data.get('reasoning', ''),
+                            estimated_impact=res_data.get('impact', '')[:255],
+                            action_steps=res_data.get('steps', []),
+                            auto_applicable=False  # AI suggestions require review
+                        )
+
+                        suggestions.append(resolution)
+
+                    except Exception as item_error:
+                        # Log the bad item but continue processing remaining resolutions
+                        _logger.warning(
+                            f"Skipping one AI resolution for conflict {conflict.id} due to error: {item_error}"
+                        )
                         continue
-                    seen_suggestions.add(dedup_key)
 
-                    # Create resolution
-                    resolution = ConflictResolution.objects.create(
-                        conflict=conflict,
-                        resolution_type=resolution_type,
-                        title=title,
-                        description=res_data.get('description', ''),
-                        ai_confidence=min(100, max(0, int(res_data.get('confidence', 70)))),
-                        ai_reasoning=res_data.get('reasoning', ''),
-                        estimated_impact=res_data.get('impact', '')[:255],
-                        action_steps=res_data.get('steps', []),
-                        auto_applicable=False  # AI suggestions require review
-                    )
-
-                    suggestions.append(resolution)
-            
         except Exception as e:
-            print(f"Error parsing AI suggestions: {e}")
-            # Fallback: build a clean human-readable description instead of dumping raw JSON
-            description = "AI analysis completed. Review the suggestions below."
-            try:
-                # Attempt to salvage root_cause / contributing_factors from the raw response
-                salvage = ai_response.strip()
-                if salvage.startswith('```'):
-                    salvage = salvage.split('\n', 1)[-1]
-                if salvage.endswith('```'):
-                    salvage = salvage.rsplit('```', 1)[0]
-                j_start = salvage.find('{')
-                j_end = salvage.rfind('}') + 1
-                if j_start >= 0 and j_end > j_start:
-                    fallback_data = json.loads(salvage[j_start:j_end])
-                    analysis = fallback_data.get('conflict_analysis', {})
-                    root_cause = analysis.get('root_cause', '').strip()
-                    factors = [f for f in analysis.get('contributing_factors', []) if f]
-                    if root_cause:
-                        description = root_cause
-                        if factors:
-                            description += ' Contributing factors include: ' + '; '.join(factors[:2]) + '.'
-            except Exception:
-                pass  # Keep the generic message
-
-            resolution = ConflictResolution.objects.create(
-                conflict=conflict,
-                resolution_type='custom',
-                title='AI Analysis Completed',
-                description=description,
-                ai_confidence=60,
-                ai_reasoning='Generated from AI analysis',
-                auto_applicable=False
+            # JSON parsing failed — log it and return whatever was successfully created.
+            # Do NOT create a placeholder "AI Analysis Completed" record; the rule-based
+            # suggestions generated by ConflictResolutionSuggester already provide
+            # meaningful fallback content and a dummy record only pollutes the UI.
+            _logger.error(
+                f"Error parsing AI suggestions for conflict {conflict.id}: {e}",
+                exc_info=True,
             )
-            suggestions.append(resolution)
-        
+
         return suggestions
     
     def _map_resolution_type(self, ai_type: str) -> str:

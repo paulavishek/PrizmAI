@@ -126,6 +126,24 @@ def conflict_detail(request, conflict_id):
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
 
+        # Remove any placeholder "AI Analysis Completed" records that were created
+        # by the old fallback code path when AI JSON parsing failed. These records
+        # carry no useful information (title='AI Analysis Completed',
+        # ai_reasoning='Generated from AI analysis') and should not be shown to
+        # users. The new code no longer generates them, but legacy records may
+        # still exist in the database.
+        stale_fallback_ids = [
+            r.pk for r in resolutions
+            if r.title.strip().lower() == 'ai analysis completed'
+            and (r.ai_reasoning or '').strip().lower() in ('generated from ai analysis', '')
+        ]
+        if stale_fallback_ids:
+            conflict.resolutions.filter(pk__in=stale_fallback_ids).delete()
+            resolutions = conflict.resolutions.all().order_by('-ai_confidence')
+            logger.info(
+                f"Removed {len(stale_fallback_ids)} stale AI fallback resolution(s) for conflict {conflict.id}"
+            )
+
         # Detect resolutions with stale/missing substantive reasoning.
         # A resolution has only a historical note (or nothing) when its ai_reasoning
         # is either empty or starts with "Based on" (the pattern appended by
