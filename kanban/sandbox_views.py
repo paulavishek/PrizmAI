@@ -1030,6 +1030,14 @@ def _duplicate_board(template_board, user):
         for cr in ConflictResolution.objects.filter(conflict__board=template_board):
             new_conflict = conflict_map.get(cr.conflict_id)
             if new_conflict:
+                # If the source resolution has stale/missing substantive reasoning
+                # (empty or only a historical note), clear it so the conflict_detail
+                # view regenerates it fresh for this user on first visit.
+                source_reasoning = (cr.ai_reasoning or '').strip()
+                copied_reasoning = (
+                    '' if (not source_reasoning or source_reasoning.startswith('Based on'))
+                    else source_reasoning
+                )
                 new_cr = ConflictResolution.objects.create(
                     conflict=new_conflict,
                     resolution_type=cr.resolution_type,
@@ -1038,7 +1046,7 @@ def _duplicate_board(template_board, user):
                     action_steps=cr.action_steps,
                     estimated_impact=cr.estimated_impact,
                     ai_confidence=cr.ai_confidence,
-                    ai_reasoning=cr.ai_reasoning,
+                    ai_reasoning=copied_reasoning,
                     auto_applicable=cr.auto_applicable,
                     implementation_data=cr.implementation_data,
                     applied_at=cr.applied_at,

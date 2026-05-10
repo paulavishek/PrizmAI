@@ -125,7 +125,38 @@ def conflict_detail(request, conflict_id):
         
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
-        
+
+        # Detect resolutions with stale/missing substantive reasoning.
+        # A resolution has only a historical note (or nothing) when its ai_reasoning
+        # is either empty or starts with "Based on" (the pattern appended by
+        # _apply_learned_patterns). Any resolution with real substantive text begins
+        # with a sentence about the action itself, not a historical reference.
+        # This silently self-heals for any user on first visit without requiring a
+        # manual demo reset.
+        def _has_stale_reasoning(resolution):
+            text = (resolution.ai_reasoning or '').strip()
+            return not text or text.startswith('Based on')
+
+        if (
+            conflict.status == 'active'
+            and resolutions.exists()
+            and all(_has_stale_reasoning(r) for r in resolutions)
+        ):
+            try:
+                from kanban.utils.conflict_detection import ConflictResolutionSuggester
+                logger.info(
+                    f"Stale reasoning detected for conflict {conflict.id} — regenerating resolutions"
+                )
+                conflict.resolutions.all().delete()
+                suggester = ConflictResolutionSuggester(conflict)
+                suggester.generate_suggestions()
+                resolutions = conflict.resolutions.all().order_by('-ai_confidence')
+            except Exception as regen_error:
+                logger.error(
+                    f"Failed to regenerate stale resolutions for conflict {conflict.id}: {regen_error}",
+                    exc_info=True,
+                )
+
         # Generate resolutions on-demand if none exist
         if not resolutions.exists() and conflict.status == 'active':
             try:

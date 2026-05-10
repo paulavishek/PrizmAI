@@ -56,17 +56,33 @@ class Command(BaseCommand):
         self.demo_boards = Board.objects.filter(organization=self.demo_org)
         self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
 
-        # Get demo users
+        # Get demo users — try canonical names first, then fall back to any board member
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
         self.alex = User.objects.filter(username='alex_chen_demo').first()
         self.sam = User.objects.filter(username='sam_rivera_demo').first()
         self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
+
+        # Fallback: if demo_admin_solo doesn't exist, use any board member as admin
+        if not self.demo_admin:
+            self.demo_admin = (
+                self.alex or self.sam or self.jordan
+                or User.objects.filter(board_memberships__board__in=self.demo_boards).first()
+            )
+            if self.demo_admin:
+                self.stdout.write(self.style.WARNING(
+                    f'   ⚠️  demo_admin_solo not found — using "{self.demo_admin.username}" as admin'
+                ))
+
+        self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
+        # Deduplicate while preserving order
+        seen = set()
+        self.demo_users = [u for u in self.demo_users if not (u.id in seen or seen.add(u.id))]
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
 
         if not self.demo_admin:
-            self.stdout.write(self.style.ERROR('❌ demo_admin_solo user not found!'))
+            self.stdout.write(self.style.ERROR('❌ No demo users found! Run create_demo_organization first.'))
             return
 
         # Clear existing data if requested
@@ -123,13 +139,34 @@ class Command(BaseCommand):
                             'type': 'reassign',
                             'title': 'Reassign 2 tasks to Jordan',
                             'confidence': 85,
-                            'impact': 'Reduces Sam\'s workload by 25%'
+                            'impact': 'Reduces Sam\'s workload by 25%',
+                            'reasoning': (
+                                "Reassigning tasks to a team member with available capacity directly removes the "
+                                "overallocation at its source, giving each task a dedicated owner with realistic "
+                                "bandwidth to meet its deadline without quality trade-offs from split focus. "
+                                "The expected outcome is that Sam's remaining tasks proceed at full pace while "
+                                "Jordan takes ownership of the reassigned work with a clear scope. "
+                                "A brief handover session is recommended so Jordan has enough context to avoid "
+                                "ramp-up delays. "
+                                "Based on 15 past resolutions of this type on your projects, this approach has "
+                                "an 80% success rate (+15% confidence adjustment)."
+                            )
                         },
                         {
                             'type': 'reschedule',
                             'title': 'Extend deadlines for lower priority tasks',
                             'confidence': 75,
-                            'impact': 'Spreads workload over 3 weeks'
+                            'impact': 'Spreads workload over 3 weeks',
+                            'reasoning': (
+                                "Spreading deadlines over a longer window reduces the simultaneous demand on Sam, "
+                                "eliminating the bottleneck without changing task ownership. "
+                                "Sam can then give focused attention to each task in sequence, reducing the risk "
+                                "of delays or errors that arise from context-switching between 11 concurrent items. "
+                                "This approach requires downstream dependencies and stakeholder expectations to "
+                                "tolerate the adjusted timeline before committing. "
+                                "Based on 10 past resolutions of this type on your projects, this approach has "
+                                "a 70% success rate (+8% confidence adjustment)."
+                            )
                         }
                     ],
                     'status': 'active'
@@ -152,13 +189,33 @@ class Command(BaseCommand):
                             'type': 'modify_dependency',
                             'title': 'Use mock API for initial development',
                             'confidence': 80,
-                            'impact': 'Allows parallel progress on both tasks'
+                            'impact': 'Allows parallel progress on both tasks',
+                            'reasoning': (
+                                "Using a mock API decouples the File Upload System from its dependency on the "
+                                "User Management API, allowing both workstreams to advance in parallel rather "
+                                "than sequentially. "
+                                "Once the real API is ready, integration can be completed with minimal rework "
+                                "since both sides will have been developed against an agreed interface contract. "
+                                "This requires both teams to define the API contract before work proceeds and "
+                                "to maintain discipline to swap out the mock cleanly on completion. "
+                                "Based on 8 past resolutions of this type on your projects, this approach has "
+                                "a 75% success rate (+12% confidence adjustment)."
+                            )
                         },
                         {
                             'type': 'add_resources',
                             'title': 'Pair programming to accelerate blocking task',
                             'confidence': 70,
-                            'impact': 'Could reduce blocking time by 50%'
+                            'impact': 'Could reduce blocking time by 50%',
+                            'reasoning': (
+                                "Pairing a second developer on the blocking User Management API task directly "
+                                "accelerates its completion, shortening the window during which the File Upload "
+                                "System is held up. "
+                                "Pair programming on this type of integration work typically reduces elapsed time "
+                                "by 30–50% while also improving code quality through real-time review. "
+                                "This works best when both contributors have enough codebase context to pair "
+                                "effectively without a lengthy ramp-up period."
+                            )
                         }
                     ],
                     'status': 'active'
@@ -180,7 +237,18 @@ class Command(BaseCommand):
                             'type': 'reschedule',
                             'title': 'Stagger tasks by 1 week',
                             'confidence': 85,
-                            'impact': 'Better focus on each task'
+                            'impact': 'Better focus on each task',
+                            'reasoning': (
+                                "Staggering the Performance Optimization and Security Audit tasks creates "
+                                "dedicated focus windows for each, preventing the context-switching overhead "
+                                "that reduces Sam's effectiveness when both are active in the same sprint. "
+                                "The expected outcome is higher-quality output on both tasks and a lower risk "
+                                "of one slipping because of pressure from the other. "
+                                "This requires confirming with stakeholders that the later task's revised "
+                                "timeline is acceptable before committing to the change. "
+                                "Based on 20 past resolutions of this type on your projects, this approach has "
+                                "an 85% success rate (+18% confidence adjustment)."
+                            )
                         }
                     ],
                     'status': 'resolved'
@@ -250,7 +318,7 @@ class Command(BaseCommand):
                         title=res_data['title'],
                         description=f"Suggested resolution: {res_data['title']}",
                         ai_confidence=res_data['confidence'],
-                        ai_reasoning=f"Based on analysis, this resolution has a {res_data['confidence']}% confidence of success. Expected impact: {res_data['impact']}",
+                        ai_reasoning=res_data.get('reasoning', ''),
                         estimated_impact=res_data['impact'],
                         action_steps=[
                             f"Review current situation",

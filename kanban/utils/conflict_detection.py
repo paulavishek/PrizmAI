@@ -480,6 +480,102 @@ class ConflictResolutionSuggester:
         
         return suggestions
     
+    def _get_resolution_reasoning(self, resolution_type):
+        """
+        Return substantive 2-3 sentence reasoning for a (conflict_type, resolution_type) pair.
+        Specific to the conflict type so the text is meaningful for the card's "Why this works" section.
+        """
+        conflict_type = self.conflict.conflict_type
+        reasoning_map = {
+            ('resource', 'reassign'): (
+                "Reassigning one of the conflicting tasks to a team member with available capacity directly removes "
+                "the overallocation at its source, giving each task a dedicated owner with realistic bandwidth. "
+                "The expected outcome is that both tasks proceed at their normal pace without quality trade-offs from "
+                "context-switching or divided attention. "
+                "For this to work, the receiving team member needs sufficient context on the task — a brief handover "
+                "is recommended to avoid ramp-up delays."
+            ),
+            ('resource', 'reschedule'): (
+                "Rescheduling one task to a non-overlapping window serialises the workload, eliminating the "
+                "simultaneous demand that is causing the resource conflict. "
+                "The team member can then give focused attention to each task in sequence, reducing the risk of "
+                "delays or errors that arise from split focus. "
+                "This approach requires downstream dependencies and stakeholder expectations to tolerate the "
+                "adjusted timeline before committing."
+            ),
+            ('resource', 'split_task'): (
+                "Breaking the overloaded task into smaller independent units allows portions to be delegated or "
+                "deprioritised without reassigning ownership entirely. "
+                "This reduces the immediate pressure on the team member while keeping them accountable for the "
+                "overall outcome. "
+                "It works best when the task has distinct deliverables that can be distributed cleanly — tightly "
+                "coupled work may not split effectively."
+            ),
+            ('resource', 'add_resources'): (
+                "Adding a contributor to one of the conflicting tasks accelerates its completion, shortening the "
+                "window during which two pieces of work compete for the same person's time. "
+                "The expected outcome is faster throughput on the selected task, freeing the team member's capacity "
+                "sooner for the other work. "
+                "This requires the new contributor to have sufficient context and availability, and works best when "
+                "the task has parallelisable workstreams."
+            ),
+            ('dependency', 'modify_dependency'): (
+                "Removing or softening the dependency allows the blocked task to proceed in parallel using a mock "
+                "or stub in place of the upstream deliverable. "
+                "Once the blocking task is complete, integration is straightforward since both sides are developed "
+                "against an agreed interface contract. "
+                "This requires the team to define that contract upfront and maintain discipline to swap out the "
+                "placeholder cleanly when the real implementation is ready."
+            ),
+            ('dependency', 'adjust_dates'): (
+                "Shifting the start date of the blocked task to after its dependency is complete eliminates the "
+                "scheduling conflict and ensures work begins only when prerequisites are genuinely ready. "
+                "This removes the risk of rework caused by building on an incomplete or changing foundation. "
+                "It requires confirming that the adjusted start date is still compatible with the task's own "
+                "deadline and any downstream deliverables that depend on it."
+            ),
+            ('dependency', 'remove_dependency'): (
+                "Re-evaluating whether the dependency is strictly necessary may reveal that the blocked task can "
+                "proceed independently, either in full or with currently available information. "
+                "Removing an unnecessary dependency unlocks parallel progress and reduces scheduling fragility "
+                "across the project. "
+                "This should be validated with both task owners to confirm no critical coupling is being overlooked "
+                "before the link is severed."
+            ),
+            ('schedule', 'adjust_dates'): (
+                "Extending the deadline to a realistic date resolves the scheduling conflict by aligning the target "
+                "with the actual work remaining, rather than forcing rushed completion. "
+                "The expected outcome is a higher-quality deliverable completed on a timeline the team can commit "
+                "to confidently. "
+                "This requires stakeholder agreement on the revised date and should be paired with a review of "
+                "downstream tasks that depend on this one."
+            ),
+            ('schedule', 'add_resources'): (
+                "Adding a team member to help with the overdue task brings more capacity to bear on the bottleneck, "
+                "making the original deadline achievable without cutting scope. "
+                "The expected outcome is faster progress through task sharing or parallel workstreams, reducing "
+                "the schedule overrun. "
+                "This works best when the task has parallelisable components and the new contributor can ramp up "
+                "quickly without requiring extensive context-setting."
+            ),
+            ('schedule', 'reschedule'): (
+                "Staggering the overlapping tasks creates dedicated focus windows for each, preventing the "
+                "context-switching overhead that reduces effectiveness when both are active simultaneously. "
+                "The expected outcome is higher quality output and a lower risk of one task slipping because of "
+                "pressure from the other. "
+                "This requires stakeholder agreement on the revised timeline before committing to the change."
+            ),
+            ('schedule', 'reduce_scope'): (
+                "Reducing the scope lowers the total work volume to a level that fits the available time, making "
+                "the schedule feasible without changing the deadline or adding resources. "
+                "The expected outcome is that the task reaches a meaningful completion state within the original "
+                "timeline, with lower-priority elements deferred to a future iteration. "
+                "This requires product owner sign-off on which scope elements can be safely cut, and clarity on "
+                "what 'done enough' looks like for the current milestone."
+            ),
+        }
+        return reasoning_map.get((conflict_type, resolution_type), '')
+
     def _suggest_resource_resolutions(self):
         """Suggest resolutions for resource conflicts."""
         suggestions = []
@@ -532,6 +628,7 @@ class ConflictResolutionSuggester:
                         title=f"Reassign '{task2.title}' to {member.get_full_name() or member.username}",
                         description=f"Move task '{task2.title}' from {user_name} to {member.get_full_name() or member.username} to balance workload.",
                         ai_confidence=70,
+                        ai_reasoning=self._get_resolution_reasoning('reassign'),
                         auto_applicable=True,
                         implementation_data={
                             'task_id': task2.id,
@@ -563,6 +660,7 @@ class ConflictResolutionSuggester:
                     title=f"Reschedule '{task2.title}' to start after first task",
                     description=f"Delay start of '{task2.title}' until '{task1.title}' is complete.",
                     ai_confidence=85,
+                    ai_reasoning=self._get_resolution_reasoning('reschedule'),
                     auto_applicable=True,
                     implementation_data={
                         'task_id': task2.id,
@@ -600,6 +698,7 @@ class ConflictResolutionSuggester:
                 title=f"Extend due date by 1 week",
                 description=f"Extend due date for '{task.title}' to {new_due.strftime('%Y-%m-%d')} to allow completion.",
                 ai_confidence=75,
+                ai_reasoning=self._get_resolution_reasoning('adjust_dates'),
                 auto_applicable=True,
                 implementation_data={
                     'task_id': task.id,
@@ -617,6 +716,7 @@ class ConflictResolutionSuggester:
                 title=f"Add team member to accelerate task",
                 description=f"Assign additional team member to '{task.title}' to help meet deadline.",
                 ai_confidence=65,
+                ai_reasoning=self._get_resolution_reasoning('add_resources'),
                 auto_applicable=False,
                 estimated_impact="Accelerates completion through collaboration"
             )
@@ -648,6 +748,7 @@ class ConflictResolutionSuggester:
             title=f"Reschedule to after blocking tasks",
             description=f"Adjust dates for '{task.title}' to start after dependencies are complete.",
             ai_confidence=80,
+            ai_reasoning=self._get_resolution_reasoning('adjust_dates'),
             auto_applicable=False,
             estimated_impact="Ensures proper task sequencing"
         )
@@ -660,6 +761,7 @@ class ConflictResolutionSuggester:
             title=f"Re-evaluate task dependencies",
             description=f"Review whether all dependencies for '{task.title}' are truly required.",
             ai_confidence=60,
+            ai_reasoning=self._get_resolution_reasoning('modify_dependency'),
             auto_applicable=False,
             estimated_impact="May enable parallel work and faster completion"
         )
@@ -668,32 +770,60 @@ class ConflictResolutionSuggester:
         return suggestions
     
     def _apply_learned_patterns(self, suggestions):
-        """Apply learned patterns to adjust confidence scores."""
+        """Apply learned patterns to adjust confidence scores and append historical context."""
         for suggestion in suggestions:
-            boost = ResolutionPattern.get_confidence_boost(
-                self.conflict.conflict_type,
-                suggestion.resolution_type,
-                self.conflict.board
-            )
-            
+            # Fetch the full pattern object so we can access times_used and success_rate,
+            # not just the pre-computed confidence_boost float.
+            pattern = None
+
+            # Board-specific pattern takes priority (requires ≥ 3 uses for reliability)
+            if self.conflict.board:
+                pattern = ResolutionPattern.objects.filter(
+                    conflict_type=self.conflict.conflict_type,
+                    resolution_type=suggestion.resolution_type,
+                    board=self.conflict.board,
+                    times_used__gte=3,
+                ).first()
+
+            # Fall back to global pattern (requires ≥ 5 uses)
+            if pattern is None:
+                pattern = ResolutionPattern.objects.filter(
+                    conflict_type=self.conflict.conflict_type,
+                    resolution_type=suggestion.resolution_type,
+                    board__isnull=True,
+                    times_used__gte=5,
+                ).first()
+
+            boost = pattern.confidence_boost if pattern else 0.0
+
             # Apply boost (with bounds checking)
             new_confidence = max(0, min(100, suggestion.ai_confidence + boost))
             suggestion.ai_confidence = int(new_confidence)
-            
-            # Add reasoning about learning
-            if boost > 0:
-                suggestion.ai_reasoning = (
-                    f"This resolution type has worked well in the past "
-                    f"(+{boost:.0f}% confidence based on team history)."
+
+            # Build historical note only when we have real pattern data
+            historical_note = ''
+            if pattern is not None:
+                n = pattern.times_used
+                success_pct = round(pattern.success_rate * 100)
+                boost_val = pattern.confidence_boost
+                boost_sign = '+' if boost_val >= 0 else ''
+                scope = 'this board' if pattern.board else 'your projects'
+                historical_note = (
+                    f"Based on {n} past resolution{'s' if n != 1 else ''} of this type on "
+                    f"{scope}, this approach has a {success_pct}% success rate "
+                    f"({boost_sign}{boost_val:.0f}% confidence adjustment)."
                 )
-            elif boost < 0:
-                suggestion.ai_reasoning = (
-                    f"This resolution type has had mixed results in the past "
-                    f"({boost:.0f}% confidence adjustment)."
-                )
-            
+
+            # Append historical note to existing reasoning — never overwrite substantive text
+            if historical_note:
+                existing = suggestion.ai_reasoning.strip()
+                if existing:
+                    suggestion.ai_reasoning = existing + ' ' + historical_note
+                else:
+                    suggestion.ai_reasoning = historical_note
+
             suggestion.save()
-        
+
         # Sort by confidence
         suggestions.sort(key=lambda s: s.ai_confidence, reverse=True)
         return suggestions
