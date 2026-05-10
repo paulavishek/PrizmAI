@@ -102,7 +102,11 @@
                                 data-task-id="{{ row.task.id }}" 
                                 data-date="{{ entry_data.date|date:'Y-m-d' }}">
                                 {% if entry_data.entry %}
-                                <div class="time-entry" data-entry-id="{{ entry_data.entry.id }}">
+                                <div class="time-entry" data-entry-id="{{ entry_data.entry.id }}"
+                                     data-hours="{{ entry_data.hours }}"
+                                     data-description="{{ entry_data.entry.description|escapejs }}"
+                                     data-is-billable="{{ entry_data.entry.is_billable|yesno:'true,false' }}"
+                                     style="cursor:pointer;" title="Click to edit">
                                     <span class="hours-display">{{ entry_data.hours }}</span>
                                     {% if entry_data.entry_count > 1 %}
                                     <span class="badge bg-info ms-1" title="{{ entry_data.entry_count }} separate sessions logged" 
@@ -254,60 +258,88 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const modal = new bootstrap.Modal(document.getElementById('quickTimeEntryModal'));
-    
-    // Add time button click
+    const modalEl = document.getElementById('quickTimeEntryModal');
+    const modal = new bootstrap.Modal(modalEl);
+    let editingEntryId = null;  // null = new entry, number = editing existing entry
+
+    function openModal({ taskId, date, hours, description, isBillable, entryId }) {
+        editingEntryId = entryId || null;
+        document.getElementById('entry-task-id').value = taskId || '';
+        document.getElementById('entry-work-date').value = date || '';
+        document.getElementById('entry-hours').value = hours || '';
+        document.getElementById('entry-description').value = description || '';
+        document.getElementById('entry-is-billable').checked = isBillable !== false && isBillable !== 'false';
+        modalEl.querySelector('.modal-title').textContent = entryId ? 'Edit Time Entry' : 'Log Time';
+        modal.show();
+    }
+
+    // Add time button click (new entry)
     document.querySelectorAll('.add-time-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            const taskId = this.dataset.taskId;
-            const date = this.dataset.date;
-            
-            document.getElementById('entry-task-id').value = taskId;
-            document.getElementById('entry-work-date').value = date;
-            document.getElementById('entry-hours').value = '';
-            document.getElementById('entry-description').value = '';
-            
-            modal.show();
+            openModal({ taskId: this.dataset.taskId, date: this.dataset.date });
         });
     });
-    
-    // Save time entry
+
+    // Click on existing entry to edit
+    document.querySelectorAll('.time-entry').forEach(div => {
+        div.addEventListener('click', function(e) {
+            if (e.target.closest('.delete-entry')) return; // ignore delete button
+            const cell = this.closest('.time-cell');
+            openModal({
+                taskId: cell.dataset.taskId,
+                date: cell.dataset.date,
+                hours: this.dataset.hours,
+                description: this.dataset.description,
+                isBillable: this.dataset.isBillable,
+                entryId: this.dataset.entryId,
+            });
+        });
+    });
+
+    // Save time entry (new or edit)
     document.getElementById('saveTimeEntry').addEventListener('click', function() {
         const taskId = document.getElementById('entry-task-id').value;
         const hours = document.getElementById('entry-hours').value;
         const description = document.getElementById('entry-description').value;
         const workDate = document.getElementById('entry-work-date').value;
-        
+
         if (!hours || parseFloat(hours) <= 0) {
             alert('Please enter valid hours');
             return;
         }
-        
-        const isBillable = document.getElementById('entry-is-billable')?.checked !== false;
-        const formData = new FormData();
-        formData.append('hours', hours);
-        formData.append('description', description);
-        formData.append('work_date', workDate);
-        formData.append('is_billable', isBillable ? 'true' : 'false');
-        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
-        
-        fetch(`/task/${taskId}/time/quick-log/`, {
-            method: 'POST',
-            body: formData,
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                modal.hide();
-                location.reload(); // Reload to show new entry
-            } else {
-                alert('Error: ' + (data.error || 'Failed to log time'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Failed to log time. Please try again.');
-        });
+
+        const isBillable = document.getElementById('entry-is-billable').checked;
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        if (editingEntryId) {
+            // Update existing entry
+            fetch(`/time-entry/${editingEntryId}/update/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ hours, description, is_billable: isBillable ? 'true' : 'false' }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) { modal.hide(); location.reload(); }
+                else alert('Error: ' + (data.error || 'Failed to update entry'));
+            })
+            .catch(() => alert('Failed to update entry. Please try again.'));
+        } else {
+            // Create new entry
+            const formData = new FormData();
+            formData.append('hours', hours);
+            formData.append('description', description);
+            formData.append('work_date', workDate);
+            formData.append('is_billable', isBillable ? 'true' : 'false');
+            formData.append('csrfmiddlewaretoken', csrfToken);
+            fetch(`/task/${taskId}/time/quick-log/`, { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) { modal.hide(); location.reload(); }
+                else alert('Error: ' + (data.error || 'Failed to log time'));
+            })
+            .catch(() => alert('Failed to log time. Please try again.'));
+        }
     });
     
     // Delete time entry

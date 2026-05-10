@@ -919,19 +919,18 @@ def my_timesheet(request, board_id=None):
         ).select_related('column', 'column__board')
         boards = [board]
     else:
-        # All boards user has access to (include demo boards in MVP mode)
-        if showing_demo_data:
+        # All boards user has access to (include demo boards in MVP mode).
+        # In demo mode, always scope to demo/sandbox boards regardless of showing_demo_data
+        # to prevent real workspace tasks bleeding through after first demo time entry.
+        if showing_demo_data or is_demo_mode:
             demo_org = Organization.objects.filter(is_demo=True).first()
             if demo_org:
                 boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | 
-                    models.Q(memberships__user=request.user) |
+                    models.Q(is_sandbox_copy=True) |
                     models.Q(organization=demo_org)
                 ).distinct()
             else:
-                boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
-                ).distinct()
+                boards = Board.objects.filter(is_sandbox_copy=True).distinct()
         else:
             boards = Board.objects.filter(
                 models.Q(created_by=request.user) | models.Q(memberships__user=request.user),
@@ -942,8 +941,9 @@ def my_timesheet(request, board_id=None):
             ).distinct()
         tasks = Task.objects.filter(
             column__board__in=boards,
-            assigned_to=display_user
-        ).select_related('column', 'column__board')
+        ).filter(
+            models.Q(assigned_to=display_user) | models.Q(time_entries__user=display_user)
+        ).distinct().select_related('column', 'column__board')
     
     # Get time entries for the week - scoped to visible boards to prevent cross-workspace bleed
     entries = TimeEntry.objects.filter(
@@ -1083,19 +1083,19 @@ def time_tracking_dashboard(request, board_id=None):
         board = get_object_or_404(Board, id=board_id)
         boards = [board]
     else:
-        # MVP Mode: Include demo boards when showing demo data
-        if showing_demo_data:
+        # MVP Mode: Include demo boards when showing demo data OR when user is in demo mode.
+        # In demo mode, always scope to demo/sandbox boards to prevent real workspace data
+        # from bleeding through (e.g. after user logs their first time entry in demo mode,
+        # showing_demo_data flips to False but we must still restrict to demo boards).
+        if showing_demo_data or is_demo_mode:
             demo_org = Organization.objects.filter(is_demo=True).first()
             if demo_org:
                 boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | 
-                    models.Q(memberships__user=request.user) |
+                    models.Q(is_sandbox_copy=True) |
                     models.Q(organization=demo_org)
                 ).distinct()
             else:
-                boards = Board.objects.filter(
-                    models.Q(created_by=request.user) | models.Q(memberships__user=request.user)
-                ).distinct()
+                boards = Board.objects.filter(is_sandbox_copy=True).distinct()
         else:
             boards = Board.objects.filter(
                 models.Q(created_by=request.user) | models.Q(memberships__user=request.user),
@@ -1397,6 +1397,53 @@ def quick_time_entry(request, task_id):
         })
     except Exception as e:
         logger.error(f"Error creating time entry: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+@demo_write_guard
+def update_time_entry(request, entry_id):
+    """
+    Update an existing time entry (hours, description, is_billable).
+    """
+    entry = get_object_or_404(TimeEntry, id=entry_id)
+    board = entry.task.column.board
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    if entry.user != request.user:
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    try:
+        hours = Decimal(request.POST.get('hours', '0'))
+        if hours <= 0:
+            return JsonResponse({'success': False, 'error': 'Hours must be greater than 0'}, status=400)
+        if hours > 16:
+            return JsonResponse({'success': False, 'error': 'Hours cannot exceed 16 per entry'}, status=400)
+
+        hours = Decimal(str(round(float(hours) * 4) / 4))
+
+        # Validate daily total won't exceed 24h (excluding this entry's current hours)
+        existing_hours = TimeEntry.objects.filter(
+            user=request.user,
+            work_date=entry.work_date,
+        ).exclude(id=entry.id).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+        if existing_hours + hours > 24:
+            return JsonResponse({
+                'success': False,
+                'error': f'Daily total would exceed 24 hours. You already have {existing_hours}h logged for this date.'
+            }, status=400)
+
+        entry.hours_spent = hours
+        entry.description = request.POST.get('description', '').strip()
+        entry.is_billable = request.POST.get('is_billable', 'true').lower() not in ('false', '0', '')
+        entry.save()
+
+        return JsonResponse({'success': True, 'hours': float(entry.hours_spent), 'message': 'Time entry updated'})
+    except Exception as e:
+        logger.error(f"Error updating time entry: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
