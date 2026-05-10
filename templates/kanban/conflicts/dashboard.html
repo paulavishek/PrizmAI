@@ -40,8 +40,15 @@
         text-align: center;
         transition: transform 0.2s;
     }
+    .stat-card {
+        cursor: pointer;
+    }
     .stat-card:hover {
         transform: scale(1.05);
+    }
+    .stat-card.active-filter {
+        outline: 3px solid rgba(255,255,255,0.7);
+        outline-offset: 2px;
     }
     .stat-number {
         font-size: 2.5rem;
@@ -136,25 +143,25 @@
     <!-- Statistics Cards -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="stat-card conflicts text-white">
+            <div class="stat-card conflicts text-white" onclick="filterBySeverity('all')" title="Show all active conflicts">
                 <p class="stat-number">{{ stats.total_active }}</p>
                 <p class="stat-label mb-0">Active Conflicts</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card critical text-white">
+            <div class="stat-card critical text-white" onclick="filterBySeverity('critical')" title="Filter critical conflicts">
                 <p class="stat-number">{{ stats.by_severity.critical }}</p>
                 <p class="stat-label mb-0">Critical</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card high-priority text-white">
+            <div class="stat-card high-priority text-white" onclick="filterBySeverity('high')" title="Filter high priority conflicts">
                 <p class="stat-number">{{ stats.by_severity.high }}</p>
                 <p class="stat-label mb-0">High Priority</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card notifications text-white">
+            <div class="stat-card notifications text-white" onclick="scrollToNotifications()" title="View your notifications">
                 <p class="stat-number">{{ stats.unread_notifications }}</p>
                 <p class="stat-label mb-0">Notifications</p>
             </div>
@@ -164,7 +171,7 @@
     <div class="row">
         <!-- Main Conflict List -->
         <div class="col-md-8">
-            <div class="card shadow-sm">
+            <div class="card shadow-sm" id="conflicts-list-card">
                 <div class="card-header bg-white">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Active Conflicts</h5>
@@ -187,7 +194,7 @@
                 <div class="card-body" style="max-height: 600px; overflow-y: auto;">
                     {% if conflicts %}
                         {% for conflict in conflicts %}
-                        <div class="conflict-card card mb-3 {{ conflict.severity }}" data-type="{{ conflict.conflict_type }}">
+                        <div class="conflict-card card mb-3 {{ conflict.severity }}" data-type="{{ conflict.conflict_type }}" data-severity="{{ conflict.severity }}">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                     <h6 class="mb-0">
@@ -262,7 +269,7 @@
         <!-- Sidebar -->
         <div class="col-md-4">
             <!-- Notifications -->
-            <div class="card shadow-sm mb-3">
+            <div class="card shadow-sm mb-3" id="notifications-panel">
                 <div class="card-header bg-white">
                     <h6 class="mb-0">
                         <i class="fas fa-bell"></i> Your Notifications
@@ -393,12 +400,50 @@
 <script>
 let currentConflictId = null;
 
+// Filter by severity (stat card clicks)
+function filterBySeverity(severity) {
+    // Clear active state on all stat cards
+    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
+    // Highlight the clicked card
+    const cardMap = { all: 0, critical: 1, high: 2 };
+    if (severity in cardMap) {
+        document.querySelectorAll('.stat-card')[cardMap[severity]].classList.add('active-filter');
+    }
+    // Reset the type filter buttons to 'All'
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.filter-btn[data-filter="all"]').classList.add('active');
+    // Show/hide conflict cards by severity
+    document.querySelectorAll('.conflict-card').forEach(card => {
+        if (severity === 'all' || card.dataset.severity === severity) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    // Scroll to the conflicts list
+    const listCard = document.getElementById('conflicts-list-card');
+    if (listCard) listCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Scroll to notifications panel
+function scrollToNotifications() {
+    const panel = document.getElementById('notifications-panel');
+    if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        panel.style.outline = '2px solid #0891b2';
+        panel.style.outlineOffset = '2px';
+        setTimeout(() => { panel.style.outline = ''; panel.style.outlineOffset = ''; }, 1500);
+    }
+}
+
 // Filter conflicts
 document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', function() {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
         
+        // Clear severity filter highlight when using type filters
+        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
         const filter = this.dataset.filter;
         document.querySelectorAll('.conflict-card').forEach(card => {
             if (filter === 'all' || card.dataset.type === filter) {
