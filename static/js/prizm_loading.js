@@ -402,6 +402,18 @@
             'Identifying resolution strategies\u2026',
             'Preparing conflict report\u2026'
         ],
+        conflictScan: [
+            'Checking resource assignments and workloads\u2026',
+            'Analyzing task dependencies and relationships\u2026',
+            'Detecting circular dependency chains\u2026',
+            'Reviewing team member availability\u2026',
+            'Examining schedule overlaps and deadline risks\u2026',
+            'Cross-referencing concurrent task assignments\u2026',
+            'Evaluating priority conflicts and blockers\u2026',
+            'Auditing multi-board resource utilization\u2026',
+            'Calculating conflict severity scores\u2026',
+            'Preparing your conflict report\u2026'
+        ],
         conflictResolution: [
             'Generating AI resolution suggestions\u2026',
             'Analyzing conflict patterns\u2026',
