@@ -169,7 +169,7 @@
                                 <div class="card border-0 bg-light h-100">
                                     <div class="card-body">
                                         <small class="text-muted d-block mb-1">Task ID</small>
-                                        <strong>#{{ conflict.conflict_data.task_id }}</strong>
+                                        <strong>{{ conflict.board.get_task_prefix }}-{{ conflict.conflict_data.task_id }}</strong>
                                     </div>
                                 </div>
                             </div>
