@@ -175,6 +175,19 @@ def conflict_detail(request, conflict_id):
             conflict=conflict,
             user=request.user
         ).update(read_at=timezone.now())
+
+        # Display-side deduplication safety net: if the DB somehow still contains
+        # duplicate suggestions (same resolution_type + title), keep only the first
+        # one seen (highest confidence wins because the queryset is ordered by
+        # -ai_confidence).
+        deduplicated_resolutions = []
+        seen_dedup_keys = set()
+        for resolution in resolutions:
+            dedup_key = (resolution.resolution_type, resolution.title.strip().lower())
+            if dedup_key in seen_dedup_keys:
+                continue
+            seen_dedup_keys.add(dedup_key)
+            deduplicated_resolutions.append(resolution)
         
         # Get similar past conflicts for context
         similar_conflicts = ConflictDetection.objects.filter(
@@ -185,7 +198,7 @@ def conflict_detail(request, conflict_id):
         
         context = {
             'conflict': conflict,
-            'resolutions': resolutions,
+            'resolutions': deduplicated_resolutions,
             'similar_conflicts': similar_conflicts,
             'can_resolve': True,
             'is_favorited': _is_fav(request.user, 'conflict', conflict.pk),
