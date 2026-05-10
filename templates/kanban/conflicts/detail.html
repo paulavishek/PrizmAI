@@ -289,7 +289,7 @@
                                         </button>
                                         {% endif %}
                                     </div>
-                                    <small class="d-block mt-1">{{ resolution.ai_reasoning }}</small>
+                                    <small class="d-block mt-1">{{ resolution.ai_reasoning|linebreaksbr }}</small>
                                     
                                     <!-- Enhanced Explainability Section -->
                                     {% if resolution.contributing_factors or resolution.assumptions or resolution.success_indicators %}

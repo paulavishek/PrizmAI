@@ -224,7 +224,7 @@ FORMAT YOUR RESPONSE AS JSON WITH FULL EXPLAINABILITY:
       "impact_timeline": "immediate|short_term|medium_term",
       "steps": ["Step 1", "Step 2", "Step 3"],
       "step_rationale": ["Why step 1 is needed", "Why step 2", "Why step 3"],
-      "reasoning": "Detailed explanation of why this resolution is recommended based on conflict analysis",
+      "reasoning": "2-3 sentences written as a single clean paragraph: (a) why this specific action directly addresses the root cause of this conflict type — explain the causal mechanism, not just the action; (b) what the expected outcome is once applied, including any measurable improvement to the team or timeline; and (c) any important caveats or conditions required for this resolution to work effectively (e.g. team capacity, stakeholder approval, dependency on another task). Do not use bullet points or labeled sections — write as flowing prose.",
       "risks": ["Risk of implementing this resolution"],
       "risk_mitigation": ["How to mitigate the risks"],
       "success_indicators": ["How to know if resolution worked"],
@@ -244,7 +244,7 @@ FORMAT YOUR RESPONSE AS JSON WITH FULL EXPLAINABILITY:
 }
 
 Provide practical, actionable suggestions that a project manager can implement immediately.
-Be transparent about your reasoning so the PM understands why each resolution is recommended.
+For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) why this specific action addresses the root cause of this conflict type, (b) the expected outcome if applied, and (c) any key caveats or conditions for it to work. Avoid generic statements — be specific to the conflict and the tasks involved.
 """
         
         return prompt
@@ -256,12 +256,20 @@ Be transparent about your reasoning so the PM understands why each resolution is
         suggestions = []
         
         try:
+            # Strip markdown code fences if the AI wrapped the response (e.g. ```json ... ```)
+            clean_response = ai_response.strip()
+            if clean_response.startswith('```'):
+                # Remove the opening fence line (e.g. "```json\n")
+                clean_response = clean_response.split('\n', 1)[-1]
+            if clean_response.endswith('```'):
+                clean_response = clean_response.rsplit('```', 1)[0]
+
             # Try to extract JSON from response
-            json_start = ai_response.find('{')
-            json_end = ai_response.rfind('}') + 1
+            json_start = clean_response.find('{')
+            json_end = clean_response.rfind('}') + 1
             
             if json_start >= 0 and json_end > json_start:
-                json_str = ai_response[json_start:json_end]
+                json_str = clean_response[json_start:json_end]
                 data = json.loads(json_str)
                 
                 for res_data in data.get('resolutions', []):
@@ -285,12 +293,34 @@ Be transparent about your reasoning so the PM understands why each resolution is
             
         except Exception as e:
             print(f"Error parsing AI suggestions: {e}")
-            # Fallback: create a generic suggestion
+            # Fallback: build a clean human-readable description instead of dumping raw JSON
+            description = "AI analysis completed. Review the suggestions below."
+            try:
+                # Attempt to salvage root_cause / contributing_factors from the raw response
+                salvage = ai_response.strip()
+                if salvage.startswith('```'):
+                    salvage = salvage.split('\n', 1)[-1]
+                if salvage.endswith('```'):
+                    salvage = salvage.rsplit('```', 1)[0]
+                j_start = salvage.find('{')
+                j_end = salvage.rfind('}') + 1
+                if j_start >= 0 and j_end > j_start:
+                    fallback_data = json.loads(salvage[j_start:j_end])
+                    analysis = fallback_data.get('conflict_analysis', {})
+                    root_cause = analysis.get('root_cause', '').strip()
+                    factors = [f for f in analysis.get('contributing_factors', []) if f]
+                    if root_cause:
+                        description = root_cause
+                        if factors:
+                            description += ' Contributing factors include: ' + '; '.join(factors[:2]) + '.'
+            except Exception:
+                pass  # Keep the generic message
+
             resolution = ConflictResolution.objects.create(
                 conflict=conflict,
                 resolution_type='custom',
                 title='AI Analysis Completed',
-                description=ai_response[:500],  # Use raw response
+                description=description,
                 ai_confidence=60,
                 ai_reasoning='Generated from AI analysis',
                 auto_applicable=False
@@ -383,6 +413,7 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
       "prerequisites": ["What needs to be in place first"],
       "revised_confidence": 85,
       "confidence_reasoning": "Why this confidence level after analysis",
+      "reasoning": "2-3 sentences as flowing prose for the 'Why this works' summary card: (a) why this specific action addresses the root cause of this conflict type — explain the causal mechanism; (b) the expected outcome once applied; and (c) any important caveats or conditions required. Synthesise the assessment, improvements, and considerations into this concise paragraph — do not use bullet points or labeled sections.",
       "implementation_tips": ["Practical tip 1", "Practical tip 2"],
       "warning_signs": ["Signs that this isn't working"]
     }
@@ -415,12 +446,23 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
                     if 0 <= idx < len(basic_suggestions):
                         suggestion = basic_suggestions[idx]
                         
-                        # Update with AI insights
-                        suggestion.ai_reasoning = (
-                            f"Assessment: {enhancement.get('assessment', '')}\n\n"
-                            f"Improvements: {enhancement.get('improvements', '')}\n\n"
-                            f"Considerations: {enhancement.get('considerations', '')}"
-                        )
+                        # Update with AI insights — use the reasoning field for the card
+                        # summary and fall back to synthesising from the detailed fields.
+                        reasoning = enhancement.get('reasoning', '').strip()
+                        if not reasoning:
+                            # Build a clean paragraph from the detailed fields as fallback
+                            parts = []
+                            assessment = enhancement.get('assessment', '').strip()
+                            improvements = enhancement.get('improvements', '').strip()
+                            considerations = enhancement.get('considerations', '').strip()
+                            if assessment:
+                                parts.append(assessment)
+                            if improvements:
+                                parts.append(improvements)
+                            if considerations:
+                                parts.append(considerations)
+                            reasoning = ' '.join(parts)
+                        suggestion.ai_reasoning = reasoning
                         
                         # Adjust confidence
                         revised_conf = enhancement.get('revised_confidence')
