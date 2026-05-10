@@ -70,6 +70,23 @@
         border-radius: 50%;
         background: #007bff;
     }
+    /* Rendered markdown inside resolution cards */
+    .conflict-ai-reasoning p {
+        font-size: 0.8rem;
+        margin-bottom: 0.25rem;
+    }
+    .conflict-ai-reasoning p:last-child {
+        margin-bottom: 0;
+    }
+    .conflict-ai-reasoning strong {
+        font-weight: 600;
+    }
+    .conflict-ai-reasoning ul,
+    .conflict-ai-reasoning ol {
+        font-size: 0.8rem;
+        padding-left: 1.25rem;
+        margin-bottom: 0.25rem;
+    }
 </style>
 {% endblock %}
 
@@ -289,7 +306,7 @@
                                         </button>
                                         {% endif %}
                                     </div>
-                                    <small class="d-block mt-1">{{ resolution.ai_reasoning|linebreaksbr }}</small>
+                                    <div class="mt-1 conflict-ai-reasoning">{{ resolution.ai_reasoning|render_markdown }}</div>
                                     
                                     <!-- Enhanced Explainability Section -->
                                     {% if resolution.contributing_factors or resolution.assumptions or resolution.success_indicators %}

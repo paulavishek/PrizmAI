@@ -4,7 +4,34 @@ Custom template tags and filters for conflict detection templates
 from django import template
 from django.utils.safestring import mark_safe
 
+try:
+    import markdown as _markdown_lib
+    _MARKDOWN_AVAILABLE = True
+except ImportError:
+    _MARKDOWN_AVAILABLE = False
+
 register = template.Library()
+
+
+@register.filter(is_safe=True)
+def render_markdown(value):
+    """Convert markdown-formatted text to safe HTML.
+
+    Uses the ``markdown`` library when available; falls back to the built-in
+    ``linebreaksbr`` behaviour so the template never breaks if the library is
+    somehow unavailable.
+    """
+    if not value:
+        return ''
+    if _MARKDOWN_AVAILABLE:
+        html = _markdown_lib.markdown(
+            str(value),
+            extensions=['nl2br', 'sane_lists'],
+        )
+        return mark_safe(html)
+    # Fallback: escape then convert newlines to <br>
+    from django.utils.html import escape, linebreaks
+    return mark_safe(linebreaks(escape(value)))
 
 @register.filter
 def get_severity_color(conflict):
