@@ -272,15 +272,29 @@ For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) 
                 json_str = clean_response[json_start:json_end]
                 data = json.loads(json_str)
                 
+                # Track seen (type, normalised_title) pairs to deduplicate within this AI response
+                seen_suggestions = set()
+                # Pre-populate with suggestions already persisted for this conflict
+                for existing in ConflictResolution.objects.filter(conflict=conflict).values('resolution_type', 'title'):
+                    seen_suggestions.add((existing['resolution_type'], existing['title'].strip().lower()))
+
                 for res_data in data.get('resolutions', []):
                     # Map AI type to model type
                     resolution_type = self._map_resolution_type(res_data.get('type', 'custom'))
-                    
+                    title = res_data.get('title', 'AI Suggested Resolution')[:255]
+
+                    # Deduplicate: skip if same resolution_type + title (case-insensitive)
+                    # was already seen in this batch OR already exists in the DB.
+                    dedup_key = (resolution_type, title.strip().lower())
+                    if dedup_key in seen_suggestions:
+                        continue
+                    seen_suggestions.add(dedup_key)
+
                     # Create resolution
                     resolution = ConflictResolution.objects.create(
                         conflict=conflict,
                         resolution_type=resolution_type,
-                        title=res_data.get('title', 'AI Suggested Resolution')[:255],
+                        title=title,
                         description=res_data.get('description', ''),
                         ai_confidence=min(100, max(0, int(res_data.get('confidence', 70)))),
                         ai_reasoning=res_data.get('reasoning', ''),
@@ -288,7 +302,7 @@ For the "reasoning" field, write 2-3 sentences of flowing prose explaining: (a) 
                         action_steps=res_data.get('steps', []),
                         auto_applicable=False  # AI suggestions require review
                     )
-                    
+
                     suggestions.append(resolution)
             
         except Exception as e:
