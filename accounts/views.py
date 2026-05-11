@@ -900,6 +900,35 @@ def update_display_mode(request):
     return JsonResponse({'status': 'ok', 'display_mode': mode})
 
 
+@login_required
+@require_POST
+def update_presence_preference(request):
+    """Toggle whether other users can see this user's last-seen timestamp.
+
+    Option B semantics: the setting only affects visibility of the current
+    user's own timestamp. The user can always see others' last-seen times
+    regardless of their own setting.
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+
+    show = data.get('show_last_seen')
+    if not isinstance(show, bool):
+        return JsonResponse({'status': 'error', 'message': 'show_last_seen must be a boolean'}, status=400)
+
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Profile not found'}, status=404)
+
+    profile.show_last_seen = show
+    profile.save(update_fields=['show_last_seen'])
+
+    return JsonResponse({'status': 'ok', 'show_last_seen': show})
+
+
 # ---------------------------------------------------------------------------
 # Google Calendar OAuth 2.0 — Connect / Callback / Disconnect
 # ---------------------------------------------------------------------------

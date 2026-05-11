@@ -257,6 +257,46 @@
     .ai-btn-spinner {
         display: none;
     }
+
+    /* ---- Presence indicators ---- */
+    .presence-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+        margin-top: 3px;
+        transition: background-color 0.4s ease;
+    }
+    .presence-dot.status-active  { background-color: #28a745; }
+    .presence-dot.status-away    { background-color: #ffc107; }
+    .presence-dot.status-offline { background-color: #ced4da; }
+
+    .last-seen-text {
+        font-size: 0.72rem;
+        color: #8a9099;
+        display: block;
+        margin-top: 1px;
+    }
+
+    #active-count-display {
+        font-size: 0.78rem;
+        font-weight: 400;
+        opacity: 0.85;
+        letter-spacing: 0.01em;
+    }
+
+    /* Privacy toggle row in members sidebar */
+    .presence-toggle-row {
+        padding-top: 0.6rem;
+        border-top: 1px solid #e9ecef;
+        margin-top: 0.6rem;
+    }
+    .presence-toggle-row .form-check-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -696,7 +736,6 @@
             addFileToList(data);
         }
         else if (data.type === 'user_typing') {
-            console.log(data.username + ' is typing...');
             showTypingIndicator(data.username);
         }
         else if (data.type === 'user_stop_typing') {
@@ -707,6 +746,9 @@
         }
         else if (data.type === 'user_leave') {
             console.log(data.username + ' left the room');
+        }
+        else if (data.type === 'presence_update') {
+            updatePresenceUI(data.members, data.active_count);
         }
         else if (data.type === 'message_deleted') {
             // Remove message from DOM immediately for all users
@@ -772,11 +814,28 @@
         }
     });
 
+    // --- Typing sender ---
+    // Sends 'typing' on keydown and auto-sends 'stop_typing' after 3 s of silence.
+    let typingTimer = null;
+    let isTypingSent = false;
+    document.querySelector('input[name="message"]').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') return; // suppress on send
+        if (!isTypingSent) {
+            chatSocketManager.send({ type: 'typing' });
+            isTypingSent = true;
+        }
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(function() {
+            chatSocketManager.send({ type: 'stop_typing' });
+            isTypingSent = false;
+        }, 3000);
+    });
+
     // Cleanup on page unload
     window.addEventListener('beforeunload', function() {
         chatSocketManager.close();
     });
-    
+
     // Typing indicator functions
     const typingUsers = new Set();
     function showTypingIndicator(username) {
@@ -803,15 +862,92 @@
         if (typingUsers.size === 0) {
             indicator.textContent = '';
             indicator.style.display = 'none';
-        } else if (typingUsers.size === 1) {
-            indicator.textContent = `${[...typingUsers][0]} is typing...`;
-            indicator.style.display = 'block';
         } else {
-            indicator.textContent = `${typingUsers.size} people are typing...`;
+            const names = [...typingUsers];
+            let label;
+            if (names.length === 1) {
+                label = `${names[0]} is typing...`;
+            } else if (names.length === 2) {
+                label = `${names[0]} and ${names[1]} are typing...`;
+            } else {
+                const extra = names.length - 2;
+                label = `${names[0]}, ${names[1]} and ${extra} other${extra > 1 ? 's' : ''} are typing...`;
+            }
+            indicator.textContent = label;
             indicator.style.display = 'block';
         }
     }
-    
+
+    // --- Presence update UI ---
+    function formatLastSeen(isoString) {
+        if (!isoString) return '';
+        const dt = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - dt;
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return 'Last seen just now';
+        if (diffMins < 60) return `Last seen ${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) {
+            const hh = dt.getHours().toString().padStart(2, '0');
+            const mm = dt.getMinutes().toString().padStart(2, '0');
+            return `Last seen today at ${hh}:${mm}`;
+        }
+        return `Last seen ${dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    }
+
+    function updatePresenceUI(members, activeCount) {
+        // Update header active count
+        const countEl = document.getElementById('active-count-display');
+        if (countEl) {
+            if (activeCount > 0) {
+                countEl.textContent = `${activeCount} active now`;
+            } else {
+                countEl.textContent = '';
+            }
+        }
+        // Update each member's dot and last-seen text
+        members.forEach(function(m) {
+            const dot = document.getElementById('presence-dot-' + m.user_id);
+            const lastSeenEl = document.getElementById('last-seen-' + m.user_id);
+            if (dot) {
+                dot.className = 'presence-dot status-' + m.status;
+                const statusLabel = m.status === 'active' ? 'Active in this room'
+                    : m.status === 'away' ? 'Online elsewhere'
+                    : 'Offline';
+                dot.title = statusLabel;
+            }
+            if (lastSeenEl) {
+                if (m.status === 'offline' && m.last_seen_iso) {
+                    lastSeenEl.textContent = formatLastSeen(m.last_seen_iso);
+                    lastSeenEl.style.display = 'block';
+                } else {
+                    lastSeenEl.textContent = '';
+                    lastSeenEl.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // --- Last-seen privacy toggle ---
+    const lastSeenToggle = document.getElementById('showLastSeenToggle');
+    if (lastSeenToggle) {
+        lastSeenToggle.addEventListener('change', function() {
+            fetch('{% url "update_presence_preference" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]') ?
+                        document.querySelector('[name=csrfmiddlewaretoken]').value :
+                        getCookie('csrftoken')
+                },
+                body: JSON.stringify({ show_last_seen: this.checked })
+            }).catch(function(err) {
+                console.error('Failed to update presence preference', err);
+            });
+        });
+    }
+
     // Function to add file to the files list dynamically
     function addFileToList(fileData) {
         const filesList = document.getElementById('filesList');
@@ -1654,6 +1790,8 @@ function aiConfirmCreateTasks() {
                         {% if chat_room.description %}
                             <p class="mb-0 text-light">{{ chat_room.description }}</p>
                         {% endif %}
+                        <!-- Active user count (updated in real time by presence_update) -->
+                        <small id="active-count-display" class="text-light"></small>
                         <!-- WebSocket Connection Status -->
                         <span id="ws-connection-status" style="font-size: 0.75rem; display: none;"></span>
                     </div>
@@ -1856,16 +1994,32 @@ function aiConfirmCreateTasks() {
     <div class="col-lg-4">
         <div class="members-sidebar">
             <h5><i class="fas fa-users me-2"></i> Members ({{ chat_room.members.count }})</h5>
-            <ul class="members-list">
+            <ul class="members-list" id="members-presence-list">
                 {% for member in chat_room.members.all %}
-                    <li>
-                        {{ member.get_full_name|default:member.username }}
-                        {% if member == chat_room.created_by %}<span class="badge bg-primary">Creator</span>{% endif %}
+                    <li class="d-flex align-items-start gap-2 py-1" data-user-id="{{ member.id }}">
+                        <span class="presence-dot status-offline" id="presence-dot-{{ member.id }}" title="Offline"></span>
+                        <div>
+                            <div>
+                                {{ member.get_full_name|default:member.username }}
+                                {% if member == chat_room.created_by %}<span class="badge bg-primary ms-1">Creator</span>{% endif %}
+                            </div>
+                            <span class="last-seen-text" id="last-seen-{{ member.id }}" style="display:none;"></span>
+                        </div>
                     </li>
                 {% empty %}
                     <li class="text-muted">No members</li>
                 {% endfor %}
             </ul>
+            <!-- Last-seen privacy toggle (Option B: only hides your own timestamp for others) -->
+            <div class="presence-toggle-row">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="showLastSeenToggle"
+                           {% if request.user.profile.show_last_seen %}checked{% endif %}>
+                    <label class="form-check-label" for="showLastSeenToggle">
+                        Show my last seen to others
+                    </label>
+                </div>
+            </div>
         </div>
 
         <!-- Files Section -->

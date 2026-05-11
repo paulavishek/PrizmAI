@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 class ChatRoomConsumer(AsyncWebsocketConsumer):
     """WebSocket consumer for real-time chat room messaging"""
+
+    # Maps room_id (int) → set of user_ids currently connected.
+    # Class-level so all consumer instances in the same process share it.
+    _active_connections: dict = {}
     
     async def connect(self):
         """Handle WebSocket connection"""
@@ -36,10 +40,17 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         )
         
         await self.accept()
-        
+
+        # Track active connection
+        ChatRoomConsumer._active_connections.setdefault(self.room_id, set())
+        ChatRoomConsumer._active_connections[self.room_id].add(self.user.id)
+
+        # Update last_seen timestamp
+        await self.update_last_seen()
+
         # NOTE: Messages are NOT auto-marked as read when joining.
         # Users must manually click "Mark as Read" for privacy control.
-        
+
         # Notify others that user joined
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -49,14 +60,24 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
                 'user_id': self.user.id
             }
         )
+
+        # Broadcast full presence state to everyone (including the joiner)
+        await self.broadcast_presence()
     
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
+        # Remove from active connections
+        room_connections = ChatRoomConsumer._active_connections.get(self.room_id, set())
+        room_connections.discard(self.user.id)
+
+        # Update last_seen on disconnect so offline timestamp is fresh
+        await self.update_last_seen()
+
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
-        
+
         # Notify others that user left
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -66,7 +87,10 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
                 'user_id': self.user.id
             }
         )
-        
+
+        # Broadcast updated presence after removal
+        await self.broadcast_presence()
+
         # Remove typing status
         await self.remove_typing_status()
     
@@ -75,12 +99,13 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         try:
             data = json.loads(text_data)
             message_type = data.get('type')
-            
-            # Handle heartbeat ping - respond with pong immediately
+
+            # Handle heartbeat ping - respond with pong and refresh last_seen
             if message_type == 'ping':
+                await self.update_last_seen()
                 await self.send(text_data=json.dumps({'type': 'pong'}))
                 return
-            
+
             if message_type == 'chat_message':
                 await self.handle_message(data)
             elif message_type == 'typing':
@@ -89,10 +114,10 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
                 await self.handle_stop_typing(data)
             elif message_type == 'message_read':
                 await self.handle_message_read(data)
-        
+
         except json.JSONDecodeError:
             pass
-    
+
     async def handle_message(self, data):
         """Handle a chat message"""
         message_text = data.get('message', '').strip()
@@ -314,8 +339,36 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         # This is called after message is saved
         # Mentioned users will see notification but message is already in chat
         pass
-    
+
+    # ------------------------------------------------------------------
+    # Presence helpers
+    # ------------------------------------------------------------------
+
+    async def broadcast_presence(self):
+        """Build current presence state and broadcast to the whole room group."""
+        active_ids = ChatRoomConsumer._active_connections.get(self.room_id, set())
+        members_data = await self.get_room_members_presence(active_ids)
+        active_count = sum(1 for m in members_data if m['status'] == 'active')
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'presence_update',
+                'members': members_data,
+                'active_count': active_count,
+            }
+        )
+
+    async def presence_update(self, event):
+        """Deliver presence_update event to this WebSocket client."""
+        await self.send(text_data=json.dumps({
+            'type': 'presence_update',
+            'members': event['members'],
+            'active_count': event['active_count'],
+        }))
+
+    # ------------------------------------------------------------------
     # Database operations
+    # ------------------------------------------------------------------
     @database_sync_to_async
     def is_user_authorized(self):
         """Check if user is authorized to access this chat room.
@@ -348,7 +401,61 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             return True
         except ChatRoom.DoesNotExist:
             return False
-    
+
+    @database_sync_to_async
+    def update_last_seen(self):
+        """Stamp UserProfile.last_seen with the current time."""
+        from accounts.models import UserProfile
+        UserProfile.objects.filter(user=self.user).update(last_seen=timezone.now())
+
+    @database_sync_to_async
+    def get_room_members_presence(self, active_ids):
+        """Return a list of presence dicts for all room members.
+
+        Each dict contains:
+          user_id, display_name, status ('active'|'away'|'offline'),
+          last_seen_iso (ISO string or None).
+
+        'last_seen_iso' is None when the member has show_last_seen=False
+        (their timestamp is hidden from others) or when last_seen is null.
+        Option B: the *requesting* user's own toggle only hides their own
+        timestamp — they can still see everyone else's.
+        """
+        from accounts.models import UserProfile
+        try:
+            chat_room = ChatRoom.objects.get(id=self.room_id)
+        except ChatRoom.DoesNotExist:
+            return []
+
+        away_cutoff = timezone.now() - timezone.timedelta(minutes=2)
+        members = chat_room.members.select_related('profile').all()
+        result = []
+        for member in members:
+            profile = getattr(member, 'profile', None)
+            last_seen_dt = profile.last_seen if profile else None
+
+            if member.id in active_ids:
+                status = 'active'
+            elif last_seen_dt and last_seen_dt >= away_cutoff:
+                status = 'away'
+            else:
+                status = 'offline'
+
+            # Only expose last_seen for offline members (active/away show dot instead)
+            # and only when the member hasn't opted out
+            show = profile.show_last_seen if profile else True
+            last_seen_iso = None
+            if status == 'offline' and show and last_seen_dt:
+                last_seen_iso = last_seen_dt.isoformat()
+
+            result.append({
+                'user_id': member.id,
+                'display_name': member.get_full_name() or member.username,
+                'status': status,
+                'last_seen_iso': last_seen_iso,
+            })
+        return result
+
     @database_sync_to_async
     def get_room_creator_id(self):
         """Get the room creator's user ID"""

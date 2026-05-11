@@ -34,6 +34,9 @@ urlpatterns = [
 
     # Display Mode API
     path('api/update-display-mode/', views.update_display_mode, name='update_display_mode'),
+
+    # Presence API
+    path('api/update-presence-preference/', views.update_presence_preference, name='update_presence_preference'),
     
     # Password Reset URLs
     path('password-reset/', 
