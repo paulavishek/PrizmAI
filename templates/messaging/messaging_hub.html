@@ -320,12 +320,20 @@
                             <i class="fas fa-users me-1"></i> {{ item.board.memberships.count }} members
                         </div>
                         <div class="board-actions">
-                            <a href="{% url 'messaging:chat_room_list' board_id=item.board.id %}" class="btn btn-sm btn-primary w-100">
-                                <i class="fas fa-comments me-1"></i> Chat Rooms
-                                {% if item.unread_count > 0 %}
-                                    <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
-                                {% endif %}
-                            </a>
+                            {% if item.has_board_access %}
+                                <a href="{% url 'messaging:chat_room_list' board_id=item.board.id %}" class="btn btn-sm btn-primary w-100">
+                                    <i class="fas fa-comments me-1"></i> Chat Rooms
+                                    {% if item.unread_count > 0 %}
+                                        <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
+                                    {% endif %}
+                                </a>
+                            {% else %}
+                                {% for room in item.rooms %}
+                                <a href="{% url 'messaging:chat_room_detail' room_id=room.id %}" class="btn btn-sm btn-primary w-100 mb-1">
+                                    <i class="fas fa-comments me-1"></i> {{ room.name }}
+                                </a>
+                                {% endfor %}
+                            {% endif %}
                         </div>
                     </div>
                 {% endfor %}
