@@ -813,10 +813,10 @@ class Command(BaseCommand):
     def get_wiki_categories_data(self):
         """Wiki category configurations"""
         return [
-            {'slug': 'getting-started', 'name': 'Getting Started', 'description': 'Onboarding and setup guides', 'icon': '🚀', 'color': '#3498db', 'ai_assistant_type': 'onboarding', 'position': 1},
-            {'slug': 'technical-docs', 'name': 'Technical Documentation', 'description': 'API references and architecture', 'icon': '📖', 'color': '#2ecc71', 'ai_assistant_type': 'technical', 'position': 2},
-            {'slug': 'meeting-notes', 'name': 'Meeting Notes', 'description': 'Sprint and team meeting notes', 'icon': '📝', 'color': '#9b59b6', 'ai_assistant_type': 'meetings', 'position': 3},
-            {'slug': 'process-workflows', 'name': 'Process & Workflows', 'description': 'Standard procedures', 'icon': '⚙️', 'color': '#e74c3c', 'ai_assistant_type': 'process', 'position': 4},
+            {'slug': 'getting-started', 'name': 'Getting Started', 'description': 'Onboarding and setup guides', 'icon': '🚀', 'color': '#3498db', 'ai_assistant_type': 'documentation', 'position': 1},
+            {'slug': 'technical-docs', 'name': 'Technical Documentation', 'description': 'API references and architecture', 'icon': '📖', 'color': '#2ecc71', 'ai_assistant_type': 'documentation', 'position': 2},
+            {'slug': 'meeting-notes', 'name': 'Meeting Notes', 'description': 'Sprint and team meeting notes', 'icon': '📝', 'color': '#9b59b6', 'ai_assistant_type': 'meeting', 'position': 3},
+            {'slug': 'process-workflows', 'name': 'Process & Workflows', 'description': 'Standard procedures', 'icon': '⚙️', 'color': '#e74c3c', 'ai_assistant_type': 'documentation', 'position': 4},
             {'slug': 'project-resources', 'name': 'Project Resources', 'description': 'Roadmaps and requirements', 'icon': '📊', 'color': '#f39c12', 'ai_assistant_type': 'documentation', 'position': 5},
         ]
 
