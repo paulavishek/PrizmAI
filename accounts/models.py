@@ -198,7 +198,19 @@ class UserProfile(models.Model):
         default=False,
         help_text="Permanent flag for demo login accounts (Alex, Sam, Jordan). Read-only, zero AI access."
     )
-    
+
+    # --- Presence / Last Seen ---
+    last_seen = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time a WebSocket heartbeat or connect/disconnect event was recorded."
+    )
+    show_last_seen = models.BooleanField(
+        default=True,
+        help_text="Whether other users can see this user's last-seen timestamp. "
+                  "When False the timestamp is hidden for others but the user can still see others'."
+    )
+
     def __str__(self):
         return f"{self.user.username}'s Profile"
     
