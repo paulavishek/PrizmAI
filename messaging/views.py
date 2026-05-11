@@ -33,20 +33,11 @@ def messaging_hub(request):
             completed_wizard=True
         )
     
-    # MVP Mode: Get all boards the user has access to (demo-aware)
+    # MVP Mode: Get all boards the user has access to (demo-aware).
+    # get_user_boards() already handles org-admin and workspace scoping correctly —
+    # do NOT add a secondary org-admin override here, as it would bypass the
+    # active-workspace filter and show boards from all workspaces in the org.
     user_boards = get_user_boards(request.user)
-    from kanban.permissions import is_user_org_admin
-    _is_org_admin = is_user_org_admin(request.user)
-    if _is_org_admin and not getattr(profile, 'is_viewing_demo', False):
-        org = getattr(profile, 'organization', None)
-        if org and not getattr(org, 'is_demo', False):
-            user_boards = Board.objects.filter(
-                organization=org,
-                is_sandbox_copy=False,
-                is_official_demo_board=False,
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            )
     
     # Calculate unread messages per board
     boards_with_unread = []
