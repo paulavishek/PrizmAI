@@ -8,6 +8,9 @@ urlpatterns = [
     # Messaging Hub
     path('', views.messaging_hub, name='messaging_hub'),
     
+    # Chat Room Invitations
+    path('invitation/<int:invitation_id>/respond/', views.respond_chat_room_invitation, name='respond_chat_room_invitation'),
+
     # Chat Rooms
     path('board/<int:board_id>/rooms/', views.chat_room_list, name='chat_room_list'),
     path('board/<int:board_id>/rooms/create/', views.create_chat_room, name='create_chat_room'),

@@ -38,7 +38,7 @@ def messaging_hub(request):
     # do NOT add a secondary org-admin override here, as it would bypass the
     # active-workspace filter and show boards from all workspaces in the org.
     user_boards = get_user_boards(request.user)
-    
+
     # Calculate unread messages per board
     boards_with_unread = []
     for board in user_boards:
@@ -55,6 +55,31 @@ def messaging_hub(request):
             'board': board,
             'unread_count': unread_count
         })
+
+    # Shared Chat Rooms: rooms on OTHER workspaces' boards that the user has
+    # been explicitly invited to and accepted.  These are shown separately so
+    # the user can chat without gaining board-level access.
+    from .models import ChatRoomInvitation
+    shared_rooms_with_unread = []
+    accepted_invitations = ChatRoomInvitation.objects.filter(
+        invited_user=request.user,
+        status=ChatRoomInvitation.ACCEPTED,
+    ).select_related('chat_room__board').exclude(
+        chat_room__board__in=user_boards,
+    )
+    for inv in accepted_invitations:
+        room = inv.chat_room
+        unread_count = room.messages.exclude(read_by=request.user).exclude(author=request.user).count()
+        shared_rooms_with_unread.append({
+            'room': room,
+            'unread_count': unread_count,
+        })
+
+    # Pending chat room invitations for this user
+    pending_invitations = ChatRoomInvitation.objects.filter(
+        invited_user=request.user,
+        status=ChatRoomInvitation.PENDING,
+    ).select_related('chat_room__board', 'invited_by')
     
     unread_notifications = Notification.objects.filter(
         recipient=request.user,
@@ -63,6 +88,8 @@ def messaging_hub(request):
     
     context = {
         'boards_with_unread': boards_with_unread,
+        'shared_rooms_with_unread': shared_rooms_with_unread,
+        'pending_invitations': pending_invitations,
         'unread_notifications': unread_notifications,
     }
     return render(request, 'messaging/messaging_hub.html', context)
@@ -115,19 +142,33 @@ def chat_room_list(request, board_id):
 def chat_room_detail(request, room_id):
     """Display a specific chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
+    from kanban.models import BoardMembership
+    from .models import ChatRoomInvitation
 
-    if not request.user.has_perm('prizmai.view_board', chat_room.board):
-        raise Http404
+    board = chat_room.board
+    has_board_membership = (
+        BoardMembership.objects.filter(board=board, user=request.user).exists()
+        or board.created_by == request.user
+    )
+    has_accepted_invitation = ChatRoomInvitation.objects.filter(
+        chat_room=chat_room,
+        invited_user=request.user,
+        status=ChatRoomInvitation.ACCEPTED,
+    ).exists()
+    is_demo = getattr(board, 'is_official_demo_board', False)
+
+    # Access is allowed for: board members/owner, accepted invitees, staff, demo boards
+    if not (has_board_membership or has_accepted_invitation or request.user.is_staff or is_demo):
+        # Check Django RBAC permission as a final fallback (org admins etc.)
+        if not request.user.has_perm('prizmai.view_board', board):
+            raise Http404
+
+    # has_board_access controls whether UI shows links/navigation to the board
+    has_board_access = has_board_membership or request.user.is_staff or is_demo
 
     # Auto-add authorized user to chat room members so they appear in the
     # member list on first page load (not only after the WebSocket connects).
-    from kanban.models import BoardMembership
-    board = chat_room.board
-    has_membership = BoardMembership.objects.filter(
-        board=board, user=request.user
-    ).exists()
-    is_demo = getattr(board, 'is_official_demo_board', False)
-    if has_membership or board.created_by == request.user or is_demo:
+    if has_board_membership or board.created_by == request.user or is_demo:
         if not chat_room.members.filter(id=request.user.id).exists():
             chat_room.members.add(request.user)
 
@@ -165,6 +206,7 @@ def chat_room_detail(request, room_id):
         'read_message_ids': read_message_ids,
         'board_columns': board_columns,
         'is_favorited': _is_fav(request.user, 'chat_room', chat_room.pk),
+        'has_board_access': has_board_access,
     }
     return render(request, 'messaging/chat_room_detail.html', context)
 
@@ -187,13 +229,59 @@ def create_chat_room(request, board_id):
             chat_room.board = board
             chat_room.created_by = request.user
             chat_room.save()
-            
-            # Add members
-            form.save_m2m()
-            
-            # Always add creator as member
+
+            # Always add creator as member first
             chat_room.members.add(request.user)
-            
+
+            # For selected members: board members are added directly;
+            # non-board-members receive an invitation and are NOT added yet.
+            from .models import ChatRoomInvitation
+            from kanban.models import BoardMembership
+            selected_members = form.cleaned_data.get('members', [])
+            invited_users = []
+            for member in selected_members:
+                if member == request.user:
+                    continue
+                is_board_member = (
+                    BoardMembership.objects.filter(board=board, user=member).exists()
+                    or board.created_by == member
+                )
+                if is_board_member:
+                    chat_room.members.add(member)
+                else:
+                    # Create pending invitation
+                    invitation, created = ChatRoomInvitation.objects.get_or_create(
+                        chat_room=chat_room,
+                        invited_user=member,
+                        defaults={'invited_by': request.user},
+                    )
+                    if created:
+                        invited_users.append(member)
+                        # Send notification to invited user
+                        from django.urls import reverse
+                        respond_url = reverse(
+                            'messaging:respond_chat_room_invitation',
+                            kwargs={'invitation_id': invitation.id},
+                        )
+                        Notification.objects.create(
+                            recipient=member,
+                            sender=request.user,
+                            notification_type='CHAT_ROOM_INVITE',
+                            title=f'Invitation to join "{chat_room.name}"',
+                            text=(
+                                f'{request.user.username} invited you to join the chat room '
+                                f'"{chat_room.name}" on board "{board.name}". '
+                                f'Accept or decline the invitation.'
+                            ),
+                            action_url=respond_url,
+                        )
+
+            if invited_users:
+                names = ', '.join(u.username for u in invited_users)
+                django_messages.info(
+                    request,
+                    f'Invitation sent to: {names}. They must accept before joining.',
+                )
             django_messages.success(request, f'Chat room "{chat_room.name}" created successfully!')
             return redirect('messaging:chat_room_detail', room_id=chat_room.id)
     else:
@@ -204,6 +292,59 @@ def create_chat_room(request, board_id):
         'board': board,
     }
     return render(request, 'messaging/create_chat_room.html', context)
+
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def respond_chat_room_invitation(request, invitation_id):
+    """Accept or decline a chat room invitation.
+
+    GET  — show confirmation page
+    POST — process action ('accept' or 'decline')
+    """
+    from .models import ChatRoomInvitation
+    invitation = get_object_or_404(
+        ChatRoomInvitation,
+        id=invitation_id,
+        invited_user=request.user,
+    )
+
+    if invitation.status != ChatRoomInvitation.PENDING:
+        django_messages.info(
+            request,
+            f'You have already {invitation.status} this invitation.',
+        )
+        return redirect('messaging:messaging_hub')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'accept':
+            invitation.status = ChatRoomInvitation.ACCEPTED
+            invitation.responded_at = timezone.now()
+            invitation.save()
+            invitation.chat_room.members.add(request.user)
+            django_messages.success(
+                request,
+                f'You have joined "{invitation.chat_room.name}".',
+            )
+            return redirect('messaging:chat_room_detail', room_id=invitation.chat_room.id)
+        elif action == 'decline':
+            invitation.status = ChatRoomInvitation.DECLINED
+            invitation.responded_at = timezone.now()
+            invitation.save()
+            django_messages.info(
+                request,
+                f'You declined the invitation to "{invitation.chat_room.name}".',
+            )
+            return redirect('messaging:messaging_hub')
+
+    context = {
+        'invitation': invitation,
+        'chat_room': invitation.chat_room,
+        'board': invitation.chat_room.board,
+    }
+    return render(request, 'messaging/respond_chat_room_invitation.html', context)
 
 
 @login_required

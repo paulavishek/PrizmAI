@@ -72,6 +72,46 @@ class ChatRoom(models.Model):
         return f'chat_room_{self.id}'
 
 
+class ChatRoomInvitation(models.Model):
+    """Invitation for a user to join a chat room.
+
+    A board member can invite non-board-members to specific chat rooms.
+    The invited user must accept before they are added to the room.
+    Acceptance grants access to the chat room ONLY — not to the board.
+    """
+    PENDING = 'pending'
+    ACCEPTED = 'accepted'
+    DECLINED = 'declined'
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (ACCEPTED, 'Accepted'),
+        (DECLINED, 'Declined'),
+    ]
+
+    chat_room = models.ForeignKey(
+        ChatRoom, on_delete=models.CASCADE, related_name='invitations'
+    )
+    invited_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='chat_room_invitations'
+    )
+    invited_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_chat_room_invitations'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['chat_room', 'invited_user']
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return (
+            f"Invitation for {self.invited_user.username} to "
+            f"{self.chat_room.name} ({self.status})"
+        )
+
+
 class ChatMessage(models.Model):
     """Messages in a chat room"""
     chat_room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages')
@@ -142,6 +182,7 @@ class Notification(models.Model):
         ('EVENT_INVITED', 'Calendar Event Invitation'),
         ('ACCESS_REQUEST', 'Access Request'),
         ('ACCESS_RESPONSE', 'Access Request Response'),
+        ('CHAT_ROOM_INVITE', 'Chat Room Invitation'),
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')

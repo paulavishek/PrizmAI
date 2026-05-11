@@ -51,8 +51,15 @@ class ChatRoomForm(forms.ModelForm):
     def __init__(self, *args, board=None, **kwargs):
         super().__init__(*args, **kwargs)
         if board:
-            # Only show members that are part of the board
-            self.fields['members'].queryset = User.objects.filter(board_memberships__board=board)
+            # Show all active users except the board itself — board members will
+            # be added directly; others will receive an invitation.
+            self.fields['members'].queryset = User.objects.filter(is_active=True).exclude(
+                id=board.created_by_id
+            )
+            self.fields['members'].help_text = (
+                'Board members will be added immediately. '
+                'Other users will receive an invitation they must accept.'
+            )
 
 
 class ChatMessageForm(forms.ModelForm):

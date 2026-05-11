@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import TaskThreadComment, ChatRoom, ChatMessage, Notification, UserTypingStatus
+from .models import TaskThreadComment, ChatRoom, ChatMessage, Notification, UserTypingStatus, ChatRoomInvitation
+
+
+@admin.register(ChatRoomInvitation)
+class ChatRoomInvitationAdmin(admin.ModelAdmin):
+    list_display = ['id', 'invited_user', 'chat_room', 'invited_by', 'status', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['invited_user__username', 'chat_room__name']
+    readonly_fields = ['created_at', 'responded_at']
 
 
 @admin.register(TaskThreadComment)
