@@ -1055,6 +1055,14 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         tasks_by_column = analytics_data.get('tasks_by_column', [])
         tasks_by_priority = analytics_data.get('tasks_by_priority', [])
         tasks_by_user = analytics_data.get('tasks_by_user', [])
+
+        # Type-specific chart data (populated by api_views for richer AI context)
+        cycle_time_data    = analytics_data.get('cycle_time_data', [])
+        weekly_trend_data  = analytics_data.get('weekly_completion_data', [])
+        label_type_data    = analytics_data.get('label_type_data', [])
+        backlog_age_data   = analytics_data.get('backlog_age_data', [])
+        on_time_late_data  = analytics_data.get('on_time_late_data', [])
+        stage_time_data    = analytics_data.get('stage_time_data', [])
         
         # Build optimized prompt - streamlined for faster response while maintaining quality
         board_name = analytics_data.get('board_name', 'Board')
@@ -1063,24 +1071,65 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         # Project-type-specific focus areas
         type_focus = {
             'product_tech': (
-                "Focus on: task velocity, blocked/at-risk items, column bottlenecks, "
-                "workload distribution, and technical debt indicators."
+                "Focus your analysis on these four areas and flag issues where found: "
+                "(1) Cycle time health — flag if the average or typical cycle time exceeds 7 days, naming which bucket dominates; "
+                "(2) Backlog aging — flag if more than 30% of To-Do tasks appear to be older than 2 weeks; "
+                "(3) Bug-to-feature ratio — flag if bugs or fixes exceed 40% of labeled work, signalling quality debt; "
+                "(4) Delivery cadence — flag if weekly completion has declined for 2 or more consecutive weeks. "
+                "End your response with exactly 2-3 specific, actionable recommendations (not generic advice) that name the exact issue and the corrective step."
             ),
             'marketing_campaign': (
-                "Focus on: deadline adherence, content output rate, review pipeline, "
-                "milestone progress, and campaign phase distribution."
+                "Focus your analysis on these four areas and flag issues where found: "
+                "(1) Content throughput — note the direction of the weekly output trend (rising, flat, or falling); "
+                "(2) Deadline adherence — flag explicitly if the on-time completion rate is below 50%; "
+                "(3) Pipeline bottlenecks — identify which stage/column currently has the highest task pile-up relative to the others; "
+                "(4) Milestone completion rate — flag if any milestones are overdue or lagging. "
+                "End your response with exactly 2-3 specific, actionable recommendations (not generic advice) that name the bottleneck stage or metric and the corrective step."
             ),
             'operations': (
-                "Focus on: process completion rate, cycle time efficiency, on-time delivery, "
-                "workload balance, and operational throughput."
+                "Focus your analysis on these four areas and flag issues where found: "
+                "(1) Process efficiency — state the on-time completion rate and flag if it is below 70%; "
+                "(2) Stage bottlenecks — identify which process stage has the longest estimated cycle time and name it explicitly; "
+                "(3) Team workload balance — flag if any individual team member carries more than double the average task load; "
+                "(4) Overall throughput — compare tasks created vs completed in the last 30 days and flag if a backlog is growing. "
+                "End your response with exactly 2-3 specific, actionable recommendations (not generic advice) that name the bottleneck or overloaded person and the corrective step."
             ),
             'general': (
                 "Focus on: overall productivity, task completion trends, workload balance, "
-                "and priority distribution."
+                "and priority distribution. End with 2-3 specific, actionable recommendations."
             ),
         }
         focus_area = type_focus.get(project_type, type_focus['general'])
-        
+
+        # Build type-specific supplemental data block for richer AI analysis
+        supplemental_lines = []
+        if project_type == 'product_tech':
+            if cycle_time_data:
+                ct_str = ', '.join([f"{b['name']}:{b['count']}" for b in cycle_time_data if b.get('count', 0) > 0])
+                if ct_str:
+                    supplemental_lines.append(f"- Cycle time buckets: {ct_str}")
+            if weekly_trend_data:
+                wt_str = ', '.join([f"{b['date']}:{b['count']}" for b in weekly_trend_data[-4:]])
+                supplemental_lines.append(f"- Weekly completions (last 4 wks): {wt_str}")
+            if label_type_data:
+                lb_str = ', '.join([f"{b['name']}:{b['count']}" for b in label_type_data])
+                supplemental_lines.append(f"- Label type breakdown: {lb_str}")
+            if backlog_age_data:
+                ba_str = ', '.join([f"{b['name']}:{b['count']}" for b in backlog_age_data])
+                supplemental_lines.append(f"- Backlog age distribution: {ba_str}")
+        elif project_type == 'marketing_campaign':
+            if weekly_trend_data:
+                wt_str = ', '.join([f"{b['date']}:{b['count']}" for b in weekly_trend_data[-4:]])
+                supplemental_lines.append(f"- Weekly content output (last 4 wks): {wt_str}")
+        elif project_type == 'operations':
+            if on_time_late_data:
+                ot_str = ', '.join([f"{b['date']} on-time:{b.get('on_time',0)} late:{b.get('late',0)}" for b in on_time_late_data[-4:]])
+                supplemental_lines.append(f"- On-time vs late (last 4 wks): {ot_str}")
+            if stage_time_data:
+                st_str = ', '.join([f"{b['name']}:{b['avg_days']}d" for b in stage_time_data])
+                supplemental_lines.append(f"- Estimated avg days per stage: {st_str}")
+        supplemental_block = ('\n' + '\n'.join(supplemental_lines)) if supplemental_lines else ''
+
         prompt = f"""Analyze this {project_type.replace('_', ' ')} board "{board_name}" and provide actionable insights for a project manager.
 
 ## Board Type: {project_type.replace('_', ' ').title()}
@@ -1092,7 +1141,7 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
 - Lean: {value_added_percentage}% value-added (target: 60%+), {total_categorized} categorized
 - Columns: {', '.join([f"{col['name']}:{col['count']}" for col in tasks_by_column])}
 - Priority: {', '.join([f"{pri['priority']}:{pri['count']}" for pri in tasks_by_priority])}
-- Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}
+- Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}{supplemental_block}
 
 IMPORTANT: Do NOT use markdown formatting like asterisks, bold, or headers in any text values. Use plain text only.
 Respond with ONLY the JSON object below, no commentary, no code fences, no explanation before or after:
