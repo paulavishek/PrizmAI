@@ -1801,6 +1801,11 @@ function aiConfirmCreateTasks() {
     <a href="{% url 'messaging:messaging_hub' %}" class="btn-prizm-back btn-sm">
         <i class="fas fa-arrow-left me-1"></i> Back
     </a>
+    {% if not has_board_access %}
+    <span class="badge bg-secondary ms-2" title="You have chat-room access only — the board is not accessible to you.">
+        <i class="fas fa-lock me-1"></i> Chat Room Access Only
+    </span>
+    {% endif %}
 </div>
 
 <div class="row">
