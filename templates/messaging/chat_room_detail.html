@@ -748,6 +748,7 @@
             console.log(data.username + ' left the room');
         }
         else if (data.type === 'presence_update') {
+            console.log('[Presence] presence_update received:', data.active_count, 'active,', data.members.length, 'members');
             updatePresenceUI(data.members, data.active_count);
         }
         else if (data.type === 'message_deleted') {
@@ -908,7 +909,30 @@
         }
         // Update each member's dot and last-seen text
         members.forEach(function(m) {
-            const dot = document.getElementById('presence-dot-' + m.user_id);
+            let dot = document.getElementById('presence-dot-' + m.user_id);
+
+            // ── Dynamic insert ────────────────────────────────────────────
+            // If the member joined after User A loaded the page (auto-added
+            // via is_user_authorized), their <li> won't exist yet. Create it
+            // so the dot update isn't silently dropped.
+            if (!dot) {
+                const list = document.getElementById('members-presence-list');
+                if (list) {
+                    const li = document.createElement('li');
+                    li.className = 'd-flex align-items-start gap-2 py-1';
+                    li.dataset.userId = m.user_id;
+                    li.innerHTML =
+                        `<span class="presence-dot status-offline" id="presence-dot-${m.user_id}" title="Offline"></span>` +
+                        `<div>` +
+                            `<div>${m.display_name}</div>` +
+                            `<span class="last-seen-text" id="last-seen-${m.user_id}" style="display:none;"></span>` +
+                        `</div>`;
+                    list.appendChild(li);
+                    dot = document.getElementById('presence-dot-' + m.user_id);
+                }
+            }
+            // ─────────────────────────────────────────────────────────────
+
             const lastSeenEl = document.getElementById('last-seen-' + m.user_id);
             if (dot) {
                 dot.className = 'presence-dot status-' + m.status;
