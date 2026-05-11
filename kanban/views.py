@@ -3287,10 +3287,14 @@ def board_analytics(request, board_id):
     # ── Goal-Aware Analytics: promoted metrics & charts ──
     promoted_metrics = None
     promoted_chart_configs = None
+    promoted_chart_data = {}
     if board.project_type:
-        from kanban.utils.analytics_helpers import get_promoted_metrics, get_promoted_charts
+        from kanban.utils.analytics_helpers import (
+            get_promoted_metrics, get_promoted_charts, get_promoted_chart_data,
+        )
         promoted_metrics = get_promoted_metrics(board)
         promoted_chart_configs = get_promoted_charts(board)
+        promoted_chart_data = get_promoted_chart_data(board)
 
     response = render(request, 'kanban/board_analytics.html', {
         'board': board,
@@ -3317,6 +3321,14 @@ def board_analytics(request, board_id):
         # Goal-Aware Analytics
         'promoted_metrics': promoted_metrics,
         'promoted_chart_configs': promoted_chart_configs,
+        # Type-specific chart datasets
+        'cycle_time_data':       promoted_chart_data.get('cycle_time_distribution', []),
+        'weekly_completion_data': promoted_chart_data.get('weekly_completion', []),
+        'label_type_data':       promoted_chart_data.get('label_type_breakdown'),
+        'backlog_age_data':      promoted_chart_data.get('backlog_age', []),
+        'stage_funnel_data':     promoted_chart_data.get('stage_funnel', []),
+        'on_time_late_data':     promoted_chart_data.get('on_time_vs_late'),
+        'stage_time_data':       promoted_chart_data.get('stage_time', []),
     })
     
     # Prevent caching of analytics data

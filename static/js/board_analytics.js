@@ -80,11 +80,20 @@ function initializeCharts() {
  */
 function initializeDynamicCharts(configs) {
     const DATA_MAP = {
-        'tasks_by_column': 'tasks-by-column-data',
-        'tasks_by_priority': 'tasks-by-priority-data',
-        'tasks_by_user': 'tasks-by-user-data',
+        // Standard existing datasets
+        'tasks_by_column':        'tasks-by-column-data',
+        'tasks_by_priority':      'tasks-by-priority-data',
+        'tasks_by_user':          'tasks-by-user-data',
         'tasks_by_lean_category': 'tasks-by-lean-data',
-        'completed_tasks': 'completed-tasks-data',
+        'completed_tasks':        'completed-tasks-data',
+        // New type-specific datasets
+        'cycle_time_distribution': 'cycle-time-data',
+        'weekly_completion':       'weekly-completion-data',
+        'label_type_breakdown':    'label-type-data',
+        'backlog_age':             'backlog-age-data',
+        'stage_funnel':            'stage-funnel-data',
+        'on_time_vs_late':         'on-time-late-data',
+        'stage_time':              'stage-time-data',
     };
 
     const PRIORITY_COLORS = window.PrizmAccessibility ?
@@ -95,6 +104,14 @@ function initializeDynamicCharts(configs) {
             'Low': 'rgba(108, 117, 125, 0.8)'
         };
 
+    // Amber gradient for backlog age chart (index 0=lightest, 3=darkest)
+    const AMBER_GRADIENT = [
+        'rgba(255, 193,   7, 0.55)',
+        'rgba(255, 152,   0, 0.70)',
+        'rgba(245, 124,   0, 0.85)',
+        'rgba(230,  74,  25, 1.00)',
+    ];
+
     configs.forEach(function(cfg) {
         const canvas = document.getElementById(cfg.id);
         if (!canvas) {
@@ -102,13 +119,13 @@ function initializeDynamicCharts(configs) {
             return;
         }
 
-        const dataElId = DATA_MAP[cfg.data_key];
+        var dataElId = DATA_MAP[cfg.data_key];
         if (!dataElId) {
             console.warn('Unknown data_key:', cfg.data_key);
             return;
         }
 
-        const dataEl = document.getElementById(dataElId);
+        var dataEl = document.getElementById(dataElId);
         if (!dataEl) {
             console.warn('Data element not found:', dataElId);
             return;
@@ -122,6 +139,123 @@ function initializeDynamicCharts(configs) {
             return;
         }
 
+        // ── Special case: label_type_breakdown → with null-fallback + title_inferred footnote + all-Chore fallback ──
+        if (cfg.data_key === 'label_type_breakdown') {
+            // rawData may be null (no tasks at all)
+            var labelData = rawData;
+            var titleInferred = false;
+            var allChore = false;
+
+            if (labelData && labelData.length > 0) {
+                titleInferred = !!(labelData[0].title_inferred);
+                var bugCount     = (labelData.find(function(i) { return i.name === 'Bug / Fix';     }) || {}).count || 0;
+                var featureCount = (labelData.find(function(i) { return i.name === 'Feature';       }) || {}).count || 0;
+                allChore = (bugCount === 0 && featureCount === 0);
+            } else {
+                allChore = true; // no data → treat same as all-Chore
+            }
+
+            // All-Chore (or no data): fall back to priority doughnut
+            if (allChore) {
+                var fallbackEl = document.getElementById('tasks-by-priority-data');
+                var fbRaw = null;
+                if (fallbackEl) {
+                    try { fbRaw = JSON.parse(fallbackEl.textContent); } catch (_) {}
+                }
+                if (fbRaw && fbRaw.length > 0) {
+                    var fbLabels = fbRaw.map(function(i) { return i.priority || 'Unknown'; });
+                    var fbValues = fbRaw.map(function(i) { return i.count || 0; });
+                    var fbColors = fbRaw.map(function(i) { return PRIORITY_COLORS[i.priority] || 'rgba(108,117,125,0.8)'; });
+                    new Chart(canvas, {
+                        type: 'doughnut',
+                        data: { labels: fbLabels, datasets: [{ data: fbValues, backgroundColor: fbColors, borderColor: '#ffffff', borderWidth: 2 }] },
+                        options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: true, position: 'bottom' } } }
+                    });
+                    var noteAllChore = document.createElement('p');
+                    noteAllChore.style.cssText = 'font-size:12px;font-style:italic;color:#6c757d;text-align:center;margin-top:8px;margin-bottom:0;';
+                    noteAllChore.textContent = 'No bug or feature labels found — showing priority breakdown instead.';
+                    canvas.closest('.chart-container').parentElement.appendChild(noteAllChore);
+                    console.log('Dynamic chart (label all-Chore fallback to priority):', cfg.id);
+                } else {
+                    canvas.parentElement.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-pie fa-3x text-muted mb-3"></i><p class="text-muted">No label data available</p><small class="text-muted">Add task labels to see breakdown</small></div>';
+                }
+                return;
+            }
+
+            // Has real Bug/Feature data — render label doughnut
+            var ldLabels = labelData.map(function(i) { return i.name; });
+            var ldValues = labelData.map(function(i) { return i.count || 0; });
+            var ldColors = labelData.map(function(i) { return i.color || 'rgba(108,117,125,0.8)'; });
+            new Chart(canvas, {
+                type: 'doughnut',
+                data: { labels: ldLabels, datasets: [{ data: ldValues, backgroundColor: ldColors, borderColor: '#ffffff', borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: true, position: 'bottom' } } }
+            });
+            if (titleInferred) {
+                var noteInferred = document.createElement('p');
+                noteInferred.style.cssText = 'font-size:12px;font-style:italic;color:#6c757d;text-align:center;margin-top:8px;margin-bottom:0;';
+                noteInferred.textContent = 'Classification inferred from task titles — apply labels for more accurate results.';
+                canvas.closest('.chart-container').parentElement.appendChild(noteInferred);
+            }
+            console.log('Dynamic chart (label breakdown):', cfg.id, titleInferred ? '(title-inferred)' : '(label-based)');
+            return;
+        }
+
+        // ── Special case: stacked_series (on_time_vs_late) ──
+        if (cfg.stacked_series) {
+            // null means not enough due-date data → fall back to completed_tasks trend
+            if (!rawData) {
+                var fallbackTrendEl = document.getElementById('completed-tasks-data');
+                if (fallbackTrendEl) {
+                    try { rawData = JSON.parse(fallbackTrendEl.textContent); } catch (e3) { rawData = null; }
+                }
+                if (rawData && rawData.length > 0) {
+                    var tLabels = rawData.map(function(i) { return i.date || 'Unknown'; });
+                    var tValues = rawData.map(function(i) { return i.count || 0; });
+                    new Chart(canvas, {
+                        type: 'bar',
+                        data: { labels: tLabels, datasets: [{ label: 'Completed', data: tValues, backgroundColor: 'rgba(40,167,69,0.8)', borderColor: 'rgba(40,167,69,1)', borderWidth: 1 }] },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                    });
+                    // Append a note that due-date data is sparse
+                    var noteDiv = document.createElement('div');
+                    noteDiv.className = 'text-muted small text-center mt-2';
+                    noteDiv.textContent = 'Showing completion trend (insufficient due-date data for on-time split)';
+                    canvas.closest('.chart-container').parentElement.appendChild(noteDiv);
+                    console.log('Dynamic chart (on-time fallback to trend):', cfg.id);
+                } else {
+                    canvas.parentElement.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted">No data available</p></div>';
+                }
+                return;
+            }
+            // Render stacked bar: green = on_time, coral = late
+            var stackLabels  = rawData.map(function(i) { return i.date; });
+            var onTimeValues = rawData.map(function(i) { return i.on_time || 0; });
+            var lateValues   = rawData.map(function(i) { return i.late   || 0; });
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: stackLabels,
+                    datasets: [
+                        { label: 'On Time', data: onTimeValues, backgroundColor: 'rgba(40, 167, 69, 0.8)',  borderColor: 'rgba(40, 167, 69, 1)',  borderWidth: 1 },
+                        { label: 'Late',    data: lateValues,   backgroundColor: 'rgba(255, 99, 132, 0.8)', borderColor: 'rgba(255, 99, 132, 1)', borderWidth: 1 },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'bottom' } },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+            console.log('Dynamic chart (stacked on-time/late):', cfg.id);
+            return;
+        }
+
+        // ── Standard path ──
         if (!rawData || rawData.length === 0) {
             const container = canvas.parentElement;
             container.innerHTML = '<div class="text-center py-5"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted">No data available</p></div>';
@@ -152,6 +286,12 @@ function initializeDynamicCharts(configs) {
         } else {
             bgColors = cfg.color || 'rgba(54, 162, 235, 0.8)';
             borderColors = cfg.border_color || 'rgba(54, 162, 235, 1)';
+        }
+
+        // ── Amber gradient override for backlog age chart ──
+        if (cfg.amber_gradient) {
+            bgColors     = rawData.map(function(item, idx) { return AMBER_GRADIENT[Math.min(idx, AMBER_GRADIENT.length - 1)]; });
+            borderColors = rawData.map(function(item, idx) { return AMBER_GRADIENT[Math.min(idx, AMBER_GRADIENT.length - 1)].replace(/[\d.]+\)$/, '1)'); });
         }
 
         var chartOptions = {
@@ -201,6 +341,26 @@ function initializeDynamicCharts(configs) {
         // Store priority chart for accessibility updates
         if (cfg.id === 'priorityChart') {
             priorityChartInstance = instance;
+        }
+
+        // ── Estimated label: append "(Estimated)" to card header + uniform-values guard ──
+        if (cfg.estimated_label) {
+            // Guard: if all bar values are identical, the estimation is meaningless — show placeholder
+            var uniqueVals = new Set(values);
+            if (uniqueVals.size === 1) {
+                var container = canvas.closest('.card');
+                var chartContainer = canvas.parentElement;
+                chartContainer.innerHTML = '<div class="text-center py-4"><i class="fas fa-chart-bar fa-3x text-muted mb-3"></i><p class="text-muted mb-1">Stage-level timing requires task column history</p><small class="text-muted">Estimated values are uniform for this board — add task history to see per-stage breakdown.</small></div>';
+                console.log('Dynamic chart (stage time uniform — showing placeholder):', cfg.id);
+                return;
+            }
+            var cardHeader = canvas.closest('.card');
+            if (cardHeader) {
+                var h6 = cardHeader.querySelector('.card-header h6');
+                if (h6 && !h6.textContent.includes('(Estimated)')) {
+                    h6.textContent += ' (Estimated)';
+                }
+            }
         }
 
         console.log('Dynamic chart initialized:', cfg.id, cfg.type);

@@ -783,6 +783,17 @@
 {{ tasks_by_lean_category|json_script:"tasks-by-lean-data" }}
 {{ completed_tasks|json_script:"completed-tasks-data" }}
 
+{% if board.project_type %}
+<!-- Type-specific chart datasets -->
+{{ cycle_time_data|json_script:"cycle-time-data" }}
+{{ weekly_completion_data|json_script:"weekly-completion-data" }}
+{{ label_type_data|json_script:"label-type-data" }}
+{{ backlog_age_data|json_script:"backlog-age-data" }}
+{{ stage_funnel_data|json_script:"stage-funnel-data" }}
+{{ on_time_late_data|json_script:"on-time-late-data" }}
+{{ stage_time_data|json_script:"stage-time-data" }}
+{% endif %}
+
 {% if promoted_chart_configs %}
 <!-- Spectra chart configuration -->
 {{ promoted_chart_configs|json_script:"promoted-chart-configs" }}

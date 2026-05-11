@@ -740,6 +740,17 @@ def summarize_board_analytics_api(request, board_id):
             'board_name': board.name,
             'project_type': board.project_type or 'general',
         }
+
+        # Augment with type-specific chart data so the AI can reference real numbers
+        if board.project_type:
+            from kanban.utils.analytics_helpers import get_promoted_chart_data
+            chart_data = get_promoted_chart_data(board)
+            analytics_data['cycle_time_data']        = chart_data.get('cycle_time_distribution', [])
+            analytics_data['weekly_completion_data'] = chart_data.get('weekly_completion', [])
+            analytics_data['label_type_data']        = chart_data.get('label_type_breakdown') or []
+            analytics_data['backlog_age_data']       = chart_data.get('backlog_age', [])
+            analytics_data['on_time_late_data']      = chart_data.get('on_time_vs_late') or []
+            analytics_data['stage_time_data']        = chart_data.get('stage_time', [])
         
         # Generate analytics summary
         summary = summarize_board_analytics(analytics_data)

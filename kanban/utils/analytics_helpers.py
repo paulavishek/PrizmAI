@@ -419,62 +419,329 @@ def get_promoted_metrics(board, raw=False):
 
 
 # ---------------------------------------------------------------------------
+# Per-type chart data computation helpers
+# ---------------------------------------------------------------------------
+
+def get_cycle_time_distribution(board):
+    """Bucket completed tasks by cycle time (created_at to completed_at / updated_at)."""
+    from kanban.models import Task
+    tasks = Task.objects.filter(
+        column__board=board, item_type='task', progress=100
+    ).exclude(created_at__isnull=True)
+    buckets = [
+        {'name': '1 day',      'count': 0},
+        {'name': '2-3 days',   'count': 0},
+        {'name': '4-7 days',   'count': 0},
+        {'name': '1-2 weeks',  'count': 0},
+        {'name': '2+ weeks',   'count': 0},
+    ]
+    for t in tasks:
+        end = t.completed_at or t.updated_at
+        if not end:
+            continue
+        days = max(0, (end - t.created_at).days)
+        if days <= 1:
+            buckets[0]['count'] += 1
+        elif days <= 3:
+            buckets[1]['count'] += 1
+        elif days <= 7:
+            buckets[2]['count'] += 1
+        elif days <= 14:
+            buckets[3]['count'] += 1
+        else:
+            buckets[4]['count'] += 1
+    return buckets
+
+
+def get_weekly_completion_trend(board, weeks=8):
+    """Return completed-task counts grouped by week for the last N weeks."""
+    from kanban.models import Task
+    cutoff = timezone.now() - timedelta(weeks=weeks)
+    qs = Task.objects.filter(
+        column__board=board, item_type='task', progress=100,
+        updated_at__gte=cutoff,
+    ).values('updated_at__date').annotate(count=Count('id')).order_by('updated_at__date')
+
+    # Map each completed date to its Monday (week start)
+    week_map = {}
+    for row in qs:
+        d = row['updated_at__date']
+        if d is None:
+            continue
+        monday = d - timedelta(days=d.weekday())
+        week_map[monday] = week_map.get(monday, 0) + row['count']
+
+    start = (timezone.now() - timedelta(weeks=weeks)).date()
+    start -= timedelta(days=start.weekday())  # align to Monday
+    result = []
+    for i in range(weeks):
+        d = start + timedelta(weeks=i)
+        label = f"Wk {d.strftime('%b')} {d.day}"
+        result.append({'date': label, 'count': week_map.get(d, 0)})
+    return result
+
+
+# Expanded keyword sets for label/title classification
+_BUG_KEYWORDS = ('bug', 'fix', 'defect', 'issue', 'error', 'crash', 'regression', 'hotfix')
+_FEATURE_KEYWORDS = ('feature', 'story', 'enhancement', 'improvement', 'epic', 'new', 'add', 'implement')
+
+
+def _classify_text(text):
+    """Return 'bug', 'feature', or 'chore' based on keyword matching against lowercased text."""
+    t = text.lower()
+    if any(kw in t for kw in _BUG_KEYWORDS):
+        return 'bug'
+    if any(kw in t for kw in _FEATURE_KEYWORDS):
+        return 'feature'
+    return 'chore'
+
+
+def get_label_type_breakdown(board):
+    """Classify tasks by label keywords into Bug / Feature / Chore categories.
+
+    Priority order:
+    1. If the task has labels → classify from joined label names.
+    2. If the task has no labels → infer from task title.
+
+    Returns None only when the board has no tasks at all.
+    Includes 'title_inferred': True when any tasks were classified from titles.
+    """
+    from kanban.models import Task
+    tasks = list(
+        Task.objects.filter(column__board=board, item_type='task')
+        .prefetch_related('labels')
+        .only('id', 'title')
+    )
+    if not tasks:
+        return None
+
+    bug_count = feature_count = chore_count = 0
+    title_inferred = False
+
+    for t in tasks:
+        labels = [lbl.name.lower() for lbl in t.labels.all()]
+        if labels:
+            joined = ' '.join(labels)
+            cat = _classify_text(joined)
+        else:
+            # Title-based inference fallback
+            cat = _classify_text(t.title or '')
+            title_inferred = True
+        if cat == 'bug':
+            bug_count += 1
+        elif cat == 'feature':
+            feature_count += 1
+        else:
+            chore_count += 1
+
+    return [
+        {'name': 'Bug / Fix',     'count': bug_count,     'color': 'rgba(220, 53, 69, 0.8)',  'title_inferred': title_inferred},
+        {'name': 'Feature',       'count': feature_count, 'color': 'rgba(54, 162, 235, 0.8)', 'title_inferred': title_inferred},
+        {'name': 'Chore / Other', 'count': chore_count,   'color': 'rgba(108, 117, 125, 0.8)','title_inferred': title_inferred},
+    ]
+
+
+def get_backlog_age_distribution(board):
+    """Bucket tasks in the To-Do/Backlog column by age since creation."""
+    from kanban.models import Task, Column
+    today = timezone.now().date()
+    # Find To-Do/Backlog column by name; fall back to lowest-position column
+    todo_col = (
+        Column.objects.filter(board=board)
+        .filter(Q(name__icontains='to do') | Q(name__icontains='todo') | Q(name__icontains='backlog'))
+        .order_by('position')
+        .first()
+    )
+    if not todo_col:
+        todo_col = Column.objects.filter(board=board).order_by('position').first()
+    buckets = [
+        {'name': '< 1 week',  'count': 0, 'intensity': 1},
+        {'name': '1-2 weeks', 'count': 0, 'intensity': 2},
+        {'name': '2-4 weeks', 'count': 0, 'intensity': 3},
+        {'name': '> 1 month', 'count': 0, 'intensity': 4},
+    ]
+    if not todo_col:
+        return buckets
+    for t in Task.objects.filter(column=todo_col, item_type='task'):
+        age = (today - t.created_at.date()).days
+        if age < 7:
+            buckets[0]['count'] += 1
+        elif age < 14:
+            buckets[1]['count'] += 1
+        elif age < 28:
+            buckets[2]['count'] += 1
+        else:
+            buckets[3]['count'] += 1
+    return buckets
+
+
+def get_stage_transition_funnel(board):
+    """Return task counts per column in board position order (pipeline funnel view)."""
+    from kanban.models import Task, Column
+    columns = Column.objects.filter(board=board).order_by('position')
+    tasks = Task.objects.filter(column__board=board, item_type='task')
+    return [
+        {'name': col.name, 'count': tasks.filter(column=col).count(), 'position': col.position}
+        for col in columns
+    ]
+
+
+def get_on_time_vs_late_weekly(board, weeks=8):
+    """Return on-time vs late completed-task counts per week for the last N weeks.
+    Returns None if fewer than 3 completed tasks have due dates (JS falls back to trend)."""
+    from kanban.models import Task
+    cutoff = timezone.now() - timedelta(weeks=weeks)
+    completed = Task.objects.filter(
+        column__board=board, item_type='task', progress=100,
+        updated_at__gte=cutoff, due_date__isnull=False,
+    )
+    if completed.count() < 3:
+        return None
+
+    week_map = {}
+    for t in completed:
+        d = t.updated_at.date()
+        monday = d - timedelta(days=d.weekday())
+        if monday not in week_map:
+            week_map[monday] = {'on_time': 0, 'late': 0}
+        if t.updated_at.date() <= t.due_date.date():
+            week_map[monday]['on_time'] += 1
+        else:
+            week_map[monday]['late'] += 1
+
+    start = (timezone.now() - timedelta(weeks=weeks)).date()
+    start -= timedelta(days=start.weekday())
+    result = []
+    for i in range(weeks):
+        d = start + timedelta(weeks=i)
+        label = f"Wk {d.strftime('%b')} {d.day}"
+        wd = week_map.get(d, {'on_time': 0, 'late': 0})
+        result.append({'date': label, 'on_time': wd['on_time'], 'late': wd['late']})
+    return result
+
+
+def _column_weight(name):
+    """Return a relative weight for a column based on its typical workflow role."""
+    n = name.lower()
+    if any(kw in n for kw in ('to do', 'todo', 'backlog')):
+        return 2.5
+    if any(kw in n for kw in ('in progress', 'doing', 'active')):
+        return 2.0
+    if any(kw in n for kw in ('review', 'testing', 'qa', 'approval')):
+        return 1.0
+    if any(kw in n for kw in ('done', 'complete', 'closed', 'finished')):
+        return 0.5
+    return 1.0  # default
+
+
+def get_estimated_time_per_stage(board):
+    """Estimate average days per stage using a weighted distribution of the board's
+    overall average cycle time.  Columns get weights based on typical workflow role
+    so the bars are meaningfully different lengths even without task-column history.
+    No task-column history is tracked; this is always an approximation."""
+    from kanban.models import Task, Column
+    columns = list(Column.objects.filter(board=board).order_by('position'))
+    if not columns:
+        return []
+    completed = Task.objects.filter(
+        column__board=board, item_type='task', progress=100,
+    )
+    cycle_times = []
+    for t in completed[:100]:
+        end = t.completed_at or t.updated_at
+        if end and t.created_at:
+            cycle_times.append(max(0, (end - t.created_at).days))
+    avg_total = sum(cycle_times) / len(cycle_times) if cycle_times else 0
+
+    weights = [_column_weight(col.name) for col in columns]
+    total_weight = sum(weights) or 1
+    return [
+        {
+            'name': col.name,
+            'avg_days': round(avg_total * (weights[i] / total_weight), 1),
+            'estimated': True,
+        }
+        for i, col in enumerate(columns)
+    ]
+
+
+def get_promoted_chart_data(board):
+    """Compute all type-specific chart datasets for a board.
+    Returns a dict keyed by data_key string; values are list/None."""
+    project_type = board.project_type
+    if not project_type:
+        return {}
+    data = {}
+    if project_type == 'product_tech':
+        data['cycle_time_distribution'] = get_cycle_time_distribution(board)
+        data['weekly_completion']        = get_weekly_completion_trend(board)
+        data['label_type_breakdown']     = get_label_type_breakdown(board)
+        data['backlog_age']              = get_backlog_age_distribution(board)
+    elif project_type == 'marketing_campaign':
+        data['weekly_completion']  = get_weekly_completion_trend(board)
+        data['stage_funnel']       = get_stage_transition_funnel(board)
+    elif project_type == 'operations':
+        data['on_time_vs_late'] = get_on_time_vs_late_weekly(board)
+        data['stage_time']      = get_estimated_time_per_stage(board)
+    return data
+
+
+# ---------------------------------------------------------------------------
 # Chart configurations by project type
 # ---------------------------------------------------------------------------
 
 PROMOTED_CHARTS = {
     'product_tech': [
         {
-            'id': 'columnChart',
-            'title': 'Tasks by Column',
+            'id': 'cycleTimeChart',
+            'title': 'Cycle Time Distribution',
             'type': 'bar',
-            'data_key': 'tasks_by_column',
+            'data_key': 'cycle_time_distribution',
             'label_field': 'name',
             'value_field': 'count',
             'color': 'rgba(54, 162, 235, 0.8)',
             'border_color': 'rgba(54, 162, 235, 1)',
         },
         {
-            'id': 'priorityChart',
-            'title': 'Tasks by Priority',
-            'type': 'doughnut',
-            'data_key': 'tasks_by_priority',
-            'label_field': 'priority',
-            'value_field': 'count',
-            'use_priority_colors': True,
-        },
-        {
-            'id': 'userChart',
-            'title': 'Workload Distribution',
+            'id': 'deployFreqChart',
+            'title': 'Deployment / Completion Frequency',
             'type': 'bar',
-            'data_key': 'tasks_by_user',
-            'label_field': 'username',
-            'value_field': 'count',
-            'color': 'rgba(75, 192, 192, 0.8)',
-            'border_color': 'rgba(75, 192, 192, 1)',
-            'index_axis': 'y',
-        },
-        {
-            'id': 'velocityChart',
-            'title': 'Completion Velocity (Last 30 Days)',
-            'type': 'bar',
-            'data_key': 'completed_tasks',
+            'data_key': 'weekly_completion',
             'label_field': 'date',
             'value_field': 'count',
-            'color': 'rgba(40, 167, 69, 0.8)',
-            'border_color': 'rgba(40, 167, 69, 1)',
+            'color': 'rgba(32, 201, 151, 0.8)',
+            'border_color': 'rgba(32, 201, 151, 1)',
+        },
+        {
+            'id': 'labelBreakdownChart',
+            'title': 'Bug vs Feature vs Chore Breakdown',
+            'type': 'doughnut',
+            'data_key': 'label_type_breakdown',
+            'label_field': 'name',
+            'value_field': 'count',
+            'use_item_colors': True,
+        },
+        {
+            'id': 'backlogAgeChart',
+            'title': 'Task Age in Backlog',
+            'type': 'bar',
+            'data_key': 'backlog_age',
+            'label_field': 'name',
+            'value_field': 'count',
+            'amber_gradient': True,
         },
     ],
     'marketing_campaign': [
         {
             'id': 'phaseChart',
-            'title': 'Tasks by Phase',
+            'title': 'Tasks by Phase / Column',
             'type': 'bar',
             'data_key': 'tasks_by_column',
             'label_field': 'name',
             'value_field': 'count',
             'color': 'rgba(153, 102, 255, 0.8)',
             'border_color': 'rgba(153, 102, 255, 1)',
+            'index_axis': 'y',
         },
         {
             'id': 'priorityChart',
@@ -486,37 +753,58 @@ PROMOTED_CHARTS = {
             'use_priority_colors': True,
         },
         {
-            'id': 'userChart',
-            'title': 'Team Output Distribution',
+            'id': 'weeklyOutputChart',
+            'title': 'Content Delivered per Week',
             'type': 'bar',
-            'data_key': 'tasks_by_user',
-            'label_field': 'username',
-            'value_field': 'count',
-            'color': 'rgba(255, 159, 64, 0.8)',
-            'border_color': 'rgba(255, 159, 64, 1)',
-            'index_axis': 'y',
-        },
-        {
-            'id': 'deadlineChart',
-            'title': 'Content Delivery Trend',
-            'type': 'bar',
-            'data_key': 'completed_tasks',
+            'data_key': 'weekly_completion',
             'label_field': 'date',
             'value_field': 'count',
-            'color': 'rgba(40, 167, 69, 0.8)',
-            'border_color': 'rgba(40, 167, 69, 1)',
+            'color': 'rgba(255, 99, 132, 0.8)',
+            'border_color': 'rgba(255, 99, 132, 1)',
+        },
+        {
+            'id': 'funnelChart',
+            'title': 'Stage Transition Funnel',
+            'type': 'bar',
+            'data_key': 'stage_funnel',
+            'label_field': 'name',
+            'value_field': 'count',
+            'color': 'rgba(153, 102, 255, 0.8)',
+            'border_color': 'rgba(153, 102, 255, 1)',
+            'index_axis': 'y',
         },
     ],
     'operations': [
         {
             'id': 'columnChart',
-            'title': 'Process Stages',
+            'title': 'Process Stage Distribution',
             'type': 'bar',
             'data_key': 'tasks_by_column',
             'label_field': 'name',
             'value_field': 'count',
             'color': 'rgba(54, 162, 235, 0.8)',
             'border_color': 'rgba(54, 162, 235, 1)',
+        },
+        {
+            'id': 'onTimeLateChart',
+            'title': 'On-Time vs Late Completion (Last 8 Weeks)',
+            'type': 'bar',
+            'data_key': 'on_time_vs_late',
+            'label_field': 'date',
+            'value_field': 'count',
+            'stacked_series': True,
+        },
+        {
+            'id': 'stageTimeChart',
+            'title': 'SLA / Cycle Time by Stage',
+            'type': 'bar',
+            'data_key': 'stage_time',
+            'label_field': 'name',
+            'value_field': 'avg_days',
+            'color': 'rgba(255, 193, 7, 0.8)',
+            'border_color': 'rgba(255, 193, 7, 1)',
+            'index_axis': 'y',
+            'estimated_label': True,
         },
         {
             'id': 'userChart',
@@ -528,25 +816,6 @@ PROMOTED_CHARTS = {
             'color': 'rgba(75, 192, 192, 0.8)',
             'border_color': 'rgba(75, 192, 192, 1)',
             'index_axis': 'y',
-        },
-        {
-            'id': 'leanChart',
-            'title': 'Lean Six Sigma Analysis',
-            'type': 'doughnut',
-            'data_key': 'tasks_by_lean_category',
-            'label_field': 'name',
-            'value_field': 'count',
-            'use_item_colors': True,
-        },
-        {
-            'id': 'cycleChart',
-            'title': 'Completion Trend',
-            'type': 'bar',
-            'data_key': 'completed_tasks',
-            'label_field': 'date',
-            'value_field': 'count',
-            'color': 'rgba(40, 167, 69, 0.8)',
-            'border_color': 'rgba(40, 167, 69, 1)',
         },
     ],
 }
