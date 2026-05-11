@@ -36,13 +36,19 @@ def messaging_hub(request):
         )
 
     # Show every room the user is an explicit member of, grouped by board.
-    # Exclude demo workspace rooms — real users must never see demo board rooms
-    # in their hub, even if stale membership records exist in the database.
+    # Exclude all demo/sandbox rooms — real users must never see these in their
+    # hub, even if stale membership records exist in the database.
+    # Three cases to exclude:
+    #   1. Boards in a demo workspace (workspace.is_demo=True)
+    #   2. Official demo boards (is_official_demo_board=True)
+    #   3. Personal sandbox copy boards (is_sandbox_copy=True, workspace=None)
     user_rooms = (
         ChatRoom.objects
         .filter(members=request.user)
         .exclude(
-            Q(board__workspace__is_demo=True) | Q(board__is_official_demo_board=True)
+            Q(board__workspace__is_demo=True)
+            | Q(board__is_official_demo_board=True)
+            | Q(board__is_sandbox_copy=True)
         )
         .select_related('board')
         .order_by('board__name', 'name')

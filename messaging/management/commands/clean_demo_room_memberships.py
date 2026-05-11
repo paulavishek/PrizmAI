@@ -33,10 +33,14 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN — no changes will be made\n'))
 
-        # Identify demo rooms: board is in a demo workspace, OR the board itself
-        # is flagged as an official demo board (handles boards with null workspace).
+        # Identify demo/sandbox rooms via three flags:
+        #   1. Board belongs to a demo workspace (workspace.is_demo=True)
+        #   2. Board is the official demo board (is_official_demo_board=True)
+        #   3. Board is a personal sandbox copy (is_sandbox_copy=True, workspace=None)
         demo_rooms = ChatRoom.objects.filter(
-            Q(board__workspace__is_demo=True) | Q(board__is_official_demo_board=True)
+            Q(board__workspace__is_demo=True)
+            | Q(board__is_official_demo_board=True)
+            | Q(board__is_sandbox_copy=True)
         ).prefetch_related('members', 'members__profile').select_related('board')
 
         if not demo_rooms.exists():
