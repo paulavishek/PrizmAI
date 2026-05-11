@@ -22,5 +22,16 @@ class KanbanConfig(AppConfig):
             if connection.vendor == 'sqlite':
                 connection.cursor().execute('PRAGMA journal_mode=WAL;')
                 connection.cursor().execute('PRAGMA synchronous=NORMAL;')
+                # busy_timeout is the SQLite-level wait (milliseconds) before
+                # raising "database is locked". This is separate from Django's
+                # Python-level timeout and fires earlier, giving SQLite a chance
+                # to retry the lock internally before Python raises an exception.
+                # 30 000 ms matches the Python-level timeout in settings.py.
+                connection.cursor().execute('PRAGMA busy_timeout=30000;')
+                # Reduce WAL auto-checkpoint frequency: the default is 1000 pages
+                # (≈4 MB). Lowering it slightly reduces the exclusive-lock window
+                # during checkpointing, which is the main remaining cause of
+                # "database is locked" in WAL mode under concurrent writers.
+                connection.cursor().execute('PRAGMA wal_autocheckpoint=100;')
 
         connection_created.connect(_enable_wal)

@@ -35,17 +35,54 @@ def messaging_hub(request):
             completed_wizard=True
         )
 
-    # Show every room the user is an explicit member of, grouped by board.
-    # All workspaces are included (demo, sandbox, regular) — rooms from any
-    # workspace are visible as long as the user has explicit membership.
-    # A workspace badge on each card gives visual context about which
-    # workspace the board belongs to.
-    user_rooms = (
-        ChatRoom.objects
-        .filter(members=request.user)
-        .select_related('board', 'board__workspace')
-        .order_by('board__name', 'name')
-    )
+    # ── Workspace-scoped room query ────────────────────────────────────────
+    # Chat rooms are isolated by the user's active workspace context so that
+    # demo rooms never bleed into the real workspace and vice-versa.
+    #
+    # Demo mode  → show ALL rooms on official demo boards / the demo workspace
+    #              (real users browse demo data as read-only observers; they
+    #              are not explicit members of those rooms).
+    # Real mode  → show only rooms where the user IS an explicit member AND
+    #              the board belongs to the current active workspace.
+    is_demo = getattr(profile, 'is_viewing_demo', False)
+    active_ws = getattr(profile, 'active_workspace', None)
+
+    if is_demo:
+        # Scope to boards that live in the demo workspace OR are flagged as
+        # the official demo board (covers the ``is_official_demo_board=True``
+        # board that may predate the workspace object).
+        user_rooms = (
+            ChatRoom.objects
+            .filter(
+                Q(board__workspace__is_demo=True)
+                | Q(board__is_official_demo_board=True)
+            )
+            .select_related('board', 'board__workspace')
+            .order_by('board__name', 'name')
+        )
+
+        # Auto-add the real user to every demo room upfront so the member
+        # count is already correct before they enter any individual room.
+        # (Previously this was done lazily on WebSocket connect, which meant
+        # rooms the user hadn't visited yet still showed the wrong count.)
+        _is_demo_account = getattr(profile, 'is_demo_account', False)
+        if not _is_demo_account:
+            _rooms_needing_add = user_rooms.exclude(members=request.user)
+            for _room in _rooms_needing_add:
+                _room.members.add(request.user)
+    else:
+        # Real workspace — only rooms the user explicitly belongs to, scoped
+        # to the active workspace so that demo/sandbox rooms are invisible.
+        room_qs = ChatRoom.objects.filter(members=request.user)
+        if active_ws and not active_ws.is_demo:
+            room_qs = room_qs.filter(board__workspace=active_ws)
+        else:
+            # No active workspace yet — exclude all demo/sandbox boards.
+            room_qs = room_qs.filter(
+                board__is_official_demo_board=False,
+                board__is_sandbox_copy=False,
+            ).exclude(board__workspace__is_demo=True)
+        user_rooms = room_qs.select_related('board', 'board__workspace').order_by('board__name', 'name')
 
     board_room_map = defaultdict(list)
     for room in user_rooms:
@@ -60,6 +97,8 @@ def messaging_hub(request):
             BoardMembership.objects.filter(board=board, user=request.user).exists()
             or board.created_by == request.user
             or request.user.is_staff
+            or getattr(board, 'is_official_demo_board', False)
+            or (board.workspace and getattr(board.workspace, 'is_demo', False))
         )
         # Build workspace badge info for the template
         ws = board.workspace
@@ -75,6 +114,14 @@ def messaging_hub(request):
         else:
             ws_label = None
             ws_is_demo = False
+        # Count unique members across all chat rooms for this board.
+        # Using chat-room membership (rather than BoardMembership) ensures
+        # that real users browsing the demo are included in the count once
+        # they have been auto-added to the rooms.
+        from django.contrib.auth.models import User as _User
+        member_count = _User.objects.filter(
+            chat_rooms__board=board
+        ).distinct().count()
         boards_with_unread.append({
             'board': board,
             'rooms': rooms,
@@ -82,6 +129,7 @@ def messaging_hub(request):
             'has_board_access': has_board_access,
             'workspace_label': ws_label,
             'workspace_is_demo': ws_is_demo,
+            'member_count': member_count,
         })
 
     # Kept for template backward-compat; always empty now — all accessible
@@ -114,12 +162,15 @@ def chat_room_list(request, board_id):
     """List all chat rooms for a board"""
     board = get_object_or_404(Board, id=board_id)
 
-    # Strict board membership check — demo boards alone are not sufficient for chat access
     from kanban.models import BoardMembership
     from kanban.permissions import is_user_org_admin as _check_org_admin
     _is_org_admin = _check_org_admin(request.user)
     _has_membership = BoardMembership.objects.filter(user=request.user, board=board).exists()
-    if not (_has_membership or board.created_by == request.user or _is_org_admin):
+    _is_demo_board = (
+        getattr(board, 'is_official_demo_board', False)
+        or (board.workspace and getattr(board.workspace, 'is_demo', False))
+    )
+    if not (_has_membership or board.created_by == request.user or _is_org_admin or _is_demo_board):
         raise Http404
     
     chat_rooms = board.chat_rooms.all()
