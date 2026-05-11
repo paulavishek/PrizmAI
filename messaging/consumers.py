@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -32,14 +33,15 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         if not is_authorized:
             await self.close()
             return
-        
-        # Join room group
+
+        # Accept first (per Django Channels docs), then join the group so the
+        # channel is fully ready before it can receive group messages.
+        await self.accept()
+
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-        
-        await self.accept()
 
         # Track active connection
         ChatRoomConsumer._active_connections.setdefault(self.room_id, set())
@@ -61,7 +63,14 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             }
         )
 
-        # Broadcast full presence state to everyone (including the joiner)
+        # Broadcast full presence state immediately (for already-connected clients)
+        await self.broadcast_presence()
+
+        # Second broadcast after a short delay: handles the case where the
+        # connecting client's onMessage handler isn't bound at the instant the
+        # first broadcast fires (JS sets chatSocketManager.onMessage a tick
+        # after the constructor returns and the socket opens).
+        await asyncio.sleep(1)
         await self.broadcast_presence()
     
     async def disconnect(self, close_code):
