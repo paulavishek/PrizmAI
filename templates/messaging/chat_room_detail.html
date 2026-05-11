@@ -297,6 +297,119 @@
         color: #6c757d;
         cursor: pointer;
     }
+
+    /* ---- In-room message search ---- */
+    #searchToggleBtn {
+        background: none;
+        border: none;
+        color: rgba(255,255,255,0.85);
+        padding: 0.25rem 0.4rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        transition: color 0.15s, background 0.15s;
+        flex-shrink: 0;
+    }
+    #searchToggleBtn:hover,
+    #searchToggleBtn.active {
+        color: #fff;
+        background: rgba(255,255,255,0.18);
+    }
+
+    .search-bar-wrapper {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+        background: #f0ecff;
+        border-bottom: 1px solid #d8d0f0;
+    }
+    .search-bar-wrapper.open {
+        max-height: 80px;
+    }
+    .search-bar-inner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+    }
+    .search-bar-inner input[type="text"] {
+        flex: 1;
+        min-width: 0;
+        font-size: 0.9rem;
+    }
+    .search-bar-inner select {
+        font-size: 0.85rem;
+        max-width: 160px;
+        flex-shrink: 0;
+    }
+    #searchCloseBtn {
+        background: none;
+        border: none;
+        color: #666;
+        font-size: 1.1rem;
+        line-height: 1;
+        padding: 0.1rem 0.3rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        border-radius: 3px;
+    }
+    #searchCloseBtn:hover { background: #e0d5f8; color: #333; }
+
+    /* Results overlay — anchored to the chat-container (position: relative set inline) */
+    .search-results-panel {
+        position: absolute;
+        top: auto;   /* JS sets this after bar opens */
+        left: 0;
+        right: 0;
+        z-index: 120;
+        background: #fff;
+        border: 1px solid #d0c8f0;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        max-height: 400px;
+        overflow-y: auto;
+        box-shadow: 0 6px 18px rgba(102,126,234,0.18);
+    }
+    .search-result-item {
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid #f0edf8;
+        cursor: pointer;
+        transition: background 0.12s;
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover { background: #f5f0ff; }
+    .search-result-meta {
+        font-size: 0.78rem;
+        color: #888;
+        margin-bottom: 0.2rem;
+    }
+    .search-result-content {
+        font-size: 0.88rem;
+        color: #333;
+        word-break: break-word;
+    }
+    .search-status-msg {
+        padding: 0.75rem 1rem;
+        font-size: 0.85rem;
+        color: #666;
+        font-style: italic;
+    }
+    mark.search-highlight {
+        background: #fef3c7;
+        color: inherit;
+        padding: 0;
+        border-radius: 2px;
+    }
+
+    /* Yellow flash animation for jump-to-message */
+    @keyframes messageFlash {
+        0%   { background: #fef3c7; box-shadow: 0 0 0 3px #fde68a; }
+        100% { background: transparent; box-shadow: none; }
+    }
+    .message-flash {
+        animation: messageFlash 1.5s ease-out forwards;
+    }
 </style>
 {% endblock %}
 
@@ -633,6 +746,7 @@
             const messageEl = document.createElement('div');
             messageEl.classList.add('message');
             messageEl.setAttribute('data-message-id', data.id);
+            messageEl.id = 'message-' + data.id;  // needed for jump-to-message from search
             messageEl.setAttribute('data-read-by', '1');  // Only sender has "read" it
             
             // Mark own messages with different styling
@@ -1793,6 +1907,153 @@ function aiConfirmCreateTasks() {
         spinner.classList.add('d-none');
     });
 }
+
+// ============================================================
+// In-room message search
+// ============================================================
+const SEARCH_URL = "{% url 'messaging:search_room_messages' room_id=chat_room.id %}";
+
+let _searchDebounceTimer = null;
+let _searchActive = false;
+
+function toggleSearchBar() {
+    if (_searchActive) {
+        closeSearch();
+    } else {
+        _searchActive = true;
+        const wrapper = document.getElementById('searchBarWrapper');
+        wrapper.classList.add('open');
+        document.getElementById('searchToggleBtn').classList.add('active');
+        // Focus input after transition
+        setTimeout(() => document.getElementById('searchInput').focus(), 260);
+    }
+}
+
+function closeSearch() {
+    _searchActive = false;
+    clearTimeout(_searchDebounceTimer);
+    document.getElementById('searchBarWrapper').classList.remove('open');
+    document.getElementById('searchToggleBtn').classList.remove('active');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('senderFilter').value = '';
+    document.getElementById('searchResultsPanel').classList.add('d-none');
+    document.getElementById('searchResultsPanel').innerHTML = '';
+}
+
+function _showSearchPanel(html) {
+    const panel = document.getElementById('searchResultsPanel');
+    panel.innerHTML = html;
+    panel.classList.remove('d-none');
+}
+
+function _escapeSearchHtml(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function _highlightMatch(text, query) {
+    // Escape HTML first, then wrap case-insensitive matches in <mark>
+    const safe = _escapeSearchHtml(text);
+    const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return safe.replace(new RegExp(safeQuery, 'gi'), m => `<mark class="search-highlight">${m}</mark>`);
+}
+
+function _formatSearchDate(isoString) {
+    const d = new Date(isoString);
+    return d.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function performSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    const senderId = document.getElementById('senderFilter').value;
+
+    if (q.length < 3) {
+        _showSearchPanel('<div class="search-status-msg">Type at least 3 characters to search</div>');
+        return;
+    }
+
+    _showSearchPanel('<div class="search-status-msg">Searching...</div>');
+
+    let url = SEARCH_URL + '?q=' + encodeURIComponent(q);
+    if (senderId) url += '&sender_id=' + encodeURIComponent(senderId);
+
+    fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.results || data.results.length === 0) {
+            _showSearchPanel(`<div class="search-status-msg">No messages found for &#39;${_escapeSearchHtml(q)}&#39;</div>`);
+            return;
+        }
+        let html = '';
+        data.results.forEach(msg => {
+            html += `<div class="search-result-item" onclick="jumpToMessage(${msg.id})">
+                <div class="search-result-meta">
+                    <strong>${_escapeSearchHtml(msg.author_display_name)}</strong>
+                    &nbsp;&middot;&nbsp;${_escapeSearchHtml(_formatSearchDate(msg.created_at))}
+                </div>
+                <div class="search-result-content">${_highlightMatch(msg.content, data.query)}</div>
+            </div>`;
+        });
+        _showSearchPanel(html);
+    })
+    .catch(() => {
+        _showSearchPanel('<div class="search-status-msg">Search failed. Please try again.</div>');
+    });
+}
+
+function jumpToMessage(messageId) {
+    closeSearch();
+    const el = document.getElementById('message-' + messageId);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('message-flash');
+    // Force reflow so removing + re-adding restarts animation
+    void el.offsetWidth;
+    el.classList.add('message-flash');
+    setTimeout(() => el.classList.remove('message-flash'), 1600);
+}
+
+// Wire up search bar events
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('searchInput');
+    const senderFilter = document.getElementById('senderFilter');
+
+    searchInput.addEventListener('keyup', function (e) {
+        if (e.key === 'Escape') { closeSearch(); return; }
+        clearTimeout(_searchDebounceTimer);
+        const q = this.value.trim();
+        if (q.length === 0) {
+            document.getElementById('searchResultsPanel').classList.add('d-none');
+            return;
+        }
+        if (q.length < 3) {
+            _showSearchPanel('<div class="search-status-msg">Type at least 3 characters to search</div>');
+            return;
+        }
+        _searchDebounceTimer = setTimeout(performSearch, 400);
+    });
+
+    senderFilter.addEventListener('change', function () {
+        clearTimeout(_searchDebounceTimer);
+        if (document.getElementById('searchInput').value.trim().length >= 3) {
+            performSearch();
+        }
+    });
+});
+
+// Global Escape listener closes the search bar from anywhere
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && _searchActive) {
+        closeSearch();
+    }
+});
 </script>
 {% endblock %}
 
@@ -1810,12 +2071,13 @@ function aiConfirmCreateTasks() {
 
 <div class="row">
     <div class="col-lg-8">
-        <div class="chat-container">
+        <div class="chat-container" style="position: relative;">
             <div class="chat-header">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2 class="mb-0"><i class="fas fa-comments me-2"></i>{{ chat_room.name }}
+                        <h2 class="mb-0 d-flex align-items-center gap-2"><i class="fas fa-comments me-2"></i>{{ chat_room.name }}
                             {% include 'partials/favorite_toggle.html' with favorite_type='chat_room' object_id=chat_room.id is_favorited=is_favorited %}
+                            <button id="searchToggleBtn" type="button" title="Search messages" onclick="toggleSearchBar()"><i class="fas fa-search"></i></button>
                         </h2>
                         {% if chat_room.description %}
                             <p class="mb-0 text-light">{{ chat_room.description }}</p>
@@ -1827,6 +2089,26 @@ function aiConfirmCreateTasks() {
                     </div>
                 </div>
             </div>
+
+            <!-- In-room message search bar (collapses via max-height transition) -->
+            <div id="searchBarWrapper" class="search-bar-wrapper">
+                <div class="search-bar-inner">
+                    <input type="text" id="searchInput" class="form-control form-control-sm"
+                           placeholder="Search messages..." autocomplete="off">
+                    <select id="senderFilter" class="form-select form-select-sm">
+                        <option value="">All senders</option>
+                        {# NOTE: members.all() is used here. The room creator is expected to be in members.
+                           If edge cases arise where the creator is not a member, they won't appear. #}
+                        {% for member in chat_room.members.all %}
+                            <option value="{{ member.id }}">{{ member.get_full_name|default:member.username }}</option>
+                        {% endfor %}
+                    </select>
+                    <button id="searchCloseBtn" type="button" title="Close search" onclick="closeSearch()">&times;</button>
+                </div>
+            </div>
+
+            <!-- Search results overlay panel (anchors to chat-container via position:relative) -->
+            <div id="searchResultsPanel" class="search-results-panel d-none"></div>
 
             <!-- AI Tools Toolbar -->
             <div class="ai-toolbar">
@@ -1923,7 +2205,7 @@ function aiConfirmCreateTasks() {
 
             <div class="chat-messages" id="messages">
                 {% for message in chat_messages %}
-                    <div class="message" data-message-id="{{ message.id }}" data-read-by="{{ message.read_by.count }}">
+                    <div class="message" id="message-{{ message.id }}" data-message-id="{{ message.id }}" data-read-by="{{ message.read_by.count }}">
                         <div class="message-author">{{ message.author.username }}</div>
                         <div class="message-content">{{ message.content }}</div>
                         <div class="message-time" data-timestamp="{{ message.created_at|date:'c' }}" title="{{ message.created_at|date:'M j, Y g:i A' }}">{{ message.created_at|date:"g:i A" }}</div>

@@ -145,6 +145,31 @@
         margin: 0.25rem 0;
         color: #333;
     }
+
+    /* Workspace badge on board cards */
+    .workspace-badge {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 500;
+        padding: 0.15rem 0.55rem;
+        border-radius: 20px;
+        vertical-align: middle;
+        margin-left: 0.4rem;
+        line-height: 1.6;
+        white-space: nowrap;
+    }
+    .workspace-badge-regular {
+        background: #e9ecef;
+        color: #495057;
+    }
+    .workspace-badge-demo {
+        background: #ede0fa;
+        color: #6a2da8;
+    }
+    .workspace-badge-sandbox {
+        background: #fff3cd;
+        color: #856404;
+    }
 </style>
 {% endblock %}
 
@@ -315,7 +340,12 @@
             <div class="boards-grid">
                 {% for item in boards_with_unread %}
                     <div class="board-card">
-                        <div class="board-name">{{ item.board.name }}</div>
+                        <div class="board-name">
+                            {{ item.board.name }}
+                            {% if item.workspace_label %}
+                                <span class="workspace-badge {% if item.workspace_is_demo %}workspace-badge-demo{% elif item.workspace_label == 'Sandbox' %}workspace-badge-sandbox{% else %}workspace-badge-regular{% endif %}">{{ item.workspace_label }}</span>
+                            {% endif %}
+                        </div>
                         <div class="board-members">
                             <i class="fas fa-users me-1"></i> {{ item.board.memberships.count }} members
                         </div>

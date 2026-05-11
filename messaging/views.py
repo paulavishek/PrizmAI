@@ -36,21 +36,14 @@ def messaging_hub(request):
         )
 
     # Show every room the user is an explicit member of, grouped by board.
-    # Exclude all demo/sandbox rooms — real users must never see these in their
-    # hub, even if stale membership records exist in the database.
-    # Three cases to exclude:
-    #   1. Boards in a demo workspace (workspace.is_demo=True)
-    #   2. Official demo boards (is_official_demo_board=True)
-    #   3. Personal sandbox copy boards (is_sandbox_copy=True, workspace=None)
+    # All workspaces are included (demo, sandbox, regular) — rooms from any
+    # workspace are visible as long as the user has explicit membership.
+    # A workspace badge on each card gives visual context about which
+    # workspace the board belongs to.
     user_rooms = (
         ChatRoom.objects
         .filter(members=request.user)
-        .exclude(
-            Q(board__workspace__is_demo=True)
-            | Q(board__is_official_demo_board=True)
-            | Q(board__is_sandbox_copy=True)
-        )
-        .select_related('board')
+        .select_related('board', 'board__workspace')
         .order_by('board__name', 'name')
     )
 
@@ -68,11 +61,27 @@ def messaging_hub(request):
             or board.created_by == request.user
             or request.user.is_staff
         )
+        # Build workspace badge info for the template
+        ws = board.workspace
+        if ws:
+            ws_label = ws.name
+            ws_is_demo = getattr(ws, 'is_demo', False)
+        elif getattr(board, 'is_official_demo_board', False):
+            ws_label = 'Demo'
+            ws_is_demo = True
+        elif getattr(board, 'is_sandbox_copy', False):
+            ws_label = 'Sandbox'
+            ws_is_demo = False
+        else:
+            ws_label = None
+            ws_is_demo = False
         boards_with_unread.append({
             'board': board,
             'rooms': rooms,
             'unread_count': unread_count,
             'has_board_access': has_board_access,
+            'workspace_label': ws_label,
+            'workspace_is_demo': ws_is_demo,
         })
 
     # Kept for template backward-compat; always empty now — all accessible
@@ -625,6 +634,65 @@ def get_unread_notification_count(request):
 
 @login_required
 @require_http_methods(["GET"])
+@login_required
+@require_http_methods(["GET"])
+def search_room_messages(request, room_id):
+    """Search messages within a single chat room.
+
+    Security:
+    - room_id comes from the URL, never from the request body.
+    - Membership is verified server-side before any query executes.
+    - All filtering uses ORM parameterized queries (no raw SQL).
+    - Optional sender_id is validated as an integer AND checked to be
+      an actual member of the room to prevent user enumeration.
+    """
+    chat_room = get_object_or_404(ChatRoom, id=room_id)
+
+    board = chat_room.board
+    is_demo = getattr(board, 'is_official_demo_board', False)
+    is_room_member = chat_room.members.filter(id=request.user.id).exists()
+
+    if not (is_room_member or request.user.is_staff or is_demo):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    q = request.GET.get('q', '').strip()
+    if len(q) < 3:
+        return JsonResponse({'error': 'Query must be at least 3 characters'}, status=400)
+
+    qs = ChatMessage.objects.filter(
+        chat_room=chat_room,
+        content__icontains=q,
+    ).select_related('author').order_by('-created_at')
+
+    # Optional sender filter — validate id and confirm sender is a room member
+    sender_id_raw = request.GET.get('sender_id', '').strip()
+    if sender_id_raw:
+        try:
+            sender_id = int(sender_id_raw)
+        except ValueError:
+            return JsonResponse({'error': 'Invalid sender_id'}, status=400)
+        # NOTE: chat_room.members.all() is used here. The room creator is expected
+        # to be in members (added on room creation). If edge cases arise where the
+        # creator is NOT a member, this filter will silently return no results for
+        # that creator — fix by also checking chat_room.created_by.
+        if not chat_room.members.filter(id=sender_id).exists():
+            return JsonResponse({'error': 'Sender not in room'}, status=403)
+        qs = qs.filter(author_id=sender_id)
+
+    results = [
+        {
+            'id': msg.id,
+            'author_username': msg.author.username,
+            'author_display_name': msg.author.get_full_name() or msg.author.username,
+            'created_at': msg.created_at.isoformat(),
+            'content': msg.content,
+        }
+        for msg in qs[:50]
+    ]
+
+    return JsonResponse({'results': results, 'query': q})
+
+
 def message_history(request, room_id):
     """Get message history for a chat room (pagination)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)

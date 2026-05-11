@@ -21,6 +21,7 @@ urlpatterns = [
     # Messages
     path('room/<int:room_id>/send/', views.send_chat_message, name='send_chat_message'),
     path('room/<int:room_id>/history/', views.message_history, name='message_history'),
+    path('room/<int:room_id>/search/', views.search_room_messages, name='search_room_messages'),
     
     # Task Thread Comments
     path('task/<int:task_id>/comments/', views.task_thread_comments, name='task_thread_comments'),
