@@ -748,7 +748,7 @@
             console.log(data.username + ' left the room');
         }
         else if (data.type === 'presence_update') {
-            console.log('[Presence] presence_update received:', data.active_count, 'active,', data.members.length, 'members');
+            console.log('[Presence] presence_update received:', data.active_count, 'active,', data.members?.length, 'members');
             updatePresenceUI(data.members, data.active_count);
         }
         else if (data.type === 'message_deleted') {
@@ -936,6 +936,7 @@
             const lastSeenEl = document.getElementById('last-seen-' + m.user_id);
             if (dot) {
                 dot.className = 'presence-dot status-' + m.status;
+                console.log('[Presence dot]', m.user_id, '→', 'status-' + m.status);
                 const statusLabel = m.status === 'active' ? 'Active in this room'
                     : m.status === 'away' ? 'Online elsewhere'
                     : 'Offline';
