@@ -4,6 +4,7 @@ API endpoints for AI-powered resource optimization and workload balancing
 """
 import json
 import logging
+import re
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
@@ -190,6 +191,54 @@ def reject_suggestion(request, suggestion_id):
 
 
 @login_required
+@require_http_methods(["POST"])
+def accept_all_suggestions(request, board_id):
+    """
+    Accept all pending resource leveling suggestions for a board
+
+    POST /api/resource-leveling/boards/{board_id}/accept-all/
+
+    Returns:
+        {
+            "success": true,
+            "accepted": 4,
+            "failed": 0,
+            "message": "4 suggestion(s) accepted successfully"
+        }
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        suggestions = ResourceLevelingSuggestion.objects.filter(
+            task__column__board=board,
+            status='pending'
+        )
+
+        accepted = 0
+        failed = 0
+
+        for suggestion in suggestions:
+            success = suggestion.accept(request.user)
+            if success:
+                accepted += 1
+            else:
+                failed += 1
+
+        return JsonResponse({
+            'success': True,
+            'accepted': accepted,
+            'failed': failed,
+            'message': f'{accepted} suggestion(s) accepted successfully'
+        })
+
+    except Board.DoesNotExist:
+        return JsonResponse({'error': 'Board not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error accepting all suggestions: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
 @require_http_methods(["GET"])
 def get_board_suggestions(request, board_id):
     """
@@ -237,6 +286,11 @@ def get_board_suggestions(request, board_id):
         total_savings = 0
         
         for s in suggestions:
+            # Detect negative time savings: stored as 0 but reasoning mentions actual negative %
+            reasoning_text = s.reasoning or ''
+            is_speed_regression = bool(
+                re.search(r'-\d+%\s+time savings', reasoning_text, re.IGNORECASE)
+            )
             suggestion_list.append({
                 'id': s.id,
                 'task_id': s.task.id,
@@ -252,7 +306,8 @@ def get_board_suggestions(request, board_id):
                 'reasoning': s.reasoning,
                 'projected_completion': s.suggested_projected_date.isoformat() if s.suggested_projected_date else None,
                 'expires_at': s.expires_at.isoformat(),
-                'status': s.status
+                'status': s.status,
+                'is_speed_regression': is_speed_regression,
             })
             total_savings += s.time_savings_hours
         

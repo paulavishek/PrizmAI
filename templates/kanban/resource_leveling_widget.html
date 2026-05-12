@@ -40,7 +40,12 @@
         
         <!-- Suggestions List with Scrollable Container -->
         <div id="suggestions-header" class="d-none mb-2">
-            <small class="text-muted"><i class="fas fa-lightbulb"></i> <span id="suggestions-count"></span></small>
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted"><i class="fas fa-lightbulb"></i> <span id="suggestions-count"></span></small>
+                <button class="btn btn-sm btn-success" id="accept-all-btn" onclick="acceptAllSuggestions()">
+                    <i class="fas fa-check-double"></i> Accept All
+                </button>
+            </div>
         </div>
         <div id="suggestions-container" class="suggestions-scrollable">
             <!-- Suggestions will be loaded here -->
@@ -65,6 +70,9 @@
                     </h6>
                     <p class="reassign-line text-muted small mb-1"></p>
                     <p class="clean-reason small mb-1" style="color:#334155;"></p>
+                    <div class="speed-regression-warning d-none mt-1 mb-1">
+                        <small class="text-warning"><i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> This reassignment prioritizes workload balance, not speed. The suggested person may take longer to complete this task.</small>
+                    </div>
                     <div class="reasoning-collapse">
                         <a href="#" class="see-reasoning-link small text-info" onclick="toggleReasoning(this); return false;">
                             <i class="fas fa-chevron-right reasoning-chevron" style="font-size:0.7em;"></i> See reasoning
@@ -75,11 +83,14 @@
                 <div class="col-md-3 text-center">
                     <div class="metrics">
                         <div class="metric mb-2">
-                            <div class="h4 mb-0 time-savings text-success"></div>
-                            <small class="text-muted">Time Savings</small>
+                            <div class="h4 mb-0 time-savings"></div>
+                            <small class="text-muted time-savings-label">Time Savings</small>
                         </div>
                         <div class="metric">
                             <div class="confidence-badge"></div>
+                            <div class="low-confidence-indicator d-none mt-1">
+                                <small class="text-muted" style="font-size:0.72rem;"><i class="fas fa-exclamation-circle"></i> Lower confidence</small>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -92,6 +103,12 @@
                     </button>
                     <div class="expires-info text-muted small mt-2">
                         <i class="far fa-clock"></i> <span class="expires-text"></span>
+                        <span
+                            class="expires-tooltip ml-1"
+                            title="Suggestions expire after this time. Expired suggestions are removed automatically and can be refreshed."
+                            style="cursor:help;">
+                            <i class="fas fa-info-circle" style="font-size:0.72em;"></i>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -195,6 +212,12 @@
 
 .utilization-low .progress-bar {
     background-color: #17a2b8;
+}
+
+.suggestion-card-low-confidence {
+    border-color: #adb5bd !important;
+    border-left-color: #adb5bd !important;
+    opacity: 0.88;
 }
 </style>
 
@@ -373,7 +396,10 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     
     noSuggestions.classList.add('d-none');
     
-    // Show suggestion count
+    // Sort suggestions by confidence descending (highest first)
+    suggestions.sort((a, b) => b.confidence - a.confidence);
+    
+    // Show suggestion count + accept-all button
     const suggestionsHeader = document.getElementById('suggestions-header');
     const suggestionsCount = document.getElementById('suggestions-count');
     suggestionsHeader.classList.remove('d-none');
@@ -384,6 +410,12 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
         const card = clone.querySelector('.suggestion-card');
         
         card.dataset.suggestionId = suggestion.id;
+        
+        // Low-confidence card styling (< 70%)
+        const isLowConfidence = suggestion.confidence < 70;
+        if (isLowConfidence) {
+            card.classList.add('suggestion-card-low-confidence');
+        }
         
         // Task title header (bold link)
         const taskLink = clone.querySelector('.task-link');
@@ -398,7 +430,7 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
         // Clean one-sentence reason + collapsible full reasoning
         const fullReasoning = suggestion.reasoning || '';
         // Split off the "The X% time savings is calculated…" details
-        const calcMatch = fullReasoning.match(/ The \d+% time savings is calculated/);
+        const calcMatch = fullReasoning.match(/ The -?\d+% time savings is calculated/);
         const primaryPart = calcMatch
             ? fullReasoning.substring(0, fullReasoning.indexOf(calcMatch[0]))
             : fullReasoning;
@@ -411,8 +443,29 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
         clone.querySelector('.clean-reason').textContent = cleanSentence;
         clone.querySelector('.full-reasoning').textContent = fullReasoning;
         
-        // Metrics
-        clone.querySelector('.time-savings').textContent = suggestion.time_savings;
+        // Speed regression warning
+        if (suggestion.is_speed_regression) {
+            clone.querySelector('.speed-regression-warning').classList.remove('d-none');
+        }
+        
+        // Time savings metric: show meaningful label instead of raw 0%
+        const timeSavingsEl = clone.querySelector('.time-savings');
+        const timeSavingsLabel = clone.querySelector('.time-savings-label');
+        if (suggestion.is_speed_regression) {
+            timeSavingsEl.textContent = '⚠️ Slower';
+            timeSavingsEl.classList.add('text-warning');
+            timeSavingsEl.style.fontSize = '1.1rem';
+            timeSavingsLabel.textContent = 'Speed Impact';
+        } else if (suggestion.time_savings === '0%') {
+            timeSavingsEl.textContent = 'Workload';
+            timeSavingsEl.classList.add('text-info');
+            timeSavingsEl.style.fontSize = '1.1rem';
+            timeSavingsLabel.textContent = 'Balance';
+        } else {
+            timeSavingsEl.textContent = suggestion.time_savings;
+            timeSavingsEl.classList.add('text-success');
+            timeSavingsLabel.textContent = 'Time Savings';
+        }
         
         // Confidence badge
         const confidenceBadge = clone.querySelector('.confidence-badge');
@@ -426,13 +479,61 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
             confidenceBadge.classList.add('confidence-low');
         }
         
-        // Expires
+        // Low-confidence indicator label
+        if (isLowConfidence) {
+            clone.querySelector('.low-confidence-indicator').classList.remove('d-none');
+        }
+        
+        // Expires — with tooltip on the info icon (uses browser native title attribute)
         const expiresDate = new Date(suggestion.expires_at);
         const hoursUntilExpiry = Math.round((expiresDate - new Date()) / 1000 / 60 / 60);
         clone.querySelector('.expires-text').textContent = 
             `Expires in ${hoursUntilExpiry}h`;
         
         container.appendChild(clone);
+    });
+}
+
+function acceptAllSuggestions() {
+    const cards = document.querySelectorAll('.suggestion-card');
+    if (cards.length === 0) return;
+
+    if (!confirm(`Accept all ${cards.length} optimization suggestion(s)? This will reassign tasks immediately.`)) {
+        return;
+    }
+
+    const btn = document.getElementById('accept-all-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Accepting...';
+
+    fetch(`/api/resource-leveling/boards/${currentBoardId}/accept-all/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const container = document.getElementById('suggestions-container');
+            container.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    ${data.accepted} task(s) reassigned successfully. Refreshing…
+                </div>
+            `;
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check-double"></i> Accept All';
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-double"></i> Accept All';
     });
 }
 
