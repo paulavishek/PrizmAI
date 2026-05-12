@@ -134,6 +134,12 @@
         background-color: rgba(23, 162, 184, 0.2);
         color: #17a2b8;
     }
+
+    .trend-badge.no_data,
+    .trend-badge.insufficient_data {
+        background-color: rgba(108, 117, 125, 0.15);
+        color: #6c757d;
+    }
     
     .action-card {
         cursor: pointer;
@@ -343,8 +349,10 @@
                     <h4 class="mb-0">{{ velocity.avg_tasks_added_per_week|floatformat:1 }}</h4>
                     <small class="text-muted">tasks added per week</small>
                     <div class="mt-2">
-                        <span class="trend-badge {{ velocity.trend }}">
-                            {% if velocity.trend == 'rapidly_increasing' %}
+                        <span class="trend-badge {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}no_data{% else %}{{ velocity.trend }}{% endif %}">
+                            {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}
+                                <i class="fas fa-minus-circle me-1"></i>No data yet
+                            {% elif velocity.trend == 'rapidly_increasing' %}
                                 <i class="fas fa-arrow-up me-1"></i>Rapidly Increasing
                             {% elif velocity.trend == 'increasing' %}
                                 <i class="fas fa-arrow-up me-1"></i>Increasing

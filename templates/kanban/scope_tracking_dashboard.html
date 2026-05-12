@@ -150,11 +150,16 @@
                     <small class="text-muted">tasks added per week</small>
                     <div class="mt-2">
                         <span class="badge 
-                            {% if velocity.trend == 'rapidly_increasing' %}bg-danger
+                            {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}bg-secondary
+                            {% elif velocity.trend == 'rapidly_increasing' %}bg-danger
                             {% elif velocity.trend == 'increasing' %}bg-warning
                             {% elif velocity.trend == 'stable' %}bg-success
                             {% else %}bg-secondary{% endif %}">
-                            {{ velocity.trend|title|replace:"_,' '" }}
+                            {% if velocity.trend == 'insufficient_data' or velocity.avg_tasks_added_per_week == 0 %}
+                                No data yet
+                            {% else %}
+                                {{ velocity.trend|title|replace:"_,' '" }}
+                            {% endif %}
                         </span>
                     </div>
                 </div>
