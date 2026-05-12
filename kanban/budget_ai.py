@@ -624,16 +624,29 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
         """Extract JSON from AI response, handling markdown fences, prose, and truncation."""
         if not text:
             raise ValueError('Empty response')
-        # Strip markdown code fences at the start and end only (not globally,
-        # to avoid corrupting any backtick characters inside JSON values)
-        cleaned = text.strip()
-        if cleaned.startswith('```json'):
-            cleaned = cleaned[7:]
-        elif cleaned.startswith('```'):
-            cleaned = cleaned[3:]
-        if cleaned.endswith('```'):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
+        # Step 1: Try to extract content from between code fences using regex.
+        # This handles leading prose, trailing text after the closing fence,
+        # and both ```json and ``` variants.
+        fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+        if fence_match:
+            candidate = fence_match.group(1).strip()
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                pass
+            # Fence content exists but isn't valid JSON yet — use it as cleaned
+            cleaned = candidate
+        else:
+            # Step 2: Fallback startswith/endswith strip for unclosed fences
+            cleaned = text.strip()
+            if cleaned.startswith('```json'):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith('```'):
+                cleaned = cleaned[3:]
+            if cleaned.endswith('```'):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
         # Try direct parse first
         try:
             json.loads(cleaned)
@@ -692,9 +705,9 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
         result = re.sub(r',\s*$', '', result)
         # Remove a trailing incomplete key (e.g. "key": ) with no value
         result = re.sub(r',\s*"[^"]*"\s*:\s*$', '', result)
-        # Count unclosed brackets/braces and close them
-        closes_bracket = 0
-        closes_brace = 0
+        # Track the ORDER of opening brackets/braces so we close them in LIFO order
+        # (e.g. [{... must close as ...}] not ...]{)
+        stack = []
         in_str = False
         i = 0
         while i < len(result):
@@ -705,17 +718,16 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             if c == '"':
                 in_str = not in_str
             if not in_str:
-                if c == '{':
-                    closes_brace += 1
-                elif c == '}':
-                    closes_brace -= 1
-                elif c == '[':
-                    closes_bracket += 1
-                elif c == ']':
-                    closes_bracket -= 1
+                if c in ('{', '['):
+                    stack.append(c)
+                elif c == '}' and stack and stack[-1] == '{':
+                    stack.pop()
+                elif c == ']' and stack and stack[-1] == '[':
+                    stack.pop()
             i += 1
-        result += ']' * max(0, closes_bracket)
-        result += '}' * max(0, closes_brace)
+        # Close in reverse order (LIFO)
+        for opener in reversed(stack):
+            result += '}' if opener == '{' else ']'
         return result
     
     def _parse_ai_response(self, response: str, metrics: Dict) -> Dict:
@@ -754,8 +766,15 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
                 recommendations = recommendations['recommendations']
             
             return recommendations if isinstance(recommendations, list) else []
-        except (json.JSONDecodeError, ValueError):
-            logger.error("Failed to parse recommendations: %s", response[:500] if response else 'empty')
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(
+                "Failed to parse recommendations (err=%s) starts_with=%r ends_with=%r full_len=%d full=%s",
+                e,
+                response[:30] if response else '',
+                response[-30:] if response else '',
+                len(response) if response else 0,
+                response if response else 'empty',
+            )
             return []
     
     def _parse_prediction(self, response: str) -> Dict:

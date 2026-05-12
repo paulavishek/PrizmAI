@@ -93,9 +93,9 @@
         <div class="col-md-3">
             <div class="card metric-card">
                 <div class="card-body">
-                    <h6 class="text-muted mb-2">Total Investment</h6>
+                    <h6 class="text-muted mb-2">Project Budget</h6>
                     <h3>{{ budget.currency }} {{ roi_metrics.total_investment|floatformat:2 }}</h3>
-                    <small class="text-muted">Budget allocated</small>
+                    <small class="text-muted">Allocated budget</small>
                 </div>
             </div>
         </div>
@@ -179,7 +179,7 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>ROI %</th>
-                                    <th>Investment</th>
+                                    <th>Actual Cost</th>
                                     <th>Expected Value</th>
                                     <th>Realized Value</th>
                                     <th>Completion</th>
@@ -195,18 +195,21 @@
                                             <strong>{{ snapshot.roi_percentage|floatformat:1 }}%</strong>
                                         </span>
                                     </td>
-                                    <td>{{ budget.currency }} {{ snapshot.total_cost|floatformat:2 }}</td>
+                                    <td title="Actual spend at snapshot time">{{ budget.currency }} {{ snapshot.total_cost|floatformat:2 }}</td>
                                     <td>{{ budget.currency }} {{ snapshot.expected_value|floatformat:2 }}</td>
                                     <td>{{ budget.currency }} {{ snapshot.realized_value|floatformat:2 }}</td>
                                     <td>
                                         {% if snapshot.total_tasks > 0 %}
-                                        <div class="progress" style="height: 20px; width: 100px;">
-                                            <div class="progress-bar bg-info" style="width: {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%">
-                                                {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%
+                                        {% with pct=snapshot.completed_tasks|floatformat:0 %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="progress flex-grow-1" style="height: 8px; min-width: 80px;">
+                                                <div class="progress-bar bg-info" style="width: {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%"></div>
                                             </div>
+                                            <small class="text-nowrap text-muted">{% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%</small>
                                         </div>
+                                        {% endwith %}
                                         {% else %}
-                                        0%
+                                        <small class="text-muted">0%</small>
                                         {% endif %}
                                     </td>
                                     <td>-</td>

@@ -155,6 +155,7 @@ def refresh_all_demo_dates(skip_mark_cache=False):
         'commitment_protocols_updated': 0,
         'comments_updated': 0,
         'chat_messages_updated': 0,
+        'boards_deadline_updated': 0,
     }
     
     now = timezone.now()
@@ -246,6 +247,9 @@ def refresh_all_demo_dates(skip_mark_cache=False):
 
             # 25. Refresh Chat Message / TaskThreadComment timestamps
             stats['chat_messages_updated'] = _refresh_chat_message_dates(now)
+
+            # 26. Refresh project_deadline on demo boards (always ~150 days ahead)
+            stats['boards_deadline_updated'] = _refresh_board_deadlines(base_date)
         
         # Mark refresh as complete
         if not skip_mark_cache:
@@ -257,6 +261,30 @@ def refresh_all_demo_dates(skip_mark_cache=False):
     except Exception as e:
         logger.error(f"Error refreshing demo dates: {e}")
         raise
+
+
+def _refresh_board_deadlines(base_date):
+    """
+    Keep project_deadline on every demo board (official templates and sandbox
+    copies) at exactly 150 days from today.  This makes burn-rate projections
+    and sustainability calculations always show a realistic future horizon,
+    no matter when the demo is viewed.
+    """
+    try:
+        from kanban.models import Board
+        from datetime import timedelta
+
+        target_deadline = base_date + timedelta(days=150)
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+        updated = Board.objects.filter(
+            pk__in=demo_board_ids
+        ).update(project_deadline=target_deadline)
+        return updated
+    except Exception as e:
+        logger.warning(f"_refresh_board_deadlines failed: {e}")
+        return 0
 
 
 def _get_demo_organizations():

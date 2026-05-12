@@ -271,11 +271,25 @@
                         </div>
                         <div class="col-md-3">
                             <strong>Sustainability:</strong><br>
-                            <span class="badge bg-{% if burn_rate.is_sustainable %}success{% else %}danger{% endif %}"
+                            {% if not burn_rate.has_deadline %}
+                            <span class="badge bg-secondary"
                                   data-bs-toggle="tooltip" data-bs-placement="top"
-                                  title="{% if burn_rate.is_sustainable %}Current spend rate can be sustained within budget through the deadline{% else %}At current burn rate, budget may run out before the project deadline{% endif %}">
-                                {% if burn_rate.is_sustainable %}Sustainable{% else %}At Risk{% endif %}
+                                  title="Set a project deadline to enable sustainability analysis">
+                                No Deadline Set
                             </span>
+                            {% elif burn_rate.is_sustainable %}
+                            <span class="badge bg-success"
+                                  data-bs-toggle="tooltip" data-bs-placement="top"
+                                  title="Current spend rate can be sustained within budget through the deadline">
+                                Sustainable
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger"
+                                  data-bs-toggle="tooltip" data-bs-placement="top"
+                                  title="At current burn rate, the remaining budget may run out before the project deadline">
+                                At Risk
+                            </span>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

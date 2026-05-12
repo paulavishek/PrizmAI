@@ -140,6 +140,18 @@ class Command(BaseCommand):
             self.software_board = self.demo_boards.filter(name__icontains='software').first()
             self.marketing_board = None
             self.bug_board = None
+
+        # Always keep the official demo template board deadline at ~150 days from
+        # today so burn-rate projections are always realistic. demo_date_refresh
+        # also rolls this forward daily, but we set it here too so a freshly
+        # provisioned board is immediately correct.
+        if self.software_board:
+            self.software_board.project_deadline = (timezone.now() + timedelta(days=150)).date()
+            self.software_board.save(update_fields=['project_deadline'])
+            self.stdout.write(
+                f'   ✓ Set project_deadline on "{self.software_board.name}": '
+                f'{self.software_board.project_deadline}'
+            )
             
         self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
 
