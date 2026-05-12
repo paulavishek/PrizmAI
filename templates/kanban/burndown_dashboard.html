@@ -478,7 +478,7 @@
     {% if alerts %}
     <div class="prediction-card">
         <h4 class="mb-3"><i class="fas fa-exclamation-triangle text-warning"></i> Active Alerts ({{ alerts.count }})
-            <small class="text-muted fw-normal ms-2">Generated {{ alerts.first.created_at|timesince }} ago</small>
+            <small class="text-muted fw-normal ms-2">Generated {{ alerts_generated_label }}</small>
         </h4>
         {% for alert in alerts %}
         <div class="alert-box {{ alert.severity }}">
@@ -884,25 +884,18 @@
     function renderVelocityChart(data) {
         const ctx = document.getElementById('velocityChart').getContext('2d');
 
-        // Filter out zero-velocity periods to avoid sparse bars with long empty gaps
-        const filtered = data.labels.reduce((acc, label, i) => {
-            if (data.velocities[i] > 0) {
-                acc.labels.push(label);
-                acc.velocities.push(data.velocities[i]);
-            }
-            return acc;
-        }, { labels: [], velocities: [] });
-
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: filtered.labels.map(d => new Date(d).toLocaleDateString()),
+                labels: data.labels.map(d => new Date(d).toLocaleDateString()),
                 datasets: [{
                     label: 'Tasks Completed',
-                    data: filtered.velocities,
+                    data: data.velocities,
                     backgroundColor: 'rgba(102, 126, 234, 0.8)',
                     borderColor: '#667eea',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    barPercentage: 0.6,
+                    maxBarThickness: 40
                 }]
             },
             options: {
@@ -942,6 +935,10 @@
                         title: {
                             display: true,
                             text: 'Period'
+                        },
+                        ticks: {
+                            maxTicksLimit: 10,
+                            maxRotation: 45
                         }
                     }
                 }
