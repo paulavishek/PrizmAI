@@ -20,6 +20,9 @@ urlpatterns = [
     path('suggestions/<int:suggestion_id>/reject/', 
          resource_leveling_views.reject_suggestion, 
          name='reject_suggestion'),
+    path('boards/<int:board_id>/accept-all/', 
+         resource_leveling_views.accept_all_suggestions, 
+         name='accept_all_suggestions'),
     
     # Board-level endpoints
     path('boards/<int:board_id>/leveling-suggestions/', 
