@@ -2781,3 +2781,42 @@ class CalendarEvent(models.Model):
     def is_solo_type(self):
         """True for event types that don't make sense to invite participants to."""
         return self.event_type in self.SOLO_TYPES
+
+
+# ---------------------------------------------------------------------------
+# BOARD STATUS REPORT HISTORY — persists the last N AI-generated reports
+# ---------------------------------------------------------------------------
+
+class BoardStatusReport(models.Model):
+    """Stores a single AI-generated status report snapshot for a board."""
+
+    RAG_CHOICES = [
+        ('green', 'Green'),
+        ('amber', 'Amber'),
+        ('red',   'Red'),
+    ]
+
+    board = models.ForeignKey(
+        Board, on_delete=models.CASCADE, related_name='status_reports',
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='generated_status_reports',
+    )
+    report_text = models.TextField()
+    report_html = models.TextField()
+    rag_status = models.CharField(max_length=10, choices=RAG_CHOICES, default='amber')
+    rag_reasoning = models.TextField(blank=True)
+    confidence_score = models.FloatField(default=0.5)
+    data_completeness = models.FloatField(default=0.5)
+    key_data_drivers = models.JSONField(default=list, blank=True)
+    provider_name = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['board', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"Status report for {self.board.name} at {self.created_at:%Y-%m-%d %H:%M}"

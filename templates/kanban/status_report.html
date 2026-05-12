@@ -63,6 +63,37 @@
         right: 12px;
     }
     .report-wrapper { position: relative; }
+    .report-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .history-panel {
+        background: #f8f9fa;
+        border-radius: 10px;
+        border: 1px solid #e9ecef;
+        padding: 16px;
+        margin-top: 24px;
+    }
+    .history-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.15s;
+        border: 1px solid transparent;
+    }
+    .history-item:hover { background: #e9ecef; border-color: #dee2e6; }
+    .history-item + .history-item { margin-top: 4px; }
+    .rag-dot {
+        width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    @media print {
+        .no-print { display: none !important; }
+        .report-card { box-shadow: none; padding: 0; }
+        nav, .info-banner, .report-actions, .copy-btn, footer { display: none !important; }
+        .report-output { border-left: 3px solid #0d6efd; padding: 16px; }
+        body { font-size: 11pt; }
+        h1.h3 { font-size: 14pt; }
+    }
 </style>
 {% endblock %}
 
@@ -86,7 +117,7 @@
             </h1>
             <p class="text-muted mb-0">{{ board.name }} — stakeholder-ready weekly update</p>
         </div>
-        <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+        <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm no-print">
             <i class="fas fa-columns me-1"></i> Back to Board
         </a>
     </div>
@@ -110,16 +141,12 @@
         </div>
 
         <!-- Generate Form -->
-        <form method="post" id="report-form">
+        <form method="post" id="report-form" class="no-print">
             {% csrf_token %}
             <div class="text-center mb-4">
                 <button type="submit" class="generate-btn" id="generate-btn">
                     <i class="fas fa-magic me-2"></i>Generate Status Report
                 </button>
-            </div>
-            <div id="status-report-loading" class="text-center mb-3" style="display:none;" data-prizm-container>
-                <div class="prizm-spinner prizm-spinner--sm"></div>
-                <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="statusReport">Generating status report…</span>
             </div>
         </form>
         {% endif %}
@@ -134,11 +161,19 @@
 
         <!-- Report Output -->
         {% if report_text %}
-        <div class="report-wrapper">
-            <div class="report-output" id="report-output">{{ report_html|safe }}</div>
-            <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyReport()" title="Copy to clipboard">
+        <div class="report-actions no-print">
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyReport()" title="Copy plain text to clipboard">
                 <i class="fas fa-copy me-1"></i>Copy
             </button>
+            <button class="btn btn-sm btn-outline-primary" onclick="downloadPDF()" title="Download as PDF">
+                <i class="fas fa-file-pdf me-1"></i>Download PDF
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="shareLink()" title="Copy shareable link">
+                <i class="fas fa-link me-1"></i>Share Link
+            </button>
+        </div>
+        <div class="report-wrapper">
+            <div class="report-output" id="report-output">{{ report_html|safe }}</div>
         </div>
 
         {% if report_explainability %}
@@ -193,11 +228,36 @@
         </div>
         {% endif %}
 
-        <div class="mt-3 text-muted small text-center">
+        <div class="mt-3 text-muted small text-center no-print">
             <i class="fas fa-clock me-1"></i>Generated just now &nbsp;·&nbsp;
             <i class="fas fa-robot me-1"></i>Powered by {{ active_provider_name }} &nbsp;·&nbsp;
             <i class="fas fa-redo me-1"></i><a href="{% url 'board_status_report' board.id %}" class="text-muted">Regenerate</a>
         </div>
+        {% endif %}
+
+        {% if past_reports %}
+        <!-- Past Reports History -->
+        <div class="history-panel no-print mt-4">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-history text-secondary me-2"></i>
+                <strong class="small">Past Reports</strong>
+                <span class="ms-2 badge bg-secondary" style="font-size:0.7rem;">{{ past_reports|length }}</span>
+            </div>
+            {% for rpt in past_reports %}
+            <div class="history-item" onclick="loadHistoryReport({{ forloop.counter0 }})">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rag-dot" style="background:{% if rpt.rag_status == 'green' %}#28a745{% elif rpt.rag_status == 'red' %}#dc3545{% else %}#ffc107{% endif %};"></div>
+                    <span class="small fw-medium">{{ rpt.created_at|date:"M d, Y" }}</span>
+                    <span class="text-muted" style="font-size:0.75rem;">{{ rpt.created_at|time:"H:i" }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted" style="font-size:0.75rem;">{{ rpt.provider_name }}</span>
+                    <i class="fas fa-chevron-right text-muted" style="font-size:0.7rem;"></i>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {{ past_reports_json|json_script:"history-data" }}
         {% endif %}
 
     </div>
@@ -228,6 +288,20 @@ function copyReport() {
     });
 }
 
+function downloadPDF() {
+    document.title = 'Status Report — {{ board.name|escapejs }} — ' + new Date().toLocaleDateString();
+    window.print();
+}
+
+function shareLink() {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target.closest('button');
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Link Copied!';
+        setTimeout(() => { btn.innerHTML = '<i class="fas fa-link me-1"></i>Share Link'; }, 2000);
+    });
+}
+
 // Explainability: confidence & data completeness rendering
 (function() {
     const confBar = document.getElementById('sr-conf-bar');
@@ -247,5 +321,56 @@ function copyReport() {
         dataPct.textContent = Math.round(dc * 100) + '%';
     }
 })();
+
+function loadHistoryReport(index) {
+    const dataEl = document.getElementById('history-data');
+    if (!dataEl) return;
+    const reports = JSON.parse(dataEl.textContent);
+    const rpt = reports[index];
+    if (!rpt) return;
+
+    // Build a simple Bootstrap modal with the past report content
+    const existing = document.getElementById('history-modal');
+    if (existing) existing.remove();
+
+    const ragColors = { green: '#28a745', amber: '#ffc107', red: '#dc3545' };
+    const ragLabels = { green: '🟢 On Track', amber: '🟡 At Risk', red: '🔴 Off Track' };
+    const color = ragColors[rpt.rag_status] || ragColors.amber;
+    const label = ragLabels[rpt.rag_status] || ragLabels.amber;
+    const confPct = Math.round((rpt.confidence_score || 0.5) * 100);
+    const dataPct = Math.round((rpt.data_completeness || 0.5) * 100);
+
+    const modal = document.createElement('div');
+    modal.id = 'history-modal';
+    modal.innerHTML = `
+    <div class="modal fade" id="historyReportModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Past Report — ${rpt.created_at}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="report-output mb-3">${rpt.html}</div>
+            <div class="p-3 rounded" style="background:linear-gradient(135deg,#f0f7ff,#f8f0ff);border:1px solid #d0e3ff;">
+              <div class="d-flex align-items-center gap-3 mb-1">
+                <span class="badge" style="background:${color};color:${rpt.rag_status==='amber'?'#212529':'#fff'};">${label}</span>
+                <small class="text-muted">Confidence: <strong>${confPct}%</strong> &nbsp;|&nbsp; Data: <strong>${dataPct}%</strong></small>
+                <small class="text-muted ms-auto"><i class="fas fa-robot me-1"></i>${rpt.provider_name || ''}</small>
+              </div>
+              ${rpt.rag_reasoning ? `<p class="small mb-0 mt-1"><i class="fas fa-lightbulb text-warning me-1"></i>${rpt.rag_reasoning}</p>` : ''}
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    const bsModal = new bootstrap.Modal(document.getElementById('historyReportModal'));
+    bsModal.show();
+    document.getElementById('historyReportModal').addEventListener('hidden.bs.modal', () => modal.remove());
+}
 </script>
 {% endblock %}

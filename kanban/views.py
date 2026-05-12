@@ -5923,18 +5923,27 @@ def board_status_report(request, board_id):
     """
     AI-generated stakeholder status report for a board.
     Gathers key metrics and calls Gemini to produce a concise weekly update.
+    GET  — shows the most recent saved report (if any) plus a history panel.
+    POST — generates a new report, saves it, and trims history to the last 5.
     """
     from api.ai_usage_utils import check_ai_quota, track_ai_request
     from kanban.utils.ai_utils import generate_status_report
+    from kanban.models import BoardStatusReport
     import time as _time
 
     board = get_object_or_404(Board, id=board_id)
 
-    # Only generate on POST so users explicitly trigger the AI call
     report_text = None
     report_html = None
     report_explainability = None
     error = None
+    active_provider_name = 'Google Gemini'
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)
+        active_provider_name = AIRouter.get_provider_display_name(_provider)
+    except Exception:
+        pass
 
     if request.method == 'POST':
         start = _time.time()
@@ -6011,6 +6020,7 @@ def board_status_report(request, board_id):
 
             if report_result:
                 import markdown as _md
+                import re as _re
                 # generate_status_report now returns a dict with explainability
                 if isinstance(report_result, dict):
                     report_text = report_result.get('report', '')
@@ -6025,9 +6035,72 @@ def board_status_report(request, board_id):
                     # Backward compatibility if somehow a string is returned
                     report_text = report_result
                     report_explainability = None
-                report_html = _md.markdown(report_text, extensions=['nl2br'])
+                # Pre-process: ensure a blank line before bullet/list items so the
+                # markdown library recognises them as proper <ul>/<li> elements.
+                _processed = _re.sub(r'(?m)([^\n])\n(\s*[*\-] )', r'\1\n\n\2', report_text)
+                report_html = _md.markdown(_processed, extensions=['extra'])
+
+                # Persist and trim history to the last 5 reports per board
+                BoardStatusReport.objects.create(
+                    board=board,
+                    created_by=request.user,
+                    report_text=report_text,
+                    report_html=report_html,
+                    rag_status=report_explainability['rag_status'] if report_explainability else 'amber',
+                    rag_reasoning=report_explainability['rag_reasoning'] if report_explainability else '',
+                    confidence_score=report_explainability['confidence_score'] if report_explainability else 0.5,
+                    data_completeness=report_explainability['data_completeness'] if report_explainability else 0.5,
+                    key_data_drivers=report_explainability['key_data_drivers'] if report_explainability else [],
+                    provider_name=active_provider_name,
+                )
+                # Keep only the 5 most recent; delete older ones
+                old_ids = list(
+                    BoardStatusReport.objects.filter(board=board)
+                    .order_by('-created_at')
+                    .values_list('id', flat=True)[5:]
+                )
+                if old_ids:
+                    BoardStatusReport.objects.filter(id__in=old_ids).delete()
             else:
                 error = 'AI could not generate the report at this time. Please try again shortly.'
+
+    else:
+        # GET: load the most recent saved report so the page is never blank
+        latest = BoardStatusReport.objects.filter(board=board).first()
+        if latest:
+            report_text = latest.report_text
+            report_html = latest.report_html
+            report_explainability = {
+                'rag_status': latest.rag_status,
+                'rag_reasoning': latest.rag_reasoning,
+                'confidence_score': latest.confidence_score,
+                'data_completeness': latest.data_completeness,
+                'key_data_drivers': latest.key_data_drivers,
+            }
+            if latest.provider_name:
+                active_provider_name = latest.provider_name
+
+    # History list for the sidebar panel (excludes the one currently shown)
+    history_qs = BoardStatusReport.objects.filter(board=board).order_by('-created_at')
+    if report_text:
+        # Exclude the currently displayed report from the history list
+        history_qs = history_qs[1:]
+    past_reports = list(history_qs[:5])
+
+    import json as _json
+    past_reports_json = _json.dumps([
+        {
+            'html': rpt.report_html,
+            'rag_status': rpt.rag_status,
+            'rag_reasoning': rpt.rag_reasoning,
+            'confidence_score': rpt.confidence_score,
+            'data_completeness': rpt.data_completeness,
+            'key_data_drivers': rpt.key_data_drivers,
+            'provider_name': rpt.provider_name,
+            'created_at': rpt.created_at.strftime('%b %d, %Y %H:%M'),
+        }
+        for rpt in past_reports
+    ])
 
     context = {
         'board': board,
@@ -6035,13 +6108,10 @@ def board_status_report(request, board_id):
         'report_html': report_html if report_text else None,
         'report_explainability': report_explainability if report_text else None,
         'error': error,
+        'active_provider_name': active_provider_name,
+        'past_reports': past_reports,
+        'past_reports_json': past_reports_json,
     }
-    try:
-        from ai_assistant.utils.ai_router import AIRouter
-        _provider, _, _, _ = AIRouter()._resolve_provider(request.user)  # display-only, not for routing
-        context['active_provider_name'] = AIRouter.get_provider_display_name(_provider)
-    except Exception:
-        context['active_provider_name'] = 'Google Gemini'
     return render(request, 'kanban/status_report.html', context)
 
 
