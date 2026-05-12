@@ -697,7 +697,9 @@ class BudgetAnalyzer:
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
-        # Calculate ROI - use snapshot data consistently for historical tracking
+        # Calculate ROI - use allocated_budget as the true investment baseline
+        # so the percentage reflects realistic project return rather than
+        # artificially inflating it against only the amount spent to date.
         roi_percentage = None
         expected_value = Decimal('0.00')
         realized_value = Decimal('0.00')
@@ -705,9 +707,12 @@ class BudgetAnalyzer:
         if latest_roi:
             expected_value = latest_roi.expected_value or Decimal('0.00')
             realized_value = latest_roi.realized_value or Decimal('0.00')
-            # Use snapshot's total_cost instead of mixing with current costs
-            roi_percentage = float(latest_roi.roi_percentage) if latest_roi.roi_percentage else 0
-            # Use snapshot's cost for display consistency
+            # Recalculate ROI against allocated budget (not just actual spend)
+            if budget.allocated_budget > 0:
+                value = realized_value if realized_value > 0 else expected_value
+                if value > 0:
+                    roi_percentage = float((value - budget.allocated_budget) / budget.allocated_budget * 100)
+            # Use snapshot's cost for historical display
             total_cost = latest_roi.total_cost
         
         # Calculate completion rate
@@ -725,11 +730,12 @@ class BudgetAnalyzer:
         
         return {
             'budget': budget,
-            'total_investment': float(total_cost),
+            'total_investment': float(budget.allocated_budget),
+            'actual_spend': float(total_cost),
             'expected_value': float(expected_value),
             'realized_value': float(realized_value),
-            'roi_percent': round(roi_percentage, 2) if roi_percentage else 0,
-            'roi_percentage': round(roi_percentage, 2) if roi_percentage else None,
+            'roi_percent': round(roi_percentage, 2) if roi_percentage is not None else 0,
+            'roi_percentage': round(roi_percentage, 2) if roi_percentage is not None else None,
             'tasks_completed': completed_tasks,
             'completed_tasks': completed_tasks,
             'total_tasks': total_tasks,
@@ -911,11 +917,37 @@ class BudgetAnalyzer:
             days_remaining_display = str(days_remaining_int)
             projected_end_date = board.project_deadline
 
-        # Sustainability: will the remaining budget cover the remaining days at this burn rate?
+        # Sustainability: compare remaining budget against the estimated cost of
+        # incomplete tasks rather than blindly extrapolating the historical burn
+        # rate.  Pure burn-rate projection is misleading because it includes
+        # past overruns on already-completed tasks — the remaining work is what
+        # actually needs to fit in the remaining budget.
+        #
+        # Fallback: if no TaskCost estimates exist, use burn-rate projection.
         is_sustainable = False
-        if has_deadline and days_remaining_int > 0 and daily_burn_rate > 0:
-            expected_remaining_spend = daily_burn_rate * days_remaining_int
-            is_sustainable = remaining_budget >= expected_remaining_spend
+        if has_deadline and days_remaining_int > 0:
+            from kanban.models import Task as _Task
+            from kanban.budget_models import TaskCost as _TaskCost
+            from django.db.models import Sum as _Sum
+
+            incomplete_task_ids = list(
+                _Task.objects.filter(
+                    column__board=board, progress__lt=100
+                ).values_list('id', flat=True)
+            )
+            remaining_estimated = (
+                _TaskCost.objects.filter(task_id__in=incomplete_task_ids)
+                .aggregate(total=_Sum('estimated_cost'))['total']
+                or Decimal('0.00')
+            )
+
+            if remaining_estimated > 0:
+                # Primary check: remaining budget covers estimated remaining work
+                is_sustainable = remaining_budget >= remaining_estimated
+            elif daily_burn_rate > 0:
+                # Fallback: use burn-rate projection when no estimates available
+                expected_remaining_spend = daily_burn_rate * days_remaining_int
+                is_sustainable = remaining_budget >= expected_remaining_spend
 
         return {
             'period_days': period_days,

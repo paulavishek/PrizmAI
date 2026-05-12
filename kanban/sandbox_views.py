@@ -55,6 +55,8 @@ def _duplicate_board(template_board, user):
         num_phases=template_board.num_phases,
         task_prefix=template_board.task_prefix,
         project_type=template_board.project_type,
+        # Copy project deadline so burn-rate projections work in the sandbox
+        project_deadline=template_board.project_deadline,
         # Copy baseline for Scope Creep Index
         baseline_task_count=template_board.baseline_task_count,
         baseline_complexity_total=template_board.baseline_complexity_total,

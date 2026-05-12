@@ -162,15 +162,10 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <div class="progress" style="height: 20px; width: 100px;">
-                                            <div class="progress-bar 
-                                                {% if task.variance_percent > 20 %}bg-danger
-                                                {% elif task.variance_percent > 10 %}bg-warning
-                                                {% else %}bg-success{% endif %}" 
-                                                style="width: {{ task.percent_of_budget }}%">
-                                                {{ task.percent_of_budget|floatformat:1 }}%
-                                            </div>
-                                        </div>
+                                        <span class="badge bg-secondary">{{ task.status }}</span>
+                                        {% if task.is_over_budget %}
+                                            <span class="badge bg-danger ms-1">Over Budget</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}

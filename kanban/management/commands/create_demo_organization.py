@@ -10,6 +10,8 @@ Usage:
     python manage.py create_demo_organization
 """
 
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from accounts.models import Organization, UserProfile
@@ -269,6 +271,8 @@ class Command(BaseCommand):
                     'is_seed_demo_data': True,  # Mark as seed data for cleanup protection
                     'created_by': creator,
                     'created_at': timezone.now(),
+                    # Set a realistic project deadline for the demo (~5 months from creation)
+                    'project_deadline': (timezone.now() + timedelta(days=150)).date(),
                 }
             )
             
