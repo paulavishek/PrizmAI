@@ -188,8 +188,11 @@
                             </thead>
                             <tbody>
                                 {% for snapshot in roi_snapshots %}
-                                <tr class="snapshot-card">
-                                    <td>{{ snapshot.snapshot_date|date:"M d, Y" }}</td>
+                                <tr class="snapshot-card{% if forloop.last %} table-warning{% endif %}">
+                                    <td>
+                                        {{ snapshot.snapshot_date|date:"M d, Y" }}
+                                        {% if forloop.last %}<span class="badge bg-warning text-dark ms-1" title="Most recent snapshot — may reflect different inputs than the historical weekly series">Current</span>{% endif %}
+                                    </td>
                                     <td>
                                         <span class="{% if snapshot.roi_percentage > 0 %}roi-positive{% elif snapshot.roi_percentage < 0 %}roi-negative{% else %}roi-neutral{% endif %}">
                                             <strong>{{ snapshot.roi_percentage|floatformat:1 }}%</strong>
@@ -212,7 +215,7 @@
                                         <small class="text-muted">0%</small>
                                         {% endif %}
                                     </td>
-                                    <td>-</td>
+                                    <td>{% if forloop.last %}<em class="text-muted small">Latest</em>{% else %}-{% endif %}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -281,7 +284,13 @@
     // ROI Trend Chart
     const roiDates = [{% for snapshot in roi_snapshots %}'{{ snapshot.snapshot_date|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
     const roiValues = [{% for snapshot in roi_snapshots %}{{ snapshot.roi_percentage|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}];
-    
+    const lastIdx = roiValues.length - 1;
+
+    // Per-point styling: last point = orange to signal it is the current live snapshot
+    const roiPointColors = roiValues.map((v, i) => i === lastIdx ? '#fd7e14' : '#28a745');
+    const roiPointBorders = roiValues.map((v, i) => i === lastIdx ? '#c85a00' : '#1e7e34');
+    const roiPointRadii  = roiValues.map((v, i) => i === lastIdx ? 8 : 4);
+
     new Chart(document.getElementById('roiTrendChart'), {
         type: 'line',
         data: {
@@ -289,17 +298,38 @@
             datasets: [{
                 label: 'ROI %',
                 data: roiValues,
-                borderColor: roiValues[roiValues.length - 1] >= 0 ? '#28a745' : '#dc3545',
-                backgroundColor: roiValues[roiValues.length - 1] >= 0 ? 'rgba(40, 167, 69, 0.1)' : 'rgba(220, 53, 69, 0.1)',
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
                 tension: 0.4,
-                fill: true
+                fill: true,
+                pointBackgroundColor: roiPointColors,
+                pointBorderColor: roiPointBorders,
+                pointRadius: roiPointRadii,
+                pointHoverRadius: roiPointRadii.map(r => r + 2),
+                // Dash the segment leading to the current snapshot so it reads as
+                // a projection/gap rather than a smooth historical trend
+                segment: {
+                    borderDash:  (ctx) => ctx.p1DataIndex === lastIdx ? [6, 4] : undefined,
+                    borderColor: (ctx) => ctx.p1DataIndex === lastIdx ? '#fd7e14' : '#28a745',
+                }
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.parsed.y.toFixed(1) + '%';
+                            if (context.dataIndex === lastIdx) {
+                                label += '  (current snapshot)';
+                            }
+                            return label;
+                        }
+                    }
+                }
             },
             scales: {
                 y: {
@@ -317,7 +347,14 @@
     // Cost vs Value Chart
     const investments = [{% for snapshot in roi_snapshots %}{{ snapshot.total_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     const realizedValues = [{% for snapshot in roi_snapshots %}{{ snapshot.realized_value }}{% if not forloop.last %}, {% endif %}{% endfor %}];
-    
+
+    // Last bar is semi-transparent + bordered to distinguish the current live snapshot
+    // from the closed historical series
+    const investBgColors   = investments.map((v, i)    => i === lastIdx ? 'rgba(0,123,255,0.35)'  : '#007bff');
+    const investBorderColors = investments.map((v, i)  => i === lastIdx ? '#007bff' : 'transparent');
+    const realizedBgColors = realizedValues.map((v, i) => i === lastIdx ? 'rgba(40,167,69,0.35)'  : '#28a745');
+    const realizedBorderColors = realizedValues.map((v, i) => i === lastIdx ? '#28a745' : 'transparent');
+
     new Chart(document.getElementById('costValueChart'), {
         type: 'bar',
         data: {
@@ -326,18 +363,31 @@
                 {
                     label: 'Investment',
                     data: investments,
-                    backgroundColor: '#007bff'
+                    backgroundColor: investBgColors,
+                    borderColor: investBorderColors,
+                    borderWidth: investments.map((v, i) => i === lastIdx ? 2 : 0),
                 },
                 {
                     label: 'Realized Value',
                     data: realizedValues,
-                    backgroundColor: '#28a745'
+                    backgroundColor: realizedBgColors,
+                    borderColor: realizedBorderColors,
+                    borderWidth: realizedValues.map((v, i) => i === lastIdx ? 2 : 0),
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: true,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        afterTitle: function(context) {
+                            return context[0].dataIndex === lastIdx ? '(Current snapshot)' : '';
+                        }
+                    }
+                }
+            },
             scales: {
                 y: { beginAtZero: true }
             }
