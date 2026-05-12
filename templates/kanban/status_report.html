@@ -73,7 +73,7 @@
     }
     .history-item {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         padding: 8px 12px;
         border-radius: 6px;
@@ -83,6 +83,15 @@
     }
     .history-item:hover { background: #e9ecef; border-color: #dee2e6; }
     .history-item + .history-item { margin-top: 4px; }
+    .history-summary {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 420px;
+    }
     .rag-dot {
         width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
     }
@@ -124,7 +133,7 @@
 
     <div class="report-card">
 
-        <!-- Info Banner -->
+        <!-- Info Banner (only when no report yet) -->
         {% if not report_text %}
         <div class="info-banner">
             <div class="d-flex gap-3 align-items-start">
@@ -139,17 +148,27 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
-        <!-- Generate Form -->
+        <!-- Generate Form (always present; compact when a report is already showing) -->
         <form method="post" id="report-form" class="no-print">
             {% csrf_token %}
+            {% if report_text %}
+            <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background:#f0f7ff;border:1px solid #bee3f8;">
+                <i class="fas fa-info-circle text-primary"></i>
+                <span class="small text-muted flex-grow-1">This report was saved {{ report_generated_at|timesince }} ago. Generate a fresh one from current board data.</span>
+                <button type="submit" class="btn btn-sm btn-primary" id="generate-btn">
+                    <i class="fas fa-magic me-1"></i>Generate New Report
+                </button>
+            </div>
+            {% else %}
             <div class="text-center mb-4">
                 <button type="submit" class="generate-btn" id="generate-btn">
                     <i class="fas fa-magic me-2"></i>Generate Status Report
                 </button>
             </div>
+            {% endif %}
         </form>
-        {% endif %}
 
         <!-- Error -->
         {% if error %}
@@ -162,13 +181,13 @@
         <!-- Report Output -->
         {% if report_text %}
         <div class="report-actions no-print">
-            <button class="btn btn-sm btn-outline-secondary" onclick="copyReport()" title="Copy plain text to clipboard">
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyReport(event)" title="Copy plain text to clipboard">
                 <i class="fas fa-copy me-1"></i>Copy
             </button>
             <button class="btn btn-sm btn-outline-primary" onclick="downloadPDF()" title="Download as PDF">
                 <i class="fas fa-file-pdf me-1"></i>Download PDF
             </button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="shareLink()" title="Copy shareable link">
+            <button class="btn btn-sm btn-outline-secondary" onclick="shareLink(event)" title="Copy shareable link">
                 <i class="fas fa-link me-1"></i>Share Link
             </button>
         </div>
@@ -229,9 +248,14 @@
         {% endif %}
 
         <div class="mt-3 text-muted small text-center no-print">
-            <i class="fas fa-clock me-1"></i>Generated just now &nbsp;·&nbsp;
-            <i class="fas fa-robot me-1"></i>Powered by {{ active_provider_name }} &nbsp;·&nbsp;
-            <i class="fas fa-redo me-1"></i><a href="{% url 'board_status_report' board.id %}" class="text-muted">Regenerate</a>
+            <i class="fas fa-clock me-1"></i>
+            {% if report_is_cached %}
+            Saved {{ report_generated_at|timesince }} ago
+            {% else %}
+            Generated just now
+            {% endif %}
+            &nbsp;·&nbsp;
+            <i class="fas fa-robot me-1"></i>Powered by {{ active_provider_name }}
         </div>
         {% endif %}
 
@@ -245,19 +269,30 @@
             </div>
             {% for rpt in past_reports %}
             <div class="history-item" onclick="loadHistoryReport({{ forloop.counter0 }})">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="rag-dot" style="background:{% if rpt.rag_status == 'green' %}#28a745{% elif rpt.rag_status == 'red' %}#dc3545{% else %}#ffc107{% endif %};"></div>
-                    <span class="small fw-medium">{{ rpt.created_at|date:"M d, Y" }}</span>
-                    <span class="text-muted" style="font-size:0.75rem;">{{ rpt.created_at|time:"H:i" }}</span>
+                <div class="flex-grow-1 me-2" style="min-width:0;">
+                    <div class="d-flex align-items-center gap-2">
+                        {% if rpt.rag_status == 'green' %}
+                        <span class="badge" style="background:#28a745;font-size:0.7rem;">🟢 On Track</span>
+                        {% elif rpt.rag_status == 'red' %}
+                        <span class="badge" style="background:#dc3545;font-size:0.7rem;">🔴 Off Track</span>
+                        {% else %}
+                        <span class="badge" style="background:#ffc107;color:#212529;font-size:0.7rem;">🟡 At Risk</span>
+                        {% endif %}
+                        <span class="small fw-medium">{{ rpt.created_at|date:"M d, Y" }}</span>
+                        <span class="text-muted" style="font-size:0.75rem;">{{ rpt.created_at|time:"H:i" }}</span>
+                    </div>
+                    {% if rpt.rag_reasoning %}
+                    <div class="history-summary">{{ rpt.rag_reasoning|truncatechars:100 }}</div>
+                    {% endif %}
                 </div>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
                     <span class="text-muted" style="font-size:0.75rem;">{{ rpt.provider_name }}</span>
                     <i class="fas fa-chevron-right text-muted" style="font-size:0.7rem;"></i>
                 </div>
             </div>
             {% endfor %}
         </div>
-        {{ past_reports_json|json_script:"history-data" }}
+        {{ past_reports_data|json_script:"history-data" }}
         {% endif %}
 
     </div>
@@ -277,7 +312,7 @@ if (reportForm) {
     });
 }
 
-function copyReport() {
+function copyReport(event) {
     const title = 'Status Report — {{ board.name }} — ' + new Date().toLocaleDateString();
     const body = document.getElementById('report-output').innerText;
     const text = title + '\n\n' + body;
@@ -293,7 +328,7 @@ function downloadPDF() {
     window.print();
 }
 
-function shareLink() {
+function shareLink(event) {
     const url = window.location.href;
     navigator.clipboard.writeText(url).then(() => {
         const btn = event.target.closest('button');
@@ -351,7 +386,7 @@ function loadHistoryReport(index) {
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
-            <div class="report-output mb-3">${rpt.html}</div>
+            <div class="report-output mb-3" id="history-report-body">${rpt.html}</div>
             <div class="p-3 rounded" style="background:linear-gradient(135deg,#f0f7ff,#f8f0ff);border:1px solid #d0e3ff;">
               <div class="d-flex align-items-center gap-3 mb-1">
                 <span class="badge" style="background:${color};color:${rpt.rag_status==='amber'?'#212529':'#fff'};">${label}</span>
@@ -362,6 +397,9 @@ function loadHistoryReport(index) {
             </div>
           </div>
           <div class="modal-footer">
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="downloadHistoryPDF('${rpt.created_at.replace(/'/g,"\\'")}')">
+              <i class="fas fa-file-pdf me-1"></i>Download PDF
+            </button>
             <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
@@ -371,6 +409,38 @@ function loadHistoryReport(index) {
     const bsModal = new bootstrap.Modal(document.getElementById('historyReportModal'));
     bsModal.show();
     document.getElementById('historyReportModal').addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+function downloadHistoryPDF(reportDate) {
+    const bodyEl = document.getElementById('history-report-body');
+    if (!bodyEl) return;
+    const reportHtml = bodyEl.innerHTML;
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Status Report — {{ board.name|escapejs }} — ${reportDate}</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; font-size: 11pt; margin: 32px; color: #212529; }
+  h1,h2,h3 { color: #212529; }
+  h2 { font-size: 1.1rem; font-weight: 700; margin-top: 1.4rem; }
+  ul, ol { padding-left: 1.5rem; }
+  li { margin-bottom: 0.25rem; }
+  p { margin-bottom: 0.5rem; }
+  .report-header { border-bottom: 2px solid #0d6efd; padding-bottom: 8px; margin-bottom: 16px; }
+  .report-header h1 { font-size: 14pt; margin: 0; }
+  .report-header p { font-size: 9pt; color: #6c757d; margin: 4px 0 0; }
+</style>
+</head><body>
+<div class="report-header">
+  <h1>AI Status Report — {{ board.name|escapejs }}</h1>
+  <p>Generated: ${reportDate} &nbsp;·&nbsp; PrizmAI</p>
+</div>
+${reportHtml}
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
 }
 </script>
 {% endblock %}

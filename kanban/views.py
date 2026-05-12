@@ -6061,8 +6061,10 @@ def board_status_report(request, board_id):
                 )
                 if old_ids:
                     BoardStatusReport.objects.filter(id__in=old_ids).delete()
+                report_generated_at = timezone.now()
             else:
                 error = 'AI could not generate the report at this time. Please try again shortly.'
+                report_generated_at = None
 
     else:
         # GET: load the most recent saved report so the page is never blank
@@ -6079,6 +6081,9 @@ def board_status_report(request, board_id):
             }
             if latest.provider_name:
                 active_provider_name = latest.provider_name
+            report_generated_at = latest.created_at
+        else:
+            report_generated_at = None
 
     # History list for the sidebar panel (excludes the one currently shown)
     history_qs = BoardStatusReport.objects.filter(board=board).order_by('-created_at')
@@ -6087,8 +6092,20 @@ def board_status_report(request, board_id):
         history_qs = history_qs[1:]
     past_reports = list(history_qs[:5])
 
-    import json as _json
-    past_reports_json = _json.dumps([
+    def _report_summary(text):
+        """Extract the first meaningful sentence from the report text for the history list."""
+        import re as _re
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            # Strip markdown bold/italic/bullets
+            clean = _re.sub(r'\*{1,3}([^*]*)\*{1,3}', r'\1', line).strip('*- ').strip()
+            if len(clean) > 25:
+                return clean[:100] + ('…' if len(clean) > 100 else '')
+        return ''
+
+    past_reports_data = [
         {
             'html': rpt.report_html,
             'rag_status': rpt.rag_status,
@@ -6098,9 +6115,10 @@ def board_status_report(request, board_id):
             'key_data_drivers': rpt.key_data_drivers,
             'provider_name': rpt.provider_name,
             'created_at': rpt.created_at.strftime('%b %d, %Y %H:%M'),
+            'summary': _report_summary(rpt.report_text),
         }
         for rpt in past_reports
-    ])
+    ]
 
     context = {
         'board': board,
@@ -6110,7 +6128,9 @@ def board_status_report(request, board_id):
         'error': error,
         'active_provider_name': active_provider_name,
         'past_reports': past_reports,
-        'past_reports_json': past_reports_json,
+        'past_reports_data': past_reports_data,
+        'report_generated_at': report_generated_at if report_text else None,
+        'report_is_cached': request.method == 'GET' and bool(report_text),
     }
     return render(request, 'kanban/status_report.html', context)
 
