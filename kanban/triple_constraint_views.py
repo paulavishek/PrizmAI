@@ -140,11 +140,28 @@ def triple_constraint_dashboard(request, board_id):
         else:
             variance_days = None  # cannot compute without both dates
 
+        # Recalculate risk level from actual variance so it reflects the
+        # effective_deadline (which may differ from the stored prediction's
+        # target_completion_date, e.g. when board.project_deadline is set).
+        # Convention: variance_days = effective_deadline - predicted_date
+        #   positive  → predicted finishes BEFORE deadline (ahead of schedule)
+        #   negative  → predicted finishes AFTER deadline (behind schedule)
+        if variance_days is None:
+            recalc_risk = latest_prediction.risk_level
+        elif variance_days > 7:
+            recalc_risk = 'low'       # clearly ahead of schedule
+        elif variance_days >= -7:
+            recalc_risk = 'medium'    # within a week of deadline
+        elif variance_days >= -30:
+            recalc_risk = 'high'      # noticeably behind
+        else:
+            recalc_risk = 'critical'  # severely behind
+
         time_data = {
             'target_date': effective_deadline.strftime('%d-%m-%Y') if effective_deadline else None,
             'predicted_date': predicted_date.strftime('%d-%m-%Y') if predicted_date else None,
             'days_ahead_behind': variance_days,
-            'risk_level': latest_prediction.risk_level,
+            'risk_level': recalc_risk,
             'delay_probability': float(latest_prediction.delay_probability or 0),
             'velocity_tasks_per_week': float(
                 latest_prediction.current_velocity) if latest_prediction.current_velocity else 0,

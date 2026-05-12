@@ -426,9 +426,13 @@
                         {% if time_data.days_ahead_behind is not None %}
                         <small class="text-muted">
                             Variance:
-                            <strong class="{% if time_data.days_ahead_behind < 0 %}text-danger{% elif time_data.days_ahead_behind > 0 %}text-success{% endif %}">
-                                {% if time_data.days_ahead_behind >= 0 %}+{% endif %}{{ time_data.days_ahead_behind }} days
-                            </strong>
+                            {% if time_data.days_ahead_behind > 0 %}
+                            <strong class="text-success">{{ time_data.days_ahead_behind }} days ahead</strong>
+                            {% elif time_data.days_ahead_behind < 0 %}
+                            <strong class="text-danger">{{ time_data.days_ahead_behind|cut:"-" }} days behind</strong>
+                            {% else %}
+                            <strong class="text-success">On schedule</strong>
+                            {% endif %}
                         </small>
                         {% else %}
                         <small class="text-muted">Variance: <strong>—</strong> (run burndown prediction)</small>
