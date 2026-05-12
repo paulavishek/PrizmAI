@@ -199,9 +199,9 @@ def on_ai_quota_saved(sender, instance, created, **kwargs):
 
         # Calculate days since first AI use
         days = 0
-        first_log = instance.user.ai_request_logs.order_by('created_at').first() if hasattr(instance.user, 'ai_request_logs') else None
-        if first_log and hasattr(first_log, 'created_at'):
-            days = (timezone.now() - first_log.created_at).days
+        first_log = instance.user.ai_request_logs.order_by('timestamp').first() if hasattr(instance.user, 'ai_request_logs') else None
+        if first_log and hasattr(first_log, 'timestamp'):
+            days = (timezone.now() - first_log.timestamp).days
 
         if pct >= 100:
             # Only create one exhausted event per "cycle"

@@ -4141,43 +4141,20 @@ def analyze_skill_gaps_api(request, board_id):
         # Calculate gaps
         gaps = calculate_skill_gaps(board, sprint_period_days=sprint_days)
         
-        # Track which gaps are still active (for cleanup)
-        active_gap_keys = set()
-        for gap_data in gaps:
-            key = (gap_data['skill_name'], gap_data['proficiency_level'])
-            active_gap_keys.add(key)
-        
-        # Only auto-resolve stale gaps if the new analysis found SOME gaps
-        # If analysis found 0 gaps, it might be an error (API failure, no tasks with skills)
-        # In that case, preserve existing gaps rather than wiping them all out
-        if len(gaps) > 0:
-            stale_gaps = SkillGap.objects.filter(
-                board=board,
-                status__in=['identified', 'acknowledged', 'in_progress']
-            )
-            resolved_count = 0
-            for stale_gap in stale_gaps:
-                key = (stale_gap.skill_name, stale_gap.proficiency_level)
-                if key not in active_gap_keys:
-                    stale_gap.status = 'resolved'
-                    stale_gap.resolved_at = timezone.now()
-                    stale_gap.save()
-                    resolved_count += 1
-            if resolved_count > 0:
-                logger.info(f"Auto-resolved {resolved_count} stale gap(s) for board {board.name}")
-        else:
-            logger.warning(f"Analysis found 0 gaps for board {board.name} - preserving existing gaps")
-        
-        # Save gaps to database (without AI recommendations initially for speed)
+        # Save gaps to database (without AI recommendations initially for speed).
+        # Track IDs of active gaps; after the loop, all remaining active gaps are bulk-resolved.
+        # This cleans up stale records from prior runs (including the 252 duplicates created
+        # before this fix was deployed) and skills that are no longer deficient.
+        used_gap_ids = set()
         saved_gaps = []
         gaps_needing_recommendations = []
-        
+
         for gap_data in gaps:
-            # Find existing active gap or create new one
+            # Find existing active gap by skill name only.
+            # There is now exactly one active gap record per unique skill name.
             skill_gap = SkillGap.objects.filter(
                 board=board,
                 skill_name=gap_data['skill_name'],
-                proficiency_level=gap_data['proficiency_level'],
                 status__in=['identified', 'acknowledged', 'in_progress']
             ).first()
             
@@ -4216,7 +4193,10 @@ def analyze_skill_gaps_api(request, board_id):
             # Queue for async recommendation generation if needed
             if not skill_gap.ai_recommendations or created:
                 gaps_needing_recommendations.append((skill_gap, gap_data))
-            
+
+            # Mark this gap as active so it is excluded from bulk-resolve below
+            used_gap_ids.add(skill_gap.id)
+
             saved_gaps.append({
                 'id': skill_gap.id,
                 'skill_name': skill_gap.skill_name,
@@ -4234,7 +4214,27 @@ def analyze_skill_gaps_api(request, board_id):
                 'plans_count': skill_gap.development_plans.count(),
                 'identified_at': skill_gap.identified_at.isoformat()
             })
-        
+
+        # Bulk-resolve all stale/duplicate gaps not touched in this run.
+        # On the first run after the fix is deployed, this resolves the 252 duplicate records.
+        # On subsequent runs, it resolves gaps for skills that are no longer deficient.
+        # Guard: only run if analysis returned results to avoid wiping on API errors.
+        if len(gaps) > 0:
+            now = timezone.now()
+            resolved_count = SkillGap.objects.filter(
+                board=board,
+                status__in=['identified', 'acknowledged', 'in_progress']
+            ).exclude(id__in=used_gap_ids).update(
+                status='resolved',
+                resolved_at=now
+            )
+            if resolved_count > 0:
+                logger.info(
+                    f"Auto-resolved {resolved_count} stale/duplicate gap(s) for board {board.name}"
+                )
+        else:
+            logger.warning(f"Analysis found 0 gaps for board {board.name} - preserving existing gaps")
+
         # Generate AI recommendations in background (non-blocking)
         if gaps_needing_recommendations:
             from threading import Thread

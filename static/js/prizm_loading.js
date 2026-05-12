@@ -425,9 +425,9 @@
             'Running skill gap analysis\u2026',
             'Mapping team competencies\u2026',
             'Identifying skill deficiencies\u2026',
-            'Evaluating training opportunities\u2026',
+            'Comparing required vs available skills\u2026',
             'Generating AI-powered recommendations\u2026',
-            'Preparing development roadmap\u2026'
+            'Analyzing team skill coverage\u2026'
         ],
         chatSummarize: [
             'Summarizing conversation\u2026',
