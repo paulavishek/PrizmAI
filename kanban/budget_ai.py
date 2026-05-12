@@ -624,8 +624,16 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
         """Extract JSON from AI response, handling markdown fences, prose, and truncation."""
         if not text:
             raise ValueError('Empty response')
-        # Strip markdown code fences with 1-4 backticks, optional language tag
-        cleaned = re.sub(r'`{1,4}(?:json|JSON)?\s*', '', text).strip()
+        # Strip markdown code fences at the start and end only (not globally,
+        # to avoid corrupting any backtick characters inside JSON values)
+        cleaned = text.strip()
+        if cleaned.startswith('```json'):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith('```'):
+            cleaned = cleaned[3:]
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
         # Try direct parse first
         try:
             json.loads(cleaned)
