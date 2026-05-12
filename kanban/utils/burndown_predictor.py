@@ -624,7 +624,7 @@ class BurndownPredictor:
             lower_remaining = remaining_tasks - (avg_velocity + std_dev) * weeks_out
             confidence_bands['lower_band'].append({
                 'date': point['date'],
-                'remaining': max(0, int(lower_remaining)),
+                'remaining': max(1, int(lower_remaining)),
             })
         
         return {

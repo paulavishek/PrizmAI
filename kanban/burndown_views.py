@@ -64,7 +64,19 @@ def burndown_dashboard(request, board_id):
         board=board,
         status__in=['active', 'acknowledged']
     ).order_by('-severity', '-created_at')
-    
+
+    # Build display label for alert timestamp ("Just now" vs "X minutes ago")
+    first_alert = active_alerts.first()
+    if first_alert:
+        delta = timezone.now() - first_alert.created_at
+        if delta.total_seconds() < 60:
+            alerts_generated_label = "Just now"
+        else:
+            from django.utils.timesince import timesince as django_timesince
+            alerts_generated_label = django_timesince(first_alert.created_at) + " ago"
+    else:
+        alerts_generated_label = None
+
     context = {
         'board': board,
         'prediction': prediction,
@@ -73,6 +85,7 @@ def burndown_dashboard(request, board_id):
         'alerts': active_alerts,
         'critical_alerts': active_alerts.filter(severity='critical'),
         'warning_alerts': active_alerts.filter(severity='warning'),
+        'alerts_generated_label': alerts_generated_label,
     }
     
     return render(request, 'kanban/burndown_dashboard.html', context)
