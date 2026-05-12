@@ -72,17 +72,19 @@ def extract_skills_from_task(task_title: str, task_description: str = "",
         [{'name': 'Python', 'level': 'Intermediate'}, ...]
     """
     try:
-        prompt = f"""Analyze this task and extract the technical skills required to complete it.
+        prompt = f"""Analyze this task and extract the key technical skills required to complete it.
 
 Task Title: {task_title}
 Task Description: {task_description or 'Not provided'}
 
-Instructions:
-1. Identify all technical skills, tools, frameworks, and technologies required
-2. For each skill, estimate the proficiency level needed: Beginner, Intermediate, Advanced, or Expert
-3. Be specific (e.g., "Python" not just "Programming")
-4. Include both hard skills (programming languages, tools) and relevant soft skills (e.g., "Communication" for tasks requiring stakeholder interaction)
-5. Return ONLY a valid JSON array, nothing else
+Rules:
+1. Return at most 6 skills — only the most essential ones for this specific task.
+2. Use SHORT, CANONICAL skill names only. Do NOT add parenthetical examples, version numbers, tool lists, or any qualifiers after the name.
+   CORRECT: "Backend Framework", "Containerization", "CI/CD", "Python", "SQL"
+   WRONG:   "Backend Framework (e.g., Node.js/Express, Python/Django)", "Containerization (e.g., Docker, Kubernetes)"
+3. For each skill, set the proficiency level needed: Beginner, Intermediate, Advanced, or Expert.
+4. Focus on hard skills (languages, tools, frameworks). Include at most 1 soft skill only if it is directly critical.
+5. Return ONLY a valid JSON array, nothing else.
 
 Output format:
 [
@@ -258,6 +260,38 @@ def build_team_skill_profile(board) -> Dict:
         }
 
 
+def _canonicalize_skill_name(name: str) -> str:
+    """Strip parenthetical examples and qualifiers from an AI-extracted skill name.
+
+    AI models frequently emit verbose names such as:
+        "Backend Framework (e.g., Node.js/Express, Python/Django/Flask)"
+        "Containerization (e.g., Docker, Kubernetes)"
+    These cause every task to produce unique skill name strings that never
+    deduplicate even after lowercasing.
+
+    This function strips everything inside parentheses so that all of those
+    variations collapse to the same base name:
+        "Backend Framework (e.g., Node.js)" -> "Backend Framework"
+        "Containerization (e.g., Docker, Kubernetes)" -> "Containerization"
+    """
+    # Remove everything in parentheses, including the parentheses themselves
+    cleaned = re.sub(r'\s*\([^)]*\)', '', name)
+    # Strip any trailing punctuation / whitespace left behind
+    return cleaned.strip(' ,;:')
+
+
+def _normalize_skill_name(name: str) -> str:
+    """Normalize a skill name to a case-insensitive deduplication key.
+
+    Applies _canonicalize_skill_name first (strips parenthetical qualifiers)
+    then lowercases.  This ensures verbose AI-extracted names like:
+        'Backend Framework (e.g., Node.js)'  and
+        'Backend Framework (e.g., Django/Flask)'
+    both resolve to 'backend framework' and merge into one gap record.
+    """
+    return _canonicalize_skill_name(name).lower()
+
+
 def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
     """
     Calculate skill gaps by comparing required skills (from tasks) 
@@ -291,6 +325,34 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         
         logger.info(f"Analyzing {len(tasks)} active tasks for skill gaps on board {board.name}")
         
+        # One-time cleanup: clear stored skills that contain parenthetical verbose names
+        # (e.g., "Backend Framework (e.g., Node.js/Express)") so they are re-extracted
+        # with the updated prompt that produces short canonical names.
+        # A skill entry is considered verbose if any name contains a '(' character.
+        verbose_tasks_cleared = 0
+        for task in tasks:
+            if task.required_skills:
+                skills_list = task.required_skills
+                if isinstance(skills_list, str):
+                    try:
+                        skills_list = json.loads(skills_list)
+                    except (json.JSONDecodeError, TypeError):
+                        skills_list = []
+                if isinstance(skills_list, list):
+                    has_verbose = any(
+                        '(' in (s.get('name', '') if isinstance(s, dict) else str(s))
+                        for s in skills_list
+                    )
+                    if has_verbose:
+                        task.required_skills = []
+                        task.save(update_fields=['required_skills'])
+                        verbose_tasks_cleared += 1
+        if verbose_tasks_cleared > 0:
+            logger.info(
+                f"Cleared verbose required_skills from {verbose_tasks_cleared} task(s) — "
+                "will re-extract with canonical short names."
+            )
+
         # Auto-populate required_skills for tasks that don't have them
         tasks_needing_skills = [t for t in tasks if not t.required_skills]
         skills_extracted_count = 0
@@ -344,7 +406,11 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         team_profile = build_team_skill_profile(board)
         skill_inventory = team_profile['skill_inventory']
         team_size = team_profile.get('team_size', 1) or 1
-        
+
+        # Build case-insensitive lookup to match AI-extracted skill names to team profile names.
+        # e.g. "Problem-Solving" (from task) matches "Problem Solving" (from team member profile)
+        skill_inventory_norm = {k.lower(): v for k, v in skill_inventory.items()}
+
         # Aggregate required skills from tasks (re-check since some may have been updated)
         required_skills = {}
         
@@ -394,8 +460,14 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                         continue
                     
                     if skill_name:
-                        if skill_name not in required_skills:
-                            required_skills[skill_name] = {
+                        # Use a normalized (lowercase) key so that name variations like
+                        # "Problem-Solving" and "Problem Solving" collapse into one entry
+                        skill_key = _normalize_skill_name(skill_name)
+                        if skill_key not in required_skills:
+                            required_skills[skill_key] = {
+                                # Use canonicalized (no parens) name for display so the UI
+                                # shows "Backend Framework" not "Backend Framework (e.g., …)"
+                                'display_name': _canonicalize_skill_name(skill_name),
                                 'expert': 0,
                                 'advanced': 0,
                                 'intermediate': 0,
@@ -403,24 +475,43 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                                 'tasks': [],
                                 'unique_tasks': set()
                             }
-                        
+
                         # Count requirement for this level
                         level_key = skill_level.lower()
-                        if level_key in required_skills[skill_name]:
-                            required_skills[skill_name][level_key] += 1
-                        
-                        required_skills[skill_name]['tasks'].append({
+                        if level_key in required_skills[skill_key]:
+                            required_skills[skill_key][level_key] += 1
+
+                        required_skills[skill_key]['tasks'].append({
                             'id': task.id,
                             'title': task.title,
                             'level': skill_level
                         })
-                        required_skills[skill_name]['unique_tasks'].add(task.id)
-        
+                        required_skills[skill_key]['unique_tasks'].add(task.id)
+
+        # Frequency filter: drop skills that appear in only 1 unique task.
+        # A skill needed by a single task is a one-off task requirement, not a
+        # team-level capability gap worth tracking.  Requiring ≥2 tasks dramatically
+        # reduces noise (one-offs like "WCAG", "ERD", "Static Site Generators") while
+        # keeping genuinely cross-cutting gaps like "Security", "Backend Development".
+        total_extracted = len(required_skills)
+        required_skills = {
+            k: v for k, v in required_skills.items()
+            if len(v.get('unique_tasks', set())) >= 2
+        }
+        logger.info(
+            f"Frequency filter: {len(required_skills)} of {total_extracted} extracted skills "
+            "appear in 2+ tasks and qualify for gap analysis"
+        )
+
         # Calculate gaps
         gaps = []
         
-        for skill_name, requirements in required_skills.items():
-            available = skill_inventory.get(skill_name, {
+        for skill_key, requirements in required_skills.items():
+            # skill_key is the normalized (lowercase) key; use display_name for output
+            display_name = requirements.get('display_name', skill_key)
+
+            # Use normalized lookup to match AI-extracted names to team profile names
+            available = skill_inventory_norm.get(skill_key, {
                 'expert': 0,
                 'advanced': 0,
                 'intermediate': 0,
@@ -448,88 +539,77 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
             # Total tasks needing this skill (at any level)
             total_tasks_needing_skill = len(requirements.get('unique_tasks', set()))
             all_affected_tasks = requirements['tasks']
-            
+
+            # Determine the highest proficiency level required across all tasks for this skill
+            highest_level = 'beginner'
+            for level in ['expert', 'advanced', 'intermediate', 'beginner']:
+                if requirements[level] > 0:
+                    highest_level = level
+                    break
+
             # CASE 1: Team has ZERO coverage for this skill
             # This is always a gap - the team cannot do this work at all
             if not has_any_coverage:
-                # Calculate gap count based on workload
-                # Assume 1 person can handle up to 5 tasks in a sprint
-                tasks_per_person = 5
-                gap_count = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
-                # Cap at reasonable number (not more than team size)
-                gap_count = min(gap_count, max(2, team_size))
-                
-                # Determine the highest level needed
-                highest_level = 'beginner'
-                for level in ['expert', 'advanced', 'intermediate', 'beginner']:
-                    if requirements[level] > 0:
-                        highest_level = level
-                        break
-                
+                # Capacity estimate: how many people would be needed (~4 tasks/person/sprint)
+                tasks_per_person = 4
+                slots_needed = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
+                # Cap to a reasonable number (not more than team size)
+                slots_needed = min(slots_needed, max(2, team_size))
+
                 gaps.append({
-                    'skill_name': skill_name,
+                    'skill_name': display_name,
                     'proficiency_level': highest_level.capitalize(),
-                    'required_count': gap_count,
+                    'required_count': slots_needed,
                     'available_count': 0,
-                    'gap_count': gap_count,
+                    'gap_count': slots_needed,
                     'affected_tasks': all_affected_tasks,
                     'task_count': total_tasks_needing_skill,
                     'has_team_coverage': False,
                     'severity': 'critical' if total_tasks_needing_skill >= 3 or highest_level in ['expert', 'advanced'] else 'high'
                 })
                 continue
-            
-            # CASE 2: Team has SOME coverage - check each proficiency level
-            for level in ['expert', 'advanced', 'intermediate', 'beginner']:
-                task_count_at_level = requirements[level]
-                
-                if task_count_at_level == 0:
-                    continue
-                
-                # Get effective team members who can handle this level
-                available_for_level = effective_coverage.get(level, 0)
-                
-                # Calculate capacity-based need
-                # Assume each person can handle 4-5 tasks per sprint
-                tasks_per_person = 4
-                slots_needed = max(1, (task_count_at_level + tasks_per_person - 1) // tasks_per_person)
-                
-                # Calculate gap
-                gap_count = max(0, slots_needed - available_for_level)
-                
-                # Even if gap_count is 0, check if coverage is thin (bus factor)
-                # If only 1 person covers many tasks, that's a risk
-                is_thin_coverage = available_for_level == 1 and task_count_at_level >= 4
-                
-                if gap_count > 0 or is_thin_coverage:
-                    affected_tasks = [t for t in requirements['tasks'] if t['level'].lower() == level]
-                    
-                    # Determine severity
-                    if gap_count > 0:
-                        severity = _calculate_gap_severity(
-                            skill_name, level, gap_count, affected_tasks,
-                            has_team_coverage=True,
-                            total_team_coverage=total_team_coverage,
-                            effective_coverage=available_for_level,
-                            team_size=team_size
-                        )
-                    else:
-                        # Thin coverage warning (bus factor risk)
-                        severity = 'low'
-                        gap_count = 1  # Suggest adding 1 more for redundancy
-                    
-                    gaps.append({
-                        'skill_name': skill_name,
-                        'proficiency_level': level.capitalize(),
-                        'required_count': slots_needed,
-                        'available_count': available_for_level,
-                        'gap_count': gap_count,
-                        'affected_tasks': affected_tasks,
-                        'task_count': task_count_at_level,
-                        'has_team_coverage': True,
-                        'thin_coverage': is_thin_coverage and gap_count == 1,
-                        'severity': severity
-                    })
+
+            # CASE 2: Team has SOME coverage — create ONE gap entry for this skill.
+            # Compare total task workload against coverage at the highest required level.
+            available_for_highest = effective_coverage.get(highest_level, 0)
+
+            # Capacity estimate for how many people are ideally needed (display/recommendation use)
+            tasks_per_person = 4
+            slots_needed = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
+
+            # Actual gap: additional people needed beyond current coverage at this level
+            actual_gap = max(0, slots_needed - available_for_highest)
+
+            # Bus factor: thin coverage is a risk even without a hard capacity gap
+            is_thin_coverage = available_for_highest == 1 and total_tasks_needing_skill >= 4
+
+            if actual_gap > 0 or is_thin_coverage:
+                if actual_gap == 0:
+                    # Thin coverage only — recommend adding 1 more for redundancy
+                    actual_gap = 1
+                    slots_needed = available_for_highest + 1
+                    severity = 'low'
+                else:
+                    severity = _calculate_gap_severity(
+                        display_name, highest_level, actual_gap, all_affected_tasks,
+                        has_team_coverage=True,
+                        total_team_coverage=total_team_coverage,
+                        effective_coverage=available_for_highest,
+                        team_size=team_size
+                    )
+
+                gaps.append({
+                    'skill_name': display_name,
+                    'proficiency_level': highest_level.capitalize(),
+                    'required_count': slots_needed,
+                    'available_count': available_for_highest,
+                    'gap_count': actual_gap,
+                    'affected_tasks': all_affected_tasks,
+                    'task_count': total_tasks_needing_skill,
+                    'has_team_coverage': True,
+                    'thin_coverage': is_thin_coverage and actual_gap == 1,
+                    'severity': severity
+                })
         
         # Sort by severity and gap size
         severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
