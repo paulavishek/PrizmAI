@@ -98,7 +98,22 @@
     <!-- Requirements × Tasks Matrix -->
     {% if requirements and tasks %}
     <div class="card">
-        <div class="card-header py-2"><strong>Requirements × Tasks</strong></div>
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <strong>Requirements × Tasks</strong>
+            <div class="d-flex align-items-center gap-2">
+                {% if tasks_truncated %}
+                <small class="text-muted">Showing {{ tasks|length }} of {{ all_tasks_count }} tasks (linked tasks shown first)</small>
+                <a href="?show_all_tasks=1" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-expand-alt me-1"></i>Show all {{ all_tasks_count }} tasks
+                </a>
+                {% elif all_tasks_count > 15 %}
+                <small class="text-muted">Showing all {{ all_tasks_count }} tasks</small>
+                <a href="?" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-compress-alt me-1"></i>Collapse to top 15
+                </a>
+                {% endif %}
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-bordered matrix-table mb-0">
                 <thead class="table-light">

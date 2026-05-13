@@ -92,8 +92,8 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Parent Requirement</label>
-                        <select name="parent" class="form-select">
-                            <option value="">— None —</option>
+                        <select name="parent" class="form-select" autocomplete="off">
+                            <option value="" {% if not form.parent.value %}selected{% endif %}>— None —</option>
                             {% for val, label in form.fields.parent.choices %}
                                 {% if val %}
                                 <option value="{{ val }}" {% if form.parent.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
@@ -111,11 +111,11 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Reviewer</label>
-                        <select name="reviewer" class="form-select">
-                            <option value="">— None —</option>
-                            {% for val, label in form.fields.reviewer.choices %}
+                        <select name="assigned_reviewer" class="form-select">
+                            <option value="" {% if not form.assigned_reviewer.value %}selected{% endif %}>— None —</option>
+                            {% for val, label in form.fields.assigned_reviewer.choices %}
                                 {% if val %}
-                                <option value="{{ val }}" {% if form.reviewer.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+                                <option value="{{ val }}" {% if form.assigned_reviewer.value|stringformat:"d" == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
                                 {% endif %}
                             {% endfor %}
                         </select>
