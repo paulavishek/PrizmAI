@@ -760,6 +760,18 @@ class Command(BaseCommand):
             pass
         self.stdout.write('   ✓ Cleared Knowledge Graph data')
 
+        # =====================================================================
+        # STEP 24: Clear Discovery (PrizmDiscovery) data
+        # =====================================================================
+        try:
+            from kanban.discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
+            IdeaComment.objects.filter(idea__organization=self.demo_org).delete()
+            IdeaPromotion.objects.filter(idea__organization=self.demo_org).delete()
+            DiscoveryIdea.objects.filter(organization=self.demo_org).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Discovery data')
+
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
     # =========================================================================
