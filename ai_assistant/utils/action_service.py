@@ -1291,10 +1291,10 @@ class SpectraActionService:
                     parts.append(f"- [{g.get('severity', 'info').upper()}] {g['area']}")
                     if g.get('recommendation'):
                         parts.append(f"  → {g['recommendation']}")
-            if result.get('uncovered_objectives'):
-                parts.append(f"\n**Uncovered Objectives:** {len(result['uncovered_objectives'])}")
-                for o in result['uncovered_objectives'][:5]:
-                    parts.append(f"- {o['title']}")
+            if result.get('uncovered_goals'):
+                parts.append(f"\n**Uncovered Goals:** {len(result['uncovered_goals'])}")
+                for o in result['uncovered_goals'][:5]:
+                    parts.append(f"- {o['name']}")
             if result.get('orphaned_tasks'):
                 parts.append(f"\n**Orphaned Tasks (no requirement):** {len(result['orphaned_tasks'])}")
 

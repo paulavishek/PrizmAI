@@ -370,6 +370,15 @@ def goal_detail(request, goal_id):
     portfolio = get_portfolio_analytics(goal, 'goal')
     proxy_metrics = GoalProxyMetric.objects.filter(goal=goal).order_by('display_order')
 
+    # --- Linked Requirements ---
+    try:
+        from requirements.models import Requirement
+        linked_requirements = Requirement.objects.filter(
+            linked_goals=goal
+        ).select_related('board', 'category').order_by('board__name', 'identifier')
+    except Exception:
+        linked_requirements = []
+
     return render(request, 'kanban/goal_detail.html', {
         # Shared skeleton context
         'record': goal,
@@ -398,6 +407,8 @@ def goal_detail(request, goal_id):
         'portfolio': portfolio,
         'proxy_metrics': proxy_metrics,
         'portfolio_narrative': goal.portfolio_narrative,
+        # Linked Requirements
+        'linked_requirements': linked_requirements,
         # RBAC context
         'can_edit': request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request),
         'can_delete': request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request),

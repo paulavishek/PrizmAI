@@ -28,30 +28,6 @@ class RequirementCategory(models.Model):
         return self.name
 
 
-class ProjectObjective(models.Model):
-    """Board-level objectives that requirements trace to."""
-    board = models.ForeignKey(
-        'kanban.Board',
-        on_delete=models.CASCADE,
-        related_name='project_objectives',
-    )
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='created_objectives',
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['created_at']
-
-    def __str__(self):
-        return self.title
-
-
 class Requirement(models.Model):
     """Core requirement model, scoped to a Board."""
 
@@ -103,10 +79,10 @@ class Requirement(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
 
     # Traceability — upward
-    objectives = models.ManyToManyField(
-        ProjectObjective,
+    linked_goals = models.ManyToManyField(
+        'kanban.OrganizationGoal',
         blank=True,
-        related_name='requirements',
+        related_name='linked_requirements',
     )
     linked_strategies = models.ManyToManyField(
         'kanban.Strategy',

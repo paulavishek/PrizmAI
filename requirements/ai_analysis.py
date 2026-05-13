@@ -49,25 +49,26 @@ class RequirementsAIAnalyzer:
         Returns gap_report with missing_areas, underspecified_objectives,
         orphaned_tasks, and recommended_requirements.
         """
-        from .models import Requirement, RequirementCategory, ProjectObjective
-        from kanban.models import Task
+        from .models import Requirement, RequirementCategory
+        from kanban.models import OrganizationGoal, Task
 
         reqs = list(Requirement.objects.filter(board=self.board).prefetch_related(
-            'linked_tasks', 'objectives',
+            'linked_tasks', 'linked_goals',
         ))
-        objectives = list(ProjectObjective.objects.filter(board=self.board))
+        org = getattr(self.board, 'organization', None)
+        goals = list(OrganizationGoal.objects.filter(organization=org)) if org else []
         tasks = list(Task.objects.filter(column__board=self.board, item_type='task').select_related('column'))
 
         if not reqs and not tasks:
             return {
                 'gaps': [],
                 'orphaned_tasks': [],
-                'uncovered_objectives': [],
+                'uncovered_goals': [],
                 'summary': 'No requirements or tasks to analyze.',
                 'severity': 'info',
             }
 
-        prompt = self._build_gap_prompt(reqs, objectives, tasks)
+        prompt = self._build_gap_prompt(reqs, goals, tasks)
         ai_response = self._call_gemini(
             prompt,
             cache_operation='requirement_gaps',
@@ -77,11 +78,11 @@ class RequirementsAIAnalyzer:
             if parsed:
                 # Enrich with concrete data
                 parsed['orphaned_tasks'] = self._find_orphaned_tasks(reqs, tasks)
-                parsed['uncovered_objectives'] = self._find_uncovered_objectives(reqs, objectives)
+                parsed['uncovered_goals'] = self._find_uncovered_goals(reqs, goals)
                 return parsed
 
         # Rule-based fallback
-        return self._fallback_gap_analysis(reqs, objectives, tasks)
+        return self._fallback_gap_analysis(reqs, goals, tasks)
 
     def generate_acceptance_criteria(self, requirement) -> Dict:
         """
@@ -132,9 +133,9 @@ class RequirementsAIAnalyzer:
         linked_tasks = list(requirement.linked_tasks.select_related('column', 'assigned_to').all())
         children = list(requirement.children.all())
         related = list(requirement.related_requirements.all())
-        objectives = list(requirement.objectives.all())
+        linked_goals = list(requirement.linked_goals.all())
 
-        prompt = self._build_impact_prompt(requirement, linked_tasks, children, related, objectives)
+        prompt = self._build_impact_prompt(requirement, linked_tasks, children, related, linked_goals)
         ai_response = self._call_gemini(
             prompt,
             cache_operation='requirement_impact',
@@ -145,10 +146,10 @@ class RequirementsAIAnalyzer:
                 parsed['linked_tasks_count'] = len(linked_tasks)
                 parsed['children_count'] = len(children)
                 parsed['related_count'] = len(related)
-                parsed['objectives_count'] = len(objectives)
+                parsed['goals_count'] = len(linked_goals)
                 return parsed
 
-        return self._fallback_impact_analysis(requirement, linked_tasks, children, related, objectives)
+        return self._fallback_impact_analysis(requirement, linked_tasks, children, related, linked_goals)
 
     def suggest_priority(self, requirement) -> Dict:
         """
@@ -201,16 +202,16 @@ Return ONLY valid JSON (no markdown fences):
   "risk_flags": ["flag 1", ...]
 }}"""
 
-    def _build_gap_prompt(self, reqs, objectives, tasks) -> str:
+    def _build_gap_prompt(self, reqs, goals, tasks) -> str:
         req_summaries = '\n'.join(
             f"- {r.identifier}: {r.title} (type={r.get_type_display()}, priority={r.get_priority_display()}, tasks={r.linked_tasks.count()})"
             for r in reqs
         ) or '(no requirements defined)'
 
-        obj_summaries = '\n'.join(
-            f"- {o.title}: {o.description[:100] if o.description else '(no description)'}"
-            for o in objectives
-        ) or '(no objectives defined)'
+        goal_summaries = '\n'.join(
+            f"- {g.name}: {g.description[:100] if g.description else '(no description)'}"
+            for g in goals
+        ) or '(no goals defined)'
 
         task_summaries = '\n'.join(
             f"- {t.title} (column={t.column.name})"
@@ -219,8 +220,8 @@ Return ONLY valid JSON (no markdown fences):
 
         return f"""Analyze this board's requirements for gaps and missing coverage.
 
-OBJECTIVES:
-{obj_summaries}
+GOALS:
+{goal_summaries}
 
 REQUIREMENTS ({len(reqs)} total):
 {req_summaries}
@@ -229,7 +230,7 @@ TASKS ({len(tasks)} total, showing first 30):
 {task_summaries}
 
 Identify:
-1. Missing requirement areas — objectives or task areas with no requirements
+1. Missing requirement areas — goals or task areas with no requirements
 2. Imbalanced coverage — areas with too many or too few requirements
 3. Recommended new requirements to fill gaps
 
@@ -240,7 +241,7 @@ Return ONLY valid JSON (no markdown fences):
   ],
   "summary": "overall gap analysis narrative",
   "severity": "critical|high|medium|low|info",
-  "coverage_assessment": "narrative of how well requirements cover objectives and tasks"
+  "coverage_assessment": "narrative of how well requirements cover goals and tasks"
 }}"""
 
     def _build_criteria_prompt(self, req) -> str:
@@ -259,7 +260,7 @@ Return ONLY valid JSON (no markdown fences):
         req_type = data.get('type', 'Functional')
         priority = data.get('priority', 'Medium')
         category = data.get('category', '') or 'General'
-        objectives = data.get('objectives', [])
+        objectives = data.get('linked_goals', data.get('objectives', []))
         obj_str = (', '.join(objectives)) if objectives else 'none'
 
         return f"""You are a requirements analyst. Based on the following requirement details, generate 3-5 clear, testable acceptance criteria in Given/When/Then format.
@@ -269,7 +270,7 @@ Description: {description}
 Type: {req_type}
 Priority: {priority}
 Category: {category}
-Linked Objectives: {obj_str}
+Linked Goals: {obj_str}
 
 Rules:
 - Each criterion must be specific and independently testable
@@ -292,11 +293,11 @@ Return ONLY valid JSON (no markdown fences):
   "notes": "any additional notes about edge cases or considerations"
 }}"""
 
-    def _build_impact_prompt(self, req, linked_tasks, children, related, objectives) -> str:
+    def _build_impact_prompt(self, req, linked_tasks, children, related, linked_goals) -> str:
         tasks_info = ', '.join(t.title for t in linked_tasks[:10]) or 'none'
         children_info = ', '.join(f"{c.identifier}: {c.title}" for c in children[:10]) or 'none'
         related_info = ', '.join(f"{r.identifier}: {r.title}" for r in related[:10]) or 'none'
-        obj_info = ', '.join(o.title for o in objectives[:10]) or 'none'
+        goals_info = ', '.join(g.name for g in linked_goals[:10]) or 'none'
 
         return f"""Analyze the downstream impact of changes to this requirement.
 
@@ -308,12 +309,12 @@ REQUIREMENT:
 - Linked Tasks: {tasks_info}
 - Child Requirements: {children_info}
 - Related Requirements: {related_info}
-- Objectives: {obj_info}
+- Linked Goals: {goals_info}
 
 Assess:
 1. What would happen if this requirement's status changed (e.g., approved → rejected)?
 2. What is the cascading impact on linked tasks and child requirements?
-3. How critical is this requirement to the objectives it supports?
+3. How critical is this requirement to the goals it supports?
 
 Return ONLY valid JSON (no markdown fences):
 {{
@@ -327,8 +328,8 @@ Return ONLY valid JSON (no markdown fences):
 }}"""
 
     def _build_priority_prompt(self, req) -> str:
-        objectives = list(req.objectives.all())
-        obj_info = ', '.join(o.title for o in objectives) or 'none'
+        linked_goals = list(req.linked_goals.all())
+        goals_info = ', '.join(g.name for g in linked_goals) or 'none'
         task_count = req.linked_tasks.count()
         children_count = req.children.count()
 
@@ -341,9 +342,9 @@ REQUIREMENT:
 - Current Priority: {req.get_priority_display()}
 - Linked Tasks: {task_count}
 - Child Requirements: {children_count}
-- Objectives: {obj_info}
+- Linked Goals: {goals_info}
 
-Consider: number of dependent items, objective importance, type of requirement, and implementation scope.
+Consider: number of dependent items, goal importance, type of requirement, and implementation scope.
 
 Return ONLY valid JSON (no markdown fences):
 {{
@@ -452,7 +453,7 @@ Return ONLY valid JSON (no markdown fences):
             'severity': data.get('severity', 'info'),
             'coverage_assessment': data.get('coverage_assessment', ''),
             'orphaned_tasks': [],
-            'uncovered_objectives': [],
+            'uncovered_goals': [],
             'analyzed_at': timezone.now().isoformat(),
         }
 
@@ -509,14 +510,14 @@ Return ONLY valid JSON (no markdown fences):
             for t in orphaned[:20]
         ]
 
-    def _find_uncovered_objectives(self, reqs, objectives) -> List[Dict]:
-        covered_obj_ids = set()
+    def _find_uncovered_goals(self, reqs, goals) -> List[Dict]:
+        covered_goal_ids = set()
         for r in reqs:
-            covered_obj_ids.update(r.objectives.values_list('id', flat=True))
-        uncovered = [o for o in objectives if o.id not in covered_obj_ids]
+            covered_goal_ids.update(r.linked_goals.values_list('id', flat=True))
+        uncovered = [g for g in goals if g.id not in covered_goal_ids]
         return [
-            {'id': o.id, 'title': o.title}
-            for o in uncovered
+            {'id': g.id, 'name': g.name}
+            for g in uncovered
         ]
 
     # ── Fallback Analyzers (rule-based) ──────────────────────────────
@@ -579,17 +580,17 @@ Return ONLY valid JSON (no markdown fences):
             'analyzed_at': timezone.now().isoformat(),
         }
 
-    def _fallback_gap_analysis(self, reqs, objectives, tasks) -> Dict:
+    def _fallback_gap_analysis(self, reqs, goals, tasks) -> Dict:
         gaps = []
         orphaned = self._find_orphaned_tasks(reqs, tasks)
-        uncovered_obj = self._find_uncovered_objectives(reqs, objectives)
+        uncovered_goals = self._find_uncovered_goals(reqs, goals)
 
-        if uncovered_obj:
-            for obj in uncovered_obj:
+        if uncovered_goals:
+            for g in uncovered_goals:
                 gaps.append({
-                    'area': f"Objective \"{obj['title']}\" has no linked requirements",
+                    'area': f"Goal \"{g['name']}\" has no linked requirements",
                     'severity': 'high',
-                    'recommendation': f"Create requirements that address objective: {obj['title']}",
+                    'recommendation': f"Create requirements that address goal: {g['name']}",
                 })
 
         if orphaned:
@@ -619,16 +620,16 @@ Return ONLY valid JSON (no markdown fences):
         elif any(g['severity'] == 'medium' for g in gaps):
             severity = 'medium'
 
-        total_issues = len(gaps) + len(orphaned) + len(uncovered_obj)
-        summary = f"Found {total_issues} gap(s): {len(uncovered_obj)} uncovered objective(s), {len(orphaned)} orphaned task(s), {len(gaps)} structural gap(s)."
+        total_issues = len(gaps) + len(orphaned) + len(uncovered_goals)
+        summary = f"Found {total_issues} gap(s): {len(uncovered_goals)} uncovered goal(s), {len(orphaned)} orphaned task(s), {len(gaps)} structural gap(s)."
 
         return {
             'gaps': gaps,
             'orphaned_tasks': orphaned,
-            'uncovered_objectives': uncovered_obj,
+            'uncovered_goals': uncovered_goals,
             'summary': summary,
             'severity': severity,
-            'coverage_assessment': f"{len(reqs)} requirements covering {len(objectives)} objectives and linked to tasks from {len(tasks)} total.",
+            'coverage_assessment': f"{len(reqs)} requirements covering {len(goals)} goals and linked to tasks from {len(tasks)} total.",
             'analyzed_at': timezone.now().isoformat(),
         }
 
@@ -666,7 +667,7 @@ Return ONLY valid JSON (no markdown fences):
             'generated_at': timezone.now().isoformat(),
         }
 
-    def _fallback_impact_analysis(self, req, linked_tasks, children, related, objectives) -> Dict:
+    def _fallback_impact_analysis(self, req, linked_tasks, children, related, linked_goals) -> Dict:
         risk_level = 'low'
         areas = []
         change_risks = []
@@ -678,8 +679,8 @@ Return ONLY valid JSON (no markdown fences):
         if children:
             areas.append(f"{len(children)} child requirement(s)")
             risk_level = 'high'
-        if objectives:
-            areas.append(f"{len(objectives)} objective(s)")
+        if linked_goals:
+            areas.append(f"{len(linked_goals)} goal(s)")
 
         if req.priority in ('critical', 'high'):
             risk_level = 'high' if risk_level != 'high' else 'critical'
@@ -703,7 +704,7 @@ Return ONLY valid JSON (no markdown fences):
             'linked_tasks_count': len(linked_tasks),
             'children_count': len(children),
             'related_count': len(related),
-            'objectives_count': len(objectives),
+            'goals_count': len(linked_goals),
             'analyzed_at': timezone.now().isoformat(),
         }
 
@@ -711,12 +712,11 @@ Return ONLY valid JSON (no markdown fences):
         factors = []
         task_count = req.linked_tasks.count()
         children_count = req.children.count()
-        obj_count = req.objectives.count()
 
         score = 50
-        if obj_count > 0:
+        if obj_count := req.linked_goals.count():
             score += 15
-            factors.append(f"Linked to {obj_count} objective(s)")
+            factors.append(f"Linked to {obj_count} goal(s)")
         if task_count > 3:
             score += 10
             factors.append(f"Has {task_count} linked tasks")

@@ -12,13 +12,11 @@ from django.views.decorators.http import require_http_methods, require_POST
 from kanban.models import Board, BoardMembership, Task, Strategy
 
 from .forms import (
-    ProjectObjectiveForm,
     RequirementCategoryForm,
     RequirementCommentForm,
     RequirementForm,
 )
 from .models import (
-    ProjectObjective,
     Requirement,
     RequirementAICache,
     RequirementCategory,
@@ -103,7 +101,6 @@ def requirements_dashboard(request, board_id):
         .annotate(count=Count('id'))
     )
     categories = RequirementCategory.objects.filter(board=board)
-    objectives = ProjectObjective.objects.filter(board=board)
 
     # Coverage: requirements with at least one linked task
     linked_count = Requirement.objects.filter(board=board, linked_tasks__isnull=False).distinct().count()
@@ -118,7 +115,6 @@ def requirements_dashboard(request, board_id):
         'total': total,
         'status_counts': status_counts,
         'categories': categories,
-        'objectives': objectives,
         'coverage_pct': coverage_pct,
         'linked_count': linked_count,
         'can_edit': can_edit,
@@ -147,7 +143,7 @@ def requirement_detail(request, board_id, pk):
     children = requirement.children.all()
     linked_tasks = requirement.linked_tasks.select_related('column', 'assigned_to').all()
     linked_strategies = requirement.linked_strategies.all()
-    objectives = requirement.objectives.all()
+    linked_goals = requirement.linked_goals.all()
     comments = requirement.comments.select_related('author').all()
     comment_form = RequirementCommentForm()
 
@@ -173,7 +169,7 @@ def requirement_detail(request, board_id, pk):
         'children': children,
         'linked_tasks': linked_tasks,
         'linked_strategies': linked_strategies,
-        'objectives': objectives,
+        'linked_goals': linked_goals,
         'comments': comments,
         'comment_form': comment_form,
         'can_edit': can_edit,
@@ -193,7 +189,7 @@ def requirement_create(request, board_id):
         return redirect('board_list')
 
     if request.method == 'POST':
-        form = RequirementForm(request.POST, board=board)
+        form = RequirementForm(request.POST, board=board, user=request.user)
         if form.is_valid():
             req = form.save(commit=False)
             req.board = board
@@ -210,7 +206,7 @@ def requirement_create(request, board_id):
             messages.success(request, f'Requirement {req.identifier} created successfully!')
             return redirect('requirements:dashboard', board_id=board.id)
     else:
-        form = RequirementForm(board=board)
+        form = RequirementForm(board=board, user=request.user)
 
     return render(request, 'requirements/requirement_form.html', {
         'board': board,
@@ -230,7 +226,7 @@ def requirement_update(request, board_id, pk):
     requirement = get_object_or_404(Requirement, pk=pk, board=board)
 
     if request.method == 'POST':
-        form = RequirementForm(request.POST, instance=requirement, board=board)
+        form = RequirementForm(request.POST, instance=requirement, board=board, user=request.user)
         if form.is_valid():
             req = form.save(commit=False)
             req.updated_by = request.user
@@ -239,7 +235,7 @@ def requirement_update(request, board_id, pk):
             messages.success(request, f'Requirement {req.identifier} updated successfully!')
             return redirect('requirements:requirement_detail', board_id=board.id, pk=req.pk)
     else:
-        form = RequirementForm(instance=requirement, board=board)
+        form = RequirementForm(instance=requirement, board=board, user=request.user)
 
     return render(request, 'requirements/requirement_form.html', {
         'board': board,
@@ -336,27 +332,9 @@ def category_create(request, board_id):
 # ── Objective Create ─────────────────────────────────────────────────
 @login_required
 def objective_create(request, board_id):
-    board, membership = _get_board_and_check_access(request, board_id, require_edit=True)
-    if board is None:
-        messages.error(request, "You don't have permission.")
-        return redirect('board_list')
+    # Objectives replaced by org-level Goals; redirect gracefully
+    return redirect('requirements:requirements_dashboard', board_id=board_id)
 
-    if request.method == 'POST':
-        form = ProjectObjectiveForm(request.POST)
-        if form.is_valid():
-            obj = form.save(commit=False)
-            obj.board = board
-            obj.created_by = request.user
-            obj.save()
-            messages.success(request, f'Objective "{obj.title}" created!')
-            return redirect('requirements:traceability_matrix', board_id=board.id)
-    else:
-        form = ProjectObjectiveForm()
-
-    return render(request, 'requirements/objective_form.html', {
-        'board': board,
-        'form': form,
-    })
 
 
 # ── Traceability Matrix ─────────────────────────────────────────────
@@ -367,9 +345,18 @@ def traceability_matrix(request, board_id):
         messages.error(request, "You don't have access to this board.")
         return redirect('board_list')
 
-    objectives = ProjectObjective.objects.filter(board=board)
+    from kanban.models import OrganizationGoal
+    # Goals: only those linked to requirements on this board
+    goal_ids = list(
+        Requirement.objects.filter(board=board)
+        .values_list('linked_goals__id', flat=True)
+        .distinct()
+    )
+    goal_ids = [g for g in goal_ids if g is not None]
+    goals = list(OrganizationGoal.objects.filter(id__in=goal_ids).order_by('name'))
+
     requirements = list(Requirement.objects.filter(board=board).prefetch_related(
-        'objectives', 'linked_tasks', 'linked_strategies',
+        'linked_goals', 'linked_tasks', 'linked_strategies',
     ))
     all_tasks = list(Task.objects.filter(column__board=board, item_type='task').select_related('column', 'assigned_to'))
 
@@ -391,12 +378,14 @@ def traceability_matrix(request, board_id):
         tasks = all_tasks
         tasks_truncated = False
 
-    # Build objectives × requirements matrix
-    obj_matrix = []
-    for obj in objectives:
-        obj_req_ids = set(obj.requirements.values_list('id', flat=True))
-        links = [req.id in obj_req_ids for req in requirements]
-        obj_matrix.append({'objective': obj, 'links': links})
+    # Build goals × requirements matrix
+    goal_matrix = []
+    for goal in goals:
+        goal_req_ids = set(
+            goal.linked_requirements.filter(board=board).values_list('id', flat=True)
+        )
+        links = [req.id in goal_req_ids for req in requirements]
+        goal_matrix.append({'goal': goal, 'links': links})
 
     # Build requirements × tasks matrix
     task_matrix = []
@@ -472,20 +461,7 @@ def requirement_unlink_task(request, board_id, pk):
     return redirect('requirements:requirement_detail', board_id=board.id, pk=pk)
 
 
-# ── Link Requirement ↔ Objective ─────────────────────────────────────
-@login_required
-@require_POST
-def requirement_link_objective(request, board_id, pk):
-    board, membership = _get_board_and_check_access(request, board_id, require_edit=True)
-    if board is None:
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-
-    requirement = get_object_or_404(Requirement, pk=pk, board=board)
-    objective_id = request.POST.get('objective_id')
-    objective = get_object_or_404(ProjectObjective, pk=objective_id, board=board)
-    requirement.objectives.add(objective)
-    messages.success(request, f'Objective linked to {requirement.identifier}.')
-    return redirect('requirements:requirement_detail', board_id=board.id, pk=pk)
+# ── Link Requirement ↔ Objective (removed — replaced by linked_goals on Requirement model)
 
 
 # ── Export CSV ───────────────────────────────────────────────────────
@@ -612,7 +588,7 @@ def requirement_ai_criteria_preview(request, board_id):
         'type': (body.get('type') or 'Functional').strip(),
         'priority': (body.get('priority') or 'Medium').strip(),
         'category': (body.get('category') or '').strip(),
-        'objectives': [o for o in body.get('objectives', []) if isinstance(o, str)],
+        'linked_goals': [o for o in body.get('linked_goals', []) if isinstance(o, str)],
     }
 
     from .ai_analysis import RequirementsAIAnalyzer

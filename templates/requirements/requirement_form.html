@@ -131,22 +131,24 @@
                     </div>
                 </div>
 
-                {% if form.fields.objectives.queryset.exists %}
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Objectives</label>
+                    <label class="form-label fw-bold"><i class="fas fa-trophy text-warning me-1"></i>Linked Goals</label>
+                    {% if form.fields.linked_goals.queryset.exists %}
                     <div class="border rounded p-2" style="max-height:150px;overflow-y:auto;">
-                        {% for obj in form.fields.objectives.queryset %}
+                        {% for goal in form.fields.linked_goals.queryset %}
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="objectives" value="{{ obj.pk }}"
-                                id="obj_{{ obj.pk }}"
-                                {% if obj.pk in form.objectives.value %}checked{% endif %}>
-                            <label class="form-check-label" for="obj_{{ obj.pk }}">{{ obj.title }}</label>
+                            <input class="form-check-input" type="checkbox" name="linked_goals" value="{{ goal.pk }}"
+                                id="goal_{{ goal.pk }}"
+                                {% if goal.pk in form.linked_goals.value %}checked{% endif %}>
+                            <label class="form-check-label" for="goal_{{ goal.pk }}">{{ goal.name }}</label>
                         </div>
                         {% endfor %}
                     </div>
-                    <small class="text-muted">Link this requirement to one or more board objectives.</small>
+                    <small class="text-muted">Link this requirement to one or more organization goals.</small>
+                    {% else %}
+                    <p class="text-muted small mb-0">No organization goals found. <a href="{% url 'goal_list' %}">Create a goal</a> to link requirements.</p>
+                    {% endif %}
                 </div>
-                {% endif %}
 
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary">

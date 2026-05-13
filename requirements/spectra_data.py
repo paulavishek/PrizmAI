@@ -25,10 +25,9 @@ def _safe_import_models():
     from requirements.models import (
         Requirement,
         RequirementCategory,
-        ProjectObjective,
         RequirementHistory,
     )
-    return Requirement, RequirementCategory, ProjectObjective, RequirementHistory
+    return Requirement, RequirementCategory, RequirementHistory
 
 
 def get_requirements_summary_for_board(board):
@@ -38,7 +37,7 @@ def get_requirements_summary_for_board(board):
 
     Used by: chatbot_service context builder, API endpoint.
     """
-    Requirement, RequirementCategory, ProjectObjective, _ = _safe_import_models()
+    Requirement, RequirementCategory, _ = _safe_import_models()
 
     reqs = Requirement.objects.filter(board=board)
     total = reqs.count()
@@ -52,7 +51,7 @@ def get_requirements_summary_for_board(board):
             'priority_breakdown': {},
             'coverage_pct': 0,
             'categories': [],
-            'objectives_count': 0,
+            'goals_count': 0,
             'critical_items': [],
         }
 
@@ -82,8 +81,13 @@ def get_requirements_summary_for_board(board):
         .values('name', 'req_count')
     )
 
-    # Objectives
-    objectives_count = ProjectObjective.objects.filter(board=board).count()
+    # Goals linked to requirements on this board
+    from kanban.models import OrganizationGoal
+    org = getattr(board, 'organization', None)
+    goals_count = (
+        OrganizationGoal.objects.filter(linked_requirements__board=board).distinct().count()
+        if org else 0
+    )
 
     # Critical items (high/critical priority that aren't implemented/verified)
     critical_items = list(
@@ -123,7 +127,7 @@ def get_requirements_summary_for_board(board):
         'coverage_pct': coverage_pct,
         'covered_count': with_tasks,
         'categories': categories,
-        'objectives_count': objectives_count,
+        'goals_count': goals_count,
         'critical_items': critical_items,
     }
 
@@ -135,11 +139,11 @@ def get_requirements_by_status(board, status=None):
 
     Returns a dict keyed by status with lists of requirement summaries.
     """
-    Requirement, _, _, _ = _safe_import_models()
+    Requirement, _, _ = _safe_import_models()
 
     qs = Requirement.objects.filter(board=board).select_related(
         'category', 'created_by', 'reviewer'
-    ).prefetch_related('linked_tasks', 'objectives')
+    ).prefetch_related('linked_tasks', 'linked_goals')
 
     if status:
         qs = qs.filter(status=status)
@@ -157,7 +161,7 @@ def get_requirements_by_status(board, status=None):
             'status': req.get_status_display(),
             'category': req.category.name if req.category else None,
             'task_count': req.linked_tasks.count(),
-            'objective_count': req.objectives.count(),
+            'goals_count': req.linked_goals.count(),
             'created_by': req.created_by.get_full_name() or req.created_by.username,
         })
 
@@ -171,10 +175,10 @@ def get_traceability_summary(board):
 
     Returns a narrative string and structured data.
     """
-    Requirement, _, ProjectObjective, _ = _safe_import_models()
+    Requirement, _, _ = _safe_import_models()
 
     reqs = Requirement.objects.filter(board=board).prefetch_related(
-        'linked_tasks', 'objectives'
+        'linked_tasks'
     )
     total = reqs.count()
     if total == 0:
@@ -232,13 +236,13 @@ def get_requirement_detail_for_spectra(board, identifier):
     Detailed info about a single requirement by identifier (e.g. REQ-001).
     Returns a dict with all fields pre-formatted for Spectra.
     """
-    Requirement, _, _, RequirementHistory = _safe_import_models()
+    Requirement, _, RequirementHistory = _safe_import_models()
 
     try:
         req = Requirement.objects.select_related(
             'category', 'created_by', 'reviewer', 'parent'
         ).prefetch_related(
-            'linked_tasks', 'objectives', 'children', 'related_requirements'
+            'linked_tasks', 'linked_goals', 'children', 'related_requirements'
         ).get(board=board, identifier=identifier)
     except Requirement.DoesNotExist:
         return None
@@ -275,7 +279,7 @@ def get_requirement_detail_for_spectra(board, identifier):
         'parent': req.parent.identifier if req.parent else None,
         'children': [c.identifier for c in req.children.all()],
         'linked_tasks': linked_tasks,
-        'objectives': [o.title for o in req.objectives.all()],
+        'linked_goals': [g.name for g in req.linked_goals.all()],
         'related_requirements': [r.identifier for r in req.related_requirements.all()],
         'history': history,
         'created_at': req.created_at.isoformat() if req.created_at else None,
@@ -287,10 +291,10 @@ def get_requirement_coverage_stats(board):
     Detailed coverage statistics pre-computed for Spectra.
     Answers questions like "how well are our requirements covered?"
     """
-    Requirement, RequirementCategory, ProjectObjective, _ = _safe_import_models()
+    Requirement, RequirementCategory, _ = _safe_import_models()
 
     reqs = Requirement.objects.filter(board=board).prefetch_related(
-        'linked_tasks', 'objectives'
+        'linked_tasks', 'linked_goals'
     )
     total = reqs.count()
     if total == 0:
@@ -352,7 +356,7 @@ def get_requirements_quality_overview(board):
     Returns a dict with average quality score, dimension averages,
     and lists of top issues.
     """
-    Requirement, _, _, _ = _safe_import_models()
+    Requirement, _, _ = _safe_import_models()
     reqs = Requirement.objects.filter(board=board).prefetch_related('linked_tasks')
     total = reqs.count()
     if total == 0:
