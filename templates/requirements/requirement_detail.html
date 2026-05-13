@@ -42,7 +42,7 @@
                         {% elif requirement.status == 'implemented' %}
                         <span class="badge" style="background:#6f42c1;color:#fff;">Implemented</span>
                         {% elif requirement.status == 'verified' %}
-                        <span class="badge bg-dark">Verified</span>
+                        <span class="badge" style="background:#343a40;color:#fff;">Verified</span>
                         {% endif %}
                         <span class="badge bg-secondary">{{ requirement.get_type_display }}</span>
                         {% if requirement.priority == 'critical' %}

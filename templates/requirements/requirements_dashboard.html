@@ -108,7 +108,12 @@
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-end">
                 <div class="col-md-3">
-                    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search requirements..." value="{{ search }}">
+                    <div class="input-group input-group-sm">
+                        <input type="text" name="q" id="reqSearchInput" class="form-control form-control-sm" placeholder="Search requirements..." value="{{ search }}">
+                        <button type="button" id="reqSearchClear" class="btn btn-outline-secondary btn-sm" title="Clear search" style="{% if not search %}display:none;{% endif %}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-md-2">
                     <select name="status" class="form-select form-select-sm">
@@ -146,8 +151,36 @@
                     <button type="submit" class="btn btn-sm btn-primary w-100"><i class="fas fa-filter"></i></button>
                 </div>
             </form>
+            {% if search or status_filter or type_filter or priority_filter or category_filter %}
+            <div class="mt-2 d-flex align-items-center gap-2">
+                <small class="text-muted"><i class="fas fa-filter me-1"></i>Filters active:</small>
+                {% if search %}<span class="badge bg-secondary">"{{ search }}"</span>{% endif %}
+                {% if status_filter %}<span class="badge bg-secondary">{{ status_filter }}</span>{% endif %}
+                {% if type_filter %}<span class="badge bg-secondary">{{ type_filter }}</span>{% endif %}
+                {% if priority_filter %}<span class="badge bg-secondary">{{ priority_filter }}</span>{% endif %}
+                {% if category_filter %}<span class="badge bg-secondary">Category filter</span>{% endif %}
+                <a href="{% url 'requirements:dashboard' board.id %}" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                    <i class="fas fa-times me-1"></i>Clear all
+                </a>
+            </div>
+            {% endif %}
         </div>
     </div>
+    <script>
+    (function () {
+        var inp = document.getElementById('reqSearchInput');
+        var btn = document.getElementById('reqSearchClear');
+        if (!inp || !btn) return;
+        btn.addEventListener('click', function () {
+            inp.value = '';
+            btn.style.display = 'none';
+            inp.closest('form').submit();
+        });
+        inp.addEventListener('input', function () {
+            btn.style.display = inp.value ? '' : 'none';
+        });
+    })();
+    </script>
 
     <!-- Requirements Table -->
     <div class="card">
@@ -190,7 +223,9 @@
                             {% elif req.status == 'implemented' %}
                             <span class="badge" style="background:#6f42c1;color:#fff;">Implemented</span>
                             {% elif req.status == 'verified' %}
-                            <span class="badge bg-dark">Verified</span>
+                            <span class="badge" style="background:#343a40;color:#fff;">Verified</span>
+                            {% else %}
+                            <span class="badge" style="background:#6c757d;color:#fff;">{{ req.status|title }}</span>
                             {% endif %}
                         </td>
                         <td>

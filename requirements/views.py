@@ -364,7 +364,25 @@ def traceability_matrix(request, board_id):
     requirements = list(Requirement.objects.filter(board=board).prefetch_related(
         'objectives', 'linked_tasks', 'linked_strategies',
     ))
-    tasks = list(Task.objects.filter(column__board=board, item_type='task').select_related('column', 'assigned_to'))
+    all_tasks = list(Task.objects.filter(column__board=board, item_type='task').select_related('column', 'assigned_to'))
+
+    # Determine which tasks to show — default to top 15, prioritising linked ones
+    DEFAULT_TASK_COLUMNS = 15
+    show_all_tasks = request.GET.get('show_all_tasks') == '1'
+
+    if not show_all_tasks and len(all_tasks) > DEFAULT_TASK_COLUMNS:
+        linked_task_ids = set(
+            Requirement.objects.filter(board=board)
+            .values_list('linked_tasks__id', flat=True)
+        )
+        linked_task_ids.discard(None)
+        linked = [t for t in all_tasks if t.id in linked_task_ids]
+        unlinked = [t for t in all_tasks if t.id not in linked_task_ids]
+        tasks = (linked + unlinked)[:DEFAULT_TASK_COLUMNS]
+        tasks_truncated = True
+    else:
+        tasks = all_tasks
+        tasks_truncated = False
 
     # Build objectives × requirements matrix
     obj_matrix = []
@@ -378,9 +396,11 @@ def traceability_matrix(request, board_id):
     covered_count = 0
     for req in requirements:
         req_task_ids = set(req.linked_tasks.values_list('id', flat=True))
-        links = [t.id in req_task_ids for t in tasks]
-        task_matrix.append({'requirement': req, 'links': links})
-        if any(links):
+        # Coverage uses ALL tasks, display links use the visible subset
+        all_links = [t.id in req_task_ids for t in all_tasks]
+        visible_links = [t.id in req_task_ids for t in tasks]
+        task_matrix.append({'requirement': req, 'links': visible_links})
+        if any(all_links):
             covered_count += 1
 
     total = len(requirements)
@@ -395,6 +415,9 @@ def traceability_matrix(request, board_id):
         'objectives': objectives,
         'requirements': requirements,
         'tasks': tasks,
+        'all_tasks_count': len(all_tasks),
+        'tasks_truncated': tasks_truncated,
+        'show_all_tasks': show_all_tasks,
         'task_prefix': board.get_task_prefix(),
         'obj_matrix': obj_matrix,
         'task_matrix': task_matrix,
