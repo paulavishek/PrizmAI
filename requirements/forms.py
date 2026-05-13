@@ -15,7 +15,7 @@ class RequirementForm(forms.ModelForm):
         fields = [
             'title', 'description', 'acceptance_criteria',
             'type', 'priority', 'status', 'category',
-            'parent', 'assigned_reviewer',
+            'parent', 'assigned_reviewer', 'objectives',
         ]
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Requirement title'}),
@@ -27,6 +27,7 @@ class RequirementForm(forms.ModelForm):
             'category': forms.Select(attrs={'class': 'form-select'}),
             'parent': forms.Select(attrs={'class': 'form-select'}),
             'assigned_reviewer': forms.Select(attrs={'class': 'form-select'}),
+            'objectives': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled'}),
         }
 
     def __init__(self, *args, board=None, **kwargs):
@@ -41,9 +42,11 @@ class RequirementForm(forms.ModelForm):
             member_ids = BoardMembership.objects.filter(board=board).values_list('user_id', flat=True)
             from django.contrib.auth.models import User
             self.fields['assigned_reviewer'].queryset = User.objects.filter(id__in=member_ids)
+            self.fields['objectives'].queryset = ProjectObjective.objects.filter(board=board)
         self.fields['category'].required = False
         self.fields['parent'].required = False
         self.fields['assigned_reviewer'].required = False
+        self.fields['objectives'].required = False
 
 
 class RequirementCategoryForm(forms.ModelForm):

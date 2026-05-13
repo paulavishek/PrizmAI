@@ -382,9 +382,11 @@ function _startLoadingMessages(contentEl, type) {
       contentEl.innerHTML = '<div class="text-center py-3"><div class="mb-2"><div class="prizm-spinner prizm-spinner--sm"></div></div><div class="prizm-loading-message-inline" id="loadMsg_' + type + '">' + _esc(msgs[0]) + '</div></div>';
       var el = document.getElementById('loadMsg_' + type);
       if (el) _activeTimers[type] = PrizmLoading.rotateMessages(el, msgs, 40000);
+}
 function _stopLoadingMessages(type) {
     if (_activeTimers[type]) {
           _activeTimers[type].stop();
+    }
 }
 
 function _post(url) {
