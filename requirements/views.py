@@ -573,6 +573,39 @@ def requirement_ai_generate_criteria(request, board_id, pk):
 
 @login_required
 @require_POST
+def requirement_ai_criteria_preview(request, board_id):
+    """Generate acceptance criteria from raw form data (no saved requirement). Returns JSON."""
+    board, membership = _get_board_and_check_access(request, board_id)
+    if board is None:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    title = (body.get('title') or '').strip()
+    description = (body.get('description') or '').strip()
+    if not title or not description:
+        return JsonResponse({'error': 'Title and description are required'}, status=400)
+
+    data = {
+        'title': title,
+        'description': description,
+        'type': (body.get('type') or 'Functional').strip(),
+        'priority': (body.get('priority') or 'Medium').strip(),
+        'category': (body.get('category') or '').strip(),
+        'objectives': [o for o in body.get('objectives', []) if isinstance(o, str)],
+    }
+
+    from .ai_analysis import RequirementsAIAnalyzer
+    analyzer = RequirementsAIAnalyzer(board)
+    result = analyzer.generate_acceptance_criteria_from_data(data)
+    return JsonResponse(result)
+
+
+@login_required
+@require_POST
 def requirement_ai_impact_analysis(request, board_id, pk):
     """Analyze downstream impact of a requirement. Returns JSON."""
     board, membership = _get_board_and_check_access(request, board_id)
