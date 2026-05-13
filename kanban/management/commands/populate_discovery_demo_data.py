@@ -1,11 +1,13 @@
 """
 Management command: populate_discovery_demo_data
 
-Seeds PrizmDiscovery with 7 realistic demo ideas for the Acme Corporation demo
+Seeds PrizmDiscovery with 8 realistic demo ideas for the Acme Corporation demo
 organisation, following the Asia-market expansion story used elsewhere in the
 demo data.
 
-Safe to run multiple times — idempotent (skips if demo ideas already exist).
+Idempotent by reset: deletes all existing demo ideas first, then recreates
+them fresh. This ensures stages and scores are always restored to seed state
+(e.g. after a user approves / scores an idea during a demo session).
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -28,10 +30,22 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR('No demo organisation found. Run create_demo_organization first.'))
             return
 
-        # Idempotency guard — skip if all 8 demo ideas already exist
-        if DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True).count() >= 8:
-            self.stdout.write(self.style.NOTICE('Discovery demo ideas already exist — skipping.'))
-            return
+        # Always reset: delete all existing demo ideas and recreate them fresh.
+        # This ensures stages and AI scores are restored to seed state even if
+        # a demo user approved, scored, or promoted an idea before resetting.
+        existing = DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True)
+        if existing.exists():
+            # Clear M2M and cascade-related records before bulk delete
+            for idea in existing:
+                try:
+                    if hasattr(idea, 'promotion'):
+                        idea.promotion.tasks.clear()
+                        idea.promotion.delete()
+                except Exception:
+                    pass
+            IdeaComment.objects.filter(idea__in=existing).delete()
+            existing.delete()
+            self.stdout.write(self.style.NOTICE('Discovery demo ideas cleared — recreating fresh.'))
 
         # ── Demo users ─────────────────────────────────────────────────
         alex = User.objects.filter(username='alex_chen_demo').first()
@@ -270,21 +284,19 @@ class Command(BaseCommand):
         # ── Idea 8: Update FAQ & Help Centre copy (new, unscored) ───────
         # Intentionally left unscored so demo users can experience clicking
         # "Score with Spectra" themselves and see the AI analysis in action.
-        DiscoveryIdea.objects.get_or_create(
+        DiscoveryIdea.objects.create(
             organization=demo_org,
             title='Update FAQ & Help Centre Copy',
-            defaults=dict(
-                description=(
-                    'Refresh the FAQ page and in-app help tooltips with accurate '
-                    'content covering new APAC features, local payment methods, '
-                    'and updated onboarding steps. '
-                    'Current content is 18 months out of date.'
-                ),
-                source='internal_team',
-                stage='new',
-                submitted_by=jordan,
-                is_demo=True,
+            description=(
+                'Refresh the FAQ page and in-app help tooltips with accurate '
+                'content covering new APAC features, local payment methods, '
+                'and updated onboarding steps. '
+                'Current content is 18 months out of date.'
             ),
+            source='internal_team',
+            stage='new',
+            submitted_by=jordan,
+            is_demo=True,
         )
 
         count = DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True).count()
