@@ -267,7 +267,9 @@ class Command(BaseCommand):
             promoted_by=alex,
         )
 
-        # ── Idea 8: Update FAQ & Help Centre copy (fill-in) ──────────
+        # ── Idea 8: Update FAQ & Help Centre copy (new, unscored) ───────
+        # Intentionally left unscored so demo users can experience clicking
+        # "Score with Spectra" themselves and see the AI analysis in action.
         DiscoveryIdea.objects.get_or_create(
             organization=demo_org,
             title='Update FAQ & Help Centre Copy',
@@ -281,16 +283,6 @@ class Command(BaseCommand):
                 source='internal_team',
                 stage='new',
                 submitted_by=jordan,
-                ai_score_impact=32,
-                ai_score_effort=18,
-                ai_score_confidence=88,
-                ai_score_recommendation='Fill-in — quick to ship, low risk, clears a persistent support burden.',
-                ai_score_reasoning=(
-                    'Content updates require no engineering work — only technical writing '
-                    'and a review cycle. Impact is modest but avoids ongoing support tickets '
-                    'from confused users. High confidence because scope is fully defined.'
-                ),
-                ai_scored_at=now,
                 is_demo=True,
             ),
         )
