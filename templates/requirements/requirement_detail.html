@@ -180,12 +180,16 @@
                                 <div class="d-flex justify-content-between">
                                     <span>
                                         <strong>{{ entry.changed_by.get_full_name|default:entry.changed_by.username }}</strong>
+                                        {% if entry.old_status %}
                                         changed status from <span class="badge bg-secondary">{{ entry.get_old_status_display }}</span>
                                         to <span class="badge bg-primary">{{ entry.get_new_status_display }}</span>
+                                        {% else %}
+                                        created this requirement with status <span class="badge bg-primary">{{ entry.get_new_status_display }}</span>
+                                        {% endif %}
                                     </span>
-                                    <small class="text-muted">{{ entry.changed_at|timesince }} ago</small>
+                                    <small class="text-muted">{{ entry.timestamp|timesince }} ago</small>
                                 </div>
-                                {% if entry.notes %}<p class="text-muted mb-0 mt-1">{{ entry.notes }}</p>{% endif %}
+                                {% if entry.notes and entry.old_status %}<p class="text-muted mb-0 mt-1">{{ entry.notes }}</p>{% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -344,6 +348,13 @@ var csrfToken = '{{ csrf_token }}';
 var qualityUrl = '{% url "requirements:ai_quality_check" board.id requirement.pk %}';
 var criteriaUrl = '{% url "requirements:ai_generate_criteria" board.id requirement.pk %}';
 var impactUrl = '{% url "requirements:ai_impact_analysis" board.id requirement.pk %}';
+
+/* Persisted AI results from the database — restored on page load */
+var aiCacheData = {
+    quality:  {% if ai_cache.quality %}JSON.parse('{{ ai_cache.quality|escapejs }}'){% else %}null{% endif %},
+    criteria: {% if ai_cache.criteria %}JSON.parse('{{ ai_cache.criteria|escapejs }}'){% else %}null{% endif %},
+    impact:   {% if ai_cache.impact %}JSON.parse('{{ ai_cache.impact|escapejs }}'){% else %}null{% endif %},
+};
 
 /* ── Revolving loading messages ───────────────────────────────────── */
 var _loadingMessages = {
@@ -506,5 +517,92 @@ function runAiImpactAnalysis() {
         content.innerHTML = '<div class="text-danger">Failed to run impact analysis. Please try again.</div>';
     });
 }
+
+/* ── Auto-restore cached results on page load ─────────────────────── */
+document.addEventListener('DOMContentLoaded', function () {
+    if (aiCacheData.quality) {
+        try {
+            var d = aiCacheData.quality;
+            var box = document.getElementById('aiQualityResult');
+            var content = document.getElementById('aiQualityContent');
+            var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
+                '<span class="fw-bold">Overall Quality:</span> ' + _scoreBadge(d.quality_score) + '</div>';
+            if (d.dimensions) {
+                html += '<div class="row g-2 mb-2">';
+                for (var k in d.dimensions) {
+                    html += '<div class="col-auto"><span class="text-muted small text-capitalize">' + _esc(k) + '</span> ' + _scoreBadge(d.dimensions[k]) + '</div>';
+                }
+                html += '</div>';
+            }
+            if (d.improvement_suggestions && d.improvement_suggestions.length) {
+                html += '<div class="mb-2"><strong class="small">Suggestions:</strong><ul class="mb-0 small">';
+                d.improvement_suggestions.forEach(function(s) { html += '<li>' + _esc(s) + '</li>'; });
+                html += '</ul></div>';
+            }
+            if (d.risk_flags && d.risk_flags.length) {
+                html += '<div><strong class="small text-danger">Risk Flags:</strong><ul class="mb-0 small">';
+                d.risk_flags.forEach(function(f) { html += '<li class="text-danger">' + _esc(f) + '</li>'; });
+                html += '</ul></div>';
+            }
+            content.innerHTML = html;
+            box.style.display = '';
+        } catch(e) {}
+    }
+
+    if (aiCacheData.criteria) {
+        try {
+            var d = aiCacheData.criteria;
+            var box = document.getElementById('aiCriteriaResult');
+            var content = document.getElementById('aiCriteriaContent');
+            var html = '';
+            if (d.criteria && d.criteria.length) {
+                d.criteria.forEach(function(c, i) {
+                    html += '<div class="card mb-2"><div class="card-body py-2 px-3" style="font-size:.85rem;">' +
+                        '<strong>' + (i+1) + '. ' + _esc(c.scenario || 'Scenario') + '</strong>' +
+                        '<div class="mt-1"><span class="badge bg-secondary me-1">Given</span> ' + _esc(c.given) + '</div>' +
+                        '<div><span class="badge bg-primary me-1">When</span> ' + _esc(c.when) + '</div>' +
+                        '<div><span class="badge bg-success me-1">Then</span> ' + _esc(c.then) + '</div>' +
+                        '</div></div>';
+                });
+            }
+            if (d.notes) {
+                html += '<div class="small text-muted mt-1"><i class="fas fa-info-circle me-1"></i>' + _esc(d.notes) + '</div>';
+            }
+            if (html) {
+                content.innerHTML = html;
+                box.style.display = '';
+            }
+        } catch(e) {}
+    }
+
+    if (aiCacheData.impact) {
+        try {
+            var d = aiCacheData.impact;
+            var box = document.getElementById('aiImpactResult');
+            var content = document.getElementById('aiImpactContent');
+            var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
+                '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
+                '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
+                (d.children_count||0) + ' child req(s), ' + (d.objectives_count||0) + ' objective(s)</span></div>';
+            if (d.impact_summary) {
+                html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
+            }
+            if (d.change_risks && d.change_risks.length) {
+                html += '<div class="mb-2"><strong class="small">Change Risks:</strong>';
+                d.change_risks.forEach(function(r) {
+                    html += '<div class="small ms-2">• ' + _riskBadge(r.severity) + ' ' + _esc(r.scenario) + ' — ' + _esc(r.impact) + '</div>';
+                });
+                html += '</div>';
+            }
+            if (d.recommendations && d.recommendations.length) {
+                html += '<div><strong class="small">Recommendations:</strong><ul class="mb-0 small">';
+                d.recommendations.forEach(function(r) { html += '<li>' + _esc(r) + '</li>'; });
+                html += '</ul></div>';
+            }
+            content.innerHTML = html;
+            box.style.display = '';
+        } catch(e) {}
+    }
+});
 </script>
 {% endblock %}

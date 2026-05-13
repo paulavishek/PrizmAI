@@ -20,6 +20,7 @@ from .forms import (
 from .models import (
     ProjectObjective,
     Requirement,
+    RequirementAICache,
     RequirementCategory,
     RequirementComment,
     RequirementHistory,
@@ -160,6 +161,11 @@ def requirement_detail(request, board_id, pk):
         column__board=board
     ).exclude(id__in=already_linked_ids).order_by('title')[:50]
 
+    # Load persisted AI analysis results
+    ai_cache = {}
+    for entry in requirement.ai_cache.all():
+        ai_cache[entry.analysis_type] = entry.result_json
+
     context = {
         'board': board,
         'requirement': requirement,
@@ -173,6 +179,7 @@ def requirement_detail(request, board_id, pk):
         'can_edit': can_edit,
         'status_choices': Requirement.STATUS_CHOICES,
         'available_tasks': available_tasks,
+        'ai_cache': ai_cache,
     }
     return render(request, 'requirements/requirement_detail.html', context)
 
@@ -552,6 +559,11 @@ def requirement_ai_quality_check(request, board_id, pk):
     from .ai_analysis import RequirementsAIAnalyzer
     analyzer = RequirementsAIAnalyzer(board)
     result = analyzer.analyze_quality(requirement)
+    RequirementAICache.objects.update_or_create(
+        requirement=requirement,
+        analysis_type='quality',
+        defaults={'result_json': json.dumps(result), 'generated_by': request.user},
+    )
     return JsonResponse(result)
 
 
@@ -568,6 +580,11 @@ def requirement_ai_generate_criteria(request, board_id, pk):
     from .ai_analysis import RequirementsAIAnalyzer
     analyzer = RequirementsAIAnalyzer(board)
     result = analyzer.generate_acceptance_criteria(requirement)
+    RequirementAICache.objects.update_or_create(
+        requirement=requirement,
+        analysis_type='criteria',
+        defaults={'result_json': json.dumps(result), 'generated_by': request.user},
+    )
     return JsonResponse(result)
 
 
@@ -617,6 +634,11 @@ def requirement_ai_impact_analysis(request, board_id, pk):
     from .ai_analysis import RequirementsAIAnalyzer
     analyzer = RequirementsAIAnalyzer(board)
     result = analyzer.analyze_impact(requirement)
+    RequirementAICache.objects.update_or_create(
+        requirement=requirement,
+        analysis_type='impact',
+        defaults={'result_json': json.dumps(result), 'generated_by': request.user},
+    )
     return JsonResponse(result)
 
 
