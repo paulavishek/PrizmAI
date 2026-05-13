@@ -441,6 +441,8 @@ def requirement_link_task(request, board_id, pk):
     task_id = request.POST.get('task_id')
     task = get_object_or_404(Task, pk=task_id, column__board=board)
     requirement.linked_tasks.add(task)
+    requirement.updated_by = request.user
+    requirement.save()
     messages.success(request, f'Task "{task.title}" linked to {requirement.identifier}.')
     return redirect('requirements:requirement_detail', board_id=board.id, pk=pk)
 
@@ -457,6 +459,8 @@ def requirement_unlink_task(request, board_id, pk):
     task_id = request.POST.get('task_id')
     task = get_object_or_404(Task, pk=task_id, column__board=board)
     requirement.linked_tasks.remove(task)
+    requirement.updated_by = request.user
+    requirement.save()
     messages.success(request, f'Task "{task.title}" unlinked from {requirement.identifier}.')
     return redirect('requirements:requirement_detail', board_id=board.id, pk=pk)
 
