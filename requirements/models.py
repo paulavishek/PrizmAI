@@ -217,8 +217,8 @@ class RequirementHistory(models.Model):
         on_delete=models.CASCADE,
         related_name='history',
     )
-    old_status = models.CharField(max_length=20, blank=True)
-    new_status = models.CharField(max_length=20)
+    old_status = models.CharField(max_length=20, blank=True, choices=Requirement.STATUS_CHOICES)
+    new_status = models.CharField(max_length=20, choices=Requirement.STATUS_CHOICES)
     changed_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -233,6 +233,36 @@ class RequirementHistory(models.Model):
 
     def __str__(self):
         return f"{self.requirement.identifier} — {self.old_status}→{self.new_status} — {self.timestamp}"
+
+
+class RequirementAICache(models.Model):
+    """Persists the most recent AI analysis result for a requirement (per type)."""
+    ANALYSIS_TYPES = [
+        ('quality', 'Quality Check'),
+        ('criteria', 'Acceptance Criteria'),
+        ('impact', 'Impact Analysis'),
+    ]
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name='ai_cache',
+    )
+    analysis_type = models.CharField(max_length=20, choices=ANALYSIS_TYPES)
+    result_json = models.TextField()
+    generated_at = models.DateTimeField(auto_now=True)
+    generated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        unique_together = ('requirement', 'analysis_type')
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f"{self.requirement.identifier} — {self.analysis_type} @ {self.generated_at}"
 
 
 class RequirementComment(models.Model):
