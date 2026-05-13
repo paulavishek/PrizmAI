@@ -24,6 +24,9 @@
             <a href="{% url 'requirements:category_create' board.id %}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-folder-plus me-1"></i>Add Category
             </a>
+            <a href="{% url 'requirements:objective_create' board.id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-bullseye me-1"></i>Add Objective
+            </a>
             <a href="{% url 'requirements:requirement_create' board.id %}" class="btn btn-primary btn-sm">
                 <i class="fas fa-plus me-1"></i>New Requirement
             </a>
