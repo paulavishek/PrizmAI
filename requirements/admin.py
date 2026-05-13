@@ -1,7 +1,6 @@
 from django.contrib import admin
 
 from .models import (
-    ProjectObjective,
     Requirement,
     RequirementCategory,
     RequirementComment,
@@ -27,12 +26,6 @@ class RequirementCategoryAdmin(admin.ModelAdmin):
     list_filter = ('board',)
     search_fields = ('name',)
 
-
-@admin.register(ProjectObjective)
-class ProjectObjectiveAdmin(admin.ModelAdmin):
-    list_display = ('title', 'board', 'created_by', 'created_at')
-    list_filter = ('board',)
-    search_fields = ('title',)
 
 
 @admin.register(Requirement)

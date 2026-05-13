@@ -23,11 +23,9 @@ urlpatterns = [
     # Link / unlink
     path('board/<int:board_id>/<int:pk>/link-task/', views.requirement_link_task, name='link_task'),
     path('board/<int:board_id>/<int:pk>/unlink-task/', views.requirement_unlink_task, name='unlink_task'),
-    path('board/<int:board_id>/<int:pk>/link-objective/', views.requirement_link_objective, name='link_objective'),
 
-    # Category & Objective
+    # Category
     path('board/<int:board_id>/category/create/', views.category_create, name='category_create'),
-    path('board/<int:board_id>/objective/create/', views.objective_create, name='objective_create'),
 
     # Traceability matrix
     path('board/<int:board_id>/traceability/', views.traceability_matrix, name='traceability_matrix'),

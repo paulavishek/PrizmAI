@@ -166,6 +166,28 @@
     </div>
 </div>
 {% endif %}
+
+{% if linked_requirements %}
+<hr class="my-3">
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0"><i class="fas fa-clipboard-list text-info me-2"></i>Linked Requirements<span class="badge bg-info ms-1">{{ linked_requirements|length }}</span></h5>
+</div>
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead class="table-light"><tr><th>REQ ID</th><th>Board</th><th>Title</th><th>Status</th></tr></thead>
+        <tbody>
+            {% for req in linked_requirements %}
+            <tr>
+                <td><code>{{ req.identifier }}</code></td>
+                <td class="text-muted small">{{ req.board.name }}</td>
+                <td><a href="{% url 'requirements:requirement_detail' req.board.id req.pk %}">{{ req.title|truncatechars:60 }}</a></td>
+                <td><span class="badge {% if req.status == 'verified' %}bg-success{% elif req.status == 'implemented' %}bg-primary{% elif req.status == 'approved' %}bg-info text-dark{% elif req.status == 'in_review' %}bg-warning text-dark{% elif req.status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">{{ req.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 {% endblock %}
 
 {# ================================================================ #}

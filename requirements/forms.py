@@ -1,7 +1,6 @@
 from django import forms
 
 from .models import (
-    ProjectObjective,
     Requirement,
     RequirementCategory,
     RequirementComment,
@@ -15,7 +14,7 @@ class RequirementForm(forms.ModelForm):
         fields = [
             'title', 'description', 'acceptance_criteria',
             'type', 'priority', 'status', 'category',
-            'parent', 'assigned_reviewer', 'objectives',
+            'parent', 'assigned_reviewer', 'linked_goals',
         ]
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Requirement title'}),
@@ -27,10 +26,10 @@ class RequirementForm(forms.ModelForm):
             'category': forms.Select(attrs={'class': 'form-select'}),
             'parent': forms.Select(attrs={'class': 'form-select'}),
             'assigned_reviewer': forms.Select(attrs={'class': 'form-select'}),
-            'objectives': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled'}),
+            'linked_goals': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled'}),
         }
 
-    def __init__(self, *args, board=None, **kwargs):
+    def __init__(self, *args, board=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         if board:
             self.fields['category'].queryset = RequirementCategory.objects.filter(board=board)
@@ -42,11 +41,26 @@ class RequirementForm(forms.ModelForm):
             member_ids = BoardMembership.objects.filter(board=board).values_list('user_id', flat=True)
             from django.contrib.auth.models import User
             self.fields['assigned_reviewer'].queryset = User.objects.filter(id__in=member_ids)
-            self.fields['objectives'].queryset = ProjectObjective.objects.filter(board=board)
+            from kanban.models import OrganizationGoal
+            org = getattr(board, 'organization', None)
+            # Fall back to the user's profile org when the board has no org (e.g. sandbox copies)
+            if org is None and user is not None:
+                try:
+                    from accounts.models import UserProfile
+                    profile = UserProfile.objects.filter(user=user).select_related('organization').first()
+                    org = getattr(profile, 'organization', None) if profile else None
+                except Exception:
+                    pass
+            if org:
+                self.fields['linked_goals'].queryset = OrganizationGoal.objects.filter(
+                    organization=org
+                ).order_by('name')
+            else:
+                self.fields['linked_goals'].queryset = OrganizationGoal.objects.none()
         self.fields['category'].required = False
         self.fields['parent'].required = False
         self.fields['assigned_reviewer'].required = False
-        self.fields['objectives'].required = False
+        self.fields['linked_goals'].required = False
 
 
 class RequirementCategoryForm(forms.ModelForm):
@@ -57,17 +71,6 @@ class RequirementCategoryForm(forms.ModelForm):
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Category name'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Optional description'}),
-        }
-
-
-class ProjectObjectiveForm(forms.ModelForm):
-    required_css_class = 'required'
-    class Meta:
-        model = ProjectObjective
-        fields = ['title', 'description']
-        widgets = {
-            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Objective title'}),
-            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Describe what this objective aims to achieve'}),
         }
 
 

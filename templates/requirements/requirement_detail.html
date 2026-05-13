@@ -275,17 +275,17 @@
                 </ul>
             </div>
 
-            <!-- Linked Objectives -->
+            <!-- Linked Goals -->
             <div class="card mb-3">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                    <strong>Objectives</strong>
-                    <span class="badge bg-primary">{{ requirement.objectives.count }}</span>
+                    <strong>Linked Goals</strong>
+                    <span class="badge bg-success">{{ requirement.linked_goals.count }}</span>
                 </div>
                 <ul class="list-group list-group-flush" style="font-size:.85rem;">
-                    {% for obj in requirement.objectives.all %}
-                    <li class="list-group-item py-2">{{ obj.title }}</li>
+                    {% for goal in linked_goals %}
+                    <li class="list-group-item py-2"><a href="{% url 'goal_detail' goal.id %}"><i class="fas fa-trophy text-warning me-1"></i>{{ goal.name }}</a></li>
                     {% empty %}
-                    <li class="list-group-item py-2 text-muted text-center">No linked objectives</li>
+                    <li class="list-group-item py-2 text-muted text-center">No linked goals</li>
                     {% endfor %}
                 </ul>
             </div>
@@ -495,7 +495,7 @@ function runAiImpactAnalysis() {
         var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
             '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
             '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
-            (d.children_count||0) + ' child req(s), ' + (d.objectives_count||0) + ' objective(s)</span></div>';
+            (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count || 0) + ' goal(s)</span></div>';
         if (d.impact_summary) {
             html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
         }
@@ -583,7 +583,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
                 '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
                 '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
-                (d.children_count||0) + ' child req(s), ' + (d.objectives_count||0) + ' objective(s)</span></div>';
+                (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count || 0) + ' goal(s)</span></div>';
             if (d.impact_summary) {
                 html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
             }

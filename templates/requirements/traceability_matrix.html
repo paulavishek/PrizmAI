@@ -66,24 +66,24 @@
         </div>
     </div>
 
-    <!-- Objectives × Requirements Matrix -->
-    {% if objectives and requirements %}
+    <!-- Goals × Requirements Matrix -->
+    {% if goals and requirements %}
     <div class="card mb-4">
-        <div class="card-header py-2"><strong>Objectives × Requirements</strong></div>
+        <div class="card-header py-2"><strong>Goals × Requirements</strong></div>
         <div class="table-responsive">
             <table class="table table-bordered matrix-table mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th style="text-align:left;min-width:200px;">Objective</th>
+                        <th style="text-align:left;min-width:200px;">Goal</th>
                         {% for req in requirements %}
                         <th class="req-cell" title="{{ req.identifier }}: {{ req.title }}">{{ req.identifier }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
-                    {% for row in obj_matrix %}
+                    {% for row in goal_matrix %}
                     <tr>
-                        <td style="text-align:left;">{{ row.objective.title|truncatewords:8 }}</td>
+                        <td style="text-align:left;">{{ row.goal.name|truncatewords:8 }}</td>
                         {% for linked in row.links %}
                         <td><span class="matrix-dot {% if linked %}linked{% else %}unlinked{% endif %}" title="{% if linked %}Linked{% else %}Not linked{% endif %}"></span></td>
                         {% endfor %}
