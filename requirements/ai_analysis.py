@@ -88,7 +88,14 @@ class RequirementsAIAnalyzer:
         Auto-generate acceptance criteria in Given/When/Then format
         from a requirement's title and description.
         """
-        prompt = self._build_criteria_prompt(requirement)
+        data = {
+            'title': requirement.title,
+            'description': requirement.description or '',
+            'type': requirement.get_type_display(),
+            'priority': requirement.get_priority_display(),
+            'category': requirement.category.name if requirement.category else '',
+        }
+        prompt = self._build_criteria_prompt_from_data(data)
         ai_response = self._call_gemini(
             prompt,
             cache_operation='requirement_criteria',
@@ -99,6 +106,23 @@ class RequirementsAIAnalyzer:
                 return parsed
 
         return self._fallback_criteria(requirement)
+
+    def generate_acceptance_criteria_from_data(self, data: Dict) -> Dict:
+        """
+        Generate acceptance criteria from raw form data (no saved requirement needed).
+        data keys: title, description, type, priority, category, objectives (optional list of strings)
+        """
+        prompt = self._build_criteria_prompt_from_data(data)
+        ai_response = self._call_gemini(
+            prompt,
+            cache_operation='requirement_criteria',
+        )
+        if ai_response:
+            parsed = self._parse_criteria_response(ai_response)
+            if parsed:
+                return parsed
+
+        return self._fallback_criteria_from_data(data)
 
     def analyze_impact(self, requirement) -> Dict:
         """
@@ -220,15 +244,40 @@ Return ONLY valid JSON (no markdown fences):
 }}"""
 
     def _build_criteria_prompt(self, req) -> str:
-        return f"""Generate acceptance criteria for this software requirement using Given/When/Then format.
+        data = {
+            'title': req.title,
+            'description': req.description or '',
+            'type': req.get_type_display(),
+            'priority': req.get_priority_display(),
+            'category': req.category.name if req.category else '',
+        }
+        return self._build_criteria_prompt_from_data(data)
 
-REQUIREMENT:
-- Title: {req.title}
-- Description: {req.description or '(none)'}
-- Type: {req.get_type_display()}
-- Priority: {req.get_priority_display()}
+    def _build_criteria_prompt_from_data(self, data: Dict) -> str:
+        title = data.get('title', '')
+        description = data.get('description', '') or '(none)'
+        req_type = data.get('type', 'Functional')
+        priority = data.get('priority', 'Medium')
+        category = data.get('category', '') or 'General'
+        objectives = data.get('objectives', [])
+        obj_str = (', '.join(objectives)) if objectives else 'none'
 
-Generate 3-5 acceptance criteria in Given/When/Then format.
+        return f"""You are a requirements analyst. Based on the following requirement details, generate 3-5 clear, testable acceptance criteria in Given/When/Then format.
+
+Requirement Title: {title}
+Description: {description}
+Type: {req_type}
+Priority: {priority}
+Category: {category}
+Linked Objectives: {obj_str}
+
+Rules:
+- Each criterion must be specific and independently testable
+- Use Given/When/Then format
+- No vague language like "should work well" or "must be fast"
+- If type is Non-Functional, include measurable thresholds (e.g. response time < 200ms, uptime > 99.9%)
+- Cover the happy path, at least one error/edge case, and any security or permission concern if relevant
+- Return only the criteria, no preamble
 
 Return ONLY valid JSON (no markdown fences):
 {{
@@ -584,7 +633,13 @@ Return ONLY valid JSON (no markdown fences):
         }
 
     def _fallback_criteria(self, req) -> Dict:
-        title = req.title or 'the feature'
+        return self._fallback_criteria_from_data({
+            'title': req.title,
+            'description': req.description or '',
+        })
+
+    def _fallback_criteria_from_data(self, data: Dict) -> Dict:
+        title = data.get('title') or 'the feature'
         criteria = [
             {
                 'scenario': f'{title} — basic functionality',

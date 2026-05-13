@@ -104,8 +104,17 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Acceptance Criteria</label>
-                    <textarea name="acceptance_criteria" class="form-control" rows="3">{{ form.acceptance_criteria.value|default:'' }}</textarea>
+                    <label class="form-label fw-bold d-flex align-items-center gap-2">
+                        Acceptance Criteria
+                        <button type="button" id="btnGenerateCriteria" class="btn btn-sm btn-outline-success ms-1" disabled title="Fill in Title and Description to enable AI generation">
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>Generate with AI
+                        </button>
+                        <span id="criteriaGenerating" style="display:none;" class="text-muted small">
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>Generating…
+                        </span>
+                    </label>
+                    <textarea name="acceptance_criteria" id="acceptanceCriteriaField" class="form-control" rows="5">{{ form.acceptance_criteria.value|default:'' }}</textarea>
+                    <small class="text-muted">AI will generate criteria in Given/When/Then format based on Title, Description, Type, Priority and Category.</small>
                 </div>
 
                 <div class="row g-3 mb-3">
@@ -149,4 +158,98 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var criteriaPreviewUrl = '{% url "requirements:ai_criteria_preview" board.id %}';
+    var csrfToken = '{{ csrf_token }}';
+
+    var titleField       = document.querySelector('input[name="title"]');
+    var descField        = document.querySelector('textarea[name="description"]');
+    var typeField        = document.querySelector('select[name="type"]');
+    var priorityField    = document.querySelector('select[name="priority"]');
+    var categoryField    = document.querySelector('select[name="category"]');
+    var criteriaField    = document.getElementById('acceptanceCriteriaField');
+    var generateBtn      = document.getElementById('btnGenerateCriteria');
+    var generatingSpan   = document.getElementById('criteriaGenerating');
+
+    function updateButtonState() {
+        var hasTitle = titleField && titleField.value.trim().length > 0;
+        var hasDesc  = descField  && descField.value.trim().length > 0;
+        generateBtn.disabled = !(hasTitle && hasDesc);
+        if (hasTitle && hasDesc) {
+            generateBtn.title = 'Generate acceptance criteria with AI';
+        } else {
+            generateBtn.title = 'Fill in Title and Description to enable AI generation';
+        }
+    }
+
+    if (titleField) titleField.addEventListener('input', updateButtonState);
+    if (descField)  descField.addEventListener('input', updateButtonState);
+    updateButtonState();
+
+    function criteriaToText(criteria) {
+        return criteria.map(function (c, i) {
+            var lines = [];
+            lines.push((i + 1) + '. ' + (c.scenario || 'Scenario'));
+            lines.push('   Given ' + (c.given  || ''));
+            lines.push('   When '  + (c.when   || ''));
+            lines.push('   Then '  + (c.then   || ''));
+            return lines.join('\n');
+        }).join('\n\n');
+    }
+
+    generateBtn.addEventListener('click', function () {
+        var objectives = [];
+        document.querySelectorAll('input[name="objectives"]:checked').forEach(function (cb) {
+            var label = document.querySelector('label[for="' + cb.id + '"]');
+            if (label) objectives.push(label.textContent.trim());
+        });
+
+        var payload = {
+            title:       titleField    ? titleField.value.trim()    : '',
+            description: descField     ? descField.value.trim()     : '',
+            type:        typeField     ? typeField.options[typeField.selectedIndex].text     : 'Functional',
+            priority:    priorityField ? priorityField.options[priorityField.selectedIndex].text : 'Medium',
+            category:    categoryField && categoryField.value ? categoryField.options[categoryField.selectedIndex].text : '',
+            objectives:  objectives,
+        };
+
+        generateBtn.disabled = true;
+        generatingSpan.style.display = '';
+
+        fetch(criteriaPreviewUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(payload),
+        })
+        .then(function (resp) {
+            if (!resp.ok) throw new Error('Request failed: ' + resp.status);
+            return resp.json();
+        })
+        .then(function (data) {
+            if (data.criteria && data.criteria.length) {
+                var text = criteriaToText(data.criteria);
+                if (data.notes) {
+                    text += '\n\nNotes: ' + data.notes;
+                }
+                criteriaField.value = text;
+                criteriaField.focus();
+            } else {
+                alert('AI could not generate criteria. Please try again or write them manually.');
+            }
+        })
+        .catch(function () {
+            alert('Failed to generate criteria. Please check your connection and try again.');
+        })
+        .finally(function () {
+            generatingSpan.style.display = 'none';
+            updateButtonState();
+        });
+    });
+})();
+</script>
 {% endblock %}

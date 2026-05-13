@@ -43,4 +43,5 @@ urlpatterns = [
     path('board/<int:board_id>/<int:pk>/ai/criteria/', views.requirement_ai_generate_criteria, name='ai_generate_criteria'),
     path('board/<int:board_id>/<int:pk>/ai/impact/', views.requirement_ai_impact_analysis, name='ai_impact_analysis'),
     path('board/<int:board_id>/ai/gaps/', views.board_requirements_gap_analysis, name='ai_gap_analysis'),
+    path('board/<int:board_id>/ai/criteria-preview/', views.requirement_ai_criteria_preview, name='ai_criteria_preview'),
 ]
