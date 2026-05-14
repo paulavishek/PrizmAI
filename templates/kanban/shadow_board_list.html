@@ -299,8 +299,11 @@
     <!-- Quantum Standup Section -->
     <div class="card quantum-standup mb-4">
         <div class="card-header bg-transparent border-0 py-3 d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#quantumStandupBody">
-            <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quantum Standup — Today's Impact</h5>
-            <i class="fas fa-chevron-down"></i>
+            <div>
+                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quantum Standup — Today's Impact</h5>
+                <small class="text-muted">See how today's real work shifted each branch's outlook — check back after your team completes tasks.</small>
+            </div>
+            <i class="fas fa-chevron-down flex-shrink-0 ms-3"></i>
         </div>
         <div class="collapse show" id="quantumStandupBody">
             <div class="card-body">
@@ -376,6 +379,14 @@
             </div>
         </div>
     </div>
+
+    {% if has_active_branches %}
+    <div class="alert alert-info alert-dismissible py-2 px-3 mb-4" id="shadowBoardTipBanner" role="alert" style="display: none;">
+        <i class="fas fa-lightbulb me-2 text-info"></i>
+        <strong>Tip:</strong> Shadow Board works best when you check in regularly. After your team completes tasks, return here to see how each branch's feasibility score has shifted — then commit the branch that's winning.
+        <button type="button" class="btn-close" id="shadowBoardTipDismiss" aria-label="Close"></button>
+    </div>
+    {% endif %}
 
     <!-- Branch Cards Grid -->
     <div class="mb-4">
@@ -618,6 +629,19 @@
 <script src="{% static 'js/shadow_board.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Tip banner: show unless dismissed this browser session
+    var tipBanner = document.getElementById('shadowBoardTipBanner');
+    if (tipBanner) {
+        var DISMISS_KEY = 'shadowBoardTipDismissed';
+        if (!sessionStorage.getItem(DISMISS_KEY)) {
+            tipBanner.style.display = '';
+        }
+        document.getElementById('shadowBoardTipDismiss').addEventListener('click', function() {
+            sessionStorage.setItem(DISMISS_KEY, '1');
+            tipBanner.style.display = 'none';
+        });
+    }
+
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
         new bootstrap.Tooltip(el, { boundary: 'window' });
     });

@@ -183,13 +183,18 @@
     {% endif %}
 
     <!-- Feasibility Trend Chart -->
-    {% if feasibility_history|length > 1 %}
+    {% if feasibility_history|length >= 1 %}
     <div class="card mb-4">
         <div class="card-header bg-light">
             <h6 class="mb-0"><i class="fas fa-chart-area me-2"></i>Feasibility Trend</h6>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="position: relative;">
             <canvas id="feasibilityChart"></canvas>
+            {% if feasibility_history|length < 3 %}
+            <p class="text-center text-muted mb-0 mt-3" id="trend-placeholder" style="font-size: 0.85rem;">
+                <i class="fas fa-hourglass-half me-1"></i>This chart will fill in as your team makes real progress. Come back after tasks are completed to watch this branch's score evolve.
+            </p>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -349,14 +354,16 @@
             <div class="modal-body">
                 <p>Are you sure you want to commit <strong>{{ branch.name }}</strong>?</p>
                 <div class="alert alert-warning">
-                    <strong><i class="fas fa-exclamation-triangle me-2"></i>Warning:</strong>
-                    This will:
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>This will:</strong>
                     <ul class="mb-0 mt-2">
                         <li>Mark this branch as the accepted reality</li>
                         <li><strong>Archive all other active branches</strong> (they can be restored later)</li>
                         <li>Create an audit log entry</li>
                     </ul>
                 </div>
+                <p class="text-muted small mb-0">
+                    <i class="fas fa-info-circle me-1 text-info"></i>Don't worry — archived branches are never deleted. You can restore any of them at any time using the Restore All Archived button.
+                </p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>

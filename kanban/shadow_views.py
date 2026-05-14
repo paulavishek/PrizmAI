@@ -107,6 +107,9 @@ class ShadowBoardListView(ListView):
         context['has_archived_branches'] = any(
             b.status == 'archived' for b in context['branches']
         )
+        context['has_active_branches'] = any(
+            b.status == 'active' for b in context['branches']
+        )
 
         # --- Quantum Standup Data ---
         # Today's real progress
@@ -124,14 +127,22 @@ class ShadowBoardListView(ListView):
         context['tasks_completed_today'] = completed_today
         context['tasks_completed_count'] = completed_today.count()
 
-        # Branch impacts today: divergences logged in last 24 hours
+        # Branch impacts today: divergences logged in last 24 hours.
+        # Deduplicate so each branch appears at most once (latest log per branch).
         recent_divergences = BranchDivergenceLog.objects.filter(
             branch__board=board,
             logged_at__gte=today_start,
             logged_at__lt=today_end,
         ).select_related('branch').order_by('-logged_at')
 
-        context['branch_impacts_today'] = recent_divergences
+        seen_branch_ids = set()
+        unique_impacts = []
+        for log in recent_divergences:
+            if log.branch_id not in seen_branch_ids:
+                seen_branch_ids.add(log.branch_id)
+                unique_impacts.append(log)
+
+        context['branch_impacts_today'] = unique_impacts
 
         # Auto-heal: if any active branches have no snapshots, re-trigger recalculation
         branches_without_snapshots = ShadowBranch.objects.filter(
@@ -560,10 +571,12 @@ def promote_scenario_to_branch(request, board_id):
             scenario_id = data_dict.get('scenario_id')
             branch_name = data_dict.get('branch_name', '').strip()
             color = data_dict.get('color', BRANCH_COLOR_PALETTE[0])
+            description = data_dict.get('description', '').strip()
         else:
             scenario_id = request.POST.get('scenario_id')
             branch_name = request.POST.get('branch_name', '').strip()
             color = request.POST.get('color', BRANCH_COLOR_PALETTE[0])
+            description = request.POST.get('description', '').strip()
 
         if not scenario_id:
             return JsonResponse({'error': 'scenario_id required'}, status=400)
@@ -578,7 +591,7 @@ def promote_scenario_to_branch(request, board_id):
             board=board,
             created_by=request.user,
             name=branch_name,
-            description=f'Promoted from scenario: {scenario.name}',
+            description=description or f'Promoted from scenario: {scenario.name}',
             source_scenario=scenario,
             branch_color=color,
         )
