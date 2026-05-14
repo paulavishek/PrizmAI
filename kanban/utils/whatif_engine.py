@@ -157,19 +157,23 @@ class WhatIfEngine:
         risk_level = 'unknown'
         confidence_pct = None
         if prediction:
-            velocity = float(prediction.current_velocity or 0)
+            # Use average_velocity to match what the Burndown Prediction dashboard displays.
+            # current_velocity is only the most-recent week; average_velocity is the mean
+            # across all historical weekly snapshots — the correct baseline for projections.
+            velocity = float(prediction.average_velocity or prediction.current_velocity or 0)
             predicted_date = prediction.predicted_completion_date
             delay_probability = float(prediction.delay_probability or 0)
             risk_level = prediction.risk_level or 'unknown'
             confidence_pct = prediction.confidence_percentage
 
-        # Velocity fallback from snapshots
+        # Velocity fallback: average recent weekly snapshots (mirrors burndown predictor logic)
         if not velocity:
-            latest_vel = TeamVelocitySnapshot.objects.filter(
+            recent_snapshots = TeamVelocitySnapshot.objects.filter(
                 board=board,
-            ).order_by('-period_end').first()
-            if latest_vel:
-                velocity = float(latest_vel.tasks_completed or 0)
+            ).order_by('-period_end')[:8]
+            counts = [float(s.tasks_completed or 0) for s in recent_snapshots]
+            if counts:
+                velocity = sum(counts) / len(counts)
 
         # Team
         team_size = board.memberships.count() or 1

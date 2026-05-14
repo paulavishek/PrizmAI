@@ -103,6 +103,55 @@
 
     /* ─── Warnings ────────────────────────────────────────────── */
     .warning-list li { font-size: .9rem; color: #856404; }
+
+    /* ─── Branch color picker (matches Shadow Board) ─────────── */
+    .branch-color-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 6px 2px;
+    }
+    .branch-color-picker label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin: 0;
+        border: 3px solid transparent;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+        transition: transform 0.15s, box-shadow 0.15s;
+        position: relative;
+        flex-shrink: 0;
+    }
+    .branch-color-picker label:hover {
+        transform: scale(1.12);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    }
+    .branch-color-picker input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+    }
+    .branch-color-picker label.color-selected {
+        transform: none;
+        box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(0,0,0,0.5);
+    }
+    .branch-color-picker label.color-selected::after {
+        content: '';
+        position: absolute;
+        width: 10px;
+        height: 6px;
+        border-left: 2.5px solid #fff;
+        border-bottom: 2.5px solid #fff;
+        transform: rotate(-45deg) translateY(-1px);
+        filter: drop-shadow(0 0 2px rgba(0,0,0,0.6));
+        pointer-events: none;
+    }
 </style>
 {% endblock %}
 
@@ -534,6 +583,44 @@
 
 </div>
 
+<!-- Promote to Shadow Branch Modal -->
+<div class="modal fade" id="promoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-atom me-2 text-success"></i>Promote to Shadow Branch</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="promote-branch-name" class="form-label">Branch Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="promote-branch-name" maxlength="200" placeholder="e.g., Mobile-First Launch">
+                </div>
+                <div class="mb-3">
+                    <label for="promote-branch-desc" class="form-label">Description <span class="text-muted small">(optional)</span></label>
+                    <textarea class="form-control" id="promote-branch-desc" rows="2" placeholder="What's the goal of this branch?"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Branch Color</label>
+                    <div class="branch-color-picker" id="promote-color-picker">
+                        {% for color in predefined_colors %}
+                        <label style="background-color: {{ color }};" {% if forloop.first %}class="color-selected"{% endif %}>
+                            <input type="radio" name="promote_branch_color" value="{{ color }}" {% if forloop.first %}checked{% endif %}>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="btn-confirm-promote">
+                    <i class="fas fa-atom me-1"></i> Create Shadow Branch
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Save Scenario Modal -->
 <div class="modal fade" id="saveModal" tabindex="-1">
     <div class="modal-dialog">
@@ -595,58 +682,86 @@
 </script>
 <script src="{% static 'js/whatif_analyzer.js' %}"></script>
 <script>
-    // Handle "Promote to Shadow Branch" buttons
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.btn-promote-scenario')) {
-            const btn = e.target.closest('.btn-promote-scenario');
-            const scenarioId = btn.dataset.scenarioId;
-            const scenarioName = btn.dataset.scenarioName;
-            
-            // Prompt for branch name and color
-            const branchName = prompt(`Branch name (default: "${scenarioName}"):`) || scenarioName;
-            if (!branchName) return;
-            
-            // Show color picker (simple modal-based approach)
-            promoteToBranch(scenarioId, branchName, 'default-color');
-        }
+    // ── Promote to Shadow Branch — modal handler ──────────────────
+    var _promoteScenarioId = null;
+
+    // Color picker: clicking a label selects it
+    document.querySelectorAll('#promote-color-picker label').forEach(function(lbl) {
+        lbl.addEventListener('click', function() {
+            document.querySelectorAll('#promote-color-picker label').forEach(function(l) {
+                l.classList.remove('color-selected');
+            });
+            lbl.classList.add('color-selected');
+        });
     });
 
-    async function promoteToBranch(scenarioId, branchName, color) {
+    // Open modal when "→ Shadow Branch" is clicked
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-promote-scenario');
+        if (!btn) return;
+
+        _promoteScenarioId = btn.dataset.scenarioId;
+        var scenarioName = btn.dataset.scenarioName || '';
+
+        // Pre-fill fields
+        document.getElementById('promote-branch-name').value = scenarioName;
+        document.getElementById('promote-branch-desc').value = '';
+
+        // Reset color picker to first swatch
+        document.querySelectorAll('#promote-color-picker label').forEach(function(l, i) {
+            l.classList.toggle('color-selected', i === 0);
+            var radio = l.querySelector('input[type="radio"]');
+            if (radio) radio.checked = (i === 0);
+        });
+
+        new bootstrap.Modal(document.getElementById('promoteModal')).show();
+    });
+
+    // Confirm promote
+    document.getElementById('btn-confirm-promote').addEventListener('click', async function() {
+        var branchName = document.getElementById('promote-branch-name').value.trim();
+        if (!branchName) {
+            document.getElementById('promote-branch-name').classList.add('is-invalid');
+            return;
+        }
+        document.getElementById('promote-branch-name').classList.remove('is-invalid');
+
+        var checkedRadio = document.querySelector('#promote-color-picker input[type="radio"]:checked');
+        var color = checkedRadio ? checkedRadio.value : '#0d6efd';
+        var description = document.getElementById('promote-branch-desc').value.trim();
+
+        var modal = bootstrap.Modal.getInstance(document.getElementById('promoteModal'));
+        if (modal) modal.hide();
+
+        await promoteToBranch(_promoteScenarioId, branchName, color, description);
+    });
+
+    async function promoteToBranch(scenarioId, branchName, color, description) {
         try {
-            const formData = new FormData();
+            var formData = new FormData();
             formData.append('scenario_id', scenarioId);
             formData.append('branch_name', branchName);
             formData.append('color', color);
-            
-            const response = await fetch(`/boards/{{ board.id }}/shadow/promote-scenario/`, {
+            if (description) formData.append('description', description);
+
+            var response = await fetch('/boards/{{ board.id }}/shadow/promote-scenario/', {
                 method: 'POST',
                 body: formData,
-                headers: {
-                    'X-CSRFToken': window.WHATIF_CONFIG.csrfToken
-                }
+                headers: { 'X-CSRFToken': window.WHATIF_CONFIG.csrfToken }
             });
 
-            const data = await response.json();
+            var data = await response.json();
             if (data.success) {
-                // Show success message
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'alert alert-success alert-dismissible fade show';
-                alertDiv.innerHTML = `
-                    ${data.message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
-                
-                // Redirect to shadow board after 2 seconds
-                setTimeout(() => {
-                    window.location.href = `/boards/{{ board.id }}/shadow/`;
-                }, 2000);
+                showToast(data.message || 'Branch created! Redirecting…', 'success');
+                setTimeout(function() {
+                    window.location.href = '/boards/{{ board.id }}/shadow/';
+                }, 1500);
             } else {
-                alert(`Error: ${data.message || data.error}`);
+                showToast('Error: ' + (data.error || data.message || 'Unknown error'), 'danger');
             }
-        } catch (error) {
-            console.error('Error promoting scenario:', error);
-            alert('Error promoting scenario to branch.');
+        } catch (err) {
+            console.error('Error promoting scenario:', err);
+            showToast('Failed to promote scenario to branch.', 'danger');
         }
     }
 </script>

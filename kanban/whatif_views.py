@@ -17,6 +17,7 @@ from kanban.models import Board
 from kanban.whatif_models import WhatIfScenario
 from kanban.utils.whatif_engine import WhatIfEngine
 from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.shadow_views import BRANCH_COLOR_PALETTE
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ def whatif_dashboard(request, board_id):
         'baseline_json': json.dumps(baseline),
         'saved_scenarios': saved_scenarios,
         'predicted_date_obj': predicted_date_obj,
+        'predefined_colors': BRANCH_COLOR_PALETTE,
     }
     return render(request, 'kanban/whatif_dashboard.html', context)
 
