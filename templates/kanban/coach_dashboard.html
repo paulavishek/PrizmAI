@@ -153,7 +153,7 @@
     }
 
     .actions-list li:before {
-        content: "â†’";
+        content: "→";
         position: absolute;
         left: 0;
         color: #667eea;
@@ -545,8 +545,8 @@
                             <li class="mb-1">Click <strong>Refresh Suggestions</strong> to get a fresh set of coaching insights</li>
                             <li class="mb-1">Start with <strong>Critical</strong> cards — these need immediate action</li>
                             <li class="mb-1">Drill into each card to see the affected tasks and the recommended action</li>
-                            <li class="mb-1">Take the action on your board, then come back and mark it resolved</li>
-                            <li>Mark suggestions as <strong>Helpful / Not helpful</strong> to train the AI over time</li>
+                            <li class="mb-1">Take the action on your board, then come back and click <strong>Acknowledge</strong> on the suggestion card</li>
+                            <li>Use <strong>Provide Feedback</strong> to rate suggestions as helpful or not helpful — this trains the AI over time</li>
                         </ol>
                         <div class="p-2 rounded bg-primary bg-opacity-10 border-start border-primary border-3">
                             <p class="small mb-0 text-dark"><i class="fas fa-lightbulb text-primary me-1"></i><strong>Tip:</strong> The coaching effectiveness score improves as you interact with suggestions. The more you use it, the more targeted it becomes for your project style.</p>
@@ -564,7 +564,7 @@
         <div class="stat-card">
             <i class="fas fa-trophy" style="color: #fbbf24; font-size: 24px; margin-bottom: 10px;"></i>
             <span class="stat-value">{{ effectiveness.effectiveness_score|default:0|floatformat:0 }}%</span>
-            <div class="stat-label">Coaching Effectiveness</div>
+            <div class="stat-label">Coaching Effectiveness <span data-bs-toggle="tooltip" data-bs-placement="top" title="Coaching Effectiveness is calculated based on your action rate, helpful ratings, and suggestion resolution. Higher engagement with suggestions improves this score." style="cursor:help; color:#9ca3af; font-size:13px;">ℹ</span></div>
         </div>
         <div class="stat-card">
             <i class="fas fa-lightbulb" style="color: #667eea; font-size: 24px; margin-bottom: 10px;"></i>
@@ -792,6 +792,9 @@ function goBack() {
 
 // Guide toggle label
 document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function(el) { new bootstrap.Tooltip(el); });
+
     var coachGuide = document.getElementById('aiCoachGuide');
     if (coachGuide) {
         coachGuide.addEventListener('shown.bs.collapse', function() {
