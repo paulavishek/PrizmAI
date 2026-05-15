@@ -222,7 +222,7 @@ def _call_gemini(system_prompt, user_prompt):
             prompt=user_prompt,
             user=None,
             system_prompt=system_prompt,
-            complexity='complex',
+            complexity='simple',
         )['text'],
         operation='premortem',
     )

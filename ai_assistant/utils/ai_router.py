@@ -617,7 +617,10 @@ class AIRouter:
                 generation_config=generation_config,
                 safety_settings=safety_settings,
             )
-            response = model.generate_content(full_prompt)
+            response = model.generate_content(
+                full_prompt,
+                request_options={"timeout": 60},
+            )
 
         # Guard against empty / safety-blocked responses
         if (

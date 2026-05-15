@@ -75,8 +75,8 @@ def _send_error(task_id, message):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.run_premortem',
-    time_limit=120,
-    soft_time_limit=90,
+    time_limit=180,
+    soft_time_limit=150,
 )
 def run_premortem_task(self, board_id, user_id):
     """Run Pre-Mortem AI analysis with streamed status updates."""
