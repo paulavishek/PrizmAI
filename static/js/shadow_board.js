@@ -82,19 +82,26 @@ function pollPendingBranches() {
  */
 function renderSparklines() {
     const branchCards = document.querySelectorAll('.branch-card');
-    
+
     branchCards.forEach(card => {
         const branchId = card.dataset.branchId;
         const canvas = document.getElementById(`sparkline-${branchId}`);
-        
         if (!canvas) return;
-        
-        // Fetch branch snapshots via API
+
         fetch(`/api/boards/${getBoardId()}/shadow/branch/${branchId}/snapshots/`)
             .then(r => r.json())
             .then(data => {
                 if (data.scores && data.scores.length > 0) {
-                    drawSparkline(canvas, data.scores);
+                    // Chart.js draws no line segment when given exactly 1 point, and
+                    // pointRadius:0 makes the dot invisible too — the sparkline appears
+                    // blank.  Duplicate the single value so a flat reference line is drawn.
+                    const scores = data.scores.length === 1
+                        ? [data.scores[0], data.scores[0]]
+                        : data.scores;
+                    const timestamps = (data.timestamps || []).length === 1
+                        ? [data.timestamps[0], data.timestamps[0]]
+                        : (data.timestamps || []);
+                    drawSparkline(canvas, scores, timestamps);
                 } else {
                     const ctx = canvas.getContext('2d');
                     canvas.style.height = '30px';
@@ -109,30 +116,41 @@ function renderSparklines() {
 }
 
 /**
- * Draw a sparkline chart on a canvas
+ * Draw a sparkline chart on a canvas.
+ * timestamps: ISO-string array parallel to scores; used as tooltip labels.
  */
-function drawSparkline(canvas, scores) {
+function drawSparkline(canvas, scores, timestamps) {
     if (typeof Chart === 'undefined') return;
-    
+
     const ctx = canvas.getContext('2d');
     const colors = scores.map(s => {
         if (s >= 70) return '#198754';
         if (s >= 50) return '#fd7e14';
         return '#dc3545';
     });
-    
+
+    // Build human-readable date labels (e.g. "Apr 25, 2026") for the hover tooltip
+    // so each point can be correlated to its snapshot date.
+    const labels = Array.isArray(timestamps) && timestamps.length === scores.length
+        ? timestamps.map(ts => {
+            try {
+                return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            } catch (_) { return ts; }
+          })
+        : scores.map((_, i) => i);
+
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels: scores.map((_, i) => i),
+            labels,
             datasets: [{
                 label: 'Feasibility',
                 data: scores,
                 borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                backgroundColor: 'rgba(13, 110, 253, 0.15)',
                 borderWidth: 2,
                 fill: true,
-                tension: 0.4,
+                tension: 0,
                 pointRadius: 0,
                 pointHoverRadius: 4,
                 pointBackgroundColor: colors
@@ -145,6 +163,7 @@ function drawSparkline(canvas, scores) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
+                        title: (items) => items[0].label,
                         label: (context) => `Feasibility: ${context.parsed.y}%`
                     }
                 }
@@ -411,26 +430,66 @@ function showDeleteConfirmation(branchId, branchName) {
 }
 
 /**
- * Toggle star status for branch
+ * Apply star visual state to button icon + card title.
+ * Extracted so it can be called for both optimistic apply and error revert.
+ */
+function applyStarVisuals(icon, btn, starred) {
+    if (starred) {
+        icon.classList.replace('far', 'fas');
+        btn.classList.add('text-warning');
+    } else {
+        icon.classList.replace('fas', 'far');
+        btn.classList.remove('text-warning');
+    }
+
+    const card = btn.closest('.branch-card');
+    if (!card) return;
+    const titleEl = card.querySelector('.card-title');
+    if (!titleEl) return;
+    const existingTitleStar = titleEl.querySelector('.fa-star');
+
+    if (starred && !existingTitleStar) {
+        const newStar = document.createElement('i');
+        newStar.className = 'fas fa-star text-warning me-1';
+        titleEl.prepend(newStar);
+    } else if (!starred && existingTitleStar) {
+        existingTitleStar.remove();
+    }
+}
+
+/**
+ * Toggle star status for branch.
+ * Optimistic update: UI changes immediately on click; reverted on error.
  */
 function toggleStarBranch(branchId, btn) {
-    const isStarred = btn.querySelector('i').classList.contains('fas');
-    
+    const icon = btn.querySelector('i');
+    const wasStarred = icon.classList.contains('fas');
+    const nowStarred = !wasStarred;
+
+    // Apply immediately so the user sees instant feedback without waiting
+    // for the server round-trip.
+    applyStarVisuals(icon, btn, nowStarred);
+
     fetch(`/api/boards/${getBoardId()}/shadow/${branchId}/toggle-star/`, {
         method: 'POST',
         headers: {
             'X-CSRFToken': getCsrfToken(),
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ starred: !isStarred })
+        body: JSON.stringify({ starred: nowStarred })
     })
     .then(r => r.json())
     .then(data => {
-        // Toggle icon
-        btn.querySelector('i').classList.toggle('fas');
-        btn.querySelector('i').classList.toggle('far');
+        if (!data.success) {
+            // Server rejected — revert to previous state
+            applyStarVisuals(icon, btn, wasStarred);
+        }
     })
-    .catch(e => alertError('Could not toggle star: ' + e.message));
+    .catch(() => {
+        // Network / parse error — revert
+        applyStarVisuals(icon, btn, wasStarred);
+        alertError('Could not toggle star. Please try again.');
+    });
 }
 
 /**
