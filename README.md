@@ -45,7 +45,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
   - **Document Analysis** — Attach PDF, DOCX, or TXT files and ask questions about their content
   - **Web Search** — Supplemental web context for research and strategic queries (when enabled)
   
-  Spectra uses a **Tiered AI Architecture**: a lightweight Flash-Lite model handles most queries cheaply, upgrading to Flash for complex analysis — keeping AI costs low while delivering rich project insights. Action capabilities (creating tasks, sending messages, logging time, scheduling events, and more) are code-complete and will ship in **Spectra v2.0**.
+  Spectra uses a **Tiered AI Architecture**: `gemini-3.1-flash-lite` handles most queries cheaply (no extended thinking, ~2–3 s), upgrading to `gemini-2.5-flash` for complex analysis — keeping AI costs low while delivering rich project insights. Action capabilities (creating tasks, sending messages, logging time, scheduling events, and more) are code-complete and will ship in **Spectra v2.0**.
 - **Multi-Provider AI** — PrizmAI supports **Google Gemini**, **OpenAI (GPT-4o)**, and **Anthropic Claude** as interchangeable AI providers. Org Admins choose the platform-wide default; individual users can optionally override it. **BYOK (Bring Your Own Key)** lets users and organisations supply their own API keys, stored encrypted (AES-256 Fernet) and never logged in plain text.
 - **AI Coach** — Proactive, personalized coaching with recommendations that learn from your feedback
 - **Explainable AI** — Every recommendation includes a transparent breakdown: confidence level, contributing factors, assumptions, limitations, and alternative perspectives
@@ -731,7 +731,7 @@ cp .env.example .env
 # Edit .env — add your SECRET_KEY and GEMINI_API_KEY at minimum
 # Optional: add OPENAI_API_KEY, ANTHROPIC_API_KEY for multi-provider support
 # Optional: set OPENAI_MODEL (default: gpt-4o) and ANTHROPIC_MODEL (default: claude-sonnet-4-6)
-# Optional: set tiered models — GEMINI_MODEL_SIMPLE/COMPLEX, OPENAI_MODEL_SIMPLE/COMPLEX, ANTHROPIC_MODEL_SIMPLE/COMPLEX
+# Optional: set tiered models — defaults are GEMINI_MODEL_SIMPLE=gemini-3.1-flash-lite, GEMINI_MODEL_COMPLEX=gemini-2.5-flash
 # Optional: add AI_KEY_ENCRYPTION_KEY to enable BYOK (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 # Optional: set GOOGLE_CALENDAR_REDIRECT_URI to override the default Calendar OAuth callback URL (production only)
 
@@ -825,7 +825,7 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 - Django Channels 4 (WebSockets)
 - Celery + django-celery-beat (async and scheduled tasks)
 - **Multi-Provider AI Router** — `AIRouter` centrally resolves the correct provider and key per user; provider-specific calls are normalised to a consistent response format
-  - Google Gemini — `gemini-2.5-flash` (default platform provider) · thread-safe BYOK via `_GEMINI_CONFIGURE_LOCK`
+  - Google Gemini — `gemini-3.1-flash-lite` (simple tasks) / `gemini-2.5-flash` (complex analysis) · thread-safe BYOK via `_GEMINI_CONFIGURE_LOCK`
   - OpenAI — `gpt-4o` (configurable via `OPENAI_MODEL`; `gpt-4o-mini` for lower cost)
   - Anthropic Claude — `claude-sonnet-4-6` (configurable via `ANTHROPIC_MODEL`; system prompt passed as top-level `system=` param)
   - BYOK support — user and org-level AES-256 Fernet encrypted keys; exhausted-quota detection distinguishes billing issues from transient rate limits
@@ -1008,7 +1008,7 @@ PrizmAI's AI layer is being built in phases. The table below tracks what is ship
 | `UserAISettings` model | ✅ | Per-user provider override, personal BYOK key |
 | `AIRouter._resolve_provider()` | ✅ | 5-step resolution: personal BYOK → user override → org BYOK → org provider → Gemini fallback |
 | Fernet AES-256 key encryption | ✅ | `_encrypt_key()` / `_decrypt_key()` — keys never stored or logged in plain text |
-| Google Gemini integration | ✅ | `gemini-2.5-flash`, thread-safe via `_GEMINI_CONFIGURE_LOCK` |
+| Google Gemini integration | ✅ | `gemini-3.1-flash-lite` (simple) / `gemini-2.5-flash` (complex), thread-safe via `_GEMINI_CONFIGURE_LOCK` |
 | Normalised response format | ✅ | `{text, provider, model, used_byok, tokens_used}` — identical for all providers |
 
 ### Phase 2 — OpenAI + Anthropic Provider Integrations ✅ Complete
