@@ -633,7 +633,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for s in all_sessions reversed %}
+                        {% for s, delta in sessions_with_delta %}
                         <tr {% if s.id == session.id %}class="table-active"{% endif %}>
                             <td>{{ forloop.counter }}</td>
                             <td>{{ s.created_at|date:"M d, Y H:i" }}</td>
@@ -653,20 +653,20 @@
                             <td>
                                 {{ s.scenarios.count }} attacks
                                 <small class="text-muted">
-                                    ({{ s.scenarios_fail_count }} not yet addressed)
+                                    ({{ s.scenarios_unaddressed_count }} not yet addressed)
                                 </small>
                             </td>
                             <td>{{ s.vaccines_applied_count }} / {{ s.vaccines.count }}</td>
                             <td>
-                                {% if not forloop.last and s.immunity_score %}
-                                    {% with prev_sessions=all_sessions|slice:"1:" %}
-                                    {% endwith %}
-                                {% endif %}
-                                {% if forloop.counter > 1 and s.immunity_score %}
-                                    —
-                                {% elif s.immunity_score %}
+                                {% if delta is None %}
                                     <span class="text-muted">baseline</span>
-                                {% else %}—{% endif %}
+                                {% elif delta > 0 %}
+                                    <span class="text-success fw-semibold">+{{ delta }}</span>
+                                {% elif delta < 0 %}
+                                    <span class="text-danger fw-semibold">{{ delta }}</span>
+                                {% else %}
+                                    <span class="text-muted">±0</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -772,7 +772,7 @@ function runStressTest() {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Running…';
+        btn.innerHTML = '<i class="fas fa-bolt me-1"></i> Running…';
     }
     if (loadingEl) loadingEl.style.display = 'block';
 

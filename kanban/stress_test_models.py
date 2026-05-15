@@ -29,8 +29,8 @@ class StressTestSession(models.Model):
         return f"Stress Test — {self.board.name} — {self.created_at:%Y-%m-%d}"
 
     @property
-    def scenarios_fail_count(self):
-        return self.scenarios.filter(outcome='FAIL').count()
+    def scenarios_unaddressed_count(self):
+        return self.scenarios.filter(is_addressed=False).count()
 
     @property
     def vaccines_applied_count(self):
