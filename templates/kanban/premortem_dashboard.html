@@ -430,6 +430,7 @@ function runPreMortem() {
     if (typeof triggerAITask === 'function') {
         triggerAITask(`{% url 'run_premortem' board.id %}`, {
             method: 'POST',
+            timeoutMs: 150000,
             onResult: function(data) {
                 if (_pmRotator) _pmRotator.stop();
                 if (loadingEl) loadingEl.style.display = 'none';

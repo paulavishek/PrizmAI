@@ -375,7 +375,7 @@ ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', '2048'))
 # Tiered model selection — AIRouter uses these to pick cheap vs. full models based on
 # task complexity.  Defaults preserve backward compatibility with existing OPENAI_MODEL
 # and ANTHROPIC_MODEL env vars already set in production.
-GEMINI_MODEL_SIMPLE = os.getenv('GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
+GEMINI_MODEL_SIMPLE = os.getenv('GEMINI_MODEL_SIMPLE', 'gemini-2.0-flash')
 GEMINI_MODEL_COMPLEX = os.getenv('GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash')
 OPENAI_MODEL_SIMPLE = os.getenv('OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
 OPENAI_MODEL_COMPLEX = os.getenv('OPENAI_MODEL_COMPLEX', os.getenv('OPENAI_MODEL', 'gpt-4o'))
