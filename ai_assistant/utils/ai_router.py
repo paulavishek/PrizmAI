@@ -582,25 +582,33 @@ class AIRouter:
             )
 
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
-        # 'simple' → Flash-Lite (faster, cheaper for lightweight classification/formatting)
-        # 'complex' → Flash (full model for analysis, generation, reasoning)
+        # 'simple' → gemini-2.0-flash (no thinking mode, fast structured output)
+        # 'complex' → gemini-2.5-flash (full model for analysis, generation, reasoning)
         if model_override:
             model_name = model_override
         elif complexity == 'complex':
             model_name = getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash')
         else:
-            model_name = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite')
+            model_name = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.0-flash')
 
         full_prompt = prompt
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
 
+        # 'simple' tasks (structured JSON output like pre-mortem) use a smaller token
+        # budget.  Avoid Gemini 2.5 models for simple tasks: their extended thinking
+        # mode adds 30–90 s of latency on analytical prompts without quality benefit.
+        # GEMINI_MODEL_SIMPLE should point to a non-thinking model (e.g. gemini-2.0-flash).
+        # ThinkingConfig is not available in google-generativeai 0.8.x; thinking behaviour
+        # is controlled solely by model choice.
+        max_output_tokens = 2048 if complexity == 'simple' else 6144
         generation_config = {
             'temperature': 0.7,
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 6144,
+            'max_output_tokens': max_output_tokens,
         }
+
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT",         "threshold": "BLOCK_ONLY_HIGH"},
             {"category": "HARM_CATEGORY_HATE_SPEECH",        "threshold": "BLOCK_ONLY_HIGH"},
@@ -608,18 +616,37 @@ class AIRouter:
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT",  "threshold": "BLOCK_ONLY_HIGH"},
         ]
 
-        # google-generativeai 0.8.x configures a module-level global API key.
-        # The lock ensures concurrent BYOK requests don't clobber each other.
-        with _GEMINI_CONFIGURE_LOCK:
+        # google-generativeai 0.8.x uses a module-level global API key (genai.configure).
+        # The lock serialises configure() calls so concurrent BYOK requests don't
+        # overwrite each other's key.  For the platform key (shared, never changes)
+        # we can release the lock before the network call so other tasks aren't
+        # blocked for the full API round-trip; BYOK calls hold it for the duration.
+        platform_key = getattr(settings, 'GEMINI_API_KEY', None)
+        is_byok = bool(api_key) and api_key != platform_key
+
+        def _build_model():
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
+            return genai.GenerativeModel(
                 model_name,
                 generation_config=generation_config,
                 safety_settings=safety_settings,
             )
+
+        if is_byok:
+            # Hold the lock for the entire call; key must not change mid-request.
+            with _GEMINI_CONFIGURE_LOCK:
+                model = _build_model()
+                response = model.generate_content(
+                    full_prompt,
+                    request_options={"timeout": 120},
+                )
+        else:
+            # Platform key never changes — release lock before the slow network call.
+            with _GEMINI_CONFIGURE_LOCK:
+                model = _build_model()
             response = model.generate_content(
                 full_prompt,
-                request_options={"timeout": 60},
+                request_options={"timeout": 120},
             )
 
         # Guard against empty / safety-blocked responses
