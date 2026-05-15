@@ -158,7 +158,7 @@ function drawSparkline(canvas, scores, timestamps) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: {
