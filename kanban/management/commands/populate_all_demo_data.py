@@ -2366,7 +2366,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                     'status': 'active',
                     'source_scenario': source_scenario,
                     'branch_color': '#0d6efd',
-                    'is_starred': True,
+                    'is_starred': False,
                     'snapshots': [
                         {
                             'scope_delta': 8, 'team_delta': 0, 'deadline_delta_weeks': 2,

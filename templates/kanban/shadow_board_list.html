@@ -434,7 +434,7 @@
         <div class="branch-grid" id="branchGrid">
             {% for branch in branches %}
                 <div class="card branch-card{% if branch.status == 'archived' %} branch-card-archived{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
-                    <div class="card-body">
+                    <div class="card-body d-flex flex-column">
                         <!-- Checkbox for compare mode -->
                         <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
                         
@@ -477,7 +477,7 @@
                             <canvas id="sparkline-{{ branch.id }}" class="sparkline" data-branch-scores="{{ branch_scores|safe }}"></canvas>
 
                             <!-- Actions -->
-                            <div class="btn-group btn-group-sm w-100 mt-3" role="group">
+                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
                                 <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-eye"></i>
                                 </a>
@@ -502,7 +502,7 @@
                         {% else %}
                             <!-- Branch still calculating — show restore/delete even without snapshots -->
                             <p class="text-muted text-center my-3"><small>Calculating first snapshot...</small></p>
-                            <div class="btn-group btn-group-sm w-100" role="group">
+                            <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
                                 {% if branch.status == 'archived' %}
                                 <button class="btn btn-outline-primary btn-restore" data-branch-id="{{ branch.id }}" title="Restore this branch to active" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-undo me-1"></i>Restore
