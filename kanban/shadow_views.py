@@ -115,43 +115,51 @@ class ShadowBoardListView(ListView):
         # --- Quantum Standup Data ---
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)
-        today_date = today_start.date()
-
-        # Bug 1 & 2 fix: filter by completed_at__date (set once when progress first
-        # reaches 100) instead of updated_at (which refreshes on every save). This
-        # excludes stale Done tasks edited today and persists correctly across refreshes.
-        completed_today = list(
-            Task.objects.filter(
-                column__board=board,
-                completed_at__date=today_date,
-            ).select_related('column', 'assigned_to').order_by('-completed_at')[:10]
-        )
-        completed_task_ids = [t.id for t in completed_today]
-
-        # Bug 3 fix: find who actually moved each task to Done by querying the
-        # TaskActivity 'moved' log. The move_task view records activity_type='moved'
-        # with a description containing the destination column name. Fall back to
-        # assigned_to, then None (template renders "Unknown").
-        move_activities = (
+        # Real Progress Today — driven by TaskActivity, not Task.completed_at.
+        #
+        # Why not completed_at: populate_all_demo_data calls Task.save() with
+        # progress=100, which causes Task.save() to stamp completed_at=now() on
+        # every seeded Done-column task.  After any demo reset all those tasks
+        # carry today's completed_at, making them indistinguishable from tasks
+        # a user genuinely completed today.
+        #
+        # TaskActivity records are only written by user-facing views (move_task
+        # for drag-and-drop, update_task_fields_api for Gantt triage).  The
+        # seeder never creates them, so they reliably represent real user work.
+        #
+        # A column-name guard at the end excludes tasks moved back out of Done
+        # later in the same day (their activity still matches 'done' in the
+        # description but their current column is no longer Done/Complete).
+        move_activities_today = (
             TaskActivity.objects
             .filter(
-                task_id__in=completed_task_ids,
-                activity_type='moved',
+                task__column__board=board,
+                task__item_type='task',
+                activity_type__in=['moved', 'updated'],
+                created_at__gte=today_start,
+                created_at__lt=today_end,
             )
             .filter(
                 models.Q(description__icontains='done') |
                 models.Q(description__icontains='complete')
             )
+            .select_related('task', 'task__column', 'user')
             .order_by('task_id', '-created_at')
-            .select_related('user')
         )
-        task_completer_map = {}
-        for act in move_activities:
-            if act.task_id not in task_completer_map:
-                task_completer_map[act.task_id] = act.user
 
-        for task in completed_today:
-            task.completer = task_completer_map.get(task.id) or task.assigned_to
+        seen_task_ids: set = set()
+        completed_today = []
+        for act in move_activities_today:
+            if act.task_id in seen_task_ids:
+                continue
+            seen_task_ids.add(act.task_id)
+            col_lower = act.task.column.name.lower()
+            if 'done' not in col_lower and 'complete' not in col_lower:
+                continue  # moved back out of Done later today
+            act.task.completer = act.user
+            completed_today.append(act.task)
+            if len(completed_today) >= 10:
+                break
 
         context['tasks_completed_today'] = completed_today
         context['tasks_completed_count'] = len(completed_today)

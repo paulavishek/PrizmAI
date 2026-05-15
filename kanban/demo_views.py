@@ -1650,6 +1650,22 @@ def reset_demo_data(request):
             except Exception:
                 pass
 
+            # Shadow branches and snapshots on official demo boards.
+            # The shadow board is a user-exploration feature; clearing it on
+            # reset gives a clean slate (populate_all_demo_data does not seed
+            # shadow branches, so nothing is lost by deleting all of them).
+            try:
+                from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+                demo_branch_ids = list(
+                    ShadowBranch.objects.filter(board__in=demo_boards).values_list('id', flat=True)
+                )
+                if demo_branch_ids:
+                    BranchDivergenceLog.objects.filter(branch_id__in=demo_branch_ids).delete()
+                    BranchSnapshot.objects.filter(branch_id__in=demo_branch_ids).delete()
+                ShadowBranch.objects.filter(board__in=demo_boards).delete()
+            except Exception:
+                pass
+
             # ============================================================
             # STEP 4: Clear user-generated messaging / notifications
             # ============================================================
