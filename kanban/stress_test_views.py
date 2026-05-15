@@ -187,6 +187,20 @@ def stress_test_dashboard(request, board_id):
     except Exception:
         pass
 
+    # Compute score deltas for the history table (chronological: oldest first)
+    sessions_list = list(sessions.order_by('created_at'))
+    sessions_with_delta = []
+    for i, s in enumerate(sessions_list):
+        if i == 0:
+            delta = None  # baseline — no previous session to compare
+        else:
+            prev = sessions_list[i - 1]
+            if s.immunity_score and prev.immunity_score:
+                delta = s.immunity_score.overall - prev.immunity_score.overall
+            else:
+                delta = None
+        sessions_with_delta.append((s, delta))
+
     # AI quota availability for the "Run" button
     has_quota = True
     if request.user.is_authenticated:
@@ -196,6 +210,7 @@ def stress_test_dashboard(request, board_id):
         'board': board,
         'session': latest_session,
         'all_sessions': sessions,
+        'sessions_with_delta': sessions_with_delta,
         'immunity_history': json.dumps(immunity_history),
         'total_scenarios': total_scenarios,
         'scenarios_addressed': scenarios_addressed,

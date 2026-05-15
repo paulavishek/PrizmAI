@@ -601,7 +601,7 @@ class AIRouter:
         # GEMINI_MODEL_SIMPLE should point to a non-thinking model (e.g. gemini-3.1-flash-lite).
         # ThinkingConfig is not available in google-generativeai 0.8.x; thinking behaviour
         # is controlled solely by model choice.
-        max_output_tokens = 2048 if complexity == 'simple' else 6144
+        max_output_tokens = 2048 if complexity == 'simple' else 8192
         generation_config = {
             'temperature': 0.7,
             'top_p': 0.8,
