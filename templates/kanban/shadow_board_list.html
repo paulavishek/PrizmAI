@@ -324,8 +324,8 @@
                                 {% for task in tasks_completed_today %}
                                 <tr>
                                     <td><small><i class="fas fa-check-circle text-success me-1"></i>{{ task.title|truncatewords:5 }}</small></td>
-                                    <td><small>{{ task.assigned_to.first_name|default:"Unassigned" }}</small></td>
-                                    <td class="text-end"><small>{{ task.updated_at|time }}</small></td>
+                                    <td><small>{{ task.completer.first_name|default:"Unknown" }}</small></td>
+                                    <td class="text-end"><small>{{ task.completed_at|time }}</small></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

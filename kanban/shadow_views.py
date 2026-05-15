@@ -11,6 +11,7 @@ Handles all HTTP requests for Shadow Board functionality:
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 import json
+import types
 from django.views.generic import ListView, CreateView, DetailView
 from django.views.decorators.http import require_POST, require_http_methods
 from django.http import JsonResponse
@@ -21,7 +22,7 @@ from django.db import models
 from datetime import timedelta
 import logging
 
-from kanban.models import Board, Task
+from kanban.models import Board, Task, TaskActivity
 from kanban.whatif_models import WhatIfScenario
 from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
 from kanban.audit_models import SystemAuditLog
@@ -112,37 +113,83 @@ class ShadowBoardListView(ListView):
         )
 
         # --- Quantum Standup Data ---
-        # Today's real progress
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)
+        today_date = today_start.date()
 
-        # Tasks completed today
-        completed_today = Task.objects.filter(
-            column__board=board,
-            progress=100,
-            updated_at__gte=today_start,
-            updated_at__lt=today_end,
-        ).select_related('column', 'assigned_to').order_by('-updated_at')[:10]
+        # Bug 1 & 2 fix: filter by completed_at__date (set once when progress first
+        # reaches 100) instead of updated_at (which refreshes on every save). This
+        # excludes stale Done tasks edited today and persists correctly across refreshes.
+        completed_today = list(
+            Task.objects.filter(
+                column__board=board,
+                completed_at__date=today_date,
+            ).select_related('column', 'assigned_to').order_by('-completed_at')[:10]
+        )
+        completed_task_ids = [t.id for t in completed_today]
+
+        # Bug 3 fix: find who actually moved each task to Done by querying the
+        # TaskActivity 'moved' log. The move_task view records activity_type='moved'
+        # with a description containing the destination column name. Fall back to
+        # assigned_to, then None (template renders "Unknown").
+        move_activities = (
+            TaskActivity.objects
+            .filter(
+                task_id__in=completed_task_ids,
+                activity_type='moved',
+            )
+            .filter(
+                models.Q(description__icontains='done') |
+                models.Q(description__icontains='complete')
+            )
+            .order_by('task_id', '-created_at')
+            .select_related('user')
+        )
+        task_completer_map = {}
+        for act in move_activities:
+            if act.task_id not in task_completer_map:
+                task_completer_map[act.task_id] = act.user
+
+        for task in completed_today:
+            task.completer = task_completer_map.get(task.id) or task.assigned_to
 
         context['tasks_completed_today'] = completed_today
-        context['tasks_completed_count'] = completed_today.count()
+        context['tasks_completed_count'] = len(completed_today)
 
-        # Branch impacts today: divergences logged in last 24 hours.
-        # Deduplicate so each branch appears at most once (latest log per branch).
-        recent_divergences = BranchDivergenceLog.objects.filter(
+        # Bug 4 fix: use BranchSnapshot records created today for "How It Affected
+        # Your Branches" instead of BranchDivergenceLog (which only logs >5-point
+        # changes). Compare each branch's latest-today snapshot against the snapshot
+        # immediately before today to derive old_score / new_score / score_delta.
+        today_snapshots_qs = BranchSnapshot.objects.filter(
             branch__board=board,
-            logged_at__gte=today_start,
-            logged_at__lt=today_end,
-        ).select_related('branch').order_by('-logged_at')
+            branch__status='active',
+            captured_at__gte=today_start,
+            captured_at__lt=today_end,
+        ).select_related('branch').order_by('branch_id', 'captured_at')
 
-        seen_branch_ids = set()
-        unique_impacts = []
-        for log in recent_divergences:
-            if log.branch_id not in seen_branch_ids:
-                seen_branch_ids.add(log.branch_id)
-                unique_impacts.append(log)
+        latest_today: dict = {}
+        for snap in today_snapshots_qs:
+            latest_today[snap.branch_id] = snap
 
-        context['branch_impacts_today'] = unique_impacts
+        branch_impacts = []
+        for branch_id, latest_snap in latest_today.items():
+            prev_snap = (
+                BranchSnapshot.objects
+                .filter(branch_id=branch_id, captured_at__lt=today_start)
+                .order_by('-captured_at')
+                .first()
+            )
+            old_score = prev_snap.feasibility_score if prev_snap else 0
+            new_score = latest_snap.feasibility_score
+            branch_impacts.append(types.SimpleNamespace(
+                branch=latest_snap.branch,
+                old_score=old_score,
+                new_score=new_score,
+                score_delta=new_score - old_score,
+            ))
+
+        branch_impacts.sort(key=lambda x: abs(x.score_delta), reverse=True)
+        context['branch_impacts_today'] = branch_impacts
 
         # Auto-heal: if any active branches have no snapshots, re-trigger recalculation
         branches_without_snapshots = ShadowBranch.objects.filter(
