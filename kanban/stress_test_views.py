@@ -215,7 +215,6 @@ def stress_test_dashboard(request, board_id):
 @demo_ai_guard
 def run_stress_test(request, board_id):
     """Run a new Red Team AI stress test session."""
-    from kanban_board.ai_cache import get_cached_ai_response
     from ai_assistant.utils.ai_router import AIRouter
 
     board = get_object_or_404(Board, id=board_id)
@@ -226,23 +225,33 @@ def run_stress_test(request, board_id):
 
     try:
         router = AIRouter()
-        full_prompt = f"{STRESS_TEST_SYSTEM_PROMPT}\n---\n{user_prompt}"
-        raw = get_cached_ai_response(
-            prompt=full_prompt,
-            model_call=lambda: router.complete(
-                prompt=user_prompt,
-                user=request.user,
-                system_prompt=STRESS_TEST_SYSTEM_PROMPT,
-                complexity='complex',
-            )['text'],
-            operation='stress_test',
-            context_id=f"board_{board.id}",
-        )
+        # Stress tests must always be fresh — bypass the cache so every explicit
+        # "Run Stress Test" click calls the AI directly.
+        raw = router.complete(
+            prompt=user_prompt,
+            user=request.user,
+            system_prompt=STRESS_TEST_SYSTEM_PROMPT,
+            complexity='complex',
+        )['text']
         if not raw:
             raise RuntimeError('AI stress test returned no response')
 
         logger.info("Stress Test raw response length: %d chars", len(raw))
         result = _parse_gemini_json(raw)
+
+        scenario_count = len(result.get('chaos_scenarios', []))
+        vaccine_count = len(result.get('vaccines', []))
+        if scenario_count < 5:
+            logger.warning(
+                "Stress Test board %s: AI returned only %d/5 scenarios — prompt may need tuning",
+                board_id, scenario_count,
+            )
+        if vaccine_count == 0:
+            logger.warning(
+                "Stress Test board %s: AI returned 0 vaccines — likely confused historical "
+                "context with output vaccines[]",
+                board_id,
+            )
 
     except Exception as e:
         logger.error("Stress Test Gemini call failed for board %s: %s", board_id, e)
