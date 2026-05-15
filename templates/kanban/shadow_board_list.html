@@ -49,6 +49,18 @@
         height: 40px;
         margin-top: 1rem;
     }
+
+    /* Archived cards: dim text/badges/buttons but NOT the sparkline canvas.
+       Bootstrap's opacity-50 on the whole card creates a CSS compositing group
+       that composites the canvas at 0.5 opacity, making the already-faint
+       sparkline fill essentially invisible. We dim only direct non-canvas
+       children instead. */
+    .branch-card-archived {
+        border-style: dashed !important;
+    }
+    .branch-card-archived .card-body > *:not(canvas) {
+        opacity: 0.6;
+    }
     
     .branch-grid {
         display: grid;
@@ -418,7 +430,7 @@
 
         <div class="branch-grid" id="branchGrid">
             {% for branch in branches %}
-                <div class="card branch-card{% if branch.status == 'archived' %} opacity-50{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
+                <div class="card branch-card{% if branch.status == 'archived' %} branch-card-archived{% endif %}" data-branch-id="{{ branch.id }}" {% if branch.snapshots.all|length == 0 %}data-pending="true"{% endif %} style="--branch-color: {{ branch.branch_color }};">
                     <div class="card-body">
                         <!-- Checkbox for compare mode -->
                         <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
@@ -466,8 +478,8 @@
                                 <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details" data-bs-toggle="tooltip" data-bs-placement="bottom">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                <button class="btn btn-outline-secondary btn-star" data-branch-id="{{ branch.id }}" title="Star/unstar" data-bs-toggle="tooltip" data-bs-placement="bottom">
-                                    <i class="fas fa-star{% if not branch.is_starred %} far{% endif %}"></i>
+                                <button class="btn btn-outline-secondary btn-star{% if branch.is_starred %} text-warning{% endif %}" data-branch-id="{{ branch.id }}" title="Star/unstar" data-bs-toggle="tooltip" data-bs-placement="bottom">
+                                    <i class="{% if branch.is_starred %}fas{% else %}far{% endif %} fa-star"></i>
                                 </button>
                                 {% if branch.status == 'active' %}
                                 <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" data-branch-name="{{ branch.name }}" title="Commit this branch as chosen direction" data-bs-toggle="tooltip" data-bs-placement="bottom">
