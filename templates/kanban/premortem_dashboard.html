@@ -17,7 +17,7 @@
     <!-- Header -->
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis {% feature_help "premortem" %}</h2>
+            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis</h2>
             <p class="text-muted">{{ board.name }} — Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
             <button class="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold"
                     style="color: #0d6efd;"
@@ -221,10 +221,14 @@
         </div>
     </div>
 
-    <!-- Loading spinner (hidden by default) -->
-    <div id="premortem-loading" class="text-center py-5" style="display:none;" data-prizm-container>
-        <div class="prizm-spinner prizm-spinner--lg"></div>
-        <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="premortem">Analyzing project risks…</p>
+    <!-- Loading card for initial run (hidden by default) -->
+    <div id="premortem-loading" class="card border-0 shadow-sm my-4" style="display:none;">
+        <div class="card-body py-5 text-center">
+            <div class="pm-analysis-spinner mb-4"></div>
+            <h5 class="fw-semibold mb-1" style="color:#1f2937;">Running Pre-Mortem Analysis</h5>
+            <p class="text-muted small mb-2">The AI is simulating failure scenarios for your project.</p>
+            <p id="premortem-status" class="fw-medium small mb-0" style="color:#dc3545; min-height:1.5em; transition:opacity 0.3s ease;">Reading your project tasks and deadlines…</p>
+        </div>
     </div>
 
     <!-- Results container (populated by JS after run) -->
@@ -297,10 +301,14 @@
     </div>
     {% endif %}
 
-    <!-- Loading spinner for re-runs (hidden by default) -->
-    <div id="premortem-loading" class="text-center py-5" style="display:none;" data-prizm-container>
-        <div class="prizm-spinner prizm-spinner--lg"></div>
-        <p class="mt-3 prizm-loading-message-inline" data-prizm-messages="premortem">Analyzing project risks…</p>
+    <!-- Loading card for re-runs (hidden by default) -->
+    <div id="premortem-loading" class="card border-0 shadow-sm my-4" style="display:none;">
+        <div class="card-body py-5 text-center">
+            <div class="pm-analysis-spinner mb-4"></div>
+            <h5 class="fw-semibold mb-1" style="color:#1f2937;">Re-running Pre-Mortem Analysis</h5>
+            <p class="text-muted small mb-2">Scanning your updated board data for new failure scenarios.</p>
+            <p id="premortem-status" class="fw-medium small mb-0" style="color:#dc3545; min-height:1.5em; transition:opacity 0.3s ease;">Reading your project tasks and deadlines…</p>
+        </div>
     </div>
 
     <!-- Scenario Cards -->
@@ -377,6 +385,18 @@
     </div>
 </div>
 
+<style>
+.pm-analysis-spinner {
+    display: inline-block;
+    width: 3.5rem;
+    height: 3.5rem;
+    border: 4px solid rgba(220, 53, 69, 0.15);
+    border-top-color: #dc3545;
+    border-radius: 50%;
+    animation: prizm-spin 0.8s linear infinite;
+}
+</style>
+
 <script>
 const CSRF_TOKEN = '{{ csrf_token }}';
 const BOARD_ID = {{ board.id }};
@@ -391,19 +411,27 @@ function runPreMortem() {
     if (resultsEl) resultsEl.style.display = 'none';
     if (runBtn) runBtn.disabled = true;
 
+    // Start rotating contextual messages timed to the ~15 s analysis window
+    const PM_MESSAGES = [
+        'Reading your project tasks and deadlines…',
+        'Imagining your project has already failed…',
+        'Tracing the root causes of each failure…',
+        'Assessing risk levels and early warning signs…',
+        'Drafting prevention actions for your team…',
+        'Finalizing the 5 failure scenarios…',
+    ];
+    const statusEl = document.getElementById('premortem-status');
+    var _pmRotator = null;
+    if (statusEl && typeof PrizmLoading !== 'undefined') {
+        _pmRotator = PrizmLoading.rotateMessages(statusEl, PM_MESSAGES, 15000);
+    }
+
     // Use progressive disclosure if the library is loaded
     if (typeof triggerAITask === 'function') {
-        if (loadingEl) {
-            loadingEl.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:140px"></div>' +
-                '<div class="ai-progress-bar mt-2"><div id="premortem-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
-                '<p id="premortem-status" class="ai-status-text">Preparing…</p>';
-        }
-
         triggerAITask(`{% url 'run_premortem' board.id %}`, {
             method: 'POST',
-            statusSelector: '#premortem-status',
-            progressSelector: '#premortem-progress',
             onResult: function(data) {
+                if (_pmRotator) _pmRotator.stop();
                 if (loadingEl) loadingEl.style.display = 'none';
                 if (data.success) {
                     window.location.reload();
@@ -413,6 +441,7 @@ function runPreMortem() {
                 }
             },
             onError: function(msg) {
+                if (_pmRotator) _pmRotator.stop();
                 if (loadingEl) loadingEl.style.display = 'none';
                 alert(msg || 'Analysis failed. Please try again.');
                 if (runBtn) runBtn.disabled = false;
@@ -421,7 +450,7 @@ function runPreMortem() {
         return;
     }
 
-    // Fallback: synchronous fetch (original behavior)
+    // Fallback: plain fetch (no WebSocket)
     fetch(`{% url 'run_premortem' board.id %}`, {
         method: 'POST',
         headers: {
@@ -431,16 +460,17 @@ function runPreMortem() {
     })
     .then(resp => resp.json())
     .then(data => {
+        if (_pmRotator) _pmRotator.stop();
         if (loadingEl) loadingEl.style.display = 'none';
         if (data.success) {
-            // Re-render the page to show new results cleanly
             window.location.reload();
         } else {
             alert(data.error || 'Analysis failed. Please try again.');
             if (runBtn) runBtn.disabled = false;
         }
     })
-    .catch(err => {
+    .catch(() => {
+        if (_pmRotator) _pmRotator.stop();
         if (loadingEl) loadingEl.style.display = 'none';
         alert('Network error. Please try again.');
         if (runBtn) runBtn.disabled = false;
