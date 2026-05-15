@@ -1296,7 +1296,7 @@ def _duplicate_board(template_board, user):
                 baseline_snapshot=ws.baseline_snapshot,
                 impact_results=ws.impact_results,
                 ai_analysis=ws.ai_analysis,
-                is_starred=ws.is_starred,
+                is_starred=False,
             )
             WhatIfScenario.objects.filter(pk=new_ws.pk).update(created_at=ws.created_at)
             whatif_map[old_pk] = new_ws

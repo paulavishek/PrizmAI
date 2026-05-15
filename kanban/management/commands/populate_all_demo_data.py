@@ -2263,7 +2263,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'risk_factors': ['Increased workload per team member exceeds sustainable threshold', 'Mobile development requires specialized skills not fully covered by current team', 'Testing effort will grow non-linearly with cross-platform requirements'],
                         'recommendations': ['Hire a contract mobile developer for 6 weeks', 'Split mobile app into MVP and full-feature phases', 'Extend deadline by 2 weeks to maintain quality standards'],
                     },
-                    'is_starred': True,
+                    'is_starred': False,
                 },
                 {
                     'name': 'Reduce Team by 1 Member',
@@ -2323,7 +2323,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         'risk_factors': ['Extended timeline may impact stakeholder expectations', 'QA tasks could uncover issues requiring additional rework'],
                         'recommendations': ['Communicate updated timeline to stakeholders proactively', 'Use the buffer to implement automated regression tests', 'Schedule a mid-sprint checkpoint to validate QA progress'],
                     },
-                    'is_starred': True,
+                    'is_starred': False,
                 },
             ]
 
