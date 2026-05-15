@@ -582,7 +582,7 @@ class AIRouter:
             )
 
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
-        # 'simple' → gemini-2.0-flash (no thinking mode, fast structured output)
+        # 'simple' → gemini-3.1-flash-lite (no thinking mode, fast structured output)
         # 'complex' → gemini-2.5-flash (full model for analysis, generation, reasoning)
         if model_override:
             model_name = model_override
@@ -598,7 +598,7 @@ class AIRouter:
         # 'simple' tasks (structured JSON output like pre-mortem) use a smaller token
         # budget.  Avoid Gemini 2.5 models for simple tasks: their extended thinking
         # mode adds 30–90 s of latency on analytical prompts without quality benefit.
-        # GEMINI_MODEL_SIMPLE should point to a non-thinking model (e.g. gemini-2.0-flash).
+        # GEMINI_MODEL_SIMPLE should point to a non-thinking model (e.g. gemini-3.1-flash-lite).
         # ThinkingConfig is not available in google-generativeai 0.8.x; thinking behaviour
         # is controlled solely by model choice.
         max_output_tokens = 2048 if complexity == 'simple' else 6144
