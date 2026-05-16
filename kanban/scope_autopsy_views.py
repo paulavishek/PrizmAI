@@ -17,8 +17,10 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+import json
+
 from kanban.models import Board, Task
-from kanban.scope_autopsy_models import ScopeAutopsyReport
+from kanban.scope_autopsy_models import ScopeAutopsyReport, TaskScopeReason
 from kanban.utils.scope_autopsy import calculate_baseline, has_scope_change_history
 from kanban.audit_utils import log_audit
 from api.ai_usage_utils import check_ai_quota, require_ai_quota
@@ -109,6 +111,28 @@ def scope_autopsy_dashboard(request, board_id):
                 ) if ev.added_by else '',
             })
 
+    # Fix 1: Detect baseline mismatch between Scope Dashboard and Autopsy
+    baseline_mismatch = None
+    if latest_report and latest_report.status == 'complete':
+        dashboard_baseline_count = board.baseline_task_count
+        dashboard_baseline_date = board.baseline_set_date
+        autopsy_baseline_count = latest_report.baseline_task_count
+        if (dashboard_baseline_count is not None
+                and dashboard_baseline_count != autopsy_baseline_count):
+            baseline_mismatch = {
+                'dashboard_count': dashboard_baseline_count,
+                'dashboard_date': dashboard_baseline_date,
+                'autopsy_count': autopsy_baseline_count,
+            }
+
+    # Fix 3: Calculate undocumented scope gap
+    undocumented_gap = 0
+    if latest_report and latest_report.status == 'complete' and enriched_events:
+        documented_task_count = latest_report.baseline_task_count + sum(
+            ev['net_task_change'] for ev in enriched_events
+        )
+        undocumented_gap = max(0, latest_report.final_task_count - documented_task_count)
+
     context = {
         'board': board,
         'state': state,
@@ -120,6 +144,8 @@ def scope_autopsy_dashboard(request, board_id):
         'enriched_events': enriched_events,
         'has_quota': has_quota,
         'is_archived': board.is_archived,
+        'baseline_mismatch': baseline_mismatch,
+        'undocumented_gap': undocumented_gap,
     }
     return render(request, 'kanban/scope_autopsy_dashboard.html', context)
 
@@ -327,10 +353,19 @@ def scope_autopsy_export(request, report_id):
             report.ai_summary.replace('\n', '<br/>'), body_style,
         ))
 
-    # Timeline Events
-    events = report.timeline_events.all()
-    if events.exists():
+    # Timeline Events — fetch once as a list for both visual and table
+    events = list(report.timeline_events.all())
+    documented_task_count = report.baseline_task_count + sum(ev.net_task_change for ev in events)
+    undocumented_gap = max(0, report.final_task_count - documented_task_count)
+
+    if events:
         elements.append(Paragraph("Scope Growth Timeline", heading_style))
+
+        # Fix 4: Visual horizontal timeline drawing
+        elements.append(_build_scope_timeline_drawing(report, events, undocumented_gap))
+        elements.append(Spacer(1, 0.15 * inch))
+
+        # Detailed events table
         event_header = [['Date', 'Event', 'Tasks', 'Delay', 'Cost']]
         event_rows = []
         for ev in events:
@@ -400,3 +435,132 @@ def scope_autopsy_export(request, report_id):
     )
     response.write(pdf)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a ReportLab Drawing for the scope growth timeline (Fix 4)
+# ---------------------------------------------------------------------------
+def _build_scope_timeline_drawing(report, events, undocumented_gap=0):
+    """
+    Return a ReportLab Drawing containing a horizontal scope growth timeline.
+    Nodes: Baseline → documented events → [undocumented gap?] → Now
+    """
+    from reportlab.graphics.shapes import Drawing, Line, Circle, String
+    from reportlab.lib.colors import HexColor, white, grey as rl_grey
+
+    nodes = []
+    nodes.append({
+        'label': 'Baseline',
+        'sublabel': f"{report.baseline_task_count} tasks",
+        'fill': HexColor('#28a745'),
+        'text': 'B',
+        'dashed': False,
+    })
+    for ev in events:
+        is_major = ev.net_task_change >= 3
+        label = ev.title[:20] + ('…' if len(ev.title) > 20 else '')
+        nodes.append({
+            'label': label,
+            'sublabel': f"+{ev.net_task_change}",
+            'fill': HexColor('#dc3545') if is_major else HexColor('#e0a800'),
+            'text': f"+{ev.net_task_change}",
+            'dashed': False,
+        })
+    if undocumented_gap > 0:
+        nodes.append({
+            'label': 'Undocumented growth',
+            'sublabel': f"+{undocumented_gap} tasks",
+            'fill': HexColor('#e9ecef'),
+            'text': f"+{undocumented_gap}",
+            'dashed': True,
+        })
+    nodes.append({
+        'label': 'Now',
+        'sublabel': f"{report.final_task_count} tasks",
+        'fill': HexColor('#6c757d'),
+        'text': 'N',
+        'dashed': False,
+    })
+
+    n = len(nodes)
+    r = 14  # circle radius (points)
+    drawing_width = 460
+    drawing_height = 78
+    line_y = 38  # y of the connecting line / circle centers
+
+    start_x = float(r + 10)
+    end_x = float(drawing_width - r - 10)
+    spacing = (end_x - start_x) / max(n - 1, 1)
+
+    drawing = Drawing(drawing_width, drawing_height)
+
+    # Horizontal connector line
+    if n > 1:
+        drawing.add(Line(start_x, line_y, end_x, line_y,
+                         strokeColor=rl_grey, strokeWidth=1))
+
+    for i, node in enumerate(nodes):
+        cx = start_x + i * spacing
+        cy = float(line_y)
+
+        is_dashed = node.get('dashed', False)
+        circle = Circle(
+            cx, cy, float(r),
+            fillColor=node['fill'],
+            strokeColor=HexColor('#6c757d') if is_dashed else white,
+            strokeWidth=1.5,
+        )
+        if is_dashed:
+            circle.strokeDashArray = [3, 2]
+        drawing.add(circle)
+
+        text_color = HexColor('#6c757d') if is_dashed else white
+        drawing.add(String(cx, cy - 3.5, node['text'],
+                           fontSize=7, fillColor=text_color,
+                           textAnchor='middle'))
+
+        # Label above circle
+        drawing.add(String(cx, cy + float(r) + 4, node['label'],
+                           fontSize=6, fillColor=HexColor('#2c3e50'),
+                           textAnchor='middle'))
+
+        # Sublabel below circle
+        drawing.add(String(cx, cy - float(r) - 11, node['sublabel'],
+                           fontSize=6, fillColor=rl_grey,
+                           textAnchor='middle'))
+
+    return drawing
+
+
+# ---------------------------------------------------------------------------
+# 5. Save scope change reason (POST) — Fix 2
+# ---------------------------------------------------------------------------
+@login_required
+@require_POST
+def save_scope_reason(request, task_id):
+    """Record why a task was added to the project scope after creation."""
+    task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        data = {}
+
+    reason = data.get('reason', 'unrecorded')
+    note = (data.get('note') or '').strip()
+
+    valid_reasons = {r[0] for r in TaskScopeReason.REASON_CHOICES}
+    if reason not in valid_reasons:
+        reason = 'unrecorded'
+
+    TaskScopeReason.objects.update_or_create(
+        task=task,
+        defaults={
+            'board': board,
+            'reason': reason,
+            'note': note,
+            'recorded_by': request.user,
+        },
+    )
+    return JsonResponse({'success': True})

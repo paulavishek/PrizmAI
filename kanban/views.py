@@ -2430,6 +2430,18 @@ def board_detail(request, board_id):
     except Exception:
         pass
 
+    # Fix 2: Pop pending scope reason modal trigger (set by create_task)
+    pending_scope_reason_task_id = None
+    _pending_task_id = request.session.pop('pending_scope_reason_task_id', None)
+    _pending_board_id = request.session.pop('pending_scope_reason_board_id', None)
+    if (_pending_task_id and _pending_board_id
+            and int(_pending_board_id) == board.id):
+        try:
+            Task.objects.get(id=_pending_task_id, column__board=board)
+            pending_scope_reason_task_id = _pending_task_id
+        except Task.DoesNotExist:
+            pass
+
     return render(request, 'kanban/board_detail.html', {
         'board': board,
         'columns': columns,
@@ -2461,6 +2473,7 @@ def board_detail(request, board_id):
         'board_preset_local': board_preset_local,
         'board_preset_global': board_preset_global,
         'board_preset_effective': board_preset_effective,
+        'pending_scope_reason_task_id': pending_scope_reason_task_id,
     })
 
 def task_detail(request, task_id):
@@ -2915,6 +2928,20 @@ def create_task(request, board_id, column_id=None):
                     log_model_change('task.created', task, request.user, request)
                 
                 messages.success(request, 'Task created successfully!')
+
+                # Fix 2: Trigger scope reason capture if this board has a baseline
+                # and is not a demo board — set a session flag so board_detail shows modal.
+                is_demo_board_for_modal = (
+                    getattr(board, 'is_official_demo_board', False)
+                    or getattr(board, 'is_sandbox_copy', False)
+                    or getattr(board, 'is_seed_demo_data', False)
+                )
+                if (request.user.is_authenticated
+                        and board.baseline_task_count is not None
+                        and not is_demo_board_for_modal):
+                    request.session['pending_scope_reason_task_id'] = task.id
+                    request.session['pending_scope_reason_board_id'] = board.id
+
                 return redirect('board_detail', board_id=board.id)
         
         # If form has duplicate tasks, add them to context for display

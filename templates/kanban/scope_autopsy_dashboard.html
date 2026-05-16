@@ -354,6 +354,23 @@
         </div>
     </div>
 
+    {# ── Fix 1: Baseline mismatch notice ────────────────────────── #}
+    {% if baseline_mismatch %}
+    <div class="alert alert-info d-flex align-items-start gap-2 mb-4 py-3" role="alert">
+        <i class="fas fa-info-circle text-info mt-1 flex-shrink-0"></i>
+        <div class="small">
+            <strong>Note:</strong>
+            The Scope Dashboard baseline
+            (<strong>{{ baseline_mismatch.dashboard_count }} tasks</strong>{% if baseline_mismatch.dashboard_date %},
+            set on {{ baseline_mismatch.dashboard_date|date:"M d, Y" }}{% endif %})
+            differs from the historical baseline detected by this Autopsy
+            (<strong>{{ baseline_mismatch.autopsy_count }} tasks</strong>).
+            The Autopsy uses the earliest detectable task count as its baseline.
+            Consider resetting your Scope Dashboard snapshot to align both views.
+        </div>
+    </div>
+    {% endif %}
+
     {# ── AI Summary ──────────────────────────────────────────────── #}
     {% if latest_report.ai_summary %}
     <div class="card mb-4">
@@ -418,6 +435,23 @@
                     <div class="align-self-center" style="flex:0 0 30px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
                     {% endif %}
                     {% endfor %}
+
+                    {# Fix 3: Undocumented growth gap node #}
+                    {% if undocumented_gap > 0 %}
+                    <div class="align-self-center" style="flex:0 0 30px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
+                    <div class="timeline-node text-center me-2" style="min-width:160px;"
+                         data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="These tasks were added without a recorded reason. Use the Scope Change prompt when adding tasks to track future changes.">
+                        <div class="mx-auto d-flex align-items-center justify-content-center"
+                             style="width:42px;height:42px;border-radius:50%;background:transparent;
+                                    border:2px dashed #6c757d;color:#6c757d;font-size:12px;cursor:default;">
+                            +{{ undocumented_gap }}
+                        </div>
+                        <div class="mt-2 small text-muted"><strong>Undocumented growth (+{{ undocumented_gap }} tasks)</strong></div>
+                        <div class="small text-muted" style="font-size:0.7rem;">No recorded reason</div>
+                        <span class="badge bg-light text-secondary border" style="font-size:0.65rem;">Untracked</span>
+                    </div>
+                    {% endif %}
 
                     {# Now dot #}
                     <div class="align-self-center" style="flex:0 0 40px;height:2px;background:#dee2e6;margin-top:-30px;"></div>

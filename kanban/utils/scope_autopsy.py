@@ -18,22 +18,18 @@ def calculate_baseline(board):
     """
     Determine the original scope baseline for a board.
 
-    Priority:
-    1. Use board.baseline_task_count / board.baseline_set_date if set
-    2. Fall back to task count 24 hours after board creation
+    Always uses the historical approach: tasks that existed within 24 hours
+    of board creation.  We deliberately ignore board.baseline_task_count
+    (set by the Scope Dashboard feature) because that is a monitoring
+    checkpoint that can be updated at any time to reflect the *current*
+    task count — not the project's original scope.  Using it here would
+    make Re-run produce 0 % growth whenever the Scope Dashboard baseline
+    equals the current task count, rendering the forensic analysis useless.
 
     Returns dict: {'task_count': int, 'baseline_date': datetime}
     """
     from kanban.models import Task
 
-    # If an explicit baseline exists on the board, use it
-    if board.baseline_task_count and board.baseline_set_date:
-        return {
-            'task_count': board.baseline_task_count,
-            'baseline_date': board.baseline_set_date,
-        }
-
-    # Fall back: count tasks that existed 24h after board creation
     cutoff = board.created_at + timedelta(hours=24)
     count = Task.objects.filter(
         column__board=board,

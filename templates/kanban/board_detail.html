@@ -2506,4 +2506,85 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
+{% if pending_scope_reason_task_id %}
+<!-- Scope Change Reason Modal (Fix 2) — shown once after a task is created when a baseline exists -->
+<div class="modal fade" id="scopeReasonModal" tabindex="-1"
+     aria-labelledby="scopeReasonModalLabel" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:460px;">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-1">
+                <h5 class="modal-title fw-semibold" id="scopeReasonModalLabel">
+                    <i class="fas fa-microscope text-warning me-2"></i>Why was this task added?
+                </h5>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="text-muted small mb-3">
+                    Recording the reason helps <strong>Scope Autopsy</strong> give you more accurate forensic analysis
+                    — instead of reporting this addition as undocumented growth.
+                </p>
+                <div class="mb-3">
+                    <label for="scopeReasonSelect" class="form-label fw-semibold small">Reason</label>
+                    <select class="form-select form-select-sm" id="scopeReasonSelect">
+                        <option value="requirement_change">Requirement Change</option>
+                        <option value="stakeholder_request">Stakeholder Request</option>
+                        <option value="discovered_complexity">Discovered Complexity</option>
+                        <option value="gold_plating">Gold Plating</option>
+                        <option value="initial_planning">Initial Planning (added at project start)</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="mb-1">
+                    <label for="scopeReasonNote" class="form-label fw-semibold small">
+                        Brief note <span class="text-muted fw-normal">(optional)</span>
+                    </label>
+                    <textarea class="form-control form-control-sm" id="scopeReasonNote"
+                              rows="2" placeholder="Any additional context…"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-1">
+                <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none"
+                        onclick="skipScopeReason()">Skip for now</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveScopeReason()">
+                    <i class="fas fa-save me-1"></i>Save Reason
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var TASK_ID = {{ pending_scope_reason_task_id }};
+    var CSRF = '{{ csrf_token }}';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var el = document.getElementById('scopeReasonModal');
+        if (!el) return;
+        var modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: false });
+        modal.show();
+    });
+
+    function postReason(reason, note) {
+        fetch('/tasks/' + TASK_ID + '/scope-reason/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: reason, note: note }),
+        }).catch(function () {});
+        var el = document.getElementById('scopeReasonModal');
+        var modal = el ? bootstrap.Modal.getInstance(el) : null;
+        if (modal) modal.hide();
+    }
+
+    window.saveScopeReason = function () {
+        var reason = document.getElementById('scopeReasonSelect').value;
+        var note = (document.getElementById('scopeReasonNote').value || '').trim();
+        postReason(reason, note);
+    };
+
+    window.skipScopeReason = function () {
+        postReason('unrecorded', '');
+    };
+}());
+</script>
+{% endif %}
+
 {% endblock content %}
