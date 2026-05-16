@@ -8,6 +8,7 @@ Provides four endpoints:
   4. Export   — PDF download of the report
 """
 import logging
+from collections import Counter, defaultdict
 from io import BytesIO
 
 from django.conf import settings
@@ -93,7 +94,44 @@ def scope_autopsy_dashboard(request, board_id):
     # Enrich report data for template
     enriched_events = []
     if latest_report and latest_report.status == 'complete':
+        # Pre-fetch all TaskScopeReason for this board (one query) so we can
+        # annotate each task_added event with the reason the user recorded.
+        reasons_qs = list(
+            TaskScopeReason.objects.filter(board=board).select_related('task')
+        )
+        reason_by_task_id = {r.task_id: r for r in reasons_qs}
+        # Secondary index keyed by (task_created_date, created_by_id) so that
+        # multi-task daily groups (where source_object_id is only task[0]) can
+        # still surface a representative reason.
+        reasons_by_day_user = defaultdict(list)
+        for r in reasons_qs:
+            day_user_key = (r.task.created_at.date(), r.task.created_by_id)
+            reasons_by_day_user[day_user_key].append(r)
+        REASON_DISPLAY = dict(TaskScopeReason.REASON_CHOICES)
+
         for ev in latest_report.timeline_events.all():
+            scope_reason_label = ''
+            scope_reason_note = ''
+
+            if ev.source_type == 'task_added':
+                # Primary: direct lookup by source task (handles all single-task events)
+                reason_obj = reason_by_task_id.get(ev.source_object_id) if ev.source_object_id else None
+                if reason_obj and reason_obj.reason != 'unrecorded':
+                    scope_reason_label = REASON_DISPLAY.get(reason_obj.reason, reason_obj.reason)
+                    scope_reason_note = reason_obj.note or ''
+                else:
+                    # Secondary: aggregate by (day, user) for multi-task daily groups
+                    day_user_key = (ev.event_date.date(), ev.added_by_id)
+                    day_reasons = [
+                        r for r in reasons_by_day_user.get(day_user_key, [])
+                        if r.reason != 'unrecorded'
+                    ]
+                    if day_reasons:
+                        dominant = Counter(r.reason for r in day_reasons).most_common(1)[0][0]
+                        scope_reason_label = REASON_DISPLAY.get(dominant, dominant)
+                        notes = list({r.note for r in day_reasons if (r.note or '').strip()})
+                        scope_reason_note = '; '.join(notes[:2])
+
             enriched_events.append({
                 'date': ev.event_date,
                 'title': ev.title,
@@ -109,6 +147,8 @@ def scope_autopsy_dashboard(request, board_id):
                 'added_by_name': (
                     ev.added_by.get_full_name() or ev.added_by.username
                 ) if ev.added_by else '',
+                'scope_reason_label': scope_reason_label,
+                'scope_reason_note': scope_reason_note,
             })
 
     # Fix 1: Detect baseline mismatch between Scope Dashboard and Autopsy
