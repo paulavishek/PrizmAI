@@ -64,6 +64,17 @@ def _duplicate_board(template_board, user):
     )
     new_board.save()
 
+    # Lock shadow-branch recalculation for this sandbox clone.  Board
+    # memberships created below will fire signals that queue a Celery
+    # recalculate task; the cloned branch scores are already correct and
+    # don't need an immediate live recalculation.  120-second TTL is
+    # well beyond the 5-second signal countdown.
+    try:
+        from django.core.cache import cache as _clone_cache
+        _clone_cache.set(f'demo_shadow_lock_{new_board.id}', True, timeout=120)
+    except Exception:
+        pass
+
     # Fresh owner membership for the real user
     BoardMembership.objects.create(board=new_board, user=user, role='owner')
 
@@ -1305,7 +1316,9 @@ def _duplicate_board(template_board, user):
 
     # --- Shadow Branches + Snapshots + Divergence Logs ---
     try:
+        from django.utils import timezone as _tz
         from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+        _clone_now = _tz.now()
         for branch in ShadowBranch.objects.filter(board=template_board):
             old_branch_pk = branch.pk
             new_source = whatif_map.get(branch.source_scenario_id) if branch.source_scenario_id else None
@@ -1321,7 +1334,16 @@ def _duplicate_board(template_board, user):
             )
             ShadowBranch.objects.filter(pk=new_branch.pk).update(created_at=branch.created_at)
 
-            for snap in BranchSnapshot.objects.filter(branch_id=old_branch_pk):
+            # Collect snapshots ordered oldest-first so we can identify the
+            # latest one and pin it to today — ensuring it always falls inside
+            # the "How It Affected Your Branches" today window regardless of
+            # when the official demo data was last seeded.
+            branch_snaps = list(
+                BranchSnapshot.objects.filter(branch_id=old_branch_pk).order_by('captured_at')
+            )
+            latest_snap_pk = branch_snaps[-1].pk if branch_snaps else None
+
+            for snap in branch_snaps:
                 new_snap = BranchSnapshot.objects.create(
                     branch=new_branch,
                     scope_delta=snap.scope_delta,
@@ -1333,7 +1355,10 @@ def _duplicate_board(template_board, user):
                     conflicts_detected=snap.conflicts_detected,
                     gemini_recommendation=snap.gemini_recommendation,
                 )
-                BranchSnapshot.objects.filter(pk=new_snap.pk).update(captured_at=snap.captured_at)
+                # Pin the most recent snapshot to now so it is visible in
+                # "How It Affected Your Branches" on the first page load.
+                new_captured_at = _clone_now if snap.pk == latest_snap_pk else snap.captured_at
+                BranchSnapshot.objects.filter(pk=new_snap.pk).update(captured_at=new_captured_at)
 
             for div in BranchDivergenceLog.objects.filter(branch_id=old_branch_pk):
                 new_div = BranchDivergenceLog.objects.create(
