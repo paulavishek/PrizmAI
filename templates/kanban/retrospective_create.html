@@ -119,7 +119,7 @@
 
                         <div class="alert alert-warning">
                             <i class="fas fa-robot"></i> <strong>AI Analysis:</strong>
-                            The system will use Google Gemini AI to generate comprehensive insights,
+                            The system will use {% if nav_ai_provider_name %}{{ nav_ai_provider_name }}{% else %}your configured AI provider{% endif %} to generate comprehensive insights,
                             identify lessons learned, and suggest actionable improvements.
                             This may take 10-30 seconds to complete.
                         </div>

@@ -244,7 +244,8 @@
                             <h6 class="text-muted">{{ metric.metric_name }}</h6>
                             <h3>{{ metric.metric_value }} <small class="text-muted">{{ metric.unit_of_measure }}</small></h3>
                             {% if metric.change_percentage %}
-                            <span class="badge bg-{% if metric.trend == 'improving' %}success{% elif metric.trend == 'declining' %}danger{% else %}secondary{% endif %}">
+                            <span class="badge bg-{% if metric.trend == 'improving' %}success{% elif metric.trend == 'declining' %}danger{% else %}secondary{% endif %}"
+                                  title="Sprint-over-sprint change" data-bs-toggle="tooltip">
                                 {% if metric.change_percentage > 0 %}+{% endif %}{{ metric.change_percentage|floatformat:1 }}%
                             </span>
                             {% endif %}
@@ -328,6 +329,11 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap tooltips
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+
     // Handle lesson status updates
     document.querySelectorAll('.lesson-status-dropdown').forEach(function(dropdown) {
         dropdown.addEventListener('change', function() {
@@ -624,7 +630,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="alert alert-info">
                             <i class="fas fa-robot"></i> <strong>AI-Generated Action Item</strong>
                             {% if action.ai_confidence %}
-                                <br>Confidence: {{ action.ai_confidence|floatformat:0 }}%
+                                <br>Confidence: {{ action.ai_confidence|as_percentage }}%
                             {% endif %}
                         </div>
                     </div>
