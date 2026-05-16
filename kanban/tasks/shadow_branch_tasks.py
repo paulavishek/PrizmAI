@@ -173,6 +173,14 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
         dict with summary of divergences logged
     """
     try:
+        from django.core.cache import cache as _cache
+        if _cache.get(f'demo_shadow_lock_{board_id}'):
+            logger.info(
+                f'Skipping branch recalculation for board {board_id}: '
+                'demo data populate in progress'
+            )
+            return {'divergences_logged': 0, 'snapshots_created': 0}
+
         from kanban.models import Board
         from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
         from kanban.utils.whatif_engine import WhatIfEngine

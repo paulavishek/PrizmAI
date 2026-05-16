@@ -1779,6 +1779,21 @@ def reset_demo_data(request):
             # ============================================================
             # STEP 7: Repopulate all official demo data
             # ============================================================
+            # Lock shadow-branch recalculation for all demo boards so that
+            # Celery tasks queued by membership/deadline signals during
+            # populate_all_demo_data don't overwrite the freshly seeded
+            # demo snapshot data.  120-second TTL is well beyond the 5-second
+            # signal countdown + populate run time.
+            try:
+                from django.core.cache import cache as _dcache
+                _demo_board_ids = list(
+                    demo_boards.values_list('id', flat=True)
+                )
+                for _bid in _demo_board_ids:
+                    _dcache.set(f'demo_shadow_lock_{_bid}', True, timeout=120)
+            except Exception:
+                pass
+
             # The --reset flag clears seed data and recreates it fresh
             call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
 

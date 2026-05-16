@@ -2349,6 +2349,17 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
         # -----------------------------------------------------------------
         # 2. SHADOW BRANCHES
         # -----------------------------------------------------------------
+        # Prevent any pending Celery recalculation tasks (queued by signals
+        # earlier in this populate run) from overwriting the demo snapshot
+        # data we are about to create.  120-second TTL exceeds the 5-second
+        # signal countdown plus the remaining populate time.
+        try:
+            from django.core.cache import cache as _pop_cache
+            for _b in self.demo_boards:
+                _pop_cache.set(f'demo_shadow_lock_{_b.id}', True, timeout=120)
+        except Exception:
+            pass
+
         try:
             from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
             from kanban.whatif_models import WhatIfScenario
