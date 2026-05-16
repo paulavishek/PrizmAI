@@ -418,7 +418,13 @@
                                     color:#fff;font-size:13px;">
                             +{{ event.net_task_change }}
                         </div>
-                        <div class="mt-2 small" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ event.title }}"><strong>{{ event.title|truncatewords:5 }}</strong></div>
+                        <div class="mt-2 small" data-bs-toggle="tooltip" data-bs-placement="top"
+                             title="{% if event.scope_reason_label %}{{ event.scope_reason_label }} — {{ event.title }}{% else %}{{ event.title }}{% endif %}">
+                            <strong>{% if event.scope_reason_label %}{{ event.scope_reason_label }}{% else %}{{ event.title|truncatewords:5 }}{% endif %}</strong>
+                        </div>
+                        {% if event.scope_reason_note %}
+                        <div class="small text-muted" style="font-size:0.7rem;max-width:150px;word-wrap:break-word;margin-top:2px;">{{ event.scope_reason_note|truncatechars:50 }}</div>
+                        {% endif %}
                         <div class="small text-muted">{{ event.date|date:"M d, Y" }}</div>
                         <div class="small">
                             {% if event.is_major_event %}
@@ -475,6 +481,14 @@
                         <span class="badge bg-secondary">{{ event.get_source_type_display }}</span>
                         {% if event.added_by_name %}
                         <span class="badge bg-info text-dark">By: {{ event.added_by_name }}</span>
+                        {% endif %}
+                        {% if event.scope_reason_label %}
+                        <div class="mt-2">
+                            <span class="badge bg-success"><i class="fas fa-tag me-1"></i>{{ event.scope_reason_label }}</span>
+                            {% if event.scope_reason_note %}
+                            <p class="text-muted small mt-1 mb-0"><em>{{ event.scope_reason_note }}</em></p>
+                            {% endif %}
+                        </div>
                         {% endif %}
                     </div>
                     <div class="col-md-6 text-md-end">
