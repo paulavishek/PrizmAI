@@ -200,6 +200,43 @@
         </div>
     </div>
 
+    {% if not has_baseline and not board.is_official_demo_board and not board.is_sandbox_copy %}
+    <!-- One-time baseline nudge banner — hidden once dismissed via localStorage -->
+    <div class="row mb-3" id="baselineNudgeBannerRow">
+        <div class="col-12">
+            <div class="alert alert-info d-flex align-items-start gap-3 mb-0 shadow-sm" id="baselineNudgeBanner"
+                 style="border-left: 4px solid #0dcaf0; border-radius: 8px;">
+                <span style="font-size:1.3rem;">💡</span>
+                <div class="flex-grow-1">
+                    <strong>Tip:</strong> Set your baseline <em>before</em> adding tasks to start tracking scope drift
+                    accurately. Once set, the Scope Dashboard will alert you whenever scope grows beyond your starting point.
+                </div>
+                <button type="button" class="btn btn-sm btn-primary ms-2 flex-shrink-0"
+                        data-bs-toggle="modal" data-bs-target="#setBaselineModal">
+                    Set Baseline Now
+                </button>
+                <button type="button" class="btn-close ms-1 flex-shrink-0" aria-label="Dismiss"
+                        id="baselineNudgeDismiss"></button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var DISMISS_KEY = 'scope_baseline_nudge_dismissed_{{ board.id }}';
+        var row = document.getElementById('baselineNudgeBannerRow');
+        if (!row) return;
+        if (localStorage.getItem(DISMISS_KEY)) {
+            row.style.display = 'none';
+            return;
+        }
+        document.getElementById('baselineNudgeDismiss').addEventListener('click', function () {
+            localStorage.setItem(DISMISS_KEY, '1');
+            row.style.display = 'none';
+        });
+    }());
+    </script>
+    {% endif %}
+
     {% if not has_baseline %}
     <!-- No Baseline Setup -->
     <div class="row mb-4">
