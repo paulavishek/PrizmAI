@@ -299,7 +299,7 @@
                     </ul>
                 </div>
                 {% if is_viewing_demo %}
-                <button type="button" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
+                <button type="button" id="reset-demo-btn" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
                         style="border:1.5px solid #d97706 !important;background:transparent !important;color:#d97706 !important;font-weight:600 !important;">
                     <i class="fas fa-redo me-1"></i>Reset Demo
                 </button>
@@ -928,6 +928,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.resetMyDemo = function() {
         if (!confirm('Reset your sandbox? This re-copies the demo data from scratch. All your current edits will be lost.')) return;
+
+        // Disable button and show spinner
+        var btn = document.getElementById('reset-demo-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Resetting… please wait';
+        }
+
+        // Show in-page info banner
+        var banner = document.createElement('div');
+        banner.id = 'reset-demo-banner';
+        banner.className = 'alert alert-info alert-dismissible fade show mx-3 mt-2';
+        banner.setAttribute('role', 'alert');
+        banner.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Resetting your demo workspace</strong> — this usually takes 30–60 seconds. Please don’t close this tab.<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+        var mainContent = document.querySelector('.prizm-main-content');
+        if (mainContent) {
+            mainContent.insertBefore(banner, mainContent.firstChild);
+        } else {
+            document.body.insertBefore(banner, document.body.firstChild);
+        }
+
         fetch('/demo/reset-mine/', {
             method: 'POST',
             headers: {
