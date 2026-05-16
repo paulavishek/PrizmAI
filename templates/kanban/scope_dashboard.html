@@ -566,6 +566,9 @@
                             <i class="fas fa-wand-magic-sparkles me-2"></i>Run AI Analysis
                         </button>
                     </form>
+                    <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-outline-secondary w-100 mb-3 quick-action-btn">
+                        🔍 Scope Autopsy
+                    </a>
                     <button type="button" class="btn btn-outline-warning w-100 mb-3 quick-action-btn"
                             data-bs-toggle="modal" data-bs-target="#setBaselineModal">
                         <i class="fas fa-flag me-2"></i>Set Baseline
@@ -573,6 +576,45 @@
                     <a href="{% url 'triple_constraint_dashboard' board.id %}" class="btn btn-outline-info w-100 quick-action-btn">
                         <i class="fas fa-balance-scale me-2"></i>Triple Constraint
                     </a>
+                </div>
+            </div>
+
+            <!-- Last Autopsy Summary -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="fas fa-microscope me-2 text-muted"></i>Last Autopsy</h6>
+                </div>
+                <div class="card-body">
+                    {% if latest_autopsy %}
+                    <p class="text-muted small mb-3">
+                        <i class="fas fa-clock me-1"></i>Run on {{ latest_autopsy.created_at|date:"M d, Y" }}
+                    </p>
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <div class="fw-semibold">{{ latest_autopsy.baseline_task_count }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Baseline</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-semibold">{{ latest_autopsy.final_task_count }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Final</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-semibold {% if latest_autopsy.total_scope_growth_percentage > 30 %}text-danger{% elif latest_autopsy.total_scope_growth_percentage > 15 %}text-warning{% else %}text-info{% endif %}">
+                                +{{ latest_autopsy.total_scope_growth_percentage|floatformat:1 }}%
+                            </div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Growth</div>
+                        </div>
+                    </div>
+                    <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-sm btn-outline-secondary w-100">
+                        View Full Report →
+                    </a>
+                    {% else %}
+                    <p class="text-muted small mb-1 fw-semibold">No autopsy run yet</p>
+                    <p class="text-muted mb-3" style="font-size: 0.8rem;">Run a Scope Autopsy to see a forensic breakdown of how your project's scope has grown.</p>
+                    <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-sm btn-outline-secondary w-100">
+                        Run Scope Autopsy →
+                    </a>
+                    {% endif %}
                 </div>
             </div>
 
