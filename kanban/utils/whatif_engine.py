@@ -245,9 +245,16 @@ class WhatIfEngine:
         timeline_shift_days = round(additional_weeks * 7) - deadline_shift
 
         new_predicted_date = None
-        if not low_velocity and baseline['predicted_date']:
-            base_date = date.fromisoformat(baseline['predicted_date'])
-            new_predicted_date = base_date + timedelta(days=timeline_shift_days)
+        if not low_velocity and baseline['velocity_per_week'] >= VELOCITY_THRESHOLD:
+            # Anchor to a freshly computed expected completion date derived from the
+            # live remaining task count rather than the stored BurndownPrediction
+            # date.  The stored prediction is only refreshed by the scheduled
+            # burndown job — not on every task completion — so anchoring to it
+            # freezes new_predicted_date (and therefore delay_probability and the
+            # feasibility score) even as tasks are completed on the real board.
+            live_weeks_remaining = baseline['remaining_tasks'] / baseline['velocity_per_week']
+            live_base_date = date.today() + timedelta(weeks=live_weeks_remaining)
+            new_predicted_date = live_base_date + timedelta(days=timeline_shift_days)
 
         new_deadline = None
         if baseline['effective_deadline']:
@@ -397,10 +404,15 @@ class WhatIfEngine:
         elif dp > 40:
             score -= 0.1
 
-        # Penalize resource overload
+        # Penalize resource overload.  The 130–200% band uses a continuous
+        # linear scale so that gradual utilization improvements from task
+        # completions produce proportional score movement rather than staying
+        # frozen until a hard threshold is crossed.
+        # Anchors: 130% → -0.15, 200% (cap) → -0.25 (same as prior step values).
         util = projected.get('utilization_pct', 0)
         if util > 130:
-            score -= 0.25
+            excess_pct = min(util - 130, 70) / 70  # 0.0 at 130%, 1.0 at 200%+
+            score -= 0.15 + excess_pct * 0.10
         elif util > 100:
             score -= 0.15
 
