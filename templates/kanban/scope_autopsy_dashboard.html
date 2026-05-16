@@ -363,13 +363,9 @@
         <i class="fas fa-info-circle text-info mt-1 flex-shrink-0"></i>
         <div class="small">
             <strong>Note:</strong>
-            The Scope Dashboard baseline
-            (<strong>{{ baseline_mismatch.dashboard_count }} tasks</strong>{% if baseline_mismatch.dashboard_date %},
-            set on {{ baseline_mismatch.dashboard_date|date:"M d, Y" }}{% endif %})
-            differs from the historical baseline detected by this Autopsy
-            (<strong>{{ baseline_mismatch.autopsy_count }} tasks</strong>).
-            The Autopsy uses the earliest detectable task count as its baseline.
-            Consider resetting your Scope Dashboard snapshot to align both views.
+            This Autopsy uses the earliest detectable task count as its historical baseline — the project's original scope.
+            The Scope Dashboard baseline is a separate monitoring checkpoint set manually.
+            These two numbers serve different purposes and it is normal for them to differ.
         </div>
     </div>
     {% endif %}
