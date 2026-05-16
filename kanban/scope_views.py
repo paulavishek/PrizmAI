@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.db.models import Sum, Avg, Count, Q
 
 from kanban.models import Board, Task, ScopeChangeSnapshot, ScopeCreepAlert
+from kanban.scope_autopsy_models import ScopeAutopsyReport
 from kanban.utils.scope_analysis import (
     get_scope_trend_data, 
     calculate_scope_velocity,
@@ -92,7 +93,11 @@ def scope_dashboard(request, board_id):
         'complexity': [item['complexity'] for item in trend_data],
         'scope_change': [item.get('scope_change_pct', 0) for item in trend_data],
     }
-    
+
+    latest_autopsy = ScopeAutopsyReport.objects.filter(
+        board=board, status='complete'
+    ).first()
+
     context = {
         'board': board,
         'has_baseline': has_baseline,
@@ -110,6 +115,7 @@ def scope_dashboard(request, board_id):
         'critical_count': critical_count,
         'warning_count': warning_count,
         'info_count': info_count,
+        'latest_autopsy': latest_autopsy,
     }
     
     return render(request, 'kanban/scope_dashboard.html', context)
