@@ -1515,9 +1515,11 @@ def _duplicate_board(template_board, user):
     except Exception:
         pass
 
-    # --- Exit Protocol: Health Signals + Cemetery Entry ---
+    # --- Exit Protocol: Health Signals + Cemetery Entry + HospiceSession + Organs ---
     try:
-        from exit_protocol.models import ProjectHealthSignal, CemeteryEntry
+        from exit_protocol.models import (
+            ProjectHealthSignal, CemeteryEntry, HospiceSession, ProjectOrgan,
+        )
         for sig in ProjectHealthSignal.objects.filter(board=template_board):
             new_sig = ProjectHealthSignal.objects.create(
                 board=new_board,
@@ -1560,6 +1562,41 @@ def _duplicate_board(template_board, user):
                 decline_timeline=ce.decline_timeline,
                 tags=ce.tags,
             )
+
+        # HospiceSession + ProjectOrgans — copy so Organ Bank and Transition Memos
+        # are populated in every sandbox, not just the master template board.
+        for hs in HospiceSession.objects.filter(board=template_board):
+            new_hs = HospiceSession.objects.create(
+                board=new_board,
+                initiated_by=hs.initiated_by,
+                trigger_type=hs.trigger_type,
+                status=hs.status,
+                ai_assessment=hs.ai_assessment,
+                knowledge_checklist=hs.knowledge_checklist,
+                team_transition_memos=hs.team_transition_memos,
+                checklist_completed_items=hs.checklist_completed_items,
+            )
+            HospiceSession.objects.filter(pk=new_hs.pk).update(
+                initiated_at=hs.initiated_at,
+                buried_at=hs.buried_at,
+            )
+            for organ in ProjectOrgan.objects.filter(hospice_session=hs):
+                new_organ = ProjectOrgan.objects.create(
+                    source_board=new_board,
+                    hospice_session=new_hs,
+                    organ_type=organ.organ_type,
+                    name=organ.name,
+                    description=organ.description,
+                    payload=organ.payload,
+                    reusability_score=organ.reusability_score,
+                    ai_rationale=organ.ai_rationale,
+                    best_suited_for=organ.best_suited_for,
+                    cautions=organ.cautions,
+                    status=organ.status,
+                )
+                ProjectOrgan.objects.filter(pk=new_organ.pk).update(
+                    extracted_at=organ.extracted_at,
+                )
     except Exception:
         pass
 

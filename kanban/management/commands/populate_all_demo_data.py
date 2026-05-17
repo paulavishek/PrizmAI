@@ -744,6 +744,9 @@ class Command(BaseCommand):
             OrganTransplant.objects.filter(organ__source_board__in=self.demo_boards).delete()
             ProjectOrgan.objects.filter(source_board__in=self.demo_boards).delete()
             CemeteryEntry.objects.filter(board__in=self.demo_boards).delete()
+            CemeteryEntry.objects.exclude(board__in=self.demo_boards).filter(
+                project_name='Legacy Bug Tracker v1'
+            ).delete()
             HospiceSession.objects.filter(board__in=self.demo_boards).delete()
             ProjectHealthSignal.objects.filter(board__in=self.demo_boards).delete()
         except Exception:
@@ -2966,6 +2969,10 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             cemetery_board = self.bug_board or self.software_board
             if cemetery_board:
                 CemeteryEntry.objects.filter(board=cemetery_board).delete()
+                # Clean up orphaned entries from non-official boards (e.g. old dev board IDs)
+                CemeteryEntry.objects.filter(project_name='Legacy Bug Tracker v1').exclude(
+                    board=cemetery_board
+                ).delete()
                 CemeteryEntry.objects.create(
                     board=cemetery_board,
                     project_name='Legacy Bug Tracker v1',
@@ -3059,70 +3066,47 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                         '40% completion the decision was made to archive it and extract reusable '
                         'components for future use.'
                     ),
-                    team_transition_memos=[
-                        {
-                            'member_name': 'Alex Chen',
-                            'role': 'Lead Developer',
-                            'contributions_summary': (
-                                'Alex architected the core bug ingestion pipeline and built the '
-                                'severity classification engine from scratch. He also led the '
-                                'database optimisation effort during the project\'s final quarter, '
-                                'though the underlying schema limitations ultimately proved insurmountable.'
-                            ),
-                            'open_tasks': (
-                                'Three unresolved critical bugs in the query optimiser remain open. '
-                                'The duplicate-detection algorithm was mid-refactor and should be '
-                                'reviewed before being adopted into the new system.'
-                            ),
-                            'handover_notes': (
-                                'All schema migration scripts are documented in /docs/migrations. '
-                                'The bug severity taxonomy (P0–P3 definitions) has been extracted '
-                                'as an organ and is ready for transplant into any future project.'
-                            ),
-                        },
-                        {
-                            'member_name': 'Sam Rivera',
-                            'role': 'QA Engineer',
-                            'contributions_summary': (
-                                'Sam built and maintained the full manual regression suite and '
-                                'authored the pre-release QA checklist that became the team\'s '
-                                'quality gate. She identified the database performance degradation '
-                                'two sprints before it caused the critical outage.'
-                            ),
-                            'open_tasks': (
-                                'The cross-browser compatibility test matrix was not completed for '
-                                'Safari 16. Accessibility audit findings (WCAG 2.1 AA) were '
-                                'documented but never actioned — these should be carried into the '
-                                'replacement project from day one.'
-                            ),
-                            'handover_notes': (
-                                'The pre-release QA checklist has been extracted as a reusable organ. '
-                                'Sam recommends prioritising automated regression coverage in any '
-                                'successor project — manual QA at this scale was a bottleneck.'
-                            ),
-                        },
-                        {
-                            'member_name': 'Jordan Taylor',
-                            'role': 'Product Manager',
-                            'contributions_summary': (
-                                'Jordan managed stakeholder expectations and owned the product roadmap '
-                                'throughout the project lifecycle. He facilitated the post-mortem '
-                                'sessions that produced the scope creep pattern documentation now '
-                                'preserved as a knowledge organ.'
-                            ),
-                            'open_tasks': (
-                                'Two enterprise stakeholders are awaiting a formal project closure '
-                                'communication. The Q3 roadmap items that were de-prioritised have '
-                                'not yet been triaged for inclusion in the replacement project backlog.'
-                            ),
-                            'handover_notes': (
-                                'Jordan has drafted a stakeholder closure email ready to send. '
-                                'All roadmap artefacts are in the shared drive under /legacy-bug-tracker. '
-                                'He recommends a scope freeze gate be built into the new project\'s '
-                                'governance process before the first sprint begins.'
-                            ),
-                        },
-                    ],
+                    team_transition_memos={
+                        str(alex.id): (
+                            '**Role:** Lead Developer\n\n'
+                            '**Contributions:** Alex architected the core bug ingestion pipeline and built the '
+                            'severity classification engine from scratch. He led the database optimisation effort '
+                            'during the project\'s final quarter, though the underlying schema limitations ultimately '
+                            'proved insurmountable.\n\n'
+                            '**Open Tasks:** Three unresolved critical bugs in the query optimiser remain open. '
+                            'The duplicate-detection algorithm was mid-refactor and should be reviewed before '
+                            'being adopted into the new system.\n\n'
+                            '**Handover Notes:** All schema migration scripts are documented in /docs/migrations. '
+                            'The bug severity taxonomy (P0–P3 definitions) has been extracted as an organ and is '
+                            'ready for transplant into any future project.'
+                        ),
+                        str(sam.id): (
+                            '**Role:** QA Engineer\n\n'
+                            '**Contributions:** Sam built and maintained the full manual regression suite and '
+                            'authored the pre-release QA checklist that became the team\'s quality gate. She '
+                            'identified the database performance degradation two sprints before it caused the '
+                            'critical outage.\n\n'
+                            '**Open Tasks:** The cross-browser compatibility test matrix was not completed for '
+                            'Safari 16. Accessibility audit findings (WCAG 2.1 AA) were documented but never '
+                            'actioned — these should be carried into the replacement project from day one.\n\n'
+                            '**Handover Notes:** The pre-release QA checklist has been extracted as a reusable organ. '
+                            'Sam recommends prioritising automated regression coverage in any successor project — '
+                            'manual QA at this scale was a bottleneck.'
+                        ),
+                        str(jordan.id): (
+                            '**Role:** Product Manager\n\n'
+                            '**Contributions:** Jordan managed stakeholder expectations and owned the product roadmap '
+                            'throughout the project lifecycle. He facilitated the post-mortem sessions that produced '
+                            'the scope creep pattern documentation now preserved as a knowledge organ.\n\n'
+                            '**Open Tasks:** Two enterprise stakeholders are awaiting a formal project closure '
+                            'communication. The Q3 roadmap items that were de-prioritised have not yet been triaged '
+                            'for inclusion in the replacement project backlog.\n\n'
+                            '**Handover Notes:** Jordan has drafted a stakeholder closure email ready to send. '
+                            'All roadmap artefacts are in the shared drive under /legacy-bug-tracker. He recommends '
+                            'a scope freeze gate be built into the new project\'s governance process before the '
+                            'first sprint begins.'
+                        ),
+                    } if (alex and sam and jordan) else {},
                 )
                 HospiceSession.objects.filter(pk=hospice.pk).update(
                     initiated_at=now - timedelta(days=45),
