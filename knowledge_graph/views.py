@@ -318,12 +318,39 @@ def organizational_memory_search(request):
         return JsonResponse({'error': 'AI quota exceeded. Try again later.'}, status=429)
 
     board_ids = _get_user_boards(request.user)
-    nodes = (
+
+    # Step 1: Always include the top 80 nodes by importance score.
+    top_nodes = list(
         MemoryNode.objects
         .filter(board_id__in=board_ids)
         .select_related('board')
-        .order_by('-importance_score', '-created_at')[:100]
+        .order_by('-importance_score', '-created_at')[:80]
     )
+    top_ids = {n.pk for n in top_nodes}
+
+    # Step 2: Keyword augmentation — find up to 20 additional nodes whose
+    # title or content matches terms from the query.  This ensures lower-
+    # importance nodes that are directly relevant to the search are never
+    # silently excluded by the rank-based cutoff.
+    import re as _re
+    raw_keywords = _re.findall(r'[a-zA-Z]{4,}', query_text)[:6]
+    if raw_keywords:
+        from django.db.models import Q as DQ
+        kw_q = DQ()
+        for kw in raw_keywords:
+            kw_q |= DQ(title__icontains=kw) | DQ(content__icontains=kw)
+        extra_nodes = list(
+            MemoryNode.objects
+            .filter(board_id__in=board_ids)
+            .filter(kw_q)
+            .exclude(pk__in=top_ids)
+            .select_related('board')
+            .order_by('-importance_score', '-created_at')[:20]
+        )
+    else:
+        extra_nodes = []
+
+    nodes = top_nodes + extra_nodes
 
     if not nodes:
         result = {
@@ -344,7 +371,7 @@ def organizational_memory_search(request):
         board_name = n.board.name if n.board else 'N/A'
         date_str = n.created_at.strftime('%Y-%m-%d')
         memory_lines.append(
-            f"NODE {n.pk}: [{n.node_type}] {n.title} | Project: {board_name} | Date: {date_str}\n{n.content[:300]}"
+            f"NODE {n.pk}: [{n.node_type}] {n.title} | Project: {board_name} | Date: {date_str}\n{n.content[:500]}"
         )
     memories_text = "\n\n".join(memory_lines)
 
