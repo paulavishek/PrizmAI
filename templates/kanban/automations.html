@@ -349,6 +349,10 @@
             <label class="form-label text-muted small">Days from now</label>
             <input type="number" id="avDaysInput" class="form-control form-control-sm" value="7" min="0" max="9999">
           </div>
+          <div class="mb-3" id="avComment" style="display:none;">
+            <label class="form-label text-muted small">Comment text <span class="text-danger">*</span></label>
+            <textarea id="avCommentText" class="form-control form-control-sm" rows="2" placeholder="Enter the comment to post on the task" maxlength="2000"></textarea>
+          </div>
           <input type="hidden" name="action_value" id="actionValueHidden">
 
           <button type="button" class="btn btn-primary w-100 mt-1" onclick="openConfirmModal()">
@@ -738,11 +742,12 @@ function onTriggerChange() {
 function onActionChange() {
   const a = document.getElementById('actionType');
   if (!a) return;
-  ['avPriority','avLabel','avNotify','avMoveCol','avAssign','avDays'].forEach(id => {
+  ['avPriority','avLabel','avNotify','avMoveCol','avAssign','avDays','avComment'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   });
   const map = {set_priority:'avPriority',add_label:'avLabel',send_notification:'avNotify',
-               move_to_column:'avMoveCol',assign_to_user:'avAssign',set_due_date:'avDays'};
+               move_to_column:'avMoveCol',assign_to_user:'avAssign',set_due_date:'avDays',
+               create_comment:'avComment'};
   if (map[a.value]) show(map[a.value]);
 }
 
@@ -758,7 +763,8 @@ function getValues() {
   let actionValue = '';
   const avMap = {set_priority:'avPrioritySelect',add_label:'avLabelSelect',
                  send_notification:'avNotifySelect',move_to_column:'avMoveColSelect',
-                 assign_to_user:'avAssignSelect',set_due_date:'avDaysInput'};
+                 assign_to_user:'avAssignSelect',set_due_date:'avDaysInput',
+                 create_comment:'avCommentText'};
   if (avMap[actionType]) actionValue = (document.getElementById(avMap[actionType]) || {}).value || '';
   return {name: (document.getElementById('ruleName') || {}).value || '', triggerType, triggerValue, actionType, actionValue};
 }
@@ -768,6 +774,9 @@ function openConfirmModal() {
   if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
   const v = getValues();
   if (!v.name.trim()) { alert('Please enter a rule name.'); return; }
+  if (v.actionType === 'create_comment' && !v.actionValue.trim()) {
+    alert('Please enter a comment text before creating the rule.'); return;
+  }
   document.getElementById('triggerValueHidden').value = v.triggerValue;
   document.getElementById('actionValueHidden').value  = v.actionValue;
   document.getElementById('confirmRuleSummary').innerHTML =

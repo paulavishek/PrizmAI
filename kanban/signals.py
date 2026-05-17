@@ -190,6 +190,20 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
 
     elif trigger_type == 'task_overdue':
         if task.due_date and task.due_date < now and task.progress < 100:
+            # Dedup: prevent the same rule from firing twice for the same task
+            # within a 10-second window (guards against duplicate post_save signals
+            # and legacy+new rule double-evaluation in the same execution cycle).
+            try:
+                from kanban.automation_models import AutomationRule as _NewRule, AutomationLog
+                if isinstance(rule, _NewRule):
+                    if AutomationLog.objects.filter(
+                        rule_id=rule.pk,
+                        task_affected_id=task.pk,
+                        triggered_at__gte=now - tz.timedelta(seconds=10),
+                    ).exists():
+                        return False
+            except Exception:
+                pass
             return True
 
     elif trigger_type == 'task_created' and created:
@@ -382,12 +396,14 @@ def _execute_action(block_type, config, task, rule):
     elif block_type == 'create_comment':
         from kanban.models import Comment
         text = config.get('text', config.get('value', ''))
-        if text:
-            Comment.objects.create(
-                task=task,
-                author=rule.created_by,
-                content=text,
-            )
+        if not text:
+            raise ValueError("Comment text is empty — edit the rule and add comment content.")
+        text = _substitute_vars(text, task)
+        Comment.objects.create(
+            task=task,
+            user=rule.created_by,
+            content=text,
+        )
 
     elif block_type == 'log_time_entry':
         try:
@@ -451,6 +467,25 @@ def _apply_automation_action(task, rule):
             log.warning("BoardAutomation set_due_date: couldn't parse days from '%s'", rule.action_value)
 
 
+def _substitute_vars(template, task):
+    """Replace {task_title}, {board_name}, {due_date}, {assignee} in a template string."""
+    board = task.column.board if task.column_id else None
+    result = template
+    result = result.replace('{task_title}', task.title or '')
+    result = result.replace('{board_name}', board.name if board else '')
+    result = result.replace('{task_id}', str(task.pk))
+    if task.due_date:
+        result = result.replace('{due_date}', task.due_date.strftime('%Y-%m-%d'))
+    else:
+        result = result.replace('{due_date}', 'not set')
+    if task.assigned_to:
+        assignee_name = task.assigned_to.get_full_name() or task.assigned_to.username
+    else:
+        assignee_name = 'unassigned'
+    result = result.replace('{assignee}', assignee_name)
+    return result
+
+
 def _send_automation_notification(task, rule, config=None):
     """Send in-app notifications triggered by an automation rule."""
     try:
@@ -464,7 +499,10 @@ def _send_automation_notification(task, rule, config=None):
         # Real users are added as board members when they browse the demo, so
         # firing automations on those boards would leak demo data to real users.
         if board.is_official_demo_board:
-            return
+            raise ValueError(
+                "Notifications are not sent in demo workspaces — "
+                "create your own workspace and board to test real notifications."
+            )
 
         # Determine sender: use the automation creator or board creator
         sender = rule.created_by or board.created_by
@@ -503,6 +541,25 @@ def _send_automation_notification(task, rule, config=None):
             recipients = list(User.objects.filter(board_memberships__board=board))
             if board.created_by and board.created_by not in recipients:
                 recipients.append(board.created_by)
+        elif recipient_key == 'specific_member':
+            target_username = (config or {}).get('target_user', '').strip()
+            if target_username:
+                from django.contrib.auth.models import User as AuthUser
+                specific_user = AuthUser.objects.filter(username=target_username).first()
+                if specific_user:
+                    recipients = [specific_user]
+
+        if not recipients:
+            known_keys = {'assignee', 'board_members', 'creator', 'specific_member'}
+            if recipient_key not in known_keys:
+                raise ValueError(
+                    f"No Notify recipient configured — open the rule in the Canvas Builder "
+                    f"and set the Notify field (Task Assignee / All Board Members / Specific Member)."
+                )
+            raise ValueError(
+                f"No recipients resolved for notify_target='{recipient_key}' "
+                f"(e.g. task has no assignee, or specific member username not found)."
+            )
 
         # Use the custom message if one was set on the rule, otherwise build a
         # clean professional default.  config['value'] holds the custom message
@@ -510,14 +567,19 @@ def _send_automation_notification(task, rule, config=None):
         # holds the recipient key).
         custom_message = ''
         if config:
-            val = config.get('value', '').strip()
-            if val and val.lower() not in ('assignee', 'board_members', 'creator'):
+            # When notify_target is set (Canvas Builder rules), the message is
+            # stored separately as 'value'; for scheduled rules 'value' doubles
+            # as the recipient key, so only treat it as a message when it isn't
+            # a known recipient keyword.
+            val = config.get('text', config.get('value', '')).strip()
+            if val and val.lower() not in ('assignee', 'board_members', 'creator', 'specific_member'):
                 custom_message = val
 
-        text = custom_message or (
-            f'Automation "{rule.name}" was triggered for task "{task.title}" '
-            f'on board "{board.name}".'
+        raw_text = custom_message or (
+            f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
+            f'on board "{{board_name}}".'
         )
+        text = _substitute_vars(raw_text, task)
 
         # Build a fixed, programmatic title in the format '[Rule Name] — [Task Name]'.
         # Setting `title` ensures the template uses it directly and never falls
@@ -542,6 +604,8 @@ def _send_automation_notification(task, rule, config=None):
                 action_url=task_url,
                 ai_summary=ai_summary_text,
             )
+    except ValueError:
+        raise  # Surface actionable errors in the audit log
     except Exception:
         import logging
         logging.getLogger(__name__).exception("_send_automation_notification failed silently")
