@@ -401,30 +401,31 @@ class Command(BaseCommand):
 
         for entry in decisions:
             created_at = entry.pop('created_at')
-            node = MemoryNode(
+            title = entry.pop('title')
+            node, created = MemoryNode.objects.get_or_create(
                 board=self.sd_board,
                 node_type='decision',
-                is_auto_captured=False,
-                **entry,
+                title=title,
+                defaults={'is_auto_captured': False, **entry},
             )
-            node.save()
-            # Back-date the timestamp after save
-            MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
-            node.refresh_from_db()
+            if created:
+                MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
+                node.refresh_from_db()
             nodes.append(node)
             self.stdout.write(f'   ✅ Decision: {node.title[:60]}')
 
         for entry in lessons:
             created_at = entry.pop('created_at')
-            node = MemoryNode(
+            title = entry.pop('title')
+            node, created = MemoryNode.objects.get_or_create(
                 board=self.sd_board,
                 node_type='manual_log',
-                is_auto_captured=False,
-                **entry,
+                title=title,
+                defaults={'is_auto_captured': False, **entry},
             )
-            node.save()
-            MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
-            node.refresh_from_db()
+            if created:
+                MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
+                node.refresh_from_db()
             nodes.append(node)
             self.stdout.write(f'   ✅ Lesson: {node.title[:60]}')
 
@@ -613,15 +614,17 @@ class Command(BaseCommand):
         nodes = []
         for entry in auto_entries:
             created_at = entry.pop('created_at')
-            node = MemoryNode(
+            node_type = entry.pop('node_type')
+            title = entry.pop('title')
+            node, created = MemoryNode.objects.get_or_create(
                 board=self.sd_board,
-                created_by=None,
-                is_auto_captured=True,
-                **entry,
+                node_type=node_type,
+                title=title,
+                defaults={'created_by': None, 'is_auto_captured': True, **entry},
             )
-            node.save()
-            MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
-            node.refresh_from_db()
+            if created:
+                MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
+                node.refresh_from_db()
             nodes.append(node)
             self.stdout.write(f'   🤖 {node.get_node_type_display()}: {node.title[:60]}')
 
