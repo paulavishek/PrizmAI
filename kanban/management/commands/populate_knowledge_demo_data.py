@@ -402,32 +402,44 @@ class Command(BaseCommand):
         for entry in decisions:
             created_at = entry.pop('created_at')
             title = entry.pop('title')
-            node, created = MemoryNode.objects.get_or_create(
-                board=self.sd_board,
-                node_type='decision',
-                title=title,
-                defaults={'is_auto_captured': False, **entry},
-            )
+            try:
+                node, created = MemoryNode.objects.get_or_create(
+                    board=self.sd_board,
+                    node_type='decision',
+                    title=title,
+                    defaults={'is_auto_captured': False, **entry},
+                )
+            except MemoryNode.MultipleObjectsReturned:
+                node = MemoryNode.objects.filter(
+                    board=self.sd_board, node_type='decision', title=title
+                ).order_by('-importance_score').first()
+                created = False
             if created:
                 MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
                 node.refresh_from_db()
             nodes.append(node)
-            self.stdout.write(f'   ✅ Decision: {node.title[:60]}')
+            self.stdout.write(f'   Decision: {node.title[:60]}')
 
         for entry in lessons:
             created_at = entry.pop('created_at')
             title = entry.pop('title')
-            node, created = MemoryNode.objects.get_or_create(
-                board=self.sd_board,
-                node_type='manual_log',
-                title=title,
-                defaults={'is_auto_captured': False, **entry},
-            )
+            try:
+                node, created = MemoryNode.objects.get_or_create(
+                    board=self.sd_board,
+                    node_type='manual_log',
+                    title=title,
+                    defaults={'is_auto_captured': False, **entry},
+                )
+            except MemoryNode.MultipleObjectsReturned:
+                node = MemoryNode.objects.filter(
+                    board=self.sd_board, node_type='manual_log', title=title
+                ).order_by('-importance_score').first()
+                created = False
             if created:
                 MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
                 node.refresh_from_db()
             nodes.append(node)
-            self.stdout.write(f'   ✅ Lesson: {node.title[:60]}')
+            self.stdout.write(f'   Lesson: {node.title[:60]}')
 
         return nodes
 
@@ -588,6 +600,34 @@ class Command(BaseCommand):
                 },
                 'created_at': past(12),
             },
+            # --- Commitment Protocol Event ---
+            {
+                'node_type': 'ai_recommendation',
+                'title': 'Negotiation triggered for "Sprint 3 Core Delivery"',
+                'content': (
+                    'Confidence in the Sprint 3 Core Delivery commitment dropped to 52%, '
+                    'falling below the 60% negotiation threshold. The primary drivers were: '
+                    'the Database Schema & Migrations task remaining unassigned for 5 days, '
+                    'the User Registration Flow running 3 days overdue, and a velocity shortfall '
+                    'of 1.8 tasks/week against the required 3.0. '
+                    'AI drafted a renegotiation package with three scope options: (1) defer the '
+                    'Notification Service to v2 and retain the original deadline, (2) extend the '
+                    'deadline by 10 days with the current scope, or (3) add a fourth team member '
+                    'for the final sprint. Stakeholder review is pending.'
+                ),
+                'tags': ['commitment', 'negotiation', 'sprint-3', 'negotiation_initiated'],
+                'importance_score': 0.78,
+                'context_data': {
+                    'source': 'commitment_protocol',
+                    'event_type': 'negotiation_initiated',
+                    'protocol_title': 'Sprint 3 Core Delivery',
+                    'confidence': 0.52,
+                    'threshold': 0.60,
+                    'trigger_reason': 'confidence_below_threshold',
+                    'options_presented': ['defer_notification_service', 'extend_deadline', 'add_resource'],
+                },
+                'created_at': past(11),
+            },
             # --- Lesson (auto-detected pattern) ---
             {
                 'node_type': 'lesson',
@@ -616,17 +656,23 @@ class Command(BaseCommand):
             created_at = entry.pop('created_at')
             node_type = entry.pop('node_type')
             title = entry.pop('title')
-            node, created = MemoryNode.objects.get_or_create(
-                board=self.sd_board,
-                node_type=node_type,
-                title=title,
-                defaults={'created_by': None, 'is_auto_captured': True, **entry},
-            )
+            try:
+                node, created = MemoryNode.objects.get_or_create(
+                    board=self.sd_board,
+                    node_type=node_type,
+                    title=title,
+                    defaults={'created_by': None, 'is_auto_captured': True, **entry},
+                )
+            except MemoryNode.MultipleObjectsReturned:
+                node = MemoryNode.objects.filter(
+                    board=self.sd_board, node_type=node_type, title=title
+                ).order_by('-importance_score').first()
+                created = False
             if created:
                 MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
                 node.refresh_from_db()
             nodes.append(node)
-            self.stdout.write(f'   🤖 {node.get_node_type_display()}: {node.title[:60]}')
+            self.stdout.write(f'   {node.get_node_type_display()}: {node.title[:60]}')
 
         return nodes
 
