@@ -2963,7 +2963,7 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
 
             # Create a Cemetery Entry for the Bug Tracking board (if it exists)
             # This gives users a "dead project" to explore in the cemetery
-            cemetery_board = self.bug_board
+            cemetery_board = self.bug_board or self.software_board
             if cemetery_board:
                 CemeteryEntry.objects.filter(board=cemetery_board).delete()
                 CemeteryEntry.objects.create(
@@ -3040,7 +3040,214 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                     tags=['monolith', 'scope-creep', 'scaling', 'technical-debt', 'performance'],
                 )
                 stats['exit_protocol'] += 1
-                self.stdout.write('   ✓ Exit Protocol (Cemetery Entry + Health Signals) created')
+
+                # --- HospiceSession (buried) ---
+                from exit_protocol.models import HospiceSession, ProjectOrgan
+                HospiceSession.objects.filter(board=cemetery_board).delete()
+                hospice = HospiceSession.objects.create(
+                    board=cemetery_board,
+                    initiated_by=alex,
+                    trigger_type='manager_initiated',
+                    status='buried',
+                    ai_assessment=(
+                        'The Legacy Bug Tracker v1 project was wound down because scope kept expanding '
+                        'beyond the original brief. What started as a simple internal bug tracker '
+                        'accumulated feature requests until it resembled a full product — sprint planning, '
+                        'reporting dashboards, and notification systems were all added without a '
+                        'corresponding architecture review. Velocity dropped sharply as team members were '
+                        'pulled onto higher-priority projects, and after three consecutive sprints below '
+                        '40% completion the decision was made to archive it and extract reusable '
+                        'components for future use.'
+                    ),
+                    team_transition_memos=[
+                        {
+                            'member_name': 'Alex Chen',
+                            'role': 'Lead Developer',
+                            'contributions_summary': (
+                                'Alex architected the core bug ingestion pipeline and built the '
+                                'severity classification engine from scratch. He also led the '
+                                'database optimisation effort during the project\'s final quarter, '
+                                'though the underlying schema limitations ultimately proved insurmountable.'
+                            ),
+                            'open_tasks': (
+                                'Three unresolved critical bugs in the query optimiser remain open. '
+                                'The duplicate-detection algorithm was mid-refactor and should be '
+                                'reviewed before being adopted into the new system.'
+                            ),
+                            'handover_notes': (
+                                'All schema migration scripts are documented in /docs/migrations. '
+                                'The bug severity taxonomy (P0–P3 definitions) has been extracted '
+                                'as an organ and is ready for transplant into any future project.'
+                            ),
+                        },
+                        {
+                            'member_name': 'Sam Rivera',
+                            'role': 'QA Engineer',
+                            'contributions_summary': (
+                                'Sam built and maintained the full manual regression suite and '
+                                'authored the pre-release QA checklist that became the team\'s '
+                                'quality gate. She identified the database performance degradation '
+                                'two sprints before it caused the critical outage.'
+                            ),
+                            'open_tasks': (
+                                'The cross-browser compatibility test matrix was not completed for '
+                                'Safari 16. Accessibility audit findings (WCAG 2.1 AA) were '
+                                'documented but never actioned — these should be carried into the '
+                                'replacement project from day one.'
+                            ),
+                            'handover_notes': (
+                                'The pre-release QA checklist has been extracted as a reusable organ. '
+                                'Sam recommends prioritising automated regression coverage in any '
+                                'successor project — manual QA at this scale was a bottleneck.'
+                            ),
+                        },
+                        {
+                            'member_name': 'Jordan Taylor',
+                            'role': 'Product Manager',
+                            'contributions_summary': (
+                                'Jordan managed stakeholder expectations and owned the product roadmap '
+                                'throughout the project lifecycle. He facilitated the post-mortem '
+                                'sessions that produced the scope creep pattern documentation now '
+                                'preserved as a knowledge organ.'
+                            ),
+                            'open_tasks': (
+                                'Two enterprise stakeholders are awaiting a formal project closure '
+                                'communication. The Q3 roadmap items that were de-prioritised have '
+                                'not yet been triaged for inclusion in the replacement project backlog.'
+                            ),
+                            'handover_notes': (
+                                'Jordan has drafted a stakeholder closure email ready to send. '
+                                'All roadmap artefacts are in the shared drive under /legacy-bug-tracker. '
+                                'He recommends a scope freeze gate be built into the new project\'s '
+                                'governance process before the first sprint begins.'
+                            ),
+                        },
+                    ],
+                )
+                HospiceSession.objects.filter(pk=hospice.pk).update(
+                    initiated_at=now - timedelta(days=45),
+                    buried_at=now - timedelta(days=30),
+                )
+
+                # --- ProjectOrgan records ---
+                ProjectOrgan.objects.filter(source_board=cemetery_board).delete()
+                organs = [
+                    {
+                        'organ_type': 'task_template',
+                        'name': 'Bug Triage & Reproduction Template',
+                        'description': 'A structured task template for reproducing and categorizing bugs with all essential diagnostic fields.',
+                        'reusability_score': 88,
+                        'payload': {
+                            'fields': [
+                                'steps_to_reproduce',
+                                'expected_behavior',
+                                'actual_behavior',
+                                'severity',
+                                'affected_version',
+                                'browser_environment',
+                                'assigned_qa',
+                            ],
+                            'default_priority': 'High',
+                            'estimated_hours': 2,
+                        },
+                    },
+                    {
+                        'organ_type': 'checklist',
+                        'name': 'Pre-Release QA Checklist',
+                        'description': 'A 7-item checklist covering all critical quality gates before any production release.',
+                        'reusability_score': 92,
+                        'payload': {
+                            'items': [
+                                'Regression test suite passed',
+                                'Cross-browser compatibility verified',
+                                'Performance benchmarks within threshold',
+                                'Accessibility scan completed',
+                                'Stakeholder sign-off received',
+                                'Rollback plan confirmed',
+                                'Monitoring alerts configured',
+                            ],
+                        },
+                    },
+                    {
+                        'organ_type': 'automation_rule',
+                        'name': 'Auto-assign Critical Bugs',
+                        'description': 'Automation rule that triggers on Critical label and routes the task to the QA lead instantly.',
+                        'reusability_score': 75,
+                        'payload': {
+                            'trigger': 'label_added',
+                            'condition': 'label == Critical',
+                            'actions': [
+                                'assign_to_qa_lead',
+                                'move_to_in_progress',
+                                'notify_team_channel',
+                            ],
+                        },
+                    },
+                    {
+                        'organ_type': 'knowledge_entry',
+                        'name': 'Root Cause: Scope Creep Pattern',
+                        'description': 'Documents the scope creep pattern observed in this project and the recommended mitigation approach.',
+                        'reusability_score': 85,
+                        'payload': {
+                            'pattern': (
+                                'Incremental feature additions, each individually reasonable, '
+                                'compound into a scope 3x the original brief when accepted without '
+                                'a corresponding architecture review. The system\'s load-bearing '
+                                'assumptions are never revisited until a hard failure forces the issue.'
+                            ),
+                            'early_warning_signs': [
+                                'Sprint scope increasing by more than 15% without a formal change request',
+                                'Team velocity declining for two consecutive sprints',
+                                'Hotfix tasks exceeding 30% of total sprint work',
+                            ],
+                            'recommended_mitigation': (
+                                'Introduce a scope gate after every 2x growth from baseline: mandatory '
+                                'architecture review, performance benchmark, and stakeholder re-sign-off '
+                                'before any further features are accepted into the backlog.'
+                            ),
+                            'source_project': 'Legacy Bug Tracker v1',
+                        },
+                    },
+                    {
+                        'organ_type': 'goal_framework',
+                        'name': 'Bug Severity Classification Framework',
+                        'description': 'Four-tier severity classification with response time SLAs and escalation paths.',
+                        'reusability_score': 79,
+                        'payload': {
+                            'tiers': [
+                                {
+                                    'level': 'P0 — Critical',
+                                    'response_time_sla': '2 hours',
+                                    'escalation_path': 'Immediate page to on-call lead and VP Engineering',
+                                },
+                                {
+                                    'level': 'P1 — High',
+                                    'response_time_sla': '8 hours',
+                                    'escalation_path': 'Assigned to QA lead, flagged in daily standup',
+                                },
+                                {
+                                    'level': 'P2 — Medium',
+                                    'response_time_sla': '3 business days',
+                                    'escalation_path': 'Added to current sprint backlog',
+                                },
+                                {
+                                    'level': 'P3 — Low',
+                                    'response_time_sla': '2 weeks',
+                                    'escalation_path': 'Triaged into next sprint planning session',
+                                },
+                            ],
+                        },
+                    },
+                ]
+                for organ_data in organs:
+                    ProjectOrgan.objects.create(
+                        source_board=cemetery_board,
+                        hospice_session=hospice,
+                        status='available',
+                        **organ_data,
+                    )
+
+                self.stdout.write('   ✓ Exit Protocol (Cemetery Entry + Health Signals + HospiceSession + 5 Organs) created')
             else:
                 self.stdout.write('   ⚠️ Bug Tracking board not found — skipping Cemetery Entry')
         except Exception as e:
