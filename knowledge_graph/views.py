@@ -375,6 +375,34 @@ def organizational_memory_search(request):
         )
     memories_text = "\n\n".join(memory_lines)
 
+    # ── Few-shot examples from past helpful answers ───────────────────────────
+    # Fetch up to 3 recent queries that the user rated as helpful.  Their Q+A
+    # pairs are injected into the system prompt so Gemini can calibrate its
+    # answer style and depth to what this team actually found useful.
+    good_examples = list(
+        OrganizationalMemoryQuery.objects.filter(
+            asked_by=request.user,
+            was_helpful=True,
+        )
+        .exclude(query_text=query_text)
+        .order_by('-asked_at')[:3]
+    )
+    few_shot_block = ''
+    if good_examples:
+        pairs = []
+        for ex in good_examples:
+            ex_answer = (ex.response_json or {}).get('answer', '').strip()
+            if ex.query_text and ex_answer:
+                pairs.append(
+                    f"Q: {ex.query_text}\nA: {ex_answer[:300]}"
+                )
+        if pairs:
+            few_shot_block = (
+                "\n\nExamples of answers your team previously rated as helpful "
+                "(use these to calibrate tone and depth — do NOT cite them as sources):\n"
+                + "\n\n".join(pairs)
+            )
+
     system_prompt = (
         "You are PrizmAI's organizational memory. You have access to a company's "
         "complete project history — decisions made, lessons learned, outcomes achieved, "
@@ -385,7 +413,8 @@ def organizational_memory_search(request):
         "- Always cite which specific memory nodes your answer draws from (by ID).\n"
         "- If no relevant memories exist, say so honestly — do not make up an answer.\n"
         "- Speak like a knowledgeable colleague, not a database.\n"
-        "- Keep answers concise — maximum 4 sentences of synthesis, then list sources.\n\n"
+        "- Keep answers concise — maximum 4 sentences of synthesis, then list sources.\n"
+        + few_shot_block + "\n\n"
         "Return ONLY valid JSON. No markdown, no explanation outside JSON."
     )
 
@@ -504,7 +533,17 @@ def organizational_memory_search(request):
 @require_POST
 @demo_write_guard
 def memory_feedback(request, query_id):
-    """Submit feedback (thumbs up/down) on a memory search result."""
+    """Submit feedback (thumbs up/down) on a memory search result.
+
+    Three real effects:
+    1. Importance score nudge — cited nodes get +0.03 on thumbs-up, -0.02 on
+       thumbs-down (clamped to [0, 1]).  Higher-scored nodes surface earlier in
+       future searches, lower-scored ones move down.
+    2. Flagging — thumbs-down marks the query as flagged_for_review in its
+       response_json so admins / future analysis can audit poor answers.
+    3. Few-shot examples — thumbs-up marks the query as a good_example so its
+       Q+A pair is injected into the Gemini prompt on future similar searches.
+    """
     query_record = get_object_or_404(OrganizationalMemoryQuery, pk=query_id)
 
     try:
@@ -516,17 +555,42 @@ def memory_feedback(request, query_id):
     if was_helpful is None:
         return JsonResponse({'error': 'was_helpful is required.'}, status=400)
 
-    query_record.was_helpful = bool(was_helpful)
-    query_record.save(update_fields=['was_helpful'])
+    was_helpful = bool(was_helpful)
+    query_record.was_helpful = was_helpful
+
+    # ── 1. Importance score nudge on cited nodes ──────────────────────────────
+    cited_nodes = list(query_record.nodes_referenced.all())
+    delta = 0.03 if was_helpful else -0.02
+    for node in cited_nodes:
+        new_score = round(min(1.0, max(0.0, node.importance_score + delta)), 4)
+        MemoryNode.objects.filter(pk=node.pk).update(importance_score=new_score)
+
+    # ── 2 & 3. Mark query as good example (few-shot) or flagged for review ───
+    meta = dict(query_record.response_json) if query_record.response_json else {}
+    if was_helpful:
+        meta['good_example'] = True
+        meta.pop('flagged_for_review', None)
+    else:
+        meta['flagged_for_review'] = True
+        meta['good_example'] = False
+    query_record.response_json = meta
+
+    query_record.save(update_fields=['was_helpful', 'response_json'])
 
     try:
         from kanban.audit_utils import log_audit
+        cited_ids = [n.pk for n in cited_nodes]
         log_audit(
             action_type='memory.feedback',
             user=request.user,
             request=request,
             message=f"Memory feedback: {'helpful' if was_helpful else 'not helpful'}",
-            additional_data={'query_id': query_id, 'was_helpful': was_helpful},
+            additional_data={
+                'query_id': query_id,
+                'was_helpful': was_helpful,
+                'nodes_nudged': cited_ids,
+                'importance_delta': delta,
+            },
         )
     except Exception:
         pass
