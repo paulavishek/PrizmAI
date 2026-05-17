@@ -79,11 +79,17 @@ class Command(BaseCommand):
         # Optionally reset
         if options.get('reset'):
             deleted, _ = MemoryNode.objects.filter(board=self.sd_board).delete()
-            self.stdout.write(self.style.WARNING(f'   🗑️  Deleted {deleted} existing knowledge nodes'))
+            self.stdout.write(self.style.WARNING(f'   Deleted {deleted} existing knowledge nodes'))
+
+        # Idempotency guard: skip seeding manual entries that already exist so
+        # re-running populate_all_demo_data never creates duplicates.
+        existing_titles = set(
+            MemoryNode.objects.filter(board=self.sd_board).values_list('title', flat=True)
+        )
 
         # Seed the data
-        manual_nodes = self._seed_manual_entries()
-        auto_nodes = self._seed_auto_captured_entries()
+        manual_nodes = self._seed_manual_entries(existing_titles=existing_titles)
+        auto_nodes = self._seed_auto_captured_entries(existing_titles=existing_titles)
         self._seed_memory_connections(manual_nodes, auto_nodes)
 
         total_manual = len(manual_nodes)
@@ -97,9 +103,11 @@ class Command(BaseCommand):
     # MANUAL ENTRIES (Decision Log & Lessons — left panel)
     # =========================================================================
 
-    def _seed_manual_entries(self):
+    def _seed_manual_entries(self, existing_titles=None):
         """Create 10 Decisions + 10 Lessons/Notes as manual (user-authored) entries."""
         self.stdout.write(self.style.NOTICE('\n📝 Seeding manual Decision & Lesson entries...'))
+        if existing_titles is None:
+            existing_titles = set()
 
         # Spread created_at times realistically across the last 3 months
         def past(days):
@@ -402,44 +410,48 @@ class Command(BaseCommand):
         for entry in decisions:
             created_at = entry.pop('created_at')
             title = entry.pop('title')
-            try:
-                node, created = MemoryNode.objects.get_or_create(
-                    board=self.sd_board,
-                    node_type='decision',
-                    title=title,
-                    defaults={'is_auto_captured': False, **entry},
-                )
-            except MemoryNode.MultipleObjectsReturned:
+            if title in existing_titles:
                 node = MemoryNode.objects.filter(
                     board=self.sd_board, node_type='decision', title=title
-                ).order_by('-importance_score').first()
-                created = False
-            if created:
-                MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
-                node.refresh_from_db()
+                ).order_by('pk').first()
+                nodes.append(node)
+                self.stdout.write(f'   Decision (existing): {title[:60]}')
+                continue
+            node = MemoryNode.objects.create(
+                board=self.sd_board,
+                node_type='decision',
+                title=title,
+                is_auto_captured=False,
+                **entry,
+            )
+            MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
+            node.refresh_from_db()
+            existing_titles.add(title)
             nodes.append(node)
-            self.stdout.write(f'   Decision: {node.title[:60]}')
+            self.stdout.write(f'   Decision: {title[:60]}')
 
         for entry in lessons:
             created_at = entry.pop('created_at')
             title = entry.pop('title')
-            try:
-                node, created = MemoryNode.objects.get_or_create(
-                    board=self.sd_board,
-                    node_type='manual_log',
-                    title=title,
-                    defaults={'is_auto_captured': False, **entry},
-                )
-            except MemoryNode.MultipleObjectsReturned:
+            if title in existing_titles:
                 node = MemoryNode.objects.filter(
                     board=self.sd_board, node_type='manual_log', title=title
-                ).order_by('-importance_score').first()
-                created = False
-            if created:
-                MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
-                node.refresh_from_db()
+                ).order_by('pk').first()
+                nodes.append(node)
+                self.stdout.write(f'   Lesson (existing): {title[:60]}')
+                continue
+            node = MemoryNode.objects.create(
+                board=self.sd_board,
+                node_type='manual_log',
+                title=title,
+                is_auto_captured=False,
+                **entry,
+            )
+            MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
+            node.refresh_from_db()
+            existing_titles.add(title)
             nodes.append(node)
-            self.stdout.write(f'   Lesson: {node.title[:60]}')
+            self.stdout.write(f'   Lesson: {title[:60]}')
 
         return nodes
 
@@ -447,9 +459,11 @@ class Command(BaseCommand):
     # AUTO-CAPTURED ENTRIES (Auto-Captured Memories 🤖 — right panel)
     # =========================================================================
 
-    def _seed_auto_captured_entries(self):
-        """Create 8 system-generated auto-captured MemoryNode entries."""
+    def _seed_auto_captured_entries(self, existing_titles=None):
+        """Create 9 system-generated auto-captured MemoryNode entries."""
         self.stdout.write(self.style.NOTICE('\n🤖 Seeding auto-captured memory entries...'))
+        if existing_titles is None:
+            existing_titles = set()
 
         def past(days):
             return timezone.now() - timedelta(days=days)
@@ -656,23 +670,26 @@ class Command(BaseCommand):
             created_at = entry.pop('created_at')
             node_type = entry.pop('node_type')
             title = entry.pop('title')
-            try:
-                node, created = MemoryNode.objects.get_or_create(
-                    board=self.sd_board,
-                    node_type=node_type,
-                    title=title,
-                    defaults={'created_by': None, 'is_auto_captured': True, **entry},
-                )
-            except MemoryNode.MultipleObjectsReturned:
+            if title in existing_titles:
                 node = MemoryNode.objects.filter(
                     board=self.sd_board, node_type=node_type, title=title
-                ).order_by('-importance_score').first()
-                created = False
-            if created:
-                MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
-                node.refresh_from_db()
+                ).order_by('pk').first()
+                nodes.append(node)
+                self.stdout.write(f'   {node.get_node_type_display()} (existing): {title[:60]}')
+                continue
+            node = MemoryNode.objects.create(
+                board=self.sd_board,
+                node_type=node_type,
+                title=title,
+                created_by=None,
+                is_auto_captured=True,
+                **entry,
+            )
+            MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
+            node.refresh_from_db()
+            existing_titles.add(title)
             nodes.append(node)
-            self.stdout.write(f'   {node.get_node_type_display()}: {node.title[:60]}')
+            self.stdout.write(f'   {node.get_node_type_display()}: {title[:60]}')
 
         return nodes
 
