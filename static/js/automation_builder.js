@@ -444,7 +444,17 @@
         html += '<div class="mb-3"><label class="form-label fw-semibold small">Label Name</label>' +
           '<input id="cfgValue" type="text" class="form-control form-control-sm" value="' + _esc(cfg.value || '') + '" placeholder="e.g. Blocked"></div>';
       } else if (bt === 'send_notification') {
-        html += '<div class="mb-3"><label class="form-label fw-semibold small">Message</label>' +
+        var notifyVal = cfg.notify_target || 'assignee';
+        html += '<div class="mb-3"><label class="form-label fw-semibold small">Notify</label>' +
+          '<select id="cfgNotifyTarget" class="form-select form-select-sm" onchange="var sm=document.getElementById(\'cfgSpecificMemberDiv\');if(sm)sm.style.display=(this.value===\'specific_member\'?\'block\':\'none\');">' +
+          '<option value="assignee"' + (notifyVal === 'assignee' ? ' selected' : '') + '>Task Assignee</option>' +
+          '<option value="specific_member"' + (notifyVal === 'specific_member' ? ' selected' : '') + '>Specific Member</option>' +
+          '<option value="board_members"' + (notifyVal === 'board_members' ? ' selected' : '') + '>All Board Members</option>' +
+          '</select></div>' +
+          '<div class="mb-3" id="cfgSpecificMemberDiv" style="' + (notifyVal === 'specific_member' ? 'display:block;' : 'display:none;') + '">' +
+          '<label class="form-label fw-semibold small">Member Username</label>' +
+          '<input id="cfgSpecificMember" type="text" class="form-control form-control-sm" value="' + _esc(cfg.target_user || '') + '" placeholder="e.g. john"></div>' +
+          '<div class="mb-3"><label class="form-label fw-semibold small">Message</label>' +
           '<textarea id="cfgValue" class="form-control form-control-sm" rows="2" placeholder="e.g. Task {task_title} is overdue">' +
           _esc(cfg.value || cfg.text || '') + '</textarea></div>';
       } else if (bt === 'move_to_column') {
@@ -508,6 +518,10 @@
         if (bt === 'stale_high_priority') newConfig.days_stale = daysEl.value;
         else newConfig.days = daysEl.value;
       }
+      var notifyTargetEl = document.getElementById('cfgNotifyTarget');
+      if (notifyTargetEl) newConfig.notify_target = notifyTargetEl.value;
+      var specificMemberEl = document.getElementById('cfgSpecificMember');
+      if (specificMemberEl && specificMemberEl.value) newConfig.target_user = specificMemberEl.value;
       b.data.config = newConfig;
       _updateConfigSummary(id);
     });
@@ -518,6 +532,7 @@
     if (!b) return;
     var cfg = b.data.config || {};
     var parts = [];
+    if (cfg.notify_target) parts.push('→ ' + cfg.notify_target);
     if (cfg.value) parts.push(cfg.value);
     if (cfg.operator && cfg.operator !== 'is') parts.push('(' + cfg.operator + ')');
     if (cfg.days) parts.push(cfg.days + ' days');
