@@ -578,9 +578,22 @@ def autopsy_report(request, entry_id):
         organ__source_board=entry.board
     ).select_related('organ', 'target_board', 'approved_by')
 
+    from knowledge_graph.models import MemoryNode
+    seen = set()
+    unique_nodes = []
+    for node in MemoryNode.objects.filter(
+        board=entry.board,
+    ).order_by('node_type', '-importance_score'):
+        key = (node.node_type, node.title)
+        if key not in seen:
+            seen.add(key)
+            unique_nodes.append(node)
+    memory_nodes = unique_nodes
+
     return render(request, 'exit_protocol/cemetery/autopsy_report.html', {
         'entry': entry,
         'transplants': transplants,
+        'memory_nodes': memory_nodes,
     })
 
 
@@ -677,6 +690,7 @@ def resurrect_project(request, entry_id):
             f"Original cause of death: {entry.get_cause_of_death_display()}."
         ),
         created_by=request.user,
+        organization=user_org,
     )
     # Add creator as member
     BoardMembership.objects.get_or_create(board=new_board, user=request.user, defaults={'role': 'member'})
