@@ -268,6 +268,8 @@ urlpatterns = [
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/update/', automation_views.rule_update, name='automation_rule_update'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/delete/', automation_views.rule_delete, name='automation_rule_delete'),
     path('boards/<int:board_id>/automations/rules/<int:rule_id>/toggle/', automation_views.rule_toggle, name='automation_rule_toggle'),
+    path('boards/<int:board_id>/automations/rules/<int:rule_id>/duplicate/', automation_views.rule_duplicate, name='automation_rule_duplicate'),
+    path('boards/<int:board_id>/automations/builder-data/', automation_views.rule_builder_data, name='automation_builder_data'),
     path('boards/<int:board_id>/automations/templates/<int:template_id>/use/', automation_views.template_use, name='automation_template_use'),
     # Legacy form-based endpoints (backward compat)
     path('boards/<int:board_id>/automations/create-form/', automation_views.rule_create_form, name='automation_create_form'),

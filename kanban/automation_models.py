@@ -230,38 +230,35 @@ class AutomationRule(models.Model):
     with rules migrated from the old models.
     """
 
-    # ── trigger choices (superset of both old models) ──────────
+    # ── trigger choices ────────────────────────────────────────
     TRIGGER_CHOICES = [
-        # event-based (from BoardAutomation)
-        ('task_overdue',           'Task becomes overdue'),
-        ('moved_to_column',        'Task moved to column'),
-        ('task_created',           'Task created'),
-        ('task_completed',         'Task completed'),
-        ('priority_changed',       'Task priority changed'),
-        ('task_assigned',          'Task assigned'),
-        ('due_date_approaching',   'Due date approaching'),
-        # new in redesign
-        ('task_completion_reached', 'Task completion reached threshold'),
-        # schedule-based (from ScheduledAutomation)
-        ('scheduled_daily',        'Scheduled — daily'),
-        ('scheduled_weekly',       'Scheduled — weekly'),
-        ('scheduled_monthly',      'Scheduled — monthly'),
+        # event-based
+        ('task_overdue',              'Task becomes overdue'),
+        ('task_moved_to_column',      'Task is moved to a column'),
+        ('task_created',              'Task is created'),
+        ('task_completed',            'Task is completed'),
+        ('task_priority_changed',     'Task priority changes'),
+        ('task_assigned',             'Task is assigned'),
+        ('due_date_approaching',      'Due date is approaching'),
+        ('task_completion_threshold', 'Completion threshold reached'),
+        # schedule-based
+        ('scheduled_daily',           'Every day at a set time'),
+        ('scheduled_weekly',          'Every week on a set day'),
+        ('scheduled_monthly',         'Every month on a set date'),
     ]
 
-    # ── action choices (superset + new) ────────────────────────
+    # ── action choices ─────────────────────────────────────────
     ACTION_CHOICES = [
-        ('set_priority',       'Set priority'),
-        ('add_label',          'Add label'),
-        ('send_notification',  'Send notification'),
-        ('move_to_column',     'Move to column'),
-        ('assign_to_user',     'Assign to user'),
-        ('set_due_date',       'Set due date (now + N days)'),
-        # new in redesign
-        ('remove_label',       'Remove label'),
-        ('set_due_date_relative', 'Set due date (relative)'),
-        ('close_task',         'Close / complete task'),
-        ('create_comment',     'Post a comment'),
-        ('log_time_entry',     'Log time entry'),
+        ('set_priority',      'Set priority'),
+        ('add_label',         'Add label'),
+        ('remove_label',      'Remove label'),
+        ('assign_to_user',    'Assign to user'),
+        ('move_to_column',    'Move to column'),
+        ('set_due_date',      'Set due date'),
+        ('close_task',        'Close task'),
+        ('send_notification', 'Send notification'),
+        ('post_comment',      'Post a comment'),
+        ('log_time_entry',    'Log time entry'),
     ]
 
     # ── core fields ────────────────────────────────────────────
@@ -270,7 +267,7 @@ class AutomationRule(models.Model):
         on_delete=models.CASCADE,
         related_name='automation_rules',
     )
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=120)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         User,
@@ -279,24 +276,52 @@ class AutomationRule(models.Model):
         related_name='automation_rules_created',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    # ── legacy single-trigger / single-action fields ───────────
+    # ── trigger ────────────────────────────────────────────────
     trigger_type = models.CharField(
         max_length=30, choices=TRIGGER_CHOICES,
         blank=True, default='',
     )
-    trigger_value = models.CharField(max_length=200, blank=True, default='')
-    action_type = models.CharField(
-        max_length=30, choices=ACTION_CHOICES,
-        blank=True, default='',
+    trigger_config = models.JSONField(
+        default=dict,
+        help_text=(
+            'Trigger-specific parameters. '
+            'Examples: task_moved_to_column: {"column_name": "Review"}, '
+            'due_date_approaching: {"days": 2}, '
+            'scheduled_daily: {"time": "09:00"}, '
+            'scheduled_weekly: {"day": "Monday", "time": "09:00"}'
+        ),
     )
-    action_value = models.CharField(max_length=200, blank=True, default='')
 
-    # ── visual flowchart (new) ─────────────────────────────────
-    rule_definition = models.JSONField(
-        blank=True, null=True,
-        help_text='JSON block tree: {id, type, block_type, config, children, else_children}',
+    # ── conditions (IF section) ────────────────────────────────
+    condition_logic = models.CharField(
+        max_length=3,
+        choices=[('AND', 'AND'), ('OR', 'OR')],
+        default='AND',
     )
+    conditions = models.JSONField(
+        default=list,
+        help_text='[{"attribute": "priority", "operator": "is", "value": "Urgent"}, ...]',
+    )
+
+    # ── actions (THEN section) ─────────────────────────────────
+    actions = models.JSONField(
+        default=list,
+        help_text='[{"type": "set_priority", "target": "Urgent", "message": null}, ...]',
+    )
+
+    # ── else branch (OTHERWISE section) ───────────────────────
+    otherwise_actions = models.JSONField(
+        default=list,
+        help_text='Same format as actions. Empty list = no else branch.',
+    )
+
+    # ── legacy fields (deprecated — kept for backward compat) ──
+    trigger_value = models.CharField(max_length=200, blank=True, default='')
+    action_type = models.CharField(max_length=30, blank=True, default='')
+    action_value = models.CharField(max_length=200, blank=True, default='')
+    rule_definition = models.JSONField(blank=True, null=True)
 
     # ── schedule fields (carried from ScheduledAutomation) ─────
     schedule_type = models.CharField(
@@ -318,9 +343,16 @@ class AutomationRule(models.Model):
     run_count = models.IntegerField(default=0)
     failure_count = models.IntegerField(default=0)
     last_run_at = models.DateTimeField(null=True, blank=True)
+    last_execution_result = models.CharField(
+        max_length=10, null=True, blank=True,
+        # values: 'success', 'skipped', 'failed'
+    )
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['board', 'is_active', 'trigger_type']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.board.name})"
@@ -353,13 +385,14 @@ class AutomationRule(models.Model):
 
 class AutomationLog(models.Model):
     """
-    Audit trail for every automation rule execution (pass or fail).
+    Audit trail for every automation rule execution.
     Written by the Celery worker and signal handler when a rule fires.
     Entries older than 90 days are purged by a scheduled cleanup task.
     """
     OUTCOME_CHOICES = [
-        ('passed', 'Passed'),
-        ('failed', 'Failed'),
+        ('success', 'Success'),
+        ('skipped', 'Skipped'),
+        ('failed',  'Failed'),
     ]
 
     rule = models.ForeignKey(
@@ -367,6 +400,13 @@ class AutomationLog(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='logs',
+    )
+    rule_name_snapshot = models.CharField(max_length=120, blank=True)
+    board = models.ForeignKey(
+        'kanban.Board',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='automation_logs',
     )
     triggered_at = models.DateTimeField(auto_now_add=True, db_index=True)
     trigger_event = models.CharField(max_length=100)
@@ -376,19 +416,26 @@ class AutomationLog(models.Model):
         null=True, blank=True,
         related_name='automation_logs',
     )
+    task_title_snapshot = models.CharField(max_length=255, blank=True)
     actions_summary = models.TextField(blank=True)
     outcome = models.CharField(
         max_length=10,
         choices=OUTCOME_CHOICES,
         db_index=True,
     )
+    skip_reason = models.CharField(max_length=100, blank=True)
     error_detail = models.TextField(blank=True)
+    execution_detail = models.JSONField(default=dict)
 
     class Meta:
         ordering = ['-triggered_at']
+        indexes = [
+            models.Index(fields=['board', 'triggered_at']),
+            models.Index(fields=['rule', 'triggered_at']),
+        ]
 
     def __str__(self):
-        rule_name = self.rule.name if self.rule else 'Deleted rule'
+        rule_name = self.rule.name if self.rule else (self.rule_name_snapshot or 'Deleted rule')
         return f"{rule_name} — {self.outcome} @ {self.triggered_at:%Y-%m-%d %H:%M}"
 
 
@@ -410,8 +457,13 @@ class AutomationTemplate(models.Model):
     description = models.TextField()
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
     trigger_type = models.CharField(max_length=30)
+    trigger_config = models.JSONField(default=dict)
+    condition_logic = models.CharField(max_length=3, default='AND')
+    conditions = models.JSONField(default=list)
+    actions = models.JSONField(default=list)
     rule_definition = models.JSONField(
-        help_text='JSON block tree identical to AutomationRule.rule_definition',
+        null=True, blank=True,
+        help_text='Deprecated canvas block tree — kept for rollback safety.',
     )
     is_builtin = models.BooleanField(default=False)
 
