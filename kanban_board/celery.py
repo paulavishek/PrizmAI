@@ -53,6 +53,11 @@ app.conf.beat_schedule = {
         'task': 'kanban.run_due_date_approaching_automations',
         'schedule': crontab(minute=30),  # Every hour at :30 (offset from conflict detection)
     },
+    # Overdue task automations - runs every hour to catch tasks whose due date just passed
+    'overdue-task-automations': {
+        'task': 'kanban.run_overdue_task_automations',
+        'schedule': crontab(minute=45),  # Every hour at :45 (offset from other automation tasks)
+    },
     # Daily executive briefing - 08:00 IST (CELERY_TIMEZONE = 'Asia/Kolkata')
     'daily-executive-briefing': {
         'task': 'kanban.ai_summary.generate_daily_executive_briefing',
