@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Count, Q
 from datetime import timedelta
 
@@ -194,9 +195,10 @@ def webhook_test(request, webhook_id):
         status='pending'
     )
     
-    # Queue delivery task
-    deliver_webhook.delay(delivery.id)
-    
+    # Queue delivery task after the transaction commits (same guard as signals.py)
+    delivery_id = delivery.id
+    transaction.on_commit(lambda: deliver_webhook.delay(delivery_id))
+
     messages.success(request, 'Test webhook queued for delivery!')
     return JsonResponse({
         'success': True,
