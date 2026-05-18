@@ -24,7 +24,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Time Tracking & Timesheets** — Log hours, track team utilization, and manage labor costs. Each time entry carries a **billable/non-billable flag** (billable by default) so teams can separate client-chargeable hours from internal overhead at a glance. The weekly timesheet shows a billable vs. non-billable split below the daily totals row.
 - **Budget & ROI Tracking** — Multi-currency support, cost forecasting, and ROI analytics
 - **Task Dependencies** — Parent-child, related, and blocking dependency types with AI analysis
-- **Board Automations** — Trigger-based rules for repetitive workflows *(Professional mode and above)*; scheduled recurring automations *(Enterprise mode)*
+- **Board Automations** — A full WHEN / IF / THEN / OTHERWISE rule engine spanning **45 triggers, 49 conditions, and 50 actions** across seven categories: **Task State**, **Time & Activity**, **AI & Risk**, **Hierarchy & Dependencies**, **AI Tools & Platform**, **Communications**, and **Scheduled**. Rules can fire on task events (created, completed, assigned, status change, progress change, description update, due-date change), time-based scans (overdue, idle, start-date reached, due-date approaching), AI-derived state (risk-level changed, complexity increased, predicted to miss due date, schedule-status change), hierarchy events (subtask completed, all subtasks done, blocking dependency completed/overdue, checklist completed, milestone reached, parent-status change), AI-tool outputs (AI Coach suggestion created, conflict detected, Discovery idea AI-scored, immunity-score drop, scope-creep detection), comments and attachments, or daily/weekly/monthly schedules. Actions go well beyond labels and notifications — set priority/progress/description, cascade due-dates and priority to subtasks, request AI analysis, flag for review, capture decisions and lessons to the project memory graph, acknowledge AI Coach suggestions, resolve conflicts, promote Discovery ideas, generate PrizmBrief status reports, notify all stakeholders, link or create wiki pages, log time, assign to the best skill match or lightest workload, and more. Conditions can be **task-scoped** (priority, risk level, predicted-completion vs due-date, checklist progress, idle days, skill-match score, hours logged, etc.) or **board-scoped** (board has active conflicts, board immunity score, board scope-creep %, board velocity trend, board predicted overrun days) — board conditions work freely alongside task triggers so a task rule can be gated by board-level health. Rules support AND/OR logic, an OTHERWISE fallback branch, and run with per-day deduplication and auto-disable after three consecutive failures. *(Trigger-based rules: Professional mode and above. Scheduled recurring rules: Enterprise mode.)*
 - **Unified Cross-Board Calendar** — Consolidated view of tasks, milestones, and events across all boards
 - **Requirements Analysis** — AI-powered requirement lifecycle management with full traceability. Define, categorize, and track requirements from draft through verified status with auto-generated identifiers (REQ-001). Link requirements to project objectives and board tasks for complete traceability. Features include a traceability matrix (objectives × requirements × tasks), CSV export, hierarchical parent-child requirements, coverage statistics, and comment threads with status change history. AI capabilities include: **Quality Scoring** (per-requirement analysis across clarity, completeness, testability, unambiguity, and feasibility dimensions), **Gap Detection** (identify uncovered objectives, orphaned tasks, and missing requirement areas), **Acceptance Criteria Generation** (auto-generate Given/When/Then criteria from requirement descriptions), and **Impact Analysis** (downstream impact assessment for linked tasks, child requirements, and objectives). Spectra AI can answer questions about requirement status, coverage gaps, quality scores, and traceability. Accessible from the AI Tools panel → Manage section on the board page. *(Professional mode and above)*
 - **PrizmDiscovery — Idea Inbox** — A structured idea pipeline for capturing, discussing, and prioritising product ideas before they enter the delivery pipeline. Submit ideas with a title, description, and source label; move them through four stages (New → Under Review → Approved → Rejected); and promote approved ideas directly to a Kanban board as tasks. Spectra AI scores each idea on **Impact** (0–100), **Effort** (0–100), and **Confidence** (0–100), assigns a quadrant (Quick Win / Strategic Bet / Fill-in / Deprioritize), and generates a reasoning paragraph. Scored ideas are visualised on an interactive **Discovery Matrix** scatter chart. Rejected ideas remain on the matrix with a muted, strikethrough style so prioritisation decisions are always explainable. *(Professional mode and above)*
@@ -397,6 +397,81 @@ These appear as recovery cards in the coaching panel, each with a clear descript
 - The section shows: the composite score circle (colour-coded green/yellow/orange/red), three dimension bars, the 30-day trend chart, and the signal log
 - You can record a manual signal or trigger a recalculation directly from the dashboard
 - Old `/boards/<board-id>/commitments/` URLs automatically redirect to the Triple Constraint Dashboard
+
+---
+
+## Automation Engine — WHEN / IF / THEN / OTHERWISE
+
+> **In plain English:** Almost every recurring chore on a project — chasing overdue tasks, escalating high-risk work, cascading due-dates to subtasks, capturing lessons when a milestone slips — can be expressed as "WHEN *X* happens, IF *Y* is true, THEN do *Z* (OTHERWISE do something else)." PrizmAI's Automation Engine lets you write those rules in a form, no code, and have them run safely against task events, AI-tool outputs, board health, and a daily/weekly/monthly schedule.
+
+### What's new in this release
+
+The Automation Engine has been substantially expanded. The numbers tell the story:
+
+| Surface | Count | Highlights |
+|---|---|---|
+| **Triggers** | **45** | Task events, time scans, AI risk transitions, hierarchy/dependency events, AI-tool outputs, comments & attachments, scheduled daily/weekly/monthly |
+| **Conditions** | **49** | Task-scoped (priority, risk level, predicted-completion, checklist progress, idle days, skill match, hours logged, cost variance…) **and** board-scoped (active conflicts, immunity score, scope-creep %, velocity trend, predicted overrun days) |
+| **Actions** | **50** | Beyond labels and notifications — set priority/progress/description, cascade due-date and priority to subtasks, request AI analysis, acknowledge AI Coach suggestions, resolve conflicts, promote Discovery ideas, generate PrizmBriefs, capture decisions/lessons to the knowledge graph, link or create wiki pages, notify all stakeholders |
+| **UI groups** | **7** | Triggers and conditions are organised into Task State, Time & Activity, AI & Risk, Hierarchy & Dependencies, AI Tools & Platform, Communications, and Scheduled — the dropdowns stay scannable even with hundreds of options |
+
+### The four blocks of a rule
+
+```text
+WHEN  ← one trigger (e.g. "Risk level becomes critical")
+IF    ← zero or more conditions joined by AND / OR
+        (e.g. "Priority is High" AND "Board has active conflicts")
+THEN  ← one or more actions
+        (e.g. "Flag for review" → "Notify rule creator" → "Capture decision")
+OTHERWISE ← optional fallback actions when IF is false
+```
+
+Conditions are evaluated together with AND/OR logic; if they pass, the THEN branch runs; otherwise the OTHERWISE branch (if defined) runs. Every action is logged to the audit trail with a structured outcome — `success`, `skipped` (with reason), or `failed` (with error detail).
+
+### Trigger categories at a glance
+
+- **Task State** — created, completed, assigned, unassigned, status (column) changed, priority changed, progress changed, description updated, due-date changed, label added
+- **Time & Activity** — overdue, idle for N days, start-date reached, completion threshold reached, due-date approaching
+- **AI & Risk** — risk level changed (or specifically became critical), predicted to miss due date, schedule-status changed (late / at-risk / on-track), complexity increased
+- **Hierarchy & Dependencies** — subtask completed, all subtasks completed, blocking dependency completed or overdue, checklist fully completed, checklist item added, milestone reached, parent-status changed
+- **AI Tools & Platform** — AI Coach suggestion created, Conflict detected, Discovery idea submitted or AI-scored, Stress Test immunity score dropped, Hospice (Exit Protocol) risk threshold reached, scope-creep detected, prediction-confidence dropped, retrospective finalised
+- **Communications** — comment added, assignee @-mentioned, attachment added, task thread message posted
+- **Scheduled** — every day, every week on a chosen day, every month on a chosen date
+
+### Action categories at a glance
+
+- **Task State** — set priority, progress, description (or append to it), labels, assignee, column, due/start date, close task
+- **AI & Risk** — set risk level, request AI analysis, flag for review (auto-adds a "Needs Review" label + a reason comment), add risk indicator, add mitigation strategy
+- **Hierarchy & Dependencies** — cascade due-date or priority to subtasks, bulk-assign subtasks, complete parent when all subtasks done, notify tasks blocked by this one, auto-check a checklist item, add a checklist item or subtask
+- **Resources & Workload** — set workload impact, estimated hours, estimated cost; assign to best skill match or lightest workload; add a required skill; escalate to board owner
+- **AI Tools & Platform** — acknowledge an AI Coach suggestion, mark a conflict resolved, promote a Discovery idea, apply a Stress Test vaccine, capture a memory-graph node, generate a PrizmBrief status report, log stakeholder engagement
+- **Communications & Memory** — send a notification (assignee / rule creator / all board members / specific user), notify all stakeholders, mention users in a comment, start a task thread, link or create a wiki page, capture a decision or lesson to the project memory graph, post a comment, log a time entry
+
+### Examples of rules you can write
+
+- **Overdue urgent task** — *WHEN task becomes overdue, IF priority is Urgent AND assignee is not empty, THEN notify the assignee + add the "Hot" label + post a comment "{task_title} is overdue, please update progress."*
+- **Risk auto-escalation** — *WHEN risk level becomes critical, IF board has active conflicts, THEN flag for review + escalate to board owner + capture a decision node.*
+- **Subtask cascade** — *WHEN parent status changes to "In Progress", THEN cascade priority to subtasks + assign subtasks to the parent's assignee.*
+- **Quick wins from Discovery** — *WHEN a Discovery idea is AI-scored, IF impact ≥ 70 AND effort ≤ 30, THEN promote the idea + post a comment in the wiki page "Quick Wins Log".*
+- **Idle-task sweep (scheduled)** — *Every day at 09:00, IF idle days ≥ 7 AND status is not "Done", THEN post a comment requesting a status update + send a notification to the rule creator.*
+- **Stakeholder broadcast on milestone** — *WHEN milestone reached, THEN generate a PrizmBrief status report + notify all stakeholders + log stakeholder engagement.*
+
+### How it stays safe
+
+- **Defensive evaluation** — every condition and action handler is wrapped to never break a task save. A misconfigured rule can be skipped or failed, but it cannot crash the app.
+- **Per-day deduplication** — overdue / idle / predicted-late rules write at most one log row per task per rule per calendar day, so an active task isn't spammed with notifications when it's edited repeatedly.
+- **Auto-disable on repeated failure** — a rule that fails three times in a row is disabled and the board owner is notified with the reason.
+- **Demo workspaces are protected** — notifications and external actions are suppressed on official demo boards so real users browsing the demo never receive automated messages.
+- **Target contract for non-task triggers** — triggers like *coach_suggestion_created* or *conflict_detected* aren't bound to a single task. Every action declares whether it needs a task, a board, or "either" — and the engine refuses to run a task-only action on a board-only trigger, recording a clean `skipped` outcome with a structured reason rather than failing silently.
+
+### Where to find Automations
+
+- **Per-board** — open any board → **Automations** tab. Create rules with the Unified Rule Builder (one modal, four blocks). Rules apply only to the board they were created on.
+- **Workspace overview** — sidebar → **Automations** for a cross-board summary of active/inactive/scheduled rule counts per board.
+- **Audit log** — the Automations page's Audit Log tab shows every rule firing with trigger, actions taken, outcome, and any skip reason or error.
+- **Templates** — the Templates tab ships pre-built rules for common scenarios (overdue chasing, completion celebration, sprint kick-off, etc.) which can be copied and adapted.
+
+> Trigger-based and event rules are available in Professional mode and above. Scheduled daily / weekly / monthly rules are Enterprise mode.
 
 ---
 

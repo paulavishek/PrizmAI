@@ -566,20 +566,13 @@
                   onchange="UnifiedRuleBuilder.onTriggerChange(this.value)"
                   aria-label="Trigger type">
             <option value="">Select a trigger…</option>
-            <optgroup label="Task events">
-              {% for value, label in trigger_choices %}
-              {% if value|slice:":10" != "scheduled_" %}
+            {% for group_name, choices in trigger_groups %}
+            <optgroup label="{{ group_name }}">
+              {% for value, label in choices %}
               <option value="{{ value }}">{{ label }}</option>
-              {% endif %}
               {% endfor %}
             </optgroup>
-            <optgroup label="Scheduled">
-              {% for value, label in trigger_choices %}
-              {% if value|slice:":10" == "scheduled_" %}
-              <option value="{{ value }}">{{ label }}</option>
-              {% endif %}
-              {% endfor %}
-            </optgroup>
+            {% endfor %}
           </select>
           <small id="rbTriggerDesc" class="text-muted d-block mt-1" style="display:none!important;"></small>
           <div id="rbTriggerSubFields"></div>
