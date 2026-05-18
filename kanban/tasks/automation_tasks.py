@@ -14,63 +14,86 @@ logger = logging.getLogger(__name__)
 @shared_task(name='kanban.run_due_date_approaching_automations')
 def run_due_date_approaching_automations():
     """
-    Checks all active 'due_date_approaching' automation rules and fires actions on
-    tasks whose due date falls within the configured number of days.
+    Checks all active 'due_date_approaching' AutomationRule records and fires
+    actions on tasks whose due date falls within the configured number of days.
 
-    Runs via Celery Beat (every hour by default) so PMs get early-warning automations
-    rather than only post-mortem 'task is already overdue' alerts.
+    Handles both new flat format (trigger_config) and legacy trigger_value field.
+    Runs via Celery Beat (every hour by default).
     """
-    from kanban.automation_models import BoardAutomation
+    from kanban.automation_models import AutomationRule, AutomationLog
     from kanban.models import Task
-    from kanban.signals import _apply_automation_action
+    from kanban.signals import _execute_flat_rule, _apply_automation_action
 
-    rules = BoardAutomation.objects.filter(
+    rules = AutomationRule.objects.filter(
         trigger_type='due_date_approaching',
         is_active=True,
-    ).select_related('board')
+    ).select_related('board', 'created_by')
 
     if not rules.exists():
-        return
+        return 0
 
     now = timezone.now()
     fired_total = 0
 
     for rule in rules:
-        try:
-            days = int(rule.trigger_value)
-        except (ValueError, TypeError):
-            logger.warning(
-                "BoardAutomation pk=%s has invalid trigger_value '%s' for due_date_approaching",
-                rule.pk, rule.trigger_value,
-            )
-            continue
+        # Resolve days from new trigger_config or legacy trigger_value
+        days = rule.trigger_config.get('days') if rule.trigger_config else None
+        if days is None:
+            try:
+                days = int(rule.trigger_value)
+            except (ValueError, TypeError):
+                logger.warning(
+                    "AutomationRule pk=%s: invalid days config for due_date_approaching",
+                    rule.pk,
+                )
+                continue
 
-        window_start = now
-        window_end   = now + timezone.timedelta(days=days)
-
-        # Tasks on this board that are not done and due within the window
+        window_end = now.date() + timezone.timedelta(days=int(days))
         tasks = Task.objects.filter(
             column__board=rule.board,
-            due_date__gte=window_start,
+            due_date__gte=now.date(),
             due_date__lte=window_end,
         ).exclude(progress=100)
 
         for task in tasks:
+            actions_taken = []
+            errors = []
             try:
-                _apply_automation_action(task, rule)
+                if rule.actions:
+                    outcome, skip_reason = _execute_flat_rule(rule, task, actions_taken, errors)
+                else:
+                    _apply_automation_action(task, rule)
+                    actions_taken.append(f"{rule.action_type}: {rule.action_value}")
+                    outcome, skip_reason = 'success', ''
                 fired_total += 1
             except Exception:
                 logger.exception(
                     "due_date_approaching automation (rule pk=%s) failed on task pk=%s",
                     rule.pk, task.pk,
                 )
+                outcome, skip_reason = 'failed', ''
+                errors.append('Execution error')
+
+            try:
+                AutomationLog.objects.create(
+                    rule=rule,
+                    rule_name_snapshot=rule.name,
+                    board=rule.board,
+                    trigger_event=rule.trigger_type,
+                    task_affected=task,
+                    task_title_snapshot=task.title or '',
+                    actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                    outcome=outcome,
+                    skip_reason=skip_reason,
+                    error_detail='; '.join(errors) if errors else '',
+                )
+            except Exception:
+                logger.exception("Failed to write AutomationLog for rule pk=%s", rule.pk)
 
         if tasks.exists():
-            rule.run_count += tasks.count()
-            rule.last_run_at = now
-            BoardAutomation.objects.filter(pk=rule.pk).update(
-                run_count=rule.run_count,
-                last_run_at=rule.last_run_at,
+            AutomationRule.objects.filter(pk=rule.pk).update(
+                run_count=rule.run_count + tasks.count(),
+                last_run_at=now,
             )
 
     logger.info("run_due_date_approaching_automations: fired %d actions", fired_total)
@@ -283,12 +306,12 @@ def run_automation_rule(rule_id):
     """
     Execute an AutomationRule when its Celery Beat schedule fires.
 
-    Receives the AutomationRule PK, loads the record, filters matching
-    tasks, walks the rule_definition tree, and writes AutomationLog entries.
+    Handles both the new flat format (conditions/actions) and the legacy
+    rule_definition canvas tree format for backward compatibility.
     Auto-disables after 3 consecutive failures.
     """
     from kanban.automation_models import AutomationRule, AutomationLog
-    from kanban.signals import _execute_rule_tree, _apply_automation_action
+    from kanban.signals import _execute_rule_tree, _apply_automation_action, _execute_flat_rule
 
     try:
         rule = AutomationRule.objects.select_related(
@@ -303,17 +326,20 @@ def run_automation_rule(rule_id):
                 "AutomationRule pk=%s: no tasks matched filter '%s'",
                 rule.pk, rule.task_filter,
             )
-            rule.run_count += 1
-            rule.last_run_at = now
             AutomationRule.objects.filter(pk=rule.pk).update(
-                run_count=rule.run_count, last_run_at=now,
+                run_count=rule.run_count + 1,
+                last_run_at=now,
+                last_execution_result='skipped',
             )
             AutomationLog.objects.create(
                 rule=rule,
+                rule_name_snapshot=rule.name,
+                board=rule.board,
                 trigger_event=rule.trigger_type,
                 task_affected=None,
                 actions_summary='No tasks matched filter',
-                outcome='passed',
+                outcome='skipped',
+                skip_reason='No matching tasks',
             )
             return f"No tasks matched filter for automation rule {rule.id}"
 
@@ -323,15 +349,26 @@ def run_automation_rule(rule_id):
         for task in tasks:
             actions_taken = []
             errors = []
+            outcome = 'success'
+            skip_reason = ''
 
-            if rule.rule_definition:
+            if rule.actions:
+                # New unified flat format
+                outcome, skip_reason = _execute_flat_rule(
+                    rule, task, actions_taken, errors,
+                )
+            elif rule.rule_definition:
+                # Legacy canvas tree format
                 _execute_rule_tree(rule.rule_definition, task, rule, actions_taken, errors)
+                outcome = 'failed' if errors else 'success'
             else:
+                # Very old single-action format
                 try:
                     _apply_automation_action(task, rule)
                     actions_taken.append(f"{rule.action_type}: {rule.action_value}")
                 except Exception as e:
                     errors.append(str(e))
+                    outcome = 'failed'
 
             total_actions += len(actions_taken)
             total_errors += len(errors)
@@ -339,23 +376,25 @@ def run_automation_rule(rule_id):
             try:
                 AutomationLog.objects.create(
                     rule=rule,
+                    rule_name_snapshot=rule.name,
+                    board=rule.board,
                     trigger_event=rule.trigger_type,
                     task_affected=task,
+                    task_title_snapshot=task.title or '',
                     actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
-                    outcome='failed' if errors else 'passed',
+                    outcome=outcome,
+                    skip_reason=skip_reason,
                     error_detail='; '.join(errors) if errors else '',
                 )
             except Exception:
                 logger.exception("Failed to write AutomationLog for rule pk=%s", rule.pk)
 
-        # Update tracking
-        rule.run_count += 1
-        rule.failure_count = 0
-        rule.last_run_at = now
+        overall_outcome = 'failed' if total_errors > 0 else 'success'
         AutomationRule.objects.filter(pk=rule.pk).update(
-            run_count=rule.run_count,
+            run_count=rule.run_count + 1,
             failure_count=0,
             last_run_at=now,
+            last_execution_result=overall_outcome,
         )
 
         logger.info(
@@ -369,7 +408,6 @@ def run_automation_rule(rule_id):
         return f"Automation rule {rule_id} not found or inactive"
     except Exception as exc:
         logger.exception("AutomationRule pk=%s failed: %s", rule_id, exc)
-        # Increment failure_count; auto-disable at 3 consecutive failures
         try:
             rule = AutomationRule.objects.get(id=rule_id)
             rule.failure_count += 1

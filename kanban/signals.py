@@ -135,41 +135,60 @@ def run_board_automations(sender, instance, created, **kwargs):
         for rule in new_rules:
             fired = _check_trigger(rule, instance, created, column_changed,
                                    priority_changed, just_completed, assignment_changed, now)
-            if fired:
-                actions_taken = []
-                errors = []
+            if not fired:
+                continue
 
-                if rule.rule_definition:
-                    # Walk the JSON rule_definition tree
-                    _execute_rule_tree(rule.rule_definition, instance, rule, actions_taken, errors)
-                else:
-                    # Legacy single trigger/action
-                    try:
-                        _apply_automation_action(instance, rule)
-                        actions_taken.append(f"{rule.action_type}: {rule.action_value}")
-                    except Exception as e:
-                        errors.append(str(e))
+            actions_taken = []
+            errors = []
+            outcome = 'success'
+            skip_reason = ''
 
-                rule.run_count += 1
-                rule.last_run_at = now
-                AutomationRule.objects.filter(pk=rule.pk).update(
-                    run_count=rule.run_count,
-                    last_run_at=rule.last_run_at,
+            if rule.actions:
+                # ── New unified flat format ──────────────────────
+                outcome, skip_reason = _execute_flat_rule(
+                    rule, instance, actions_taken, errors,
                 )
-
-                # Write audit log
+            elif rule.rule_definition:
+                # ── Legacy canvas block tree ─────────────────────
+                _execute_rule_tree(rule.rule_definition, instance, rule, actions_taken, errors)
+                outcome = 'failed' if errors else 'success'
+            else:
+                # ── Legacy single action (very old rules) ────────
                 try:
-                    AutomationLog.objects.create(
-                        rule=rule,
-                        trigger_event=rule.trigger_type,
-                        task_affected=instance,
-                        actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
-                        outcome='failed' if errors else 'passed',
-                        error_detail='; '.join(errors) if errors else '',
-                    )
-                except Exception:
-                    import logging
-                    logging.getLogger(__name__).exception("Failed to write AutomationLog")
+                    _apply_automation_action(instance, rule)
+                    actions_taken.append(f"{rule.action_type}: {rule.action_value}")
+                except Exception as e:
+                    errors.append(str(e))
+                    outcome = 'failed'
+
+            AutomationRule.objects.filter(pk=rule.pk).update(
+                run_count=rule.run_count + 1,
+                last_run_at=now,
+                last_execution_result=outcome,
+            )
+
+            try:
+                AutomationLog.objects.create(
+                    rule=rule,
+                    rule_name_snapshot=rule.name,
+                    board=board,
+                    trigger_event=rule.trigger_type,
+                    task_affected=instance,
+                    task_title_snapshot=instance.title or '',
+                    actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                    outcome=outcome,
+                    skip_reason=skip_reason,
+                    error_detail='; '.join(errors) if errors else '',
+                    execution_detail={
+                        'trigger_type': rule.trigger_type,
+                        'conditions_evaluated': len(rule.conditions),
+                        'actions_count': len(rule.actions),
+                        'branch': 'then' if outcome != 'skipped' else 'skipped',
+                    },
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("Failed to write AutomationLog")
 
     except Exception:
         # Never let automations crash core task saves
@@ -180,28 +199,29 @@ def run_board_automations(sender, instance, created, **kwargs):
 def _check_trigger(rule, task, created, column_changed, priority_changed,
                    just_completed, assignment_changed, now):
     """Check whether a rule's trigger matches the current task save event."""
+    from django.utils import timezone as tz
     trigger_type = rule.trigger_type
+    cfg = rule.trigger_config if hasattr(rule, 'trigger_config') else {}
 
-    if trigger_type == 'moved_to_column' and column_changed:
-        col_name = task.column.name.lower()
-        trigger_val = (rule.trigger_value or '').lower()
-        if trigger_val in col_name:
+    # ── task_moved_to_column (new name) or moved_to_column (old name) ──
+    if trigger_type in ('task_moved_to_column', 'moved_to_column') and column_changed:
+        col_name = task.column.name.lower() if task.column else ''
+        # New format: match by column_name config key
+        target = (cfg.get('column_name') or rule.trigger_value or '').lower()
+        if not target or target in col_name:
             return True
 
     elif trigger_type == 'task_overdue':
-        if task.due_date and task.due_date < now and task.progress < 100:
-            # Dedup: prevent the same rule from firing twice for the same task
-            # within a 10-second window (guards against duplicate post_save signals
-            # and legacy+new rule double-evaluation in the same execution cycle).
+        if task.due_date and task.due_date < now.date() and task.progress < 100:
+            # 10-second dedup window
             try:
-                from kanban.automation_models import AutomationRule as _NewRule, AutomationLog
-                if isinstance(rule, _NewRule):
-                    if AutomationLog.objects.filter(
-                        rule_id=rule.pk,
-                        task_affected_id=task.pk,
-                        triggered_at__gte=now - tz.timedelta(seconds=10),
-                    ).exists():
-                        return False
+                from kanban.automation_models import AutomationLog
+                if AutomationLog.objects.filter(
+                    rule_id=rule.pk,
+                    task_affected_id=task.pk,
+                    triggered_at__gte=now - tz.timedelta(seconds=10),
+                ).exists():
+                    return False
             except Exception:
                 pass
             return True
@@ -212,15 +232,324 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
     elif trigger_type == 'task_completed' and just_completed:
         return True
 
-    elif trigger_type == 'priority_changed' and priority_changed:
-        trigger_val = (rule.trigger_value or '').lower()
-        if not trigger_val or task.priority.lower() == trigger_val:
+    # ── task_priority_changed (new name) or priority_changed (old name) ──
+    elif trigger_type in ('task_priority_changed', 'priority_changed') and priority_changed:
+        target_priority = (cfg.get('priority') or rule.trigger_value or '').lower()
+        if not target_priority or task.priority.lower() == target_priority:
             return True
 
     elif trigger_type == 'task_assigned' and assignment_changed and task.assigned_to:
         return True
 
+    # ── task_completion_threshold (new name) or task_completion_reached (old) ──
+    elif trigger_type in ('task_completion_threshold', 'task_completion_reached'):
+        threshold = int(cfg.get('threshold', rule.trigger_value or 100))
+        old_progress = getattr(rule, '_old_progress', 0)
+        if old_progress < threshold <= (task.progress or 0):
+            return True
+
+    elif trigger_type == 'due_date_approaching':
+        # This is handled by a Celery Beat task, not the post_save signal.
+        # Returning False here prevents accidental double-firing.
+        return False
+
     return False
+
+
+def _execute_flat_rule(rule, task, actions_taken, errors):
+    """
+    Execute a rule stored in the new unified flat format
+    (rule.conditions / rule.actions / rule.otherwise_actions).
+    Returns (outcome, skip_reason) where outcome is 'success'/'skipped'/'failed'.
+    """
+    # Evaluate conditions
+    if rule.conditions:
+        results = [_evaluate_condition_flat(c, task) for c in rule.conditions]
+        if rule.condition_logic == 'OR':
+            conditions_met = any(results)
+        else:
+            conditions_met = all(results)
+    else:
+        conditions_met = True
+
+    if conditions_met:
+        branch_actions = rule.actions
+        branch = 'then'
+    elif rule.otherwise_actions:
+        branch_actions = rule.otherwise_actions
+        branch = 'otherwise'
+    else:
+        return 'skipped', 'Condition not met'
+
+    had_error = False
+    for action in branch_actions:
+        try:
+            _execute_action_flat(action, task, rule)
+            actions_taken.append(f"{action.get('type')}")
+        except Exception as exc:
+            errors.append(f"{action.get('type')} failed: {exc}")
+            had_error = True
+
+    return ('failed' if had_error else 'success'), ''
+
+
+def _evaluate_condition_flat(condition, task):
+    """
+    Evaluate a single condition dict from rule.conditions against a task.
+    condition = {"attribute": "priority", "operator": "is", "value": "Urgent"}
+    Returns True or False.
+    """
+    from django.utils import timezone as tz
+
+    attr = condition.get('attribute', '')
+    operator = condition.get('operator', '')
+    value = condition.get('value')
+
+    if attr == 'priority':
+        task_val = (task.priority or '').lower()
+        cmp_val = (value or '').lower()
+        if operator == 'is':         return task_val == cmp_val
+        if operator == 'is_not':     return task_val != cmp_val
+        if operator == 'is_empty':   return not task.priority
+        if operator == 'is_not_empty': return bool(task.priority)
+
+    elif attr == 'assignee':
+        has_assignee = task.assigned_to_id is not None
+        if operator == 'is_empty':     return not has_assignee
+        if operator == 'is_not_empty': return has_assignee
+        if operator == 'is':           return str(task.assigned_to_id) == str(value)
+        if operator == 'is_not':       return str(task.assigned_to_id) != str(value)
+
+    elif attr == 'column':
+        col_name = (task.column.name if task.column else '').lower()
+        cmp_val = (value or '').lower()
+        if operator == 'is':     return col_name == cmp_val
+        if operator == 'is_not': return col_name != cmp_val
+
+    elif attr == 'label':
+        task_labels = set(task.labels.values_list('name', flat=True))
+        if operator == 'has':            return value in task_labels
+        if operator == 'does_not_have': return value not in task_labels
+        if operator == 'is_empty':       return len(task_labels) == 0
+        if operator == 'is_not_empty':   return len(task_labels) > 0
+
+    elif attr == 'progress':
+        progress = task.progress or 0
+        try:
+            cmp_int = int(value or 0)
+        except (TypeError, ValueError):
+            return False
+        if operator == 'gte':    return progress >= cmp_int
+        if operator == 'lte':    return progress <= cmp_int
+        if operator == 'equals': return progress == cmp_int
+
+    elif attr == 'all_subtasks_done':
+        from kanban.models import Task as TaskModel
+        subtasks = TaskModel.objects.filter(parent_task=task)
+        if not subtasks.exists():
+            result = False
+        else:
+            result = not subtasks.filter(progress__lt=100).exists()
+        if operator == 'is_true':  return result
+        if operator == 'is_false': return not result
+
+    elif attr == 'due_date':
+        if operator == 'is_empty':     return task.due_date is None
+        if operator == 'is_not_empty': return task.due_date is not None
+        if operator == 'is_overdue':
+            return task.due_date is not None and task.due_date < tz.now().date()
+        if operator == 'within_days':
+            if not task.due_date:
+                return False
+            try:
+                days = int(value or 0)
+            except (TypeError, ValueError):
+                return False
+            return 0 <= (task.due_date - tz.now().date()).days <= days
+
+    elif attr == 'stale_high_priority':
+        if task.priority not in ('high', 'urgent'):
+            result = False
+        elif hasattr(task, 'updated_at') and task.updated_at:
+            result = task.updated_at < tz.now() - tz.timedelta(days=7)
+        else:
+            result = False
+        if operator == 'is_true':  return result
+        if operator == 'is_false': return not result
+
+    return False
+
+
+def _execute_action_flat(action, task, rule):
+    """
+    Execute a single action dict from rule.actions / rule.otherwise_actions.
+    action = {"type": "set_priority", "target": "Urgent", "message": null}
+    """
+    from django.utils import timezone as tz
+    from django.db.models import Q
+    from kanban.models import Task as TaskModel
+
+    VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
+    action_type = action.get('type', '')
+    target = action.get('target') or ''
+    message = action.get('message') or ''
+
+    board = task.column.board if task.column_id else None
+
+    if action_type == 'set_priority':
+        prio = target.lower()
+        if prio in VALID_PRIORITIES:
+            TaskModel.objects.filter(pk=task.pk).update(priority=prio)
+
+    elif action_type == 'add_label':
+        from kanban.models import TaskLabel
+        if board and target:
+            label = TaskLabel.objects.filter(board=board, name__iexact=target).first()
+            if label:
+                task.labels.add(label)
+
+    elif action_type == 'remove_label':
+        from kanban.models import TaskLabel
+        if board and target:
+            label = TaskLabel.objects.filter(board=board, name__iexact=target).first()
+            if label:
+                task.labels.remove(label)
+
+    elif action_type == 'assign_to_user':
+        from django.contrib.auth.models import User as AuthUser
+        target_lower = target.lower()
+        if target_lower == 'task_assignee':
+            pass  # already assigned — no-op
+        elif target_lower == 'rule_creator':
+            if rule.created_by:
+                TaskModel.objects.filter(pk=task.pk).update(assigned_to=rule.created_by)
+        elif target_lower == 'all_board_members':
+            # Assign to each board member in turn (last-write wins; use notification instead)
+            _send_notification_flat(task, rule, 'all_board_members', message)
+            return
+        else:
+            # target is a user ID string
+            try:
+                user = AuthUser.objects.get(pk=int(target))
+                TaskModel.objects.filter(pk=task.pk).update(assigned_to=user)
+            except (AuthUser.DoesNotExist, ValueError, TypeError):
+                raise ValueError(f"assign_to_user: user with id '{target}' not found")
+
+    elif action_type == 'move_to_column':
+        from kanban.models import Column
+        if board:
+            col = Column.objects.filter(board=board, name__icontains=target).exclude(
+                pk=task.column_id
+            ).first()
+            if col:
+                TaskModel.objects.filter(pk=task.pk).update(column=col)
+
+    elif action_type == 'set_due_date':
+        DUE_DATE_MAP = {
+            'today': 0, 'in_2_days': 2, 'in_7_days': 7,
+            'in_14_days': 14, 'in_30_days': 30,
+        }
+        days = DUE_DATE_MAP.get(target.lower())
+        if days is None:
+            try:
+                days = int(target)
+            except (TypeError, ValueError):
+                raise ValueError(f"set_due_date: invalid target '{target}'")
+        new_due = tz.now().date() + tz.timedelta(days=days)
+        TaskModel.objects.filter(pk=task.pk).update(due_date=new_due)
+
+    elif action_type == 'close_task':
+        TaskModel.objects.filter(pk=task.pk).update(progress=100)
+
+    elif action_type == 'send_notification':
+        _send_notification_flat(task, rule, target, message)
+
+    elif action_type == 'post_comment':
+        from kanban.models import Comment
+        text = _substitute_vars(message or f'Automated comment by rule "{rule.name}".', task)
+        Comment.objects.create(task=task, user=rule.created_by, content=text)
+
+    elif action_type == 'log_time_entry':
+        try:
+            from kanban.budget_models import TimeEntry
+            hours = float(target or 1)
+            TimeEntry.objects.create(
+                task=task,
+                user=rule.created_by or task.assigned_to,
+                hours=hours,
+                notes=f'Auto-logged by automation "{rule.name}"',
+            )
+        except Exception:
+            pass
+
+
+def _send_notification_flat(task, rule, target, message=''):
+    """Send notification for a send_notification action in the new flat format."""
+    try:
+        from messaging.models import Notification
+        from django.contrib.auth.models import User as AuthUser
+        from django.urls import reverse
+
+        board = task.column.board if task.column_id else None
+        if not board:
+            return
+
+        if getattr(board, 'is_official_demo_board', False):
+            return
+
+        sender = rule.created_by or (board.created_by if board else None)
+        if not sender:
+            return
+
+        try:
+            task_url = reverse('task_detail', args=[task.id])
+        except Exception:
+            task_url = None
+
+        target_lower = (target or '').lower()
+        recipients = []
+
+        if target_lower == 'task_assignee':
+            if task.assigned_to:
+                recipients = [task.assigned_to]
+        elif target_lower == 'all_board_members':
+            recipients = list(AuthUser.objects.filter(board_memberships__board=board))
+            if board.created_by and board.created_by not in recipients:
+                recipients.append(board.created_by)
+        elif target_lower == 'rule_creator':
+            if rule.created_by:
+                recipients = [rule.created_by]
+        else:
+            # target is a user ID
+            try:
+                u = AuthUser.objects.get(pk=int(target))
+                recipients = [u]
+            except (AuthUser.DoesNotExist, ValueError, TypeError):
+                pass
+
+        if not recipients:
+            return
+
+        raw = message or (
+            f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
+            f'on board "{{board_name}}".'
+        )
+        text = _substitute_vars(raw, task)
+        title = f'{rule.name} — {task.title}'[:255]
+
+        for recipient in recipients:
+            Notification.objects.create(
+                recipient=recipient,
+                sender=sender,
+                notification_type='ACTIVITY',
+                title=title,
+                text=text,
+                action_url=task_url,
+                ai_summary=title[:200],
+            )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('_send_notification_flat failed')
 
 
 def _execute_rule_tree(node, task, rule, actions_taken, errors):
@@ -393,7 +722,7 @@ def _execute_action(block_type, config, task, rule):
         if done_col:
             TaskModel.objects.filter(pk=task.pk).update(column=done_col, progress=100)
 
-    elif block_type == 'create_comment':
+    elif block_type in ('post_comment', 'create_comment'):
         from kanban.models import Comment
         text = config.get('text', config.get('value', ''))
         if not text:
