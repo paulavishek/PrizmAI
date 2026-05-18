@@ -141,9 +141,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     SECRET = args.secret
 
-    server = HTTPServer(("0.0.0.0", args.port), WebhookHandler)
+    # Bind to 127.0.0.1 so that "localhost" resolves without an IPv6 fallback
+    # delay (~2 s on Windows when the server only has an IPv4 socket).
+    server = HTTPServer(("127.0.0.1", args.port), WebhookHandler)
     print(f"{BOLD}{GREEN}PrizmAI Webhook Receiver{RESET}")
-    print(f"  Listening on  http://localhost:{args.port}/")
+    print(f"  Listening on  http://127.0.0.1:{args.port}/")
     print(f"  Failure sims  /fail (500) · /timeout · /401")
     print(f"  Log endpoint  http://localhost:{args.port}/log")
     print(f"  Secret        {'set ✓' if SECRET else 'not set — signature check skipped'}")
