@@ -50,7 +50,7 @@ def _build_slack_payload(event_type, data):
 def deliver_webhook(self, delivery_id):
     """
     Deliver a webhook to the target URL
-    
+
     Args:
         delivery_id: ID of the WebhookDelivery to process
     """
@@ -58,122 +58,134 @@ def deliver_webhook(self, delivery_id):
         delivery = WebhookDelivery.objects.select_related('webhook').get(id=delivery_id)
     except WebhookDelivery.DoesNotExist:
         return {'error': 'Delivery not found'}
-    
+
     webhook = delivery.webhook
-    
+
     # Check if webhook is still active
     if not webhook.is_active or webhook.status == 'disabled':
         delivery.status = 'failed'
         delivery.error_message = 'Webhook is inactive or disabled'
         delivery.save()
         return {'error': 'Webhook inactive'}
-    
-    # Prepare payload — use Slack-compatible format for Slack Incoming Webhooks
-    if _is_slack_webhook(webhook.url):
-        payload = _build_slack_payload(delivery.event_type, delivery.payload)
-    else:
-        payload = {
-            'event': delivery.event_type,
-            'timestamp': delivery.created_at.isoformat(),
-            'delivery_id': delivery.id,
-            'data': delivery.payload
-        }
-    
-    # Prepare headers
-    headers = {
-        'Content-Type': 'application/json',
-        'User-Agent': 'PrizmAI-Webhook/1.0',
-        'X-Webhook-Event': delivery.event_type,
-        'X-Webhook-Delivery': str(delivery.id),
-    }
-    
-    # Add custom headers
-    if webhook.custom_headers:
-        headers.update(webhook.custom_headers)
-    
-    # Add HMAC signature if secret is set
-    if webhook.secret:
-        payload_str = json.dumps(payload)
-        signature = hmac.new(
-            webhook.secret.encode('utf-8'),
-            payload_str.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-        headers['X-Webhook-Signature'] = f'sha256={signature}'
-    
-    # Attempt delivery
-    start_time = time.time()
+
     try:
-        response = requests.post(
-            webhook.url,
-            json=payload,
-            headers=headers,
-            timeout=webhook.timeout_seconds
-        )
-        
-        response_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Update delivery record
-        delivery.response_status_code = response.status_code
-        delivery.response_body = response.text[:1000]  # Store first 1000 chars
-        delivery.response_time_ms = response_time_ms
-        delivery.delivered_at = timezone.now()
-        
-        # Consider 2xx status codes as success
-        if 200 <= response.status_code < 300:
-            delivery.status = 'success'
-            webhook.increment_delivery_stats(success=True)
+        # Prepare payload — use Slack-compatible format for Slack Incoming Webhooks
+        if _is_slack_webhook(webhook.url):
+            payload = _build_slack_payload(delivery.event_type, delivery.payload)
         else:
+            payload = {
+                'event': delivery.event_type,
+                'timestamp': delivery.created_at.isoformat(),
+                'delivery_id': delivery.id,
+                'data': delivery.payload
+            }
+
+        # Prepare headers
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'PrizmAI-Webhook/1.0',
+            'X-Webhook-Event': delivery.event_type,
+            'X-Webhook-Delivery': str(delivery.id),
+        }
+
+        # Add custom headers
+        if webhook.custom_headers:
+            headers.update(webhook.custom_headers)
+
+        # Add HMAC signature if secret is set
+        if webhook.secret:
+            payload_str = json.dumps(payload)
+            signature = hmac.new(
+                webhook.secret.encode('utf-8'),
+                payload_str.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+            headers['X-Webhook-Signature'] = f'sha256={signature}'
+
+        # Attempt delivery
+        start_time = time.time()
+        try:
+            response = requests.post(
+                webhook.url,
+                json=payload,
+                headers=headers,
+                timeout=webhook.timeout_seconds
+            )
+
+            response_time_ms = int((time.time() - start_time) * 1000)
+
+            # Update delivery record
+            delivery.response_status_code = response.status_code
+            delivery.response_body = response.text[:1000]
+            delivery.response_time_ms = response_time_ms
+            delivery.delivered_at = timezone.now()
+
+            # Consider 2xx status codes as success
+            if 200 <= response.status_code < 300:
+                delivery.status = 'success'
+                webhook.increment_delivery_stats(success=True)
+            else:
+                delivery.status = 'failed'
+                delivery.error_message = f'HTTP {response.status_code}: {response.text[:200]}'
+                webhook.increment_delivery_stats(success=False)
+
+                # Retry if eligible
+                if delivery.is_retriable():
+                    retry_delivery.apply_async(
+                        args=[delivery_id],
+                        countdown=webhook.retry_delay_seconds
+                    )
+
+            delivery.save()
+
+            return {
+                'success': delivery.status == 'success',
+                'status_code': response.status_code,
+                'response_time_ms': response_time_ms
+            }
+
+        except requests.exceptions.Timeout:
             delivery.status = 'failed'
-            delivery.error_message = f'HTTP {response.status_code}: {response.text[:200]}'
+            delivery.error_message = f'Request timeout after {webhook.timeout_seconds}s'
+            delivery.save()
+
             webhook.increment_delivery_stats(success=False)
-            
+
             # Retry if eligible
             if delivery.is_retriable():
                 retry_delivery.apply_async(
                     args=[delivery_id],
                     countdown=webhook.retry_delay_seconds
                 )
-        
-        delivery.save()
-        
-        return {
-            'success': delivery.status == 'success',
-            'status_code': response.status_code,
-            'response_time_ms': response_time_ms
-        }
-        
-    except requests.exceptions.Timeout:
+
+            return {'error': 'timeout'}
+
+        except requests.exceptions.RequestException as e:
+            delivery.status = 'failed'
+            delivery.error_message = str(e)[:500]
+            delivery.save()
+
+            webhook.increment_delivery_stats(success=False)
+
+            # Retry if eligible
+            if delivery.is_retriable():
+                retry_delivery.apply_async(
+                    args=[delivery_id],
+                    countdown=webhook.retry_delay_seconds
+                )
+
+            return {'error': str(e)}
+
+    except Exception as e:
+        # Catch-all: any unexpected error (bad custom_headers type, HMAC failure,
+        # non-serialisable payload, etc.) must not leave the delivery in Pending.
         delivery.status = 'failed'
-        delivery.error_message = f'Request timeout after {webhook.timeout_seconds}s'
-        delivery.save()
-        
-        webhook.increment_delivery_stats(success=False)
-        
-        # Retry if eligible
-        if delivery.is_retriable():
-            retry_delivery.apply_async(
-                args=[delivery_id],
-                countdown=webhook.retry_delay_seconds
-            )
-        
-        return {'error': 'timeout'}
-        
-    except requests.exceptions.RequestException as e:
-        delivery.status = 'failed'
-        delivery.error_message = str(e)[:500]
-        delivery.save()
-        
-        webhook.increment_delivery_stats(success=False)
-        
-        # Retry if eligible
-        if delivery.is_retriable():
-            retry_delivery.apply_async(
-                args=[delivery_id],
-                countdown=webhook.retry_delay_seconds
-            )
-        
-        return {'error': str(e)}
+        delivery.error_message = f'Internal error: {type(e).__name__}: {str(e)[:400]}'
+        try:
+            delivery.save()
+        except Exception:
+            pass
+        raise  # Re-raise so Celery marks the task as FAILURE and logs the traceback
 
 
 @shared_task
