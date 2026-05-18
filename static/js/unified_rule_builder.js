@@ -446,6 +446,11 @@ const UnifiedRuleBuilder = (() => {
       });
     }
     if (opSel) {
+      // Sync state with the rendered operator dropdown — first option shows as
+      // selected without firing a change event.
+      if (!state.conditions[idx].operator && opSel.value) {
+        state.conditions[idx].operator = opSel.value;
+      }
       opSel.addEventListener('change', e => {
         state.conditions[idx].operator = e.target.value;
         state.conditions[idx].value = null;
@@ -467,6 +472,12 @@ const UnifiedRuleBuilder = (() => {
   function _bindConditionValue(idx) {
     const valEl = document.getElementById(`rbCondVal_${idx}`);
     if (valEl) {
+      // Same sync-on-render trick as actions: a SELECT without an explicit
+      // `selected` option visually shows option 0, but the change event never
+      // fires, leaving state.value as null.
+      if (valEl.tagName === 'SELECT' && state.conditions[idx].value == null && valEl.value) {
+        state.conditions[idx].value = valEl.value;
+      }
       valEl.addEventListener('change', e => {
         state.conditions[idx].value = e.target.value || null;
         updatePreview();
@@ -685,6 +696,16 @@ const UnifiedRuleBuilder = (() => {
     }
     const targetEl = document.getElementById(`rbActionTarget_${branch}_${idx}`);
     if (targetEl) {
+      // Sync state with the rendered select's actual value. A SELECT with no
+      // explicit `selected` option shows the first option as visually selected,
+      // but the change event never fires, leaving state.target as '' and the
+      // rule saving with an empty recipient/priority/etc.
+      if (targetEl.tagName === 'SELECT') {
+        const actionList = branch === 'then' ? state.actions : state.otherwiseActions;
+        if (!actionList[idx].target && targetEl.value) {
+          actionList[idx].target = targetEl.value;
+        }
+      }
       const ev = targetEl.tagName === 'SELECT' ? 'change' : 'input';
       targetEl.addEventListener(ev, e => {
         const actionList = branch === 'then' ? state.actions : state.otherwiseActions;
