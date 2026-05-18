@@ -405,6 +405,7 @@ const UnifiedRuleBuilder = (() => {
     if (attr === 'assignee') {
       return `<select class="form-select form-select-sm" style="max-width:180px" id="rbCondVal_${idx}" aria-label="Condition value">
         <option value="">Select member</option>
+        <option value="none" ${cond.value === 'none' ? 'selected':''}>None (Unassigned)</option>
         ${boardData.members.map(m =>
           `<option value="${m.id}" ${cond.value == m.id ? 'selected':''}>${_esc(m.username)}</option>`).join('')}
       </select>`;

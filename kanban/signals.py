@@ -341,6 +341,10 @@ def _evaluate_condition_flat(condition, task):
         has_assignee = task.assigned_to_id is not None
         if operator == 'is_empty':     return not has_assignee
         if operator == 'is_not_empty': return has_assignee
+        # Sentinel value "none" means "Unassigned" — match tasks with no assignee.
+        if str(value).lower() == 'none':
+            if operator == 'is':       return not has_assignee
+            if operator == 'is_not':   return has_assignee
         if operator == 'is':           return str(task.assigned_to_id) == str(value)
         if operator == 'is_not':       return str(task.assigned_to_id) != str(value)
 
@@ -657,7 +661,13 @@ def _evaluate_condition(block_type, config, task):
             return task.assigned_to is None
         elif operator == 'is_not_empty':
             return task.assigned_to is not None
-        elif operator == 'is':
+        # Sentinel value "none" means "Unassigned"
+        if str(value).lower() == 'none':
+            if operator == 'is':
+                return task.assigned_to is None
+            elif operator == 'is_not':
+                return task.assigned_to is not None
+        if operator == 'is':
             return task.assigned_to and task.assigned_to.username == value
         elif operator == 'is_not':
             return not task.assigned_to or task.assigned_to.username != value
