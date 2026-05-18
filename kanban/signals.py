@@ -212,7 +212,10 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
             return True
 
     elif trigger_type == 'task_overdue':
-        if task.due_date and task.due_date < now.date() and task.progress < 100:
+        # Task.due_date is a DateTimeField — coerce to date for a calendar-day
+        # comparison so a datetime/date TypeError can't silently break the signal.
+        task_due_date = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+        if task_due_date and task_due_date < now.date() and task.progress < 100:
             # 10-second dedup window
             try:
                 from kanban.automation_models import AutomationLog
@@ -356,16 +359,21 @@ def _evaluate_condition_flat(condition, task):
     elif attr == 'due_date':
         if operator == 'is_empty':     return task.due_date is None
         if operator == 'is_not_empty': return task.due_date is not None
+        # Coerce datetime → date for calendar-day comparisons; DateTimeField
+        # cannot be compared with date objects directly in Python 3.
+        due_date_value = (
+            task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+        ) if task.due_date else None
         if operator == 'is_overdue':
-            return task.due_date is not None and task.due_date < tz.now().date()
+            return due_date_value is not None and due_date_value < tz.now().date()
         if operator == 'within_days':
-            if not task.due_date:
+            if not due_date_value:
                 return False
             try:
                 days = int(value or 0)
             except (TypeError, ValueError):
                 return False
-            return 0 <= (task.due_date - tz.now().date()).days <= days
+            return 0 <= (due_date_value - tz.now().date()).days <= days
 
     elif attr == 'stale_high_priority':
         if task.priority not in ('high', 'urgent'):
@@ -393,6 +401,19 @@ def _execute_action_flat(action, task, rule):
     action_type = action.get('type', '')
     target = action.get('target') or ''
     message = action.get('message') or ''
+
+    # Defensive defaults for rules saved with an empty target. The Unified Rule
+    # Builder used to leave state.target='' when the user did not explicitly
+    # change the dropdown — the visually-selected first option never fired a
+    # change event. Fall back to the same default the dropdown was showing.
+    if not target:
+        ACTION_DEFAULT_TARGETS = {
+            'send_notification': 'task_assignee',
+            'assign_to_user':    'task_assignee',
+            'set_priority':      'urgent',
+            'set_due_date':      'today',
+        }
+        target = ACTION_DEFAULT_TARGETS.get(action_type, '')
 
     board = task.column.board if task.column_id else None
 
