@@ -75,8 +75,15 @@ def webhook_detail(request, webhook_id):
         from django.http import Http404
         raise Http404
     
-    # Get recent deliveries
-    deliveries = webhook.deliveries.all()[:50]
+    # Always surface failed/retrying deliveries first, then the 50 most recent.
+    non_success = list(
+        webhook.deliveries.exclude(status='success').order_by('-created_at')
+    )
+    non_success_ids = {d.id for d in non_success}
+    recent = list(
+        webhook.deliveries.filter(status='success').order_by('-created_at')[:50]
+    )
+    deliveries = non_success + [d for d in recent if d.id not in non_success_ids]
     
     # Get delivery statistics
     last_24h = timezone.now() - timedelta(hours=24)

@@ -47,12 +47,13 @@ def _build_slack_payload(event_type, data):
 
 
 @shared_task(bind=True, max_retries=3)
-def deliver_webhook(self, delivery_id):
+def deliver_webhook(self, delivery_id, is_retry=False):
     """
     Deliver a webhook to the target URL
 
     Args:
         delivery_id: ID of the WebhookDelivery to process
+        is_retry: True when called by retry_delivery; skips double-counting stats
     """
     try:
         delivery = WebhookDelivery.objects.select_related('webhook').get(id=delivery_id)
@@ -123,11 +124,17 @@ def deliver_webhook(self, delivery_id):
             # Consider 2xx status codes as success
             if 200 <= response.status_code < 300:
                 delivery.status = 'success'
-                webhook.increment_delivery_stats(success=True)
+                if is_retry:
+                    # Convert the earlier failure tick into a success: total stays the same.
+                    webhook.increment_delivery_stats(success=True, is_retry=True)
+                else:
+                    webhook.increment_delivery_stats(success=True)
             else:
                 delivery.status = 'failed'
                 delivery.error_message = f'HTTP {response.status_code}: {response.text[:200]}'
-                webhook.increment_delivery_stats(success=False)
+                if not is_retry:
+                    # Only count the first attempt; retries don't add to failed_deliveries.
+                    webhook.increment_delivery_stats(success=False)
 
                 # Retry if eligible
                 if delivery.is_retriable():
@@ -149,7 +156,8 @@ def deliver_webhook(self, delivery_id):
             delivery.error_message = f'Request timeout after {webhook.timeout_seconds}s'
             delivery.save()
 
-            webhook.increment_delivery_stats(success=False)
+            if not is_retry:
+                webhook.increment_delivery_stats(success=False)
 
             # Retry if eligible
             if delivery.is_retriable():
@@ -165,7 +173,8 @@ def deliver_webhook(self, delivery_id):
             delivery.error_message = str(e)[:500]
             delivery.save()
 
-            webhook.increment_delivery_stats(success=False)
+            if not is_retry:
+                webhook.increment_delivery_stats(success=False)
 
             # Retry if eligible
             if delivery.is_retriable():
@@ -209,8 +218,8 @@ def retry_delivery(delivery_id):
     delivery.status = 'retrying'
     delivery.save()
     
-    # Attempt delivery
-    return deliver_webhook.delay(delivery_id)
+    # Attempt delivery — is_retry=True so stats aren't double-counted
+    return deliver_webhook.apply_async(args=[delivery_id], kwargs={'is_retry': True})
 
 
 @shared_task
