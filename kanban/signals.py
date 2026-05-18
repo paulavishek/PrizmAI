@@ -216,13 +216,17 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
         # comparison so a datetime/date TypeError can't silently break the signal.
         task_due_date = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
         if task_due_date and task_due_date < now.date() and task.progress < 100:
-            # 10-second dedup window
+            # Per-day dedupe: an overdue task should produce at most one log
+            # entry per rule per calendar day, regardless of how many times
+            # the task is saved. Matches the Celery Beat sweep behavior so a
+            # user editing the same overdue task several times doesn't get
+            # spammed with duplicate notifications.
             try:
                 from kanban.automation_models import AutomationLog
                 if AutomationLog.objects.filter(
                     rule_id=rule.pk,
                     task_affected_id=task.pk,
-                    triggered_at__gte=now - tz.timedelta(seconds=10),
+                    triggered_at__date=now.date(),
                 ).exists():
                     return False
             except Exception:
@@ -259,6 +263,16 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
     return False
 
 
+class _ActionNoOp(Exception):
+    """
+    Raised by an action when it could not be applied for a non-error reason
+    (e.g. send_notification target resolves to zero recipients because the
+    task has no assignee). The rule itself ran correctly — the action simply
+    had nothing to do — so the audit log marks the outcome as 'skipped'
+    rather than 'failed'.
+    """
+
+
 def _execute_flat_rule(rule, task, actions_taken, errors):
     """
     Execute a rule stored in the new unified flat format
@@ -285,15 +299,22 @@ def _execute_flat_rule(rule, task, actions_taken, errors):
         return 'skipped', 'Condition not met'
 
     had_error = False
+    skip_reasons = []
     for action in branch_actions:
         try:
             _execute_action_flat(action, task, rule)
             actions_taken.append(f"{action.get('type')}")
+        except _ActionNoOp as warn:
+            skip_reasons.append(f"{action.get('type')}: {warn}")
         except Exception as exc:
             errors.append(f"{action.get('type')} failed: {exc}")
             had_error = True
 
-    return ('failed' if had_error else 'success'), ''
+    if had_error:
+        return 'failed', ''
+    if not actions_taken and skip_reasons:
+        return 'skipped', '; '.join(skip_reasons)[:100]
+    return 'success', ''
 
 
 def _evaluate_condition_flat(condition, task):
@@ -512,72 +533,75 @@ def _execute_action_flat(action, task, rule):
 
 
 def _send_notification_flat(task, rule, target, message=''):
-    """Send notification for a send_notification action in the new flat format."""
+    """Send notification for a send_notification action in the new flat format.
+
+    Raises _ActionNoOp when the action cannot deliver to anyone (no assignee,
+    demo board, etc.) so the audit log can record a 'skipped' outcome with a
+    clear reason rather than a misleading 'success'.
+    """
+    from messaging.models import Notification
+    from django.contrib.auth.models import User as AuthUser
+    from django.urls import reverse
+
+    board = task.column.board if task.column_id else None
+    if not board:
+        raise _ActionNoOp('task has no board')
+
+    if getattr(board, 'is_official_demo_board', False):
+        raise _ActionNoOp('demo board — notifications suppressed')
+
+    sender = rule.created_by or (board.created_by if board else None)
+    if not sender:
+        raise _ActionNoOp('no sender (rule has no creator and board has no owner)')
+
     try:
-        from messaging.models import Notification
-        from django.contrib.auth.models import User as AuthUser
-        from django.urls import reverse
-
-        board = task.column.board if task.column_id else None
-        if not board:
-            return
-
-        if getattr(board, 'is_official_demo_board', False):
-            return
-
-        sender = rule.created_by or (board.created_by if board else None)
-        if not sender:
-            return
-
-        try:
-            task_url = reverse('task_detail', args=[task.id])
-        except Exception:
-            task_url = None
-
-        target_lower = (target or '').lower()
-        recipients = []
-
-        if target_lower == 'task_assignee':
-            if task.assigned_to:
-                recipients = [task.assigned_to]
-        elif target_lower == 'all_board_members':
-            recipients = list(AuthUser.objects.filter(board_memberships__board=board))
-            if board.created_by and board.created_by not in recipients:
-                recipients.append(board.created_by)
-        elif target_lower == 'rule_creator':
-            if rule.created_by:
-                recipients = [rule.created_by]
-        else:
-            # target is a user ID
-            try:
-                u = AuthUser.objects.get(pk=int(target))
-                recipients = [u]
-            except (AuthUser.DoesNotExist, ValueError, TypeError):
-                pass
-
-        if not recipients:
-            return
-
-        raw = message or (
-            f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
-            f'on board "{{board_name}}".'
-        )
-        text = _substitute_vars(raw, task)
-        title = f'{rule.name} — {task.title}'[:255]
-
-        for recipient in recipients:
-            Notification.objects.create(
-                recipient=recipient,
-                sender=sender,
-                notification_type='ACTIVITY',
-                title=title,
-                text=text,
-                action_url=task_url,
-                ai_summary=title[:200],
-            )
+        task_url = reverse('task_detail', args=[task.id])
     except Exception:
-        import logging
-        logging.getLogger(__name__).exception('_send_notification_flat failed')
+        task_url = None
+
+    target_lower = (target or '').lower()
+    recipients = []
+
+    if target_lower == 'task_assignee':
+        if task.assigned_to:
+            recipients = [task.assigned_to]
+    elif target_lower == 'all_board_members':
+        recipients = list(AuthUser.objects.filter(board_memberships__board=board))
+        if board.created_by and board.created_by not in recipients:
+            recipients.append(board.created_by)
+    elif target_lower == 'rule_creator':
+        if rule.created_by:
+            recipients = [rule.created_by]
+    else:
+        # target is a user ID
+        try:
+            u = AuthUser.objects.get(pk=int(target))
+            recipients = [u]
+        except (AuthUser.DoesNotExist, ValueError, TypeError):
+            pass
+
+    if not recipients:
+        if target_lower == 'task_assignee':
+            raise _ActionNoOp('task has no assignee')
+        raise _ActionNoOp(f'no recipients resolved for target {target!r}')
+
+    raw = message or (
+        f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
+        f'on board "{{board_name}}".'
+    )
+    text = _substitute_vars(raw, task)
+    title = f'{rule.name} — {task.title}'[:255]
+
+    for recipient in recipients:
+        Notification.objects.create(
+            recipient=recipient,
+            sender=sender,
+            notification_type='ACTIVITY',
+            title=title,
+            text=text,
+            action_url=task_url,
+            ai_summary=title[:200],
+        )
 
 
 def _execute_rule_tree(node, task, rule, actions_taken, errors):

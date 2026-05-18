@@ -131,12 +131,15 @@ def run_overdue_task_automations():
             due_date__lt=today,
         ).exclude(progress=100)
 
-        # Collect task IDs already fired today to avoid duplicate notifications
+        # Collect task IDs already processed today (success OR skipped) to avoid
+        # re-firing. Skipping over 'failed' too is deliberate: retrying an action
+        # that just failed with the same inputs an hour later rarely helps, and
+        # spamming the audit log with hourly retries is worse than the missed
+        # transient. The user can re-enable the rule or re-save the task to retry.
         already_fired_today = set(
             AutomationLog.objects.filter(
                 rule=rule,
                 triggered_at__date=today,
-                outcome='success',
             ).values_list('task_affected_id', flat=True)
         )
 
