@@ -24,43 +24,207 @@ const UnifiedRuleBuilder = (() => {
 
   // ─── Trigger display map ─────────────────────────────────────────────────
 
-  const TRIGGER_LABELS = {
-    task_overdue:              'Task becomes overdue',
-    task_created:              'Task is created',
-    task_completed:            'Task is completed',
-    task_assigned:             'Task is assigned',
-    task_priority_changed:     'Task priority changes',
-    task_moved_to_column:      'Task is moved to a column',
-    task_completion_threshold: 'Completion threshold reached',
-    due_date_approaching:      'Due date is approaching',
-    scheduled_daily:           'Every day at a set time',
-    scheduled_weekly:          'Every week on a set day',
-    scheduled_monthly:         'Every month on a set date',
+  // ─── Trigger / Attribute / Action labels ─────────────────────────────────
+  // Grouped per the seven-group UI taxonomy (Task State / Time & Activity /
+  // AI & Risk / Hierarchy & Dependencies / AI Tools & Platform /
+  // Communications / Scheduled). The render code flattens these for label
+  // lookup but the template renders <optgroup> blocks from the groups.
+
+  const TRIGGER_GROUPS = {
+    'Task State': {
+      task_created:              'Task is created',
+      task_completed:            'Task is completed',
+      task_assigned:             'Task is assigned',
+      task_unassigned:           'Task is unassigned',
+      task_moved_to_column:      'Task is moved to a column',
+      task_status_changed:       'Task status (column) changed',
+      task_priority_changed:     'Task priority changes',
+      task_progress_changed:     'Task progress changed',
+      task_description_updated:  'Task description updated',
+      task_due_date_changed:     'Task due date changed',
+      task_label_added:          'Task label added',
+    },
+    'Time & Activity': {
+      task_overdue:              'Task becomes overdue',
+      task_idle:                 'Task is idle (no updates for N days)',
+      task_start_date_reached:   'Task start date reached',
+      task_completion_threshold: 'Completion threshold reached',
+      due_date_approaching:      'Due date is approaching',
+    },
+    'AI & Risk': {
+      risk_level_changed:        'Risk level changed',
+      risk_level_critical:       'Risk level becomes critical',
+      predicted_late:            'Predicted to miss due date',
+      schedule_status_changed:   'Schedule status changed',
+      complexity_increased:      'Complexity increased',
+    },
+    'Hierarchy & Dependencies': {
+      subtask_completed:         'A subtask completed',
+      all_subtasks_completed:    'All subtasks completed',
+      dependency_completed:      'A blocking dependency completed',
+      dependency_overdue:        'A blocking dependency became overdue',
+      checklist_completed:       'Checklist fully completed',
+      checklist_item_added:      'Checklist item added',
+      milestone_reached:         'Milestone reached',
+      parent_status_changed:     'Parent task status changed',
+    },
+    'AI Tools & Platform': {
+      coach_suggestion_created:  'AI Coach suggestion created',
+      conflict_detected:         'Conflict detected',
+      discovery_idea_scored:     'Discovery idea AI-scored',
+      discovery_idea_submitted:  'Discovery idea submitted',
+      immunity_score_dropped:    'Immunity score dropped',
+      hospice_risk_triggered:    'Hospice risk threshold reached',
+      scope_creep_detected:      'Scope creep detected',
+      prediction_confidence_dropped: 'Prediction confidence dropped',
+      retrospective_finalized:   'Retrospective finalized',
+    },
+    'Communications': {
+      comment_added:             'Comment added to a task',
+      mention_received:          'Assignee was @-mentioned',
+      attachment_added:          'Attachment added to a task',
+      task_thread_message:       'Task thread message posted',
+    },
+    'Scheduled': {
+      scheduled_daily:           'Every day at a set time',
+      scheduled_weekly:          'Every week on a set day',
+      scheduled_monthly:         'Every month on a set date',
+    },
   };
 
-  const ACTION_LABELS = {
-    set_priority:     'Set priority',
-    add_label:        'Add label',
-    remove_label:     'Remove label',
-    assign_to_user:   'Assign to user',
-    move_to_column:   'Move to column',
-    set_due_date:     'Set due date',
-    close_task:       'Close task',
-    send_notification:'Send notification',
-    post_comment:     'Post a comment',
-    log_time_entry:   'Log time entry',
+  const ACTION_GROUPS = {
+    'Task State': {
+      set_priority:             'Set priority',
+      set_progress:             'Set progress %',
+      set_description:          'Set description',
+      append_to_description:    'Append to description',
+      add_label:                'Add label',
+      remove_label:             'Remove label',
+      assign_to_user:           'Assign to user',
+      clear_assignee:           'Clear assignee',
+      move_to_column:           'Move to column',
+      set_due_date:             'Set due date',
+      set_start_date:           'Set start date',
+      clear_due_date:           'Clear due date',
+      close_task:               'Close task',
+    },
+    'AI & Risk': {
+      set_risk_level:           'Set risk level',
+      request_ai_analysis:      'Request AI analysis',
+      flag_for_review:          'Flag for review',
+      add_risk_indicator:       'Add risk indicator',
+      add_mitigation_strategy:  'Add mitigation strategy',
+    },
+    'Hierarchy & Dependencies': {
+      cascade_due_date:         'Cascade due date to subtasks',
+      cascade_priority:         'Cascade priority to subtasks',
+      assign_subtasks_to:       'Assign all subtasks',
+      complete_parent_if_all_subtasks_done: 'Complete parent if all subtasks done',
+      notify_blocked_tasks:     'Notify tasks blocked by this one',
+      auto_check_checklist:     'Auto-check a checklist item',
+      add_checklist_item:       'Add a checklist item',
+      add_subtask:              'Add a subtask',
+    },
+    'Resources & Workload': {
+      set_workload_impact:      'Set workload impact',
+      set_estimated_hours:      'Set estimated hours',
+      set_estimated_cost:       'Set estimated cost',
+      assign_to_best_skill_match: 'Assign to best skill match',
+      assign_to_lightest_workload: 'Assign to lightest workload',
+      add_required_skill:       'Add required skill',
+      escalate_to_owner:        'Escalate to board owner',
+    },
+    'AI Tools & Platform': {
+      acknowledge_coach_suggestion: 'Acknowledge coach suggestion',
+      resolve_conflict:         'Mark conflict resolved',
+      promote_discovery_idea:   'Promote discovery idea to task',
+      apply_stress_test_vaccine: 'Apply stress-test vaccine',
+      create_memory_node:       'Create memory-graph node',
+      generate_status_report:   'Generate PrizmBrief status report',
+      add_stakeholder_engagement: 'Log stakeholder engagement',
+    },
+    'Communications & Memory': {
+      send_notification:        'Send notification',
+      notify_stakeholders:      'Notify all stakeholders',
+      mention_users_in_comment: 'Mention users in a comment',
+      start_task_thread:        'Start a task thread',
+      link_wiki_page:           'Link an existing wiki page',
+      create_wiki_page:         'Create a new wiki page',
+      capture_decision:         'Capture decision as memory node',
+      capture_lesson:           'Capture lesson as memory node',
+      post_comment:             'Post a comment',
+      log_time_entry:           'Log time entry',
+    },
   };
 
-  const ATTRIBUTE_LABELS = {
-    priority:           'Priority',
-    assignee:           'Assignee',
-    column:             'Column',
-    label:              'Label',
-    due_date:           'Due date',
-    progress:           'Progress',
-    all_subtasks_done:  'All subtasks done',
-    stale_high_priority:'Stale high-priority',
+  const ATTRIBUTE_GROUPS = {
+    'Task State': {
+      priority:           'Priority',
+      assignee:           'Assignee',
+      created_by:         'Created by',
+      status:             'Status (column)',
+      column:             'Column',
+      label:              'Label',
+      title:              'Title',
+      description:        'Description',
+      progress:           'Progress',
+      checklist_progress: 'Checklist progress',
+      has_comments:       'Has comments',
+      has_attachments:    'Has attachments',
+    },
+    'Time & Activity': {
+      due_date:           'Due date',
+      start_date:         'Start date',
+      idle_days:          'Idle days',
+      time_in_column:     'Time in column',
+      stale_high_priority:'Stale high-priority',
+    },
+    'AI & Risk': {
+      risk_level:         'Risk level',
+      risk_score:         'Risk score',
+      predicted_completion: 'Predicted completion',
+      prediction_confidence: 'Prediction confidence',
+      complexity_score:   'Complexity score',
+      schedule_status:    'Schedule status',
+      lss_classification: 'LSS classification',
+      ai_risk_score:      'AI risk score',
+    },
+    'Hierarchy & Dependencies': {
+      all_subtasks_done:  'All subtasks done',
+      parent_status:      'Parent status',
+      subtask_count:      'Subtask count',
+      subtask_completion_pct: 'Subtask completion %',
+      has_dependencies:   'Has dependencies',
+      has_blocked_tasks:  'Has blocked tasks',
+      dependency_status:  'Dependency status',
+      item_type:          'Item type',
+      phase:              'Phase',
+      is_root_task:       'Is root task',
+    },
+    'Resources & Workload': {
+      workload_impact:    'Workload impact',
+      skill_match_score:  'Skill match score',
+      required_skills:    'Required skills',
+      collaboration_required: 'Collaboration required',
+      estimated_cost:     'Estimated cost',
+      estimated_hours:    'Estimated hours',
+      hours_logged:       'Hours logged',
+      cost_variance_pct:  'Cost variance %',
+      assignee_workload:  'Assignee workload',
+    },
+    'AI Tools & Platform': {
+      board_has_active_conflicts: 'Board has active conflicts',
+      board_immunity_score: 'Board immunity score',
+      board_scope_creep_pct: 'Board scope creep %',
+      board_velocity_trend: 'Board velocity trend',
+      board_predicted_overrun_days: 'Board predicted overrun (days)',
+    },
   };
+
+  // Flattened lookups built once for label rendering (preview, edit views).
+  const TRIGGER_LABELS = Object.assign({}, ...Object.values(TRIGGER_GROUPS));
+  const ACTION_LABELS  = Object.assign({}, ...Object.values(ACTION_GROUPS));
+  const ATTRIBUTE_LABELS = Object.assign({}, ...Object.values(ATTRIBUTE_GROUPS));
 
   // ─── Init ────────────────────────────────────────────────────────────────
 
@@ -345,10 +509,20 @@ const UnifiedRuleBuilder = (() => {
     }
   }
 
+  function _renderGroupedOptions(groups, selectedValue) {
+    // Emits one <optgroup> block per group, with the entries inside each group.
+    // ``groups`` is an object: { 'Group Name': { value: label, ... }, ... }.
+    return Object.entries(groups).map(([groupName, entries]) => {
+      const options = Object.entries(entries).map(([v, l]) =>
+        `<option value="${v}" ${selectedValue === v ? 'selected' : ''}>${l}</option>`
+      ).join('');
+      if (!options) return '';
+      return `<optgroup label="${_esc(groupName)}">${options}</optgroup>`;
+    }).join('');
+  }
+
   function _conditionRowHtml(cond, idx) {
-    const attributes = Object.entries(ATTRIBUTE_LABELS).map(([v, l]) =>
-      `<option value="${v}" ${cond.attribute === v ? 'selected' : ''}>${l}</option>`
-    ).join('');
+    const attributes = _renderGroupedOptions(ATTRIBUTE_GROUPS, cond.attribute);
 
     const operators = _operatorsFor(cond.attribute).map(([v, l]) =>
       `<option value="${v}" ${cond.operator === v ? 'selected' : ''}>${l}</option>`
@@ -376,15 +550,67 @@ const UnifiedRuleBuilder = (() => {
   }
 
   function _operatorsFor(attribute) {
+    const IS_ISNOT_EMPTY = [['is','is'],['is_not','is not'],['is_empty','is empty'],['is_not_empty','is not empty']];
+    const GTE_LTE = [['gte','≥'],['lte','≤'],['equals','=']];
+    const BOOL = [['is_true','is true'],['is_false','is false']];
+    const TEXT = [['contains','contains'],['does_not_contain','does not contain'],['is_empty','is empty'],['is_not_empty','is not empty']];
+
     const map = {
-      priority:           [['is','is'],['is_not','is not'],['is_empty','is empty'],['is_not_empty','is not empty']],
-      assignee:           [['is','is'],['is_not','is not'],['is_empty','is empty'],['is_not_empty','is not empty']],
+      // Phase 1a
+      priority:           IS_ISNOT_EMPTY,
+      assignee:           IS_ISNOT_EMPTY,
       column:             [['is','is'],['is_not','is not']],
       label:              [['has','has'],['does_not_have','does not have'],['is_empty','is empty'],['is_not_empty','is not empty']],
       due_date:           [['within_days','is within N days'],['is_overdue','is overdue'],['is_empty','is empty'],['is_not_empty','is not empty']],
-      progress:           [['gte','≥'],['lte','≤'],['equals','=']],
-      all_subtasks_done:  [['is_true','is true'],['is_false','is false']],
-      stale_high_priority:[['is_true','is true'],['is_false','is false']],
+      progress:           GTE_LTE,
+      all_subtasks_done:  BOOL,
+      stale_high_priority:BOOL,
+      // Phase 1b — task fields
+      status:             [['is','is'],['is_not','is not']],
+      created_by:         IS_ISNOT_EMPTY,
+      start_date:         [['is_past','is in the past'],['is_today','is today'],['within_days','is within N days'],['is_empty','is empty'],['is_not_empty','is not empty']],
+      description:        TEXT,
+      title:              [['contains','contains'],['does_not_contain','does not contain']],
+      checklist_progress: GTE_LTE,
+      has_comments:       [['is_true','any'],['is_false','none'],['count_gte','count ≥'],['count_lte','count ≤']],
+      has_attachments:    BOOL,
+      idle_days:          [['gte','≥'],['lte','≤']],
+      time_in_column:     [['gte','≥'],['lte','≤']],
+      // Phase 2 — risk & AI
+      risk_level:         [['is','is'],['is_not','is not'],['is_at_least','is at least']],
+      risk_score:         GTE_LTE,
+      predicted_completion: [['before_due','before due'],['after_due','after due'],['within_days_of_due','within N days of due']],
+      prediction_confidence: [['gte','≥'],['lte','≤']],
+      complexity_score:   GTE_LTE,
+      schedule_status:    [['is','is']],
+      lss_classification: [['is','is'],['is_not','is not']],
+      ai_risk_score:      [['gte','≥'],['lte','≤']],
+      // Phase 3 — hierarchy
+      parent_status:      [['is','is'],['is_not','is not']],
+      subtask_count:      GTE_LTE,
+      subtask_completion_pct: [['gte','≥'],['lte','≤']],
+      has_dependencies:   BOOL,
+      has_blocked_tasks:  BOOL,
+      dependency_status:  [['all_complete','all complete'],['any_overdue','any overdue'],['any_blocked','any blocked']],
+      item_type:          [['is','is']],
+      phase:              [['is','is'],['is_not','is not']],
+      is_root_task:       BOOL,
+      // Phase 4 — resource & cost
+      workload_impact:    [['is','is'],['is_at_least','is at least']],
+      skill_match_score:  [['gte','≥'],['lte','≤']],
+      required_skills:    [['contains','contains'],['count_gte','count ≥'],['is_empty','is empty']],
+      collaboration_required: BOOL,
+      estimated_cost:     [['gte','≥'],['lte','≤']],
+      estimated_hours:    [['gte','≥'],['lte','≤']],
+      hours_logged:       [['gte','≥'],['lte','≤']],
+      cost_variance_pct:  [['gte','≥'],['lte','≤']],
+      assignee_workload:  [['gte','≥'],['lte','≤']],
+      // Phase 5 — board-scoped
+      board_has_active_conflicts: [['is_true','any'],['count_gte','count ≥']],
+      board_immunity_score: [['gte','≥'],['lte','≤']],
+      board_scope_creep_pct: [['gte','≥'],['lte','≤']],
+      board_velocity_trend: [['is','is']],
+      board_predicted_overrun_days: [['gte','≥']],
     };
     return map[attribute] || [['is','is'],['is_not','is not']];
   }
@@ -579,15 +805,7 @@ const UnifiedRuleBuilder = (() => {
     const showTarget = !!actionType && !ACTIONS_WITH_NO_TARGET.includes(actionType);
     const showMessage = ACTIONS_WITH_MESSAGE.includes(actionType);
 
-    const actionOptions = Object.entries(ACTION_LABELS).map(([v, l]) => {
-      const cats = {
-        set_priority:'Task', add_label:'Task', remove_label:'Task', assign_to_user:'Task',
-        move_to_column:'Task', set_due_date:'Task', close_task:'Task',
-        send_notification:'Communication', post_comment:'Communication',
-        log_time_entry:'Time',
-      };
-      return `<option value="${v}" ${actionType === v ? 'selected':''} data-cat="${cats[v]||''}">${l}</option>`;
-    }).join('');
+    const actionOptions = _renderGroupedOptions(ACTION_GROUPS, actionType);
 
     const targetHtml = showTarget ? `
       <span class="small text-muted mx-1">to</span>

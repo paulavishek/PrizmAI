@@ -35,11 +35,25 @@ MAX_SCHEDULED_AUTOMATIONS_PER_BOARD = 10
 
 VALID_TRIGGERS = {t[0] for t in AutomationRule.TRIGGER_CHOICES}
 VALID_ACTIONS = {a[0] for a in AutomationRule.ACTION_CHOICES}
-VALID_ATTRIBUTES = {'priority', 'assignee', 'column', 'label', 'due_date',
-                    'progress', 'all_subtasks_done', 'stale_high_priority'}
-VALID_OPERATORS = {'is', 'is_not', 'is_empty', 'is_not_empty', 'has',
-                   'does_not_have', 'gte', 'lte', 'equals', 'within_days',
-                   'is_overdue', 'is_true', 'is_false'}
+
+# Pull the authoritative attribute list from the registry so new condition
+# handlers automatically become valid. Imported lazily inside the validator
+# to avoid circular import at module load.
+def _valid_attributes():
+    from kanban.automation_conditions import CONDITION_HANDLERS
+    return set(CONDITION_HANDLERS.keys())
+
+VALID_OPERATORS = {
+    # task-field operators (Phase 1a / 1b)
+    'is', 'is_not', 'is_empty', 'is_not_empty', 'has', 'does_not_have',
+    'gte', 'lte', 'equals', 'within_days', 'is_overdue', 'is_true', 'is_false',
+    'is_past', 'is_today', 'contains', 'does_not_contain',
+    'count_gte', 'count_lte',
+    # AI & risk operators (Phase 2)
+    'is_at_least', 'before_due', 'after_due', 'within_days_of_due',
+    # hierarchy & dependencies operators (Phase 3)
+    'all_complete', 'any_overdue', 'any_blocked',
+}
 
 
 # ───────────────────────────────────────────────────────
@@ -246,6 +260,8 @@ def automations_page(request, board_id):
         'members': members,
         'trigger_choices': AutomationRule.TRIGGER_CHOICES,
         'action_choices': AutomationRule.ACTION_CHOICES,
+        'trigger_groups': AutomationRule.TRIGGER_GROUPS,
+        'action_groups': AutomationRule.ACTION_GROUPS,
         'active_tab': tab,
     }
 

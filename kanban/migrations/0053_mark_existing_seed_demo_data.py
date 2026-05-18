@@ -93,6 +93,9 @@ def reverse_mark_seed_demo_data(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ('kanban', '0052_add_is_seed_demo_data'),
+        # Organization.is_demo is added in accounts/0004; this data migration
+        # queries that field, so it must run after accounts/0004.
+        ('accounts', '0004_organization_is_demo'),
     ]
 
     operations = [

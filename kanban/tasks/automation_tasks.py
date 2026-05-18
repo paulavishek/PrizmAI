@@ -538,3 +538,147 @@ def _notify_rule_disabled(rule):
             f'was automatically disabled after 3 consecutive failures.'
         ),
     )
+
+
+# ─── Phase 1b — new periodic tasks ───────────────────────────────────────────
+
+
+def _run_scheduled_task_scan(trigger_type, task_queryset_for_rule_fn):
+    """Shared driver for periodic scans modelled on run_overdue_task_automations.
+
+    ``task_queryset_for_rule_fn(rule, now) -> queryset`` returns the tasks the
+    rule should fire on. Per-task: dedupe per-day, execute via _execute_flat_rule,
+    write an AutomationLog, update rule.run_count/last_run_at.
+    """
+    from kanban.automation_models import AutomationRule, AutomationLog
+    from kanban.signals import _execute_flat_rule, _apply_automation_action
+
+    rules = AutomationRule.objects.filter(
+        trigger_type=trigger_type,
+        is_active=True,
+    ).select_related('board', 'created_by')
+    if not rules.exists():
+        return 0
+
+    now = timezone.now()
+    fired_total = 0
+
+    for rule in rules:
+        try:
+            tasks = task_queryset_for_rule_fn(rule, now)
+        except Exception:
+            logger.exception(
+                "%s automation (rule pk=%s) failed building queryset",
+                trigger_type, rule.pk,
+            )
+            continue
+
+        for task in tasks:
+            # Per-day dedupe so a single idle/predicted task doesn't accumulate
+            # multiple log rows across hourly Celery sweeps.
+            if AutomationLog.objects.filter(
+                rule_id=rule.pk,
+                task_affected_id=task.pk,
+                triggered_at__date=now.date(),
+            ).exists():
+                continue
+
+            actions_taken = []
+            errors = []
+            outcome, skip_reason = 'success', ''
+            try:
+                if rule.actions:
+                    outcome, skip_reason = _execute_flat_rule(
+                        rule, task, actions_taken, errors,
+                    )
+                else:
+                    _apply_automation_action(task, rule)
+                    actions_taken.append(f"{rule.action_type}: {rule.action_value}")
+            except Exception:
+                logger.exception(
+                    "%s automation (rule pk=%s) failed on task pk=%s",
+                    trigger_type, rule.pk, task.pk,
+                )
+                outcome = 'failed'
+                errors.append('Execution error')
+
+            try:
+                AutomationLog.objects.create(
+                    rule=rule,
+                    rule_name_snapshot=rule.name,
+                    board=rule.board,
+                    trigger_event=rule.trigger_type,
+                    task_affected=task,
+                    task_title_snapshot=task.title or '',
+                    actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                    outcome=outcome,
+                    skip_reason=skip_reason,
+                    error_detail='; '.join(errors) if errors else '',
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to write AutomationLog for rule pk=%s", rule.pk,
+                )
+            fired_total += 1
+
+        if hasattr(tasks, 'exists') and tasks.exists():
+            count = tasks.count()
+            AutomationRule.objects.filter(pk=rule.pk).update(
+                run_count=rule.run_count + count,
+                last_run_at=now,
+            )
+
+    logger.info('%s: fired %d actions', trigger_type, fired_total)
+    return fired_total
+
+
+@shared_task(name='kanban.run_idle_task_automations')
+def run_idle_task_automations():
+    """Fires task_idle rules — tasks not updated for ``trigger_config.days`` days."""
+    from kanban.models import Task
+
+    def qs(rule, now):
+        try:
+            days = int(rule.trigger_config.get('days', 7))
+        except (TypeError, ValueError):
+            days = 7
+        cutoff = now - timezone.timedelta(days=days)
+        return Task.objects.filter(
+            column__board=rule.board,
+            updated_at__lt=cutoff,
+        ).exclude(progress=100)
+
+    return _run_scheduled_task_scan('task_idle', qs)
+
+
+@shared_task(name='kanban.run_start_date_reached_automations')
+def run_start_date_reached_automations():
+    """Fires task_start_date_reached rules — tasks whose start_date <= today
+    and progress < 100."""
+    from kanban.models import Task
+
+    def qs(rule, now):
+        return Task.objects.filter(
+            column__board=rule.board,
+            start_date__lte=now.date(),
+        ).exclude(progress=100).exclude(start_date__isnull=True)
+
+    return _run_scheduled_task_scan('task_start_date_reached', qs)
+
+
+@shared_task(name='kanban.run_predicted_late_automations')
+def run_predicted_late_automations():
+    """Phase 2: fires predicted_late rules — tasks whose AI-predicted completion
+    date exceeds the due date. Skips tasks without both fields populated."""
+    from kanban.models import Task
+    from django.db.models import F
+
+    def qs(rule, now):
+        return Task.objects.filter(
+            column__board=rule.board,
+            predicted_completion_date__isnull=False,
+            due_date__isnull=False,
+            predicted_completion_date__gt=F('due_date'),
+        ).exclude(progress=100)
+
+    return _run_scheduled_task_scan('predicted_late', qs)
