@@ -16,6 +16,7 @@ from kanban.tasks.demo_tasks import (
 
 from kanban.tasks.automation_tasks import (
     run_due_date_approaching_automations,
+    run_overdue_task_automations,
     run_scheduled_automation,
 )
 
@@ -83,6 +84,7 @@ __all__ = [
     'refresh_demo_dates_task',
     # Automation tasks
     'run_due_date_approaching_automations',
+    'run_overdue_task_automations',
     # Time tracking tasks
     'send_time_tracking_reminders',
     'detect_time_anomalies',

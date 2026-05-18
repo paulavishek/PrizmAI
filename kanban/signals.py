@@ -244,7 +244,7 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
     # ── task_completion_threshold (new name) or task_completion_reached (old) ──
     elif trigger_type in ('task_completion_threshold', 'task_completion_reached'):
         threshold = int(cfg.get('threshold', rule.trigger_value or 100))
-        old_progress = getattr(rule, '_old_progress', 0)
+        old_progress = getattr(task, '_old_progress', 0)
         if old_progress < threshold <= (task.progress or 0):
             return True
 
@@ -437,12 +437,14 @@ def _execute_action_flat(action, task, rule):
 
     elif action_type == 'move_to_column':
         from kanban.models import Column
-        if board:
+        if board and target:
             col = Column.objects.filter(board=board, name__icontains=target).exclude(
                 pk=task.column_id
-            ).first()
+            ).order_by('position').first()
             if col:
                 TaskModel.objects.filter(pk=task.pk).update(column=col)
+            else:
+                raise ValueError(f"move_to_column: no column matching '{target}' found on board")
 
     elif action_type == 'set_due_date':
         DUE_DATE_MAP = {
@@ -466,21 +468,26 @@ def _execute_action_flat(action, task, rule):
 
     elif action_type == 'post_comment':
         from kanban.models import Comment
+        if not rule.created_by:
+            raise ValueError("post_comment: rule has no creator, cannot post comment")
         text = _substitute_vars(message or f'Automated comment by rule "{rule.name}".', task)
         Comment.objects.create(task=task, user=rule.created_by, content=text)
 
     elif action_type == 'log_time_entry':
+        from kanban.budget_models import TimeEntry
+        user = rule.created_by or task.assigned_to
+        if not user:
+            raise ValueError("log_time_entry: no user available (rule has no creator and task has no assignee)")
         try:
-            from kanban.budget_models import TimeEntry
             hours = float(target or 1)
-            TimeEntry.objects.create(
-                task=task,
-                user=rule.created_by or task.assigned_to,
-                hours=hours,
-                notes=f'Auto-logged by automation "{rule.name}"',
-            )
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            raise ValueError(f"log_time_entry: invalid hours value '{target}'")
+        TimeEntry.objects.create(
+            task=task,
+            user=user,
+            hours=hours,
+            notes=f'Auto-logged by automation "{rule.name}"',
+        )
 
 
 def _send_notification_flat(task, rule, target, message=''):

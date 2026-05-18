@@ -100,6 +100,95 @@ def run_due_date_approaching_automations():
     return fired_total
 
 
+@shared_task(name='kanban.run_overdue_task_automations')
+def run_overdue_task_automations():
+    """
+    Checks all active 'task_overdue' AutomationRule records and fires actions
+    on tasks whose due date has passed and are not yet complete.
+
+    Deduplicates per rule+task per day so the same task doesn't get notified
+    multiple times in a single day. Runs via Celery Beat (every hour by default).
+    """
+    from kanban.automation_models import AutomationRule, AutomationLog
+    from kanban.models import Task
+    from kanban.signals import _execute_flat_rule, _apply_automation_action
+
+    rules = AutomationRule.objects.filter(
+        trigger_type='task_overdue',
+        is_active=True,
+    ).select_related('board', 'created_by')
+
+    if not rules.exists():
+        return 0
+
+    now = timezone.now()
+    today = now.date()
+    fired_total = 0
+
+    for rule in rules:
+        tasks = Task.objects.filter(
+            column__board=rule.board,
+            due_date__lt=today,
+        ).exclude(progress=100)
+
+        # Collect task IDs already fired today to avoid duplicate notifications
+        already_fired_today = set(
+            AutomationLog.objects.filter(
+                rule=rule,
+                triggered_at__date=today,
+                outcome='success',
+            ).values_list('task_affected_id', flat=True)
+        )
+
+        for task in tasks:
+            if task.pk in already_fired_today:
+                continue
+
+            actions_taken = []
+            errors = []
+            try:
+                if rule.actions:
+                    outcome, skip_reason = _execute_flat_rule(rule, task, actions_taken, errors)
+                else:
+                    _apply_automation_action(task, rule)
+                    actions_taken.append(f"{rule.action_type}: {rule.action_value}")
+                    outcome, skip_reason = 'success', ''
+                fired_total += 1
+            except Exception:
+                logger.exception(
+                    "task_overdue automation (rule pk=%s) failed on task pk=%s",
+                    rule.pk, task.pk,
+                )
+                outcome, skip_reason = 'failed', ''
+                errors.append('Execution error')
+
+            try:
+                AutomationLog.objects.create(
+                    rule=rule,
+                    rule_name_snapshot=rule.name,
+                    board=rule.board,
+                    trigger_event=rule.trigger_type,
+                    task_affected=task,
+                    task_title_snapshot=task.title or '',
+                    actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                    outcome=outcome,
+                    skip_reason=skip_reason,
+                    error_detail='; '.join(errors) if errors else '',
+                )
+            except Exception:
+                logger.exception("Failed to write AutomationLog for rule pk=%s", rule.pk)
+
+        fired_for_rule = tasks.exclude(pk__in=already_fired_today).count()
+        if fired_for_rule:
+            AutomationRule.objects.filter(pk=rule.pk).update(
+                run_count=rule.run_count + fired_for_rule,
+                last_run_at=now,
+            )
+
+    logger.info("run_overdue_task_automations: fired %d actions", fired_total)
+    return fired_total
+
+
 # ---------------------------------------------------------------------------
 # Scheduled Automation task (called by Celery Beat via PeriodicTask)
 # ---------------------------------------------------------------------------
