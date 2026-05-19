@@ -2041,9 +2041,14 @@ def _purge_existing_sandbox(user):
         pass
 
     # ── Analytics session data ──
+    # Only delete closed (historical) sessions. The currently-open session must
+    # survive so that the logout feedback form can display accurate metrics.
+    # Deleting it here would cause the middleware to create a fresh session with
+    # all-zero counts on the very next request, making the logout page show 0
+    # for every metric even after an active demo session.
     try:
         from analytics.models import UserSession
-        UserSession.objects.filter(user=user).delete()
+        UserSession.objects.filter(user=user, session_end__isnull=False).delete()
     except Exception:
         pass
 
