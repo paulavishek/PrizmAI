@@ -1829,8 +1829,7 @@
                         <ul class="dropdown-menu p-2" style="min-width:220px;" aria-labelledby="add-label-dropdown">
                             <li>
                                 <div id="board-label-list">
-                                    {% with board_labels=task.column.board.labels.all %}
-                                    {% for label in board_labels %}
+                                    {% for label in task.column.board.labels.all %}
                                     {% if label.category == 'regular' and label not in task.labels.all %}
                                     <button type="button" class="dropdown-item add-label-btn d-flex align-items-center gap-2"
                                             data-label-id="{{ label.id }}" data-label-name="{{ label.name }}" data-label-color="{{ label.color }}">
@@ -1839,7 +1838,6 @@
                                     {% endif %}
                                     {% empty %}
                                     <span class="dropdown-item-text text-muted small" id="no-board-labels-msg">No labels on this board yet.</span>
-                                    {% endwith %}
                                     {% endfor %}
                                 </div>
                             </li>

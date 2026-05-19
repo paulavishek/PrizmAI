@@ -187,6 +187,8 @@ class AccessRequest(models.Model):
     @classmethod
     def has_pending(cls, user, board):
         """Check if user already has a pending request for this board."""
+        if not getattr(user, 'is_authenticated', False):
+            return False
         return cls.objects.filter(
             requester=user, board=board, status='pending'
         ).exists()
