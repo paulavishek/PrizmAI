@@ -1208,7 +1208,11 @@
                                         <small class="text-muted">
                                             <strong>Factors considered:</strong><br>
                                             {% if prediction.factors.complexity_score %}
-                                            • Complexity: {{ prediction.factors.complexity_score }}/10<br>
+                                            • This task's complexity: {{ prediction.factors.complexity_score }}/10
+                                            {% if prediction.factors.complexity_range_min and prediction.factors.complexity_range_max %}
+                                            <span class="text-muted" style="font-size:0.9em;">(similar tasks matched: {{ prediction.factors.complexity_range_min }}–{{ prediction.factors.complexity_range_max }}/10)</span>
+                                            {% endif %}
+                                            <br>
                                             {% endif %}
                                             {% if prediction.factors.priority %}
                                             • Priority: {{ prediction.factors.priority|title }}<br>
@@ -1216,7 +1220,11 @@
                                             {% if prediction.factors.team_member_velocity %}
                                             • Team velocity: {{ prediction.factors.team_member_velocity }}x<br>
                                             {% endif %}
-                                            • Historical avg: {{ prediction.factors.historical_avg_days|floatformat:1 }} days<br>
+                                            • Historical avg: {{ prediction.factors.historical_avg_days|floatformat:1 }} days
+                                            {% if prediction.factors.sample_size %}
+                                            <span class="text-muted" style="font-size:0.9em;">(across {{ prediction.factors.sample_size }} matched record{{ prediction.factors.sample_size|pluralize }})</span>
+                                            {% endif %}
+                                            <br>
                                             • Method: {{ prediction.prediction_method|title|cut:"_" }}
                                         </small>
                                     </div>
@@ -3084,11 +3092,14 @@
                             ${pred.similar_tasks && pred.similar_tasks.length > 0 ? `
                                 <button type="button" class="btn btn-outline-info btn-sm mt-1 w-100" data-bs-toggle="collapse" data-bs-target="#similar-tasks-list">
                                     <i class="fas fa-tasks me-1"></i>View ${pred.similar_tasks.length} Similar Task${pred.similar_tasks.length !== 1 ? 's' : ''}
+                                    ${pred.based_on_tasks && pred.based_on_tasks > pred.similar_tasks.length ? `<span class="text-muted">(of ${pred.based_on_tasks} total)</span>` : ''}
                                     <i class="fas fa-chevron-down ms-1"></i>
                                 </button>
                                 <div class="collapse mt-2" id="similar-tasks-list">
                                     <div class="card card-body py-2 px-2 bg-white border-info">
                                         <small class="text-primary mb-2"><strong><i class="fas fa-info-circle me-1"></i>Tasks used for prediction:</strong></small>
+                                        ${pred.based_on_tasks && pred.based_on_tasks > pred.similar_tasks.length ? `<small class="text-muted d-block mb-2" style="font-size:0.8em;"><i class="fas fa-filter me-1"></i>Showing ${pred.similar_tasks.length} unique records out of ${pred.based_on_tasks} matched. Duplicate title/duration entries are hidden. The average and prediction are computed from all ${pred.based_on_tasks} records.</small>` : ''}
+                                        <small class="text-muted d-block mb-2" style="font-size:0.8em;"><i class="fas fa-sliders-h me-1"></i>The predicted date may differ from the historical average because the engine applies adjustments for priority, team velocity, risk, dependencies, and collaboration overhead. See <em>View factors</em> below for the full breakdown.</small>
                                         <div class="list-group list-group-flush">
                                             ${pred.similar_tasks.map(task => `
                                                 <a href="/tasks/${task.id}/" class="list-group-item list-group-item-action py-2 px-2 small border-start border-info border-3" target="_blank">
@@ -3133,10 +3144,10 @@
                             <div class="card card-body py-2 px-2 bg-white">
                                 <small class="text-muted">
                                     <strong>Factors considered:</strong><br>
-                                    ${pred.factors.complexity_score ? `• Complexity: ${pred.factors.complexity_score}/10<br>` : ''}
+                                    ${pred.factors.complexity_score ? `• This task's complexity: ${pred.factors.complexity_score}/10${pred.factors.complexity_range_min !== undefined ? ` <span style="font-size:0.9em;">(similar tasks matched: ${pred.factors.complexity_range_min}–${pred.factors.complexity_range_max}/10)</span>` : ''}<br>` : ''}
                                     ${pred.factors.priority ? `• Priority: ${pred.factors.priority.charAt(0).toUpperCase() + pred.factors.priority.slice(1)}<br>` : ''}
                                     ${pred.factors.team_member_velocity ? `• Team velocity: ${pred.factors.team_member_velocity}x<br>` : ''}
-                                    • Historical avg: ${pred.factors.historical_avg_days ? pred.factors.historical_avg_days.toFixed(1) : 'N/A'} days<br>
+                                    • Historical avg: ${pred.factors.historical_avg_days ? pred.factors.historical_avg_days.toFixed(1) : 'N/A'} days${pred.factors.sample_size ? ` <span style="font-size:0.9em;">(across ${pred.factors.sample_size} matched record${pred.factors.sample_size !== 1 ? 's' : ''})</span>` : ''}<br>
                                     • Method: ${pred.prediction_method.replace(/_/g, ' ')}
                                 </small>
                             </div>

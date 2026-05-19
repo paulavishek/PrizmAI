@@ -104,6 +104,8 @@ def predict_task_completion_date(task):
         'adjusted_estimate_days': round(adjusted_days, 1),
         'remaining_progress': round(remaining_progress * 100, 1),
         'complexity_score': task.complexity_score,
+        'complexity_range_min': max(1, task.complexity_score - 2),
+        'complexity_range_max': min(10, task.complexity_score + 2),
         'priority': task.priority,
         'workload_impact': task.workload_impact,
         'skill_match_score': task.skill_match_score,
