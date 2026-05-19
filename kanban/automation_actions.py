@@ -209,6 +209,12 @@ def _send_notification(task, rule, target_key, message=''):
             raise _ActionNoOp('task has no assignee')
         raise _ActionNoOp(f'no recipients resolved for target {target_key!r}')
 
+    # Demo sandbox mirror: on a per-user sandbox copy the resolved recipient is
+    # typically a demo persona the logged-in user can't see notifications for.
+    # Also notify the sandbox owner so the demo experience surfaces automation.
+    if getattr(board, 'is_sandbox_copy', False) and board.owner and board.owner not in recipients:
+        recipients.append(board.owner)
+
     raw = message or (
         f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
         f'on board "{{board_name}}".'
@@ -1017,6 +1023,7 @@ def _act_notify_stakeholders(target, rule, action):
     if task is not None:
         raw = _substitute_vars(raw, task)
     sent = 0
+    notified_users = set()
     for sh in stakeholders:
         if not sh.email:
             continue
@@ -1029,7 +1036,20 @@ def _act_notify_stakeholders(target, rule, action):
             title=f'Stakeholder update — {board.name}'[:255],
             text=raw, ai_summary=raw[:200],
         )
+        notified_users.add(user.pk)
         sent += 1
+
+    # Demo sandbox mirror: stakeholder emails on sandbox copies don't map to the
+    # logged-in user; mirror to the sandbox owner so the demo user sees it.
+    if getattr(board, 'is_sandbox_copy', False) and board.owner and board.owner.pk not in notified_users:
+        Notification.objects.create(
+            recipient=board.owner, sender=sender,
+            notification_type='ACTIVITY',
+            title=f'Stakeholder update — {board.name}'[:255],
+            text=raw, ai_summary=raw[:200],
+        )
+        sent += 1
+
     if sent == 0:
         raise _ActionNoOp('no stakeholders with linked user accounts')
 
