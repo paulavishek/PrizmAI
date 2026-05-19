@@ -353,9 +353,9 @@
                     <li><a class="dropdown-item" href="{% url 'manage_workspace_members' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
                     {% endif %}
                     <li><a class="dropdown-item" href="{% url 'workspace_preset_settings' %}"><i class="fas fa-sliders-h me-2"></i>Workspace Settings</a></li>
-                    {% if active_workspace %}
-                    <li><a class="dropdown-item" href="{% url 'custom_field_list' active_workspace.pk %}"><i class="fas fa-tags me-2"></i>Custom Fields</a></li>
                     {% endif %}
+                    {% if can_rename_workspace and active_workspace %}
+                    <li><a class="dropdown-item" href="{% url 'custom_field_list' active_workspace.pk %}"><i class="fas fa-tags me-2"></i>Custom Fields</a></li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}"><i class="fas fa-robot me-2"></i>AI Usage</a></li>
