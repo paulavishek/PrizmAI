@@ -113,15 +113,19 @@ def predict_task_completion_date(task):
         'team_member_velocity': round(historical_stats.get('velocity_factor', 1.0), 2),
         'historical_avg_days': round(historical_stats['avg_duration'], 1),
         'sample_size': historical_stats['sample_size'],
+        'displayed_tasks': historical_stats.get('displayed_tasks', len(historical_stats.get('similar_tasks', []))),
         'data_quality': historical_stats.get('data_quality', 'unknown'),
         'adjustments_applied': historical_stats.get('adjustments', {})
     }
-    
+
+    displayed_count = historical_stats.get('displayed_tasks', len(historical_stats.get('similar_tasks', [])))
+
     return {
         'predicted_date': predicted_date,
         'confidence': round(confidence, 2),
         'confidence_interval_days': round(confidence_interval, 1),
         'based_on_tasks': historical_stats['sample_size'],
+        'displayed_tasks': displayed_count,
         'similar_tasks': historical_stats.get('similar_tasks', []),
         'factors': factors,
         'early_date': early_date,
@@ -171,16 +175,24 @@ def _get_historical_statistics(task):
         if stats['count'] >= 5:  # Good sample size
             # Get similar tasks and format completed_at for JSON serialization
             similar_tasks_list = []
-            for task_data in same_assignee_tasks[:10].values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
+            seen_keys = set()
+            for task_data in same_assignee_tasks.order_by('-completed_at').values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
                 task_dict = dict(task_data)
                 if task_dict.get('completed_at'):
                     task_dict['completed_at'] = task_dict['completed_at'].isoformat()
-                similar_tasks_list.append(task_dict)
-            
+                # Deduplicate display list: skip entries with identical title+duration
+                dedup_key = (task_dict['title'], task_dict['actual_duration_days'])
+                if dedup_key not in seen_keys:
+                    seen_keys.add(dedup_key)
+                    similar_tasks_list.append(task_dict)
+                if len(similar_tasks_list) >= 10:
+                    break
+
             return {
                 'avg_duration': stats['avg'],
                 'std_dev': stats['std'],
                 'sample_size': stats['count'],
+                'displayed_tasks': len(similar_tasks_list),
                 'data_quality': 'high',
                 'velocity_factor': task.get_velocity_factor(),
                 'similar_tasks': similar_tasks_list
@@ -206,16 +218,23 @@ def _get_historical_statistics(task):
     if stats['count'] >= 3:
         # Get similar tasks and format completed_at for JSON serialization
         similar_tasks_list = []
-        for task_data in board_tasks[:10].values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
+        seen_keys = set()
+        for task_data in board_tasks.order_by('-completed_at').values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
             task_dict = dict(task_data)
             if task_dict.get('completed_at'):
                 task_dict['completed_at'] = task_dict['completed_at'].isoformat()
-            similar_tasks_list.append(task_dict)
-        
+            dedup_key = (task_dict['title'], task_dict['actual_duration_days'])
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
+                similar_tasks_list.append(task_dict)
+            if len(similar_tasks_list) >= 10:
+                break
+
         return {
             'avg_duration': stats['avg'],
             'std_dev': stats['std'],
             'sample_size': stats['count'],
+            'displayed_tasks': len(similar_tasks_list),
             'data_quality': 'medium',
             'velocity_factor': 1.0,
             'similar_tasks': similar_tasks_list
@@ -240,16 +259,23 @@ def _get_historical_statistics(task):
     if stats['count'] >= 2:
         # Get similar tasks and format completed_at for JSON serialization
         similar_tasks_list = []
-        for task_data in org_tasks[:10].values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
+        seen_keys = set()
+        for task_data in org_tasks.order_by('-completed_at').values('id', 'title', 'actual_duration_days', 'complexity_score', 'priority', 'completed_at'):
             task_dict = dict(task_data)
             if task_dict.get('completed_at'):
                 task_dict['completed_at'] = task_dict['completed_at'].isoformat()
-            similar_tasks_list.append(task_dict)
-        
+            dedup_key = (task_dict['title'], task_dict['actual_duration_days'])
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
+                similar_tasks_list.append(task_dict)
+            if len(similar_tasks_list) >= 10:
+                break
+
         return {
             'avg_duration': stats['avg'],
             'std_dev': stats['std'],
             'sample_size': stats['count'],
+            'displayed_tasks': len(similar_tasks_list),
             'data_quality': 'low',
             'velocity_factor': 1.0,
             'similar_tasks': similar_tasks_list
@@ -340,8 +366,8 @@ def _apply_prediction_adjustments(base_days, task, historical_stats):
         if skill_factor != 1.0:
             adjusted_days *= skill_factor
     
-    # Team velocity adjustment
-    velocity_factor = historical_stats.get('velocity_factor', 1.0)
+    # Team velocity adjustment — capped at 2.5x to avoid runaway inflation from sparse data
+    velocity_factor = min(2.5, max(0.4, historical_stats.get('velocity_factor', 1.0)))
     if velocity_factor != 1.0:
         adjusted_days *= velocity_factor
         adjustments['velocity_adjustment'] = f"{velocity_factor:.2f}x (team member velocity)"
@@ -516,6 +542,7 @@ def update_task_prediction(task):
         task.prediction_metadata = {
             'confidence_interval_days': prediction['confidence_interval_days'],
             'based_on_tasks': prediction['based_on_tasks'],
+            'displayed_tasks': prediction.get('displayed_tasks', len(prediction.get('similar_tasks', []))),
             'similar_tasks': prediction.get('similar_tasks', []),
             'factors': prediction['factors'],
             'early_date': prediction['early_date'].isoformat(),
