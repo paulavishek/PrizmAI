@@ -1064,12 +1064,21 @@ class TaskLabel(models.Model):
         ('regular', 'Regular'),
         ('lean', 'Lean Six Sigma'),
     ]
-    
+
+    PRESET_LABELS = [
+        {'name': 'Bug',           'color': '#dc3545'},
+        {'name': 'Feature',       'color': '#0d6efd'},
+        {'name': 'Enhancement',   'color': '#6f42c1'},
+        {'name': 'Needs Review',  'color': '#fd7e14'},
+        {'name': 'Documentation', 'color': '#20c997'},
+        {'name': 'In Progress',   'color': '#ffc107'},
+    ]
+
     name = models.CharField(max_length=50)
     color = ColorField(default='#FF5733')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='labels')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='regular')
-    
+
     def __str__(self):
         return self.name
 
