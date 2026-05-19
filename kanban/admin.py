@@ -1342,3 +1342,39 @@ class IdeaPromotionAdmin(admin.ModelAdmin):
     search_fields = ('idea__title', 'board__name', 'promoted_by__username')
     readonly_fields = ('promoted_at',)
     filter_horizontal = ('tasks',)
+
+
+# ── Custom Fields ─────────────────────────────────────────────────────────
+
+from .custom_field_models import (
+    CustomFieldDefinition,
+    CustomFieldOption,
+    TaskCustomFieldValue,
+)
+
+
+class CustomFieldOptionInline(admin.TabularInline):
+    model = CustomFieldOption
+    extra = 0
+    fields = ('value', 'is_default', 'position')
+
+
+@admin.register(CustomFieldDefinition)
+class CustomFieldDefinitionAdmin(admin.ModelAdmin):
+    list_display = (
+        'name', 'field_type', 'workspace', 'is_required',
+        'exclude_from_ai', 'is_active', 'position',
+    )
+    list_filter = ('field_type', 'is_active', 'exclude_from_ai', 'workspace')
+    search_fields = ('name', 'workspace__name')
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [CustomFieldOptionInline]
+
+
+@admin.register(TaskCustomFieldValue)
+class TaskCustomFieldValueAdmin(admin.ModelAdmin):
+    list_display = ('task', 'field', 'display_value', 'updated_by', 'updated_at')
+    list_filter = ('field__field_type', 'field')
+    search_fields = ('task__title', 'field__name', 'value_text')
+    readonly_fields = ('updated_at',)
+    filter_horizontal = ('selected_options',)

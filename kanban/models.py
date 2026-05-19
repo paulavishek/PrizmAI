@@ -1665,6 +1665,7 @@ class TaskActivity(models.Model):
         ('commented', 'Commented'),
         ('label_added', 'Label Added'),
         ('label_removed', 'Label Removed'),
+        ('custom_field', 'Custom Field Changed'),
     ]
     
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='activities')
@@ -2683,6 +2684,11 @@ class WorkspaceInvitation(models.Model):
 from .shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog  # noqa: E402
 from .access_request_models import AccessRequest  # noqa: E402
 from .project_signals_models import ProjectSignal, ProjectConfidenceScore  # noqa: E402
+from .custom_field_models import (  # noqa: E402
+    CustomFieldDefinition,
+    CustomFieldOption,
+    TaskCustomFieldValue,
+)
 
 
 class CalendarEvent(models.Model):

@@ -1,0 +1,95 @@
+{% comment %}
+Renders inputs for every active workspace custom field on a task.
+
+Context required:
+    custom_fields_for_task  — output of serialize_task_custom_fields(task) OR
+                              serialize_field_definitions_for_workspace(ws_id)
+                              when rendering a "new task" form (no values yet).
+
+Each input is named  custom_field_<field_id>  (lists use  custom_field_<id>[]).
+The view layer parses these into TaskCustomFieldValue rows.
+{% endcomment %}
+
+{% if custom_fields_for_task %}
+<div class="card mb-3 cf-task-widget">
+    <div class="card-header">
+        <strong>Custom fields</strong>
+    </div>
+    <div class="card-body">
+        {% for f in custom_fields_for_task %}
+            <div class="mb-3">
+                <label class="form-label">
+                    {{ f.name }}
+                    {% if f.is_required %}<span class="text-danger">*</span>{% endif %}
+                    {% if f.exclude_from_ai %}
+                        <span class="badge bg-warning text-dark ms-1" title="Hidden from AI">
+                            <i class="bi bi-eye-slash"></i> No AI
+                        </span>
+                    {% endif %}
+                </label>
+
+                {% if f.field_type == 'text' %}
+                    <input type="text" class="form-control"
+                           name="custom_field_{{ f.field_id }}"
+                           value="{{ f.value|default_if_none:'' }}"
+                           {% if f.is_required %}required{% endif %}>
+
+                {% elif f.field_type == 'long_text' %}
+                    <textarea class="form-control" rows="3"
+                              name="custom_field_{{ f.field_id }}"
+                              {% if f.is_required %}required{% endif %}>{{ f.value|default_if_none:'' }}</textarea>
+
+                {% elif f.field_type == 'number' %}
+                    <input type="number" step="any" class="form-control"
+                           name="custom_field_{{ f.field_id }}"
+                           value="{{ f.value|default_if_none:'' }}"
+                           {% if f.is_required %}required{% endif %}>
+
+                {% elif f.field_type == 'date' %}
+                    <input type="date" class="form-control"
+                           name="custom_field_{{ f.field_id }}"
+                           value="{{ f.value|date:'Y-m-d'|default_if_none:'' }}"
+                           {% if f.is_required %}required{% endif %}>
+
+                {% elif f.field_type == 'boolean' %}
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input"
+                               id="cf_bool_{{ f.field_id }}"
+                               name="custom_field_{{ f.field_id }}"
+                               value="1" {% if f.value %}checked{% endif %}>
+                        <label class="form-check-label" for="cf_bool_{{ f.field_id }}">
+                            Yes
+                        </label>
+                    </div>
+
+                {% elif f.field_type == 'list' %}
+                    {% if f.is_multi_select %}
+                        <select multiple class="form-select"
+                                name="custom_field_{{ f.field_id }}[]"
+                                {% if f.is_required %}required{% endif %}>
+                            {% for opt in f.options %}
+                                <option value="{{ opt.id }}"
+                                    {% if opt.id in f.selected_option_ids %}selected{% endif %}>
+                                    {{ opt.value }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        <select class="form-select"
+                                name="custom_field_{{ f.field_id }}"
+                                {% if f.is_required %}required{% endif %}>
+                            <option value="">— Select —</option>
+                            {% for opt in f.options %}
+                                <option value="{{ opt.id }}"
+                                    {% if opt.id in f.selected_option_ids %}selected{% endif %}>
+                                    {{ opt.value }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

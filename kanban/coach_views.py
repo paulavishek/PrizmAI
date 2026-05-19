@@ -141,6 +141,20 @@ def generate_suggestions(request, board_id):
             'active_tasks': Task.objects.filter(column__board=board, progress__isnull=False, progress__lt=100).count(),
             'project_phase': 'active',  # Could be enhanced
         }
+
+        # Inject workspace custom-field schema so the coach can reference
+        # fields by name (e.g., "Externally Blocked", "Regulatory Phase").
+        # Values themselves stay aggregate — full per-task data goes through
+        # Spectra. Honors exclude_from_ai automatically.
+        try:
+            from kanban.utils.coach_custom_field_context import (
+                summarize_custom_fields_for_board,
+            )
+            cf_summary = summarize_custom_fields_for_board(board)
+            if cf_summary:
+                context['custom_fields'] = cf_summary
+        except Exception as _cf_exc:
+            logger.warning("Custom-field coach summary failed: %s", _cf_exc)
         
         # Initialize AI coach service
         ai_coach = AICoachService()

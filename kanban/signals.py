@@ -16,6 +16,9 @@ from kanban import automation_actions as _aa
 from kanban.automation_conditions import TriggerTarget
 from kanban.automation_actions import _ActionNoOp, _ActionSkip  # re-exported
 
+# Custom-field change handlers — registered for their side effects.
+from kanban import custom_field_signals as _cfs  # noqa: F401
+
 # Pre-save field snapshot — populated by track_field_changes() below and
 # consumed in Phase 1b by triggers that fire on "X changed to Y".
 TRACKED_FIELDS = (

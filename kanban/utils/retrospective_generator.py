@@ -156,8 +156,94 @@ class RetrospectiveGenerator:
             )
         else:
             metrics['scope_change_percentage'] = 0
-        
+
+        # Custom-field breakdowns — only surface patterns backed by at least
+        # 5 tasks per value bucket. Below that threshold the comparison is
+        # statistically meaningless and risks misleading the PM (e.g. "tasks
+        # tagged External Dependency took 1.8x longer" on n=2 vs n=38).
+        try:
+            metrics['custom_field_breakdowns'] = self._custom_field_breakdowns(
+                tasks, completed_tasks,
+            )
+        except Exception as exc:
+            logger.warning("Custom-field breakdown failed: %s", exc)
+            metrics['custom_field_breakdowns'] = []
+
         return metrics
+
+    # Minimum sample size per value bucket. Below this we suppress the
+    # comparison silently — see issue raised during plan review.
+    CUSTOM_FIELD_MIN_SAMPLES = 5
+
+    def _custom_field_breakdowns(self, tasks, completed_tasks):
+        """
+        Compute per-custom-field comparisons for the retrospective period.
+
+        For each value of a List or Boolean custom field, report:
+          - tasks with that value
+          - completion rate
+          - avg completion time (days)
+        Suppressed when fewer than CUSTOM_FIELD_MIN_SAMPLES tasks share the
+        value. Excludes fields with exclude_from_ai=True so sensitive fields
+        never leak into the retrospective prompt.
+        """
+        from kanban.custom_field_models import (
+            CustomFieldDefinition,
+            FIELD_TYPE_BOOLEAN,
+            FIELD_TYPE_LIST,
+            TaskCustomFieldValue,
+        )
+
+        workspace_id = getattr(self.board, 'workspace_id', None)
+        if not workspace_id:
+            return []
+
+        fields = list(
+            CustomFieldDefinition.objects
+            .filter(
+                workspace_id=workspace_id,
+                is_active=True,
+                applies_to_tasks=True,
+                exclude_from_ai=False,
+                field_type__in=[FIELD_TYPE_BOOLEAN, FIELD_TYPE_LIST],
+            )
+        )
+        if not fields:
+            return []
+
+        task_ids = set(tasks.values_list('id', flat=True))
+        completed_ids = set(completed_tasks.values_list('id', flat=True))
+
+        out = []
+        for fdef in fields:
+            # Bucket task IDs by value for this field.
+            buckets = {}  # value_label -> list of task_ids
+            values = (
+                TaskCustomFieldValue.objects
+                .filter(field=fdef, task_id__in=task_ids)
+                .prefetch_related('selected_options')
+            )
+            for v in values:
+                if fdef.field_type == FIELD_TYPE_BOOLEAN:
+                    label = 'Yes' if v.value_boolean else 'No'
+                    buckets.setdefault(label, []).append(v.task_id)
+                else:  # list
+                    for opt in v.selected_options.all():
+                        buckets.setdefault(opt.value, []).append(v.task_id)
+
+            for label, ids in buckets.items():
+                if len(ids) < self.CUSTOM_FIELD_MIN_SAMPLES:
+                    continue  # statistical-significance threshold
+                bucket_completed = [tid for tid in ids if tid in completed_ids]
+                completion_rate = round(100 * len(bucket_completed) / len(ids), 1)
+                out.append({
+                    'field': fdef.name,
+                    'value': label,
+                    'task_count': len(ids),
+                    'completed_count': len(bucket_completed),
+                    'completion_rate': completion_rate,
+                })
+        return out
     
     def _calculate_avg_completion_time(self, completed_tasks):
         """Calculate average completion time; try actual_duration_days first, fallback to date diff."""
@@ -408,7 +494,7 @@ Generate a comprehensive retrospective analysis for a project sprint/period.
 - Team Velocity: {metrics.get('avg_velocity', 'N/A')} tasks/period
 - Velocity Trend: {metrics.get('velocity_trend', 'unknown')}
 - Scope Change: {metrics.get('scope_change_percentage', 0):.1f}%
-
+{self._format_custom_field_breakdowns(metrics.get('custom_field_breakdowns', []))}
 **Board Team Members & Current Workload:**
 {members_text}
 
@@ -464,6 +550,20 @@ Format the response with clear sections using the headers above.
 """
         return prompt
     
+    def _format_custom_field_breakdowns(self, breakdowns):
+        """Render workspace custom-field comparisons for the prompt.
+        Only buckets with n >= CUSTOM_FIELD_MIN_SAMPLES reach this method
+        (filtering happens in `_custom_field_breakdowns`). Returns '' if none."""
+        if not breakdowns:
+            return ''
+        lines = ["\n**Custom Field Breakdowns** (workspace-defined attributes, n>=5 only):"]
+        for b in breakdowns:
+            lines.append(
+                f"- {b['field']} = {b['value']}: {b['task_count']} tasks, "
+                f"{b['completion_rate']:.1f}% completion rate"
+            )
+        return '\n'.join(lines) + '\n'
+
     def _format_members_for_prompt(self, members):
         """Format board members list for AI prompt injection."""
         if not members:

@@ -1120,6 +1120,9 @@
                     </div><!-- /tab-activity -->
                 </div><!-- /tab-content -->
 
+                {# Workspace-defined custom fields (typed metadata). #}
+                {% include 'kanban/custom_fields/_task_widget.html' %}
+
                 <!-- Sticky Save button (visible on Overview/Details/Relationships tabs) -->
                 <div class="border-top pt-3 mt-3 sticky-bottom bg-white pb-3" id="stickyFormActions">
                     <div class="d-flex justify-content-end">
