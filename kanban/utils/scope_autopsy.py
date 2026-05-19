@@ -185,6 +185,58 @@ def collect_scope_history(board):
     except Exception:
         logger.warning("Error collecting meeting transcripts for board %s", board.pk, exc_info=True)
 
+    # ── SOURCE 5: Custom-field value changes ────────────────────────────
+    # The custom_field_signals module creates TaskActivity rows with
+    # activity_type='custom_field' whenever a real user changes a typed
+    # custom-field value. Bulk/system writes have updated_by=None and are
+    # silently skipped at the signal layer, so the events below are
+    # guaranteed to be user-initiated and meaningful.
+    try:
+        from kanban.models import TaskActivity
+        cf_activities = (
+            TaskActivity.objects
+            .filter(
+                task__column__board=board,
+                activity_type='custom_field',
+                created_at__gt=baseline_date,
+                created_at__lte=now,
+            )
+            .select_related('user', 'task')
+            .order_by('created_at')
+        )
+        # Group by (date, user) so a sprint with 6 small edits surfaces as
+        # one rolled-up event rather than six noisy lines.
+        cf_daily = defaultdict(list)
+        for activity in cf_activities:
+            key = (activity.created_at.date(), getattr(activity.user, 'pk', None))
+            cf_daily[key].append(activity)
+
+        for (day, user_id), activities in cf_daily.items():
+            actor = activities[0].user
+            actor_name = (actor.get_full_name() or actor.username) if actor else ''
+            sample = '; '.join(a.description[:80] for a in activities[:3])
+            if len(activities) > 3:
+                sample += f" (+{len(activities) - 3} more)"
+            events.append({
+                'date': activities[0].created_at,
+                'title': (
+                    f"{len(activities)} custom-field change"
+                    f"{'s' if len(activities) != 1 else ''} by {actor_name or 'Unknown'}"
+                ),
+                'description': sample,
+                'source_type': 'custom_field_change',
+                'source_object_type': 'TaskActivity',
+                'source_object_id': activities[0].pk,
+                # Custom-field edits don't add tasks — but they're still scope signals
+                # (a field changing across many tasks during a sprint is a flag).
+                'tasks_added': 0,
+                'tasks_removed': 0,
+                'added_by_id': user_id,
+                'added_by_name': actor_name,
+            })
+    except Exception:
+        logger.warning("Error collecting custom-field changes for board %s", board.pk, exc_info=True)
+
     # ── De-duplicate and sort ───────────────────────────────────────────
     # Remove alert-sourced events whose task counts overlap with task_added events
     # on the same day (alerts are derivative of task additions).

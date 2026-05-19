@@ -72,6 +72,7 @@ class ScopeTimelineEvent(models.Model):
         ('meeting', 'Meeting Transcript'),
         ('ai_suggestion', 'AI Suggestion Accepted'),
         ('bulk_import', 'Bulk Task Import'),
+        ('custom_field_change', 'Custom Field Change'),
         ('unknown', 'Unknown Source'),
     ]
 

@@ -2498,6 +2498,9 @@ def task_detail(request, task_id):
             'related_tasks',
             'dependencies',
             'checklist_items',
+            # Custom fields — required prefetch (see spectra_data_fetchers.fetch_task_dict).
+            'custom_field_values__field',
+            'custom_field_values__selected_options',
             Prefetch('file_attachments', queryset=TaskFile.objects.filter(deleted_at__isnull=True).select_related('uploaded_by'))
         ),
         id=task_id
@@ -2545,7 +2548,16 @@ def task_detail(request, task_id):
 
             # Save budget/cost fields to TaskCost model
             form._save_task_cost(task)
-            
+
+            # Persist custom-field values (workspace-defined typed metadata).
+            try:
+                from kanban.custom_field_serializers import save_custom_field_values_from_post
+                from django.core.exceptions import ValidationError as _CFValidationError
+                save_custom_field_values_from_post(task, request.POST, request.user)
+            except _CFValidationError as cf_err:
+                messages.error(request, f"Custom field error: {cf_err}")
+                # Continue — task save succeeded; only custom-field side failed.
+
             # --- Detect which AI-relevant fields changed ---
             ai_field_labels = {
                 'title': 'title',
@@ -2765,10 +2777,14 @@ def task_detail(request, task_id):
         total=Sum('hours_spent')
     )['total'] or 0
     
+    from kanban.custom_field_serializers import serialize_task_custom_fields
+    custom_fields_for_task = serialize_task_custom_fields(task)
+
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
         'form': form,
+        'custom_fields_for_task': custom_fields_for_task,
         'comment_form': comment_form,
         'comments': comments,
         'activities': activities,
@@ -2893,7 +2909,16 @@ def create_task(request, board_id, column_id=None):
 
                 # Save budget/cost fields to TaskCost model
                 form._save_task_cost(task)
-                
+
+                # Persist custom-field values from the create form (if any).
+                if request.user.is_authenticated:
+                    try:
+                        from kanban.custom_field_serializers import save_custom_field_values_from_post
+                        from django.core.exceptions import ValidationError as _CFValidationError
+                        save_custom_field_values_from_post(task, request.POST, request.user)
+                    except _CFValidationError as cf_err:
+                        messages.warning(request, f"Custom field error: {cf_err}")
+
                 # ── Create checklist items from AI breakdown (if provided) ──
                 checklist_json = request.POST.get('checklist_breakdown_data', '').strip()
                 if checklist_json:
@@ -2961,11 +2986,30 @@ def create_task(request, board_id, column_id=None):
         form = TaskForm(board=board, initial=initial)
         duplicate_tasks = None
     
+    # For new tasks we have no values yet — render every active workspace field
+    # with its defaults via the same serializer shape.
+    from kanban.custom_field_serializers import serialize_field_definitions_for_workspace
+    if board.workspace_id:
+        defs = serialize_field_definitions_for_workspace(board.workspace_id)
+        custom_fields_for_task = [
+            {
+                **d,
+                'value': None,
+                'display': '',
+                'selected_option_ids': [opt['id'] for opt in d.get('options', []) if opt.get('id')]
+                                       if d.get('field_type') == 'list' else [],
+            }
+            for d in defs
+        ]
+    else:
+        custom_fields_for_task = []
+
     return render(request, 'kanban/create_task.html', {
         'form': form,
         'board': board,
         'column': column,
-        'duplicate_tasks': duplicate_tasks
+        'duplicate_tasks': duplicate_tasks,
+        'custom_fields_for_task': custom_fields_for_task,
     })
 
 def delete_task(request, task_id):

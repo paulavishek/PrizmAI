@@ -865,6 +865,9 @@
                         </div>
                         {% endif %}
                         
+                        {# Workspace-defined custom fields (typed metadata). #}
+                        {% include 'kanban/custom_fields/_task_widget.html' %}
+
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
                         <!-- SECTION 4: FINAL REVIEW & CREATE                                    -->
                         <!-- ═══════════════════════════════════════════════════════════════════ -->

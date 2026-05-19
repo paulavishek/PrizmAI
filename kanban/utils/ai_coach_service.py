@@ -172,6 +172,27 @@ class AICoachService:
     
     def _build_enhancement_prompt(self, suggestion: Dict, context: Dict) -> str:
         """Build prompt for AI enhancement with full explainability"""
+        # Render a compact "Custom Fields" section when the workspace has any.
+        # See summarize_custom_fields_for_board() — exclude_from_ai fields are
+        # already filtered out.
+        custom_fields_block = ''
+        cf_summary = context.get('custom_fields') or []
+        if cf_summary:
+            lines = []
+            for entry in cf_summary:
+                desc = f"- {entry['name']} ({entry['type']}, set on {entry['tasks_set']} tasks"
+                top = entry.get('top_values') or []
+                if top:
+                    desc += f"; common: {', '.join(top)}"
+                desc += ")"
+                lines.append(desc)
+            custom_fields_block = (
+                "\n## Workspace Custom Fields (PM-defined task metadata):\n"
+                + "\n".join(lines)
+                + "\nReference these by name in your advice when relevant; the "
+                + "user has chosen them as meaningful signals.\n"
+            )
+
         return f"""You are an experienced project management coach helping a PM improve their project.
 Your advice must be transparent, actionable, and concise.
 
@@ -187,6 +208,7 @@ Your advice must be transparent, actionable, and concise.
 - Active Tasks: {context.get('active_tasks', 'N/A')}
 - Project Phase: {context.get('project_phase', 'N/A')}
 - Current Velocity: {context.get('velocity', 'N/A')} tasks/week
+{custom_fields_block}
 
 ## Metrics:
 {json.dumps(suggestion.get('metrics_snapshot', {}), indent=2)}

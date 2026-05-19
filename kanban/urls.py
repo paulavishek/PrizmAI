@@ -24,6 +24,7 @@ from . import favorite_views
 from . import sandbox_views
 from . import access_request_views
 from . import discovery_views
+from . import custom_field_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -460,4 +461,20 @@ urlpatterns = [
     path('api/strategic/<str:record_type>/<int:record_id>/generate-portfolio-narrative/', api_views.generate_portfolio_narrative_api, name='generate_portfolio_narrative_api'),
     path('api/goals/<int:goal_id>/generate-proxy-metrics/', api_views.generate_proxy_metrics_api, name='generate_proxy_metrics_api'),
     path('api/goals/<int:goal_id>/proxy-metrics/<int:metric_id>/update-value/', api_views.update_proxy_metric_value_api, name='update_proxy_metric_value_api'),
+
+    # -----------------------------------------------------------------------
+    # Custom Fields — workspace-scoped, admin-managed (v1: tasks only)
+    # -----------------------------------------------------------------------
+    path('workspace/<int:workspace_id>/custom-fields/',
+         custom_field_views.custom_field_list,
+         name='custom_field_list'),
+    path('workspace/<int:workspace_id>/custom-fields/new/',
+         custom_field_views.custom_field_create,
+         name='custom_field_create'),
+    path('workspace/<int:workspace_id>/custom-fields/<int:field_id>/',
+         custom_field_views.custom_field_edit,
+         name='custom_field_edit'),
+    path('workspace/<int:workspace_id>/custom-fields/<int:field_id>/delete/',
+         custom_field_views.custom_field_delete,
+         name='custom_field_delete'),
 ]

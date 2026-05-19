@@ -40,6 +40,22 @@ def fetch_task_dict(task):
     Caller MUST use .select_related('column', 'assigned_to') before passing
     the task in. Dependencies and labels should be prefetched if needed.
 
+    ── N+1 WARNING (Custom Fields) ────────────────────────────────────────
+    This function reads `task.custom_field_values` to inject user-defined
+    custom-field data into the Spectra Task Dict. Every queryset that calls
+    `fetch_task_dict` MUST add:
+
+        prefetch_related(
+            'custom_field_values__field',
+            'custom_field_values__selected_options',
+        )
+
+    Otherwise a board with N tasks triggers up to 3N extra DB queries
+    (one per task for the value rows, plus one each for the field FK and
+    the selected_options M2M). On a 100-task board that's ~300 unnecessary
+    hits every time Spectra answers a question. `fetch_board_tasks` below
+    already includes this prefetch — new callers must do the same.
+
     Returns a dict — the canonical "Spectra Task Dict" contract.
     """
     today = timezone.now().date()
@@ -103,6 +119,14 @@ def fetch_task_dict(task):
     except Exception:
         comment_count = 0
 
+    # Custom fields — honors per-field `exclude_from_ai` flag.
+    # Returns {} cheaply for tasks without custom-field values.
+    try:
+        from kanban.custom_field_serializers import serialize_for_ai
+        custom_fields = serialize_for_ai(task)
+    except Exception:
+        custom_fields = {}
+
     return {
         'id': task.id,
         'board_id': task.column.board_id if task.column_id else None,
@@ -130,6 +154,7 @@ def fetch_task_dict(task):
         'risk_level': task.risk_level,
         'ai_risk_score': task.ai_risk_score,
         'updated_at': task.updated_at if hasattr(task, 'updated_at') else None,
+        'custom_fields': custom_fields,
     }
 
 
@@ -154,7 +179,12 @@ def fetch_board_tasks(board, filters=None):
         Task.objects
         .filter(column__board=board)
         .select_related('column', 'assigned_to', 'parent_task')
-        .prefetch_related('dependencies', 'labels', 'subtasks')
+        .prefetch_related(
+            'dependencies', 'labels', 'subtasks',
+            # Custom fields — see fetch_task_dict's N+1 warning above.
+            'custom_field_values__field',
+            'custom_field_values__selected_options',
+        )
         .order_by('column__position', 'position')
     )
 
