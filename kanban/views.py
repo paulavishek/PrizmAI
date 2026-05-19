@@ -4997,6 +4997,74 @@ def _create_board_from_import_result(result, user, organization, session):
     return new_board
 
 @login_required
+@require_http_methods(["POST"])
+def quick_create_label(request, board_id):
+    """AJAX: create a regular label inline from the task form or task details."""
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    name = request.POST.get('name', '').strip()
+    color = request.POST.get('color', '#3B82F6').strip()
+    if not name:
+        return JsonResponse({'error': 'Label name is required'}, status=400)
+    if len(name) > 50:
+        return JsonResponse({'error': 'Label name must be 50 characters or fewer'}, status=400)
+
+    label, created = TaskLabel.objects.get_or_create(
+        board=board,
+        name=name,
+        defaults={'color': color, 'category': 'regular'},
+    )
+    return JsonResponse({'id': label.id, 'name': label.name, 'color': label.color, 'created': created})
+
+
+@login_required
+@require_http_methods(["POST"])
+def toggle_task_label(request, task_id):
+    """AJAX: add or remove a label on a task without a full form submit."""
+    task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    label_id = request.POST.get('label_id')
+    if not label_id:
+        return JsonResponse({'error': 'label_id is required'}, status=400)
+
+    label = get_object_or_404(TaskLabel, id=label_id, board=board)
+    if task.labels.filter(id=label.id).exists():
+        task.labels.remove(label)
+        action = 'removed'
+    else:
+        task.labels.add(label)
+        action = 'added'
+
+    return JsonResponse({'action': action, 'label_id': label.id})
+
+
+@login_required
+@require_http_methods(["POST"])
+def load_preset_labels(request, board_id):
+    """AJAX: seed a board with PRESET_LABELS (idempotent), return all board regular labels."""
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    for preset in TaskLabel.PRESET_LABELS:
+        TaskLabel.objects.get_or_create(
+            board=board,
+            name=preset['name'],
+            defaults={'color': preset['color'], 'category': 'regular'},
+        )
+
+    labels = list(
+        TaskLabel.objects.filter(board=board, category='regular').values('id', 'name', 'color')
+    )
+    return JsonResponse({'labels': labels})
+
+
+@login_required
 def add_lean_labels(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     

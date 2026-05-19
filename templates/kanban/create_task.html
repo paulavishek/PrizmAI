@@ -160,17 +160,157 @@
                             </div>
 
                             <!-- Labels -->
-                            {% if form.labels.field.queryset.exists %}
-                            <div class="mb-3">
-                                <label for="{{ form.labels.id_for_label }}" class="form-label">
+                            <div class="mb-3" id="labels-section">
+                                <label class="form-label">
                                     <i class="fas fa-tags me-1"></i> Tags/Labels <small class="text-muted">(Optional)</small>
                                 </label>
-                                {{ form.labels }}
+
+                                {# Hidden select kept for form submission #}
+                                <div style="display:none;">{{ form.labels }}</div>
                                 {% if form.labels.errors %}
                                     <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
                                 {% endif %}
+
+                                {# Badge-style clickable label picker #}
+                                <div id="label-badge-area" class="d-flex flex-wrap gap-1 mb-2">
+                                    {% for label in form.labels.field.queryset %}
+                                    <span class="badge label-badge {% if label in form.labels.value %}label-badge-selected{% endif %}"
+                                          data-label-id="{{ label.id }}"
+                                          style="background-color:{{ label.color }};cursor:pointer;opacity:{% if label in form.labels.value %}1{% else %}0.45{% endif %};"
+                                          title="{{ label.name }}">
+                                        {{ label.name }}
+                                    </span>
+                                    {% empty %}
+                                    <span class="text-muted small" id="no-labels-hint">No labels yet — load presets or create one below.</span>
+                                    {% endfor %}
+                                </div>
+
+                                {# Load preset labels button #}
+                                <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="load-presets-btn">
+                                    <i class="fas fa-magic me-1"></i> Load preset labels
+                                </button>
+
+                                {# Inline new-label mini-form #}
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="toggle-new-label-btn">
+                                    <i class="fas fa-plus me-1"></i> New label
+                                </button>
+                                <div id="new-label-form" class="mt-2 d-none">
+                                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                                        <input type="text" id="new-label-name" class="form-control form-control-sm" style="max-width:180px;" placeholder="Label name" maxlength="50">
+                                        <input type="color" id="new-label-color" class="form-control form-control-color form-control-sm" value="#3B82F6" title="Label colour" style="width:40px;">
+                                        <button type="button" class="btn btn-sm btn-primary" id="save-new-label-btn">Add</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="cancel-new-label-btn">Cancel</button>
+                                    </div>
+                                </div>
                             </div>
-                            {% endif %}
+
+                            <script>
+                            (function () {
+                                const boardId = {{ board.id }};
+                                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                                const hiddenSelect = document.querySelector('#id_labels');
+                                const badgeArea = document.getElementById('label-badge-area');
+
+                                function selectedIds() {
+                                    return Array.from(hiddenSelect.selectedOptions).map(o => parseInt(o.value));
+                                }
+
+                                function syncHidden(labelId, select) {
+                                    const opt = hiddenSelect.querySelector(`option[value="${labelId}"]`);
+                                    if (!opt) return;
+                                    opt.selected = select;
+                                }
+
+                                function renderBadge(label, selected) {
+                                    const span = document.createElement('span');
+                                    span.className = 'badge label-badge' + (selected ? ' label-badge-selected' : '');
+                                    span.dataset.labelId = label.id;
+                                    span.style.cssText = `background-color:${label.color};cursor:pointer;opacity:${selected ? 1 : 0.45};`;
+                                    span.title = label.name;
+                                    span.textContent = label.name;
+                                    span.addEventListener('click', toggleBadge);
+                                    return span;
+                                }
+
+                                function addOptionToHidden(label) {
+                                    if (hiddenSelect.querySelector(`option[value="${label.id}"]`)) return;
+                                    const opt = document.createElement('option');
+                                    opt.value = label.id;
+                                    opt.textContent = label.name;
+                                    hiddenSelect.appendChild(opt);
+                                }
+
+                                function toggleBadge(e) {
+                                    const span = e.currentTarget;
+                                    const id = parseInt(span.dataset.labelId);
+                                    const nowSelected = !span.classList.contains('label-badge-selected');
+                                    span.classList.toggle('label-badge-selected', nowSelected);
+                                    span.style.opacity = nowSelected ? '1' : '0.45';
+                                    syncHidden(id, nowSelected);
+                                }
+
+                                badgeArea.querySelectorAll('.label-badge').forEach(b => b.addEventListener('click', toggleBadge));
+
+                                // Load preset labels
+                                document.getElementById('load-presets-btn').addEventListener('click', function () {
+                                    this.disabled = true;
+                                    fetch(`/boards/${boardId}/load-preset-labels/`, {
+                                        method: 'POST',
+                                        headers: {'X-CSRFToken': csrfToken},
+                                    })
+                                    .then(r => r.json())
+                                    .then(data => {
+                                        const hint = document.getElementById('no-labels-hint');
+                                        if (hint) hint.remove();
+                                        data.labels.forEach(label => {
+                                            addOptionToHidden(label);
+                                            if (!badgeArea.querySelector(`[data-label-id="${label.id}"]`)) {
+                                                badgeArea.appendChild(renderBadge(label, false));
+                                            }
+                                        });
+                                        this.textContent = 'Presets loaded';
+                                        this.disabled = true;
+                                    })
+                                    .catch(() => { this.disabled = false; });
+                                });
+
+                                // Toggle new-label mini-form
+                                document.getElementById('toggle-new-label-btn').addEventListener('click', function () {
+                                    document.getElementById('new-label-form').classList.toggle('d-none');
+                                });
+                                document.getElementById('cancel-new-label-btn').addEventListener('click', function () {
+                                    document.getElementById('new-label-form').classList.add('d-none');
+                                });
+
+                                // Save new label
+                                document.getElementById('save-new-label-btn').addEventListener('click', function () {
+                                    const name = document.getElementById('new-label-name').value.trim();
+                                    const color = document.getElementById('new-label-color').value;
+                                    if (!name) { alert('Please enter a label name.'); return; }
+                                    this.disabled = true;
+                                    const body = new URLSearchParams({name, color, csrfmiddlewaretoken: csrfToken});
+                                    fetch(`/boards/${boardId}/quick-create-label/`, {
+                                        method: 'POST',
+                                        headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded'},
+                                        body,
+                                    })
+                                    .then(r => r.json())
+                                    .then(label => {
+                                        if (label.error) { alert(label.error); return; }
+                                        const hint = document.getElementById('no-labels-hint');
+                                        if (hint) hint.remove();
+                                        addOptionToHidden(label);
+                                        const badge = renderBadge(label, true);
+                                        badgeArea.appendChild(badge);
+                                        syncHidden(label.id, true);
+                                        document.getElementById('new-label-name').value = '';
+                                        document.getElementById('new-label-form').classList.add('d-none');
+                                    })
+                                    .catch(() => {})
+                                    .finally(() => { this.disabled = false; });
+                                });
+                            })();
+                            </script>
 
                             <!-- Start Date & Due Date -->
                             <div class="row mb-3">

@@ -157,18 +157,154 @@
                             {% endif %}
                         </div>
                         
-                        <!-- Labels -->
-                        {% if form.labels.field.queryset.exists %}
-                        <div class="mb-3">
-                            <label for="{{ form.labels.id_for_label }}" class="form-label">
-                                <i class="fas fa-tags me-1"></i> Tags/Labels
+                        <!-- Labels (badge picker, mirrors the sidebar AJAX panel) -->
+                        <div class="mb-3" id="detail-labels-section">
+                            <label class="form-label">
+                                <i class="fas fa-tags me-1"></i> Tags/Labels <small class="text-muted">(Optional)</small>
                             </label>
-                            {{ form.labels }}
+                            <div style="display:none;">{{ form.labels }}</div>
                             {% if form.labels.errors %}
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
                             {% endif %}
+                            <div id="detail-form-badge-area" class="d-flex flex-wrap gap-1 mb-2">
+                                {% for label in form.labels.field.queryset %}
+                                {% with is_sel=label.id|stringformat:"s" %}
+                                <span class="badge label-badge"
+                                      data-label-id="{{ label.id }}"
+                                      style="background-color:{{ label.color }};cursor:pointer;"
+                                      title="{{ label.name }}">
+                                    {{ label.name }}
+                                </span>
+                                {% endwith %}
+                                {% empty %}
+                                <span class="text-muted small" id="detail-no-labels-hint">No labels yet.</span>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="detail-form-load-presets-btn">
+                                <i class="fas fa-magic me-1"></i> Load presets
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="detail-form-toggle-new-label-btn">
+                                <i class="fas fa-plus me-1"></i> New label
+                            </button>
+                            <div id="detail-form-new-label-form" class="mt-2 d-none">
+                                <div class="d-flex gap-2 align-items-center flex-wrap">
+                                    <input type="text" id="detail-form-new-label-name" class="form-control form-control-sm" style="max-width:180px;" placeholder="Label name" maxlength="50">
+                                    <input type="color" id="detail-form-new-label-color" class="form-control form-control-color form-control-sm" value="#3B82F6" style="width:40px;">
+                                    <button type="button" class="btn btn-sm btn-primary" id="detail-form-save-new-label-btn">Add</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="detail-form-cancel-new-label-btn">Cancel</button>
+                                </div>
+                            </div>
                         </div>
-                        {% endif %}
+                        <script>
+                        (function () {
+                            const boardId = {{ task.column.board.id }};
+                            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                            const hiddenSelect = document.querySelector('#id_labels');
+                            const badgeArea = document.getElementById('detail-form-badge-area');
+
+                            // Mark already-selected labels on load
+                            const selectedIds = hiddenSelect
+                                ? Array.from(hiddenSelect.selectedOptions).map(o => parseInt(o.value))
+                                : [];
+                            badgeArea.querySelectorAll('.label-badge').forEach(badge => {
+                                const id = parseInt(badge.dataset.labelId);
+                                const sel = selectedIds.includes(id);
+                                badge.classList.toggle('label-badge-selected', sel);
+                                badge.style.opacity = sel ? '1' : '0.45';
+                            });
+
+                            function syncHidden(labelId, select) {
+                                if (!hiddenSelect) return;
+                                const opt = hiddenSelect.querySelector(`option[value="${labelId}"]`);
+                                if (opt) opt.selected = select;
+                            }
+
+                            function renderBadge(label, selected) {
+                                const span = document.createElement('span');
+                                span.className = 'badge label-badge' + (selected ? ' label-badge-selected' : '');
+                                span.dataset.labelId = label.id;
+                                span.style.cssText = `background-color:${label.color};cursor:pointer;opacity:${selected ? 1 : 0.45};`;
+                                span.title = label.name;
+                                span.textContent = label.name;
+                                span.addEventListener('click', toggleBadge);
+                                return span;
+                            }
+
+                            function addOptionToHidden(label) {
+                                if (!hiddenSelect) return;
+                                if (hiddenSelect.querySelector(`option[value="${label.id}"]`)) return;
+                                const opt = document.createElement('option');
+                                opt.value = label.id;
+                                opt.textContent = label.name;
+                                hiddenSelect.appendChild(opt);
+                            }
+
+                            function toggleBadge(e) {
+                                const span = e.currentTarget;
+                                const id = parseInt(span.dataset.labelId);
+                                const nowSelected = !span.classList.contains('label-badge-selected');
+                                span.classList.toggle('label-badge-selected', nowSelected);
+                                span.style.opacity = nowSelected ? '1' : '0.45';
+                                syncHidden(id, nowSelected);
+                            }
+
+                            badgeArea.querySelectorAll('.label-badge').forEach(b => b.addEventListener('click', toggleBadge));
+
+                            document.getElementById('detail-form-load-presets-btn').addEventListener('click', function () {
+                                this.disabled = true;
+                                fetch(`/boards/${boardId}/load-preset-labels/`, {
+                                    method: 'POST',
+                                    headers: {'X-CSRFToken': csrfToken},
+                                })
+                                .then(r => r.json())
+                                .then(data => {
+                                    const hint = document.getElementById('detail-no-labels-hint');
+                                    if (hint) hint.remove();
+                                    data.labels.forEach(label => {
+                                        addOptionToHidden(label);
+                                        if (!badgeArea.querySelector(`[data-label-id="${label.id}"]`)) {
+                                            badgeArea.appendChild(renderBadge(label, false));
+                                        }
+                                    });
+                                    this.textContent = 'Presets loaded';
+                                })
+                                .catch(() => { this.disabled = false; });
+                            });
+
+                            document.getElementById('detail-form-toggle-new-label-btn').addEventListener('click', function () {
+                                document.getElementById('detail-form-new-label-form').classList.toggle('d-none');
+                            });
+                            document.getElementById('detail-form-cancel-new-label-btn').addEventListener('click', function () {
+                                document.getElementById('detail-form-new-label-form').classList.add('d-none');
+                            });
+
+                            document.getElementById('detail-form-save-new-label-btn').addEventListener('click', function () {
+                                const name = document.getElementById('detail-form-new-label-name').value.trim();
+                                const color = document.getElementById('detail-form-new-label-color').value;
+                                if (!name) { alert('Please enter a label name.'); return; }
+                                this.disabled = true;
+                                fetch(`/boards/${boardId}/quick-create-label/`, {
+                                    method: 'POST',
+                                    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body: new URLSearchParams({name, color}),
+                                })
+                                .then(r => r.json())
+                                .then(label => {
+                                    if (label.error) { alert(label.error); return; }
+                                    const hint = document.getElementById('detail-no-labels-hint');
+                                    if (hint) hint.remove();
+                                    addOptionToHidden(label);
+                                    const badge = renderBadge(label, true);
+                                    badgeArea.appendChild(badge);
+                                    syncHidden(label.id, true);
+                                    document.getElementById('detail-form-new-label-name').value = '';
+                                    document.getElementById('detail-form-new-label-form').classList.add('d-none');
+                                })
+                                .catch(() => {})
+                                .finally(() => { this.disabled = false; });
+                            });
+                        })();
+                        </script>
 
                         <!-- Phase Selection -->
                         {% if form.phase %}
@@ -1659,28 +1795,207 @@
                     </div>
                 </div>
 
-                {% if task.labels.all %}                <div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <label class="text-muted mb-0">Labels
-                            <button type="button" class="btn btn-sm p-0" data-bs-toggle="modal" data-bs-target="#leanLabelsInfoModal">
-                                <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma labels"></i>
-                            </button>
-                        </label>
+                <!-- Labels — inline add/remove panel -->
+                <div id="task-labels-panel">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="text-muted mb-0"><i class="fas fa-tags me-1"></i>Labels</label>
                     </div>
-                    
-                    <div class="p-2 bg-light rounded">{% for label in task.labels.all %}
-                            {% if label.category == 'lean' %}
-                            <span class="task-label lean-label" style="--label-color: {{ label.color }}" 
-                                  title="Lean Six Sigma: {{ label.name }}">
-                                <i class="fas fa-chart-line"></i> {{ label.name }}
-                            </span>
-                            {% else %}
-                            <span class="task-label" style="--label-color: {{ label.color }}">{{ label.name }}</span>
-                            {% endif %}
+                    <div id="task-label-badges" class="d-flex flex-wrap gap-1 mb-1">
+                        {% for label in task.labels.all %}
+                        {% if label.category == 'lean' %}
+                        <span class="task-label lean-label" style="--label-color: {{ label.color }}"
+                              title="Lean Six Sigma: {{ label.name }}">
+                            <i class="fas fa-chart-line"></i> {{ label.name }}
+                        </span>
+                        {% else %}
+                        <span class="badge d-inline-flex align-items-center gap-1 label-badge label-badge-selected"
+                              data-label-id="{{ label.id }}"
+                              style="background-color:{{ label.color }};opacity:1;">
+                            {{ label.name }}
+                            <button type="button" class="btn-close btn-close-white btn-sm ms-1 remove-label-btn"
+                                    style="font-size:0.6rem;" aria-label="Remove"
+                                    data-label-id="{{ label.id }}"></button>
+                        </span>
+                        {% endif %}
                         {% endfor %}
                     </div>
+
+                    {# Add label dropdown #}
+                    <div class="dropdown d-inline-block">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                id="add-label-dropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-plus me-1"></i> Add label
+                        </button>
+                        <ul class="dropdown-menu p-2" style="min-width:220px;" aria-labelledby="add-label-dropdown">
+                            <li>
+                                <div id="board-label-list">
+                                    {% with board_labels=task.column.board.labels.all %}
+                                    {% for label in board_labels %}
+                                    {% if label.category == 'regular' and label not in task.labels.all %}
+                                    <button type="button" class="dropdown-item add-label-btn d-flex align-items-center gap-2"
+                                            data-label-id="{{ label.id }}" data-label-name="{{ label.name }}" data-label-color="{{ label.color }}">
+                                        <span class="badge" style="background-color:{{ label.color }};">{{ label.name }}</span>
+                                    </button>
+                                    {% endif %}
+                                    {% empty %}
+                                    <span class="dropdown-item-text text-muted small" id="no-board-labels-msg">No labels on this board yet.</span>
+                                    {% endwith %}
+                                    {% endfor %}
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider my-1"></li>
+                            <li>
+                                <button type="button" class="dropdown-item text-primary small" id="detail-load-presets-btn">
+                                    <i class="fas fa-magic me-1"></i> Load preset labels
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" class="dropdown-item text-primary small" id="detail-toggle-new-label-btn">
+                                    <i class="fas fa-plus me-1"></i> New label…
+                                </button>
+                            </li>
+                            <li id="detail-new-label-form" class="d-none px-2 pb-1">
+                                <div class="d-flex gap-1 align-items-center mt-1">
+                                    <input type="text" id="detail-new-label-name" class="form-control form-control-sm"
+                                           style="max-width:130px;" placeholder="Name" maxlength="50">
+                                    <input type="color" id="detail-new-label-color" class="form-control form-control-color form-control-sm"
+                                           value="#3B82F6" style="width:36px;">
+                                    <button type="button" class="btn btn-sm btn-primary" id="detail-save-new-label-btn">Add</button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
-                {% endif %}
+
+                <script>
+                (function () {
+                    const taskId = {{ task.id }};
+                    const boardId = {{ task.column.board.id }};
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                                      document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+
+                    function postJson(url, body) {
+                        return fetch(url, {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: new URLSearchParams(body),
+                        }).then(r => r.json());
+                    }
+
+                    function buildAssignedBadge(labelId, labelName, labelColor) {
+                        const span = document.createElement('span');
+                        span.className = 'badge d-inline-flex align-items-center gap-1 label-badge label-badge-selected';
+                        span.dataset.labelId = labelId;
+                        span.style.cssText = `background-color:${labelColor};opacity:1;`;
+                        span.textContent = labelName + ' ';
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'btn-close btn-close-white btn-sm ms-1 remove-label-btn';
+                        btn.style.fontSize = '0.6rem';
+                        btn.setAttribute('aria-label', 'Remove');
+                        btn.dataset.labelId = labelId;
+                        btn.addEventListener('click', handleRemove);
+                        span.appendChild(btn);
+                        return span;
+                    }
+
+                    // Remove label
+                    function handleRemove(e) {
+                        e.stopPropagation();
+                        const labelId = this.dataset.labelId;
+                        postJson(`/tasks/${taskId}/toggle-label/`, {label_id: labelId})
+                            .then(data => {
+                                if (data.action === 'removed') {
+                                    document.querySelector(`#task-label-badges [data-label-id="${labelId}"]`)?.remove();
+                                }
+                            });
+                    }
+                    document.querySelectorAll('.remove-label-btn').forEach(b => b.addEventListener('click', handleRemove));
+
+                    // Add label from dropdown
+                    document.querySelectorAll('.add-label-btn').forEach(btn => {
+                        btn.addEventListener('click', function () {
+                            const id = this.dataset.labelId;
+                            const name = this.dataset.labelName;
+                            const color = this.dataset.labelColor;
+                            postJson(`/tasks/${taskId}/toggle-label/`, {label_id: id})
+                                .then(data => {
+                                    if (data.action === 'added') {
+                                        document.getElementById('task-label-badges').appendChild(buildAssignedBadge(id, name, color));
+                                        this.closest('li, button')?.remove();
+                                    }
+                                });
+                        });
+                    });
+
+                    // Load preset labels
+                    document.getElementById('detail-load-presets-btn').addEventListener('click', function () {
+                        this.disabled = true;
+                        postJson(`/boards/${boardId}/load-preset-labels/`, {})
+                            .then(data => {
+                                const list = document.getElementById('board-label-list');
+                                const noMsg = document.getElementById('no-board-labels-msg');
+                                if (noMsg) noMsg.remove();
+                                const assignedIds = Array.from(
+                                    document.querySelectorAll('#task-label-badges [data-label-id]')
+                                ).map(el => parseInt(el.dataset.labelId));
+                                data.labels.forEach(label => {
+                                    if (assignedIds.includes(label.id)) return;
+                                    if (list.querySelector(`[data-label-id="${label.id}"]`)) return;
+                                    const btn = document.createElement('button');
+                                    btn.type = 'button';
+                                    btn.className = 'dropdown-item add-label-btn d-flex align-items-center gap-2';
+                                    btn.dataset.labelId = label.id;
+                                    btn.dataset.labelName = label.name;
+                                    btn.dataset.labelColor = label.color;
+                                    btn.innerHTML = `<span class="badge" style="background-color:${label.color};">${label.name}</span>`;
+                                    btn.addEventListener('click', function () {
+                                        postJson(`/tasks/${taskId}/toggle-label/`, {label_id: label.id})
+                                            .then(data => {
+                                                if (data.action === 'added') {
+                                                    document.getElementById('task-label-badges').appendChild(
+                                                        buildAssignedBadge(label.id, label.name, label.color)
+                                                    );
+                                                    btn.remove();
+                                                }
+                                            });
+                                    });
+                                    list.appendChild(btn);
+                                });
+                                this.textContent = 'Presets loaded';
+                                this.disabled = true;
+                            });
+                    });
+
+                    // New label mini-form in dropdown
+                    document.getElementById('detail-toggle-new-label-btn').addEventListener('click', function () {
+                        document.getElementById('detail-new-label-form').classList.toggle('d-none');
+                    });
+
+                    document.getElementById('detail-save-new-label-btn').addEventListener('click', function () {
+                        const name = document.getElementById('detail-new-label-name').value.trim();
+                        const color = document.getElementById('detail-new-label-color').value;
+                        if (!name) return;
+                        this.disabled = true;
+                        postJson(`/boards/${boardId}/quick-create-label/`, {name, color})
+                            .then(label => {
+                                if (label.error) { alert(label.error); return; }
+                                // Assign immediately
+                                return postJson(`/tasks/${taskId}/toggle-label/`, {label_id: label.id})
+                                    .then(data => {
+                                        if (data.action === 'added') {
+                                            document.getElementById('task-label-badges').appendChild(
+                                                buildAssignedBadge(label.id, label.name, label.color)
+                                            );
+                                        }
+                                        document.getElementById('detail-new-label-name').value = '';
+                                        document.getElementById('detail-new-label-form').classList.add('d-none');
+                                    });
+                            })
+                            .finally(() => { this.disabled = false; });
+                    });
+                })();
+                </script>
             </div>
         </div>
 

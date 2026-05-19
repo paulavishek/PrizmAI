@@ -1369,26 +1369,14 @@ class Command(BaseCommand):
         self.stdout.write('   ✅ Software Development dependencies created (mainline + branch per phase)')
 
     def create_lean_labels(self, software_board, marketing_board, bug_board):
-        """Create Lean Six Sigma labels for all boards"""
-        # Main Lean Six Sigma category labels (for analytics chart)
+        """Create Lean Six Sigma category labels for all boards (used by analytics chart)"""
         main_lean_labels = [
             {'name': 'Value-Added', 'color': '#28a745'},
             {'name': 'Necessary NVA', 'color': '#ffc107'},
             {'name': 'Waste/Eliminate', 'color': '#dc3545'},
         ]
-        
-        # Additional Lean Six Sigma methodology labels
-        lean_labels = [
-            {'name': 'Muda (Waste)', 'color': '#dc3545'},
-            {'name': 'Mura (Unevenness)', 'color': '#fd7e14'},
-            {'name': 'Muri (Overburden)', 'color': '#ffc107'},
-            {'name': 'Kaizen (Improvement)', 'color': '#28a745'},
-            {'name': '5S (Organization)', 'color': '#17a2b8'},
-            {'name': 'Poka-yoke (Error-Proofing)', 'color': '#6f42c1'},
-        ]
 
         for board in [b for b in [software_board, marketing_board, bug_board] if b]:
-            # Create main category labels first (essential for analytics)
             for label_data in main_lean_labels:
                 TaskLabel.objects.get_or_create(
                     board=board,
@@ -1398,19 +1386,8 @@ class Command(BaseCommand):
                         'category': 'lean',
                     }
                 )
-            
-            # Create additional methodology labels
-            for label_data in lean_labels:
-                TaskLabel.objects.get_or_create(
-                    board=board,
-                    name=label_data['name'],
-                    defaults={
-                        'color': label_data['color'],
-                        'category': 'lean',
-                    }
-                )
 
-        self.stdout.write('   ✅ Lean Six Sigma labels created for all boards (including analytics categories)')
+        self.stdout.write('   ✅ Lean Six Sigma category labels created for all boards')
 
     def assign_lean_labels(self, software_tasks, marketing_tasks, bug_tasks):
         """Assign Lean Six Sigma labels to appropriate tasks"""
@@ -1441,39 +1418,7 @@ class Command(BaseCommand):
                 if waste:
                     task.labels.add(waste)
 
-            # Assign additional methodology labels based on task characteristics
-            # Kaizen = continuous improvement tasks (optimization, reviews, compliance)
-            improvement_keywords = ['optimization', 'review', 'compliance', 'polish', 'testing', 'audit']
-            if any(kw in task.title.lower() for kw in improvement_keywords):
-                kaizen_label = next((l for l in labels if 'Kaizen' in l.name), None)
-                if kaizen_label:
-                    task.labels.add(kaizen_label)
-
-            # Muri = overburden — flag tasks whose assignee has too many tasks
-            if task.assigned_to:
-                assignee_task_count = task.assigned_to.assigned_tasks.filter(
-                    column__board=board
-                ).count()
-                if assignee_task_count > 8:
-                    muri_label = next((l for l in labels if 'Muri' in l.name), None)
-                    if muri_label:
-                        task.labels.add(muri_label)
-
-            # Poka-yoke for error-proofing tasks (testing, security, error handling)
-            error_keywords = ['testing', 'security', 'error', 'audit', 'monitoring']
-            if any(kw in task.title.lower() for kw in error_keywords):
-                pokayoke_label = next((l for l in labels if 'Poka-yoke' in l.name), None)
-                if pokayoke_label:
-                    task.labels.add(pokayoke_label)
-
-            # Random chance for other methodology labels
-            if random.random() < 0.15:
-                methodology_labels = [l for l in labels if l.name in ['Muda (Waste)', 'Mura (Unevenness)', '5S (Organization)']]
-                if methodology_labels:
-                    random_label = random.choice(methodology_labels)
-                    task.labels.add(random_label)
-
-        self.stdout.write('   ✅ Lean Six Sigma labels assigned to all tasks (with analytics categories)')
+        self.stdout.write('   ✅ Lean Six Sigma category labels assigned to all tasks')
 
     def enhance_tasks_with_demo_data(self, tasks, skill_pool, board_type):
         """Add comprehensive demo data to tasks including risk, skills, collaboration, and AI analysis"""
