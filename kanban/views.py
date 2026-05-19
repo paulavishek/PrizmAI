@@ -2668,6 +2668,7 @@ def task_detail(request, task_id):
                         'confidence_percentage': int(prediction['confidence'] * 100),
                         'confidence_interval_days': prediction['confidence_interval_days'],
                         'based_on_tasks': prediction['based_on_tasks'],
+                        'displayed_tasks': prediction.get('displayed_tasks', len(prediction.get('similar_tasks', []))),
                         'similar_tasks': prediction.get('similar_tasks', []),
                         'factors': prediction['factors'],
                         'early_date': prediction['early_date'],
@@ -2677,10 +2678,10 @@ def task_detail(request, task_id):
                     }
             except Exception as e:
                 logger.warning(f"Failed to generate initial prediction for task {task.id}: {e}")
-        
+
         # Check if prediction is stale (older than 24 hours) and update if needed
         elif task.predicted_completion_date and (
-            not task.last_prediction_update or 
+            not task.last_prediction_update or
             (timezone.now() - task.last_prediction_update > timedelta(hours=24))
         ):
             try:
@@ -2690,13 +2691,14 @@ def task_detail(request, task_id):
                     is_likely_late = False
                     if task.due_date:
                         is_likely_late = prediction['predicted_date'] > task.due_date
-                    
+
                     prediction_data = {
                         'predicted_date': prediction['predicted_date'],
                         'confidence': prediction['confidence'],
                         'confidence_percentage': int(prediction['confidence'] * 100),
                         'confidence_interval_days': prediction['confidence_interval_days'],
                         'based_on_tasks': prediction['based_on_tasks'],
+                        'displayed_tasks': prediction.get('displayed_tasks', len(prediction.get('similar_tasks', []))),
                         'similar_tasks': prediction.get('similar_tasks', []),
                         'factors': prediction['factors'],
                         'early_date': prediction['early_date'],
@@ -2741,13 +2743,15 @@ def task_detail(request, task_id):
                 early_date = predicted - timedelta(days=2)
                 late_date = predicted + timedelta(days=3)
 
+            _stored_similar = task.prediction_metadata.get('similar_tasks', [])
             prediction_data = {
                 'predicted_date': predicted,
                 'confidence': task.prediction_confidence,
                 'confidence_percentage': int(task.prediction_confidence * 100),
                 'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
                 'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
-                'similar_tasks': task.prediction_metadata.get('similar_tasks', []),
+                'displayed_tasks': task.prediction_metadata.get('displayed_tasks', len(_stored_similar)),
+                'similar_tasks': _stored_similar,
                 'factors': task.prediction_metadata.get('factors', {}),
                 'early_date': early_date,
                 'late_date': late_date,
@@ -6197,14 +6201,24 @@ def task_quick_view(request, task_id):
 
     # Prediction data (reuse pattern from task_detail)
     prediction_data = None
-    if task.predicted_completion_date:
-        confidence_pct = int((task.prediction_confidence or 0) * 100)
-        based_on = (task.prediction_metadata or {}).get('based_on_tasks', 0)
-        prediction_data = {
-            'predicted_date': task.predicted_completion_date,
-            'confidence_percentage': confidence_pct,
-            'based_on_tasks': based_on,
-        }
+    if task.progress < 100:
+        # Auto-generate prediction if task has a start date but no stored prediction yet
+        if task.start_date and not task.predicted_completion_date:
+            try:
+                from kanban.utils.task_prediction import update_task_prediction
+                update_task_prediction(task)
+                task.refresh_from_db()
+            except Exception as e:
+                logger.warning(f"Failed to auto-generate prediction for task {task.id} in quick view: {e}")
+
+        if task.predicted_completion_date:
+            confidence_pct = int((task.prediction_confidence or 0) * 100)
+            based_on = (task.prediction_metadata or {}).get('based_on_tasks', 0)
+            prediction_data = {
+                'predicted_date': task.predicted_completion_date,
+                'confidence_percentage': confidence_pct,
+                'based_on_tasks': based_on,
+            }
 
     # Dependencies
     blocked_by = task.dependencies.all()

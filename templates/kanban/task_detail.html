@@ -1140,12 +1140,23 @@
                                     <!-- Similar Tasks List -->
                                     {% if prediction.similar_tasks %}
                                         <button type="button" class="btn btn-outline-info btn-sm mt-1 w-100" data-bs-toggle="collapse" data-bs-target="#similar-tasks-list">
-                                            <i class="fas fa-tasks me-1"></i>View {{ prediction.similar_tasks|length }} Similar Task{{ prediction.similar_tasks|length|pluralize }} 
+                                            <i class="fas fa-tasks me-1"></i>View {{ prediction.similar_tasks|length }} Similar Task{{ prediction.similar_tasks|length|pluralize }}
+                                            {% if prediction.based_on_tasks and prediction.based_on_tasks > prediction.similar_tasks|length %}
+                                                <span class="text-muted">(of {{ prediction.based_on_tasks }} total)</span>
+                                            {% endif %}
                                             <i class="fas fa-chevron-down ms-1"></i>
                                         </button>
                                         <div class="collapse mt-2" id="similar-tasks-list">
                                             <div class="card card-body py-2 px-2 bg-white border-info">
                                                 <small class="text-primary mb-2"><strong><i class="fas fa-info-circle me-1"></i>Tasks used for prediction:</strong></small>
+                                                {% if prediction.based_on_tasks and prediction.based_on_tasks > prediction.similar_tasks|length %}
+                                                <small class="text-muted d-block mb-2" style="font-size:0.8em;">
+                                                    <i class="fas fa-filter me-1"></i>Showing {{ prediction.similar_tasks|length }} unique records out of {{ prediction.based_on_tasks }} matched. Duplicate title/duration entries are hidden. The average and prediction are computed from all {{ prediction.based_on_tasks }} records.
+                                                </small>
+                                                {% endif %}
+                                                <small class="text-muted d-block mb-2" style="font-size:0.8em;">
+                                                    <i class="fas fa-sliders-h me-1"></i>The predicted date may differ from the historical average because the engine applies adjustments for priority, team velocity, risk, dependencies, and collaboration overhead. See <em>View details</em> below for the full breakdown.
+                                                </small>
                                                 <div class="list-group list-group-flush">
                                                     {% for similar_task in prediction.similar_tasks %}
                                                     <a href="{% url 'task_detail' similar_task.id %}" class="list-group-item list-group-item-action py-2 px-2 small border-start border-info border-3" target="_blank">
