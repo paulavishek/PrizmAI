@@ -652,9 +652,11 @@ const UnifiedRuleBuilder = (() => {
         min="1" max="30" style="width:80px" value="${cond.value||2}" aria-label="Days"> <span class="small">days</span>`;
     }
     if (attr === 'progress') {
-      return `<input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
-        min="0" max="100" style="width:80px" value="${cond.value||0}" aria-label="Progress %">
-        <span class="small">%</span>`;
+      return `<div class="input-group input-group-sm" style="width:110px">
+        <input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
+          min="0" max="100" value="${cond.value||0}" aria-label="Progress %">
+        <span class="input-group-text">%</span>
+      </div>`;
     }
     return '';
   }
