@@ -178,7 +178,7 @@
                                           data-label-id="{{ label.id }}"
                                           style="background-color:{{ label.color }};cursor:pointer;opacity:{% if label in form.labels.value %}1{% else %}0.45{% endif %};"
                                           title="{{ label.name }}">
-                                        {{ label.name }}
+                                        {{ label.name }}{% if label in form.labels.value %}<span class="label-remove ms-1" style="font-size:0.75em;opacity:0.8;" title="Remove">×</span>{% endif %}
                                     </span>
                                     {% empty %}
                                     <span class="text-muted small" id="no-labels-hint">No labels yet — create one below.</span>
@@ -223,6 +223,14 @@
                                     span.style.cssText = `background-color:${label.color};cursor:pointer;opacity:${selected ? 1 : 0.45};`;
                                     span.title = label.name;
                                     span.textContent = label.name;
+                                    if (selected) {
+                                        const rm = document.createElement('span');
+                                        rm.className = 'label-remove ms-1';
+                                        rm.style.cssText = 'font-size:0.75em;opacity:0.8;';
+                                        rm.title = 'Remove';
+                                        rm.textContent = '×';
+                                        span.appendChild(rm);
+                                    }
                                     span.addEventListener('click', toggleBadge);
                                     return span;
                                 }
@@ -241,6 +249,20 @@
                                     const nowSelected = !span.classList.contains('label-badge-selected');
                                     span.classList.toggle('label-badge-selected', nowSelected);
                                     span.style.opacity = nowSelected ? '1' : '0.45';
+                                    // Show/hide the × remove indicator
+                                    let rm = span.querySelector('.label-remove');
+                                    if (nowSelected) {
+                                        if (!rm) {
+                                            rm = document.createElement('span');
+                                            rm.className = 'label-remove ms-1';
+                                            rm.style.cssText = 'font-size:0.75em;opacity:0.8;';
+                                            rm.title = 'Remove';
+                                            rm.textContent = '×';
+                                            span.appendChild(rm);
+                                        }
+                                    } else if (rm) {
+                                        rm.remove();
+                                    }
                                     syncHidden(id, nowSelected);
                                 }
 
