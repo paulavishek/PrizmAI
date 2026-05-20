@@ -32,6 +32,8 @@ class CustomFieldDefinitionForm(forms.ModelForm):
             'default_text': forms.TextInput(attrs={'class': 'form-control'}),
             'default_number': forms.NumberInput(attrs={'class': 'form-control', 'step': 'any'}),
             'default_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'is_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'exclude_from_ai': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, workspace=None, **kwargs):

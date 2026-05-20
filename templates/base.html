@@ -192,6 +192,16 @@
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:200px;font-size:0.82rem;">
                         <li><h6 class="dropdown-header" style="font-size:0.7rem;"><i class="fas fa-briefcase me-1"></i>Workspace Settings</h6></li>
                         <li>
+                            <a class="dropdown-item" href="{% url 'workspace_preset_settings' %}">
+                                <i class="fas fa-sliders-h me-2 text-muted"></i>Workspace Settings
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'custom_field_list' active_workspace.pk %}">
+                                <i class="fas fa-tags me-2 text-muted"></i>Custom Fields
+                            </a>
+                        </li>
+                        <li>
                             <button class="dropdown-item" onclick="wsStartEdit(); document.getElementById('ws-settings-dropdown').querySelector('.dropdown-menu').classList.remove('show');">
                                 <i class="fas fa-pencil-alt me-2 text-muted"></i>Rename Workspace
                             </button>
