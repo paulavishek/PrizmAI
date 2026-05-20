@@ -62,18 +62,16 @@ class ContextProviderRegistry:
         Collect compact summaries from ALL registered providers.
 
         Returns a single string of ~50-100 lines giving Spectra baseline
-        awareness of every feature.  Errors in individual providers are
-        caught and reported inline (never crash the whole response).
+        awareness of every feature.  Individual provider errors are already
+        caught in ``BaseContextProvider.get_summary`` and converted into an
+        explicit "data temporarily unavailable" line; the registry trusts
+        that contract and just concatenates the returned strings.
         """
         parts = []
-        for name, provider in self._providers.items():
-            try:
-                summary = provider.get_summary(board, user, is_demo_mode)
-                if summary and summary.strip():
-                    parts.append(summary.strip())
-            except Exception as e:
-                logger.warning('Provider %s summary error: %s', name, e)
-                parts.append(f'⚠️ {name} data temporarily unavailable.')
+        for provider in self._providers.values():
+            summary = provider.get_summary(board, user, is_demo_mode)
+            if summary and summary.strip():
+                parts.append(summary.strip())
         if not parts:
             return ''
         return (
@@ -90,6 +88,7 @@ class ContextProviderRegistry:
 
         ``provider_names`` is a list of provider names chosen by the
         context router.  Only those providers are queried for full detail.
+        Provider errors are handled at the base-class level.
         """
         parts = []
         for name in provider_names:
@@ -97,15 +96,9 @@ class ContextProviderRegistry:
             if not provider:
                 logger.warning('Router requested unknown provider: %s', name)
                 continue
-            try:
-                detail = provider.get_detail(
-                    board, user, query, is_demo_mode
-                )
-                if detail and detail.strip():
-                    parts.append(detail.strip())
-            except Exception as e:
-                logger.warning('Provider %s detail error: %s', name, e)
-                parts.append(f'⚠️ {name} detailed data temporarily unavailable.')
+            detail = provider.get_detail(board, user, query, is_demo_mode)
+            if detail and detail.strip():
+                parts.append(detail.strip())
         if not parts:
             return ''
         return '\n\n'.join(parts) + '\n'
@@ -133,6 +126,16 @@ def _auto_register():
         commitment_provider,
         cemetery_provider,
         aggregate_provider,
+        # ── Coverage-gap providers added April 2026 ──
+        requirements_provider,
+        stakeholder_provider,
+        custom_fields_provider,
+        resource_leveling_provider,
+        scope_provider,
+        risk_scenarios_provider,
+        discovery_provider,
+        access_provider,
+        knowledge_base_provider,
     )
 
 

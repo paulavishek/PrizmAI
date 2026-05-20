@@ -24,6 +24,16 @@ logger = logging.getLogger(__name__)
 # Maximum providers to include full detail for (prevents token explosion)
 MAX_DETAIL_PROVIDERS = 5
 
+# Minimum total keyword-match score before we skip the AI classifier.
+# Below this, run the AI classifier as a second opinion even if 2+ providers
+# matched on keywords — short queries with weak signal often need the AI to
+# resolve ambiguity (e.g. "what's the status?" can mean tasks OR commitments).
+AI_FALLBACK_SCORE_THRESHOLD = 8
+
+# Long queries usually span multiple features; always consult the AI classifier
+# so we don't miss a provider just because one keyword dominated the score.
+LONG_QUERY_WORD_THRESHOLD = 12
+
 
 def route_query(query, provider_tags, use_ai=True):
     """
@@ -38,17 +48,27 @@ def route_query(query, provider_tags, use_ai=True):
     Returns:
         list of provider names (strings) that should be queried for detail.
     """
-    # ── Tier 1: keyword matching ────────────────────────────────────────
-    keyword_matches = _keyword_match(query, provider_tags)
+    # ── Tier 1: keyword matching (scored) ───────────────────────────────
+    keyword_matches, total_score = _keyword_match(query, provider_tags)
 
-    if len(keyword_matches) >= 2 or not use_ai:
-        # Strong keyword signal or AI disabled — use keyword results
+    word_count = len(query.split())
+    needs_ai_second_opinion = (
+        total_score < AI_FALLBACK_SCORE_THRESHOLD
+        or word_count >= LONG_QUERY_WORD_THRESHOLD
+        or len(keyword_matches) <= 1
+    )
+
+    if not needs_ai_second_opinion or not use_ai:
+        # Strong, focused keyword signal — trust it.
         return keyword_matches[:MAX_DETAIL_PROVIDERS]
 
-    # ── Tier 2: AI classification (only if keywords are weak) ───────────
+    # ── Tier 2: AI classification (weak signal OR long query) ───────────
     ai_matches = _ai_classify(query, provider_tags)
     if ai_matches:
-        return ai_matches[:MAX_DETAIL_PROVIDERS]
+        # Merge AI picks with any strong keyword matches so we don't lose
+        # ground truth when the AI is over-eager. Keyword picks come first.
+        merged = list(dict.fromkeys(keyword_matches + ai_matches))
+        return merged[:MAX_DETAIL_PROVIDERS]
 
     # If AI returns nothing, fall back to keyword matches (even if just 1)
     if keyword_matches:
@@ -63,7 +83,9 @@ def route_query(query, provider_tags, use_ai=True):
 def _keyword_match(query, provider_tags):
     """
     Score each provider by how many of its tags appear in the query.
-    Returns providers sorted by match score (highest first).
+    Returns (ranked_provider_names, total_score_across_all_providers).
+    Callers use the total score to decide whether the signal is strong
+    enough to skip the AI classifier.
     """
     query_lower = query.lower()
     scores = {}
@@ -85,7 +107,8 @@ def _keyword_match(query, provider_tags):
 
     # Sort by score descending
     ranked = sorted(scores.keys(), key=lambda n: scores[n], reverse=True)
-    return ranked
+    total_score = sum(scores.values())
+    return ranked, total_score
 
 
 # ── Tier 2: AI-based classification ─────────────────────────────────────────
@@ -181,5 +204,8 @@ def classify_query_type(query):
     ]):
         return {'type': 'help', 'temperature': 0.5}
 
-    # Default — conversational
-    return {'type': 'conversational', 'temperature': 0.7}
+    # Default — conversational. Kept low (0.4) on purpose: Spectra is a
+    # data-grounded assistant, not a brainstorm partner. High temperature
+    # encourages Gemini to fill gaps with plausible-sounding training data,
+    # which is the exact failure mode this overhaul targets.
+    return {'type': 'conversational', 'temperature': 0.4}
