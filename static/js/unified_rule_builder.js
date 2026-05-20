@@ -1089,9 +1089,16 @@ const UnifiedRuleBuilder = (() => {
       task_assignee:'task assignee', all_board_members:'all board members',
       rule_creator:'rule creator',
     };
-    const target = a.target
-      ? (NOTIFY_LABELS[a.target] || a.target)
-      : '';
+    let target = '';
+    if (a.target) {
+      if (NOTIFY_LABELS[a.target]) {
+        target = NOTIFY_LABELS[a.target];
+      } else {
+        const numId = parseInt(a.target, 10);
+        const member = !isNaN(numId) && boardData.members.find(m => m.id === numId);
+        target = member ? member.username : a.target;
+      }
+    }
     return target ? `${label.toLowerCase()} to ${target}` : label.toLowerCase();
   }
 
