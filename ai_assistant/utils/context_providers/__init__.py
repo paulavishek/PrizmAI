@@ -108,6 +108,52 @@ class ContextProviderRegistry:
 registry = ContextProviderRegistry()
 
 
+def get_cached_summaries(user, board, is_demo_mode=False, ttl=60):
+    """
+    Return ``(summaries_str, cache_hit_bool)``.
+
+    Summaries are cached per (user_id, board_id, is_demo_mode) for `ttl`
+    seconds. Cache invalidation: see ai_assistant/signals.py — Task /
+    Column / Board / AccessRequest / BoardStatusReport / TaskActivity
+    changes bust the relevant board's entries (cross-board entries are
+    busted on any board change).
+    """
+    try:
+        from kanban_board.ai_cache import ai_cache_manager
+    except Exception:
+        return registry.get_all_summaries(board, user, is_demo_mode), False
+
+    if board:
+        op = f'spectra_summaries_board_{board.id}'
+    else:
+        op = 'spectra_summaries_cross_board'
+
+    user_id = getattr(user, 'id', None) or 'anon'
+    cache_payload = f'user={user_id}:demo={int(bool(is_demo_mode))}'
+
+    try:
+        cached = ai_cache_manager.get(
+            prompt=cache_payload, operation=op, context_hash=None,
+        )
+    except Exception:
+        cached = None
+
+    if cached is not None:
+        return cached, True
+
+    summaries = registry.get_all_summaries(board, user, is_demo_mode)
+
+    try:
+        ai_cache_manager.set(
+            prompt=cache_payload, result=summaries, operation=op,
+            context_hash=None, ttl=ttl,
+        )
+    except Exception:
+        pass
+
+    return summaries, False
+
+
 def _auto_register():
     """Import all provider modules so they self-register."""
     from . import (  # noqa: F401
@@ -136,6 +182,16 @@ def _auto_register():
         discovery_provider,
         access_provider,
         knowledge_base_provider,
+        # ── Spectra v2 providers (May 2026) ──
+        activity_provider,
+        coach_provider,
+        memory_provider,
+        status_report_provider,
+        integrations_provider,
+        comments_provider,
+        files_provider,
+        skill_dev_provider,
+        briefs_provider,
     )
 
 

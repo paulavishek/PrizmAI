@@ -22,14 +22,30 @@ class AIAssistantSessionAdmin(admin.ModelAdmin):
 
 @admin.register(AIAssistantMessage)
 class AIAssistantMessageAdmin(admin.ModelAdmin):
-    list_display = ['get_session_title', 'role', 'model', 'is_starred', 'used_web_search', 'created_at']
+    list_display = [
+        'get_session_title', 'role', 'model', 'is_starred',
+        'used_web_search', 'created_at', 'spectra_debug_link',
+    ]
     list_filter = ['role', 'model', 'is_starred', 'used_web_search', 'created_at']
     search_fields = ['content', 'session__title']
     readonly_fields = ['created_at', 'tokens_used']
-    
+
     def get_session_title(self, obj):
         return obj.session.title
     get_session_title.short_description = 'Session'
+
+    def spectra_debug_link(self, obj):
+        # Only assistant messages carry the providers_fired telemetry.
+        if obj.role != 'assistant':
+            return ''
+        from django.utils.html import format_html
+        from django.urls import reverse
+        try:
+            url = reverse('ai_assistant:spectra_debug', args=[obj.id])
+        except Exception:
+            return ''
+        return format_html('<a href="{}" target="_blank">debug</a>', url)
+    spectra_debug_link.short_description = 'Debug'
 
 
 @admin.register(ProjectKnowledgeBase)

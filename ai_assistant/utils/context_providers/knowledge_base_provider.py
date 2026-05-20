@@ -27,12 +27,17 @@ class KnowledgeBaseContextProvider(BaseContextProvider):
     ]
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
-        if not board:
-            return ''
         from ai_assistant.models import ProjectKnowledgeBase
         from django.db.models import Count
 
-        qs = ProjectKnowledgeBase.objects.filter(board=board, is_active=True)
+        qs = ProjectKnowledgeBase.objects.filter(is_active=True)
+        if board:
+            qs = qs.filter(board=board)
+        else:
+            # Cross-board mode — restrict to KB entries on accessible boards.
+            accessible = self._get_accessible_boards(user, is_demo_mode)
+            qs = qs.filter(board__in=accessible)
+
         total = qs.count()
         if total == 0:
             return ''
@@ -45,24 +50,27 @@ class KnowledgeBaseContextProvider(BaseContextProvider):
             f'{row["c"]} {type_label_map.get(row["content_type"], row["content_type"])}'
             for row in breakdown
         )
-        return f'📚 **Knowledge Base:** {total} entries — {parts}.\n'
+        scope = 'across your boards' if not board else ''
+        prefix = f'📚 **Knowledge Base{(" " + scope) if scope else ""}:**'
+        return f'{prefix} {total} entries — {parts}.\n'
 
     def _get_detail_impl(self, board, user, query='', is_demo_mode=False):
-        if not board:
-            return None
         from ai_assistant.models import ProjectKnowledgeBase
 
-        qs = (
-            ProjectKnowledgeBase.objects
-            .filter(board=board, is_active=True)
-            .only('title', 'content_type', 'updated_at')
-            .order_by('-updated_at')
-        )
+        qs = ProjectKnowledgeBase.objects.filter(is_active=True)
+        if board:
+            qs = qs.filter(board=board)
+        else:
+            accessible = self._get_accessible_boards(user, is_demo_mode)
+            qs = qs.filter(board__in=accessible)
+
+        qs = qs.only('title', 'content_type', 'updated_at', 'board_id').order_by('-updated_at')
         total = qs.count()
         if total == 0:
             return None
 
-        ctx = f'**📚 Knowledge Base — {board.name}** ({total} entries)\n'
+        title_scope = board.name if board else 'all your boards'
+        ctx = f'**📚 Knowledge Base — {title_scope}** ({total} entries)\n'
         ctx += '_Spectra retrieves specific excerpts from these entries via keyword search; this list is just the inventory._\n\n'
 
         type_label_map = dict(ProjectKnowledgeBase.CONTENT_TYPE_CHOICES)

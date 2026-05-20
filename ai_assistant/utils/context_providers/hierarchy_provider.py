@@ -70,9 +70,14 @@ class HierarchyContextProvider(BaseContextProvider):
         ).values_list('strategy_id', flat=True).distinct())
 
         # Include the active board's strategy even if _get_accessible_boards
-        # doesn't return it (e.g. official demo board for sandbox users)
+        # doesn't return it (e.g. official demo board for sandbox users) — but
+        # only when the user is in demo mode OR has explicit read access to the
+        # board. Otherwise we'd leak strategic context for boards the user
+        # isn't a member of.
         if board and board.strategy_id:
-            strategy_ids.add(board.strategy_id)
+            from ai_assistant.utils.rbac_utils import can_spectra_read_board
+            if is_demo_mode or can_spectra_read_board(user, board):
+                strategy_ids.add(board.strategy_id)
 
         if not strategy_ids:
             return '**🏗️ Hierarchy Navigator:** No goals/missions linked.\n'

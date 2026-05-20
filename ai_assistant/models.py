@@ -120,7 +120,20 @@ class ProjectKnowledgeBase(models.Model):
     last_indexed = models.DateTimeField(auto_now=True)
     
     is_active = models.BooleanField(default=True, help_text="Is this KB entry active?")
-    
+
+    # Semantic embeddings (Gemini text-embedding-004 — 768 dims).
+    # Stored as a JSON list of floats so we stay on SQLite. Cosine similarity
+    # is computed in Python; nullable rows fall back to keyword search.
+    embedding = models.JSONField(
+        null=True, blank=True,
+        help_text="Embedding vector for semantic retrieval (list of floats).",
+    )
+    embedding_model = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text="Model used to generate the embedding (for safe re-indexing).",
+    )
+    embedding_updated_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ['-updated_at']
         verbose_name = 'Project Knowledge Base'

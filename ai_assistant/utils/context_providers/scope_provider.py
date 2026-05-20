@@ -35,6 +35,14 @@ class ScopeContextProvider(BaseContextProvider):
         if data['scope_change_pct'] is not None:
             parts.append(f'{data["scope_change_pct"]:+.1f}% vs baseline')
 
+        autopsy = data.get('latest_autopsy')
+        if autopsy:
+            parts.append(
+                f'last autopsy {autopsy["created_at"]} '
+                f'(+{autopsy["growth_pct"]:.1f}% growth, '
+                f'{autopsy["delay_days"]}d delay)'
+            )
+
         if not parts:
             return '📐 **Scope:** stable, no open alerts.\n'
         return '📐 **Scope:** ' + ', '.join(parts) + '.\n'
@@ -83,6 +91,26 @@ class ScopeContextProvider(BaseContextProvider):
                 )
                 if a['ai_summary']:
                     ctx += f'    {a["ai_summary"][:200]}\n'
+
+        if data.get('autopsies'):
+            ctx += f'\n**Scope Autopsies ({len(data["autopsies"])}):**\n'
+            for ap in data['autopsies'][:5]:
+                ctx += (
+                    f'  - {ap["created_at"]} [{ap["status"]}]: '
+                    f'{ap["baseline_task_count"]} → {ap["final_task_count"]} tasks '
+                    f'(+{ap["total_scope_growth_percentage"]:.1f}%), '
+                    f'{ap["total_delay_days"]}d delay, '
+                    f'${ap["total_budget_impact"]} impact\n'
+                )
+                if ap.get('ai_summary'):
+                    ctx += f'    {ap["ai_summary"][:240]}\n'
+                if ap.get('top_events'):
+                    ctx += '    Top events:\n'
+                    for ev in ap['top_events'][:3]:
+                        ctx += (
+                            f'      • {ev["event_date"]} — {ev["title"]} '
+                            f'(net +{ev["net_task_change"]})\n'
+                        )
 
         return ctx
 

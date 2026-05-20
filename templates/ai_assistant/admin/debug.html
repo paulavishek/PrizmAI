@@ -1,0 +1,116 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Spectra Debug — Message #{{ message.id }}{% endblock %}
+
+{% block extrastyle %}
+<style>
+  .spectra-debug { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; }
+  .spectra-debug h2 { border-bottom: 2px solid #79aec8; padding-bottom: 0.5em; margin-top: 1.5em; }
+  .spectra-debug .panel { background: #fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 1em 1.25em; margin: 1em 0; }
+  .spectra-debug .panel.bad { background: #fff5f5; border-color: #fbb; }
+  .spectra-debug .panel.ok  { background: #f0faf0; border-color: #b8d8b8; }
+  .spectra-debug .kv { display: grid; grid-template-columns: 220px 1fr; gap: 0.25em 1em; margin: 0.5em 0; }
+  .spectra-debug .kv dt { color: #555; font-weight: 600; }
+  .spectra-debug .kv dd { margin: 0; }
+  .spectra-debug .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 6px; }
+  .spectra-debug .dot.green { background: #4caf50; }
+  .spectra-debug .dot.red { background: #e53935; }
+  .spectra-debug .dot.blue { background: #2196f3; }
+  .spectra-debug pre { background: #272822; color: #f8f8f2; padding: 1em; border-radius: 4px; overflow-x: auto; max-height: 600px; white-space: pre-wrap; word-wrap: break-word; font-size: 12px; }
+  .spectra-debug .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #eee; color: #333; margin-right: 4px; }
+  .spectra-debug .pill.warn { background: #fff3cd; color: #856404; }
+  .spectra-debug .msg-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+  .spectra-debug .msg-pair .msg { padding: 1em; border-radius: 4px; }
+  .spectra-debug .msg.user { background: #e3f2fd; }
+  .spectra-debug .msg.assistant { background: #f3e5f5; }
+  .spectra-debug ul { padding-left: 1.25em; }
+  .spectra-debug code { font-family: SFMono-Regular, Menlo, monospace; font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="spectra-debug">
+  <h1>Spectra Debug View</h1>
+  <p>Message <code>#{{ message.id }}</code> from session
+    <a href="{% url 'admin:ai_assistant_aiassistantsession_change' session.id %}">{{ session.title }}</a>
+    (user <strong>{{ session.user.username }}</strong>{% if session.board %},
+    board <strong>{{ session.board.name }}</strong>{% else %}, cross-board{% endif %})
+  </p>
+
+  <h2>Conversation</h2>
+  <div class="msg-pair">
+    <div class="msg user">
+      <strong>User</strong>
+      {% if user_message %}
+        <p><small>{{ user_message.created_at|date:"Y-m-d H:i:s" }}</small></p>
+        <pre style="background:#fff;color:#000;white-space:pre-wrap;">{{ user_message.content }}</pre>
+      {% else %}<em>(no prior user message found)</em>{% endif %}
+    </div>
+    <div class="msg assistant">
+      <strong>Spectra</strong>
+      <p><small>{{ message.created_at|date:"Y-m-d H:i:s" }} · {{ message.tokens_used }} tokens</small></p>
+      <pre style="background:#fff;color:#000;white-space:pre-wrap;">{{ message.content }}</pre>
+    </div>
+  </div>
+
+  <h2>Routing</h2>
+  <div class="panel">
+    <dl class="kv">
+      <dt>Query type</dt><dd><code>{{ query_type|default:"—" }}</code></dd>
+      <dt>Temperature</dt><dd><code>{{ temperature|default:"—" }}</code></dd>
+      <dt>Cache hit (summaries)</dt>
+      <dd>
+        {% if cache_hit %}
+          <span class="dot green"></span><strong>yes</strong> — feature summaries served from 60s cache
+        {% else %}
+          <span class="dot red"></span><strong>no</strong> — summaries freshly built (~30 ORM queries)
+        {% endif %}
+      </dd>
+      <dt>System prompt</dt>
+      <dd><code>{{ system_prompt_len }} chars</code> · hash <code>{{ system_prompt_hash|default:"—" }}</code></dd>
+    </dl>
+  </div>
+
+  <h2>Providers</h2>
+  <div class="panel {% if providers_unavailable %}bad{% else %}ok{% endif %}">
+    <p><strong>Always-on summary providers that contributed ({{ providers_fired|length }}):</strong></p>
+    <ul>
+      {% for p in providers_fired %}
+        <li><span class="dot green"></span>{{ p }}</li>
+      {% empty %}
+        <li><em>none</em></li>
+      {% endfor %}
+    </ul>
+    {% if providers_unavailable %}
+      <p><strong>⚠️ Providers that returned "data temporarily unavailable":</strong></p>
+      <ul>
+        {% for p in providers_unavailable %}
+          <li><span class="dot red"></span>{{ p }}</li>
+        {% endfor %}
+      </ul>
+      <p><small>Check <code>logs/ai_assistant.log</code> for the underlying traceback (logged at ERROR with <code>exc_info=True</code>).</small></p>
+    {% endif %}
+    <p style="margin-top:1em;"><strong>Detail providers picked by router ({{ providers_detailed|length }}):</strong></p>
+    <ul>
+      {% for p in providers_detailed %}
+        <li><span class="dot blue"></span>{{ p }}</li>
+      {% empty %}
+        <li><em>none</em></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <h2>Full System Prompt</h2>
+  {% if system_prompt %}
+    <p><small>Loaded from <code>logs/spectra_prompts.log</code> by hash <code>{{ system_prompt_hash }}</code>.</small></p>
+    <pre>{{ system_prompt }}</pre>
+  {% else %}
+    <div class="panel bad">
+      <p>System prompt not found in <code>logs/spectra_prompts.log</code>.</p>
+      <p><small>This may happen if the log file was rotated, the message predates the debug-telemetry rollout, or logging is disabled.</small></p>
+    </div>
+  {% endif %}
+
+  <h2>Raw context_data</h2>
+  <pre>{{ context_data }}</pre>
+</div>
+{% endblock %}

@@ -1334,7 +1334,75 @@ def refresh_knowledge_base(request):
             'status': 'success',
             'message': 'Knowledge base refreshed successfully'
         })
-    
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Admin-only Spectra debug view ───────────────────────────────────────
+
+
+@login_required
+def spectra_debug_view(request, message_id):
+    """
+    Show what Spectra actually sent to Gemini for a given AIAssistantMessage,
+    plus which providers fired, the resolved temperature, cache_hit, KB hits.
+
+    Staff-only — surfaces system prompts which can contain sensitive board
+    data across boards if the requester is a Spectra admin.
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'staff only'}, status=403)
+
+    message = get_object_or_404(
+        AIAssistantMessage.objects.select_related('session', 'session__user', 'session__board'),
+        id=message_id,
+    )
+
+    # The system prompt itself is logged by hash; look it up.
+    context_data = message.context_data or {}
+    prompt_hash = context_data.get('system_prompt_hash', '')
+    system_prompt = ''
+    if prompt_hash:
+        try:
+            from django.conf import settings as dj_settings
+            import os
+            log_path = os.path.join(dj_settings.BASE_DIR, 'logs', 'spectra_prompts.log')
+            if os.path.exists(log_path):
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as fh:
+                    blob = fh.read()
+                marker = f'PROMPT_HASH={prompt_hash}'
+                idx = blob.rfind(marker)
+                if idx >= 0:
+                    begin = blob.find('---BEGIN---', idx)
+                    end = blob.find('---END---', begin) if begin >= 0 else -1
+                    if begin >= 0 and end > begin:
+                        system_prompt = blob[begin + len('---BEGIN---'):end].strip()
+        except Exception as e:
+            logger.warning(f'spectra_debug_view: prompt lookup failed: {e}')
+
+    # Pair the assistant message with the user message that triggered it.
+    user_message = (
+        AIAssistantMessage.objects
+        .filter(session=message.session, created_at__lt=message.created_at, role='user')
+        .order_by('-created_at')
+        .first()
+    )
+
+    ctx = {
+        'message': message,
+        'user_message': user_message,
+        'session': message.session,
+        'context_data': context_data,
+        'providers_fired': context_data.get('providers_fired', []),
+        'providers_unavailable': context_data.get('providers_unavailable', []),
+        'providers_detailed': context_data.get('providers_detailed', []),
+        'temperature': context_data.get('temperature'),
+        'query_type': context_data.get('query_type'),
+        'cache_hit': context_data.get('cache_hit', False),
+        'system_prompt': system_prompt,
+        'system_prompt_hash': prompt_hash,
+        'system_prompt_len': context_data.get('system_prompt_len', 0),
+    }
+    return render(request, 'ai_assistant/admin/debug.html', ctx)
 

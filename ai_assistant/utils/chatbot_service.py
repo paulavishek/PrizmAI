@@ -588,44 +588,119 @@ class TaskFlowChatbotService:
             qs = ProjectKnowledgeBase.objects.filter(is_active=True)
             if self.board:
                 qs = qs.filter(board=self.board)
+            else:
+                # Cross-board mode — scope to boards this user can access so KB
+                # content from boards the user is not a member of cannot leak.
+                from ai_assistant.utils.rbac_utils import get_accessible_boards_for_spectra
+                org = None
+                try:
+                    if self.user and hasattr(self.user, 'profile') and self.user.profile.organization_id:
+                        org = self.user.profile.organization
+                except Exception:
+                    pass
+                accessible = get_accessible_boards_for_spectra(
+                    self.user, is_demo_mode=self.is_demo_mode, organization=org,
+                )
+                qs = qs.filter(board__in=accessible)
             if type_hint:
                 typed_qs = qs.filter(content_type=type_hint)
                 if typed_qs.exists():
                     qs = typed_qs  # only restrict if it doesn't kill the result set
 
+            # Build candidate set via keyword OR — this is the recall step.
+            # Both keyword hits AND embedding-only matches must originate from
+            # this RBAC-scoped queryset, so semantic search NEVER bypasses
+            # access control.
             keyword_filter = Q()
             for kw in keywords:
                 keyword_filter |= Q(title__icontains=kw) | Q(content__icontains=kw)
-            qs = qs.filter(keyword_filter)
+            keyword_qs = qs.filter(keyword_filter)
 
-            # Materialize once, rank in Python (simple, no DB-specific scoring)
-            entries = list(qs.only(
-                'id', 'title', 'summary', 'content', 'content_type', 'updated_at',
+            entries = list(keyword_qs.only(
+                'id', 'title', 'summary', 'content', 'content_type',
+                'updated_at', 'embedding',
             )[:50])
+
+            # Hybrid step: if many candidates have embeddings, also embed the
+            # query so vector matches can outrank shallow keyword hits.
+            query_vec = None
+            if entries and any(getattr(e, 'embedding', None) for e in entries):
+                try:
+                    from ai_assistant.utils.ai_clients import embed_text
+                    query_vec = embed_text(query, task_type='RETRIEVAL_QUERY')
+                except Exception:
+                    query_vec = None
+
+            # Also pull a small set of embedding-only candidates (rows that
+            # don't keyword-match but might be semantically close). Cap to
+            # 30 to keep the Python similarity loop trivial.
+            if query_vec is not None:
+                semantic_candidates = list(
+                    qs.exclude(id__in=[e.id for e in entries])
+                      .exclude(embedding__isnull=True)
+                      .only(
+                          'id', 'title', 'summary', 'content', 'content_type',
+                          'updated_at', 'embedding',
+                      )[:30]
+                )
+                entries.extend(semantic_candidates)
+
             if not entries:
                 return ''
 
-            def score(entry):
+            def keyword_score(entry):
                 hay = f'{entry.title}\n{entry.content or ""}'.lower()
                 return sum(1 for kw in keywords if kw in hay)
 
-            entries.sort(key=lambda e: (-score(e), -(e.updated_at.timestamp() if e.updated_at else 0)))
+            def cosine_score(entry):
+                if query_vec is None:
+                    return 0.0
+                emb = getattr(entry, 'embedding', None)
+                if not emb:
+                    return 0.0
+                try:
+                    from ai_assistant.utils.ai_clients import cosine_similarity
+                    return float(cosine_similarity(query_vec, emb))
+                except Exception:
+                    return 0.0
 
-            # Allow up to max_results + 2 when there's a clear score gap so a
-            # strong primary hit doesn't suppress equally relevant secondaries.
-            top_score = score(entries[0])
-            allow_extra = top_score >= 3
-            limit = max_results + (2 if allow_extra else 0)
-            top = [e for e in entries[:limit] if score(e) > 0]
-            if not top:
+            # Normalize keyword score 0..1 by max possible (# of keywords)
+            kw_max = max(1, len(keywords))
+            scored = []
+            for e in entries:
+                kw = keyword_score(e)
+                cos = cosine_score(e)
+                kw_norm = kw / kw_max
+                # If we have embeddings at all, weight cosine more; otherwise
+                # fall back to keyword-only ranking (cos will be 0).
+                combined = 0.4 * kw_norm + 0.6 * cos if query_vec is not None else kw_norm
+                # Drop rows that match nothing
+                if combined <= 0.0 and kw == 0:
+                    continue
+                scored.append((combined, kw, cos, e))
+
+            if not scored:
                 return ''
 
+            scored.sort(key=lambda row: (
+                -row[0],
+                -(row[3].updated_at.timestamp() if row[3].updated_at else 0),
+            ))
+
+            top_combined = scored[0][0]
+            allow_extra = top_combined >= 0.55  # strong hit → show a couple more
+            limit = max_results + (2 if allow_extra else 0)
+            top = scored[:limit]
+
             lines = ['**From Project Knowledge Base:**\n']
-            for entry in top:
+            for combined, kw, cos, entry in top:
                 content_type_label = entry.get_content_type_display()
                 summary_text = entry.summary if entry.summary else self._kb_excerpt(entry.content, keywords)
+                # Include a relevance hint so Spectra knows how confident the
+                # retrieval is — useful when several hits are weakly related.
+                rel = f' (relevance {combined:.2f})' if combined < 0.4 else ''
                 lines.append(
-                    f'- [{content_type_label}] {entry.title}: {summary_text}'
+                    f'- [{content_type_label}] {entry.title}{rel}: {summary_text}'
                 )
             return '\n'.join(lines) + '\n'
 
@@ -4361,7 +4436,7 @@ Your role is to help project managers and team members with:
 - Wiki/Documentation search and knowledge retrieval
 - Meeting notes analysis and action item tracking
 - **Strategic Workflow**: Org Goals → Missions → Strategies → Boards hierarchy
-- **AI Tools on Boards**: Budget tracking, Burndown/Velocity charts, Scope Creep Analysis, Pre-Mortem risk scenarios, Stress Tests (immunity scoring), What-If simulations, Conflict detection, AI Coaching, Retrospectives, Automations (trigger & scheduled), Stakeholder management (with RACI), Resource Leveling (capacity alerts + workload recommendations), Requirements management & traceability, Custom Fields, Discovery Ideas backlog, Access Requests, Gantt charts & Triple Constraint
+- **AI Tools on Boards**: Budget tracking, Burndown/Velocity charts, Scope Creep Analysis, Scope Autopsy (forensic post-mortem of scope growth), Pre-Mortem risk scenarios, Stress Tests (immunity scoring), What-If simulations, Conflict detection, AI Coaching (suggestions, insights, PM metrics), Retrospectives, Automations (trigger & scheduled), Stakeholder management (with RACI), Resource Leveling (capacity alerts + workload recommendations), Requirements management & traceability, Custom Fields, Discovery Ideas backlog, Access Requests, Activity Feed (TaskActivity log), Task Comments & Thread Comments, File Attachments (task files & chat files), Skill Development Plans & Skill Gaps, PrizmBriefs (AI-generated presentations), Board Status Reports (with RAG scoring), Third-party Integrations (GitHub, etc.), Gantt charts & Triple Constraint
 - **Focus Today (Decision Center)**: Pending decisions, risk assessments, briefings
 - **Knowledge Graph**: Organizational memory, lessons learned, patterns
 - **Analytics**: Team performance, engagement metrics, feedback
@@ -4535,9 +4610,14 @@ When answering questions about organizational goals, missions, or strategies, us
             # Compact 2-5 line summaries from ALL providers. This gives Spectra
             # baseline awareness of every feature so it never says "I don't have
             # that information" for basic factual questions.
-            feature_summaries = ctx_registry.get_all_summaries(
-                self.board, self.user, self.is_demo_mode
+            # Per-board 60-second cache cuts ~24-33 ORM round-trips on repeat
+            # queries. Invalidation is wired in ai_assistant/signals.py.
+            from ai_assistant.utils.context_providers import get_cached_summaries
+            feature_summaries, _summaries_cache_hit = get_cached_summaries(
+                user=self.user, board=self.board,
+                is_demo_mode=self.is_demo_mode, ttl=60,
             )
+            self._spectra_summaries_cache_hit = _summaries_cache_hit
             if feature_summaries:
                 context_parts.append(feature_summaries)
                 logger.debug('Added feature summaries from %d providers',
@@ -4676,6 +4756,53 @@ When answering questions about organizational goals, missions, or strategies, us
 
             response = self.gemini_client.get_response(prompt, system_prompt, temperature=temperature)
 
+            # ── Debug telemetry for the admin debug view ──
+            import hashlib
+            try:
+                sys_prompt_hash = hashlib.sha256(
+                    system_prompt.encode('utf-8', errors='replace')
+                ).hexdigest()[:16]
+            except Exception:
+                sys_prompt_hash = ''
+            sys_prompt_len = len(system_prompt) if isinstance(system_prompt, str) else 0
+
+            # Identify which always-on providers actually emitted content
+            # so the admin debug view can render green/red dots per provider.
+            providers_fired = []
+            providers_unavailable = []
+            try:
+                if feature_summaries:
+                    for p_name, p_obj in ctx_registry.providers.items():
+                        # Quick re-render each provider's summary line — cheap
+                        # because we just hit the cache. We never call providers
+                        # twice; instead we scan the already-built block for the
+                        # PROVIDER_NAME and the "data temporarily unavailable"
+                        # marker that base.py emits on failure.
+                        if f'**{p_name}' in (feature_summaries or '') or f'**{p_name}:' in (feature_summaries or ''):
+                            providers_fired.append(p_name)
+                    if 'data temporarily unavailable' in (feature_summaries or '').lower():
+                        # Find which provider lines contain that marker.
+                        for line in (feature_summaries or '').splitlines():
+                            low = line.lower()
+                            if 'data temporarily unavailable' in low:
+                                for p_name in ctx_registry.providers.keys():
+                                    if p_name.lower() in low and p_name not in providers_unavailable:
+                                        providers_unavailable.append(p_name)
+            except Exception:
+                pass
+
+            # Also write the full system prompt to a rotating file so the
+            # debug view can fetch it by hash without storing 100KB+ per
+            # AIAssistantMessage row.
+            try:
+                spectra_prompt_logger = logging.getLogger('spectra_prompts')
+                spectra_prompt_logger.info(
+                    f'PROMPT_HASH={sys_prompt_hash} LEN={sys_prompt_len}\n'
+                    f'---BEGIN---\n{system_prompt}\n---END---'
+                )
+            except Exception:
+                pass
+
             return {
                 'response': response['content'],
                 'source': 'gemini',
@@ -4689,6 +4816,15 @@ When answering questions about organizational goals, missions, or strategies, us
                     'matched_providers': matched_providers,
                     'provider_count': len(matched_providers),
                     'context_provided': bool(context_parts),
+                    # Debug telemetry (rendered by the admin debug view):
+                    'providers_fired': providers_fired,
+                    'providers_unavailable': providers_unavailable,
+                    'providers_detailed': list(matched_providers),
+                    'system_prompt_hash': sys_prompt_hash,
+                    'system_prompt_len': sys_prompt_len,
+                    'temperature': temperature,
+                    'query_type': query_type,
+                    'cache_hit': getattr(self, '_spectra_summaries_cache_hit', False),
                 }
             }
         
