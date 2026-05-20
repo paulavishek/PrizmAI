@@ -172,9 +172,6 @@ def _send_notification(task, rule, target_key, message=''):
     if not board:
         raise _ActionNoOp('task has no board')
 
-    if getattr(board, 'is_official_demo_board', False):
-        raise _ActionNoOp('demo board — notifications suppressed')
-
     sender = rule.created_by or (board.created_by if board else None)
     if not sender:
         raise _ActionNoOp('no sender (rule has no creator and board has no owner)')
@@ -184,36 +181,44 @@ def _send_notification(task, rule, target_key, message=''):
     except Exception:
         task_url = None
 
-    target_lower = (target_key or '').lower()
-    recipients = []
-
-    if target_lower == 'task_assignee':
-        if task.assigned_to:
-            recipients = [task.assigned_to]
-    elif target_lower == 'all_board_members':
-        recipients = list(AuthUser.objects.filter(board_memberships__board=board))
-        if board.created_by and board.created_by not in recipients:
-            recipients.append(board.created_by)
-    elif target_lower == 'rule_creator':
+    # On official demo boards, redirect all notifications to the rule creator so
+    # the automation feature is testable in the sandbox without spamming demo personas.
+    if getattr(board, 'is_official_demo_board', False):
         if rule.created_by:
             recipients = [rule.created_by]
+        else:
+            raise _ActionNoOp('demo board — no rule creator to redirect notification to')
     else:
-        try:
-            u = AuthUser.objects.get(pk=int(target_key))
-            recipients = [u]
-        except (AuthUser.DoesNotExist, ValueError, TypeError):
-            pass
+        target_lower = (target_key or '').lower()
+        recipients = []
 
-    if not recipients:
         if target_lower == 'task_assignee':
-            raise _ActionNoOp('task has no assignee')
-        raise _ActionNoOp(f'no recipients resolved for target {target_key!r}')
+            if task.assigned_to:
+                recipients = [task.assigned_to]
+        elif target_lower == 'all_board_members':
+            recipients = list(AuthUser.objects.filter(board_memberships__board=board))
+            if board.created_by and board.created_by not in recipients:
+                recipients.append(board.created_by)
+        elif target_lower == 'rule_creator':
+            if rule.created_by:
+                recipients = [rule.created_by]
+        else:
+            try:
+                u = AuthUser.objects.get(pk=int(target_key))
+                recipients = [u]
+            except (AuthUser.DoesNotExist, ValueError, TypeError):
+                pass
 
-    # Demo sandbox mirror: on a per-user sandbox copy the resolved recipient is
-    # typically a demo persona the logged-in user can't see notifications for.
-    # Also notify the sandbox owner so the demo experience surfaces automation.
-    if getattr(board, 'is_sandbox_copy', False) and board.owner and board.owner not in recipients:
-        recipients.append(board.owner)
+        if not recipients:
+            if (target_key or '').lower() == 'task_assignee':
+                raise _ActionNoOp('task has no assignee')
+            raise _ActionNoOp(f'no recipients resolved for target {target_key!r}')
+
+        # Demo sandbox mirror: on a per-user sandbox copy the resolved recipient is
+        # typically a demo persona the logged-in user can't see notifications for.
+        # Also notify the sandbox owner so the demo experience surfaces automation.
+        if getattr(board, 'is_sandbox_copy', False) and board.owner and board.owner not in recipients:
+            recipients.append(board.owner)
 
     raw = message or (
         f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
