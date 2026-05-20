@@ -181,14 +181,9 @@
                                         {{ label.name }}
                                     </span>
                                     {% empty %}
-                                    <span class="text-muted small" id="no-labels-hint">No labels yet — load presets or create one below.</span>
+                                    <span class="text-muted small" id="no-labels-hint">No labels yet — create one below.</span>
                                     {% endfor %}
                                 </div>
-
-                                {# Load preset labels button #}
-                                <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="load-presets-btn">
-                                    <i class="fas fa-magic me-1"></i> Load preset labels
-                                </button>
 
                                 {# Inline new-label mini-form #}
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="toggle-new-label-btn">
@@ -250,29 +245,6 @@
                                 }
 
                                 badgeArea.querySelectorAll('.label-badge').forEach(b => b.addEventListener('click', toggleBadge));
-
-                                // Load preset labels
-                                document.getElementById('load-presets-btn').addEventListener('click', function () {
-                                    this.disabled = true;
-                                    fetch(`/boards/${boardId}/load-preset-labels/`, {
-                                        method: 'POST',
-                                        headers: {'X-CSRFToken': csrfToken},
-                                    })
-                                    .then(r => r.json())
-                                    .then(data => {
-                                        const hint = document.getElementById('no-labels-hint');
-                                        if (hint) hint.remove();
-                                        data.labels.forEach(label => {
-                                            addOptionToHidden(label);
-                                            if (!badgeArea.querySelector(`[data-label-id="${label.id}"]`)) {
-                                                badgeArea.appendChild(renderBadge(label, false));
-                                            }
-                                        });
-                                        this.textContent = 'Presets loaded';
-                                        this.disabled = true;
-                                    })
-                                    .catch(() => { this.disabled = false; });
-                                });
 
                                 // Toggle new-label mini-form
                                 document.getElementById('toggle-new-label-btn').addEventListener('click', function () {
