@@ -58,6 +58,21 @@ app.conf.beat_schedule = {
         'task': 'kanban.run_overdue_task_automations',
         'schedule': crontab(minute=45),  # Every hour at :45 (offset from other automation tasks)
     },
+    # Idle-task automations - hourly sweep, offset from other automation tasks
+    'idle-task-automations': {
+        'task': 'kanban.run_idle_task_automations',
+        'schedule': crontab(minute=15),  # Every hour at :15
+    },
+    # Start-date-reached automations - daily check shortly after midnight local time
+    'start-date-reached-automations': {
+        'task': 'kanban.run_start_date_reached_automations',
+        'schedule': crontab(hour=0, minute=5),  # Daily at 00:05
+    },
+    # Predicted-late automations - daily check (heavier query, runs once/day)
+    'predicted-late-automations': {
+        'task': 'kanban.run_predicted_late_automations',
+        'schedule': crontab(hour=1, minute=5),  # Daily at 01:05
+    },
     # Daily executive briefing - 08:00 IST (CELERY_TIMEZONE = 'Asia/Kolkata')
     'daily-executive-briefing': {
         'task': 'kanban.ai_summary.generate_daily_executive_briefing',

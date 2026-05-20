@@ -186,11 +186,45 @@ def run_board_automations(sender, instance, created, **kwargs):
         new_rules = AutomationRule.objects.filter(board=board, is_active=True).exclude(
             trigger_type__startswith='scheduled_',
         )
+        # Per-request dedupe: track which rules have already fired for this
+        # in-memory Task instance so a second .save() in the same request (e.g.,
+        # via update_task_prediction, refresh_from_db + save) does not re-fire
+        # the same rule.  This is the in-process belt; the DB check below is
+        # the cross-process suspenders.
+        fired_this_request = getattr(instance, '_automation_rules_fired', None)
+        if fired_this_request is None:
+            fired_this_request = set()
+            instance._automation_rules_fired = fired_this_request
+
         for rule in new_rules:
             fired = _check_trigger(rule, instance, created, column_changed,
                                    priority_changed, just_completed, assignment_changed, now)
             if not fired:
                 continue
+
+            # In-memory guard
+            if rule.pk in fired_this_request:
+                continue
+
+            # DB safety net: catches cross-request duplicate emissions (e.g.,
+            # a follow-up update_task_prediction() task.save() in a separate
+            # request). 3s window is wide enough to absorb realistic re-save
+            # latency yet narrow enough that a deliberate second user change
+            # still fires the rule normally.
+            try:
+                from datetime import timedelta as _td
+                if AutomationLog.objects.filter(
+                    rule_id=rule.pk,
+                    task_affected_id=instance.pk,
+                    trigger_event=rule.trigger_type,
+                    triggered_at__gte=now - _td(seconds=3),
+                ).exists():
+                    fired_this_request.add(rule.pk)
+                    continue
+            except Exception:
+                pass
+
+            fired_this_request.add(rule.pk)
 
             actions_taken = []
             errors = []
@@ -360,9 +394,13 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
         return 'due_date' in (getattr(task, '_field_changes', {}) or {})
 
     # ── Phase 1b: scheduled checks (handled by celery, not post_save) ──
-    elif trigger_type in ('task_idle', 'task_start_date_reached', 'task_label_added'):
-        # Periodic celery tasks fire these. task_label_added would need
-        # m2m_changed wiring on Task.labels which is deferred.
+    elif trigger_type in ('task_idle', 'task_start_date_reached'):
+        # Periodic celery tasks fire these.
+        return False
+
+    elif trigger_type == 'task_label_added':
+        # Fired by the m2m_changed receiver (run_task_label_added_automations),
+        # not by Task.save() — labels are attached via the m2m through-table.
         return False
 
     # ── Phase 2: AI/Risk triggers (use _field_changes snapshot) ──
@@ -1537,6 +1575,103 @@ def sync_due_date_to_google_calendar(sender, instance, created, **kwargs):
             f"sync_due_date_to_google_calendar: could not sync for task {instance.pk}: {exc}"
         )
 
+
+
+# ─── Phase 1b: Task label added (m2m_changed) ───────────────────────────────
+
+
+from django.db.models.signals import m2m_changed  # noqa: E402
+
+
+@receiver(m2m_changed, sender=Task.labels.through)
+def run_task_label_added_automations(sender, instance, action, pk_set, **kwargs):
+    """Fire 'task_label_added' rules when one or more labels are attached to a
+    Task. Delegates rule execution to the same flat-rule path used by other
+    triggers. Reverse side (label.tasks.add(task)) also dispatches here.
+    """
+    # Only fire on the forward post_add (Task → labels). The reverse direction
+    # (TaskLabel → tasks) provides a TaskLabel as instance; handled below.
+    if action != 'post_add' or not pk_set:
+        return
+
+    try:
+        from kanban.models import Task as TaskModel, TaskLabel
+        from kanban.automation_models import AutomationRule, AutomationLog
+        from django.utils import timezone as tz
+
+        # Resolve (task, added_label_ids) tuples — instance type depends on
+        # which side of the m2m relation triggered the change.
+        if isinstance(instance, TaskModel):
+            task_label_pairs = [(instance, pk_set)]
+        elif isinstance(instance, TaskLabel):
+            tasks = TaskModel.objects.filter(pk__in=pk_set)
+            task_label_pairs = [(t, {instance.pk}) for t in tasks]
+        else:
+            return
+
+        now = tz.now()
+        for task, label_ids in task_label_pairs:
+            if task.column_id is None:
+                continue
+            board = task.column.board
+            if board is None:
+                continue
+
+            added_labels = list(
+                TaskLabel.objects.filter(pk__in=label_ids).only('name')
+            )
+            added_names_lower = {l.name.lower() for l in added_labels}
+
+            rules = AutomationRule.objects.filter(
+                board=board, is_active=True, trigger_type='task_label_added',
+            )
+
+            for rule in rules:
+                cfg = rule.trigger_config or {}
+                cfg_label = (cfg.get('label_name') or '').strip().lower()
+                if cfg_label and cfg_label not in added_names_lower:
+                    continue
+
+                actions_taken = []
+                errors = []
+                outcome, skip_reason = 'success', ''
+                try:
+                    if rule.actions:
+                        outcome, skip_reason = _execute_flat_rule(
+                            rule, task, actions_taken, errors,
+                        )
+                except Exception as exc:
+                    outcome = 'failed'
+                    errors.append(str(exc))
+
+                AutomationRule.objects.filter(pk=rule.pk).update(
+                    run_count=rule.run_count + 1,
+                    last_run_at=now,
+                    last_execution_result=outcome,
+                )
+                try:
+                    AutomationLog.objects.create(
+                        rule=rule,
+                        rule_name_snapshot=rule.name,
+                        board=board,
+                        trigger_event='task_label_added',
+                        task_affected=task,
+                        task_title_snapshot=task.title or '',
+                        actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
+                        outcome=outcome,
+                        skip_reason=skip_reason,
+                        error_detail='; '.join(errors) if errors else '',
+                        execution_detail={
+                            'trigger_type': 'task_label_added',
+                            'labels_added': sorted(added_names_lower),
+                        },
+                    )
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("Failed to write AutomationLog for task_label_added")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("task_label_added automation runner failed silently")
 
 
 # ─── Phase 3: ChecklistItem-driven triggers ──────────────────────────────────

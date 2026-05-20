@@ -451,6 +451,61 @@ const UnifiedRuleBuilder = (() => {
         state.triggerConfig.time = e.target.value; updatePreview();
       });
 
+    } else if (tt === 'task_status_changed') {
+      container.innerHTML = `
+        <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+          <label class="form-label small mb-0">From</label>
+          <select class="form-select form-select-sm" id="rbTrigSubFrom" style="width:160px">
+            <option value="">Any column</option>
+            ${boardData.columns.map(c =>
+              `<option value="${_esc(c.name)}" ${cfg.from === c.name ? 'selected' : ''}>${_esc(c.name)}</option>`
+            ).join('')}
+          </select>
+          <label class="form-label small mb-0">to</label>
+          <select class="form-select form-select-sm" id="rbTrigSubTo" style="width:160px">
+            <option value="">Any column</option>
+            ${boardData.columns.map(c =>
+              `<option value="${_esc(c.name)}" ${cfg.to === c.name ? 'selected' : ''}>${_esc(c.name)}</option>`
+            ).join('')}
+          </select>
+        </div>`;
+      document.getElementById('rbTrigSubFrom').addEventListener('change', e => {
+        state.triggerConfig.from = e.target.value; updatePreview();
+      });
+      document.getElementById('rbTrigSubTo').addEventListener('change', e => {
+        state.triggerConfig.to = e.target.value; updatePreview();
+      });
+
+    } else if (tt === 'task_idle') {
+      container.innerHTML = `
+        <div class="mt-2 d-flex align-items-center gap-2">
+          <label class="form-label small mb-0">Idle for</label>
+          <input type="number" class="form-control form-control-sm" id="rbTrigSubIdleDays"
+            min="1" max="365" value="${cfg.idle_days || 7}" style="width:80px">
+          <span class="small">days</span>
+        </div>`;
+      document.getElementById('rbTrigSubIdleDays').addEventListener('input', e => {
+        state.triggerConfig.idle_days = parseInt(e.target.value) || 7;
+        updatePreview();
+      });
+
+    } else if (tt === 'task_label_added') {
+      const opts = (boardData.labels || []).map(l =>
+        `<option value="${_esc(l.name)}" ${cfg.label_name === l.name ? 'selected' : ''}>${_esc(l.name)}</option>`
+      ).join('');
+      container.innerHTML = `
+        <div class="mt-2">
+          <label class="form-label small">When this label is added</label>
+          <select class="form-select form-select-sm" id="rbTrigSubLabel">
+            <option value="">Any label</option>
+            ${opts}
+          </select>
+        </div>`;
+      document.getElementById('rbTrigSubLabel').addEventListener('change', e => {
+        state.triggerConfig.label_name = e.target.value;
+        updatePreview();
+      });
+
     } else if (tt === 'scheduled_monthly') {
       container.innerHTML = `
         <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
@@ -561,14 +616,14 @@ const UnifiedRuleBuilder = (() => {
       assignee:           IS_ISNOT_EMPTY,
       column:             [['is','is'],['is_not','is not']],
       label:              [['has','has'],['does_not_have','does not have'],['is_empty','is empty'],['is_not_empty','is not empty']],
-      due_date:           [['within_days','is within N days'],['is_overdue','is overdue'],['is_empty','is empty'],['is_not_empty','is not empty']],
+      due_date:           [['within_days','is due within next N days'],['is_overdue','is overdue'],['is_empty','is empty'],['is_not_empty','is not empty']],
       progress:           GTE_LTE,
       all_subtasks_done:  BOOL,
       stale_high_priority:BOOL,
       // Phase 1b — task fields
       status:             [['is','is'],['is_not','is not']],
       created_by:         IS_ISNOT_EMPTY,
-      start_date:         [['is_past','is in the past'],['is_today','is today'],['within_days','is within N days'],['is_empty','is empty'],['is_not_empty','is not empty']],
+      start_date:         [['is_past','is in the past'],['is_today','is today'],['within_days','starts within next N days'],['is_empty','is empty'],['is_not_empty','is not empty']],
       description:        TEXT,
       title:              [['contains','contains'],['does_not_contain','does not contain']],
       checklist_progress: GTE_LTE,
@@ -618,7 +673,7 @@ const UnifiedRuleBuilder = (() => {
   function _conditionValueHtml(cond, idx) {
     const op = cond.operator || '';
     const attr = cond.attribute || '';
-    const NO_VALUE_OPS = ['is_empty','is_not_empty','is_true','is_false','is_overdue'];
+    const NO_VALUE_OPS = ['is_empty','is_not_empty','is_true','is_false','is_overdue','is_past','is_today'];
 
     if (!attr || NO_VALUE_OPS.includes(op)) return '';
 
@@ -636,7 +691,7 @@ const UnifiedRuleBuilder = (() => {
           `<option value="${m.id}" ${cond.value == m.id ? 'selected':''}>${_esc(m.username)}</option>`).join('')}
       </select>`;
     }
-    if (attr === 'column') {
+    if (attr === 'column' || attr === 'status') {
       return `<select class="form-select form-select-sm" style="max-width:180px" id="rbCondVal_${idx}" aria-label="Condition value">
         <option value="">Select column</option>
         ${boardData.columns.map(c =>
@@ -644,21 +699,57 @@ const UnifiedRuleBuilder = (() => {
       </select>`;
     }
     if (attr === 'label') {
-      return `<input type="text" class="form-control form-control-sm" id="rbCondVal_${idx}"
-        style="max-width:160px" placeholder="Label name" value="${_esc(cond.value||'')}" aria-label="Condition value">`;
+      const labelOpts = (boardData.labels || []).map(l =>
+        `<option value="${_esc(l.name)}" ${cond.value === l.name ? 'selected':''}>${_esc(l.name)}</option>`
+      ).join('');
+      return `<select class="form-select form-select-sm" style="max-width:180px" id="rbCondVal_${idx}" aria-label="Condition value">
+        <option value="">Select label</option>
+        ${labelOpts}
+      </select>`;
     }
     if (attr === 'due_date' && op === 'within_days') {
       return `<input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
         min="1" max="30" style="width:80px" value="${cond.value||2}" aria-label="Days"> <span class="small">days</span>`;
     }
-    if (attr === 'progress') {
+    if (attr === 'start_date' && op === 'within_days') {
+      return `<input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
+        min="1" max="30" style="width:80px" value="${cond.value||2}" aria-label="Days"> <span class="small">days</span>`;
+    }
+    if (attr === 'progress' || attr === 'checklist_progress') {
       return `<div class="input-group input-group-sm" style="width:110px">
         <input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
           min="0" max="100" value="${cond.value||0}" aria-label="Progress %">
         <span class="input-group-text">%</span>
       </div>`;
     }
-    return '';
+    if (attr === 'idle_days' || attr === 'time_in_column') {
+      return `<div class="input-group input-group-sm" style="width:110px">
+        <input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
+          min="1" max="365" value="${cond.value||1}" aria-label="Days">
+        <span class="input-group-text">days</span>
+      </div>`;
+    }
+    if (attr === 'description' || attr === 'title') {
+      return `<input type="text" class="form-control form-control-sm" id="rbCondVal_${idx}"
+        style="max-width:240px" placeholder="Text to match"
+        value="${_esc(cond.value||'')}" aria-label="Condition value">`;
+    }
+    if (attr === 'created_by') {
+      return `<select class="form-select form-select-sm" style="max-width:180px" id="rbCondVal_${idx}" aria-label="Condition value">
+        <option value="">Select member</option>
+        ${boardData.members.map(m =>
+          `<option value="${m.id}" ${cond.value == m.id ? 'selected':''}>${_esc(m.username)}</option>`).join('')}
+      </select>`;
+    }
+    if (attr === 'has_comments' && (op === 'count_gte' || op === 'count_lte')) {
+      return `<input type="number" class="form-control form-control-sm" id="rbCondVal_${idx}"
+        min="0" max="999" style="width:80px" value="${cond.value||1}" aria-label="Comment count">`;
+    }
+    // Generic numeric/text fallback so any attribute requiring a value still
+    // renders an editable control instead of silently leaving the row blank.
+    return `<input type="text" class="form-control form-control-sm" id="rbCondVal_${idx}"
+      style="max-width:200px" placeholder="Value"
+      value="${_esc(cond.value||'')}" aria-label="Condition value">`;
   }
 
   function _bindConditionRow(idx) {
@@ -865,11 +956,22 @@ const UnifiedRuleBuilder = (() => {
       const memberOpts = boardData.members.map(m =>
         `<option value="${m.id}" ${target == m.id ? 'selected':''}>${_esc(m.username)}</option>`
       ).join('');
-      return `<select class="form-select form-select-sm" style="max-width:180px"
-        id="rbActionTarget_${branch}_${idx}" aria-label="Notification target">
-        ${opts}
-        <optgroup label="Specific member">${memberOpts}</optgroup>
-      </select>`;
+      const demoHint = (
+        actionType === 'send_notification'
+        && (boardData.is_official_demo_board || boardData.is_sandbox_copy)
+      ) ? `
+        <div class="small text-muted mt-1" style="max-width:320px">
+          <i class="fas fa-info-circle me-1"></i>
+          On demo boards, notifications are redirected to you so the test stays self-contained.
+        </div>` : '';
+      return `<span class="d-inline-flex flex-column">
+        <select class="form-select form-select-sm" style="max-width:180px"
+          id="rbActionTarget_${branch}_${idx}" aria-label="Notification target">
+          ${opts}
+          <optgroup label="Specific member">${memberOpts}</optgroup>
+        </select>
+        ${demoHint}
+      </span>`;
     }
     if (actionType === 'move_to_column') {
       return `<select class="form-select form-select-sm" style="max-width:180px"
@@ -1076,10 +1178,14 @@ const UnifiedRuleBuilder = (() => {
     const opMap = {
       is:'is', is_not:'is not', is_empty:'is empty', is_not_empty:'is not empty',
       has:'has', does_not_have:'does not have', gte:'≥', lte:'≤', equals:'=',
-      within_days:'is within', is_overdue:'is overdue', is_true:'is true', is_false:'is false',
+      within_days:'is within next', is_overdue:'is overdue', is_true:'is true', is_false:'is false',
+      contains:'contains', does_not_contain:'does not contain',
+      is_past:'is in the past', is_today:'is today',
+      count_gte:'count ≥', count_lte:'count ≤',
     };
     const op = opMap[c.operator] || c.operator;
-    const val = c.value !== null && c.value !== undefined && c.value !== '' ? ` ${c.value}` : '';
+    let val = c.value !== null && c.value !== undefined && c.value !== '' ? ` ${c.value}` : '';
+    if (c.operator === 'within_days' && val) val = `${val} days`;
     return `${attr} ${op}${val}`;
   }
 
@@ -1130,10 +1236,38 @@ const UnifiedRuleBuilder = (() => {
         errors.push({ field: `rbActionType_then_${i}`, msg: 'Please select an action type.' });
     });
 
+    const NO_VALUE_OPS = ['is_empty','is_not_empty','is_true','is_false','is_overdue','is_past','is_today'];
     state.conditions.forEach((c, i) => {
-      if (!c.attribute)
+      if (!c.attribute) {
         errors.push({ field: `rbCondAttr_${i}`, msg: 'Please complete all condition fields or remove the incomplete row.' });
+        return;
+      }
+      if (!c.operator) {
+        errors.push({ field: `rbCondOp_${i}`, msg: 'Please choose an operator for this condition.' });
+        return;
+      }
+      if (!NO_VALUE_OPS.includes(c.operator)) {
+        const v = c.value;
+        const isBlank = v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+        if (isBlank) {
+          errors.push({ field: `rbCondVal_${i}`, msg: 'This condition needs a value to match against.' });
+        }
+      }
     });
+
+    // Trigger-config required-field validation for newly wired triggers.
+    if (state.trigger === 'task_idle') {
+      const d = parseInt(state.triggerConfig.idle_days);
+      if (!d || d < 1) {
+        errors.push({ field: 'rbTrigSubIdleDays', msg: 'Please enter how many idle days should trigger the rule.' });
+      }
+    }
+    if (state.trigger === 'due_date_approaching') {
+      const d = parseInt(state.triggerConfig.days);
+      if (!d || d < 1) {
+        errors.push({ field: 'rbTrigSubDays', msg: 'Please enter how many days ahead to watch for.' });
+      }
+    }
 
     return errors;
   }

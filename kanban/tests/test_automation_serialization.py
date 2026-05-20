@@ -167,6 +167,8 @@ def current_rules():
             cfg = {'day_of_month': 1, 'time': '09:00'}
         elif trigger_key == 'due_date_approaching':
             cfg = {'days': 2}
+        elif trigger_key == 'task_idle':
+            cfg = {'idle_days': 7}
         fixtures.append({
             'name': f'Current trigger: {trigger_key}',
             'trigger_type': trigger_key,

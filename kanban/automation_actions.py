@@ -214,11 +214,13 @@ def _send_notification(task, rule, target_key, message=''):
                 raise _ActionNoOp('task has no assignee')
             raise _ActionNoOp(f'no recipients resolved for target {target_key!r}')
 
-        # Demo sandbox mirror: on a per-user sandbox copy the resolved recipient is
-        # typically a demo persona the logged-in user can't see notifications for.
-        # Also notify the sandbox owner so the demo experience surfaces automation.
-        if getattr(board, 'is_sandbox_copy', False) and board.owner and board.owner not in recipients:
-            recipients.append(board.owner)
+        # Demo sandbox: the resolved demo personas can't actually log in to see
+        # notifications. Redirect everything to the sandbox owner so the demo
+        # experience surfaces the automation — and only the owner, to avoid
+        # the double-up that previously appended the owner on top of the
+        # already-resolved demo recipients.
+        if getattr(board, 'is_sandbox_copy', False) and board.owner:
+            recipients = [board.owner]
 
     raw = message or (
         f'Automation "{rule.name}" was triggered for task "{{task_title}}" '
