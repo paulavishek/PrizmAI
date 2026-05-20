@@ -538,22 +538,14 @@
       <!-- Body -->
       <div class="modal-body">
 
-        <!-- Rule name + Apply to -->
-        <div class="row g-3 mb-3">
-          <div class="col-8">
-            <label for="rbRuleName" class="form-label fw-semibold">
-              Rule Name <span class="text-danger">*</span>
-            </label>
-            <input type="text" id="rbRuleName" class="form-control"
-                   placeholder="e.g. Notify assignee when task is overdue"
-                   maxlength="120" autocomplete="off">
-          </div>
-          <div class="col-4">
-            <label for="rbApplyTo" class="form-label fw-semibold">Apply to</label>
-            <select id="rbApplyTo" class="form-select">
-              <option value="this_board">This board</option>
-            </select>
-          </div>
+        <!-- Rule name -->
+        <div class="mb-3">
+          <label for="rbRuleName" class="form-label fw-semibold">
+            Rule Name <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="rbRuleName" class="form-control"
+                 placeholder="e.g. Notify assignee when task is overdue"
+                 maxlength="120" autocomplete="off">
         </div>
 
         <!-- ─── WHEN section ─── -->
