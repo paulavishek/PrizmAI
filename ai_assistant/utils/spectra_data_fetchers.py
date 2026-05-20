@@ -15,6 +15,7 @@ Created: April 12, 2026 — Spectra Accuracy Overhaul v1.1
 """
 
 import logging
+import re
 from datetime import date
 
 from django.db.models import Count, F, Q
@@ -612,6 +613,11 @@ def fetch_custom_fields_summary(board):
     if not workspace_id:
         return {'total': 0, 'names': [], 'excluded_from_ai': 0}
 
+    # Custom field DEFINITIONS are workspace-scoped by design — all boards in
+    # the same workspace share the same field schema. This is intentional and
+    # not an RBAC leak: a workspace member sees field names/types for the
+    # whole workspace, but individual field VALUES on tasks are board-scoped
+    # below in fetch_custom_fields_detail (which uses task__column__board=board).
     all_active = CustomFieldDefinition.objects.filter(
         workspace_id=workspace_id, is_active=True, applies_to_tasks=True,
     )
@@ -805,10 +811,28 @@ def fetch_scope_summary(board):
     latest = ScopeChangeSnapshot.objects.filter(board=board).order_by('-snapshot_date').first()
     scope_pct = latest.scope_change_percentage if latest else None
 
+    latest_autopsy_obj = None
+    try:
+        from kanban.scope_autopsy_models import ScopeAutopsyReport
+        latest_autopsy_obj = (
+            ScopeAutopsyReport.objects.filter(board=board, status='complete')
+            .order_by('-created_at').first()
+        )
+    except Exception:
+        latest_autopsy_obj = None
+
     return {
         'active_alerts': active_qs.count(),
         'critical_alerts': active_qs.filter(severity='critical').count(),
         'scope_change_pct': scope_pct,
+        'latest_autopsy': (
+            {
+                'created_at': latest_autopsy_obj.created_at.strftime('%Y-%m-%d'),
+                'growth_pct': latest_autopsy_obj.total_scope_growth_percentage,
+                'delay_days': latest_autopsy_obj.total_delay_days,
+            }
+            if latest_autopsy_obj else None
+        ),
     }
 
 
@@ -859,10 +883,39 @@ def fetch_scope_detail(board, alert_limit=10):
             'ai_summary': a.ai_summary or '',
         })
 
+    autopsies = []
+    try:
+        from kanban.scope_autopsy_models import ScopeAutopsyReport
+        for ap in (
+            ScopeAutopsyReport.objects.filter(board=board)
+            .order_by('-created_at')[:5]
+        ):
+            top_events = []
+            for ev in ap.timeline_events.order_by('-net_task_change', 'event_date')[:3]:
+                top_events.append({
+                    'event_date': ev.event_date.strftime('%Y-%m-%d'),
+                    'title': ev.title,
+                    'net_task_change': ev.net_task_change,
+                })
+            autopsies.append({
+                'created_at': ap.created_at.strftime('%Y-%m-%d %H:%M'),
+                'status': ap.get_status_display(),
+                'baseline_task_count': ap.baseline_task_count,
+                'final_task_count': ap.final_task_count,
+                'total_scope_growth_percentage': ap.total_scope_growth_percentage,
+                'total_delay_days': ap.total_delay_days,
+                'total_budget_impact': str(ap.total_budget_impact),
+                'ai_summary': ap.ai_summary or '',
+                'top_events': top_events,
+            })
+    except Exception:
+        autopsies = []
+
     return {
         'latest_snapshot': serialize_snapshot(latest),
         'baseline': serialize_snapshot(baseline),
         'alerts': alerts,
+        'autopsies': autopsies,
     }
 
 
@@ -1119,3 +1172,758 @@ def fetch_access_requests_detail(board, user):
     as_owner = [fmt(r, 'owner') for r in base.filter(owner=user)[:15]]
     as_requester = [fmt(r, 'requester') for r in base.filter(requester=user)[:15]]
     return {'as_owner': as_owner, 'as_requester': as_requester}
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Phase 2 v2 fetchers — Activity, Coach, Memory, Status Report,
+# Integrations, Comments, Files, Skill Development, Briefs.
+# Every fetcher takes an `accessible` queryset (the user's accessible
+# boards) for cross-board scoping; `board` (single board) takes
+# precedence when set.
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _humanize_dt(dt):
+    """Compact 'when' label used across the new providers."""
+    if not dt:
+        return ''
+    try:
+        delta = timezone.now() - dt
+        if delta.days >= 30:
+            return dt.strftime('%Y-%m-%d')
+        if delta.days >= 1:
+            return f'{delta.days}d ago'
+        hours = delta.seconds // 3600
+        if hours >= 1:
+            return f'{hours}h ago'
+        minutes = max(1, delta.seconds // 60)
+        return f'{minutes}m ago'
+    except Exception:
+        try:
+            return dt.strftime('%Y-%m-%d')
+        except Exception:
+            return ''
+
+
+# ── Activity ───────────────────────────────────────────────────────────
+
+def fetch_activity_summary(board, accessible_boards):
+    """Counts + latest TaskActivity event. Board or accessible_boards required."""
+    try:
+        from kanban.models import TaskActivity
+    except Exception:
+        return None
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(days=7)
+
+    qs = TaskActivity.objects.filter(created_at__gte=cutoff).select_related(
+        'task', 'user', 'task__column'
+    )
+    if board:
+        qs = qs.filter(task__column__board=board)
+    else:
+        if accessible_boards is None:
+            return None
+        qs = qs.filter(task__column__board__in=accessible_boards)
+
+    total = qs.count()
+    latest_obj = qs.order_by('-created_at').first()
+    latest = None
+    if latest_obj:
+        actor = latest_obj.user.get_full_name() or latest_obj.user.username
+        latest = {
+            'actor': actor,
+            'action': latest_obj.get_activity_type_display().lower(),
+            'task_title': latest_obj.task.title,
+            'when': _humanize_dt(latest_obj.created_at),
+        }
+    return {'total': total, 'latest': latest}
+
+
+def fetch_activity_detail(board, accessible_boards, limit=25):
+    """Most-recent TaskActivity events in last 30 days."""
+    try:
+        from kanban.models import TaskActivity
+    except Exception:
+        return None
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(days=30)
+
+    qs = TaskActivity.objects.filter(created_at__gte=cutoff).select_related(
+        'task', 'user', 'task__column'
+    )
+    if board:
+        qs = qs.filter(task__column__board=board)
+    else:
+        if accessible_boards is None:
+            return None
+        qs = qs.filter(task__column__board__in=accessible_boards)
+
+    qs = qs.order_by('-created_at')
+    total = qs.count()
+    events = []
+    for ev in qs[:limit]:
+        actor = ev.user.get_full_name() or ev.user.username
+        events.append({
+            'when': _humanize_dt(ev.created_at),
+            'actor': actor,
+            'action': ev.get_activity_type_display().lower(),
+            'task_title': ev.task.title,
+            'description': (ev.description or '').strip(),
+        })
+    truncated = max(0, total - limit)
+    return {'events': events, 'truncated': truncated}
+
+
+# ── AI Coach ───────────────────────────────────────────────────────────
+
+def fetch_coach_summary(board, user, accessible_boards):
+    """Open suggestions + most-recent PM metric snapshot for the user."""
+    try:
+        from kanban.coach_models import CoachingSuggestion, PMMetrics
+    except Exception:
+        return None
+
+    sugg = CoachingSuggestion.objects.filter(status='active')
+    if board:
+        sugg = sugg.filter(board=board)
+    elif accessible_boards is not None:
+        sugg = sugg.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    open_count = sugg.count()
+    high_sev = sugg.filter(severity__in=['high', 'critical']).count()
+    top = sugg.order_by('-severity', '-created_at').first()
+    top_suggestion = None
+    if top:
+        top_suggestion = {'title': top.title, 'severity': top.severity}
+
+    top_metric = None
+    if user and getattr(user, 'is_authenticated', False):
+        m_qs = PMMetrics.objects.filter(pm_user=user)
+        if board:
+            m_qs = m_qs.filter(board=board)
+        elif accessible_boards is not None:
+            m_qs = m_qs.filter(board__in=accessible_boards)
+        m = m_qs.order_by('-period_end').first()
+        if m:
+            top_metric = {
+                'velocity_trend': m.velocity_trend,
+                'deadline_hit_rate': float(m.deadline_hit_rate),
+            }
+
+    return {
+        'open_count': open_count,
+        'high_severity': high_sev,
+        'top_suggestion': top_suggestion,
+        'top_metric': top_metric,
+    }
+
+
+def fetch_coach_detail(board, user, accessible_boards):
+    """Detail: list open suggestions + recent PM metrics + active insights."""
+    try:
+        from kanban.coach_models import (
+            CoachingSuggestion, PMMetrics, CoachingInsight,
+        )
+    except Exception:
+        return None
+
+    sugg_qs = CoachingSuggestion.objects.filter(
+        status__in=['active', 'acknowledged']
+    ).select_related('board', 'task')
+    if board:
+        sugg_qs = sugg_qs.filter(board=board)
+    elif accessible_boards is not None:
+        sugg_qs = sugg_qs.filter(board__in=accessible_boards)
+    else:
+        return None
+    sugg_qs = sugg_qs.order_by('-severity', '-created_at')
+
+    suggestions = []
+    for s in sugg_qs[:15]:
+        suggestions.append({
+            'title': s.title,
+            'type': s.get_suggestion_type_display(),
+            'severity': s.severity,
+            'status': s.status,
+            'message': s.message,
+            'created_at': s.created_at.strftime('%Y-%m-%d'),
+        })
+
+    metrics = []
+    if user and getattr(user, 'is_authenticated', False):
+        m_qs = PMMetrics.objects.filter(pm_user=user)
+        if board:
+            m_qs = m_qs.filter(board=board)
+        elif accessible_boards is not None:
+            m_qs = m_qs.filter(board__in=accessible_boards)
+        for m in m_qs.order_by('-period_end')[:3]:
+            metrics.append({
+                'period': f'{m.period_start} → {m.period_end}',
+                'velocity_trend': m.velocity_trend,
+                'deadline_hit_rate': float(m.deadline_hit_rate),
+                'risk_mitigation_success_rate': float(m.risk_mitigation_success_rate),
+                'coaching_effectiveness_score': float(m.coaching_effectiveness_score),
+            })
+
+    insights = []
+    for i in CoachingInsight.objects.filter(is_active=True).order_by(
+        '-confidence_score', '-sample_size'
+    )[:5]:
+        insights.append({
+            'title': i.title,
+            'confidence': float(i.confidence_score),
+        })
+
+    return {
+        'suggestions': suggestions,
+        'metrics': metrics,
+        'insights': insights,
+    }
+
+
+# ── Organizational Memory ──────────────────────────────────────────────
+
+def fetch_memory_summary(board, accessible_boards, organization):
+    """Memory node counts + latest title."""
+    try:
+        from knowledge_graph.models import MemoryNode
+    except Exception:
+        return None
+
+    if board:
+        qs = MemoryNode.objects.filter(board=board)
+    elif accessible_boards is not None:
+        qs = MemoryNode.objects.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    total = qs.count()
+    if total == 0:
+        return {'total': 0, 'by_type': {}, 'latest_title': None}
+
+    by_type = {}
+    for row in qs.values('node_type').annotate(c=Count('id')).order_by('-c'):
+        by_type[row['node_type']] = row['c']
+
+    latest = qs.order_by('-created_at').first()
+    return {
+        'total': total,
+        'by_type': by_type,
+        'latest_title': latest.title if latest else None,
+    }
+
+
+def fetch_memory_detail(board, accessible_boards, organization, query=''):
+    """Top relevant nodes + recent connections. Lightweight keyword filter."""
+    try:
+        from knowledge_graph.models import MemoryNode, MemoryConnection
+    except Exception:
+        return None
+
+    if board:
+        qs = MemoryNode.objects.filter(board=board)
+    elif accessible_boards is not None:
+        qs = MemoryNode.objects.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    qs = qs.select_related('board')
+
+    # Light keyword filter (tags + title + content) if query has signal
+    if query:
+        terms = [t for t in re.findall(r'\w+', query.lower()) if len(t) >= 3]
+        if terms:
+            f = Q()
+            for t in terms[:8]:
+                f |= Q(title__icontains=t) | Q(content__icontains=t)
+            qs_filtered = qs.filter(f)
+            if qs_filtered.exists():
+                qs = qs_filtered
+
+    total = MemoryNode.objects.filter(
+        board=board if board else None,
+    ).count() if board else qs.count()
+
+    by_type = {}
+    for row in qs.values('node_type').annotate(c=Count('id')).order_by('-c'):
+        by_type[row['node_type']] = row['c']
+
+    nodes = []
+    for n in qs.order_by('-importance_score', '-created_at')[:10]:
+        excerpt = (n.content or '')[:200]
+        if len(n.content or '') > 200:
+            excerpt += '…'
+        nodes.append({
+            'type': n.get_node_type_display(),
+            'title': n.title,
+            'importance': float(n.importance_score),
+            'when': _humanize_dt(n.created_at),
+            'board_name': n.board.name if n.board else None,
+            'excerpt': excerpt,
+        })
+
+    # Connections among the surfaced nodes only
+    surfaced_ids = {
+        n.id for n in qs.order_by('-importance_score', '-created_at')[:20]
+    }
+    connections = []
+    if surfaced_ids:
+        for c in MemoryConnection.objects.filter(
+            from_node_id__in=surfaced_ids, to_node_id__in=surfaced_ids,
+        ).select_related('from_node', 'to_node')[:10]:
+            connections.append({
+                'from': c.from_node.title,
+                'to': c.to_node.title,
+                'type': c.get_connection_type_display(),
+            })
+
+    return {
+        'total': total,
+        'by_type': by_type,
+        'nodes': nodes,
+        'connections': connections,
+    }
+
+
+# ── Status Reports ─────────────────────────────────────────────────────
+
+def fetch_status_report_summary(board, accessible_boards):
+    """Count + latest status report."""
+    try:
+        from kanban.models import BoardStatusReport
+    except Exception:
+        return None
+
+    qs = BoardStatusReport.objects.select_related('board')
+    if board:
+        qs = qs.filter(board=board)
+    elif accessible_boards is not None:
+        qs = qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    total = qs.count()
+    if total == 0:
+        return {'total': 0, 'latest': None}
+
+    latest = qs.order_by('-created_at').first()
+    return {
+        'total': total,
+        'latest': {
+            'created_at': latest.created_at.strftime('%Y-%m-%d'),
+            'rag': latest.rag_status,
+            'board_name': latest.board.name,
+        },
+    }
+
+
+def fetch_status_report_detail(board, accessible_boards, limit=5):
+    try:
+        from kanban.models import BoardStatusReport
+    except Exception:
+        return None
+
+    qs = BoardStatusReport.objects.select_related('board').order_by('-created_at')
+    if board:
+        qs = qs.filter(board=board)
+    elif accessible_boards is not None:
+        qs = qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    reports = []
+    for r in qs[:limit]:
+        text = (r.report_text or '').strip()
+        excerpt = text[:600] + ('…' if len(text) > 600 else '')
+        reports.append({
+            'board_name': r.board.name,
+            'created_at': r.created_at.strftime('%Y-%m-%d %H:%M'),
+            'rag': r.rag_status,
+            'rag_reasoning': r.rag_reasoning or '',
+            'confidence': float(r.confidence_score),
+            'text_excerpt': excerpt,
+            'key_drivers': list(r.key_data_drivers or []),
+        })
+    return {'reports': reports}
+
+
+# ── Integrations ───────────────────────────────────────────────────────
+
+def fetch_integrations_summary(board, accessible_boards):
+    try:
+        from integrations.models import GitHubIntegration
+    except Exception:
+        return None
+
+    qs = GitHubIntegration.objects.select_related('board')
+    if board:
+        qs = qs.filter(board=board)
+    elif accessible_boards is not None:
+        qs = qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    total = qs.count()
+    if total == 0:
+        return {'total': 0, 'active': 0, 'active_repos': []}
+
+    active = qs.filter(is_active=True).count()
+    active_repos = list(
+        qs.filter(is_active=True).values_list('repo_full_name', flat=True)[:5]
+    )
+    return {'total': total, 'active': active, 'active_repos': active_repos}
+
+
+def fetch_integrations_detail(board, accessible_boards):
+    try:
+        from integrations.models import GitHubIntegration
+    except Exception:
+        return None
+
+    qs = GitHubIntegration.objects.select_related('board', 'in_review_column')
+    if board:
+        qs = qs.filter(board=board)
+    elif accessible_boards is not None:
+        qs = qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    integrations = []
+    for g in qs.order_by('-updated_at')[:15]:
+        # Never expose webhook_secret.
+        integrations.append({
+            'repo': g.repo_full_name,
+            'board_name': g.board.name,
+            'is_active': g.is_active,
+            'created_at': g.created_at.strftime('%Y-%m-%d'),
+            'in_review_column': g.in_review_column.name if g.in_review_column else None,
+        })
+    return {'integrations': integrations}
+
+
+# ── Comments ───────────────────────────────────────────────────────────
+
+def fetch_comments_summary(board, accessible_boards):
+    try:
+        from kanban.models import Comment
+        from messaging.models import TaskThreadComment
+    except Exception:
+        return None
+    from datetime import timedelta
+    cutoff_7d = timezone.now() - timedelta(days=7)
+
+    c_qs = Comment.objects.select_related('task__column')
+    t_qs = TaskThreadComment.objects.select_related('task__column')
+    if board:
+        c_qs = c_qs.filter(task__column__board=board)
+        t_qs = t_qs.filter(task__column__board=board)
+    elif accessible_boards is not None:
+        c_qs = c_qs.filter(task__column__board__in=accessible_boards)
+        t_qs = t_qs.filter(task__column__board__in=accessible_boards)
+    else:
+        return None
+
+    classic = c_qs.count()
+    thread = t_qs.count()
+    if classic == 0 and thread == 0:
+        return {'total': 0, 'thread_count': 0, 'classic_count': 0, 'recent_7d': 0}
+
+    recent_7d = (
+        c_qs.filter(created_at__gte=cutoff_7d).count()
+        + t_qs.filter(created_at__gte=cutoff_7d).count()
+    )
+    return {
+        'total': classic + thread,
+        'thread_count': thread,
+        'classic_count': classic,
+        'recent_7d': recent_7d,
+    }
+
+
+def fetch_comments_detail(board, accessible_boards, limit=15):
+    try:
+        from kanban.models import Comment
+        from messaging.models import TaskThreadComment
+    except Exception:
+        return None
+
+    c_qs = Comment.objects.select_related('user', 'task', 'task__column')
+    t_qs = TaskThreadComment.objects.select_related('author', 'task', 'task__column')
+    if board:
+        c_qs = c_qs.filter(task__column__board=board)
+        t_qs = t_qs.filter(task__column__board=board)
+    elif accessible_boards is not None:
+        c_qs = c_qs.filter(task__column__board__in=accessible_boards)
+        t_qs = t_qs.filter(task__column__board__in=accessible_boards)
+    else:
+        return None
+
+    merged = []
+    for c in c_qs.order_by('-created_at')[:limit]:
+        author = c.user.get_full_name() or c.user.username
+        merged.append((c.created_at, {
+            'kind': 'classic',
+            'author': author,
+            'task_title': c.task.title,
+            'when': _humanize_dt(c.created_at),
+            'content_excerpt': (c.content or '')[:200],
+        }))
+    for t in t_qs.order_by('-created_at')[:limit]:
+        author = t.author.get_full_name() or t.author.username
+        merged.append((t.created_at, {
+            'kind': 'thread',
+            'author': author,
+            'task_title': t.task.title,
+            'when': _humanize_dt(t.created_at),
+            'content_excerpt': (t.content or '')[:200],
+        }))
+    merged.sort(key=lambda row: row[0], reverse=True)
+    return {'comments': [row[1] for row in merged[:limit]]}
+
+
+# ── Files & Attachments ────────────────────────────────────────────────
+
+def fetch_files_summary(board, accessible_boards):
+    try:
+        from kanban.models import TaskFile
+        from messaging.models import FileAttachment
+    except Exception:
+        return None
+
+    tf = TaskFile.objects.filter(deleted_at__isnull=True)
+    fa = FileAttachment.objects.filter(deleted_at__isnull=True)
+    if board:
+        tf = tf.filter(task__column__board=board)
+        fa = fa.filter(chat_room__board=board)
+    elif accessible_boards is not None:
+        tf = tf.filter(task__column__board__in=accessible_boards)
+        fa = fa.filter(chat_room__board__in=accessible_boards)
+    else:
+        return None
+
+    task_count = tf.count()
+    chat_count = fa.count()
+    if task_count == 0 and chat_count == 0:
+        return {'total': 0, 'task_files': 0, 'chat_files': 0, 'total_size_bytes': 0}
+
+    total_size = (
+        sum(tf.values_list('file_size', flat=True))
+        + sum(fa.values_list('file_size', flat=True))
+    )
+    return {
+        'total': task_count + chat_count,
+        'task_files': task_count,
+        'chat_files': chat_count,
+        'total_size_bytes': total_size,
+    }
+
+
+def fetch_files_detail(board, accessible_boards, limit=15):
+    try:
+        from kanban.models import TaskFile
+        from messaging.models import FileAttachment
+    except Exception:
+        return None
+
+    tf = TaskFile.objects.filter(deleted_at__isnull=True).select_related(
+        'uploaded_by', 'task'
+    )
+    fa = FileAttachment.objects.filter(deleted_at__isnull=True).select_related(
+        'uploaded_by', 'chat_room'
+    )
+    if board:
+        tf = tf.filter(task__column__board=board)
+        fa = fa.filter(chat_room__board=board)
+    elif accessible_boards is not None:
+        tf = tf.filter(task__column__board__in=accessible_boards)
+        fa = fa.filter(chat_room__board__in=accessible_boards)
+    else:
+        return None
+
+    merged = []
+    by_type = {}
+    for f in tf.order_by('-uploaded_at')[:limit]:
+        uploader = f.uploaded_by.get_full_name() or f.uploaded_by.username
+        by_type[f.file_type] = by_type.get(f.file_type, 0) + 1
+        merged.append((f.uploaded_at, {
+            'filename': f.filename,
+            'type': f.file_type,
+            'size': f.file_size,
+            'uploaded_by': uploader,
+            'when': _humanize_dt(f.uploaded_at),
+            'attached_to': f'task "{f.task.title}"',
+            'ai_summary': (f.ai_summary or '').strip(),
+        }))
+    for f in fa.order_by('-uploaded_at')[:limit]:
+        uploader = f.uploaded_by.get_full_name() or f.uploaded_by.username
+        by_type[f.file_type] = by_type.get(f.file_type, 0) + 1
+        merged.append((f.uploaded_at, {
+            'filename': f.filename,
+            'type': f.file_type,
+            'size': f.file_size,
+            'uploaded_by': uploader,
+            'when': _humanize_dt(f.uploaded_at),
+            'attached_to': f'chat room "{f.chat_room.name}"',
+            'ai_summary': (f.ai_summary or '').strip(),
+        }))
+    merged.sort(key=lambda row: row[0], reverse=True)
+    return {
+        'files': [row[1] for row in merged[:limit]],
+        'by_type': dict(sorted(by_type.items(), key=lambda kv: -kv[1])),
+    }
+
+
+# ── Skill Development ──────────────────────────────────────────────────
+
+def fetch_skill_dev_summary(board, accessible_boards):
+    try:
+        from kanban.models import SkillDevelopmentPlan, SkillGap
+    except Exception:
+        return None
+
+    plans = SkillDevelopmentPlan.objects.exclude(status__in=['completed', 'cancelled'])
+    gaps = SkillGap.objects.exclude(status__in=['resolved', 'accepted'])
+    if board:
+        plans = plans.filter(board=board)
+        gaps = gaps.filter(board=board)
+    elif accessible_boards is not None:
+        plans = plans.filter(board__in=accessible_boards)
+        gaps = gaps.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    active_plans = plans.count()
+    open_gaps = gaps.count()
+    critical = gaps.filter(severity__in=['high', 'critical']).count()
+    return {
+        'active_plans': active_plans,
+        'open_gaps': open_gaps,
+        'critical_gaps': critical,
+    }
+
+
+def fetch_skill_dev_detail(board, accessible_boards):
+    try:
+        from kanban.models import SkillDevelopmentPlan, SkillGap, TeamSkillProfile
+    except Exception:
+        return None
+
+    plans_qs = SkillDevelopmentPlan.objects.exclude(
+        status__in=['cancelled']
+    ).select_related('board')
+    gaps_qs = SkillGap.objects.exclude(
+        status__in=['accepted']
+    ).select_related('board')
+    profiles_qs = TeamSkillProfile.objects.select_related('board')
+    if board:
+        plans_qs = plans_qs.filter(board=board)
+        gaps_qs = gaps_qs.filter(board=board)
+        profiles_qs = profiles_qs.filter(board=board)
+    elif accessible_boards is not None:
+        plans_qs = plans_qs.filter(board__in=accessible_boards)
+        gaps_qs = gaps_qs.filter(board__in=accessible_boards)
+        profiles_qs = profiles_qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    plans = []
+    for p in plans_qs.order_by('-target_completion_date')[:10]:
+        plans.append({
+            'title': p.title,
+            'plan_type': p.get_plan_type_display(),
+            'target_skill': p.target_skill,
+            'target_proficiency': p.target_proficiency,
+            'status': p.get_status_display(),
+            'target_date': p.target_completion_date.strftime('%Y-%m-%d') if p.target_completion_date else None,
+        })
+
+    gaps = []
+    for g in gaps_qs.order_by('-severity', '-identified_at')[:10]:
+        gaps.append({
+            'skill_name': g.skill_name,
+            'proficiency': g.proficiency_level,
+            'gap_count': g.gap_count,
+            'required_count': g.required_count,
+            'severity': g.severity,
+            'status': g.status,
+        })
+
+    profiles = []
+    for prof in profiles_qs[:5]:
+        try:
+            util = float(prof.utilization_percentage)
+        except Exception:
+            util = 0.0
+        profiles.append({
+            'board_name': prof.board.name,
+            'skill_count': len(prof.available_skills),
+            'utilization_percentage': util,
+        })
+
+    return {'plans': plans, 'gaps': gaps, 'profiles': profiles}
+
+
+# ── Briefs (SavedBrief) ────────────────────────────────────────────────
+
+def fetch_briefs_summary(board, user, accessible_boards):
+    if not user or not getattr(user, 'is_authenticated', False):
+        return None
+    try:
+        from kanban.prizmbrief_models import SavedBrief
+    except Exception:
+        return None
+
+    qs = SavedBrief.objects.filter(user=user)
+    if board:
+        qs = qs.filter(board=board)
+    elif accessible_boards is not None:
+        qs = qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    total = qs.count()
+    if total == 0:
+        return {'total': 0, 'latest': None}
+
+    latest = qs.order_by('-created_at').first()
+    return {
+        'total': total,
+        'latest': {
+            'name': latest.name,
+            'when': _humanize_dt(latest.created_at),
+        },
+    }
+
+
+def fetch_briefs_detail(board, user, accessible_boards):
+    if not user or not getattr(user, 'is_authenticated', False):
+        return None
+    try:
+        from kanban.prizmbrief_models import SavedBrief
+    except Exception:
+        return None
+
+    qs = SavedBrief.objects.filter(user=user).select_related('board')
+    if board:
+        qs = qs.filter(board=board)
+    elif accessible_boards is not None:
+        qs = qs.filter(board__in=accessible_boards)
+    else:
+        return None
+
+    briefs = []
+    for b in qs.order_by('-created_at')[:10]:
+        slides = b.slides_json or []
+        briefs.append({
+            'name': b.name,
+            'audience_label': b.audience_label or b.audience,
+            'purpose_label': b.purpose_label or b.purpose,
+            'mode_label': b.mode_label or b.mode,
+            'slide_count': len(slides) if isinstance(slides, list) else 0,
+            'when': _humanize_dt(b.created_at),
+            'board_name': b.board.name if not board else None,
+        })
+    return {'briefs': briefs}

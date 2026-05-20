@@ -40,4 +40,7 @@ urlpatterns = [
     # Knowledge base management
     path('knowledge-base/', views.knowledge_base_view, name='knowledge_base'),
     path('api/knowledge-base/refresh/', views.refresh_knowledge_base, name='refresh_kb'),
+
+    # Admin-only Spectra debug view
+    path('admin/spectra-debug/<int:message_id>/', views.spectra_debug_view, name='spectra_debug'),
 ]

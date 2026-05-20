@@ -438,6 +438,14 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        'spectra_prompts_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'spectra_prompts.log'),
+            'maxBytes': 25 * 1024 * 1024,  # 25 MB per file
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -451,6 +459,11 @@ LOGGING = {
         },
         'analytics': {
             'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'spectra_prompts': {
+            'handlers': ['spectra_prompts_file'],
             'level': 'INFO',
             'propagate': False,
         },

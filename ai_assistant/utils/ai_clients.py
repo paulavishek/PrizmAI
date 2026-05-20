@@ -451,3 +451,103 @@ class GeminiClient:
                 'tokens': 0,
                 'model_used': 'none',
             }
+
+
+# Embedding model identifier — exported so other modules can record which
+# model produced a stored vector. text-embedding-004 outputs 768-dim vectors.
+GEMINI_EMBEDDING_MODEL = 'models/text-embedding-004'
+
+
+def embed_text(text, task_type='RETRIEVAL_DOCUMENT'):
+    """
+    Embed `text` via Gemini's text-embedding-004 model.
+
+    Args:
+        text: String to embed. Empty/None returns None.
+        task_type: 'RETRIEVAL_DOCUMENT' (default — for stored KB rows) or
+                   'RETRIEVAL_QUERY' (use this for user queries at search
+                   time — Gemini optimizes the vector for the role).
+
+    Returns:
+        list[float] of length 768 on success, None on failure.
+
+    Caches successful results via ai_cache_manager keyed on a SHA256 of the
+    input text + task_type. Long TTL (24h) since the vector is deterministic.
+    """
+    if not text:
+        return None
+    text = text.strip()
+    if not text:
+        return None
+
+    try:
+        import hashlib
+        from kanban_board.ai_cache import ai_cache_manager
+        key_payload = f'{task_type}:{text}'
+        context_id = hashlib.sha256(key_payload.encode('utf-8')).hexdigest()[:16]
+        cached = ai_cache_manager.get(
+            prompt=key_payload, operation='embedding', context_hash=context_id,
+        )
+        if cached and isinstance(cached, list):
+            return cached
+    except Exception:
+        # Cache layer optional — fall through to live call.
+        cached = None
+        ai_cache_manager = None
+        context_id = None
+        key_payload = None
+
+    try:
+        import google.generativeai as genai
+        api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        if not api_key:
+            logger.warning('embed_text: GEMINI_API_KEY not configured')
+            return None
+        genai.configure(api_key=api_key)
+        # Gemini's embed_content tops out around 2048 tokens of input;
+        # truncate aggressively rather than failing.
+        if len(text) > 8000:
+            text = text[:8000]
+        result = genai.embed_content(
+            model=GEMINI_EMBEDDING_MODEL, content=text, task_type=task_type,
+        )
+        vec = result.get('embedding') if isinstance(result, dict) else getattr(result, 'embedding', None)
+        if not vec:
+            logger.warning('embed_text: empty embedding returned')
+            return None
+        vec_list = list(vec)
+        # Cache for 24h
+        try:
+            if ai_cache_manager and key_payload and context_id:
+                ai_cache_manager.set(
+                    prompt=key_payload, result=vec_list,
+                    operation='embedding', context_hash=context_id, ttl=86400,
+                )
+        except Exception:
+            pass
+        return vec_list
+    except Exception as e:
+        logger.error(f'embed_text failed: {e}', exc_info=True)
+        return None
+
+
+def cosine_similarity(a, b):
+    """Cosine similarity for two equal-length float lists. Returns 0.0 on bad input."""
+    if not a or not b:
+        return 0.0
+    if len(a) != len(b):
+        return 0.0
+    try:
+        dot = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for x, y in zip(a, b):
+            dot += x * y
+            norm_a += x * x
+            norm_b += y * y
+        if norm_a <= 0.0 or norm_b <= 0.0:
+            return 0.0
+        import math
+        return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
+    except Exception:
+        return 0.0
