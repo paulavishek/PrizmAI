@@ -33,6 +33,7 @@ def run_due_date_approaching_automations():
         return 0
 
     now = timezone.now()
+    today = now.date()
     fired_total = 0
 
     for rule in rules:
@@ -55,7 +56,17 @@ def run_due_date_approaching_automations():
             due_date__lte=window_end,
         ).exclude(progress=100)
 
+        # Per-day dedupe so the hourly sweep doesn't fire the same task 24×.
+        already_fired_today = set(
+            AutomationLog.objects.filter(
+                rule=rule,
+                triggered_at__date=today,
+            ).values_list('task_affected_id', flat=True)
+        )
+
         for task in tasks:
+            if task.pk in already_fired_today:
+                continue
             actions_taken = []
             errors = []
             try:
@@ -90,9 +101,10 @@ def run_due_date_approaching_automations():
             except Exception:
                 logger.exception("Failed to write AutomationLog for rule pk=%s", rule.pk)
 
-        if tasks.exists():
+        fired_for_rule = tasks.exclude(pk__in=already_fired_today).count()
+        if fired_for_rule:
             AutomationRule.objects.filter(pk=rule.pk).update(
-                run_count=rule.run_count + tasks.count(),
+                run_count=rule.run_count + fired_for_rule,
                 last_run_at=now,
             )
 

@@ -134,11 +134,40 @@ def _validate_unified_payload(data):
         elif a['type'] not in VALID_ACTIONS:
             errors.append(f'Action {i + 1}: unknown action type "{a["type"]}".')
 
+    NO_VALUE_OPS = {
+        'is_empty', 'is_not_empty', 'is_true', 'is_false',
+        'is_overdue', 'is_past', 'is_today',
+    }
     for i, c in enumerate(data.get('conditions', [])):
         if not c.get('attribute'):
             errors.append(f'Condition {i + 1}: please select an attribute.')
-        if not c.get('operator'):
+            continue
+        op = c.get('operator')
+        if not op:
             errors.append(f'Condition {i + 1}: please select an operator.')
+            continue
+        if op not in NO_VALUE_OPS:
+            v = c.get('value')
+            is_blank = v is None or (isinstance(v, str) and v.strip() == '')
+            if is_blank:
+                errors.append(
+                    f'Condition {i + 1}: this operator needs a value to match against.'
+                )
+
+    # Trigger-config required-field validation parity with the client.
+    cfg = data.get('trigger_config', {}) or {}
+    if trigger_type == 'task_idle':
+        try:
+            if int(cfg.get('idle_days') or 0) < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append('Please enter how many idle days should trigger the rule.')
+    elif trigger_type == 'due_date_approaching':
+        try:
+            if int(cfg.get('days') or 0) < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append('Please enter how many days ahead to watch for.')
 
     for i, a in enumerate(data.get('otherwise_actions', [])):
         if not a.get('type'):
@@ -584,7 +613,13 @@ def rule_builder_data(request, board_id):
         .order_by('name')
     )
 
-    return JsonResponse({'members': members, 'columns': columns, 'labels': labels})
+    return JsonResponse({
+        'members': members,
+        'columns': columns,
+        'labels': labels,
+        'is_official_demo_board': bool(getattr(board, 'is_official_demo_board', False)),
+        'is_sandbox_copy': bool(getattr(board, 'is_sandbox_copy', False)),
+    })
 
 
 @login_required
