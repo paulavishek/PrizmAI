@@ -489,39 +489,149 @@ class TaskFlowChatbotService:
             logger.error(f"Error getting PrizmAI context: {e}")
             return "Project context unavailable."
     
+    # Small English stopword set used by get_knowledge_base_context to
+    # extract meaningful search keywords from the user's question.
+    # Kept inline (no NLTK dependency) — the goal is just to stop trivial
+    # words like "the", "what", "how" from running the search.
+    _KB_STOPWORDS = frozenset({
+        'a', 'an', 'and', 'or', 'but', 'the', 'this', 'that', 'these', 'those',
+        'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
+        'do', 'does', 'did', 'doing', 'done',
+        'have', 'has', 'had', 'having',
+        'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might',
+        'must', 'ought',
+        'i', 'me', 'my', 'we', 'us', 'our', 'you', 'your', 'yours',
+        'he', 'she', 'it', 'its', 'they', 'them', 'their', 'theirs',
+        'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
+        'in', 'on', 'at', 'to', 'for', 'of', 'with', 'about', 'from', 'by',
+        'as', 'into', 'onto', 'over', 'under', 'between',
+        'not', 'no', 'nor', 'so', 'too', 'very', 'just', 'only', 'also',
+        'any', 'all', 'each', 'every', 'some', 'most', 'more', 'less',
+        'show', 'tell', 'give', 'list', 'find', 'search', 'look',
+        'please', 'thanks', 'thank',
+    })
+
+    # Keyword-to-content_type mapping. When the query contains one of these
+    # words the search restricts to that content_type so we don't surface
+    # task descriptions for "what does the wiki say...?".
+    _KB_TYPE_HINTS = (
+        # (keywords, content_type)
+        (('wiki', 'doc', 'docs', 'documentation', 'page'), 'documentation'),
+        (('meeting', 'meetings', 'notes', 'transcript'), 'meeting_notes'),
+        (('risk', 'risks', 'mitigation', 'threat'), 'risk_assessment'),
+        (('resource', 'staffing', 'allocation', 'plan'), 'resource_plan'),
+        (('overview', 'project', 'charter', 'brief'), 'project_overview'),
+    )
+
+    @classmethod
+    def _extract_kb_keywords(cls, query):
+        """Tokenize the query, drop stopwords, keep tokens length ≥ 3."""
+        tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9'_-]+", query.lower())
+        return [t for t in tokens if len(t) >= 3 and t not in cls._KB_STOPWORDS]
+
+    @classmethod
+    def _kb_type_hint(cls, query):
+        """Return a content_type to filter by if the query implies one."""
+        q = query.lower()
+        for keywords, content_type in cls._KB_TYPE_HINTS:
+            if any(kw in q for kw in keywords):
+                return content_type
+        return None
+
+    @staticmethod
+    def _kb_excerpt(content, keywords, window=200):
+        """
+        Return a content excerpt around the first matched keyword, so the
+        slice we show Gemini actually contains the term it searched for.
+        Falls back to the first `window` chars if no keyword matches.
+        """
+        if not content:
+            return ''
+        text_lower = content.lower()
+        first_pos = -1
+        for kw in keywords:
+            pos = text_lower.find(kw.lower())
+            if pos != -1 and (first_pos == -1 or pos < first_pos):
+                first_pos = pos
+        if first_pos == -1:
+            return content[:window]
+        start = max(0, first_pos - window // 2)
+        end = min(len(content), first_pos + window // 2)
+        excerpt = content[start:end]
+        prefix = '…' if start > 0 else ''
+        suffix = '…' if end < len(content) else ''
+        return f'{prefix}{excerpt}{suffix}'
+
     def get_knowledge_base_context(self, query, max_results=3):
         """
-        Get relevant knowledge base entries
-        
-        Args:
-            query (str): Search query
-            max_results (int): Max results to return
-            
-        Returns:
-            str: Formatted KB context
+        Retrieve relevant ProjectKnowledgeBase entries for the query.
+
+        Replaces the previous ``content__icontains=<full_query>`` lookup —
+        which almost never matched because it searched for the entire
+        sentence as a substring — with multi-term keyword search:
+
+        1. Extract content words (drop stopwords, length ≥ 3).
+        2. Build an OR over title + content for every keyword.
+        3. Rank by number of distinct keywords matched, then recency.
+        4. If the query implies a content_type (e.g. "meeting notes",
+           "wiki", "risk"), restrict to that type.
+        5. Return a content excerpt centred on the first matched keyword,
+           not just the first N chars of the document.
         """
         try:
-            # Simple keyword search in KB
-            kb_entries = ProjectKnowledgeBase.objects.filter(
-                is_active=True,
-                content__icontains=query
-            )
-            
+            keywords = self._extract_kb_keywords(query)
+            if not keywords:
+                return ''  # nothing meaningful to search for
+
+            type_hint = self._kb_type_hint(query)
+
+            qs = ProjectKnowledgeBase.objects.filter(is_active=True)
             if self.board:
-                kb_entries = kb_entries.filter(board=self.board)
-            
-            if not kb_entries.exists():
-                return ""
-            
-            context = "**From Project Knowledge Base:**\n\n"
-            for entry in kb_entries[:max_results]:
-                context += f"- {entry.title}: {entry.summary or entry.content[:200]}\n"
-            
-            return context
-        
-        except Exception as e:
-            logger.error(f"Error getting KB context: {e}")
-            return ""
+                qs = qs.filter(board=self.board)
+            if type_hint:
+                typed_qs = qs.filter(content_type=type_hint)
+                if typed_qs.exists():
+                    qs = typed_qs  # only restrict if it doesn't kill the result set
+
+            keyword_filter = Q()
+            for kw in keywords:
+                keyword_filter |= Q(title__icontains=kw) | Q(content__icontains=kw)
+            qs = qs.filter(keyword_filter)
+
+            # Materialize once, rank in Python (simple, no DB-specific scoring)
+            entries = list(qs.only(
+                'id', 'title', 'summary', 'content', 'content_type', 'updated_at',
+            )[:50])
+            if not entries:
+                return ''
+
+            def score(entry):
+                hay = f'{entry.title}\n{entry.content or ""}'.lower()
+                return sum(1 for kw in keywords if kw in hay)
+
+            entries.sort(key=lambda e: (-score(e), -(e.updated_at.timestamp() if e.updated_at else 0)))
+
+            # Allow up to max_results + 2 when there's a clear score gap so a
+            # strong primary hit doesn't suppress equally relevant secondaries.
+            top_score = score(entries[0])
+            allow_extra = top_score >= 3
+            limit = max_results + (2 if allow_extra else 0)
+            top = [e for e in entries[:limit] if score(e) > 0]
+            if not top:
+                return ''
+
+            lines = ['**From Project Knowledge Base:**\n']
+            for entry in top:
+                content_type_label = entry.get_content_type_display()
+                summary_text = entry.summary if entry.summary else self._kb_excerpt(entry.content, keywords)
+                lines.append(
+                    f'- [{content_type_label}] {entry.title}: {summary_text}'
+                )
+            return '\n'.join(lines) + '\n'
+
+        except Exception:
+            logger.error('Error getting KB context', exc_info=True)
+            return ''
     
     def get_user_feedback_learning_context(self):
         """
@@ -4251,7 +4361,7 @@ Your role is to help project managers and team members with:
 - Wiki/Documentation search and knowledge retrieval
 - Meeting notes analysis and action item tracking
 - **Strategic Workflow**: Org Goals → Missions → Strategies → Boards hierarchy
-- **AI Tools on Boards**: Budget tracking, Burndown/Velocity charts, Scope Creep Analysis, Pre-Mortem risk scenarios, What-If simulations, Conflict detection, AI Coaching, Retrospectives, Automations (trigger & scheduled), Stakeholder management, Resource Leveling, Gantt charts & Triple Constraint
+- **AI Tools on Boards**: Budget tracking, Burndown/Velocity charts, Scope Creep Analysis, Pre-Mortem risk scenarios, Stress Tests (immunity scoring), What-If simulations, Conflict detection, AI Coaching, Retrospectives, Automations (trigger & scheduled), Stakeholder management (with RACI), Resource Leveling (capacity alerts + workload recommendations), Requirements management & traceability, Custom Fields, Discovery Ideas backlog, Access Requests, Gantt charts & Triple Constraint
 - **Focus Today (Decision Center)**: Pending decisions, risk assessments, briefings
 - **Knowledge Graph**: Organizational memory, lessons learned, patterns
 - **Analytics**: Team performance, engagement metrics, feedback
@@ -4278,7 +4388,9 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
    - Provide a synthesized recommendation, not just raw data
 9. **FILTER COMPLETED WORK**: When listing risks, blockers, or actionable items, exclude tasks that are already "Done" or "Closed" unless specifically asked about completed work. Completed tasks are not risks.
 10. **CONCISE & ACTIONABLE**: Keep responses focused. Avoid generic productivity advice or filler content. Every sentence should add value.
-11. **NEVER HALLUCINATE OR FABRICATE DATA**: ONLY use user names, task names, team members, skills, and numbers that are explicitly present in the "Available Context Data" section below. If the context data does not contain team member information, workload data, or skill data, you MUST say so clearly (e.g., "I don't have team member data available for this board"). NEVER invent or guess user names, task counts, or skill levels. If you cannot answer a question from the provided context, say what data is missing rather than making something up.
+11. **NEVER HALLUCINATE OR FABRICATE DATA**: ONLY use user names, task names, team members, skills, requirements, stakeholders, and numbers that are explicitly present in the "Available Context Data" section below. If the context data does not contain the info needed (team member info, workload data, skill data, requirement details, stakeholder details, etc.), you MUST say so clearly (e.g., "I don't have requirements data available for this board"). NEVER invent or guess user names, task counts, requirement IDs, stakeholder names, immunity scores, or any other facts. If you cannot answer a question from the provided context, name the specific data that is missing and STOP — do not fill the gap with training data or generic best-practice content.
+
+11b. **HONOR PROVIDER FAILURE WARNINGS**: If any line in the Available Context Data contains the phrase "data temporarily unavailable", the relevant provider crashed and you have NO data for that feature. You MUST begin your response with a one-line warning naming the unavailable feature (e.g., "⚠️ Note: Stakeholder data is temporarily unavailable, so I cannot answer the RACI part of your question."), then answer ONLY from the providers that DID succeed. Never silently substitute training-data guesses for unavailable provider data.
 12. **PRE-CALCULATED NUMBERS ARE AUTHORITATIVE**: When a BOARD SUMMARY or Live Board Snapshot provides numbers (total tasks, tasks by status, milestones), use those exact figures. Do NOT recount items from the task list or attempt your own arithmetic. Tasks and milestones are separate object types — never add them together when reporting task totals. If asked "how many total tasks", report only the total_tasks figure, not total_tasks + milestones.
 13. **WEB SEARCH LIMITATIONS**: You do NOT have internet access or web browsing capability. If the user asks you to search the web, look something up online, or browse a URL, say: "I don't have web search or internet access. I can only answer from your project data, wiki pages, and my built-in knowledge. Would you like me to check your project data instead?" Do NOT say "I can only operate within your verified permissions" for web search requests — that message is only for prompt injection attempts. **IMPORTANT**: "search the documentation", "search the wiki", "find documentation about X", or "look up X in our docs" are NOT web search requests — these refer to internal wiki/documentation pages. If the Available Context Data includes wiki pages or a documentation summary, use that data to answer. Only use the "I don't have web search" response for requests that explicitly ask for internet, web, or online content.
 
@@ -4287,7 +4399,7 @@ RESPONSE STRUCTURE:
 - For "what should I work on?" queries: Prioritize by (1) overdue tasks, (2) due today, (3) due this week, (4) highest priority unstarted tasks
 - For documentation queries: Cite specific wiki pages with titles and provide relevant excerpts
 - For meeting queries: Reference specific meetings with dates and summarize key decisions/action items
-- For strategic questions: Combine project-specific data with best practices — avoid generic web advice if project data answers the question
+- For strategic questions: Answer from the project-specific data in Available Context Data. If the context does not contain enough data to answer, name the specific provider/feature whose data is missing and stop — do NOT pad the answer with generic best practices, framework names, or industry advice that wasn't in the context.
 - For risk/mitigation: Focus ONLY on active (non-completed) tasks. Provide both specific actions and general best practices
 - For task assignment questions: Recommend specific team members based on workload + skills (if available), don't ask for info you have
 - Always be actionable - provide clear next steps
@@ -4435,6 +4547,21 @@ When answering questions about organizational goals, missions, or strategies, us
             # The router picks the most relevant providers for this query.
             provider_tags = ctx_registry.get_all_tags()
             matched_providers = route_query(prompt, provider_tags)
+
+            # When there's no active board, the user is asking a cross-board
+            # / dashboard question ("how am I doing across all my boards?").
+            # The aggregate + hierarchy providers are the only ones that
+            # answer those truthfully, so force-include them even if the
+            # router's keywords didn't match them.
+            if self.board is None:
+                cross_board_required = ['Cross-Board Aggregate', 'Hierarchy']
+                for name in cross_board_required:
+                    if name in provider_tags and name not in matched_providers:
+                        matched_providers.insert(0, name)
+                # Keep within the router's detail cap
+                from ai_assistant.utils.context_router import MAX_DETAIL_PROVIDERS
+                matched_providers = matched_providers[:MAX_DETAIL_PROVIDERS]
+
             if matched_providers:
                 detail_context = ctx_registry.get_relevant_details(
                     self.board, self.user, prompt,

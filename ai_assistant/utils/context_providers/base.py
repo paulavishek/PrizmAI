@@ -51,36 +51,51 @@ class BaseContextProvider(ABC):
         Return a compact 2-5 line summary of this feature's state.
 
         Always called for every query to provide baseline awareness.
-        Returns empty string if user lacks access.
+        Returns empty string if user lacks access. On any internal error,
+        returns an explicit "data temporarily unavailable" warning line so
+        Spectra can tell the user something is missing — the system prompt's
+        rule 11b then forces Gemini to mention the failure rather than
+        hallucinate a substitute.
         """
         if not self._check_access(board, user, is_demo_mode):
             return ''
         try:
             return self._get_summary_impl(board, user, is_demo_mode) or ''
-        except Exception as e:
-            logger.warning(
-                'Context provider %s summary failed: %s',
-                self.PROVIDER_NAME, e,
+        except Exception:
+            # Use logger.error with exc_info=True so the traceback ends up in
+            # logs — warnings without tracebacks make provider bugs invisible.
+            logger.error(
+                'Context provider %s summary crashed',
+                self.PROVIDER_NAME, exc_info=True,
             )
-            return f'⚠️ {self.PROVIDER_NAME} data temporarily unavailable.\n'
+            return (
+                f'⚠️ {self.PROVIDER_NAME} data temporarily unavailable '
+                f'(provider error). Do not answer questions about this feature '
+                f'from memory.\n'
+            )
 
     def get_detail(self, board, user, query='', is_demo_mode=False):
         """
         Return detailed context for this feature (only when relevant).
 
         Called by the router when the query matches this provider's tags.
-        Returns empty string if user lacks access.
+        Returns empty string if user lacks access. On any internal error,
+        returns an explicit "data temporarily unavailable" warning line.
         """
         if not self._check_access(board, user, is_demo_mode):
             return ''
         try:
             return self._get_detail_impl(board, user, query, is_demo_mode) or ''
-        except Exception as e:
-            logger.warning(
-                'Context provider %s detail failed: %s',
-                self.PROVIDER_NAME, e,
+        except Exception:
+            logger.error(
+                'Context provider %s detail crashed',
+                self.PROVIDER_NAME, exc_info=True,
             )
-            return f'⚠️ {self.PROVIDER_NAME} detailed data temporarily unavailable.\n'
+            return (
+                f'⚠️ {self.PROVIDER_NAME} detailed data temporarily unavailable '
+                f'(provider error). Do not answer questions about this feature '
+                f'from memory.\n'
+            )
 
     # ── Security layer (RBAC + sandbox) ─────────────────────────────────
 
