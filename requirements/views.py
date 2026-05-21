@@ -408,14 +408,14 @@ def traceability_matrix(request, board_id):
 
     context = {
         'board': board,
-        'objectives': objectives,
+        'goals': goals,
         'requirements': requirements,
         'tasks': tasks,
         'all_tasks_count': len(all_tasks),
         'tasks_truncated': tasks_truncated,
         'show_all_tasks': show_all_tasks,
         'task_prefix': board.get_task_prefix(),
-        'obj_matrix': obj_matrix,
+        'goal_matrix': goal_matrix,
         'task_matrix': task_matrix,
         'covered_count': covered_count,
         'uncovered_count': uncovered_count,
