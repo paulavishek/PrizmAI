@@ -192,6 +192,14 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not seed Discovery demo ideas after sandbox provision: %s", e)
 
+    # Seed automation hierarchy demo data: checklist items, parent/subtask
+    # groups, and blocking dependency pair needed for T-22–T-29 test scenarios.
+    try:
+        from django.core.management import call_command
+        call_command('populate_automation_demo_data')
+    except Exception as e:
+        logger.warning("Could not seed automation hierarchy data after sandbox provision: %s", e)
+
     redirect_url = '/dashboard/'
     _send_provision_status(user_id, 'Your workspace is ready!', 100)
     _send_provision_result(user_id, {
