@@ -10,12 +10,22 @@ class AIAssistantSession(models.Model):
     Represents a conversation session with the AI Project Assistant
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_sessions')
-    board = models.ForeignKey(Board, on_delete=models.SET_NULL, null=True, blank=True, 
+    board = models.ForeignKey(Board, on_delete=models.SET_NULL, null=True, blank=True,
                              related_name='ai_sessions', help_text="Board context for this session")
-    
+    # Workspace isolation — sessions must be scoped to the workspace they were created in
+    # so demo sandbox sessions never bleed into real workspaces (and vice versa).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.CASCADE,
+        related_name='ai_sessions',
+        null=True,
+        blank=True,
+        help_text="The workspace this session belongs to. Null only for legacy rows pre-migration.",
+    )
+
     title = models.CharField(max_length=200, help_text="Session title/topic")
     description = models.TextField(blank=True, null=True, help_text="Session description")
-    
+
     is_active = models.BooleanField(default=True, help_text="Is this session currently active?")
     is_demo = models.BooleanField(default=False, help_text="Is this a demo/example session visible to all users?")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -150,6 +160,16 @@ class AIAssistantAnalytics(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_analytics')
     board = models.ForeignKey(Board, on_delete=models.SET_NULL, null=True, blank=True,
                             related_name='ai_analytics')
+    # Workspace isolation — analytics rows must be scoped to the workspace they were
+    # generated in so the analytics dashboard never mixes demo and real activity.
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.CASCADE,
+        related_name='ai_analytics',
+        null=True,
+        blank=True,
+        help_text="The workspace this analytics row belongs to. Null only for legacy rows pre-migration.",
+    )
     date = models.DateField(auto_now_add=True, help_text="Analytics date")
     
     # Usage metrics

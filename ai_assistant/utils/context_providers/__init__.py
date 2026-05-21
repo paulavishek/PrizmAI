@@ -192,6 +192,9 @@ def _auto_register():
         files_provider,
         skill_dev_provider,
         briefs_provider,
+        # ── May 2026: Conflicts + Shadow Board coverage gaps ──
+        conflicts_provider,
+        shadow_board_provider,
     )
 
 

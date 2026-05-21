@@ -31,18 +31,21 @@ from .utils.chatbot_service import TaskFlowChatbotService
 @ensure_csrf_cookie
 def assistant_welcome(request):
     """Welcome page for AI Project Assistant"""
-    # Get user's own sessions
-    user_sessions = AIAssistantSession.objects.filter(user=request.user)
-    
-    # Only include demo sessions when in demo mode
-    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
-    if is_demo_mode:
-        demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
-        all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
-        total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    # Scope sessions to the active workspace — see migration 0016 and get_sessions().
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        all_sessions = AIAssistantSession.objects.none()
+        total_sessions_count = 0
+    elif ws.is_demo:
+        scoped = AIAssistantSession.objects.filter(workspace=ws).filter(
+            Q(user=request.user) | Q(is_demo=True)
+        )
+        all_sessions = scoped.distinct().order_by('-updated_at')[:5]
+        total_sessions_count = scoped.distinct().count()
     else:
-        all_sessions = user_sessions.order_by('-updated_at')[:5]
-        total_sessions_count = user_sessions.count()
+        scoped = AIAssistantSession.objects.filter(workspace=ws, user=request.user)
+        all_sessions = scoped.order_by('-updated_at')[:5]
+        total_sessions_count = scoped.count()
     
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -72,29 +75,37 @@ def chat_interface(request, session_id=None):
             session_id = None
     
     # Get session if specified, otherwise let user create one via "New Chat" button
+    ws = getattr(request, 'workspace', None)
     if session_id:
-        # Allow access to user's own sessions; demo sessions only in demo mode
-        is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
-        if is_demo_mode:
+        # Scope by workspace: a session is only viewable in the workspace it was created in.
+        if ws is None:
+            session = None
+        elif ws.is_demo:
             session = AIAssistantSession.objects.filter(
                 Q(user=request.user) | Q(is_demo=True),
-                id=session_id
+                workspace=ws,
+                id=session_id,
             ).first()
         else:
             session = AIAssistantSession.objects.filter(
                 user=request.user,
-                id=session_id
+                workspace=ws,
+                id=session_id,
             ).first()
-        
+
         if not session:
             return render(request, 'error.html', {
                 'error_message': 'Session not found or access denied.'
             }, status=404)
     else:
-        # Don't auto-create sessions - let user create one via "New Chat" button
-        # Try to get the most recent user session to display, but don't create one
-        session = AIAssistantSession.objects.filter(user=request.user, is_active=True).order_by('-updated_at').first()
-        # session can be None - template will handle showing empty state
+        # Don't auto-create sessions - let user create one via "New Chat" button.
+        # Show the most recent session in THIS workspace only.
+        if ws is None:
+            session = None
+        else:
+            session = AIAssistantSession.objects.filter(
+                user=request.user, workspace=ws, is_active=True
+            ).order_by('-updated_at').first()
     
     # Get user's organization
     user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
@@ -140,16 +151,27 @@ def chat_interface(request, session_id=None):
 @demo_write_guard
 @require_http_methods(["POST"])
 def create_session(request):
-    """Create a new AI Assistant session"""
+    """Create a new AI Assistant session.
+
+    The session is bound to ``request.workspace`` so it can never appear in another
+    workspace's sidebar (see migration 0016 and get_sessions()).
+    """
     try:
         data = json.loads(request.body)
-        
-        # Check for duplicate title (warn, don't block)
+
+        ws = getattr(request, 'workspace', None)
+        if ws is None:
+            return JsonResponse({
+                'status': 'error',
+                'error': 'No active workspace. Select a workspace before starting a chat.',
+            }, status=400)
+
+        # Check for duplicate title within this workspace only (warn, don't block).
         title = data.get('title', '').strip()
         force = data.get('force', False)
         if title and not force:
             existing = AIAssistantSession.objects.filter(
-                user=request.user, title__iexact=title
+                user=request.user, workspace=ws, title__iexact=title
             ).first()
             if existing:
                 return JsonResponse({
@@ -166,6 +188,7 @@ def create_session(request):
         if form.is_valid():
             session = form.save(commit=False)
             session.user = request.user
+            session.workspace = ws
             session.save()
 
             # Reset any stale conversation-flow state so a new session
@@ -482,6 +505,7 @@ def send_message(request):
                 board=board,
                 date=today,
                 defaults={
+                    'workspace': getattr(request, 'workspace', None),
                     'sessions_created': 0,
                     'messages_sent': 0,
                     'gemini_requests': 0,
@@ -491,6 +515,9 @@ def send_message(request):
                     'avg_response_time_ms': 0,
                 }
             )
+            # Backfill workspace for legacy rows that pre-date migration 0016.
+            if analytics.workspace_id is None:
+                analytics.workspace = getattr(request, 'workspace', None)
 
             analytics.messages_sent += 1
             if response.get('source') == 'gemini':
@@ -675,17 +702,26 @@ def remove_attachment(request, attachment_id):
 
 @login_required
 def get_sessions(request):
-    """Get user's chat sessions — workspace-mode aware"""
-    is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False) if hasattr(request.user, 'profile') else False
-    if is_demo_mode:
-        # Demo mode: user's own sessions AND shared demo sessions
+    """Get user's chat sessions — strictly scoped to the active workspace.
+
+    Each session is bound to a workspace at creation time (see ``_get_or_create_session``).
+    A session must NEVER appear in a workspace other than its own; otherwise demo
+    sandbox sessions bleed into real workspaces (see migration 0016 for the FK).
+    """
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        sessions = AIAssistantSession.objects.none()
+    elif ws.is_demo:
+        # Demo workspace shows the user's own demo-bound sessions AND shared seeded demo sessions.
         sessions = AIAssistantSession.objects.filter(
+            workspace=ws,
+        ).filter(
             Q(user=request.user) | Q(is_demo=True)
         ).order_by('-updated_at')
     else:
-        # My Workspace mode: only user's own non-demo sessions
+        # Real workspace shows only the current user's sessions in this workspace.
         sessions = AIAssistantSession.objects.filter(
-            user=request.user, is_demo=False
+            workspace=ws, user=request.user
         ).order_by('-updated_at')
     
     data = {
@@ -713,12 +749,19 @@ def get_session_messages(request, session_id):
     from accounts.models import Organization
     
     try:
-        # Allow access to user's own sessions OR demo sessions
-        session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(is_demo=True),
-            id=session_id
-        ).first()
-        
+        # Scope by active workspace: a session is only visible in the workspace it was
+        # created in. Cross-workspace access (e.g. demo → real) must return 404.
+        ws = getattr(request, 'workspace', None)
+        session_qs = AIAssistantSession.objects.filter(id=session_id)
+        if ws is None:
+            session = None
+        elif ws.is_demo:
+            session = session_qs.filter(workspace=ws).filter(
+                Q(user=request.user) | Q(is_demo=True)
+            ).first()
+        else:
+            session = session_qs.filter(workspace=ws, user=request.user).first()
+
         if not session:
             return JsonResponse({'error': 'Session not found'}, status=404)
         
@@ -778,11 +821,11 @@ def rename_session(request, session_id):
         if not new_title:
             return JsonResponse({'success': False, 'error': 'Title cannot be empty'}, status=400)
         
-        # Check for duplicate title (warn, don't block)
+        # Check for duplicate title within the same workspace (warn, don't block).
         force = data.get('force', False)
         if not force:
             existing = AIAssistantSession.objects.filter(
-                user=request.user, title__iexact=new_title
+                user=request.user, workspace=session.workspace, title__iexact=new_title
             ).exclude(id=session_id).first()
             if existing:
                 return JsonResponse({
@@ -999,6 +1042,7 @@ def submit_feedback(request, message_id):
                 board=board,
                 date=today,
                 defaults={
+                    'workspace': message.session.workspace or getattr(request, 'workspace', None),
                     'sessions_created': 0,
                     'messages_sent': 0,
                     'gemini_requests': 0,
@@ -1008,6 +1052,8 @@ def submit_feedback(request, message_id):
                     'avg_response_time_ms': 0,
                 }
             )
+            if analytics.workspace_id is None:
+                analytics.workspace = message.session.workspace or getattr(request, 'workspace', None)
             
             # Undo previous vote if re-voting
             if previous_helpful is True:
@@ -1047,24 +1093,32 @@ def analytics_dashboard(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get sessions - include demo sessions and user's own sessions
-    sessions_qs = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True),
-        updated_at__gte=timezone.now() - timedelta(days=30)
-    )
-    
+    # Scope analytics strictly to the active workspace. Previously this view
+    # unconditionally OR'd in every demo user's analytics, so every workspace
+    # showed the same numbers — see migration 0016.
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        sessions_qs = AIAssistantSession.objects.none()
+        analytics_qs = AIAssistantAnalytics.objects.none()
+    else:
+        sessions_qs = AIAssistantSession.objects.filter(
+            workspace=ws,
+            updated_at__gte=timezone.now() - timedelta(days=30),
+        )
+        analytics_qs = AIAssistantAnalytics.objects.filter(
+            workspace=ws,
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+        if ws.is_demo:
+            # Demo workspace: include seeded demo sessions plus the user's own.
+            sessions_qs = sessions_qs.filter(Q(user=request.user) | Q(is_demo=True))
+        else:
+            sessions_qs = sessions_qs.filter(user=request.user)
+            analytics_qs = analytics_qs.filter(user=request.user)
+
     if board_id:
         sessions_qs = sessions_qs.filter(board_id=board_id)
-    
-    # Get analytics from both demo users and current user
-    demo_user_ids = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
-    analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(user_id__in=demo_user_ids),
-        date__gte=start_date,
-        date__lte=end_date
-    )
-    
-    if board_id:
         analytics_qs = analytics_qs.filter(board_id=board_id)
     
     # Count total messages from actual sessions (not accumulated analytics)
@@ -1122,14 +1176,33 @@ def get_analytics_data(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
 
-    # --- Session-based daily message counts (demo + user) ---
-    sessions_qs = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True),
-        updated_at__date__gte=start_date,
-        updated_at__date__lte=end_date,
-    )
+    # --- Session-based daily message counts — scoped to the active workspace ---
+    ws = getattr(request, 'workspace', None)
+    if ws is None:
+        sessions_qs = AIAssistantSession.objects.none()
+        analytics_qs = AIAssistantAnalytics.objects.none()
+    else:
+        sessions_qs = AIAssistantSession.objects.filter(
+            workspace=ws,
+            updated_at__date__gte=start_date,
+            updated_at__date__lte=end_date,
+        )
+        analytics_qs = AIAssistantAnalytics.objects.filter(
+            workspace=ws,
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+        if ws.is_demo:
+            sessions_qs = sessions_qs.filter(Q(user=request.user) | Q(is_demo=True))
+        else:
+            sessions_qs = sessions_qs.filter(user=request.user)
+            analytics_qs = analytics_qs.filter(user=request.user)
+
     if board_id:
         sessions_qs = sessions_qs.filter(board_id=board_id)
+        analytics_qs = analytics_qs.filter(board_id=board_id)
+
+    analytics_qs = analytics_qs.order_by('date')
 
     daily_messages = (
         sessions_qs
@@ -1140,17 +1213,6 @@ def get_analytics_data(request):
     )
     # Build a dict: date -> message count
     messages_by_date = {row['day'].isoformat(): row['total'] for row in daily_messages}
-
-    # --- Analytics-based daily token / RAG / web-search counts (demo + user) ---
-    # Include demo user analytics so charts are consistent with the metric cards on the dashboard
-    demo_user_ids_chart = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
-    analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(user_id__in=demo_user_ids_chart),
-        date__gte=start_date,
-        date__lte=end_date,
-    ).order_by('date')
-    if board_id:
-        analytics_qs = analytics_qs.filter(board_id=board_id)
 
     tokens_by_date = {}
     web_searches_by_date = {}

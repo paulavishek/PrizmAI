@@ -15,8 +15,9 @@ class RiskContextProvider(BaseContextProvider):
         'risk', 'risks', 'critical', 'blocker', 'blockers', 'blocked',
         'dependency', 'dependencies', 'depends', 'blocking',
         'stakeholder', 'stakeholders', 'high risk', 'risk score',
-        'mitigation', 'what if', 'shadow board', 'pre-mortem',
-        'stress test', 'scenario',
+        'mitigation', 'pre-mortem', 'stress test', 'scenario',
+        # NOTE: 'shadow board' moved to shadow_board_provider (May 2026) —
+        # risk_provider never actually surfaced shadow branch data.
     ]
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
