@@ -275,6 +275,15 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'   ⚠️ Discovery demo data: {e}'))
 
+            # 14. Automation Hierarchy Demo Data
+            self.stdout.write(self.style.NOTICE('\n⚡ PHASE 14: Creating Automation Hierarchy Demo Data...'))
+            try:
+                from django.core.management import call_command as _call_auto
+                _call_auto('populate_automation_demo_data')
+                self.stdout.write(self.style.SUCCESS('   ✅ Automation hierarchy data seeded.'))
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'   ⚠️ Automation hierarchy data: {e}'))
+
         # Final Summary
         self.print_final_summary()
 
