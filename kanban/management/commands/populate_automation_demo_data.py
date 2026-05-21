@@ -299,18 +299,23 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        from kanban.models import Board, Column, Task, ChecklistItem
+        from django.db.models import Q
+        from kanban.models import Board
 
         self.stdout.write(self.style.SUCCESS('\n' + '=' * 70))
         self.stdout.write(self.style.SUCCESS('  Populating Automation Hierarchy Demo Data'))
         self.stdout.write(self.style.SUCCESS('=' * 70))
 
-        board = Board.objects.filter(
-            name__icontains='software',
-            is_official_demo_board=True,
-        ).first()
-        if not board:
-            self.stdout.write(self.style.ERROR('❌ Official demo board not found.'))
+        # Seed both the official template board AND every sandbox copy so that
+        # users who have already provisioned a sandbox see the data immediately
+        # without needing to re-provision.
+        boards = list(
+            Board.objects.filter(name__icontains='software').filter(
+                Q(is_official_demo_board=True) | Q(is_sandbox_copy=True)
+            )
+        )
+        if not boards:
+            self.stdout.write(self.style.ERROR('No software demo boards found.'))
             return
 
         from django.contrib.auth import get_user_model
@@ -319,33 +324,45 @@ class Command(BaseCommand):
         sam = User.objects.filter(username='sam_rivera_demo').first()
         jordan = User.objects.filter(username='jordan_taylor_demo').first()
         if not all([alex, sam, jordan]):
-            self.stdout.write(self.style.ERROR('❌ Demo users not found.'))
+            self.stdout.write(self.style.ERROR('Demo users not found.'))
             return
 
-        self.board = board
         self.alex = alex
         self.sam = sam
         self.jordan = jordan
         self.now = timezone.now()
         self.today = self.now.date()
 
-        self.stdout.write(f'  Board : {board.name} (id={board.id})')
+        total_checklist = total_parents = total_subtasks = total_deps = 0
 
-        with transaction.atomic():
-            if options['reset']:
-                self._reset_data()
+        for board in boards:
+            self.stdout.write(self.style.NOTICE(
+                f'\n  > Board: {board.name} (id={board.id}, '
+                f'{"official" if board.is_official_demo_board else "sandbox"})'
+            ))
+            self.board = board
 
-            checklist_count = self._seed_checklist_items()
-            parent_count, subtask_count = self._seed_parent_subtask_groups()
-            dep_count = self._seed_blocking_dependency_pair()
+            with transaction.atomic():
+                if options['reset']:
+                    self._reset_data()
+
+                c = self._seed_checklist_items()
+                p, s = self._seed_parent_subtask_groups()
+                d = self._seed_blocking_dependency_pair()
+
+            total_checklist += c
+            total_parents += p
+            total_subtasks += s
+            total_deps += d
 
         self.stdout.write(self.style.SUCCESS('\n' + '=' * 70))
         self.stdout.write(self.style.SUCCESS('  Summary'))
         self.stdout.write(self.style.SUCCESS('=' * 70))
-        self.stdout.write(f'  ✅ Checklist items created : {checklist_count}')
-        self.stdout.write(f'  ✅ Parent tasks created    : {parent_count}')
-        self.stdout.write(f'  ✅ Subtasks created        : {subtask_count}')
-        self.stdout.write(f'  ✅ Dependency tasks added  : {dep_count}')
+        self.stdout.write(f'  [OK] Boards seeded           : {len(boards)}')
+        self.stdout.write(f'  [OK] Checklist items created : {total_checklist}')
+        self.stdout.write(f'  [OK] Parent tasks created    : {total_parents}')
+        self.stdout.write(f'  [OK] Subtasks created        : {total_subtasks}')
+        self.stdout.write(f'  [OK] Dependency tasks added  : {total_deps}')
         self.stdout.write('')
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -355,10 +372,11 @@ class Command(BaseCommand):
     def _reset_data(self):
         from kanban.models import Task, ChecklistItem
 
-        # Remove checklist items on seed tasks
+        # Remove checklist items on known-title tasks (avoid is_seed_demo_data
+        # which is not copied to sandbox task duplicates).
         ChecklistItem.objects.filter(
             task__column__board=self.board,
-            task__is_seed_demo_data=True,
+            task__title__in=list(CHECKLIST_MAP.keys()),
         ).delete()
 
         # Remove the new tasks seeded by this command (identified by title)
@@ -385,7 +403,7 @@ class Command(BaseCommand):
             title__in=new_task_titles,
         ).delete()
 
-        self.stdout.write('   ✓ Cleared existing automation demo data')
+        self.stdout.write('   [OK] Cleared existing automation demo data')
 
     # ─────────────────────────────────────────────────────────────────────────
     #  1. Checklist items on all existing demo tasks
@@ -394,21 +412,24 @@ class Command(BaseCommand):
     def _seed_checklist_items(self):
         from kanban.models import Task, ChecklistItem
 
-        self.stdout.write(self.style.NOTICE('\n📋 Seeding checklist items on existing tasks...'))
+        self.stdout.write(self.style.NOTICE('\n[Checklist] Seeding checklist items on existing tasks...'))
 
-        # Skip if already seeded (idempotent check)
+        # Skip if already seeded (idempotent check — match by title so we don't
+        # accidentally skip when users have added their own checklist items).
         already = ChecklistItem.objects.filter(
             task__column__board=self.board,
-            task__is_seed_demo_data=True,
+            task__title__in=list(CHECKLIST_MAP.keys()),
         ).count()
         if already > 0:
-            self.stdout.write(f'   ⏭️  {already} checklist items already exist, skipping')
+            self.stdout.write(f'   [skip] {already} checklist items already exist, skipping')
             return 0
 
+        # Filter by title, not is_seed_demo_data, because _duplicate_board does
+        # not copy that flag onto sandbox task copies.
         tasks_qs = Task.objects.filter(
             column__board=self.board,
-            is_seed_demo_data=True,
-            parent_task__isnull=True,   # only top-level tasks at this stage
+            parent_task__isnull=True,
+            title__in=list(CHECKLIST_MAP.keys()),
         )
 
         total = 0
@@ -426,7 +447,7 @@ class Command(BaseCommand):
                 )
             total += len(items)
 
-        self.stdout.write(f'   ✅ Created {total} checklist items across existing tasks')
+        self.stdout.write(f'   [OK] Created {total} checklist items across existing tasks')
         return total
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -436,13 +457,13 @@ class Command(BaseCommand):
     def _seed_parent_subtask_groups(self):
         from kanban.models import Task, ChecklistItem, Column
 
-        self.stdout.write(self.style.NOTICE('\n🗂️  Seeding parent/subtask groups...'))
+        self.stdout.write(self.style.NOTICE('\n[Groups] Seeding parent/subtask groups...'))
 
         if Task.objects.filter(
             column__board=self.board,
             title='Social Login Integration',
         ).exists():
-            self.stdout.write('   ⏭️  Parent/subtask groups already exist, skipping')
+            self.stdout.write('   [skip] Parent/subtask groups already exist, skipping')
             return 0, 0
 
         columns = {col.name: col for col in Column.objects.filter(board=self.board)}
@@ -548,7 +569,7 @@ class Command(BaseCommand):
             subtask_count += 1
 
         self.stdout.write(
-            f'   ✅ Created {parent_count} parent tasks with {subtask_count} subtasks'
+            f'   [OK] Created {parent_count} parent tasks with {subtask_count} subtasks'
         )
         return parent_count, subtask_count
 
@@ -559,13 +580,13 @@ class Command(BaseCommand):
     def _seed_blocking_dependency_pair(self):
         from kanban.models import Task, ChecklistItem, Column
 
-        self.stdout.write(self.style.NOTICE('\n🔗 Seeding blocking dependency pair...'))
+        self.stdout.write(self.style.NOTICE('\n[Deps] Seeding blocking dependency pair...'))
 
         if Task.objects.filter(
             column__board=self.board,
             title='API Gateway Configuration',
         ).exists():
-            self.stdout.write('   ⏭️  Blocking dependency pair already exists, skipping')
+            self.stdout.write('   [skip] Blocking dependency pair already exists, skipping')
             return 0
 
         columns = {col.name: col for col in Column.objects.filter(board=self.board)}
@@ -623,7 +644,7 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(
-            f'   ✅ Created "API Gateway Configuration" (overdue, 40%) and '
-            f'"End-to-End Integration Tests" (depends on it)'
+            '   [OK] Created "API Gateway Configuration" (overdue, 40%) and '
+            '"End-to-End Integration Tests" (depends on it)'
         )
         return 2
