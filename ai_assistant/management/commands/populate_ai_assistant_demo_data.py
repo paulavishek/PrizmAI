@@ -186,17 +186,33 @@ class Command(BaseCommand):
             else:
                 board = None
             
-            # Create session
-            session = AIAssistantSession.objects.create(
+            # Create-or-get session. Using ``get_or_create`` keyed on
+            # (user, board, title, is_demo=True) prevents this seeder from
+            # producing duplicate demo sessions on repeated runs without
+            # ``--reset`` — the cause of the 6x-duplicated demo titles seen
+            # in the sidebar before May 2026.
+            workspace = getattr(board, 'workspace', None) if board else None
+            session, created = AIAssistantSession.objects.get_or_create(
                 user=user,
                 board=board,
                 title=session_data['title'],
-                description=session_data.get('description', ''),
-                is_active=session_data.get('is_active', False),
-                is_demo=True,  # Mark as demo session visible to all users
-                message_count=len(session_data['messages']),
-                total_tokens_used=random.randint(500, 3000),
+                is_demo=True,
+                defaults={
+                    'workspace': workspace,
+                    'description': session_data.get('description', ''),
+                    'is_active': session_data.get('is_active', False),
+                    'message_count': len(session_data['messages']),
+                    'total_tokens_used': random.randint(500, 3000),
+                },
             )
+            if not created:
+                # Refresh fields that might have drifted, but keep the existing pk.
+                session.description = session_data.get('description', '')
+                session.is_active = session_data.get('is_active', False)
+                session.message_count = len(session_data['messages'])
+                if session.workspace_id is None and workspace is not None:
+                    session.workspace = workspace
+                session.save()
             
             # Backdate the session - use update() to bypass auto_now
             days_ago = session_data.get('days_ago', 0)

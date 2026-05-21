@@ -456,6 +456,126 @@ COMMENT: testuser1 IS NOT THE OWNER OF THE DEMO. I THINK IT IS ALEX.
 
 ---
 
+## Section F — Additional Provider Coverage (added May 2026)
+
+*These questions exercise providers that the first 50 questions didn't reach. Run them on any board you own.*
+
+---
+
+**Q51.** `What recent comments have been posted on tasks in this board? Which task has the most comments?`
+
+- **Tests:** Comments provider — comment listing + aggregation
+- **Expected:** Recent comment summaries with author, task, and timestamp, or "No comments found"
+
+---
+
+**Q52.** `Which tasks have file attachments? How many files are attached in total?`
+
+- **Tests:** Files & Attachments provider — attachment inventory
+- **Expected:** Tasks with attachment counts, total file count, or "No attachments found"
+
+---
+
+**Q53.** `What is the latest status report for this board? What's the RAG (Red/Amber/Green) signal?`
+
+- **Tests:** Status Report provider — latest report + RAG health
+- **Expected:** Latest report summary with RAG health and timestamp, or "No status reports captured"
+
+---
+
+**Q54.** `What pending decisions are in the Decision Center for this board?`
+
+- **Tests:** Decisions provider — decision log inventory
+- **Expected:** List of pending decisions with owners and deadlines, or "No pending decisions"
+
+---
+
+**Q55.** `Are any GitHub repositories connected to this board? Are there open pull requests linked to tasks?`
+
+- **Tests:** Integrations provider — GitHub/PR linkage
+- **Expected:** Connected repos, open PRs linked to tasks, or "No integrations connected"
+
+---
+
+**Q56.** `What custom fields are defined on this board? Show me the values for the highest-priority task.`
+
+- **Tests:** Custom Fields provider — field schema + per-task value retrieval
+- **Expected:** Field definitions with type and example values, or "No custom fields defined"
+
+---
+
+**Q57.** `Are there any pending access requests for this board?`
+
+- **Tests:** Access Requests provider — request inventory
+- **Expected:** List of pending requests with requesting user and requested role, or "No pending access requests"
+
+---
+
+**Q58.** `List all conflicts on this board. How many are resource conflicts vs schedule vs dependency conflicts?`
+
+- **Tests:** Conflicts provider (NEW May 2026) — breakdown by conflict type
+- **Expected:** Counts by type (resource / schedule / dependency) and severity, or "No active conflicts"
+- **Tricky element:** Previously Spectra answered "no conflicts" when the Conflicts tab showed many. Verify this no longer happens.
+
+---
+
+**Q59.** `Are there any shadow board branches for this project? What are their feasibility scores compared to the main board?`
+
+- **Tests:** Shadow Board provider (NEW May 2026) — branch listing + feasibility
+- **Expected:** Branch names with feasibility scores and projected completion dates, or "No shadow branches created"
+- **Previously failing:** Spectra answered "I can only see Demo Workspace data" because no provider existed.
+
+---
+
+**Q60.** `Generate a PrizmBrief for this board summarizing the current sprint.`
+
+- **Tests:** Briefs / PrizmBrief provider — generation invocation
+- **Expected:** A structured brief covering progress + risks + next steps. Should reference real board data, not a generic template.
+
+---
+
+## Section G — Write Action Coverage (added May 2026)
+
+*Validates Spectra's action-capable flows. The previous question bank covered RBAC for write actions in Section E but didn't validate that writes by authorized users actually succeed.*
+
+---
+
+**Q61.** Member moves a task between columns
+
+- **Log in as:** testuser1
+- **Select board:** "AI Model Development & Data Pipeline" *(Member)*
+- **Ask Spectra:** `Move "Authentication System" from In Review to Done.`
+- **Expected:** ✅ Spectra confirms the move and the task appears in Done. Members can edit tasks.
+- **Verify:** Refresh the board UI and check the new column. Spectra's audit trail entry should show the source/target columns.
+
+---
+
+**Q62.** Owner creates a task with assignment + due date
+
+- **Log in as:** testuser3
+- **Select board:** "testuser3's Test Board" *(Owner)*
+- **Ask Spectra:** `Create a task "Database Backup Verification" in the To Do column. Assign it to testuser3 and set the due date to next Friday.`
+- **Expected:** ✅ Task is created with correct assignment and due date. Spectra returns the new task ID.
+- **Fail condition:** Task created but assignment missing, or wrong due date.
+
+---
+
+**Q63.** Member adds a comment
+
+- **Log in as:** testuser1
+- **Select board:** "AI Model Development & Data Pipeline" *(Member)*
+- **Ask Spectra:** `Add a comment to "Authentication System": "Reviewed by QA — ready for release."`
+- **Expected:** ✅ Comment is added; Spectra confirms with the comment ID/text.
+- **Verify:** Open the task in the UI and confirm the comment is present with the correct author.
+
+---
+
+## Coverage Gap Tracking
+
+After Section F + G additions, the test bank exercises every Spectra context provider. Track per-provider results when re-running the suite.
+
+---
+
 ## Quick Reference: Pass/Fail Summary Table
 
 | # | Question Summary | User | Board | Role | Expected |

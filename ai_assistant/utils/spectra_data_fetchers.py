@@ -59,7 +59,8 @@ def fetch_task_dict(task):
 
     Returns a dict — the canonical "Spectra Task Dict" contract.
     """
-    today = timezone.now().date()
+    now = timezone.now()
+    today = now.date()
 
     # Column name — the LIVE source of truth for task status
     col_name = task.column.name if task.column_id else 'Unknown'
@@ -94,10 +95,17 @@ def fetch_task_dict(task):
     else:
         due_date_date = None
 
-    is_overdue = bool(
-        due_date_date and due_date_date < today and not is_complete
-    )
-    overdue_days = (today - due_date_date).days if is_overdue else 0
+    # Overdue check — match the dashboard's logic in kanban/views.py:224 which
+    # uses ``due_date__lt=timezone.now()`` (datetime comparison). A task whose
+    # due_date is "today" with a 00:00 timestamp shows as overdue any time after
+    # midnight, which is what the dashboard counts. Without this, Spectra
+    # under-counted overdue tasks by excluding everything due today.
+    if due_date_val and not hasattr(due_date_val, 'date'):
+        # Pure date object — compare against today
+        is_overdue = bool(due_date_val < today and not is_complete)
+    else:
+        is_overdue = bool(due_date_val and due_date_val < now and not is_complete)
+    overdue_days = (today - due_date_date).days if (is_overdue and due_date_date) else 0
 
     # Parent task title (requires select_related('parent_task'))
     parent_task_title = task.parent_task.title if task.parent_task_id and hasattr(task, 'parent_task') and task.parent_task else None

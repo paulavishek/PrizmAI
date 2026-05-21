@@ -8,6 +8,7 @@ RBAC-aware provider that fixes the 50-task display limit.
 import logging
 from datetime import date
 
+from django.db.models import Q
 from django.utils import timezone
 
 from .base import BaseContextProvider
@@ -137,6 +138,25 @@ class BoardContextProvider(BaseContextProvider):
                 overdue_flag = ' ⚠️' if t['is_overdue'] else ''
                 ctx += f'- [{t["column_name"]}] {t["title"]} → {assignee}{overdue_flag}\n'
 
+        # Pre-filtered "due in the next 7 days" subsection so the LLM doesn't
+        # have to filter All Tasks mentally — that was producing answers with
+        # tasks months out when the user asked about the next week.
+        from datetime import timedelta
+        from django.utils import timezone as _tz
+        today = _tz.now().date()
+        next_week = today + timedelta(days=7)
+        due_soon = [
+            t for t in tasks
+            if t.get('due_date_date') and today <= t['due_date_date'] <= next_week
+            and not t.get('is_complete')
+        ]
+        ctx += f'\n**Due in next 7 days ({len(due_soon)}):**\n'
+        if not due_soon:
+            ctx += '  (none)\n'
+        else:
+            for t in sorted(due_soon, key=lambda x: x['due_date_date']):
+                ctx += f'  • {t["title"]} — due {t["due_date_date"]} — {t["assigned_to_display"]}\n'
+
         # Milestones
         if milestones:
             ctx += f'\n**🏁 Milestones ({len(milestones)}):**\n'
@@ -168,12 +188,21 @@ class BoardContextProvider(BaseContextProvider):
             col_names = [c.name for c in columns]
             ctx += f'\n**Workflow Columns:** {" → ".join(col_names)}\n'
 
-        # Labels
-        from kanban.models import TaskLabel
-        labels = TaskLabel.objects.filter(board=board)
+        # Labels — include usage counts so the LLM can answer
+        # "which label is used most" and surface duplicate labels that
+        # exist at the seeded level but are not actually applied.
+        from kanban.models import TaskLabel, Task
+        from django.db.models import Count
+        labels = (
+            TaskLabel.objects.filter(board=board)
+            .annotate(usage=Count('tasks', filter=Q(tasks__column__board=board)))
+            .order_by('-usage', 'name')
+        )
         if labels.exists():
-            label_names = [f'{l.name} ({l.category})' if l.category else l.name for l in labels[:15]]
-            ctx += f'\n**Labels:** {", ".join(label_names)}\n'
+            ctx += f'\n**Labels ({labels.count()}, sorted by usage):**\n'
+            for l in labels[:25]:
+                cat = f' [{l.category}]' if l.category else ''
+                ctx += f'  • {l.name}{cat} — used by {l.usage} task(s)\n'
 
         return ctx
 
