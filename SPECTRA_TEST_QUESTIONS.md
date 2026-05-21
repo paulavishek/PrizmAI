@@ -51,6 +51,7 @@
 - **Tests:** Board membership data retrieval
 - **Expected:** A list of users with their roles (Owner, Member, Viewer)
 
+COMMENT: testuser1 IS NOT THE OWNER OF THE DEMO. I THINK IT IS ALEX.
 ---
 
 **Q4.** `Which tasks are marked as high priority?`
@@ -65,7 +66,7 @@
 - **Tests:** Due date comparison against today's date
 - **Expected:** A count and list of overdue tasks, or "No overdue tasks found"
 
----
+---COMMENT: DASHBOARD SAYS THERE ARE 3 OVERDUE TASKS
 
 **Q6.** `What is the name of this board and when was it created?`
 
@@ -112,7 +113,7 @@
 - **Tests:** Calendar provider — deadline awareness
 - **Expected:** A list of tasks with upcoming due dates within the next week
 
----
+---COMMENT: SPECTRA SHOWS MANY TASKS WHICH DO NOT HAVE DUE DATES IN NEXT 7 DAYS.
 
 **Q12.** `Summarize the recent team chat activity on this board.`
 
@@ -126,7 +127,7 @@
 - **Tests:** Automation provider — rule listing
 - **Expected:** A list of active automation rules with their triggers and actions, or "No active automations"
 
----
+---COMMENT: SPECTRA CAN NOT ACCESS AUTOMATION FEATURE DATA
 
 **Q14.** `How many hours have been logged on this board in total? Who has logged the most?`
 
@@ -189,7 +190,7 @@
 - **Tests:** Conflicts provider — active conflict listing
 - **Expected:** A description of any active conflicts (resource double-booking, deadline misalignment, etc.) or "No conflicts detected"
 
----
+---COMMENT: THERE ARE NO SCHEDULE CONFLICTS BUT THERE ARE RESIURCE CONFLICTS.THE CONFICTS TAB CLEARLY SHOW THAT. 
 
 ## Section C — AI & Intelligence Features
 *Complex analytical questions requiring Spectra to synthesize data across multiple providers.*
@@ -291,7 +292,7 @@
 - **Tests:** Shadow board provider — branch listing and feasibility
 - **Expected:** Branch names, feasibility scores, and projected completion dates, or "No shadow branches have been created"
 
----
+---COMMENT: SPECTRA DOESN'T HAVE ACCESS TO SHADOW BOARD DATA
 
 **Q36.** `Is this project showing early signs of needing the exit hospice protocol? What is the health score?`
 
