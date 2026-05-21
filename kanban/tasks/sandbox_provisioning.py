@@ -178,6 +178,13 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception:
         pass
 
+    # Seed Requirements demo data for the new sandbox boards (idempotent).
+    try:
+        from django.core.management import call_command
+        call_command('populate_demo_requirements')
+    except Exception as e:
+        logger.warning("Could not seed requirements after sandbox provision: %s", e)
+
     # Seed PrizmDiscovery demo ideas for the demo org (idempotent).
     try:
         from django.core.management import call_command
