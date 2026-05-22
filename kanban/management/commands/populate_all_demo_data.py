@@ -642,6 +642,9 @@ class Command(BaseCommand):
         )
 
         # ===================== IN REVIEW (2) =====================
+        # R1 - OVERDUE SCENARIO: code review running 4 days past deadline.
+        # The daily refresh pins this task to always appear 4 days past-due
+        # (see _OVERDUE_PINS in demo_date_refresh.py).
         out['R1'] = self._make_task(
             code='R1', title='Authentication System',
             description=('Implement the complete user authentication system: email/password '
@@ -649,7 +652,7 @@ class Command(BaseCommand):
                          'password reset via email tokens, session management, and integration with '
                          'the JWT middleware established in the security architecture phase.'),
             column=col['In Review'], phase=PHASE_CORE, parent=epics['auth'],
-            priority='urgent', start_offset=-18, due_offset=-3, progress=90,
+            priority='urgent', start_offset=-36, due_offset=-20, progress=90,
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='high', collab=False,
             est_cost=5200, est_hours=60, hourly=87.5, actual_cost=4980,
@@ -713,6 +716,9 @@ class Command(BaseCommand):
                 (self.priya, 'Tested the verification flow - smooth experience. The real-time validation is a nice touch.', 1),
             ],
         )
+        # P2 - OVERDUE SCENARIO: rollback complexity caused 3-day slip.
+        # The daily refresh pins this task to always appear 3 days past-due
+        # (see _OVERDUE_PINS in demo_date_refresh.py).
         out['P2'] = self._make_task(
             code='P2', title='Database Schema & Migrations',
             description=('Implement the full production database schema: write all Django '
@@ -721,7 +727,7 @@ class Command(BaseCommand):
                          'rollback procedures for each migration, and document the upgrade path '
                          'for production deployment.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['api'],
-            priority='high', start_offset=-12, due_offset=8, progress=55,
+            priority='high', start_offset=-31, due_offset=-19, progress=55,
             complexity=7, risk_l='medium', risk_i='high', risk_level='high',
             lss=LSS_VA, workload='high', collab=False,
             est_cost=3800, est_hours=44, hourly=87.5, actual_cost=2090,
@@ -736,7 +742,9 @@ class Command(BaseCommand):
                 (self.priya, 'Migrations for all core tables are done. Currently working on the rollback procedures - they are more complex than estimated because of the circular reference between Board and Organization. May need 2 extra days.', 1),
             ],
         )
-        # P3 - INTENTIONALLY OVERDUE (due_offset=-2). DO NOT FIX.
+        # P3 - OVERDUE SCENARIO: seed values are deeply negative so the task is
+        # overdue right after population. The daily refresh pins this task to
+        # always appear 8 days past-due (see _OVERDUE_PINS in demo_date_refresh.py).
         out['P3'] = self._make_task(
             code='P3', title='Social Login Integration',
             description=('Implement OAuth 2.0 social login for Google and GitHub providers using '
@@ -744,7 +752,7 @@ class Command(BaseCommand):
                          'first then try to login with social, manage token storage, implement the '
                          'consent screen flows, and add social login buttons to the authentication UI.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['auth'],
-            priority='high', start_offset=-15, due_offset=-2, progress=45,
+            priority='high', start_offset=-34, due_offset=-24, progress=45,
             complexity=6, risk_l='high', risk_i='medium', risk_level='high',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3000, est_hours=34, hourly=87.5, actual_cost=1350,
@@ -1443,14 +1451,17 @@ class Command(BaseCommand):
     def _create_coaching_suggestions(self, tasks_by_code):
         items = [
             dict(
-                suggestion_type='resource_overload', severity='high', status='active',
-                title='Priya Sharma is overloaded',
-                message=('Priya is assigned to 3 concurrent in-flight tasks, including one that '
-                         'is overdue. Consider redistributing Social Login Integration to Marcus '
-                         'Chen.'),
+                suggestion_type='resource_overload', severity='critical', status='active',
+                title='Priya Sharma is critically overloaded — 3 overdue tasks',
+                message=('Priya is the assignee on three overdue tasks simultaneously: '
+                         'Social Login Integration (P3, 45%, 8 days past due), '
+                         'Database Schema & Migrations (P2, 55%, 3 days past due), and '
+                         'Authentication System (R1, 90%, 4 days past due in code review). '
+                         'Immediate redistribution is recommended to unblock the phase milestone.'),
                 recommended_actions=[
                     {'action': 'Reassign Social Login Integration (P3) to Marcus Chen'},
                     {'action': 'Pair Marcus with Priya on the GitHub OAuth scope workaround'},
+                    {'action': 'Ask Elena to take the R1 code review to free up Priya'},
                 ],
                 task=tasks_by_code['P3'], days_ago=4,
             ),
@@ -1754,8 +1765,8 @@ class Command(BaseCommand):
         overdue = children.filter(due_date__lt=self.NOW, progress__lt=100)
         self.stdout.write(
             f'Overdue tasks: {overdue.count()}  '
-            '(expected: 2 - Social Login Integration far-overdue + '
-            'Authentication System in late code review)'
+            '(expected: 3 - Social Login Integration P3 + '
+            'Authentication System R1 in review + Database Schema P2 slightly overdue)'
         )
 
         dep_count = sum(t.dependencies.count() for t in children)

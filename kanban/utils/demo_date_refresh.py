@@ -409,6 +409,26 @@ def _refresh_task_dates(now, base_date):
                 task.due_date = new_due_datetime
                 tasks_to_update.append(task)
 
+        # After the uniform shift, pin known overdue scenarios to fixed offsets
+        # from today so the demo always shows realistic deadline slippage
+        # regardless of how many daily refreshes have elapsed.
+        # days_started / days_overdue = how many days before today each date lands.
+        _OVERDUE_PINS = {
+            'Social Login Integration':     {'days_started': 18, 'days_overdue': 8},
+            'Authentication System':        {'days_started': 20, 'days_overdue': 4},
+            'Database Schema & Migrations': {'days_started': 15, 'days_overdue': 3},
+        }
+        for task in tasks_to_update:
+            pin = _OVERDUE_PINS.get(task.title)
+            if pin and getattr(task, 'progress', 100) < 100:
+                task.start_date = base_date - timedelta(days=pin['days_started'])
+                task.due_date = timezone.make_aware(
+                    _dt.datetime.combine(
+                        base_date - timedelta(days=pin['days_overdue']),
+                        _dt.time(12, 0),
+                    )
+                )
+
         if tasks_to_update:
             Task.objects.bulk_update(tasks_to_update, ['due_date', 'start_date'], batch_size=500)
 
