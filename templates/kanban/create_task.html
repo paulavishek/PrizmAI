@@ -172,18 +172,7 @@
                                 {% endif %}
 
                                 {# Badge-style clickable label picker #}
-                                <div id="label-badge-area" class="d-flex flex-wrap gap-1 mb-2">
-                                    {% for label in form.labels.field.queryset %}
-                                    <span class="badge label-badge {% if label in form.labels.value %}label-badge-selected{% endif %}"
-                                          data-label-id="{{ label.id }}"
-                                          style="background-color:{{ label.color }};cursor:pointer;opacity:{% if label in form.labels.value %}1{% else %}0.45{% endif %};"
-                                          title="{{ label.name }}">
-                                        {{ label.name }}{% if label in form.labels.value %}<span class="label-remove ms-1" style="font-size:0.75em;opacity:0.8;" title="Remove">×</span>{% endif %}
-                                    </span>
-                                    {% empty %}
-                                    <span class="text-muted small" id="no-labels-hint">No labels yet — create one below.</span>
-                                    {% endfor %}
-                                </div>
+                                <div id="label-badge-area" class="d-flex flex-wrap gap-1 mb-2"></div>
 
                                 {# Inline new-label mini-form #}
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="toggle-new-label-btn">
@@ -291,8 +280,6 @@
                                     .then(r => r.json())
                                     .then(label => {
                                         if (label.error) { alert(label.error); return; }
-                                        const hint = document.getElementById('no-labels-hint');
-                                        if (hint) hint.remove();
                                         addOptionToHidden(label);
                                         const badge = renderBadge(label, true);
                                         badgeArea.appendChild(badge);

@@ -166,23 +166,7 @@
                             {% if form.labels.errors %}
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
                             {% endif %}
-                            <div id="detail-form-badge-area" class="d-flex flex-wrap gap-1 mb-2">
-                                {% for label in form.labels.field.queryset %}
-                                {% with is_sel=label.id|stringformat:"s" %}
-                                <span class="badge label-badge"
-                                      data-label-id="{{ label.id }}"
-                                      style="background-color:{{ label.color }};cursor:pointer;"
-                                      title="{{ label.name }}">
-                                    {{ label.name }}
-                                </span>
-                                {% endwith %}
-                                {% empty %}
-                                <span class="text-muted small" id="detail-no-labels-hint">No labels yet.</span>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="detail-form-load-presets-btn">
-                                <i class="fas fa-magic me-1"></i> Load presets
-                            </button>
+                            <div id="detail-form-badge-area" class="d-flex flex-wrap gap-1 mb-2"></div>
                             <button type="button" class="btn btn-sm btn-outline-primary" id="detail-form-toggle-new-label-btn">
                                 <i class="fas fa-plus me-1"></i> New label
                             </button>
@@ -201,17 +185,6 @@
                             const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
                             const hiddenSelect = document.querySelector('#id_labels');
                             const badgeArea = document.getElementById('detail-form-badge-area');
-
-                            // Mark already-selected labels on load
-                            const selectedIds = hiddenSelect
-                                ? Array.from(hiddenSelect.selectedOptions).map(o => parseInt(o.value))
-                                : [];
-                            badgeArea.querySelectorAll('.label-badge').forEach(badge => {
-                                const id = parseInt(badge.dataset.labelId);
-                                const sel = selectedIds.includes(id);
-                                badge.classList.toggle('label-badge-selected', sel);
-                                badge.style.opacity = sel ? '1' : '0.45';
-                            });
 
                             function syncHidden(labelId, select) {
                                 if (!hiddenSelect) return;
@@ -250,27 +223,6 @@
 
                             badgeArea.querySelectorAll('.label-badge').forEach(b => b.addEventListener('click', toggleBadge));
 
-                            document.getElementById('detail-form-load-presets-btn').addEventListener('click', function () {
-                                this.disabled = true;
-                                fetch(`/boards/${boardId}/load-preset-labels/`, {
-                                    method: 'POST',
-                                    headers: {'X-CSRFToken': csrfToken},
-                                })
-                                .then(r => r.json())
-                                .then(data => {
-                                    const hint = document.getElementById('detail-no-labels-hint');
-                                    if (hint) hint.remove();
-                                    data.labels.forEach(label => {
-                                        addOptionToHidden(label);
-                                        if (!badgeArea.querySelector(`[data-label-id="${label.id}"]`)) {
-                                            badgeArea.appendChild(renderBadge(label, false));
-                                        }
-                                    });
-                                    this.textContent = 'Presets loaded';
-                                })
-                                .catch(() => { this.disabled = false; });
-                            });
-
                             document.getElementById('detail-form-toggle-new-label-btn').addEventListener('click', function () {
                                 document.getElementById('detail-form-new-label-form').classList.toggle('d-none');
                             });
@@ -291,8 +243,6 @@
                                 .then(r => r.json())
                                 .then(label => {
                                     if (label.error) { alert(label.error); return; }
-                                    const hint = document.getElementById('detail-no-labels-hint');
-                                    if (hint) hint.remove();
                                     addOptionToHidden(label);
                                     const badge = renderBadge(label, true);
                                     badgeArea.appendChild(badge);
