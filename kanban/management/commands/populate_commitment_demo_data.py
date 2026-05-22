@@ -39,14 +39,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.NOTICE('\n📋 Populating Commitment Protocol Demo Data...'))
+        self.stdout.write(self.style.NOTICE('\n Populating Commitment Protocol Demo Data...'))
 
         # --- Get demo organization ---
         try:
             demo_org = Organization.objects.get(is_demo=True, name='Demo - Acme Corporation')
         except Organization.DoesNotExist:
             self.stdout.write(self.style.ERROR(
-                '❌ Demo organization not found. Run create_demo_organization first.'
+                '[FAIL] Demo organization not found. Run create_demo_organization first.'
             ))
             return
 
@@ -58,7 +58,7 @@ class Command(BaseCommand):
         ).first()
         if not board:
             self.stdout.write(self.style.ERROR(
-                '❌ Software Development demo board not found.'
+                '[FAIL] Software Development demo board not found.'
             ))
             return
 
@@ -68,7 +68,7 @@ class Command(BaseCommand):
         jordan = User.objects.filter(username='elena.vasquez').first()
         if not all([alex, sam, jordan]):
             self.stdout.write(self.style.ERROR(
-                '❌ Demo users not found. Run create_demo_organization first.'
+                '[FAIL] Demo users not found. Run create_demo_organization first.'
             ))
             return
 
@@ -79,12 +79,12 @@ class Command(BaseCommand):
             UserCredibilityScore.objects.filter(
                 user__in=[alex, sam, jordan]
             ).delete()
-            self.stdout.write(f'   ✓ Cleared commitment data ({deleted[0]} objects)')
+            self.stdout.write(f'   [OK] Cleared commitment data ({deleted[0]} objects)')
 
         # --- Idempotency: skip if protocols already exist ---
         if CommitmentProtocol.objects.filter(board=board).exists():
             self.stdout.write(self.style.SUCCESS(
-                '   ✅ Commitment protocols already exist — skipping'
+                '   [OK] Commitment protocols already exist - skipping'
             ))
             return
 
@@ -111,7 +111,7 @@ class Command(BaseCommand):
                     stats['credibility'] += 1
 
             # =================================================================
-            # PROTOCOL 1: "Ship MVP Platform v1.0" — At Risk showcase
+            # PROTOCOL 1: "Ship MVP Platform v1.0" - At Risk showcase
             # =================================================================
             protocol1 = CommitmentProtocol.objects.create(
                 board=board,
@@ -131,7 +131,7 @@ class Command(BaseCommand):
                 negotiation_threshold=0.40,
                 last_signal_date=now - timedelta(days=2),
                 ai_reasoning=(
-                    '**Confidence Analysis — Ship MVP Platform v1.0**\n\n'
+                    '**Confidence Analysis - Ship MVP Platform v1.0**\n\n'
                     'Current confidence has declined from 80% to 52% over the past '
                     '16 days, placing this commitment in "At Risk" territory.\n\n'
                     '**Key factors driving the decline:**\n'
@@ -190,7 +190,7 @@ class Command(BaseCommand):
                     'signal_type': 'milestone_hit',
                     'signal_value': 0.30,
                     'description': (
-                        'Dashboard UI core components completed ahead of schedule — '
+                        'Dashboard UI core components completed ahead of schedule - '
                         'all 8 wireframes implemented and passing visual regression tests.'
                     ),
                     'confidence_before': 0.80,
@@ -204,7 +204,7 @@ class Command(BaseCommand):
                     'signal_value': -0.50,
                     'description': (
                         'Third-party search API vendor pushed back integration timeline '
-                        'by 2 weeks due to API v3 migration — Search & Indexing Engine blocked.'
+                        'by 2 weeks due to API v3 migration - Search & Indexing Engine blocked.'
                     ),
                     'confidence_before': 0.83,
                     'confidence_after': 0.62,
@@ -217,7 +217,7 @@ class Command(BaseCommand):
                     'signal_value': -0.30,
                     'description': (
                         'Three new GDPR compliance tasks added to scope mid-sprint '
-                        'after legal review — increases total task count by 15%.'
+                        'after legal review - increases total task count by 15%.'
                     ),
                     'confidence_before': 0.62,
                     'confidence_after': 0.53,
@@ -230,7 +230,7 @@ class Command(BaseCommand):
                     'signal_value': 0.25,
                     'description': (
                         'File Upload System completed security review and '
-                        'penetration testing — all critical paths verified.'
+                        'penetration testing - all critical paths verified.'
                     ),
                     'confidence_before': 0.53,
                     'confidence_after': 0.59,
@@ -295,7 +295,7 @@ class Command(BaseCommand):
                 tokens_wagered=50,
                 confidence_estimate=0.62,
                 reasoning=(
-                    'Team velocity on core features is strong — Dashboard and '
+                    'Team velocity on core features is strong - Dashboard and '
                     'File Upload were both ahead of schedule. If the search '
                     'dependency unblocks this week, we have enough runway. '
                     'The scope additions are manageable.'
@@ -312,7 +312,7 @@ class Command(BaseCommand):
             stats['bets'] += 1
 
             # =================================================================
-            # PROTOCOL 2: "Complete Security Audit & Compliance" — Active/healthy
+            # PROTOCOL 2: "Complete Security Audit & Compliance" - Active/healthy
             # =================================================================
             protocol2 = CommitmentProtocol.objects.create(
                 board=board,
@@ -331,7 +331,7 @@ class Command(BaseCommand):
                 negotiation_threshold=0.40,
                 last_signal_date=now - timedelta(days=3),
                 ai_reasoning=(
-                    '**Confidence Analysis — Security Audit & Compliance**\n\n'
+                    '**Confidence Analysis - Security Audit & Compliance**\n\n'
                     'Confidence is at 78%, down from 90% initial. The protocol '
                     'remains in "Active" status with a healthy margin above '
                     'the 40% negotiation threshold.\n\n'
@@ -339,7 +339,7 @@ class Command(BaseCommand):
                     'compliance review, demonstrating strong security fundamentals.\n\n'
                     '**Risk factor:** A new PCI-DSS requirement revision was '
                     'announced, requiring validation of payment data handling '
-                    'compliance. Impact is moderate — the team has experience '
+                    'compliance. Impact is moderate - the team has experience '
                     'with PCI-DSS and the revision is incremental.\n\n'
                     '**Outlook:** On track if the PCI-DSS validation completes '
                     'within the next sprint. No renegotiation expected.'
@@ -375,7 +375,7 @@ class Command(BaseCommand):
                     'signal_type': 'task_completed',
                     'signal_value': 0.25,
                     'description': (
-                        'Authentication System passed code review — '
+                        'Authentication System passed code review - '
                         'OWASP Top 10 compliance verified across all endpoints.'
                     ),
                     'confidence_before': 0.90,
@@ -388,7 +388,7 @@ class Command(BaseCommand):
                     'signal_type': 'external_risk',
                     'signal_value': -0.30,
                     'description': (
-                        'New PCI-DSS requirement revision announced — '
+                        'New PCI-DSS requirement revision announced - '
                         'need to validate payment data handling compliance. '
                         'Impact assessment in progress.'
                     ),
@@ -447,7 +447,7 @@ class Command(BaseCommand):
             stats['bets'] += 1
 
         self.stdout.write(self.style.SUCCESS(
-            f'   ✅ Commitments: {stats["protocols"]} protocols, '
+            f'   [OK] Commitments: {stats["protocols"]} protocols, '
             f'{stats["signals"]} signals, {stats["bets"]} bets, '
             f'{stats["credibility"]} credibility scores'
         ))

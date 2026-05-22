@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = '[DEPRECATED] Legacy board member migration — no longer needed'
+    help = '[DEPRECATED] Legacy board member migration - no longer needed'
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.WARNING(
@@ -15,7 +15,7 @@ class Command(BaseCommand):
             'by Django data migrations. No action taken.'
         ))
                 self.stdout.write(self.style.SUCCESS(
-                    f'  ✓ Migrated {migrated_count} member(s) to Editor role'
+                    f'  [OK] Migrated {migrated_count} member(s) to Editor role'
                 ))
             else:
                 self.stdout.write('  - No members to migrate')

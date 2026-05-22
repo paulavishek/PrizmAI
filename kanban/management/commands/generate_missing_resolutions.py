@@ -84,7 +84,7 @@ class Command(BaseCommand):
                 basic_suggestions = suggester.generate_suggestions()
                 
                 self.stdout.write(self.style.SUCCESS(
-                    f'  ✓ Generated {len(basic_suggestions)} basic resolution(s)'
+                    f'  [OK] Generated {len(basic_suggestions)} basic resolution(s)'
                 ))
                 total_resolutions += len(basic_suggestions)
                 
@@ -94,7 +94,7 @@ class Command(BaseCommand):
                 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(
-                    f'  ✗ Failed to generate basic resolutions: {str(e)}'
+                    f'  [FAIL] Failed to generate basic resolutions: {str(e)}'
                 ))
                 continue
             
@@ -105,7 +105,7 @@ class Command(BaseCommand):
                     ai_suggestions = ai_engine.generate_advanced_resolutions(conflict)
                     
                     self.stdout.write(self.style.SUCCESS(
-                        f'  ✓ Generated {len(ai_suggestions)} AI-powered resolution(s)'
+                        f'  [OK] Generated {len(ai_suggestions)} AI-powered resolution(s)'
                     ))
                     total_ai_resolutions += len(ai_suggestions)
                     
@@ -121,11 +121,11 @@ class Command(BaseCommand):
             self.stdout.write('')  # Blank line between conflicts
         
         # Summary
-        self.stdout.write(self.style.SUCCESS('─' * 60))
+        self.stdout.write(self.style.SUCCESS('-' * 60))
         self.stdout.write(self.style.SUCCESS(f'Summary:'))
         self.stdout.write(self.style.SUCCESS(f'  Conflicts processed: {total_conflicts}'))
         self.stdout.write(self.style.SUCCESS(f'  Basic resolutions generated: {total_resolutions}'))
         if with_ai:
             self.stdout.write(self.style.SUCCESS(f'  AI resolutions generated: {total_ai_resolutions}'))
-        self.stdout.write(self.style.SUCCESS('─' * 60))
-        self.stdout.write(self.style.SUCCESS('\n✓ Resolution generation completed!'))
+        self.stdout.write(self.style.SUCCESS('-' * 60))
+        self.stdout.write(self.style.SUCCESS('\n[OK] Resolution generation completed!'))

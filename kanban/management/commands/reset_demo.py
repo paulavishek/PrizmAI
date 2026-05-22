@@ -105,7 +105,7 @@ class Command(BaseCommand):
             # narrative (overdue task, mid-progress states, etc.). The seeder
             # already calls detect_conflicts at the end.
 
-            # Step 2: Detect conflicts for fresh data (idempotent — runs again
+            # Step 2: Detect conflicts for fresh data (idempotent - runs again
             # in case populate_all_demo_data's internal call was skipped)
             self.stdout.write('[2/2] Detecting conflicts...')
             try:

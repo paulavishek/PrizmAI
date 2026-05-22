@@ -66,8 +66,8 @@ class Command(BaseCommand):
                     action = 'Created' if created else 'Updated'
                     self.stdout.write(
                         f'    {action} profile for {user.username}: '
-                        f'{old_tasks} → {profile.current_active_tasks} tasks, '
-                        f'{old_workload:.1f}h → {profile.current_workload_hours:.1f}h workload'
+                        f'{old_tasks} -> {profile.current_active_tasks} tasks, '
+                        f'{old_workload:.1f}h -> {profile.current_workload_hours:.1f}h workload'
                     )
                     
                     total_updated += 1
@@ -78,7 +78,7 @@ class Command(BaseCommand):
                     )
         
         self.stdout.write(
-            self.style.SUCCESS(f'\n✓ Successfully refreshed {total_updated} user profiles')
+            self.style.SUCCESS(f'\n[OK] Successfully refreshed {total_updated} user profiles')
         )
         self.stdout.write(
             self.style.SUCCESS('All workload data is now in sync!')

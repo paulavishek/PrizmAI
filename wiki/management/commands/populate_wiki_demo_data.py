@@ -34,9 +34,9 @@ class Command(BaseCommand):
         # Get demo organization
         try:
             demo_org = Organization.objects.get(name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✓ Found organization: {demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR('✗ Demo - Acme Corporation not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo - Acme Corporation not found!'))
             self.stdout.write('  Please run: python manage.py create_demo_organization')
             return
 
@@ -48,10 +48,10 @@ class Command(BaseCommand):
             demo_user = User.objects.filter(is_superuser=True).first()
 
         if not demo_user:
-            self.stdout.write(self.style.ERROR('✗ No suitable user found to create wiki content!'))
+            self.stdout.write(self.style.ERROR('[FAIL] No suitable user found to create wiki content!'))
             return
 
-        self.stdout.write(self.style.SUCCESS(f'✓ Using author: {demo_user.username}'))
+        self.stdout.write(self.style.SUCCESS(f'[OK] Using author: {demo_user.username}'))
 
         # Get demo boards and tasks for linking
         demo_boards = Board.objects.filter(organization=demo_org)
@@ -77,7 +77,7 @@ class Command(BaseCommand):
         # Summary
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.SUCCESS('✓ WIKI DEMO DATA COMPLETE'))
+        self.stdout.write(self.style.SUCCESS('[OK] WIKI DEMO DATA COMPLETE'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'  Categories: {len(categories)}')
         self.stdout.write(f'  Wiki pages: {len(pages)}')
@@ -99,7 +99,7 @@ class Command(BaseCommand):
         cats_deleted = WikiCategory.objects.filter(organization=demo_org).delete()
         self.stdout.write(f'  Deleted {cats_deleted[0]} categories')
         
-        self.stdout.write(self.style.SUCCESS('  ✓ Wiki data reset complete'))
+        self.stdout.write(self.style.SUCCESS('  [OK] Wiki data reset complete'))
 
     def create_categories(self, demo_org):
         """Create wiki categories"""
@@ -235,7 +235,7 @@ class Command(BaseCommand):
                 )
                 if created:
                     links_created += 1
-                    self.stdout.write(f"  Linked: '{api_doc.title}' → '{task.title}'")
+                    self.stdout.write(f"  Linked: '{api_doc.title}' -> '{task.title}'")
 
         # Link coding standards to code-related tasks
         if coding_standards and demo_tasks.exists():
@@ -252,7 +252,7 @@ class Command(BaseCommand):
                 )
                 if created:
                     links_created += 1
-                    self.stdout.write(f"  Linked: '{coding_standards.title}' → '{task.title}'")
+                    self.stdout.write(f"  Linked: '{coding_standards.title}' -> '{task.title}'")
 
         # Link sprint planning to high priority tasks
         if sprint_planning and demo_tasks.exists():
@@ -269,7 +269,7 @@ class Command(BaseCommand):
                 )
                 if created:
                     links_created += 1
-                    self.stdout.write(f"  Linked: '{sprint_planning.title}' → '{task.title}'")
+                    self.stdout.write(f"  Linked: '{sprint_planning.title}' -> '{task.title}'")
 
         # Link architecture doc to design/infrastructure tasks
         if architecture and demo_tasks.exists():
@@ -286,7 +286,7 @@ class Command(BaseCommand):
                 )
                 if created:
                     links_created += 1
-                    self.stdout.write(f"  Linked: '{architecture.title}' → '{task.title}'")
+                    self.stdout.write(f"  Linked: '{architecture.title}' -> '{task.title}'")
 
         # Link feature requirements to feature tasks
         if feature_req and demo_tasks.exists():
@@ -303,7 +303,7 @@ class Command(BaseCommand):
                 )
                 if created:
                     links_created += 1
-                    self.stdout.write(f"  Linked: '{feature_req.title}' → '{task.title}'")
+                    self.stdout.write(f"  Linked: '{feature_req.title}' -> '{task.title}'")
 
         # Link wiki pages to boards
         if demo_boards.exists():
@@ -320,7 +320,7 @@ class Command(BaseCommand):
                 )
                 if created:
                     links_created += 1
-                    self.stdout.write(f"  Linked: '{coding_standards.title}' → Board: '{software_board.name}'")
+                    self.stdout.write(f"  Linked: '{coding_standards.title}' -> Board: '{software_board.name}'")
 
         return links_created
 
@@ -339,7 +339,7 @@ class Command(BaseCommand):
                 'slug': 'welcome-to-acme',
                 'is_pinned': True,
                 'tags': ['onboarding', 'welcome', 'intro'],
-                'content': f"""# Welcome to Acme Corporation! 🎉
+                'content': f"""# Welcome to Acme Corporation! 
 
 Welcome to the team! This knowledge hub contains everything you need to get started and succeed at Acme Corporation.
 

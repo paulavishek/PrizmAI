@@ -17,7 +17,7 @@ organisation, owned by Priya Sharma, with:
   - 25 historical completed tasks on a hidden archive board (ML training data)
   - 3 wiki pages under an "Engineering" category
 
-Every date is calculated relative to TODAY at runtime — re-running the command
+Every date is calculated relative to TODAY at runtime - re-running the command
 shifts the project forward so "today" always sits inside Phase 2 (~40% through).
 
 Usage:
@@ -56,7 +56,7 @@ DEMO_ORG_NAME = 'Demo - Acme Corporation'
 DEMO_BOARD_NAME = 'Software Development'
 ARCHIVE_BOARD_NAME = 'Historical Reference Data'
 
-# Codebase storage values (NOT the display labels — see Task model choices)
+# Codebase storage values (NOT the display labels - see Task model choices)
 LSS_VA = 'value_added'
 LSS_NVA = 'necessary_nva'
 LSS_WASTE = 'waste'
@@ -102,7 +102,7 @@ class Command(BaseCommand):
         self.reset = options.get('reset', False)
 
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.SUCCESS('DEMO DATA POPULATION — Software Development board'))
+        self.stdout.write(self.style.SUCCESS('DEMO DATA POPULATION - Software Development board'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'Today: {self.TODAY}  (project mid-point)')
         self.stdout.write('')
@@ -119,7 +119,7 @@ class Command(BaseCommand):
 
             # Idempotency: if the board already has seed tasks AND we're not
             # resetting, this is a no-op (the heavy seed work has nothing safe
-            # to add — singletons like ProjectBudget would clash).
+            # to add - singletons like ProjectBudget would clash).
             existing_tasks = Task.objects.filter(
                 column__board=self.board, is_seed_demo_data=True,
             ).count()
@@ -128,7 +128,7 @@ class Command(BaseCommand):
                     f'  Board already has {existing_tasks} seed tasks. '
                     'Skipping seed (pass --reset to rebuild).'
                 ))
-                # Always refresh labels — cheap and matches new colour scheme
+                # Always refresh labels - cheap and matches new colour scheme
                 self._create_labels(self.board)
             else:
                 # Core seed sequence
@@ -160,13 +160,13 @@ class Command(BaseCommand):
         try:
             self.demo_org = Organization.objects.get(name=DEMO_ORG_NAME, is_demo=True)
         except Organization.DoesNotExist:
-            self.stdout.write('Demo organisation missing — running create_demo_organization...')
+            self.stdout.write('Demo organisation missing - running create_demo_organization...')
             call_command('create_demo_organization')
             self.demo_org = Organization.objects.get(name=DEMO_ORG_NAME, is_demo=True)
 
         # Ensure all three personas exist (self-heal if missing)
         if User.objects.filter(username__in=PERSONA_USERNAMES).count() < 3:
-            self.stdout.write('One or more personas missing — running create_demo_organization...')
+            self.stdout.write('One or more personas missing - running create_demo_organization...')
             call_command('create_demo_organization')
 
         self.priya = User.objects.get(username='priya.sharma')
@@ -245,11 +245,11 @@ class Command(BaseCommand):
             ChatMessage.objects.filter(chat_room__board=b).delete()
             ChatRoom.objects.filter(board=b).delete()
 
-        self.stdout.write('  ✓ Reset complete')
+        self.stdout.write('  [OK] Reset complete')
 
     def _delete_legacy_demo_boards(self):
         """Delete Marketing Campaign / Bug Tracking / Software Project boards
-        that belong to the demo org. Safe — never touches real user boards
+        that belong to the demo org. Safe - never touches real user boards
         because of the organization filter."""
         legacy = Board.objects.filter(
             organization=self.demo_org,
@@ -272,7 +272,7 @@ class Command(BaseCommand):
             b.delete()
         if deleted:
             self.stdout.write(self.style.WARNING(
-                f'  ✓ Deleted legacy demo boards: {", ".join(deleted)}'
+                f'  [OK] Deleted legacy demo boards: {", ".join(deleted)}'
             ))
 
     # ------------------------------------------------------------------
@@ -471,7 +471,7 @@ class Command(BaseCommand):
                 ('Define acceptance criteria for all major user stories', True),
             ],
             comments=[
-                (self.priya, 'Stakeholder interviews completed. Three rounds of review needed before sign-off — more iterations than planned but the final PRD is solid.', 51),
+                (self.priya, 'Stakeholder interviews completed. Three rounds of review needed before sign-off - more iterations than planned but the final PRD is solid.', 51),
                 (self.marcus, 'PRD approved by all stakeholders. Ready to move to architecture.', 49),
             ],
         )
@@ -495,7 +495,7 @@ class Command(BaseCommand):
             ],
             comments=[
                 (self.elena, 'Docker setup is done. The CI pipeline runs in under 4 minutes with dependency caching. All green.', 46),
-                (self.marcus, 'Onboarding doc is excellent — I got up and running in 30 minutes as a test.', 44),
+                (self.marcus, 'Onboarding doc is excellent - I got up and running in 30 minutes as a test.', 44),
             ],
         )
         out['D3'] = self._make_task(
@@ -519,7 +519,7 @@ class Command(BaseCommand):
                 ('Review architecture with full team and incorporate feedback', True),
             ],
             comments=[
-                (self.marcus, 'Architecture review completed. Decision to use Django Channels for WebSockets was debated — Celery + Redis pub/sub was considered but Channels won on simplicity grounds.', 43),
+                (self.marcus, 'Architecture review completed. Decision to use Django Channels for WebSockets was debated - Celery + Redis pub/sub was considered but Channels won on simplicity grounds.', 43),
                 (self.priya, 'ADRs approved. Slight over-budget due to extra review cycles but the rigour was worth it.', 40),
             ],
         )
@@ -567,7 +567,7 @@ class Command(BaseCommand):
             ],
             comments=[
                 (self.priya, 'All security layers implemented and tested. Penetration test checklist passed. Brute-force lockout triggers after 5 failed attempts with exponential backoff.', 30),
-                (self.elena, 'Ran OWASP ZAP scan — no critical findings. Two medium findings resolved.', 28),
+                (self.elena, 'Ran OWASP ZAP scan - no critical findings. Two medium findings resolved.', 28),
             ],
         )
         out['D6'] = self._make_task(
@@ -619,7 +619,7 @@ class Command(BaseCommand):
             description=('Implement the four-tier RBAC system: Org Admin, Owner, Member, and '
                          'Viewer roles. Build permission predicates using django-rules, enforce '
                          'board-level access checks on all views, implement automatic downward '
-                         'permission inheritance through the Goal → Mission → Strategy → Board '
+                         'permission inheritance through the Goal -> Mission -> Strategy -> Board '
                          'hierarchy, and add upward read-only visibility for board members.'),
             column=col['Done'], phase=PHASE_CORE, parent=epics['auth'],
             priority='urgent', start_offset=-22, due_offset=-12, progress=100,
@@ -660,7 +660,7 @@ class Command(BaseCommand):
             ],
             comments=[
                 (self.priya, 'Implementation complete. Submitted for code review. All auth flows working, including edge cases like expired reset tokens and concurrent session handling.', 4),
-                (self.marcus, 'Reviewing now. The token rotation logic is clean. One question on the session expiry behaviour — left a comment in the PR.', 2),
+                (self.marcus, 'Reviewing now. The token rotation logic is clean. One question on the session expiry behaviour - left a comment in the PR.', 2),
             ],
         )
         out['R2'] = self._make_task(
@@ -682,7 +682,7 @@ class Command(BaseCommand):
                 ('Build AI content extraction for PDF/DOCX attachments', False),
             ],
             comments=[
-                (self.marcus, 'MIME validation and GCS integration done. AI extraction working for PDFs — DOCX support needs one more day. Overall 88% complete.', 3),
+                (self.marcus, 'MIME validation and GCS integration done. AI extraction working for PDFs - DOCX support needs one more day. Overall 88% complete.', 3),
             ],
         )
 
@@ -707,8 +707,8 @@ class Command(BaseCommand):
                 ('Build onboarding wizard and AI workspace setup', False),
             ],
             comments=[
-                (self.marcus, 'Signup form and email verification are working. The onboarding wizard is 60% done — the AI workspace generation is the last piece. On track for the deadline.', 2),
-                (self.priya, 'Tested the verification flow — smooth experience. The real-time validation is a nice touch.', 1),
+                (self.marcus, 'Signup form and email verification are working. The onboarding wizard is 60% done - the AI workspace generation is the last piece. On track for the deadline.', 2),
+                (self.priya, 'Tested the verification flow - smooth experience. The real-time validation is a nice touch.', 1),
             ],
         )
         out['P2'] = self._make_task(
@@ -731,10 +731,10 @@ class Command(BaseCommand):
                 ('Write rollback procedures and test in staging', False),
             ],
             comments=[
-                (self.priya, 'Migrations for all core tables are done. Currently working on the rollback procedures — they are more complex than estimated because of the circular reference between Board and Organization. May need 2 extra days.', 1),
+                (self.priya, 'Migrations for all core tables are done. Currently working on the rollback procedures - they are more complex than estimated because of the circular reference between Board and Organization. May need 2 extra days.', 1),
             ],
         )
-        # P3 — INTENTIONALLY OVERDUE (due_offset=-2). DO NOT FIX.
+        # P3 - INTENTIONALLY OVERDUE (due_offset=-2). DO NOT FIX.
         out['P3'] = self._make_task(
             code='P3', title='Social Login Integration',
             description=('Implement OAuth 2.0 social login for Google and GitHub providers using '
@@ -746,7 +746,7 @@ class Command(BaseCommand):
             complexity=6, risk_l='high', risk_i='medium', risk_level='high',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3000, est_hours=34, hourly=87.5, actual_cost=1350,
-            assignee=self.priya, creator=self.marcus,  # SAME ASSIGNEE AS P2 — intentional conflict
+            assignee=self.priya, creator=self.marcus,  # SAME ASSIGNEE AS P2 - intentional conflict
             label_names=['Backend', 'Security', 'Value-Added'], labels=labels,
             checklist=[
                 ('Configure django-allauth for Google OAuth 2.0', True),
@@ -754,8 +754,8 @@ class Command(BaseCommand):
                 ('Handle account linking edge cases', False),
             ],
             comments=[
-                (self.priya, 'Google OAuth is working but I am blocked on two things simultaneously — the DB migrations are taking longer than expected AND the GitHub OAuth has an undocumented scope behaviour I need to investigate. Flagging for tomorrow\'s standup.', 1),
-                (self.priya, "Noted. This is now past due. Let's discuss reprioritisation — Marcus can you pair with Priya on the GitHub OAuth piece?", 0),
+                (self.priya, 'Google OAuth is working but I am blocked on two things simultaneously - the DB migrations are taking longer than expected AND the GitHub OAuth has an undocumented scope behaviour I need to investigate. Flagging for tomorrow\'s standup.', 1),
+                (self.priya, "Noted. This is now past due. Let's discuss reprioritisation - Marcus can you pair with Priya on the GitHub OAuth piece?", 0),
             ],
         )
         out['P4'] = self._make_task(
@@ -778,7 +778,7 @@ class Command(BaseCommand):
                 ('Set up API health check and readiness endpoints', False),
             ],
             comments=[
-                (self.elena, 'Rate limiting is live. CORS configuration is next — need to confirm the production domain list with the team before locking it down.', 2),
+                (self.elena, 'Rate limiting is live. CORS configuration is next - need to confirm the production domain list with the team before locking it down.', 2),
             ],
         )
 
@@ -803,7 +803,7 @@ class Command(BaseCommand):
                 ('Set up two-way Google Calendar sync for task due dates', False),
             ],
             comments=[
-                (self.priya, 'This is a key enterprise feature. Priority is high — calendar sync is one of the top-requested items from beta users.', 3),
+                (self.priya, 'This is a key enterprise feature. Priority is high - calendar sync is one of the top-requested items from beta users.', 3),
             ],
         )
         out['T2'] = self._make_task(
@@ -826,7 +826,7 @@ class Command(BaseCommand):
                 ('Implement PR title/body task ID parsing and column move', False),
             ],
             comments=[
-                (self.marcus, 'Picked this up as a natural follow-on from the social login work. The webhook receiver should be straightforward — the PR parsing logic is the interesting part.', 4),
+                (self.marcus, 'Picked this up as a natural follow-on from the social login work. The webhook receiver should be straightforward - the PR parsing logic is the interesting part.', 4),
             ],
         )
         out['T3'] = self._make_task(
@@ -871,7 +871,7 @@ class Command(BaseCommand):
                 ('Build fallback logic to FCM for cross-platform unification', False),
             ],
             comments=[
-                (self.elena, 'Blocked on T3 (Mobile Push Notifications) completing first — APNs is the iOS-specific layer on top of the FCM foundation.', 6),
+                (self.elena, 'Blocked on T3 (Mobile Push Notifications) completing first - APNs is the iOS-specific layer on top of the FCM foundation.', 6),
             ],
         )
         out['T5'] = self._make_task(
@@ -917,7 +917,7 @@ class Command(BaseCommand):
                 ('Add axe-core accessibility tests to CI pipeline', False),
             ],
             comments=[
-                (self.marcus, 'Scheduled for Phase 4. Running a preliminary axe-core scan this week to scope the effort — want to flag any surprises early.', 8),
+                (self.marcus, 'Scheduled for Phase 4. Running a preliminary axe-core scan this week to scope the effort - want to flag any surprises early.', 8),
             ],
         )
 
@@ -949,7 +949,7 @@ class Command(BaseCommand):
                          'Neon PostgreSQL for the database, Redis on Cloud Memorystore, Cloud '
                          'Storage for file uploads, environment variable management via Secret '
                          'Manager, custom domain configuration with SSL, health check endpoints, '
-                         'auto-scaling configuration, and a staged rollout plan (dev → staging → '
+                         'auto-scaling configuration, and a staged rollout plan (dev -> staging -> '
                          'production).'),
             column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
             priority='urgent', start_offset=42, due_offset=56, progress=0,
@@ -1028,8 +1028,8 @@ class Command(BaseCommand):
         out['B6'] = self._make_task(
             code='B6', title='End-to-End Test Suite',
             description=('Build a comprehensive end-to-end test suite using Playwright: cover '
-                         'all critical user journeys (registration → board creation → task '
-                         'management → collaboration → AI features), implement visual regression '
+                         'all critical user journeys (registration -> board creation -> task '
+                         'management -> collaboration -> AI features), implement visual regression '
                          'testing for key UI components, set up test data factories, and integrate '
                          'E2E tests into the CI pipeline with parallel test execution.'),
             column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
@@ -1087,7 +1087,7 @@ class Command(BaseCommand):
             ],
         )
 
-        self.stdout.write(f'  ✓ Created 4 epics + {len(out)} child tasks')
+        self.stdout.write(f'  [OK] Created 4 epics + {len(out)} child tasks')
         return out
 
     # ------------------------------------------------------------------
@@ -1111,7 +1111,7 @@ class Command(BaseCommand):
         ]
         for from_code, to_code in pairs:
             t[to_code].dependencies.add(t[from_code])
-        self.stdout.write(f'  ✓ Linked {len(pairs)} timeline dependencies')
+        self.stdout.write(f'  [OK] Linked {len(pairs)} timeline dependencies')
 
     # ------------------------------------------------------------------
     # Milestones
@@ -1147,7 +1147,7 @@ class Command(BaseCommand):
                 created_by=self.priya,
                 is_seed_demo_data=True,
             )
-        self.stdout.write('  ✓ Created 3 milestones')
+        self.stdout.write('  [OK] Created 3 milestones')
 
     # ------------------------------------------------------------------
     # Budget & time tracking
@@ -1181,7 +1181,7 @@ class Command(BaseCommand):
             if total_hours <= 0 or not task.start_date:
                 continue
 
-            # Spread across 3–6 entries within the task window
+            # Spread across 3-6 entries within the task window
             num_entries = random.choice([3, 4, 5, 6])
             entries = self._distribute_hours(total_hours, num_entries)
 
@@ -1208,13 +1208,13 @@ class Command(BaseCommand):
                     user=task.assigned_to,
                     hours_spent=Decimal(f'{hrs:.2f}'),
                     work_date=work_date,
-                    description=random.choice(descriptions) + f' — {task.title}',
+                    description=random.choice(descriptions) + f' - {task.title}',
                     is_billable=True,
                 )
                 time_entry_count += 1
 
         self.stdout.write(
-            f'  ✓ Budget created. {time_entry_count} time entries logged.'
+            f'  [OK] Budget created. {time_entry_count} time entries logged.'
         )
 
     @staticmethod
@@ -1276,7 +1276,7 @@ class Command(BaseCommand):
                           'engagement_status': 'involved'},
             )
 
-        self.stdout.write(f'  ✓ Created {len(defs)} stakeholders')
+        self.stdout.write(f'  [OK] Created {len(defs)} stakeholders')
 
     # ------------------------------------------------------------------
     # Scope baseline
@@ -1287,12 +1287,12 @@ class Command(BaseCommand):
                 user=self.priya,
                 snapshot_type='manual',
                 is_baseline=True,
-                notes=('Initial project baseline — established at project kickoff '
+                notes=('Initial project baseline - established at project kickoff '
                        'with 26 tasks across 4 phases.'),
             )
-            self.stdout.write('  ✓ Scope baseline snapshot recorded')
+            self.stdout.write('  [OK] Scope baseline snapshot recorded')
         except Exception as e:
-            self.stdout.write(self.style.WARNING(f'  ⚠ Could not create scope snapshot: {e}'))
+            self.stdout.write(self.style.WARNING(f'  [WARN] Could not create scope snapshot: {e}'))
 
     # ------------------------------------------------------------------
     # Retrospective
@@ -1312,8 +1312,8 @@ class Command(BaseCommand):
             },
             what_went_well=(
                 "Architecture decisions were well-documented with ADRs making future changes easier. "
-                "Development environment setup was smooth — Elena's Docker configuration had new "
-                "team members productive within 30 minutes. Security architecture was thorough — "
+                "Development environment setup was smooth - Elena's Docker configuration had new "
+                "team members productive within 30 minutes. Security architecture was thorough - "
                 "the penetration test passed with only two medium findings, both resolved before "
                 "phase end. All 8 tasks delivered on time."
             ),
@@ -1321,7 +1321,7 @@ class Command(BaseCommand):
                 'Database schema design took longer than estimated due to circular reference '
                 'complexity. Some tasks had insufficiently detailed acceptance criteria leading '
                 'to two rounds of revision. The security review for RBAC should have been '
-                'scheduled earlier — it came close to blocking the phase milestone.'
+                'scheduled earlier - it came close to blocking the phase milestone.'
             ),
             key_achievements=[
                 'All 8 Phase 1 tasks delivered on time and within budget',
@@ -1346,7 +1346,7 @@ class Command(BaseCommand):
             finalized_by=self.priya,
             finalized_at=self.NOW - timedelta(days=20),
         )
-        self.stdout.write('  ✓ Phase 1 retrospective created')
+        self.stdout.write('  [OK] Phase 1 retrospective created')
 
     # ------------------------------------------------------------------
     # Chat rooms
@@ -1365,12 +1365,12 @@ class Command(BaseCommand):
             )
             room.members.add(self.priya, self.marcus, self.elena)
             msg_total += self._seed_messages(room, name)
-        self.stdout.write(f'  ✓ Created 3 chat rooms with {msg_total} messages')
+        self.stdout.write(f'  [OK] Created 3 chat rooms with {msg_total} messages')
 
     def _seed_messages(self, room, name):
         if name == '#general':
             msgs = [
-                (self.priya, 'Phase 1 retrospective is up in the Retros tab — please give it a read before standup tomorrow.', 9),
+                (self.priya, 'Phase 1 retrospective is up in the Retros tab - please give it a read before standup tomorrow.', 9),
                 (self.elena, 'Onboarding doc update merged. New devs should be productive in <30 min now.', 7),
                 (self.marcus, 'Reminder: we are freezing scope changes until after the Phase 2 milestone.', 5),
                 (self.priya, 'Stakeholder demo on Friday. Authentication and File Upload need to be demo-ready.', 3),
@@ -1381,10 +1381,10 @@ class Command(BaseCommand):
             msgs = [
                 (self.priya, 'The circular FK reference in the migration is driving me crazy. Going with a nullable field and a data migration to populate it post-hoc. Not ideal but it unblocks P2.', 4),
                 (self.marcus, 'Pushed the R1 PR. The token rotation logic is mostly cribbed from the django-rest-knox docs.', 3),
-                (self.elena, 'CI build is flaky on the auth test — same lockout test failing intermittently. Looking now.', 3),
+                (self.elena, 'CI build is flaky on the auth test - same lockout test failing intermittently. Looking now.', 3),
                 (self.priya, 'GitHub OAuth scope behaviour: confirmed undocumented. Filed a bug upstream but we need to work around it for P3.', 1),
-                (self.marcus, 'Cool — I can pair on the workaround later today.', 1),
-                (self.elena, 'CI fixed — the lockout test was racy. Bumped the timeout by 100ms.', 0),
+                (self.marcus, 'Cool - I can pair on the workaround later today.', 1),
+                (self.elena, 'CI fixed - the lockout test was racy. Bumped the timeout by 100ms.', 0),
             ]
         else:  # sprint-planning
             msgs = [
@@ -1392,7 +1392,7 @@ class Command(BaseCommand):
                 (self.marcus, 'Capacity check: I am full. Can someone take Slack/Teams webhooks (B3)?', 5),
                 (self.priya, 'It is in the backlog, no rush. Focus on P1 and finish R2.', 5),
                 (self.elena, 'I will keep P4 moving in parallel with the smoke test prep.', 4),
-                (self.priya, 'P3 is overdue. Marcus — can you pair with Priya on the GitHub OAuth scope issue?', 0),
+                (self.priya, 'P3 is overdue. Marcus - can you pair with Priya on the GitHub OAuth scope issue?', 0),
                 (self.marcus, 'Yes. Will block out the afternoon.', 0),
             ]
 
@@ -1474,7 +1474,7 @@ class Command(BaseCommand):
             CoachingSuggestion.objects.filter(pk=cs.pk).update(
                 created_at=self.NOW - timedelta(days=days_ago),
             )
-        self.stdout.write('  ✓ 4 coaching suggestions created')
+        self.stdout.write('  [OK] 4 coaching suggestions created')
 
     # ------------------------------------------------------------------
     # Historical ML training data
@@ -1551,7 +1551,7 @@ class Command(BaseCommand):
                 created_by=self.priya,
                 is_seed_demo_data=True,
             )
-        self.stdout.write('  ✓ 25 historical ML training tasks created (archive board)')
+        self.stdout.write('  [OK] 25 historical ML training tasks created (archive board)')
 
     # ------------------------------------------------------------------
     # Priority decisions
@@ -1579,7 +1579,7 @@ class Command(BaseCommand):
             PriorityDecision.objects.filter(pk=pd.pk).update(
                 decided_at=self.NOW - timedelta(days=rng.randint(1, 90)),
             )
-        self.stdout.write('  ✓ 30 priority decisions created')
+        self.stdout.write('  [OK] 30 priority decisions created')
 
     # ------------------------------------------------------------------
     # Wiki pages
@@ -1626,7 +1626,7 @@ class Command(BaseCommand):
                 "- Session expiry: 60 minutes idle, 8 hours absolute.\n"
                 "- Brute-force protection via django-axes (5 attempts, exponential backoff).\n\n"
                 "## Secret management\n\n"
-                "Secrets live in Google Secret Manager — never in source. Local dev uses "
+                "Secrets live in Google Secret Manager - never in source. Local dev uses "
                 "`.env.local` (gitignored). Rotate every 90 days.\n\n"
                 "## Vulnerability reporting\n\n"
                 "Email `security@acme-corp.demo`. We acknowledge within 24 hours and "
@@ -1650,7 +1650,7 @@ class Command(BaseCommand):
                 "6. The PR description includes a manual test plan a reviewer can follow.\n\n"
                 "## Velocity tracking\n\n"
                 "We track velocity in completed-tasks per sprint, not story points. "
-                "Trends matter more than absolute numbers — a sudden 30% drop is a flag "
+                "Trends matter more than absolute numbers - a sudden 30% drop is a flag "
                 "for a retro conversation.\n\n"
                 "## Sprint planning\n\n"
                 "Each sprint starts with one over-arching goal. Tasks that do not "
@@ -1668,7 +1668,7 @@ class Command(BaseCommand):
                     'tags': ['engineering', 'standards'],
                 },
             )
-        self.stdout.write('  ✓ Wiki: 1 category + 3 pages created')
+        self.stdout.write('  [OK] Wiki: 1 category + 3 pages created')
 
     # ------------------------------------------------------------------
     # Optional sub-seeders
@@ -1684,20 +1684,20 @@ class Command(BaseCommand):
         for name in subs:
             try:
                 call_command(name)
-                self.stdout.write(f'  ✓ {name}')
+                self.stdout.write(f'  [OK] {name}')
             except Exception as e:
-                self.stdout.write(self.style.WARNING(f'  ⚠ {name} skipped: {e}'))
+                self.stdout.write(self.style.WARNING(f'  [WARN] {name} skipped: {e}'))
 
-        # NOTE: do NOT call refresh_demo_dates here — our seed already writes
+        # NOTE: do NOT call refresh_demo_dates here - our seed already writes
         # dynamic dates relative to TODAY, and the refresh command resets
         # progress/checklists/dates in a way that wipes the carefully-tuned
         # narrative (intentional overdue task, mid-progress states, etc.).
 
         try:
             call_command('detect_conflicts', '--clear')
-            self.stdout.write('  ✓ detect_conflicts')
+            self.stdout.write('  [OK] detect_conflicts')
         except Exception as e:
-            self.stdout.write(self.style.WARNING(f'  ⚠ detect_conflicts skipped: {e}'))
+            self.stdout.write(self.style.WARNING(f'  [WARN] detect_conflicts skipped: {e}'))
 
     # ------------------------------------------------------------------
     # Verification
@@ -1712,7 +1712,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('DEMO DATA VERIFICATION REPORT'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'Board: {b.name}')
-        self.stdout.write(f'Total task rows: {tasks.count()}  (expected: 35 — 4 epics + 28 tasks + 3 milestones)')
+        self.stdout.write(f'Total task rows: {tasks.count()}  (expected: 35 - 4 epics + 28 tasks + 3 milestones)')
         for c in b.columns.all().order_by('position'):
             self.stdout.write(
                 f'  {c.name:<14} {tasks.filter(column=c).count():>3}'
@@ -1722,7 +1722,7 @@ class Command(BaseCommand):
         overdue = children.filter(due_date__lt=self.NOW, progress__lt=100)
         self.stdout.write(
             f'Overdue tasks: {overdue.count()}  '
-            '(expected: 2 — Social Login Integration far-overdue + '
+            '(expected: 2 - Social Login Integration far-overdue + '
             'Authentication System in late code review)'
         )
 
@@ -1731,7 +1731,7 @@ class Command(BaseCommand):
 
         for username in PERSONA_USERNAMES:
             ok = User.objects.filter(username=username).exists()
-            self.stdout.write(f'  Persona {username}: {"✓" if ok else "✗ MISSING"}')
+            self.stdout.write(f'  Persona {username}: {"[OK]" if ok else "[FAIL] MISSING"}')
 
         archive = Board.objects.filter(
             name=ARCHIVE_BOARD_NAME, organization=self.demo_org,
@@ -1741,6 +1741,6 @@ class Command(BaseCommand):
             self.stdout.write(f'Historical ML tasks: {hist}  (expected: 25, on hidden archive board)')
 
         self.stdout.write('')
-        self.stdout.write(f'📅 All dates relative to TODAY = {self.TODAY}')
-        self.stdout.write('🔄 Re-run anytime to slide the project forward.')
+        self.stdout.write(f' All dates relative to TODAY = {self.TODAY}')
+        self.stdout.write(' Re-run anytime to slide the project forward.')
         self.stdout.write(self.style.SUCCESS('=' * 80))

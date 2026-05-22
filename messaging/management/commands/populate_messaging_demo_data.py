@@ -44,9 +44,9 @@ class Command(BaseCommand):
         # Get demo organization
         try:
             self.demo_org = Organization.objects.get(name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {self.demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR('❌ Demo - Acme Corporation not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo - Acme Corporation not found!'))
             self.stdout.write('   Please run: python manage.py create_demo_organization')
             return
 
@@ -70,10 +70,10 @@ class Command(BaseCommand):
                 User.objects.filter(is_superuser=True).first()
             if self.demo_admin:
                 self.stdout.write(self.style.WARNING(
-                    f'⚠️  demo_admin_solo not found — using {self.demo_admin.username} as fallback'
+                    f'[WARN]  demo_admin_solo not found - using {self.demo_admin.username} as fallback'
                 ))
             else:
-                self.stdout.write(self.style.ERROR('❌ No usable admin/demo user found!'))
+                self.stdout.write(self.style.ERROR('[FAIL] No usable admin/demo user found!'))
                 return
 
         # Clear existing data if requested
@@ -91,7 +91,7 @@ class Command(BaseCommand):
 
     def clear_messaging_data(self):
         """Clear existing messaging demo data"""
-        self.stdout.write(self.style.WARNING('\n🗑️  Clearing existing messaging demo data...'))
+        self.stdout.write(self.style.WARNING('\n  Clearing existing messaging demo data...'))
         
         # Delete in correct order for foreign key constraints
         Notification.objects.filter(recipient__in=self.demo_users).delete()
@@ -100,7 +100,7 @@ class Command(BaseCommand):
         TaskThreadComment.objects.filter(task__column__board__in=self.demo_boards).delete()
         ChatRoom.objects.filter(board__in=self.demo_boards).delete()
         
-        self.stdout.write(self.style.SUCCESS('   ✅ Cleared existing data'))
+        self.stdout.write(self.style.SUCCESS('   [OK] Cleared existing data'))
 
     def get_user_by_key(self, key):
         """Get user by short key name"""
@@ -150,7 +150,7 @@ class Command(BaseCommand):
                     'description': 'Pull request discussions and code review feedback',
                     'messages': [
                         {'author': 'demo_admin', 'content': 'Just submitted PR #142 for the new authentication module. @marcus.chen could you review?', 'minutes_ago': 300},
-                        {'author': 'sam', 'content': 'On it! Give me about 30 minutes. 🔍', 'minutes_ago': 295},
+                        {'author': 'sam', 'content': 'On it! Give me about 30 minutes. ', 'minutes_ago': 295},
                         {'author': 'sam', 'content': 'Reviewed! LGTM with minor suggestions. Left a few comments on the token refresh logic.', 'minutes_ago': 260},
                         {'author': 'demo_admin', 'content': 'Great feedback! I\'ll address those comments and update the PR.', 'minutes_ago': 255},
                         {'author': 'alex', 'content': 'Nice work both of you! This will be a great addition to our security features.', 'minutes_ago': 200},
@@ -171,7 +171,7 @@ class Command(BaseCommand):
 
     def create_chat_rooms_and_messages(self):
         """Create chat rooms and populate with messages"""
-        self.stdout.write(self.style.NOTICE('\n📬 Creating Chat Rooms and Messages...'))
+        self.stdout.write(self.style.NOTICE('\nCreating Chat Rooms and Messages...'))
         
         rooms_created = 0
         messages_created = 0
@@ -203,7 +203,7 @@ class Command(BaseCommand):
                     rooms_created += 1
                     for member in board_members:
                         room.members.add(member)
-                    self.stdout.write(f'   ✅ Created: {board_name} → {room_name}')
+                    self.stdout.write(f'   [OK] Created: {board_name} -> {room_name}')
                 else:
                     # Ensure all board members are in the room
                     for member in board_members:
@@ -237,7 +237,7 @@ class Command(BaseCommand):
 
     def create_file_attachments(self):
         """Create file attachment metadata"""
-        self.stdout.write(self.style.NOTICE('\n📎 Creating File Attachments...'))
+        self.stdout.write(self.style.NOTICE('\nCreating File Attachments...'))
         
         attachments_created = 0
         file_data = self.get_file_attachment_data()
@@ -272,7 +272,7 @@ class Command(BaseCommand):
 
     def create_notifications(self):
         """Create demo notifications referencing real tasks and chat rooms from the demo board"""
-        self.stdout.write(self.style.NOTICE('\n🔔 Creating Notifications...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Notifications...'))
 
         notifications_created = 0
         now = timezone.now()
@@ -364,7 +364,7 @@ class Command(BaseCommand):
             {
                 'type': 'MENTION',
                 'sender_key': 'sam',
-                'text': f'{sam_name} mentioned you in {room_reviews}: "PR is ready for your approval — ping me with questions."',
+                'text': f'{sam_name} mentioned you in {room_reviews}: "PR is ready for your approval - ping me with questions."',
                 'action_url': room_url(room_reviews_obj),
                 'minutes_ago': 240,
                 'is_read': True,
@@ -372,7 +372,7 @@ class Command(BaseCommand):
             {
                 'type': 'TASK_ASSIGNED_CAL',
                 'sender_key': 'alex',
-                'text': f'You were assigned to "{task_db}" — due in 3 days.',
+                'text': f'You were assigned to "{task_db}" - due in 3 days.',
                 'action_url': task_url(obj_db),
                 'minutes_ago': 360,
                 'is_read': True,
@@ -380,7 +380,7 @@ class Command(BaseCommand):
             {
                 'type': 'COMMENT',
                 'sender_key': 'jordan',
-                'text': f'{jordan_name} commented on "{task_api}": "I\'ve added the rate-limiting logic — please verify on staging."',
+                'text': f'{jordan_name} commented on "{task_api}": "I\'ve added the rate-limiting logic - please verify on staging."',
                 'action_url': task_url(obj_api),
                 'minutes_ago': 480,
                 'is_read': True,
@@ -388,7 +388,7 @@ class Command(BaseCommand):
             {
                 'type': 'ACTIVITY',
                 'sender_key': 'alex',
-                'text': f'{alex_name} marked "{task_done}" as complete. 🎉',
+                'text': f'{alex_name} marked "{task_done}" as complete. ',
                 'action_url': task_url(obj_done),
                 'minutes_ago': 720,
                 'is_read': True,
@@ -396,7 +396,7 @@ class Command(BaseCommand):
             {
                 'type': 'COMMENT',
                 'sender_key': 'sam',
-                'text': f'{sam_name} left a review comment on "{task_review}": "Looks good overall — added a few inline suggestions."',
+                'text': f'{sam_name} left a review comment on "{task_review}": "Looks good overall - added a few inline suggestions."',
                 'action_url': task_url(obj_review),
                 'minutes_ago': 1440,
                 'is_read': True,
@@ -408,9 +408,9 @@ class Command(BaseCommand):
         # --clear first is not required.
         old_texts = [
             'You have been invited to "Q2 Sprint Review" on Friday at 3:00 PM.',
-            'Alex Chen marked "Sprint Planning" as complete. 🎉',
+            'Alex Chen marked "Sprint Planning" as complete. ',
             'Jordan Taylor moved "User Authentication Module" to In Review.',
-            'You were assigned to "Database Schema Design" — due in 3 days.',
+            'You were assigned to "Database Schema Design" - due in 3 days.',
             'Jordan Taylor commented on "API Gateway Configuration":',
             'Sam Rivera replied to your comment on "Set up CI/CD pipeline":',
             'Alex Chen mentioned you in General Discussion:',
@@ -489,7 +489,7 @@ class Command(BaseCommand):
 
     def create_task_comments(self):
         """Create task thread comments"""
-        self.stdout.write(self.style.NOTICE('\n💬 Creating Task Comments...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Task Comments...'))
         
         comments_created = 0
         demo_tasks = Task.objects.filter(column__board__in=self.demo_boards)[:10]
@@ -499,7 +499,7 @@ class Command(BaseCommand):
             {'author': 'sam', 'content': 'I\'ve started working on this. Should have an update by EOD.'},
             {'author': 'jordan', 'content': '@demo_admin_solo Can you review the latest changes?'},
             {'author': 'demo_admin', 'content': 'Looks good! Moving this to review. @marcus.chen please verify.'},
-            {'author': 'sam', 'content': 'Verified and tested. Ready for production! 🚀'},
+            {'author': 'sam', 'content': 'Verified and tested. Ready for production! '},
         ]
 
         for task in demo_tasks:
@@ -540,12 +540,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('MESSAGING DEMO DATA SUMMARY'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'''
-📊 Total Demo Messaging Data:
-   • Chat Rooms: {total_rooms}
-   • Chat Messages: {total_messages}
-   • File Attachments: {total_attachments}
-   • Notifications: {total_notifications}
-   • Task Comments: {total_comments}
+ Total Demo Messaging Data:
+   - Chat Rooms: {total_rooms}
+   - Chat Messages: {total_messages}
+   - File Attachments: {total_attachments}
+   - Notifications: {total_notifications}
+   - Task Comments: {total_comments}
 
-🎉 Demo messaging feature is now populated!
+ Demo messaging feature is now populated!
 ''')

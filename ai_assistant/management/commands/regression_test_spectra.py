@@ -46,7 +46,7 @@ CHECKS = [
             ("Done: 7", lambda r: "7" in r.lower() and "done" in r.lower()),
         ],
     ),
-    # Q3: Milestone status (Bug 1 — Foundation must be Done)
+    # Q3: Milestone status (Bug 1 - Foundation must be Done)
     (
         "What are the milestones on this board and their status?",
         [
@@ -54,7 +54,7 @@ CHECKS = [
             ("Core Auth not done", lambda r: "core auth" in r.lower()),
         ],
     ),
-    # Q4: Specific task status (Bug 2 — Auth System must be In Review)
+    # Q4: Specific task status (Bug 2 - Auth System must be In Review)
     (
         "What is the current status of the Authentication System task?",
         [
@@ -63,7 +63,7 @@ CHECKS = [
              or ("in review" in r.lower())),  # allow mention if both present
         ],
     ),
-    # Q5: Priority check (Bug 3 — User Registration Flow must be Urgent)
+    # Q5: Priority check (Bug 3 - User Registration Flow must be Urgent)
     (
         "What is the priority of the User Registration Flow task?",
         [
@@ -79,7 +79,7 @@ CHECKS = [
             ("only 2", lambda r: "2" in r),
         ],
     ),
-    # Q7: Sam Rivera's tasks (Bug 5 — must list exactly his tasks)
+    # Q7: Sam Rivera's tasks (Bug 5 - must list exactly his tasks)
     (
         "Show me all tasks assigned to Sam Rivera",
         [
@@ -103,7 +103,7 @@ CHECKS = [
             ("Auth System", lambda r: "authentication system" in r.lower()),
         ],
     ),
-    # Q9: Dependency blocking (Bug 7 — must show correct blocking counts)
+    # Q9: Dependency blocking (Bug 7 - must show correct blocking counts)
     (
         "Which tasks are blocking the most other tasks?",
         [

@@ -84,7 +84,7 @@ class Command(BaseCommand):
                 return False
             
             # Display results
-            self.stdout.write(self.style.SUCCESS(f"  ✓ Model v{result['model_version']} trained successfully!"))
+            self.stdout.write(self.style.SUCCESS(f"  [OK] Model v{result['model_version']} trained successfully!"))
             self.stdout.write(f"    Accuracy: {result['accuracy']:.2%}")
             self.stdout.write(f"    Training samples: {result['training_samples']}")
             self.stdout.write(f"    Test samples: {result['test_samples']}")
@@ -150,6 +150,6 @@ class Command(BaseCommand):
         # Summary
         self.stdout.write(
             self.style.SUCCESS(
-                f'\n✓ Successfully trained {success_count} of {boards.count()} models'
+                f'\n[OK] Successfully trained {success_count} of {boards.count()} models'
             )
         )

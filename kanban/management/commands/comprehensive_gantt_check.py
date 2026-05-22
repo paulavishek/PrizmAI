@@ -75,17 +75,17 @@ class Command(BaseCommand):
         
         # Issues
         if issues_found:
-            self.stdout.write(self.style.WARNING(f'\n⚠️  ISSUES FOUND: {len(issues_found)}'))
+            self.stdout.write(self.style.WARNING(f'\n[WARN]  ISSUES FOUND: {len(issues_found)}'))
             for issue in issues_found:
-                self.stdout.write(self.style.WARNING(f'  • {issue}'))
+                self.stdout.write(self.style.WARNING(f'  - {issue}'))
         else:
-            self.stdout.write(self.style.SUCCESS('\n✅ NO ISSUES FOUND - All Gantt charts are ready!'))
+            self.stdout.write(self.style.SUCCESS('\n[OK] NO ISSUES FOUND - All Gantt charts are ready!'))
         
         self.stdout.write(self.style.SUCCESS(f'\n{"="*80}\n'))
     
     def check_board(self, board, issues_found):
         """Check a specific board's Gantt chart data"""
-        self.stdout.write(f'\n  📊 Board: {board.name} (ID: {board.id})')
+        self.stdout.write(f'\n   Board: {board.name} (ID: {board.id})')
         self.stdout.write(f'     URL: http://127.0.0.1:8000/boards/{board.id}/gantt/')
         
         tasks = Task.objects.filter(column__board=board).order_by('start_date')
@@ -98,11 +98,11 @@ class Command(BaseCommand):
         if tasks_without_dates.exists():
             issue = f'{board.name}: {tasks_without_dates.count()} tasks missing dates'
             issues_found.append(issue)
-            self.stdout.write(self.style.WARNING(f'     ⚠️  Missing Dates: {tasks_without_dates.count()}'))
+            self.stdout.write(self.style.WARNING(f'     [WARN]  Missing Dates: {tasks_without_dates.count()}'))
             for task in tasks_without_dates[:3]:
                 self.stdout.write(self.style.WARNING(f'        - {task.title}'))
         else:
-            self.stdout.write(self.style.SUCCESS(f'     ✅ All tasks have dates'))
+            self.stdout.write(self.style.SUCCESS(f'     [OK] All tasks have dates'))
         
         # Check dynamic dates (should have dates in past, present, and future)
         today = timezone.now().date()
@@ -149,19 +149,19 @@ class Command(BaseCommand):
         if invalid_deps > 0:
             issue = f'{board.name}: {invalid_deps} invalid dependencies (dates conflict)'
             issues_found.append(issue)
-            self.stdout.write(self.style.WARNING(f'     ⚠️  Invalid Dependencies: {invalid_deps}'))
+            self.stdout.write(self.style.WARNING(f'     [WARN]  Invalid Dependencies: {invalid_deps}'))
         
         if self_referencing_deps > 0:
             issue = f'{board.name}: {self_referencing_deps} self-referencing dependencies'
             issues_found.append(issue)
-            self.stdout.write(self.style.WARNING(f'     ⚠️  Self-Referencing: {self_referencing_deps}'))
+            self.stdout.write(self.style.WARNING(f'     [WARN]  Self-Referencing: {self_referencing_deps}'))
         
         if total_deps > 0 and invalid_deps == 0 and self_referencing_deps == 0:
-            self.stdout.write(self.style.SUCCESS(f'     ✅ All dependencies are valid'))
+            self.stdout.write(self.style.SUCCESS(f'     [OK] All dependencies are valid'))
         
         # Show task timeline sample
         if tasks_with_dates.exists():
-            self.stdout.write(f'\n     📅 Task Timeline Sample (first 5):')
+            self.stdout.write(f'\n      Task Timeline Sample (first 5):')
             for task in tasks_with_dates[:5]:
                 deps = task.dependencies.all()
                 dep_info = ''
@@ -172,8 +172,8 @@ class Command(BaseCommand):
                     dep_info = f' [depends on: {dep_names}]'
                 
                 self.stdout.write(
-                    f'        • {task.title[:40]:42} | '
-                    f'{task.start_date} → {task.due_date.date()}'
+                    f'        - {task.title[:40]:42} | '
+                    f'{task.start_date} -> {task.due_date.date()}'
                     f'{dep_info}'
                 )
             

@@ -170,7 +170,7 @@ class Command(BaseCommand):
         try:
             cache = caches[cache_name]
             cache.clear()
-            self.stdout.write(self.style.SUCCESS(f"✓ Cache '{cache_name}' cleared successfully"))
+            self.stdout.write(self.style.SUCCESS(f"[OK] Cache '{cache_name}' cleared successfully"))
         except Exception as e:
             raise CommandError(f"Failed to clear cache '{cache_name}': {e}")
     
@@ -180,9 +180,9 @@ class Command(BaseCommand):
             try:
                 cache = caches[name]
                 cache.clear()
-                self.stdout.write(self.style.SUCCESS(f"✓ Cache '{name}' cleared"))
+                self.stdout.write(self.style.SUCCESS(f"[OK] Cache '{name}' cleared"))
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"✗ Failed to clear '{name}': {e}"))
+                self.stdout.write(self.style.ERROR(f"[FAIL] Failed to clear '{name}': {e}"))
         
         self.stdout.write(self.style.SUCCESS("\nAll caches cleared!"))
     
@@ -193,12 +193,12 @@ class Command(BaseCommand):
         if board_id:
             self.stdout.write(f"Warming up cache for board {board_id}...")
             warmup_board_cache(board_id)
-            self.stdout.write(self.style.SUCCESS(f"✓ Board {board_id} cache warmed"))
+            self.stdout.write(self.style.SUCCESS(f"[OK] Board {board_id} cache warmed"))
         
         if user_id:
             self.stdout.write(f"Warming up cache for user {user_id}...")
             warmup_user_cache(user_id)
-            self.stdout.write(self.style.SUCCESS(f"✓ User {user_id} cache warmed"))
+            self.stdout.write(self.style.SUCCESS(f"[OK] User {user_id} cache warmed"))
         
         if not board_id and not user_id:
             self.stdout.write(self.style.WARNING(
@@ -211,11 +211,11 @@ class Command(BaseCommand):
         
         if board_id:
             cache_manager.invalidate_board(board_id)
-            self.stdout.write(self.style.SUCCESS(f"✓ Board {board_id} cache invalidated"))
+            self.stdout.write(self.style.SUCCESS(f"[OK] Board {board_id} cache invalidated"))
         
         if user_id:
             cache_manager.invalidate_user(user_id)
-            self.stdout.write(self.style.SUCCESS(f"✓ User {user_id} cache invalidated"))
+            self.stdout.write(self.style.SUCCESS(f"[OK] User {user_id} cache invalidated"))
         
         if not board_id and not user_id:
             self.stdout.write(self.style.WARNING(
@@ -233,30 +233,30 @@ class Command(BaseCommand):
             test_key = 'prizmAI:test:connection'
             test_value = {'test': True, 'message': 'Cache working!'}
             cache.set(test_key, test_value, 60)
-            self.stdout.write(self.style.SUCCESS("  ✓ SET operation successful"))
+            self.stdout.write(self.style.SUCCESS("  [OK] SET operation successful"))
             
             # Test get
             retrieved = cache.get(test_key)
             if retrieved == test_value:
-                self.stdout.write(self.style.SUCCESS("  ✓ GET operation successful"))
+                self.stdout.write(self.style.SUCCESS("  [OK] GET operation successful"))
             else:
-                self.stdout.write(self.style.ERROR("  ✗ GET returned incorrect value"))
+                self.stdout.write(self.style.ERROR("  [FAIL] GET returned incorrect value"))
             
             # Test delete
             cache.delete(test_key)
             if cache.get(test_key) is None:
-                self.stdout.write(self.style.SUCCESS("  ✓ DELETE operation successful"))
+                self.stdout.write(self.style.SUCCESS("  [OK] DELETE operation successful"))
             else:
-                self.stdout.write(self.style.ERROR("  ✗ DELETE failed"))
+                self.stdout.write(self.style.ERROR("  [FAIL] DELETE failed"))
             
             # Test get_or_set
             result = cache.get_or_set('prizmAI:test:get_or_set', lambda: 'computed', 60)
             if result == 'computed':
-                self.stdout.write(self.style.SUCCESS("  ✓ GET_OR_SET operation successful"))
+                self.stdout.write(self.style.SUCCESS("  [OK] GET_OR_SET operation successful"))
             cache.delete('prizmAI:test:get_or_set')
             
-            self.stdout.write(self.style.SUCCESS(f"\n✓ Cache '{cache_name}' is working correctly!"))
+            self.stdout.write(self.style.SUCCESS(f"\n[OK] Cache '{cache_name}' is working correctly!"))
             
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f"\n✗ Cache test failed: {e}"))
+            self.stdout.write(self.style.ERROR(f"\n[FAIL] Cache test failed: {e}"))
             raise CommandError(f"Cache test failed: {e}")

@@ -63,14 +63,14 @@ class Command(BaseCommand):
         
         if sessions_count == 0 and events_count == 0:
             self.stdout.write(
-                self.style.SUCCESS('\n✅ No old data found. Database is clean!')
+                self.style.SUCCESS('\n[OK] No old data found. Database is clean!')
             )
             return
         
         if dry_run:
             self.stdout.write(
                 self.style.WARNING(
-                    '\n⚠️  DRY RUN - No data was deleted. Remove --dry-run flag to perform deletion.'
+                    '\n[WARN]  DRY RUN - No data was deleted. Remove --dry-run flag to perform deletion.'
                 )
             )
             return
@@ -92,7 +92,7 @@ class Command(BaseCommand):
                 deleted_events = old_events.delete()
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'✅ Deleted {deleted_events[0]} analytics events'
+                        f'[OK] Deleted {deleted_events[0]} analytics events'
                     )
                 )
                 logger.info(f'Deleted {deleted_events[0]} old analytics events')
@@ -102,21 +102,21 @@ class Command(BaseCommand):
                 deleted_sessions = old_sessions.delete()
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'✅ Deleted {deleted_sessions[0]} user sessions'
+                        f'[OK] Deleted {deleted_sessions[0]} user sessions'
                     )
                 )
                 logger.info(f'Deleted {deleted_sessions[0]} old user sessions')
             
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'\n✅ Cleanup completed successfully! '
+                    f'\n[OK] Cleanup completed successfully! '
                     f'Total records removed: {deleted_events[0] + deleted_sessions[0]}'
                 )
             )
         
         except Exception as e:
             self.stdout.write(
-                self.style.ERROR(f'\n❌ Error during cleanup: {str(e)}')
+                self.style.ERROR(f'\n[FAIL] Error during cleanup: {str(e)}')
             )
             logger.error(f'Error during cleanup: {e}', exc_info=True)
             raise

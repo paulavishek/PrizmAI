@@ -4,8 +4,8 @@ Management command to seed Automation Hierarchy demo data.
 Adds the data needed to test the "Hierarchy & Dependencies" automation
 triggers (T-22 through T-29) described in the Spectra test plan:
 
-  - Checklist items on every existing demo task (2–4 per task)
-  - 4 parent tasks, each with 2–3 subtasks (for subtask triggers)
+  - Checklist items on every existing demo task (2-4 per task)
+  - 4 parent tasks, each with 2-3 subtasks (for subtask triggers)
   - 1 dedicated blocking-dependency pair with Task B pre-seeded as overdue
 
 Usage:
@@ -414,7 +414,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.NOTICE('\n[Checklist] Seeding checklist items on existing tasks...'))
 
-        # Skip if already seeded (idempotent check — match by title so we don't
+        # Skip if already seeded (idempotent check - match by title so we don't
         # accidentally skip when users have added their own checklist items).
         already = ChecklistItem.objects.filter(
             task__column__board=self.board,
@@ -597,7 +597,7 @@ class Command(BaseCommand):
         )
         in_progress = columns.get('In Progress') or todo
 
-        # Task B — already overdue (due 2 days ago, 40% progress)
+        # Task B - already overdue (due 2 days ago, 40% progress)
         task_b_due = timezone.make_aware(
             datetime.combine(self.today - timedelta(days=2), time(12, 0))
         )
@@ -619,7 +619,7 @@ class Command(BaseCommand):
                 task=task_b, title=title, is_completed=False, position=pos, source='manual',
             )
 
-        # Task A — depends on Task B
+        # Task A - depends on Task B
         task_a_due = timezone.make_aware(
             datetime.combine(self.today + timedelta(days=14), time(12, 0))
         )

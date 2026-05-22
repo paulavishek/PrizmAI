@@ -45,7 +45,7 @@ class Command(BaseCommand):
                     pass
             IdeaComment.objects.filter(idea__in=existing).delete()
             existing.delete()
-            self.stdout.write(self.style.NOTICE('Discovery demo ideas cleared — recreating fresh.'))
+            self.stdout.write(self.style.NOTICE('Discovery demo ideas cleared - recreating fresh.'))
 
         # ── Demo users ─────────────────────────────────────────────────
         alex = User.objects.filter(username='priya.sharma').first()
@@ -84,7 +84,7 @@ class Command(BaseCommand):
             ai_score_impact=87,
             ai_score_effort=72,
             ai_score_confidence=81,
-            ai_score_recommendation='Prioritise — high strategic value, manageable effort.',
+            ai_score_recommendation='Prioritise - high strategic value, manageable effort.',
             ai_score_reasoning=(
                 'Strong market opportunity in APAC, validated by customer interviews. '
                 'Effort is moderate due to localisation complexity but offset by large '
@@ -104,7 +104,7 @@ class Command(BaseCommand):
             promoted_by=alex,
         )
 
-        # Comment thread — decision journey
+        # Comment thread - decision journey
         IdeaComment.objects.create(
             idea=idea1,
             author=jordan,
@@ -117,7 +117,7 @@ class Command(BaseCommand):
             idea=idea1,
             author=sam,
             content=(
-                'Agreed — I ran a quick feasibility check and our React Native team '
+                'Agreed - I ran a quick feasibility check and our React Native team '
                 'can deliver an MVP in Q3. Biggest risk is payment gateway certification '
                 'timelines (Alipay takes 8-12 weeks).'
             ),
@@ -133,7 +133,7 @@ class Command(BaseCommand):
         IdeaComment.objects.create(
             idea=idea1,
             author=alex,
-            content='✅ Promoted to APAC Sprint Q3 board. Three tasks created. Kicking off next Monday.',
+            content='[OK] Promoted to APAC Sprint Q3 board. Three tasks created. Kicking off next Monday.',
         )
 
         # ── Idea 2: AI-Powered Language Localisation (under_review, scored) ──
@@ -151,9 +151,9 @@ class Command(BaseCommand):
             ai_score_impact=78,
             ai_score_effort=65,
             ai_score_confidence=72,
-            ai_score_recommendation='Strong bet — aligns with APAC expansion and reduces localisation cost by est. 60%.',
+            ai_score_recommendation='Strong bet - aligns with APAC expansion and reduces localisation cost by est. 60%.',
             ai_score_reasoning=(
-                'High leverage relative to effort — LLM translation is now mature enough '
+                'High leverage relative to effort - LLM translation is now mature enough '
                 'for production use with human review. Main risk is regulatory sensitivity '
                 'in some target markets.'
             ),
@@ -175,7 +175,7 @@ class Command(BaseCommand):
             ai_score_impact=83,
             ai_score_effort=58,
             ai_score_confidence=76,
-            ai_score_recommendation='Pursue in parallel with mobile app — a dependency, not optional.',
+            ai_score_recommendation='Pursue in parallel with mobile app - a dependency, not optional.',
             ai_score_reasoning=(
                 'Without payment localisation, conversion rates in APAC will remain low. '
                 'Legal and compliance work is the main bottleneck; technical integration '
@@ -200,7 +200,7 @@ class Command(BaseCommand):
             is_demo=True,
         )
 
-        # ── Idea 5: Competitor Feature Parity — Dashboard Export (new, unscored) ──
+        # ── Idea 5: Competitor Feature Parity - Dashboard Export (new, unscored) ──
         DiscoveryIdea.objects.create(
             organization=demo_org,
             title='Dashboard Export to PowerPoint / PDF',
@@ -230,7 +230,7 @@ class Command(BaseCommand):
             ai_score_impact=34,
             ai_score_effort=62,
             ai_score_confidence=68,
-            ai_score_recommendation='Deprioritise — low impact relative to effort for our B2B segment.',
+            ai_score_recommendation='Deprioritise - low impact relative to effort for our B2B segment.',
             ai_score_reasoning=(
                 'Gamification is a B2C pattern. Our enterprise buyers prioritise ROI '
                 'and workflow efficiency, not engagement loops. Complexity cost is high '
@@ -243,7 +243,7 @@ class Command(BaseCommand):
             idea=idea6,
             author=alex,
             content=(
-                'Rejecting this for now. We spoke to 5 enterprise buyers — none of them '
+                'Rejecting this for now. We spoke to 5 enterprise buyers - none of them '
                 'cited engagement as a pain point. Not the right fit for our current ICP.'
             ),
         )
@@ -263,7 +263,7 @@ class Command(BaseCommand):
             ai_score_impact=74,
             ai_score_effort=40,
             ai_score_confidence=79,
-            ai_score_recommendation='Quick Win — high impact with relatively low implementation effort.',
+            ai_score_recommendation='Quick Win - high impact with relatively low implementation effort.',
             ai_score_reasoning=(
                 'Pricing localisation is a well-understood process and primarily a commercial '
                 'and billing-system change rather than a deep technical investment. '

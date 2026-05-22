@@ -65,7 +65,7 @@ class Command(BaseCommand):
                 confidence = result.get('confidence', 0)
                 
                 self.stdout.write(
-                    f"✓ Task '{task.title}': "
+                    f"[OK] Task '{task.title}': "
                     f"Found {parent_suggestions} parent suggestions, "
                     f"{related_suggestions} related tasks (confidence: {confidence})"
                 )
@@ -73,7 +73,7 @@ class Command(BaseCommand):
                 analyzed_count += 1
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"✗ Error analyzing task '{task.title}': {str(e)}")
+                    self.style.ERROR(f"[FAIL] Error analyzing task '{task.title}': {str(e)}")
                 )
 
         self.stdout.write(

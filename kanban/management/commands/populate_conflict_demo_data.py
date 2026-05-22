@@ -46,9 +46,9 @@ class Command(BaseCommand):
         # Get demo organization
         try:
             self.demo_org = Organization.objects.get(name='Demo - Acme Corporation')
-            self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {self.demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR('❌ Demo - Acme Corporation not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo - Acme Corporation not found!'))
             self.stdout.write('   Please run: python manage.py create_demo_organization')
             return
 
@@ -56,7 +56,7 @@ class Command(BaseCommand):
         self.demo_boards = Board.objects.filter(organization=self.demo_org)
         self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
 
-        # Get demo users — try canonical names first, then fall back to any board member
+        # Get demo users - try canonical names first, then fall back to any board member
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
         self.alex = User.objects.filter(username='priya.sharma').first()
         self.sam = User.objects.filter(username='marcus.chen').first()
@@ -72,7 +72,7 @@ class Command(BaseCommand):
             )
             if self.demo_admin:
                 self.stdout.write(self.style.WARNING(
-                    f'   ⚠️  demo_admin_solo not found — using "{self.demo_admin.username}" as admin'
+                    f'   [WARN]  demo_admin_solo not found - using "{self.demo_admin.username}" as admin'
                 ))
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
@@ -82,7 +82,7 @@ class Command(BaseCommand):
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
 
         if not self.demo_admin:
-            self.stdout.write(self.style.ERROR('❌ No demo users found! Run create_demo_organization first.'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo users found! Run create_demo_organization first.'))
             return
 
         # Clear existing data if requested
@@ -99,7 +99,7 @@ class Command(BaseCommand):
 
     def clear_conflict_data(self):
         """Clear existing conflict demo data"""
-        self.stdout.write(self.style.WARNING('\n🗑️  Clearing existing conflict demo data...'))
+        self.stdout.write(self.style.WARNING('\n  Clearing existing conflict demo data...'))
         
         # Delete in correct order for foreign key constraints
         ConflictNotification.objects.filter(conflict__board__in=self.demo_boards).delete()
@@ -107,7 +107,7 @@ class Command(BaseCommand):
         ConflictDetection.objects.filter(board__in=self.demo_boards).delete()
         ResolutionPattern.objects.filter(board__in=self.demo_boards).delete()
         
-        self.stdout.write(self.style.SUCCESS('   ✅ Cleared existing data'))
+        self.stdout.write(self.style.SUCCESS('   [OK] Cleared existing data'))
 
     def get_conflict_configs(self):
         """Return conflict configurations for each board"""
@@ -212,7 +212,7 @@ class Command(BaseCommand):
                                 "accelerates its completion, shortening the window during which the File Upload "
                                 "System is held up. "
                                 "Pair programming on this type of integration work typically reduces elapsed time "
-                                "by 30–50% while also improving code quality through real-time review. "
+                                "by 30-50% while also improving code quality through real-time review. "
                                 "This works best when both contributors have enough codebase context to pair "
                                 "effectively without a lengthy ramp-up period."
                             )
@@ -258,7 +258,7 @@ class Command(BaseCommand):
 
     def create_conflicts(self):
         """Create conflict detection records and resolutions"""
-        self.stdout.write(self.style.NOTICE('\n⚠️  Creating Conflicts and Resolutions...'))
+        self.stdout.write(self.style.NOTICE('\n[WARN]  Creating Conflicts and Resolutions...'))
         
         conflicts_created = 0
         resolutions_created = 0
@@ -308,7 +308,7 @@ class Command(BaseCommand):
                 conflict.affected_users.set(affected_users)
 
                 conflicts_created += 1
-                self.stdout.write(f'   ✅ Created: {board_name} → {config["title"][:50]}...')
+                self.stdout.write(f'   [OK] Created: {board_name} -> {config["title"][:50]}...')
 
                 # Create resolutions for this conflict
                 for i, res_data in enumerate(config['suggested_resolutions']):
@@ -346,7 +346,7 @@ class Command(BaseCommand):
 
     def create_resolution_patterns(self):
         """Create resolution patterns for learning"""
-        self.stdout.write(self.style.NOTICE('\n📊 Creating Resolution Patterns...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Resolution Patterns...'))
         
         patterns_created = 0
         
@@ -420,7 +420,7 @@ class Command(BaseCommand):
 
     def create_notifications(self):
         """Create notifications for active conflicts"""
-        self.stdout.write(self.style.NOTICE('\n🔔 Creating Conflict Notifications...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Conflict Notifications...'))
         
         notifications_created = 0
         
@@ -449,13 +449,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('CONFLICT DEMO DATA SUMMARY'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'''
-📊 Total Conflict Demo Data:
-   • Total Conflicts: {total_conflicts}
+ Total Conflict Demo Data:
+   - Total Conflicts: {total_conflicts}
      - Active: {active_conflicts}
      - Resolved: {resolved_conflicts}
-   • Resolution Options: {total_resolutions}
-   • Learning Patterns: {total_patterns}
-   • Notifications: {total_notifications}
+   - Resolution Options: {total_resolutions}
+   - Learning Patterns: {total_patterns}
+   - Notifications: {total_notifications}
 
-🎉 Conflict detection demo is now populated!
+ Conflict detection demo is now populated!
 ''')
