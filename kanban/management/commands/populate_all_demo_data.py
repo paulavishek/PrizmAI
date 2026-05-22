@@ -650,7 +650,10 @@ class Command(BaseCommand):
             description=('Implement the complete user authentication system: email/password '
                          'registration with verification, secure login with remember-me functionality, '
                          'password reset via email tokens, session management, and integration with '
-                         'the JWT middleware established in the security architecture phase.'),
+                         'the JWT middleware established in the security architecture phase. '
+                         'Currently waiting for security sign-off from the Security Officer (James Okonkwo) '
+                         'before this PR can be merged to main — the review was requested 4 days ago '
+                         'and remains outstanding.'),
             column=col['In Review'], phase=PHASE_CORE, parent=epics['auth'],
             priority='urgent', start_offset=-36, due_offset=-20, progress=90,
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
@@ -725,7 +728,11 @@ class Command(BaseCommand):
                          'migrations for the 23-table schema, create database seed scripts for '
                          'lookup tables, implement migration testing in the CI pipeline, write '
                          'rollback procedures for each migration, and document the upgrade path '
-                         'for production deployment.'),
+                         'for production deployment. This task requires the Authentication System '
+                         '(R1) API contract to be finalised before the oauth_tokens migration can '
+                         'be validated against the live auth layer in CI. Currently slipping due '
+                         'to a circular reference between Board and Organization that complicates '
+                         'the rollback procedures.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['api'],
             priority='high', start_offset=-31, due_offset=-19, progress=55,
             complexity=7, risk_l='medium', risk_i='high', risk_level='high',
@@ -748,9 +755,13 @@ class Command(BaseCommand):
         out['P3'] = self._make_task(
             code='P3', title='Social Login Integration',
             description=('Implement OAuth 2.0 social login for Google and GitHub providers using '
-                         'django-allauth. Handle account linking for users who register with email '
-                         'first then try to login with social, manage token storage, implement the '
-                         'consent screen flows, and add social login buttons to the authentication UI.'),
+                         'django-allauth. This task is blocked by two upstream dependencies: '
+                         'Database Schema & Migrations (P2) must complete the oauth_provider_tokens '
+                         'table before provider tokens can be stored, and the Authentication System '
+                         '(R1) depends on final security sign-off before the session integration '
+                         'layer can be wired in. Handle account linking for users who register with '
+                         'email first then try to login with social, manage token storage, implement '
+                         'the consent screen flows, and add social login buttons to the authentication UI.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['auth'],
             priority='high', start_offset=-34, due_offset=-24, progress=45,
             complexity=6, risk_l='high', risk_i='medium', risk_level='high',

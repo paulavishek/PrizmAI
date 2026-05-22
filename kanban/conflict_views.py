@@ -415,42 +415,40 @@ def conflict_feedback(request, conflict_id):
 def trigger_detection_all(request):
     """
     Manually trigger conflict detection for all accessible boards.
+    Always runs synchronously so results are immediately visible. Also
+    queues a Celery task (fire-and-forget) when workers are available so
+    that resolution suggestions can be generated in the background.
     """
     try:
         # Get all accessible boards (demo-aware)
         boards = get_user_boards(request.user)
-        
-        # Trigger detection for each board
+
         count = 0
         total_conflicts = 0
-        sync_mode = False
-        
+
         for board in boards:
+            # Run detection synchronously — guarantees immediate results
+            # regardless of whether Celery workers are running.
+            service = ConflictDetectionService(board=board)
+            results = service.detect_all_conflicts()
+            total_conflicts += results['total_conflicts']
+
+            # Also enqueue for background resolution-suggestion generation.
             try:
                 detect_board_conflicts_task.delay(board.id)
-            except Exception as celery_error:
-                # Fallback to synchronous detection if Celery/Redis unavailable
-                if not sync_mode:
-                    logger.warning(f"Celery unavailable, switching to sync detection: {celery_error}")
-                    sync_mode = True
-                
-                service = ConflictDetectionService(board=board)
-                results = service.detect_all_conflicts()
-                total_conflicts += results['total_conflicts']
-            
+            except Exception:
+                pass  # Workers unavailable — sync results are already committed
+
             count += 1
-        
-        if sync_mode:
-            message = f'Conflict detection completed for {count} board(s). Found {total_conflicts} conflicts.'
-        else:
-            message = f'Conflict detection started for {count} board(s). Results will appear shortly.'
-        
+
+        message = f'Conflict detection completed for {count} board(s). Found {total_conflicts} new conflict(s).'
         messages.success(request, message)
-        
+
         return JsonResponse({
             'success': True,
             'message': message,
-            'boards_scanned': count
+            'boards_scanned': count,
+            'conflicts_found': total_conflicts,
         })
         
     except Exception as e:
@@ -467,35 +465,38 @@ def trigger_detection_all(request):
 def trigger_detection(request, board_id):
     """
     Manually trigger conflict detection for a specific board.
+    Always runs synchronously so results are immediately visible.
     """
     try:
         # Get boards user has access to (demo-aware)
         accessible_boards = get_user_boards(request.user)
-        
+
         board = get_object_or_404(
             Board,
             id=board_id,
             id__in=accessible_boards.values_list('id', flat=True)
         )
-        
-        # Try async detection first, fallback to sync if Redis unavailable
+
+        # Run synchronously — immediate results guaranteed
+        service = ConflictDetectionService(board=board)
+        results = service.detect_all_conflicts()
+        total_conflicts = results['total_conflicts']
+        message = f"Conflict detection completed for '{board.name}': {total_conflicts} new conflict(s) found."
+
+        # Also enqueue for background resolution-suggestion generation
         try:
             detect_board_conflicts_task.delay(board.id)
-            message = 'Conflict detection started. Results will appear shortly.'
-        except Exception as celery_error:
-            # Fallback to synchronous detection if Celery/Redis unavailable
-            logger.warning(f"Celery unavailable, running sync detection: {celery_error}")
-            service = ConflictDetectionService(board=board)
-            results = service.detect_all_conflicts()
-            message = f"Conflict detection completed: {results['total_conflicts']} conflicts found"
-        
-        messages.success(request, f"Conflict detection started for {board.name}")
-        
+        except Exception:
+            pass
+
+        messages.success(request, message)
+
         return JsonResponse({
             'success': True,
             'message': message,
             'board_id': board.id,
-            'board_name': board.name
+            'board_name': board.name,
+            'conflicts_found': total_conflicts,
         })
         
     except Exception as e:
