@@ -154,9 +154,9 @@ class Command(BaseCommand):
         """Create demo chat sessions with Q&A messages"""
         self.stdout.write('\n2. Creating Chat Sessions & Q&A...')
         
-        # Prioritize demo_admin_solo for solo demo mode, fall back to alex_chen_demo
+        # Prioritize demo_admin_solo for solo demo mode, fall back to priya.sharma
         primary_user = demo_users.filter(username='demo_admin_solo').first() or \
-                       demo_users.filter(username='alex_chen_demo').first() or \
+                       demo_users.filter(username='priya.sharma').first() or \
                        demo_users.first()
         secondary_user = demo_users.exclude(pk=primary_user.pk).first()
         

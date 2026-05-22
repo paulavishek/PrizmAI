@@ -1620,7 +1620,7 @@ def reset_demo_data(request):
                 task__column__board__in=demo_boards
             ).exclude(
                 task__is_seed_demo_data=True,
-                user__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
             ).delete()
 
             # User-added task activities / time entries / task thread comments
@@ -1637,7 +1637,7 @@ def reset_demo_data(request):
                 TimeEntry.objects.filter(
                     task__column__board__in=demo_boards
                 ).exclude(
-                    user__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 ).delete()
             except Exception:
                 pass
@@ -1678,7 +1678,7 @@ def reset_demo_data(request):
                 ChatMessage.objects.filter(
                     chat_room__board__in=demo_boards
                 ).exclude(
-                    author__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    author__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 ).delete()
 
                 # Delete notifications for the current real user
@@ -1705,7 +1705,7 @@ def reset_demo_data(request):
                 non_demo_board_sessions = AIAssistantSession.objects.filter(
                     board__in=demo_boards
                 ).exclude(
-                    user__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 )
                 AIAssistantMessage.objects.filter(session__in=non_demo_board_sessions).delete()
                 non_demo_board_sessions.delete()
@@ -1720,7 +1720,7 @@ def reset_demo_data(request):
                 CalendarEvent.objects.filter(
                     board__in=demo_boards
                 ).exclude(
-                    created_by__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    created_by__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 ).delete()
                 # Also clean user-created events without board association
                 CalendarEvent.objects.filter(created_by=request.user, board__isnull=True).delete()
@@ -1733,7 +1733,7 @@ def reset_demo_data(request):
                 user_memory_nodes = MemoryNode.objects.filter(
                     board__in=demo_boards
                 ).exclude(
-                    created_by__username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                    created_by__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 )
                 node_ids = list(user_memory_nodes.values_list('id', flat=True))
                 if node_ids:

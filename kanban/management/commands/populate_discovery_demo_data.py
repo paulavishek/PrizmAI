@@ -48,13 +48,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE('Discovery demo ideas cleared — recreating fresh.'))
 
         # ── Demo users ─────────────────────────────────────────────────
-        alex = User.objects.filter(username='alex_chen_demo').first()
-        sam = User.objects.filter(username='sam_rivera_demo').first()
-        jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        alex = User.objects.filter(username='priya.sharma').first()
+        sam = User.objects.filter(username='marcus.chen').first()
+        jordan = User.objects.filter(username='elena.vasquez').first()
 
         if not (alex and sam and jordan):
             self.stderr.write(self.style.ERROR(
-                'Demo users not found (alex_chen_demo, sam_rivera_demo, jordan_taylor_demo). '
+                'Demo users not found (priya.sharma, marcus.chen, elena.vasquez). '
                 'Run create_demo_organization first.'
             ))
             return

@@ -62,9 +62,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'✅ Found board: {self.sd_board.name} (ID: {self.sd_board.pk})'))
 
         # Get demo users
-        self.alex = User.objects.filter(username='alex_chen_demo').first()
-        self.sam = User.objects.filter(username='sam_rivera_demo').first()
-        self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        self.alex = User.objects.filter(username='priya.sharma').first()
+        self.sam = User.objects.filter(username='marcus.chen').first()
+        self.jordan = User.objects.filter(username='elena.vasquez').first()
 
         if not self.alex:
             # Fallback to any demo user

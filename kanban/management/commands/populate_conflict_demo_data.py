@@ -58,9 +58,9 @@ class Command(BaseCommand):
 
         # Get demo users — try canonical names first, then fall back to any board member
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
-        self.alex = User.objects.filter(username='alex_chen_demo').first()
-        self.sam = User.objects.filter(username='sam_rivera_demo').first()
-        self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        self.alex = User.objects.filter(username='priya.sharma').first()
+        self.sam = User.objects.filter(username='marcus.chen').first()
+        self.jordan = User.objects.filter(username='elena.vasquez').first()
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
 
@@ -121,7 +121,7 @@ class Command(BaseCommand):
                     'title': 'Sam Rivera has excessive workload',
                     'description': 'Sam has 11 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 8 tasks per developer and may cause delays or quality issues.',
                     'conflict_data': {
-                        'affected_user': 'sam_rivera_demo',
+                        'affected_user': 'marcus.chen',
                         'current_tasks': 11,
                         'recommended_max': 8,
                         'overdue_risk': 3,

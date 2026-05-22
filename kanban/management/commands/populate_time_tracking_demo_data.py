@@ -5,9 +5,9 @@ This creates comprehensive time entries for demo users so that the
 Time Tracking Dashboard and My Timesheet features show demo data.
 
 Demo data is created for:
-- alex_chen_demo
-- sam_rivera_demo  
-- jordan_taylor_demo
+- priya.sharma
+- marcus.chen  
+- elena.vasquez
 
 The entries are spread over the last 30 days to show realistic time tracking
 patterns with activity every day.
@@ -56,9 +56,9 @@ class Command(BaseCommand):
 
         # Get demo users
         demo_users = {
-            'alex': User.objects.filter(username='alex_chen_demo').first(),
-            'sam': User.objects.filter(username='sam_rivera_demo').first(),
-            'jordan': User.objects.filter(username='jordan_taylor_demo').first(),
+            'alex': User.objects.filter(username='priya.sharma').first(),
+            'sam': User.objects.filter(username='marcus.chen').first(),
+            'jordan': User.objects.filter(username='elena.vasquez').first(),
         }
         
         # Filter out None values

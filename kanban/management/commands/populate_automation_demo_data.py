@@ -320,9 +320,9 @@ class Command(BaseCommand):
 
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        alex = User.objects.filter(username='alex_chen_demo').first()
-        sam = User.objects.filter(username='sam_rivera_demo').first()
-        jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        alex = User.objects.filter(username='priya.sharma').first()
+        sam = User.objects.filter(username='marcus.chen').first()
+        jordan = User.objects.filter(username='elena.vasquez').first()
         if not all([alex, sam, jordan]):
             self.stdout.write(self.style.ERROR('Demo users not found.'))
             return

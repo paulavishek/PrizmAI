@@ -86,9 +86,9 @@ class Command(BaseCommand):
 
         # Get demo users if available (only use if board has organization)
         if board.organization:
-            alex = User.objects.filter(email='alex.chen@demo.prizmai.local').first() or user
-            sam = User.objects.filter(email='sam.rivera@demo.prizmai.local').first() or user
-            jordan = User.objects.filter(email='jordan.taylor@demo.prizmai.local').first() or user
+            alex = User.objects.filter(email='priya.sharma@demo.prizmai.local').first() or user
+            sam = User.objects.filter(email='marcus.chen@demo.prizmai.local').first() or user
+            jordan = User.objects.filter(email='elena.vasquez@demo.prizmai.local').first() or user
         else:
             # No org, so don't assign users (would fail due to UserPerformanceProfile constraint)
             alex = sam = jordan = None

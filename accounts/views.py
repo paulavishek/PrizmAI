@@ -98,7 +98,7 @@ def quick_demo_login(request, username):
     Saves the real user's username in session so they can switch back.
     """
     # Only allow login for demo users
-    demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+    demo_users = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
     
     if username not in demo_users:
         messages.error(request, 'Invalid demo user.')
@@ -140,7 +140,7 @@ def return_to_real_account(request):
     Switch back from a demo account to the real user account that initiated the demo session.
     """
     real_username = request.session.get('real_user_username')
-    demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+    demo_users = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
 
     if not real_username:
         messages.warning(request, 'No previous account found. Please log in.')

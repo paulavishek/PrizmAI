@@ -804,8 +804,8 @@ def _refresh_ai_session_dates(now):
         
         # Get demo users
         from django.contrib.auth.models import User
-        demo_usernames = ['demo_admin_solo', 'alex_chen_demo', 'sam_rivera_demo', 
-                         'jordan_taylor_demo', 'john_doe', 'jane_smith']
+        demo_usernames = ['demo_admin_solo', 'priya.sharma', 'marcus.chen', 
+                         'elena.vasquez', 'john_doe', 'jane_smith']
         demo_users = list(User.objects.filter(username__in=demo_usernames).values_list('id', flat=True))
         
         if not demo_users:
