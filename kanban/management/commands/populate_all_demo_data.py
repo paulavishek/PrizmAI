@@ -68,11 +68,13 @@ PERSONA_USERNAMES = ('priya.sharma', 'marcus.chen', 'elena.vasquez')
 LEGACY_USERNAMES = ('alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo')
 LEGACY_BOARD_NAMES = ('Marketing Campaign', 'Bug Tracking', 'Software Project')
 
-# Phase labels stored on Task.phase (CharField). Display strings only.
-PHASE_FOUNDATION = 'Phase 1: Foundation'
-PHASE_CORE = 'Phase 2: Core Features'
-PHASE_INTEGRATIONS = 'Phase 3: Integrations'
-PHASE_LAUNCH = 'Phase 4: Launch Readiness'
+# Phase labels stored on Task.phase (CharField). Must match the bare "Phase N"
+# format expected by the Gantt view's phase grouping (kanban/views.py l.3517) and
+# the CPM toggle's JS filter (gantt_chart.html l.2503).
+PHASE_FOUNDATION = 'Phase 1'
+PHASE_CORE = 'Phase 2'
+PHASE_INTEGRATIONS = 'Phase 3'
+PHASE_LAUNCH = 'Phase 4'
 
 
 def _aware_due(d):
@@ -136,7 +138,7 @@ class Command(BaseCommand):
                 epics = self._create_epics(labels)
                 tasks_by_code = self._create_child_tasks(epics, labels)
                 self._link_dependencies(tasks_by_code)
-                self._create_milestones()
+                self._create_milestones(tasks_by_code)
                 self._create_budget_and_time(tasks_by_code, epics)
                 self._create_stakeholders(tasks_by_code)
                 self._create_scope_baseline()
@@ -1116,21 +1118,27 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     # Milestones
     # ------------------------------------------------------------------
-    def _create_milestones(self):
-        """Create 3 milestone Tasks (item_type='milestone') for the Gantt chart."""
+    def _create_milestones(self, tasks_by_code):
+        """Create 3 milestone Tasks (item_type='milestone') for the Gantt chart.
+
+        Each milestone is anchored to the last task of its phase via
+        position_after_task so it renders inline after that task in the Gantt
+        row order (see buildOrderedTaskList in gantt_chart.html). Without the
+        anchor, milestones fall through to the end of the list.
+        """
         col = self.columns['Backlog']
         ms_defs = [
             ('Foundation Architecture Complete',
              'All Phase 1 infrastructure, architecture, and environment setup tasks completed and verified.',
-             -21, 'completed', PHASE_FOUNDATION),
+             -21, 'completed', PHASE_FOUNDATION, 'D8'),
             ('Core Authentication Ready',
              'Complete authentication system, RBAC, security patterns, and auth test suite all passing.',
-             7, 'upcoming', PHASE_CORE),
+             7, 'upcoming', PHASE_CORE, 'P4'),
             ('Integration Sprint Complete',
              'All third-party integrations (Google, GitHub, FCM, APNs, webhooks) built, tested, and deployed.',
-             49, 'upcoming', PHASE_INTEGRATIONS),
+             49, 'upcoming', PHASE_INTEGRATIONS, 'T5'),
         ]
-        for title, desc, due_off, status, phase in ms_defs:
+        for title, desc, due_off, status, phase, anchor_code in ms_defs:
             Task.objects.create(
                 title=title,
                 description=desc,
@@ -1145,6 +1153,7 @@ class Command(BaseCommand):
                 completed_at=self._days_ago(-due_off) if status == 'completed' else None,
                 assigned_to=self.priya,
                 created_by=self.priya,
+                position_after_task=tasks_by_code[anchor_code],
                 is_seed_demo_data=True,
             )
         self.stdout.write('  [OK] Created 3 milestones')
