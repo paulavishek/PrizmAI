@@ -508,7 +508,7 @@ class Command(BaseCommand):
                          'Cloud Run. Produce architecture decision records (ADRs) for all major '
                          'technology choices.'),
             column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
-            priority='urgent', start_offset=-50, due_offset=-40, progress=100,
+            priority='urgent', start_offset=-48, due_offset=-40, progress=100,
             complexity=9, risk_l='medium', risk_i='high', risk_level='high',
             lss=LSS_VA, workload='high', collab=True,
             est_cost=5600, est_hours=64, hourly=87.5, actual_cost=5950,
@@ -532,7 +532,7 @@ class Command(BaseCommand):
                          'initial Django migrations, establish naming conventions, and document the '
                          'data model with field-level descriptions.'),
             column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['api'],
-            priority='high', start_offset=-42, due_offset=-33, progress=100,
+            priority='high', start_offset=-39, due_offset=-33, progress=100,
             complexity=7, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3500, est_hours=40, hourly=87.5, actual_cost=3325,
@@ -954,7 +954,7 @@ class Command(BaseCommand):
                          'auto-scaling configuration, and a staged rollout plan (dev -> staging -> '
                          'production).'),
             column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
-            priority='urgent', start_offset=42, due_offset=56, progress=0,
+            priority='urgent', start_offset=50, due_offset=60, progress=0,
             complexity=9, risk_l='high', risk_i='high', risk_level='high',
             lss=LSS_NVA, workload='high', collab=True,
             est_cost=6400, est_hours=72, hourly=90, actual_cost=0,
@@ -1015,7 +1015,7 @@ class Command(BaseCommand):
                          'GitHub Actions for community PR CI, and produce a technical blog post '
                          'explaining the architecture.'),
             column=col['Backlog'], phase=PHASE_LAUNCH, parent=epics['foundation'],
-            priority='high', start_offset=44, due_offset=56, progress=0,
+            priority='high', start_offset=61, due_offset=72, progress=0,
             complexity=4, risk_l='low', risk_i='medium', risk_level='low',
             lss=LSS_NVA, workload='medium', collab=True,
             est_cost=2400, est_hours=28, hourly=85, actual_cost=0,
@@ -1096,20 +1096,43 @@ class Command(BaseCommand):
     # Timeline dependencies
     # ------------------------------------------------------------------
     def _link_dependencies(self, t):
-        """Set the M2M Task.dependencies arrows that drive the Gantt chart."""
+        """Set the M2M Task.dependencies arrows that drive the Gantt chart.
+
+        Each phase carries its own internal chain so the Gantt shows realistic
+        intra-phase links (not just cross-phase handoffs), and CPM has enough
+        edges to compute meaningful slack inside each phase.
+        """
         pairs = [
+            # Phase 1 -- Foundation: requirements feed architecture, architecture
+            # feeds DB schema and security patterns. D2 (env setup) runs in parallel.
+            ('D1', 'D3'),
+            ('D3', 'D4'),
+            ('D3', 'D5'),
+            # Phase 1 -> Phase 2 handoffs
             ('D4', 'P2'),
             ('D5', 'P3'),
             ('D5', 'R1'),
+            # Phase 2 -- Core Features
             ('D6', 'P4'),
             ('D7', 'R1'),
             ('D8', 'R1'),
             ('R1', 'P1'),
+            # Phase 2 -> Phase 3 handoffs
             ('P1', 'T1'),
             ('P1', 'T2'),
+            # Phase 3 -- Integrations
             ('T1', 'T3'),
             ('T3', 'T4'),
+            # Phase 2 / 3 -> Phase 4 handoffs
             ('P4', 'T5'),
+            # Phase 4 -- Launch Readiness: perf + rate limit + E2E tests gate
+            # the prod deploy; deploy + accessibility + API docs gate the OSS launch.
+            ('B1', 'B2'),
+            ('T5', 'B2'),
+            ('B6', 'B2'),
+            ('B2', 'B5'),
+            ('T6', 'B5'),
+            ('B7', 'B5'),
         ]
         for from_code, to_code in pairs:
             t[to_code].dependencies.add(t[from_code])
@@ -1736,7 +1759,7 @@ class Command(BaseCommand):
         )
 
         dep_count = sum(t.dependencies.count() for t in children)
-        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 12)')
+        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 21)')
 
         for username in PERSONA_USERNAMES:
             ok = User.objects.filter(username=username).exists()
