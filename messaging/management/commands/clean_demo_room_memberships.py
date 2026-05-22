@@ -31,7 +31,7 @@ class Command(BaseCommand):
         dry_run = options['dry_run']
 
         if dry_run:
-            self.stdout.write(self.style.WARNING('DRY RUN — no changes will be made\n'))
+            self.stdout.write(self.style.WARNING('DRY RUN - no changes will be made\n'))
 
         # Identify demo/sandbox rooms via three flags:
         #   1. Board belongs to a demo workspace (workspace.is_demo=True)

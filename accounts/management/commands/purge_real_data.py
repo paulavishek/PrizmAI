@@ -124,9 +124,9 @@ class Command(BaseCommand):
         if real_users:
             for u in real_users[:10]:
                 flag = ' [superuser]' if u['is_superuser'] else ''
-                self.stdout.write(f'      • {u["username"]} <{u["email"]}>{flag}')
+                self.stdout.write(f'      - {u["username"]} <{u["email"]}>{flag}')
             if len(real_users) > 10:
-                self.stdout.write(f'      … and {len(real_users) - 10} more')
+                self.stdout.write(f'      ... and {len(real_users) - 10} more')
         self.stdout.write(
             f'  Non-demo organisations: {len(non_demo_orgs)} '
             f'(+ all their boards, tasks, comments, etc.)'
@@ -143,11 +143,11 @@ class Command(BaseCommand):
             self.stdout.write('')
             self.stdout.write(self.style.WARNING('Superusers that will NOT be deleted (use --include-superusers to remove):'))
             for su in skipped_superusers:
-                self.stdout.write(f'      • {su["username"]} <{su["email"]}>')
+                self.stdout.write(f'      - {su["username"]} <{su["email"]}>')
 
         if not real_users and not non_demo_orgs:
             self.stdout.write('')
-            self.stdout.write(self.style.SUCCESS('Database is already clean — nothing to do.'))
+            self.stdout.write(self.style.SUCCESS('Database is already clean - nothing to do.'))
             return
 
         # ---- 5. Confirmation -----------------------------------------------
@@ -158,7 +158,7 @@ class Command(BaseCommand):
             ))
             answer = input('Type "yes" to proceed: ').strip().lower()
             if answer != 'yes':
-                self.stdout.write(self.style.ERROR('Aborted — no changes made.'))
+                self.stdout.write(self.style.ERROR('Aborted - no changes made.'))
                 return
 
         # ---- 6. Execute inside a transaction --------------------------------
@@ -172,7 +172,7 @@ class Command(BaseCommand):
 
             self._header('COMPLETE')
             self.stdout.write(self.style.SUCCESS(
-                f'✓ Deleted {len(real_users)} real user(s) and '
+                f'[OK] Deleted {len(real_users)} real user(s) and '
                 f'{len(non_demo_orgs)} non-demo organisation(s).'
             ))
             self.stdout.write(self.style.SUCCESS(
@@ -181,12 +181,12 @@ class Command(BaseCommand):
             ))
             if skipped_superusers:
                 self.stdout.write(self.style.WARNING(
-                    f'  ⚠ {len(skipped_superusers)} superuser(s) were NOT deleted.'
+                    f'  [WARN] {len(skipped_superusers)} superuser(s) were NOT deleted.'
                     f' Re-run with --include-superusers to remove them.'
                 ))
 
         except Exception as exc:
-            self.stdout.write(self.style.ERROR(f'✗ Error — transaction rolled back: {exc}'))
+            self.stdout.write(self.style.ERROR(f'[FAIL] Error - transaction rolled back: {exc}'))
             import traceback
             traceback.print_exc()
 
@@ -209,7 +209,7 @@ class Command(BaseCommand):
             demo_org.created_by = alex
             demo_org.save(update_fields=['created_by'])
             self.stdout.write(
-                self.style.SUCCESS(f'  ✓ demo org created_by reassigned: {old} → priya.sharma')
+                self.style.SUCCESS(f'  [OK] demo org created_by reassigned: {old} -> priya.sharma')
             )
             changed = True
 
@@ -224,15 +224,15 @@ class Command(BaseCommand):
                 qs.update(created_by=alex)
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'  ✓ {count} demo Board(s) reassigned to priya.sharma'
+                        f'  [OK] {count} demo Board(s) reassigned to priya.sharma'
                     )
                 )
                 changed = True
         except Exception as exc:
-            self.stdout.write(self.style.WARNING(f'  ⚠ Could not reassign demo boards: {exc}'))
+            self.stdout.write(self.style.WARNING(f'  [WARN] Could not reassign demo boards: {exc}'))
 
         if not changed:
-            self.stdout.write('  (demo org created_by already a demo user — no change needed)')
+            self.stdout.write('  (demo org created_by already a demo user - no change needed)')
 
     def _step2_delete_real_users(self, real_users_qs):
         """
@@ -274,7 +274,7 @@ class Command(BaseCommand):
         finally:
             _celery_task_mod.Task.apply_async = _orig_apply_async
 
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Deleted {count} real user account(s)'))
+        self.stdout.write(self.style.SUCCESS(f'  [OK] Deleted {count} real user account(s)'))
 
     def _step3_delete_non_demo_orgs(self):
         """
@@ -293,7 +293,7 @@ class Command(BaseCommand):
         for org in qs:
             self.stdout.write(f'  Deleting: {org.name}')
         qs.delete()
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Deleted {count} non-demo organisation(s)'))
+        self.stdout.write(self.style.SUCCESS(f'  [OK] Deleted {count} non-demo organisation(s)'))
 
     def _step4_clean_orphans(self):
         """
@@ -329,7 +329,7 @@ class Command(BaseCommand):
         except Exception:
             pass
 
-        # messaging – Notifications with no recipient
+        # messaging - Notifications with no recipient
         try:
             from messaging.models import Notification
             qs = Notification.objects.filter(recipient__isnull=True)
@@ -341,10 +341,10 @@ class Command(BaseCommand):
         except Exception:
             pass
 
-        # wiki – pages with no author fall outside the demo org anyway
+        # wiki - pages with no author fall outside the demo org anyway
         # (demo wiki data is org-scoped and was protected in step 1)
 
-        # api – request logs without a user
+        # api - request logs without a user
         try:
             from api.models import APIRequestLog
             qs = APIRequestLog.objects.filter(user__isnull=True)
@@ -358,12 +358,12 @@ class Command(BaseCommand):
 
         if cleanups:
             for msg in cleanups:
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Removed {msg}'))
+                self.stdout.write(self.style.SUCCESS(f'  [OK] Removed {msg}'))
         else:
             self.stdout.write('  (no orphaned records found)')
 
         if total:
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Total orphaned records removed: {total}'))
+            self.stdout.write(self.style.SUCCESS(f'  [OK] Total orphaned records removed: {total}'))
 
     # ------------------------------------------------------------------
     # Helpers

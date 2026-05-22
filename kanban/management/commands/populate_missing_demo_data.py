@@ -42,7 +42,7 @@ class Command(BaseCommand):
         # Find demo org by is_demo flag (not by name, since it may have been renamed)
         demo_org = Organization.objects.filter(is_demo=True).first()
         if not demo_org:
-            self.stdout.write(self.style.ERROR('❌ No demo organization found (is_demo=True).'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo organization found (is_demo=True).'))
             return
 
         # Find official demo board
@@ -51,7 +51,7 @@ class Command(BaseCommand):
             is_official_demo_board=True,
         ).first()
         if not board:
-            self.stdout.write(self.style.ERROR('❌ No official demo board found.'))
+            self.stdout.write(self.style.ERROR('[FAIL] No official demo board found.'))
             return
 
         self.stdout.write(f'  Org: {demo_org.name} (id={demo_org.id})')
@@ -63,7 +63,7 @@ class Command(BaseCommand):
         jordan = User.objects.filter(username='elena.vasquez').first()
 
         if not all([alex, sam, jordan]):
-            self.stdout.write(self.style.ERROR('❌ Demo users not found.'))
+            self.stdout.write(self.style.ERROR('[FAIL] Demo users not found.'))
             return
 
         self.board = board
@@ -88,7 +88,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('  Summary'))
         self.stdout.write(self.style.SUCCESS('=' * 70))
         for feature, count in stats.items():
-            self.stdout.write(f'  ✅ {feature}: {count} records created')
+            self.stdout.write(f'  [OK] {feature}: {count} records created')
         self.stdout.write('')
 
     def _reset_data(self):
@@ -108,7 +108,7 @@ class Command(BaseCommand):
         StakeholderEngagementRecord.objects.filter(stakeholder__board=self.board).delete()
         StakeholderTaskInvolvement.objects.filter(stakeholder__board=self.board).delete()
         ProjectStakeholder.objects.filter(board=self.board).delete()
-        self.stdout.write('   ✓ Cleared existing data for all 5 features')
+        self.stdout.write('   [OK] Cleared existing data for all 5 features')
 
     # -----------------------------------------------------------------
     #  1. CALENDAR EVENTS
@@ -116,17 +116,17 @@ class Command(BaseCommand):
     def _create_calendar_events(self):
         from kanban.models import CalendarEvent, Task
 
-        self.stdout.write(self.style.NOTICE('\n📅 Creating Calendar Events...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Calendar Events...'))
 
         if CalendarEvent.objects.filter(board=self.board).exists():
-            self.stdout.write('   ⏭️  Calendar events already exist, skipping')
+            self.stdout.write('   [SKIP] Calendar events already exist, skipping')
             return 0
 
         tasks = list(Task.objects.filter(column__board=self.board).order_by('id')[:6])
         count = 0
 
         events = [
-            # Recurring standup — today
+            # Recurring standup - today
             {
                 'title': 'Daily Standup',
                 'description': 'Team sync: blockers, progress, and priorities for the day.',
@@ -134,11 +134,11 @@ class Command(BaseCommand):
                 'visibility': 'team',
                 'start_datetime': timezone.make_aware(datetime.combine(self.today, time(9, 0))),
                 'end_datetime': timezone.make_aware(datetime.combine(self.today, time(9, 15))),
-                'location': 'Zoom — #standup',
+                'location': 'Zoom - #standup',
                 'created_by': self.alex,
                 'participants': [self.alex, self.sam, self.jordan],
             },
-            # Sprint planning — 2 days from now
+            # Sprint planning - 2 days from now
             {
                 'title': 'Sprint 3 Planning',
                 'description': 'Plan Sprint 3 scope. Review backlog priorities, estimate new tasks, and agree on capacity.',
@@ -151,7 +151,7 @@ class Command(BaseCommand):
                 'participants': [self.alex, self.sam, self.jordan],
                 'linked_task': tasks[0] if tasks else None,
             },
-            # Architecture review — 4 days from now
+            # Architecture review - 4 days from now
             {
                 'title': 'Architecture Review: Search Engine',
                 'description': 'Deep-dive on Search & Indexing Engine design. Review Elasticsearch vs Meilisearch trade-offs.',
@@ -159,12 +159,12 @@ class Command(BaseCommand):
                 'visibility': 'team',
                 'start_datetime': timezone.make_aware(datetime.combine(self.today + timedelta(days=4), time(14, 0))),
                 'end_datetime': timezone.make_aware(datetime.combine(self.today + timedelta(days=4), time(15, 0))),
-                'location': 'Zoom — #architecture',
+                'location': 'Zoom - #architecture',
                 'created_by': self.sam,
                 'participants': [self.sam, self.jordan],
                 'linked_task': tasks[5] if len(tasks) > 5 else None,
             },
-            # Sprint retrospective — past (3 days ago)
+            # Sprint retrospective - past (3 days ago)
             {
                 'title': 'Sprint 2 Retrospective',
                 'description': 'Reflect on Sprint 2 outcomes. Discuss what went well, what needs improvement, and action items.',
@@ -176,9 +176,9 @@ class Command(BaseCommand):
                 'created_by': self.alex,
                 'participants': [self.alex, self.sam, self.jordan],
             },
-            # Team event — 7 days out
+            # Team event - 7 days out
             {
-                'title': 'Team Lunch — Sprint 2 Celebration',
+                'title': 'Team Lunch - Sprint 2 Celebration',
                 'description': 'Celebrating successful Sprint 2 delivery! Dashboard UI and Authentication shipped on time.',
                 'event_type': 'team_event',
                 'visibility': 'team',
@@ -188,9 +188,9 @@ class Command(BaseCommand):
                 'created_by': self.alex,
                 'participants': [self.alex, self.sam, self.jordan],
             },
-            # Out of office — Sam
+            # Out of office - Sam
             {
-                'title': 'Sam Rivera — PTO',
+                'title': 'Sam Rivera - PTO',
                 'description': 'Out of office for personal day. Jordan covering API reviews.',
                 'event_type': 'out_of_office',
                 'visibility': 'team',
@@ -200,7 +200,7 @@ class Command(BaseCommand):
                 'created_by': self.sam,
                 'participants': [self.sam],
             },
-            # Code review block — Jordan
+            # Code review block - Jordan
             {
                 'title': 'Focus Block: Code Review',
                 'description': 'Reserved time for reviewing Authentication System and File Upload PRs.',
@@ -212,9 +212,9 @@ class Command(BaseCommand):
                 'participants': [self.jordan],
                 'linked_task': tasks[1] if len(tasks) > 1 else None,
             },
-            # Stakeholder demo — 6 days out
+            # Stakeholder demo - 6 days out
             {
-                'title': 'Stakeholder Demo — Core Features',
+                'title': 'Stakeholder Demo - Core Features',
                 'description': 'Demo Authentication, Dashboard, and File Upload features to VP of Engineering and Product Lead.',
                 'event_type': 'meeting',
                 'visibility': 'team',
@@ -238,7 +238,7 @@ class Command(BaseCommand):
                 ev.participants.set(participants)
             count += 1
 
-        self.stdout.write(f'   ✅ Created {count} calendar events')
+        self.stdout.write(f'   [OK] Created {count} calendar events')
         return count
 
     # -----------------------------------------------------------------
@@ -248,10 +248,10 @@ class Command(BaseCommand):
         from kanban.commitment_models import CommitmentProtocol, ConfidenceSignal
         from kanban.models import Task
 
-        self.stdout.write(self.style.NOTICE('\n📋 Creating Commitment Protocols...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Commitment Protocols...'))
 
         if CommitmentProtocol.objects.filter(board=self.board).exists():
-            self.stdout.write('   ⏭️  Commitment protocols already exist, skipping')
+            self.stdout.write('   [SKIP] Commitment protocols already exist, skipping')
             return 0
 
         tasks = list(Task.objects.filter(column__board=self.board).order_by('id'))
@@ -303,10 +303,10 @@ class Command(BaseCommand):
              'description': 'Dashboard UI Development completed ahead of schedule.',
              'confidence_before': 0.85, 'confidence_after': 0.88, 'recorded_by': self.alex},
             {'days_ago': 7, 'signal_type': 'dependency_blocked', 'signal_value': -0.4,
-             'description': 'Database Schema task unassigned — blocks User Management API.',
+             'description': 'Database Schema task unassigned - blocks User Management API.',
              'confidence_before': 0.88, 'confidence_after': 0.80, 'recorded_by': self.sam},
             {'days_ago': 5, 'signal_type': 'decay', 'signal_value': -0.05,
-             'description': 'Automated confidence decay — no new positive signals.',
+             'description': 'Automated confidence decay - no new positive signals.',
              'confidence_before': 0.80, 'confidence_after': 0.76, 'ai_generated': True},
             {'days_ago': 3, 'signal_type': 'milestone_missed', 'signal_value': -0.3,
              'description': 'User Registration Flow missed its target completion date.',
@@ -352,7 +352,7 @@ class Command(BaseCommand):
             ai_reasoning=(
                 'Authentication System is in review which is positive. However, Security Audit '
                 'and API Rate Limiting have not started. Linear decay model chosen because '
-                'security tasks have clear pass/fail criteria — partial progress matters less.'
+                'security tasks have clear pass/fail criteria - partial progress matters less.'
             ),
             negotiation_threshold=0.50,
             token_pool_per_member=100,
@@ -366,13 +366,13 @@ class Command(BaseCommand):
 
         signals_p2 = [
             {'days_ago': 8, 'signal_type': 'task_completed', 'signal_value': 0.2,
-             'description': 'Security Architecture Patterns completed — foundation in place.',
+             'description': 'Security Architecture Patterns completed - foundation in place.',
              'confidence_before': 0.90, 'confidence_after': 0.90, 'recorded_by': self.sam},
             {'days_ago': 4, 'signal_type': 'manual_positive', 'signal_value': 0.15,
-             'description': 'Authentication System moved to In Review — on track.',
+             'description': 'Authentication System moved to In Review - on track.',
              'confidence_before': 0.90, 'confidence_after': 0.88, 'recorded_by': self.sam},
             {'days_ago': 2, 'signal_type': 'external_risk', 'signal_value': -0.3,
-             'description': 'External audit firm moved date up by 5 days — tighter window.',
+             'description': 'External audit firm moved date up by 5 days - tighter window.',
              'confidence_before': 0.88, 'confidence_after': 0.82, 'recorded_by': self.alex},
         ]
         for sig_data in signals_p2:
@@ -425,13 +425,13 @@ class Command(BaseCommand):
              'description': 'Base API Structure completed.',
              'confidence_before': 0.80, 'confidence_after': 0.82, 'recorded_by': self.sam},
             {'days_ago': 8, 'signal_type': 'dependency_blocked', 'signal_value': -0.5,
-             'description': 'Database Schema unassigned — blocks 3 downstream tasks.',
+             'description': 'Database Schema unassigned - blocks 3 downstream tasks.',
              'confidence_before': 0.82, 'confidence_after': 0.68, 'recorded_by': self.alex},
             {'days_ago': 5, 'signal_type': 'decay', 'signal_value': -0.1,
-             'description': 'Stepped decay triggered — crossed 7-day inactivity threshold.',
+             'description': 'Stepped decay triggered - crossed 7-day inactivity threshold.',
              'confidence_before': 0.68, 'confidence_after': 0.58, 'ai_generated': True},
             {'days_ago': 2, 'signal_type': 'milestone_missed', 'signal_value': -0.4,
-             'description': 'Mid-sprint checkpoint missed — only 2 of 5 planned tasks done.',
+             'description': 'Mid-sprint checkpoint missed - only 2 of 5 planned tasks done.',
              'confidence_before': 0.58, 'confidence_after': 0.48, 'recorded_by': self.jordan},
         ]
         for sig_data in signals_p3:
@@ -448,7 +448,7 @@ class Command(BaseCommand):
         count += 1
 
         total_signals = ConfidenceSignal.objects.filter(protocol__board=self.board).count()
-        self.stdout.write(f'   ✅ Created {count} commitment protocols, {total_signals} confidence signals')
+        self.stdout.write(f'   [OK] Created {count} commitment protocols, {total_signals} confidence signals')
         return count
 
     # -----------------------------------------------------------------
@@ -457,10 +457,10 @@ class Command(BaseCommand):
     def _create_board_automations(self):
         from kanban.automation_models import BoardAutomation
 
-        self.stdout.write(self.style.NOTICE('\n⚡ Creating Board Automations...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Board Automations...'))
 
         if BoardAutomation.objects.filter(board=self.board).exists():
-            self.stdout.write('   ⏭️  Board automations already exist, skipping')
+            self.stdout.write('   [SKIP] Board automations already exist, skipping')
             return 0
 
         count = 0
@@ -521,7 +521,7 @@ class Command(BaseCommand):
                 'trigger_value': 'In Progress',
                 'action_type': 'set_priority',
                 'action_value': 'medium',
-                'is_active': False,  # Disabled — was too aggressive
+                'is_active': False,  # Disabled - was too aggressive
                 'created_by': self.sam,
                 'run_count': 8,
             },
@@ -537,7 +537,7 @@ class Command(BaseCommand):
                 )
             count += 1
 
-        self.stdout.write(f'   ✅ Created {count} board automations')
+        self.stdout.write(f'   [OK] Created {count} board automations')
         return count
 
     # -----------------------------------------------------------------
@@ -546,10 +546,10 @@ class Command(BaseCommand):
     def _create_decision_items(self):
         from decision_center.models import DecisionItem
 
-        self.stdout.write(self.style.NOTICE('\n🎯 Creating Decision Items...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Decision Items...'))
 
         if DecisionItem.objects.filter(board=self.board).exists():
-            self.stdout.write('   ⏭️  Decision items already exist, skipping')
+            self.stdout.write('   [SKIP] Decision items already exist, skipping')
             return 0
 
         count = 0
@@ -580,7 +580,7 @@ class Command(BaseCommand):
                 'created_for': self.sam,
                 'item_type': 'overallocated',
                 'priority_level': 'awareness',
-                'title': 'Sam Rivera has 10 tasks — above team average',
+                'title': 'Sam Rivera has 10 tasks - above team average',
                 'description': 'Sam Rivera is assigned to 10 tasks (team avg: 8.7). Three tasks are in high-priority status. Consider load balancing.',
                 'suggested_action': 'Review Sam\'s task list and consider moving API Rate Limiting or Performance Optimization to Jordan.',
                 'context_data': {'user': 'Sam Rivera', 'task_count': 10, 'high_priority': 3, 'team_avg': 8.7},
@@ -613,7 +613,7 @@ class Command(BaseCommand):
                 'created_for': self.alex,
                 'item_type': 'budget_threshold',
                 'priority_level': 'quick_win',
-                'title': 'Budget at 24.6% — on track for current sprint',
+                'title': 'Budget at 24.6% - on track for current sprint',
                 'description': 'Project has spent $18,466 of $75,000 (24.6%). At current velocity, the project is on budget. However, if the scope change for accessibility audit is approved, budget utilization could reach 31%.',
                 'suggested_action': 'No immediate action needed. Monitor if accessibility audit is approved.',
                 'context_data': {'budget_total': 75000, 'budget_spent': 18466, 'pct': 24.6},
@@ -649,7 +649,7 @@ class Command(BaseCommand):
                 )
             count += 1
 
-        self.stdout.write(f'   ✅ Created {count} decision items')
+        self.stdout.write(f'   [OK] Created {count} decision items')
         return count
 
     # -----------------------------------------------------------------
@@ -661,10 +661,10 @@ class Command(BaseCommand):
         )
         from kanban.models import Task
 
-        self.stdout.write(self.style.NOTICE('\n👥 Creating Project Stakeholders...'))
+        self.stdout.write(self.style.NOTICE('\n Creating Project Stakeholders...'))
 
         if ProjectStakeholder.objects.filter(board=self.board).exists():
-            self.stdout.write('   ⏭️  Stakeholders already exist, skipping')
+            self.stdout.write('   [SKIP] Stakeholders already exist, skipping')
             return 0
 
         count = 0
@@ -825,7 +825,7 @@ class Command(BaseCommand):
             ('Dr. Priya Sharma', 42,  'meeting', 'Project kick-off and scope alignment.',
              'Executive sponsor confirmed. Success criteria agreed.',
              'positive', 4, False, None, 'alex'),
-            ('Marcus Johnson',    5,  'video',   'Sprint planning — user-facing feature prioritisation.',
+            ('Marcus Johnson',    5,  'video',   'Sprint planning - user-facing feature prioritisation.',
              'User Registration and Dashboard features elevated to P1 for current sprint.',
              'positive', 5, False, None, 'alex'),
             ('Marcus Johnson',   18,  'chat',    'Shared wireframe prototypes for review.',
@@ -834,7 +834,7 @@ class Command(BaseCommand):
             ('Marcus Johnson',   35,  'meeting', 'Product roadmap walkthrough.',
              'Roadmap approved. Documentation deliverable scoped into sprint 2.',
              'positive', 4, True, 10, 'alex'),
-            ('Lisa Chen',        10,  'meeting', 'Security requirements workshop — authentication flows.',
+            ('Lisa Chen',        10,  'meeting', 'Security requirements workshop - authentication flows.',
              'Session token expiry policy agreed: 30 min idle, 8 hr absolute.',
              'positive', 4, True, 7, 'sam'),
             ('Lisa Chen',        28,  'email',   'Shared API Rate Limiting design spec for compliance review.',
@@ -852,7 +852,7 @@ class Command(BaseCommand):
             ('Rachel Torres',    12,  'email',   'Sent feature preview summary and beta user guide draft.',
              'Positive response. Rachel requested access to staging for hands-on review.',
              'positive', 4, True, 5, 'alex'),
-            ('Rachel Torres',    45,  'email',   'Monthly stakeholder status email — project health update.',
+            ('Rachel Torres',    45,  'email',   'Monthly stakeholder status email - project health update.',
              'Acknowledged. No concerns raised.',
              'neutral', 3, False, None, 'alex'),
             ('James Wilson',     14,  'video',   'CI/CD pipeline architecture review.',
@@ -892,7 +892,7 @@ class Command(BaseCommand):
             rec_count += 1
 
         self.stdout.write(
-            f'   ✅ Created {count} stakeholders, {inv_count} task involvements, '
+            f'   [OK] Created {count} stakeholders, {inv_count} task involvements, '
             f'{rec_count} engagement records'
         )
         return count

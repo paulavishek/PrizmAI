@@ -2,8 +2,8 @@
 Management Command: Populate Knowledge Base Demo Data
 ======================================================
 Seeds the Software Development demo board's Knowledge Graph with realistic
-demo entries — both manual (Decision Log & Lessons) and auto-captured
-(system-detected events) — plus AI-discovered MemoryConnections that link
+demo entries - both manual (Decision Log & Lessons) and auto-captured
+(system-detected events) - plus AI-discovered MemoryConnections that link
 related nodes causally.
 
 Usage:
@@ -42,13 +42,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('POPULATING KNOWLEDGE BASE DEMO DATA'))
         self.stdout.write(self.style.NOTICE('=' * 80))
 
-        # Get demo organization — look up by is_demo flag, not by hard-coded name
+        # Get demo organization - look up by is_demo flag, not by hard-coded name
         self.demo_org = Organization.objects.filter(is_demo=True).first()
         if not self.demo_org:
-            self.stdout.write(self.style.ERROR('❌ No demo organization found (is_demo=True)!'))
+            self.stdout.write(self.style.ERROR('[FAIL] No demo organization found (is_demo=True)!'))
             self.stdout.write('   Please run: python manage.py create_demo_organization')
             return
-        self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
+        self.stdout.write(self.style.SUCCESS(f'[OK] Found organization: {self.demo_org.name}'))
 
         # Get the Software Development board
         self.sd_board = Board.objects.filter(
@@ -57,9 +57,9 @@ class Command(BaseCommand):
         ).first()
 
         if not self.sd_board:
-            self.stdout.write(self.style.ERROR('❌ Software Development demo board not found!'))
+            self.stdout.write(self.style.ERROR('[FAIL] Software Development demo board not found!'))
             return
-        self.stdout.write(self.style.SUCCESS(f'✅ Found board: {self.sd_board.name} (ID: {self.sd_board.pk})'))
+        self.stdout.write(self.style.SUCCESS(f'[OK] Found board: {self.sd_board.name} (ID: {self.sd_board.pk})'))
 
         # Get demo users
         self.alex = User.objects.filter(username='priya.sharma').first()
@@ -95,17 +95,17 @@ class Command(BaseCommand):
         total_manual = len(manual_nodes)
         total_auto = len(auto_nodes)
         self.stdout.write(self.style.SUCCESS(
-            f'\n✅ Knowledge Base seeded: {total_manual} manual entries, '
+            f'\n[OK] Knowledge Base seeded: {total_manual} manual entries, '
             f'{total_auto} auto-captured entries, 6 AI-discovered connections'
         ))
 
     # =========================================================================
-    # MANUAL ENTRIES (Decision Log & Lessons — left panel)
+    # MANUAL ENTRIES (Decision Log & Lessons - left panel)
     # =========================================================================
 
     def _seed_manual_entries(self, existing_titles=None):
         """Create 10 Decisions + 10 Lessons/Notes as manual (user-authored) entries."""
-        self.stdout.write(self.style.NOTICE('\n📝 Seeding manual Decision & Lesson entries...'))
+        self.stdout.write(self.style.NOTICE('\n Seeding manual Decision & Lesson entries...'))
         if existing_titles is None:
             existing_titles = set()
 
@@ -119,7 +119,7 @@ class Command(BaseCommand):
                 'content': (
                     'After evaluating both options during Sprint 2, the team decided to move '
                     'the client-facing API to GraphQL. REST was creating over-fetching problems '
-                    'on the mobile PWA — screens were loading 4–5 endpoints just to render one '
+                    'on the mobile PWA - screens were loading 4-5 endpoints just to render one '
                     'view. GraphQL lets the client request exactly what it needs. Trade-off: '
                     'steeper learning curve for two junior devs, but long-term performance gain '
                     'justified it.'
@@ -134,7 +134,7 @@ class Command(BaseCommand):
                 'content': (
                     'During the Database Schema & Migrations task planning, we evaluated NoSQL '
                     'vs relational. The project has complex relationships between users, tasks, '
-                    'boards, and permissions — a relational model fits this better. MongoDB was '
+                    'boards, and permissions - a relational model fits this better. MongoDB was '
                     'considered for the activity log only, but we decided to keep everything in '
                     'one system to reduce operational complexity.'
                 ),
@@ -148,7 +148,7 @@ class Command(BaseCommand):
                 'content': (
                     'For the Authentication System, we debated JWT tokens vs traditional '
                     'server-side sessions. Chose JWT because the mobile PWA and REST API need '
-                    'stateless auth. Acknowledged trade-off: token revocation is harder — '
+                    'stateless auth. Acknowledged trade-off: token revocation is harder - '
                     'mitigated by keeping token expiry at 15 minutes with refresh tokens.'
                 ),
                 'tags': ['authentication', 'security', 'jwt'],
@@ -160,7 +160,7 @@ class Command(BaseCommand):
                 'title': 'Redis selected for real-time collaboration layer',
                 'content': (
                     'The Real-time Collaboration feature requires fast pub/sub messaging between '
-                    'users. Evaluated Redis, RabbitMQ, and Kafka. Redis Pub/Sub was chosen — it '
+                    'users. Evaluated Redis, RabbitMQ, and Kafka. Redis Pub/Sub was chosen - it '
                     'already exists in the stack for caching, so no new infrastructure. For our '
                     'scale (under 10,000 concurrent users), Redis is more than sufficient. Kafka '
                     'would be overkill.'
@@ -176,7 +176,7 @@ class Command(BaseCommand):
                     'During API Rate Limiting implementation, we debated the threshold. Too low '
                     'frustrates power users; too high leaves us vulnerable to abuse. Settled on '
                     '100 req/min for authenticated users, 20 req/min for unauthenticated. Based '
-                    'on real usage analysis from beta — 99th percentile user was at 67 req/min. '
+                    'on real usage analysis from beta - 99th percentile user was at 67 req/min. '
                     'Will revisit at 10k users.'
                 ),
                 'tags': ['api', 'rate-limiting', 'security', 'performance'],
@@ -190,7 +190,7 @@ class Command(BaseCommand):
                     'The File Upload System task raised the question of local vs cloud storage. '
                     'Local storage does not scale and creates deployment complexity. Chose '
                     'S3-compatible object storage (works with AWS S3 and self-hosted MinIO). '
-                    '25 MB cap based on typical document/image sizes — video uploads explicitly '
+                    '25 MB cap based on typical document/image sizes - video uploads explicitly '
                     'out of scope for v1.'
                 ),
                 'tags': ['file-upload', 'storage', 's3', 'scope'],
@@ -202,7 +202,7 @@ class Command(BaseCommand):
                 'title': 'Notification service built in-house instead of using a third-party',
                 'content': (
                     'Evaluated SendGrid, Courier, and Novu for the Notification Service. Decided '
-                    'to build a lightweight in-house solution for v1 — we only need email and '
+                    'to build a lightweight in-house solution for v1 - we only need email and '
                     'in-app notifications. Third-party adds cost and a dependency. Will revisit '
                     'if we need SMS, push notifications, or complex multi-channel routing in v2.'
                 ),
@@ -231,7 +231,7 @@ class Command(BaseCommand):
                     'During Integration Testing Suite planning, running the full test suite '
                     'locally was taking 4+ minutes and slowing developer flow. Decision: unit '
                     'tests run locally via pre-commit hook (fast, under 30 seconds), integration '
-                    'tests run only in CI pipeline on push. Acceptable trade-off — integration '
+                    'tests run only in CI pipeline on push. Acceptable trade-off - integration '
                     'failures caught before merge.'
                 ),
                 'tags': ['testing', 'ci-cd', 'developer-experience'],
@@ -242,7 +242,7 @@ class Command(BaseCommand):
             {
                 'title': 'Data caching TTL standardised at 5 minutes across all endpoints',
                 'content': (
-                    'The Data Caching Layer had inconsistent TTL values — some endpoints had '
+                    'The Data Caching Layer had inconsistent TTL values - some endpoints had '
                     '30 seconds, others had 1 hour, set by different developers independently. '
                     'Standardised to 5-minute TTL as the default, with explicit overrides '
                     'required and documented for anything outside this. Reduces cache-related '
@@ -257,7 +257,7 @@ class Command(BaseCommand):
 
         lessons = [
             {
-                'title': 'Underestimated database migration complexity — always add buffer',
+                'title': 'Underestimated database migration complexity - always add buffer',
                 'content': (
                     'The Database Schema & Migrations task was estimated at 3 days. Actual time: '
                     '6 days. Root cause: we did not account for migrating existing test data, '
@@ -273,9 +273,9 @@ class Command(BaseCommand):
             {
                 'title': 'Authentication edge cases always take longer than the happy path',
                 'content': (
-                    'The Authentication System happy path (sign up → log in → log out) was done '
-                    'in 2 days. The edge cases — expired tokens, concurrent sessions, password '
-                    'reset race conditions, OAuth failure handling — took 5 more days. Lesson: '
+                    'The Authentication System happy path (sign up -> log in -> log out) was done '
+                    'in 2 days. The edge cases - expired tokens, concurrent sessions, password '
+                    'reset race conditions, OAuth failure handling - took 5 more days. Lesson: '
                     'when estimating auth work, multiply the happy-path estimate by 3 to account '
                     'for edge cases.'
                 ),
@@ -289,7 +289,7 @@ class Command(BaseCommand):
                 'content': (
                     'During Real-time Collaboration development, we only load-tested after the '
                     'feature was code-complete. Discovered that the WebSocket server degraded '
-                    'significantly above 200 concurrent connections — required an architecture '
+                    'significantly above 200 concurrent connections - required an architecture '
                     'change at the last minute. New rule: any real-time or WebSocket feature '
                     'must have a load test milestone built into the task, not added at the end.'
                 ),
@@ -299,7 +299,7 @@ class Command(BaseCommand):
                 'created_at': past(68),
             },
             {
-                'title': 'Notification fatigue is real — users disabled emails within week 1',
+                'title': 'Notification fatigue is real - users disabled emails within week 1',
                 'content': (
                     'Initial Notification Service sent an email for every task update, comment, '
                     'and status change. After beta launch, 60% of users had turned off all email '
@@ -314,9 +314,9 @@ class Command(BaseCommand):
                 'created_at': past(48),
             },
             {
-                'title': 'API documentation written alongside code, not after — saved the sprint',
+                'title': 'API documentation written alongside code, not after - saved the sprint',
                 'content': (
-                    'In a previous sprint, we wrote API docs after the feature was built — it '
+                    'In a previous sprint, we wrote API docs after the feature was built - it '
                     'took an extra week and introduced inconsistencies. This sprint, every '
                     'endpoint in the API Rate Limiting feature had its documentation written in '
                     'the same PR as the code. Review was faster, the frontend team unblocked '
@@ -350,7 +350,7 @@ class Command(BaseCommand):
                     'board they had been removed from. Root cause: the user\'s board membership '
                     'was cached and the cache was not invalidated on role removal. Fixed by '
                     'adding cache invalidation hooks to all permission-change events. Lesson: '
-                    'any caching of access-control data needs explicit invalidation logic — '
+                    'any caching of access-control data needs explicit invalidation logic - '
                     'never assume TTL expiry is sufficient for security-related data.'
                 ),
                 'tags': ['caching', 'security', 'permissions', 'bug'],
@@ -359,7 +359,7 @@ class Command(BaseCommand):
                 'created_at': past(33),
             },
             {
-                'title': 'Waste/Eliminate tasks in the backlog were consistently deprioritised — schedule a cleanup sprint',
+                'title': 'Waste/Eliminate tasks in the backlog were consistently deprioritised - schedule a cleanup sprint',
                 'content': (
                     'Tasks labelled Waste/Eliminate (e.g., Notification Service refactor, legacy '
                     'endpoint cleanup) kept getting pushed to the next sprint. After 3 sprints, '
@@ -377,7 +377,7 @@ class Command(BaseCommand):
                 'title': 'Integration tests caught a critical data loss bug before it reached production',
                 'content': (
                     'During Integration Testing Suite execution, a test flagged that '
-                    'bulk-deleting tasks was also silently deleting associated time entries — '
+                    'bulk-deleting tasks was also silently deleting associated time entries - '
                     'a foreign key constraint issue not caught by unit tests. The bug would '
                     'have caused permanent data loss in production. This was a direct '
                     'justification for the investment in integration tests. Shared with the '
@@ -391,7 +391,7 @@ class Command(BaseCommand):
             {
                 'title': 'Stand-ups became more effective when anchored to the Kanban board',
                 'content': (
-                    'Early stand-ups were verbal-only, ran 20–30 minutes, and often went '
+                    'Early stand-ups were verbal-only, ran 20-30 minutes, and often went '
                     'off-topic. Switched to a format where the Kanban board is open on screen '
                     'and each person speaks only to cards they moved yesterday or are blocked '
                     'on. Stand-up duration dropped to 8 minutes on average. Blockers were '
@@ -456,12 +456,12 @@ class Command(BaseCommand):
         return nodes
 
     # =========================================================================
-    # AUTO-CAPTURED ENTRIES (Auto-Captured Memories 🤖 — right panel)
+    # AUTO-CAPTURED ENTRIES (Auto-Captured Memories  - right panel)
     # =========================================================================
 
     def _seed_auto_captured_entries(self, existing_titles=None):
         """Create 9 system-generated auto-captured MemoryNode entries."""
-        self.stdout.write(self.style.NOTICE('\n🤖 Seeding auto-captured memory entries...'))
+        self.stdout.write(self.style.NOTICE('\n Seeding auto-captured memory entries...'))
         if existing_titles is None:
             existing_titles = set()
 
@@ -702,8 +702,8 @@ class Command(BaseCommand):
         Create 6 AI-discovered MemoryConnections linking related nodes causally.
 
         Manual node index reference (manual_nodes list):
-          Decisions [0–9]:
-            0 = REST→GraphQL
+          Decisions [0-9]:
+            0 = REST->GraphQL
             1 = PostgreSQL
             2 = JWT auth
             3 = Redis real-time
@@ -714,16 +714,16 @@ class Command(BaseCommand):
             8 = Integration tests in CI
             9 = Caching TTL standardisation
 
-          Lessons [10–19]:
+          Lessons [10-19]:
             10 = DB migration underestimated
             11 = Auth edge cases estimation
             12 = Real-time load testing
             13 = Notification fatigue
             14 = API docs alongside code
             15 = File upload MIME server-side
-            16 = Caching bug → permissions
+            16 = Caching bug -> permissions
             17 = Waste/Eliminate cleanup sprint
-            18 = Integration tests → data loss bug
+            18 = Integration tests -> data loss bug
             19 = Stand-ups on Kanban board
 
         Auto node index reference (auto_nodes list):
@@ -736,14 +736,14 @@ class Command(BaseCommand):
             6 = ai_recommendation: Test coverage gap
             7 = lesson: Waste/Eliminate velocity pattern
         """
-        self.stdout.write(self.style.NOTICE('\n🔗 Seeding AI-discovered MemoryConnections...'))
+        self.stdout.write(self.style.NOTICE('\n Seeding AI-discovered MemoryConnections...'))
 
         connections = [
-            # 1. GraphQL decision → led to a measurable performance improvement referenced
+            # 1. GraphQL decision -> led to a measurable performance improvement referenced
             #    in caching TTL standardisation (they needed consistent TTL because GraphQL
             #    responses were being cached inconsistently after the switch)
             {
-                'from_node': manual_nodes[0],   # REST→GraphQL decision
+                'from_node': manual_nodes[0],   # REST->GraphQL decision
                 'to_node': manual_nodes[9],     # Caching TTL standardisation
                 'connection_type': 'led_to',
                 'reason': (
@@ -752,7 +752,7 @@ class Command(BaseCommand):
                     'caching TTL standardisation decision.'
                 ),
             },
-            # 2. Caching TTL standardisation → caused → Caching security bug
+            # 2. Caching TTL standardisation -> caused -> Caching security bug
             #    (standardising TTL revealed the permissions-caching flaw because it
             #    was now predictable when the stale permission data would be served)
             {
@@ -765,7 +765,7 @@ class Command(BaseCommand):
                     'security bug was discovered and reproduced consistently.'
                 ),
             },
-            # 3. JWT decision → prevented → auth risk event
+            # 3. JWT decision -> prevented -> auth risk event
             #    (stateless JWT prevented a class of session-fixation attacks that
             #    server-side sessions would have been vulnerable to)
             {
@@ -779,7 +779,7 @@ class Command(BaseCommand):
                     'surface, now surfaced as an under-tested area.'
                 ),
             },
-            # 4. DB migration underestimated lesson → similar to → Auth edge cases lesson
+            # 4. DB migration underestimated lesson -> similar to -> Auth edge cases lesson
             #    (both are examples of the same estimation anti-pattern: happy-path sizing)
             {
                 'from_node': manual_nodes[10],  # DB migration underestimated
@@ -792,7 +792,7 @@ class Command(BaseCommand):
                     'failure modes that were not accounted for upfront.'
                 ),
             },
-            # 5. Notification fatigue lesson → prevented → future over-notification
+            # 5. Notification fatigue lesson -> prevented -> future over-notification
             #    (the lesson directly informed the Notification Service decision to
             #    build in-house with digest support from day one)
             {
@@ -806,7 +806,7 @@ class Command(BaseCommand):
                     'full control over this behaviour without third-party constraints.'
                 ),
             },
-            # 6. File upload MIME lesson → led to → S3 file upload decision being revisited
+            # 6. File upload MIME lesson -> led to -> S3 file upload decision being revisited
             #    for security (the server-side validation finding reinforced the need to
             #    keep uploads in isolated cloud storage, not local)
             {
@@ -834,7 +834,7 @@ class Command(BaseCommand):
             )
             status = 'created' if created else 'already exists'
             self.stdout.write(
-                f'   🔗 [{conn.connection_type.upper()}] '
-                f'"{conn.from_node.title[:35]}..." → "{conn.to_node.title[:35]}..." '
+                f'    [{conn.connection_type.upper()}] '
+                f'"{conn.from_node.title[:35]}..." -> "{conn.to_node.title[:35]}..." '
                 f'({status})'
             )

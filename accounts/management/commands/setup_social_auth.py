@@ -1,4 +1,4 @@
-﻿from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand
 from django.contrib.sites.models import Site
 from allauth.socialaccount.models import SocialApp
 import os
@@ -46,23 +46,23 @@ class Command(BaseCommand):
             google_app.secret = client_secret
             google_app.save()
             self.stdout.write(
-                self.style.SUCCESS('✓ Updated existing Google OAuth configuration')
+                self.style.SUCCESS('[OK] Updated existing Google OAuth configuration')
             )
         else:
             self.stdout.write(
-                self.style.SUCCESS('✓ Created Google OAuth configuration')
+                self.style.SUCCESS('[OK] Created Google OAuth configuration')
             )
 
         # Ensure the app is associated with the site
         if site not in google_app.sites.all():
             google_app.sites.add(site)
             self.stdout.write(
-                self.style.SUCCESS(f'✓ Associated Google OAuth with site: {site.name}')
+                self.style.SUCCESS(f'[OK] Associated Google OAuth with site: {site.name}')
             )
 
         self.stdout.write(
             self.style.SUCCESS(
-                '\n✅ Google OAuth setup complete! '
+                '\n[OK] Google OAuth setup complete! '
                 'The Google sign-in button should now appear on the login page.'
             )
         )

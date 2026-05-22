@@ -48,7 +48,7 @@ class Command(BaseCommand):
             
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'✓ Successfully updated "Developer Onboarding Checklist" page'
+                    f'[OK] Successfully updated "Developer Onboarding Checklist" page'
                 )
             )
             

@@ -79,7 +79,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write('Expires: Never')
         self.stdout.write('')
-        self.stdout.write(self.style.WARNING('⚠️  Save this token now - you won\'t be able to see it again!'))
+        self.stdout.write(self.style.WARNING('[WARN]  Save this token now - you won\'t be able to see it again!'))
         self.stdout.write('')
         self.stdout.write('Usage example:')
         self.stdout.write('  curl -H "Authorization: Bearer ' + token.token + '" http://localhost:8000/api/v1/boards/')

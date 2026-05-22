@@ -55,10 +55,10 @@ class Command(BaseCommand):
             self.stdout.write('\nTeam Members:')
             for member in report['members']:
                 status_icon = {
-                    'overloaded': '🔴',
-                    'balanced': '🟢',
-                    'underutilized': '🔵'
-                }.get(member['status'], '⚪')
+                    'overloaded': '[!!]',
+                    'balanced': '[OK]',
+                    'underutilized': '[--]'
+                }.get(member['status'], '[  ]')
                 self.stdout.write(
                     f"  {status_icon} {member['name']}: "
                     f"{member['utilization']:.0f}% "
@@ -84,5 +84,5 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('No optimization suggestions found'))
             self.stdout.write('This means your team is well balanced!')
         
-        self.stdout.write('\n' + self.style.SUCCESS('✓ Resource leveling is working!'))
+        self.stdout.write('\n' + self.style.SUCCESS('[OK] Resource leveling is working!'))
         self.stdout.write(f'\nVisit: http://localhost:8000/boards/{board.id}/')

@@ -271,7 +271,7 @@ class Command(BaseCommand):
         Requirement.objects.filter(board=sandbox_board).delete()
         RequirementCategory.objects.filter(board=sandbox_board).delete()
 
-        # Build task mapping: template task title → sandbox task
+        # Build task mapping: template task title -> sandbox task
         sandbox_tasks = {t.title: t for t in Task.objects.filter(column__board=sandbox_board)}
 
         # Copy categories
@@ -300,7 +300,7 @@ class Command(BaseCommand):
                 created_by=creator,
                 assigned_reviewer=reviewer if req.status != 'draft' else None,
             )
-            # Goals are org-scoped — share same objects
+            # Goals are org-scoped - share same objects
             new_req.linked_goals.set(req.linked_goals.all())
             # Map tasks by title
             for old_task in req.linked_tasks.all():

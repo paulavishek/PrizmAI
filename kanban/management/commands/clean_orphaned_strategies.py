@@ -2,14 +2,14 @@
 Management command to clean up orphaned Strategy records.
 
 An "orphaned" strategy is one that is not reachable from any active workspace
-and is not part of the official demo seed data — i.e. it was created before
+and is not part of the official demo seed data - i.e. it was created before
 workspace FKs were enforced, or was left behind by incomplete provisioning runs.
 
 Specifically, a strategy is considered orphaned when ALL of the following hold:
-  1. strategy.workspace_id is NULL          — not bound to any workspace
-  2. strategy.is_seed_demo_data is False    — not official seed/demo data
-  3. strategy.mission.workspace_id is NULL  — parent mission also unbound
-  4. strategy.mission.is_demo is False      — mission not flagged as demo
+  1. strategy.workspace_id is NULL          - not bound to any workspace
+  2. strategy.is_seed_demo_data is False    - not official seed/demo data
+  3. strategy.mission.workspace_id is NULL  - parent mission also unbound
+  4. strategy.mission.is_demo is False      - mission not flagged as demo
   5. strategy.mission.is_seed_demo_data is False
 
 Run with --dry-run first to preview what would be deleted:
@@ -45,7 +45,7 @@ class Command(BaseCommand):
 
         if dry_run:
             self.stdout.write(
-                self.style.WARNING("DRY RUN — no changes will be made.\n")
+                self.style.WARNING("DRY RUN - no changes will be made.\n")
             )
 
         orphaned_qs = (
@@ -97,7 +97,7 @@ class Command(BaseCommand):
         ).strip().lower()
 
         if confirm != "yes":
-            self.stdout.write(self.style.WARNING("Aborted — no changes made."))
+            self.stdout.write(self.style.WARNING("Aborted - no changes made."))
             return
 
         with transaction.atomic():

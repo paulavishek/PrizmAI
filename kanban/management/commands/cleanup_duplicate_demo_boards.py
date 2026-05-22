@@ -45,12 +45,12 @@ class Command(BaseCommand):
         demo_orgs = Organization.objects.filter(name__in=demo_org_names)
 
         if not demo_orgs.exists():
-            self.stdout.write(self.style.ERROR('\n❌ No demo organizations found!'))
+            self.stdout.write(self.style.ERROR('\n[FAIL] No demo organizations found!'))
             self.stdout.write(self.style.WARNING('Expected organization: Demo - Acme Corporation'))
             self.stdout.write(self.style.WARNING('Run "python manage.py populate_test_data" first to create demo data.'))
             return
 
-        self.stdout.write(f'\n✓ Found {demo_orgs.count()} demo organization(s): {", ".join([org.name for org in demo_orgs])}')
+        self.stdout.write(f'\n[OK] Found {demo_orgs.count()} demo organization(s): {", ".join([org.name for org in demo_orgs])}')
 
         # Find official demo boards
         official_demo_boards = Board.objects.filter(
@@ -59,18 +59,18 @@ class Command(BaseCommand):
         )
 
         if not official_demo_boards.exists():
-            self.stdout.write(self.style.ERROR('\n❌ No official demo boards found!'))
+            self.stdout.write(self.style.ERROR('\n[FAIL] No official demo boards found!'))
             self.stdout.write(self.style.WARNING(f'Expected boards: {", ".join(demo_board_names)}'))
             return
 
-        self.stdout.write(f'✓ Found {official_demo_boards.count()} official demo board(s):')
+        self.stdout.write(f'[OK] Found {official_demo_boards.count()} official demo board(s):')
         for board in official_demo_boards:
             task_count = Task.objects.filter(column__board=board).count()
             member_count = board.memberships.count()
-            self.stdout.write(f'  • {board.name} ({board.organization.name}) - {task_count} tasks, {member_count} members')
+            self.stdout.write(f'  - {board.name} ({board.organization.name}) - {task_count} tasks, {member_count} members')
 
         # Find duplicate demo boards in other organizations
-        self.stdout.write(self.style.NOTICE('\n🔍 Searching for duplicate demo boards in user organizations...'))
+        self.stdout.write(self.style.NOTICE('\n Searching for duplicate demo boards in user organizations...'))
         
         duplicate_boards = Board.objects.filter(
             name__in=demo_board_names
@@ -79,10 +79,10 @@ class Command(BaseCommand):
         )
 
         if not duplicate_boards.exists():
-            self.stdout.write(self.style.SUCCESS('\n✅ No duplicate demo boards found! Your system is clean.'))
+            self.stdout.write(self.style.SUCCESS('\n[OK] No duplicate demo boards found! Your system is clean.'))
             return
 
-        self.stdout.write(self.style.WARNING(f'\n⚠️  Found {duplicate_boards.count()} duplicate demo board(s):'))
+        self.stdout.write(self.style.WARNING(f'\n[WARN]  Found {duplicate_boards.count()} duplicate demo board(s):'))
         
         # Group duplicates by organization
         duplicates_by_org = {}
@@ -97,7 +97,7 @@ class Command(BaseCommand):
         total_members_affected = 0
         
         for org_name, boards in duplicates_by_org.items():
-            self.stdout.write(f'\n  📁 Organization: {org_name}')
+            self.stdout.write(f'\n   Organization: {org_name}')
             for board in boards:
                 task_count = Task.objects.filter(column__board=board).count()
                 member_count = board.memberships.count()
@@ -105,32 +105,32 @@ class Command(BaseCommand):
                 total_members_affected += member_count
                 
                 self.stdout.write(
-                    f'    • {board.name} (ID: {board.id}) - '
+                    f'    - {board.name} (ID: {board.id}) - '
                     f'{task_count} tasks, {member_count} members'
                 )
 
         # Summary
-        self.stdout.write(self.style.WARNING(f'\n📊 Summary:'))
-        self.stdout.write(f'  • Duplicate boards found: {duplicate_boards.count()}')
-        self.stdout.write(f'  • Total tasks in duplicates: {total_tasks_to_remove}')
-        self.stdout.write(f'  • Members affected: {total_members_affected}')
+        self.stdout.write(self.style.WARNING(f'\n Summary:'))
+        self.stdout.write(f'  - Duplicate boards found: {duplicate_boards.count()}')
+        self.stdout.write(f'  - Total tasks in duplicates: {total_tasks_to_remove}')
+        self.stdout.write(f'  - Members affected: {total_members_affected}')
 
         if dry_run:
-            self.stdout.write(self.style.NOTICE('\n🔍 DRY RUN MODE - No changes will be made'))
+            self.stdout.write(self.style.NOTICE('\n DRY RUN MODE - No changes will be made'))
             self.stdout.write(self.style.NOTICE('Run without --dry-run to perform cleanup'))
             return
 
         # Perform cleanup
         if auto_fix:
-            self.stdout.write(self.style.WARNING('\n🔧 AUTO-FIX MODE: Cleaning up duplicates...'))
+            self.stdout.write(self.style.WARNING('\n AUTO-FIX MODE: Cleaning up duplicates...'))
         else:
-            confirm = input('\n⚠️  Do you want to remove these duplicate boards? (yes/no): ')
+            confirm = input('\n[WARN]  Do you want to remove these duplicate boards? (yes/no): ')
             if confirm.lower() != 'yes':
-                self.stdout.write(self.style.WARNING('\n❌ Cleanup cancelled by user'))
+                self.stdout.write(self.style.WARNING('\n[FAIL] Cleanup cancelled by user'))
                 return
 
         # Migrate users to official demo boards and remove duplicates
-        self.stdout.write(self.style.NOTICE('\n🔄 Migrating users to official demo boards...'))
+        self.stdout.write(self.style.NOTICE('\n Migrating users to official demo boards...'))
         
         migrated_users = set()
         deleted_boards = 0
@@ -150,7 +150,7 @@ class Command(BaseCommand):
                         if not official_board.memberships.filter(user=member).exists():
                             BoardMembership.objects.get_or_create(board=official_board, user=member, defaults={'role': 'member'})
                             migrated_users.add(member.username)
-                            self.stdout.write(f'  ✓ Migrated {member.username} to official {official_board.name}')
+                            self.stdout.write(f'  [OK] Migrated {member.username} to official {official_board.name}')
                 
                 # Get task count before deletion
                 task_count = Task.objects.filter(column__board=board).count()
@@ -169,25 +169,25 @@ class Command(BaseCommand):
                 
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'  ✓ Removed duplicate board: {board_name} (ID: {board_id}) '
+                        f'  [OK] Removed duplicate board: {board_name} (ID: {board_id}) '
                         f'with {task_count} tasks'
                     )
                 )
             except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(
-                        f'  ✗ Failed to remove board: {board.name} (ID: {board.id})'
+                        f'  [FAIL] Failed to remove board: {board.name} (ID: {board.id})'
                     )
                 )
                 self.stdout.write(self.style.ERROR(f'    Error: {str(e)}'))
 
         # Final summary
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
-        self.stdout.write(self.style.SUCCESS('✅ Cleanup Complete!'))
+        self.stdout.write(self.style.SUCCESS('[OK] Cleanup Complete!'))
         self.stdout.write(self.style.SUCCESS('='*70))
-        self.stdout.write(f'  • Removed {deleted_boards} duplicate board(s)')
-        self.stdout.write(f'  • Deleted {deleted_tasks} duplicate tasks')
-        self.stdout.write(f'  • Migrated {len(migrated_users)} user(s) to official demo boards')
+        self.stdout.write(f'  - Removed {deleted_boards} duplicate board(s)')
+        self.stdout.write(f'  - Deleted {deleted_tasks} duplicate tasks')
+        self.stdout.write(f'  - Migrated {len(migrated_users)} user(s) to official demo boards')
         if deleted_boards > 0:
-            self.stdout.write(self.style.SUCCESS('\n💡 Users can now access the official demo boards from their dashboard!'))
+            self.stdout.write(self.style.SUCCESS('\n Users can now access the official demo boards from their dashboard!'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))

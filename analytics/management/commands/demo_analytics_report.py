@@ -29,7 +29,7 @@ class Command(BaseCommand):
         self.stdout.write("=" * 80)
         
         # Overall metrics
-        self.print_section("📊 OVERALL METRICS")
+        self.print_section(" OVERALL METRICS")
         total_sessions = DemoSession.objects.filter(created_at__gte=start_date).count()
         anonymous_sessions = DemoSession.objects.filter(
             created_at__gte=start_date,
@@ -42,7 +42,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  Authenticated Users: {authenticated_sessions} ({self.percentage(authenticated_sessions, total_sessions)})")
         
         # Conversion metrics
-        self.print_section("\n💰 CONVERSION METRICS")
+        self.print_section("\n CONVERSION METRICS")
         
         # Anonymous conversion
         anonymous_converted = DemoSession.objects.filter(
@@ -79,7 +79,7 @@ class Command(BaseCommand):
             self.stdout.write(f"Avg Time to Conversion: {int(avg_time / 60)} minutes")
         
         # Engagement metrics
-        self.print_section("\n🎯 ENGAGEMENT METRICS")
+        self.print_section("\n ENGAGEMENT METRICS")
         
         avg_duration = DemoSession.objects.filter(
             created_at__gte=start_date
@@ -102,7 +102,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Sessions with Aha Moment: {sessions_with_aha}/{total_sessions} ({aha_rate:.1f}%)")
         
         # Aha moment impact
-        self.print_section("\n✨ AHA MOMENT IMPACT")
+        self.print_section("\nAHA MOMENT IMPACT")
         
         no_aha = DemoSession.objects.filter(
             created_at__gte=start_date,
@@ -125,7 +125,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Conversion Lift: +{lift:.0f}%"))
         
         # Top features explored
-        self.print_section("\n🔥 TOP FEATURES EXPLORED")
+        self.print_section("\nTOP FEATURES EXPLORED")
         
         features = DemoAnalytics.objects.filter(
             timestamp__gte=start_date,
@@ -140,7 +140,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{i}. {feature_name}: {count} interactions")
         
         # Device breakdown
-        self.print_section("\n📱 DEVICE BREAKDOWN")
+        self.print_section("\nDEVICE BREAKDOWN")
         
         devices = DemoSession.objects.filter(
             created_at__gte=start_date
@@ -157,7 +157,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{device_type.capitalize()}: {count} sessions, {conversions} conversions ({rate:.1f}%)")
         
         # Demo mode breakdown
-        self.print_section("\n🎮 DEMO MODE BREAKDOWN")
+        self.print_section("\nDEMO MODE BREAKDOWN")
         
         modes = DemoSession.objects.filter(
             created_at__gte=start_date
@@ -174,7 +174,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{mode_name.capitalize()} Mode: {count} sessions, {conversions} conversions ({rate:.1f}%)")
         
         # Nudge effectiveness
-        self.print_section("\n💡 NUDGE EFFECTIVENESS")
+        self.print_section("\n NUDGE EFFECTIVENESS")
         
         total_nudges_shown = DemoSession.objects.filter(
             created_at__gte=start_date
@@ -190,25 +190,25 @@ class Command(BaseCommand):
         self.stdout.write(f"Nudge Click-Through: {total_nudges_clicked}/{total_nudges_shown} ({click_rate:.1f}%)")
         
         # Key insights
-        self.print_section("\n💡 KEY INSIGHTS")
+        self.print_section("\n KEY INSIGHTS")
         
         if anonymous_rate > overall_rate:
             self.stdout.write(self.style.WARNING(
-                f"⚠️  Anonymous users convert BETTER than authenticated ({anonymous_rate:.1f}% vs {auth_rate:.1f}%)"
+                f"[WARN]  Anonymous users convert BETTER than authenticated ({anonymous_rate:.1f}% vs {auth_rate:.1f}%)"
             ))
         elif anonymous_rate < overall_rate:
             self.stdout.write(self.style.WARNING(
-                f"⚠️  Anonymous users convert WORSE than authenticated ({anonymous_rate:.1f}% vs {auth_rate:.1f}%)"
+                f"[WARN]  Anonymous users convert WORSE than authenticated ({anonymous_rate:.1f}% vs {auth_rate:.1f}%)"
             ))
         
         if with_aha_rate > no_aha_rate * 2:
             self.stdout.write(self.style.SUCCESS(
-                f"✅ Aha moments double conversion rate! Focus on triggering more aha moments."
+                f"[OK] Aha moments double conversion rate! Focus on triggering more aha moments."
             ))
         
         if avg_features and avg_features < 3:
             self.stdout.write(self.style.WARNING(
-                f"⚠️  Users explore only {avg_features:.1f} features on average. Improve feature discovery."
+                f"[WARN]  Users explore only {avg_features:.1f} features on average. Improve feature discovery."
             ))
         
         self.stdout.write("\n" + "=" * 80)

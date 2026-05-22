@@ -51,7 +51,7 @@ class Command(BaseCommand):
                 users.append(user)
             except User.DoesNotExist:
                 self.stdout.write(self.style.ERROR(
-                    f'   [MISSING] {td["username"]} ({td["email"]}) — '
+                    f'   [MISSING] {td["username"]} ({td["email"]}) - '
                     f'please sign up first at /accounts/signup/'
                 ))
                 return
@@ -85,9 +85,9 @@ class Command(BaseCommand):
             if real_org and (profile.organization is None or profile.organization.is_demo):
                 profile.organization = real_org
                 profile.save(update_fields=['organization'])
-                self.stdout.write(f'   [UPDATED] {user.username} profile → org: {real_org.name}')
+                self.stdout.write(f'   [UPDATED] {user.username} profile -> org: {real_org.name}')
             else:
-                self.stdout.write(f'   [EXISTS] {user.username} → org: {real_org.name}')
+                self.stdout.write(f'   [EXISTS] {user.username} -> org: {real_org.name}')
 
             # Workspace
             has_workspace = Workspace.objects.filter(
@@ -123,13 +123,13 @@ class Command(BaseCommand):
                     defaults={'global_preset': 'enterprise'},
                 )
                 tag = '[CREATED]' if created else '[UPDATED]'
-                self.stdout.write(f'   {tag} {org.name} → Enterprise')
+                self.stdout.write(f'   {tag} {org.name} -> Enterprise')
 
         # ------------------------------------------------------------------
         # Step 4: Ensure each user has at least one board in their workspace
         # ------------------------------------------------------------------
         self.stdout.write('\n4. Ensuring each user has boards...')
-        user_boards = {}  # user → first board (used for cross-RBAC)
+        user_boards = {}  # user -> first board (used for cross-RBAC)
         for user in users:
             ws = Workspace.objects.filter(created_by=user, is_demo=False).first()
             if not ws:
@@ -165,9 +165,9 @@ class Command(BaseCommand):
 
         # ------------------------------------------------------------------
         # Step 5: Cross-board RBAC rotation
-        #   user1's board → user2=member, user3=viewer
-        #   user2's board → user3=member, user1=viewer
-        #   user3's board → user1=member, user2=viewer
+        #   user1's board -> user2=member, user3=viewer
+        #   user2's board -> user3=member, user1=viewer
+        #   user3's board -> user1=member, user2=viewer
         # ------------------------------------------------------------------
         self.stdout.write('\n5. Cross-board RBAC memberships...')
         rotation = [
@@ -183,7 +183,7 @@ class Command(BaseCommand):
             board = user_boards.get(owner_user.id)
             if not board:
                 self.stdout.write(
-                    f'   ⚠️ No board for {owner_user.username}, skipping rotation'
+                    f'   [WARN] No board for {owner_user.username}, skipping rotation'
                 )
                 continue
 
@@ -220,7 +220,7 @@ class Command(BaseCommand):
             Board.objects.filter(is_official_demo_board=True).order_by('name')
         )
         if not template_boards:
-            self.stdout.write('   ⚠️ No demo template boards found — run create_demo_organization first')
+            self.stdout.write('   [WARN] No demo template boards found - run create_demo_organization first')
         else:
             self.stdout.write(f'   Template boards: {[b.name for b in template_boards]}')
 
@@ -234,7 +234,7 @@ class Command(BaseCommand):
                     if existing_count < template_count:
                         self.stdout.write(
                             f'   [PARTIAL] {user.username} has sandbox but only '
-                            f'{existing_count}/{template_count} boards — '
+                            f'{existing_count}/{template_count} boards - '
                             f'duplicating missing boards'
                         )
                         existing_clones = set(
@@ -266,12 +266,12 @@ class Command(BaseCommand):
                                 new_boards.append(new_board)
                             except Exception as e:
                                 self.stdout.write(self.style.ERROR(
-                                    f'      ✗ Failed to clone {tmpl.name}: {e}'
+                                    f'      [FAIL] Failed to clone {tmpl.name}: {e}'
                                 ))
                         if new_boards:
                             DemoSandbox.objects.create(user=user)
                             self.stdout.write(self.style.SUCCESS(
-                                f'      ✓ Created sandbox with {len(new_boards)} boards'
+                                f'      [OK] Created sandbox with {len(new_boards)} boards'
                             ))
 
                             # Join demo org
@@ -279,7 +279,7 @@ class Command(BaseCommand):
                             if demo_org:
                                 profile = user.profile
                                 if profile.organization != demo_org:
-                                    # Don't overwrite real org — just ensure membership
+                                    # Don't overwrite real org - just ensure membership
                                     pass
 
         # ------------------------------------------------------------------
@@ -300,8 +300,8 @@ class Command(BaseCommand):
                         'onboarding_status', 'active_workspace', 'is_viewing_demo',
                     ])
                     self.stdout.write(
-                        f'   [UPDATED] {user.username}: onboarding → completed, '
-                        f'active workspace → {ws.name}'
+                        f'   [UPDATED] {user.username}: onboarding -> completed, '
+                        f'active workspace -> {ws.name}'
                     )
             else:
                 self.stdout.write(
@@ -312,7 +312,7 @@ class Command(BaseCommand):
         # Summary
         # ------------------------------------------------------------------
         self.stdout.write(self.style.SUCCESS('\n' + '=' * 80))
-        self.stdout.write(self.style.SUCCESS('  ✓ TEST ENVIRONMENT SETUP COMPLETE'))
+        self.stdout.write(self.style.SUCCESS('  [OK] TEST ENVIRONMENT SETUP COMPLETE'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write('\nUser summary:')
         for user in users:

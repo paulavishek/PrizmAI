@@ -49,7 +49,7 @@ class Command(BaseCommand):
         delay = options['delay']
 
         if dry_run:
-            self.stdout.write(self.style.WARNING('DRY RUN — no API calls will be made'))
+            self.stdout.write(self.style.WARNING('DRY RUN - no API calls will be made'))
 
         boards = Board.objects.filter(is_active=True)
 
@@ -97,7 +97,7 @@ class Command(BaseCommand):
                     f'{result["project_type"]} ({result.get("confidence", 0):.0%})'))
                 success += 1
             except Exception as exc:
-                self.stdout.write(self.style.ERROR(f'FAILED — {exc}'))
+                self.stdout.write(self.style.ERROR(f'FAILED - {exc}'))
                 failed += 1
 
             if i < total and delay > 0:

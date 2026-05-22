@@ -56,7 +56,7 @@ class Command(BaseCommand):
                 # Success summary
                 self.stdout.write('')
                 self.stdout.write(self.style.SUCCESS('='*80))
-                self.stdout.write(self.style.SUCCESS('✓ DEMO ORGANIZATION SETUP COMPLETE'))
+                self.stdout.write(self.style.SUCCESS('[OK] DEMO ORGANIZATION SETUP COMPLETE'))
                 self.stdout.write(self.style.SUCCESS('='*80))
                 self.stdout.write(f'  Organization: {demo_org.name}')
                 self.stdout.write(f'  Boards: {len(boards)}')
@@ -68,7 +68,7 @@ class Command(BaseCommand):
                 self.stdout.write('')
                 
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'✗ Error: {str(e)}'))
+            self.stdout.write(self.style.ERROR(f'[FAIL] Error: {str(e)}'))
             import traceback
             traceback.print_exc()
             raise
@@ -90,7 +90,7 @@ class Command(BaseCommand):
                 'priya.sharma@demo.prizmai.local',
                 'marcus.chen@demo.prizmai.local',
                 'elena.vasquez@demo.prizmai.local',
-                # Legacy — remove old personas if still present
+                # Legacy - remove old personas if still present
                 'alex.chen@demo.prizmai.local',
                 'sam.rivera@demo.prizmai.local',
                 'jordan.taylor@demo.prizmai.local',
@@ -114,7 +114,7 @@ class Command(BaseCommand):
             self.stdout.write(f'  Deleting organization and all related data...')
             demo_org.delete()
             
-            self.stdout.write(self.style.SUCCESS('  ✓ Demo data reset complete'))
+            self.stdout.write(self.style.SUCCESS('  [OK] Demo data reset complete'))
         else:
             self.stdout.write('  No demo organization found (clean slate)')
 
@@ -126,7 +126,7 @@ class Command(BaseCommand):
         # If not, use first superuser
         creator = User.objects.filter(is_superuser=True).first()
         if not creator:
-            self.stdout.write(self.style.ERROR('  ✗ No superuser found!'))
+            self.stdout.write(self.style.ERROR('  [FAIL] No superuser found!'))
             self.stdout.write('  Please create a superuser first: python manage.py createsuperuser')
             raise Exception('No superuser available')
         
@@ -141,14 +141,14 @@ class Command(BaseCommand):
         )
         
         if created:
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {demo_org.name}'))
+            self.stdout.write(self.style.SUCCESS(f'  [OK] Created: {demo_org.name}'))
         else:
             self.stdout.write(self.style.WARNING(f'  ! Already exists: {demo_org.name}'))
             # Update is_demo flag if it wasn't set
             if not demo_org.is_demo:
                 demo_org.is_demo = True
                 demo_org.save()
-                self.stdout.write(self.style.SUCCESS('  ✓ Updated is_demo flag'))
+                self.stdout.write(self.style.SUCCESS('  [OK] Updated is_demo flag'))
         
         return demo_org
 
@@ -221,7 +221,7 @@ class Command(BaseCommand):
             if created:
                 user.set_password('DemoUser@2026')
                 user.save()
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {user.get_full_name()} ({user.email})'))
+                self.stdout.write(self.style.SUCCESS(f'  [OK] Created: {user.get_full_name()} ({user.email})'))
             else:
                 user.set_password('DemoUser@2026')
                 user.save()
@@ -252,7 +252,7 @@ class Command(BaseCommand):
             
             personas.append(user)
         
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Created {len(personas)} personas'))
+        self.stdout.write(self.style.SUCCESS(f'  [OK] Created {len(personas)} personas'))
         return personas
 
     def create_demo_boards(self, demo_org, personas):
@@ -318,7 +318,7 @@ class Command(BaseCommand):
                     self.stdout.write(f'    - Added column: {column_name}')
 
             if created:
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Created board: {board.name}'))
+                self.stdout.write(self.style.SUCCESS(f'  [OK] Created board: {board.name}'))
             else:
                 self.stdout.write(self.style.WARNING(f'  ! Already exists: {board.name} (refreshed)'))
 
@@ -338,7 +338,7 @@ class Command(BaseCommand):
             'elena.vasquez':  'member',  # Elena Vasquez - DevOps/QA
         }
 
-        # Usernames that identify any demo persona (legacy or new) — preserved when
+        # Usernames that identify any demo persona (legacy or new) - preserved when
         # we scan existing membership for real users to keep around.
         demo_usernames = set(role_map.keys()) | {
             'alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo',  # legacy
@@ -347,7 +347,7 @@ class Command(BaseCommand):
         total_assigned = 0
 
         for board in boards:
-            # Get existing members (real users — not any demo persona, old or new)
+            # Get existing members (real users - not any demo persona, old or new)
             existing_real_user_ids = BoardMembership.objects.filter(
                 board=board
             ).exclude(user__username__in=demo_usernames).values_list('user_id', flat=True)
@@ -373,5 +373,5 @@ class Command(BaseCommand):
                     defaults={'role': 'member'}
                 )
         
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Assigned {len(personas)} demo personas to {len(boards)} boards'))
+        self.stdout.write(self.style.SUCCESS(f'  [OK] Assigned {len(personas)} demo personas to {len(boards)} boards'))
         self.stdout.write(f'    Total board memberships: {total_assigned}')

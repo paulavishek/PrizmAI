@@ -47,7 +47,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('Nothing to backfill.'))
             return
 
-        self.stdout.write(f'Backfilling embeddings for {total} KB rows…')
+        self.stdout.write(f'Backfilling embeddings for {total} KB rows...')
         ok = 0
         skipped = 0
         sleep_s = max(0, opts['sleep_ms']) / 1000.0

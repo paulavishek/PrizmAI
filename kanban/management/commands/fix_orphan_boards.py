@@ -3,7 +3,7 @@ One-time cleanup for boards with no workspace.
 
 Boards created before the Workspace model existed (or seeded by an old demo
 command) carry ``workspace=None``. These bleed across the workspace switcher
-because they have no home — including the test users' personal "Software
+because they have no home - including the test users' personal "Software
 Development" copies that were causing Spectra to answer from the wrong board.
 
 For each orphan: assign to the owner's primary non-demo workspace if one
@@ -61,7 +61,7 @@ class Command(BaseCommand):
                 owner_label = owner.username if owner else '<no owner>'
                 self.stdout.write(self.style.WARNING(
                     f'  SKIP id={board.id} name={board.name!r} owner={owner_label} '
-                    f'— no eligible non-demo workspace'
+                    f'- no eligible non-demo workspace'
                 ))
                 if delete_skipped and not dry_run:
                     board.delete()

@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = '[DEPRECATED] Legacy RBAC initialization — no longer needed'
+    help = '[DEPRECATED] Legacy RBAC initialization - no longer needed'
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.WARNING(
@@ -16,7 +16,7 @@ class Command(BaseCommand):
             '(owner/member/viewer roles). No action taken.'
         ))
             
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {len(roles)} roles:'))
+            self.stdout.write(self.style.SUCCESS(f'  [OK] Created {len(roles)} roles:'))
             for role in roles:
                 self.stdout.write(f'    - {role.name}: {len(role.permissions)} permissions')
             

@@ -65,7 +65,7 @@ class Command(BaseCommand):
                         suggestion.save()
                     expired_count += 1
                     self.stdout.write(
-                        f'    ⏰ Expired: Task "{suggestion.task.title}" -> {suggestion.suggested_assignee.username} (time expired)'
+                        f'    [EXPIRED] Task "{suggestion.task.title}" -> {suggestion.suggested_assignee.username} (time expired)'
                     )
                     continue
                 
@@ -76,7 +76,7 @@ class Command(BaseCommand):
                         suggestion.save()
                     invalid_count += 1
                     self.stdout.write(
-                        f'    ✅ Invalid: Task "{suggestion.task.title}" is already completed'
+                        f'    [OK] Invalid: Task "{suggestion.task.title}" is already completed'
                     )
                     continue
                 
@@ -87,7 +87,7 @@ class Command(BaseCommand):
                         suggestion.save()
                     invalid_count += 1
                     self.stdout.write(
-                        f'    ✓ Already Applied: Task "{suggestion.task.title}" -> {suggestion.suggested_assignee.username}'
+                        f'    [OK] Already Applied: Task "{suggestion.task.title}" -> {suggestion.suggested_assignee.username}'
                     )
                     continue
                 
@@ -106,7 +106,7 @@ class Command(BaseCommand):
                             suggestion.save()
                         invalid_count += 1
                         self.stdout.write(
-                            f'    ⚠️  Invalid: {suggestion.suggested_assignee.username} now overloaded '
+                            f'    [WARN]  Invalid: {suggestion.suggested_assignee.username} now overloaded '
                             f'({profile.utilization_percentage:.1f}% utilization)'
                         )
                         continue
@@ -118,7 +118,7 @@ class Command(BaseCommand):
                         suggestion.save()
                     invalid_count += 1
                     self.stdout.write(
-                        f'    🔄 Invalid: Task "{suggestion.task.title}" reassigned to someone else'
+                        f'     Invalid: Task "{suggestion.task.title}" reassigned to someone else'
                     )
                     continue
             
@@ -140,7 +140,7 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(
-                self.style.SUCCESS(f'\n✓ Successfully cleaned up {total_cleaned} stale suggestions')
+                self.style.SUCCESS(f'\n[OK] Successfully cleaned up {total_cleaned} stale suggestions')
             )
             self.stdout.write(
                 self.style.SUCCESS('All suggestions are now up to date!')

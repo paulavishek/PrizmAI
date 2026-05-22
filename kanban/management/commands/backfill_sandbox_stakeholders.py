@@ -9,7 +9,7 @@ records but whose template board has stakeholders will be backfilled with:
   - StakeholderEngagementRecord records (fresh, dates relative to today)
 
 This is a one-time migration for sandboxes created before the stakeholder
-demo data was added.  It is safe to re-run — boards that already have
+demo data was added.  It is safe to re-run - boards that already have
 stakeholders are skipped.
 
 Usage:
@@ -61,14 +61,14 @@ class Command(BaseCommand):
             # Skip if already has stakeholders
             if ProjectStakeholder.objects.filter(board=sandbox).exists():
                 self.stdout.write(
-                    f'  ⏭️  Board {sandbox.id} ({sandbox.name}) — already has stakeholders, skipping'
+                    f'  [SKIP]  Board {sandbox.id} ({sandbox.name}) - already has stakeholders, skipping'
                 )
                 continue
 
             template = sandbox.cloned_from
             if not template:
                 self.stdout.write(
-                    self.style.WARNING(f'  ⚠️  Board {sandbox.id} has no cloned_from template, skipping')
+                    self.style.WARNING(f'  [WARN]  Board {sandbox.id} has no cloned_from template, skipping')
                 )
                 continue
 
@@ -76,12 +76,12 @@ class Command(BaseCommand):
             if not template_stakeholders:
                 self.stdout.write(
                     self.style.WARNING(
-                        f'  ⚠️  Template board {template.id} has no stakeholders yet, skipping'
+                        f'  [WARN]  Template board {template.id} has no stakeholders yet, skipping'
                     )
                 )
                 continue
 
-            # Build title → sandbox task map (case-insensitive prefix match)
+            # Build title -> sandbox task map (case-insensitive prefix match)
             sandbox_tasks = {
                 t.title.lower(): t
                 for t in Task.objects.filter(column__board=sandbox)
@@ -90,7 +90,7 @@ class Command(BaseCommand):
             # ----------------------------------------------------------------
             # Copy stakeholders
             # ----------------------------------------------------------------
-            stakeholder_map = {}  # template pk → new sandbox stakeholder
+            stakeholder_map = {}  # template pk -> new sandbox stakeholder
             for sh in template_stakeholders:
                 new_sh = ProjectStakeholder.objects.create(
                     board=sandbox,
@@ -143,7 +143,7 @@ class Command(BaseCommand):
             # ----------------------------------------------------------------
             # Seed fresh engagement records (dates relative to today)
             # ----------------------------------------------------------------
-            owner = sandbox.owner  # real user — used as created_by
+            owner = sandbox.owner  # real user - used as created_by
             sh_by_name = {sh.name: sh for sh in stakeholder_map.values()}
 
             # (name, days_ago, channel, description, outcome, sentiment, rating)
@@ -155,7 +155,7 @@ class Command(BaseCommand):
                  'Architecture milestone check-in.',
                  'Signed off on system design.', 'positive', 5),
                 ('Marcus Johnson',     5, 'video',
-                 'Sprint planning — feature prioritisation.',
+                 'Sprint planning - feature prioritisation.',
                  'User Registration elevated to P1 for current sprint.', 'positive', 5),
                 ('Marcus Johnson',    21, 'chat',
                  'Shared wireframe prototypes for review.',
@@ -205,7 +205,7 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'  ✅ Board {sandbox.id} ({sandbox.name} — owner: {owner.username}): '
+                    f'  [OK] Board {sandbox.id} ({sandbox.name} - owner: {owner.username}): '
                     f'{len(template_stakeholders)} stakeholders, '
                     f'{total_inv} involvements, '
                     f'{len(seed_records)} engagement records'

@@ -29,7 +29,7 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         dry_run = opts['dry_run']
 
-        # Group demo sessions by (user_id, board_id, title) — the natural identity.
+        # Group demo sessions by (user_id, board_id, title) - the natural identity.
         groups = defaultdict(list)
         for s in AIAssistantSession.objects.filter(is_demo=True).order_by('id'):
             key = (s.user_id, s.board_id, s.title)

@@ -46,7 +46,7 @@ class Command(BaseCommand):
                 
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'✓ Updated "{category.name}": {old_type} → {type_name}'
+                        f'[OK] Updated "{category.name}": {old_type} -> {type_name}'
                     )
                 )
             else:
