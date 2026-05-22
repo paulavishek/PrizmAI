@@ -47,8 +47,8 @@ The Demo Sandbox allows any authenticated user to explore PrizmAI's full feature
 │  Board.is_official_demo_board = True                              │
 │  Board.is_seed_demo_data = True                                   │
 │  Immutable source of truth.  Never shown directly to users.       │
-│  Contains: 36 tasks, 4 columns, 15 labels, 53 comments,          │
-│            3 demo persona memberships                             │
+│  Contains: 35 items (28 child tasks, 4 epics, 3 milestones),     │
+│            5 columns, 13 labels, 3 demo persona memberships       │
 └──────────────────────────────────┬───────────────────────────────┘
                                    │ _duplicate_board()
                     ┌──────────────┴──────────────┐
@@ -81,11 +81,11 @@ This org/workspace switch is the mechanism that drives all downstream query scop
 
 Three synthetic users serve as team members across all sandbox boards:
 
-| Username | Email | Role |
-|----------|-------|------|
-| `alex_chen_demo` | `alex.chen@demo.prizmai.local` | Member |
-| `sam_rivera_demo` | `sam.rivera@demo.prizmai.local` | Member |
-| `jordan_taylor_demo` | `jordan.taylor@demo.prizmai.local` | Member |
+| Username | Email | Role | Specialty |
+|----------|-------|------|-----------|
+| `priya.sharma` | `priya.sharma@demo.prizmai.local` | Owner / Org Admin | Backend (Python, Django, REST APIs) |
+| `marcus.chen` | `marcus.chen@demo.prizmai.local` | Member | Frontend / UX (JavaScript, React, CSS) |
+| `elena.vasquez` | `elena.vasquez@demo.prizmai.local` | Member | DevOps / QA (Docker, CI/CD, GCP) |
 
 These personas are identified by their `@demo.prizmai.local` email domain. This identifier is used as the authoritative check when deciding which memberships to copy during board duplication.
 
@@ -395,7 +395,7 @@ After applying code fixes, existing corrupted data was cleaned up:
 Template Board 1 (Software Development):
   REMOVED: testuser1 (paul.biotech10@gmail.com) — real user membership
   REMOVED: testuser2 (avip3310@gmail.com) — real user membership
-  KEPT:    jordan_taylor_demo, sam_rivera_demo, alex_chen_demo
+  KEPT:    priya.sharma, marcus.chen, elena.vasquez (demo personas)
 
 Sandbox Board 71 (testuser1's copy):
   REMOVED: testuser2 (avip3310@gmail.com) — cross-user membership
@@ -438,7 +438,7 @@ BoardMembership.objects.filter(
 | Metric | Value |
 |--------|-------|
 | Template boards | 1 |
-| Objects per template board | ~36 tasks, 4 columns, 15 labels, 53 comments, 3 memberships |
+| Objects per template board | 35 items (28 child tasks, 4 epics, 3 milestones), 5 columns, 13 labels, 3 persona memberships |
 | Objects duplicated per user | ~110+ rows (tasks + comments + labels + columns + memberships + related models) |
 | Active sandboxes | 2 (testuser1, testuser2) |
 
