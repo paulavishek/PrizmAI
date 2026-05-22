@@ -38,15 +38,15 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('='*70))
 
         # Define official demo organizations and boards
-        demo_org_names = ['Dev Team', 'Marketing Team']
-        demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
+        demo_org_names = ['Demo - Acme Corporation']
+        demo_board_names = ['Software Development']
 
         # Find official demo organizations
         demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-        
+
         if not demo_orgs.exists():
             self.stdout.write(self.style.ERROR('\n❌ No demo organizations found!'))
-            self.stdout.write(self.style.WARNING('Expected organizations: Dev Team, Marketing Team'))
+            self.stdout.write(self.style.WARNING('Expected organization: Demo - Acme Corporation'))
             self.stdout.write(self.style.WARNING('Run "python manage.py populate_test_data" first to create demo data.'))
             return
 

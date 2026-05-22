@@ -902,7 +902,7 @@ def my_timesheet(request, board_id=None):
 
     if not user_has_entries and is_demo_mode:
         # Only show demo user data when explicitly in demo mode
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
             if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
@@ -1070,7 +1070,7 @@ def time_tracking_dashboard(request, board_id=None):
 
     if not user_has_entries and is_demo_mode:
         # Only show demo user data when explicitly in demo mode
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
             if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
@@ -1501,7 +1501,7 @@ def time_entries_by_date(request):
     display_user = request.user
     user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     if not user_has_entries:
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
             if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
@@ -1580,7 +1580,7 @@ def time_entries_by_period(request):
     display_user = request.user
     user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
     if not user_has_entries:
-        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
         for demo_username in demo_usernames:
             demo_user = User.objects.filter(username=demo_username).first()
             if demo_user and TimeEntry.objects.filter(user=demo_user).exists():

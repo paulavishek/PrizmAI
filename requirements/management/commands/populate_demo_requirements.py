@@ -29,9 +29,9 @@ class Command(BaseCommand):
             return
 
         # Get demo users
-        alex = User.objects.filter(username='alex_chen_demo').first()
-        sam = User.objects.filter(username='sam_rivera_demo').first()
-        jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        alex = User.objects.filter(username='priya.sharma').first()
+        sam = User.objects.filter(username='marcus.chen').first()
+        jordan = User.objects.filter(username='elena.vasquez').first()
         if not alex:
             self.stdout.write(self.style.WARNING('Demo users not found. Skipping.'))
             return

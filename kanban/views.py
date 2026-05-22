@@ -2108,7 +2108,7 @@ def create_board(request):
 
             # Auto-add demo personas when creating a board in demo/sandbox mode
             if demo_mode:
-                demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+                demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 for demo_user in User.objects.filter(username__in=demo_usernames):
                     BoardMembership.objects.get_or_create(
                         board=board, user=demo_user,
@@ -2509,7 +2509,7 @@ def task_detail(request, task_id):
 
     # RBAC: check view permission on the parent board.
     # Demo bypass: skip RBAC when the board lives in a demo workspace so that
-    # sample-data tasks (e.g. from alex_chen_demo shown on the time tracking
+    # sample-data tasks (e.g. from priya.sharma shown on the time tracking
     # dashboard) remain accessible to users browsing in demo mode.
     from kanban.permissions import is_demo_context
     if not is_demo_context(request, board=board) and not request.user.has_perm('prizmai.view_board', board):
@@ -5954,11 +5954,11 @@ def load_demo_data(request):
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             
             if not demo_orgs.exists():
-                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data using: python manage.py populate_test_data')
+                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data using: python manage.py populate_all_demo_data --reset')
                 return redirect('dashboard')
-            
+
             # Get the demo boards
-            demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
+            demo_board_names = ['Software Development']
             demo_boards = Board.objects.filter(
                 organization__in=demo_orgs,
                 name__in=demo_board_names

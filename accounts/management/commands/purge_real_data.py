@@ -2,9 +2,9 @@
 Management command to purge all real user accounts and their artifacts.
 
 Keeps only the three demo personas and their demo board:
-  - alex_chen_demo  (Alex Chen)
-  - sam_rivera_demo (Sam Rivera)
-  - jordan_taylor_demo (Jordan Taylor)
+  - priya.sharma  (Alex Chen)
+  - marcus.chen (Sam Rivera)
+  - elena.vasquez (Jordan Taylor)
   - demo_admin_solo (Solo demo admin)
 
 The "Demo - Acme Corporation" organisation and "Software Development" board
@@ -16,7 +16,7 @@ The demo organisation's `created_by` is set to the first Django superuser by
 `create_demo_organisation`.  Deleting that superuser would cascade-delete the
 entire demo org.  This command first re-assigns `created_by` on the demo org
 (and on any other demo artefacts that reference non-demo users) to
-alex_chen_demo, so the CASCADE is harmless.
+priya.sharma, so the CASCADE is harmless.
 
 Usage:
     python manage.py purge_real_data
@@ -33,9 +33,9 @@ from django.db import transaction
 # Demo identity constants  (must match create_demo_organization.py)
 # ---------------------------------------------------------------------------
 DEMO_USERNAMES = {
-    'alex_chen_demo',
-    'sam_rivera_demo',
-    'jordan_taylor_demo',
+    'priya.sharma',
+    'marcus.chen',
+    'elena.vasquez',
     'demo_admin_solo',
 }
 
@@ -89,10 +89,10 @@ class Command(BaseCommand):
             ))
             return
 
-        alex = User.objects.filter(username='alex_chen_demo').first()
+        alex = User.objects.filter(username='priya.sharma').first()
         if not alex:
             self.stdout.write(self.style.ERROR(
-                'Demo user alex_chen_demo not found. '
+                'Demo user priya.sharma not found. '
                 'Run: python manage.py create_demo_organization first.'
             ))
             return
@@ -196,7 +196,7 @@ class Command(BaseCommand):
 
     def _step1_protect_demo_org(self, demo_org, alex):
         """
-        Re-assign created_by on the demo organisation to alex_chen_demo if it
+        Re-assign created_by on the demo organisation to priya.sharma if it
         currently points to a non-demo user (e.g., a superuser created by
         `create_demo_organization`).  Without this, deleting that superuser
         would CASCADE-delete the demo org.
@@ -209,7 +209,7 @@ class Command(BaseCommand):
             demo_org.created_by = alex
             demo_org.save(update_fields=['created_by'])
             self.stdout.write(
-                self.style.SUCCESS(f'  ✓ demo org created_by reassigned: {old} → alex_chen_demo')
+                self.style.SUCCESS(f'  ✓ demo org created_by reassigned: {old} → priya.sharma')
             )
             changed = True
 
@@ -224,7 +224,7 @@ class Command(BaseCommand):
                 qs.update(created_by=alex)
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'  ✓ {count} demo Board(s) reassigned to alex_chen_demo'
+                        f'  ✓ {count} demo Board(s) reassigned to priya.sharma'
                     )
                 )
                 changed = True

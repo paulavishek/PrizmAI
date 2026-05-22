@@ -40,8 +40,8 @@ class Command(BaseCommand):
             self.stdout.write('  Please run: python manage.py create_demo_organization')
             return
 
-        # Get a demo user to be the author (prefer alex_chen_demo)
-        demo_user = User.objects.filter(username='alex_chen_demo').first()
+        # Get a demo user to be the author (prefer priya.sharma)
+        demo_user = User.objects.filter(username='priya.sharma').first()
         if not demo_user:
             demo_user = User.objects.filter(profile__organization=demo_org).first()
         if not demo_user:

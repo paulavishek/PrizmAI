@@ -56,9 +56,9 @@ class Command(BaseCommand):
 
         # Get demo users
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
-        self.alex = User.objects.filter(username='alex_chen_demo').first()
-        self.sam = User.objects.filter(username='sam_rivera_demo').first()
-        self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
+        self.alex = User.objects.filter(username='priya.sharma').first()
+        self.sam = User.objects.filter(username='marcus.chen').first()
+        self.jordan = User.objects.filter(username='elena.vasquez').first()
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
@@ -125,10 +125,10 @@ class Command(BaseCommand):
                     'description': 'Team updates, announcements, and general discussions',
                     'messages': [
                         {'author': 'alex', 'content': 'Good morning team! 🌅 Ready for our sprint planning today?', 'minutes_ago': 180},
-                        {'author': 'sam', 'content': 'Morning @alex_chen_demo! Yes, I finished reviewing the backlog items.', 'minutes_ago': 175},
+                        {'author': 'sam', 'content': 'Morning @priya.sharma! Yes, I finished reviewing the backlog items.', 'minutes_ago': 175},
                         {'author': 'demo_admin', 'content': 'Great work everyone! The API integration is looking solid. 👏', 'minutes_ago': 120},
                         {'author': 'sam', 'content': '@demo_admin_solo Thank you! I ran into a small issue with the OAuth flow, but resolved it.', 'minutes_ago': 115},
-                        {'author': 'alex', 'content': 'Quick update: Client meeting moved to 3 PM. @sam_rivera_demo can you prepare the demo?', 'minutes_ago': 60},
+                        {'author': 'alex', 'content': 'Quick update: Client meeting moved to 3 PM. @marcus.chen can you prepare the demo?', 'minutes_ago': 60},
                         {'author': 'sam', 'content': 'Absolutely! I\'ll have the staging environment ready by 2:30 PM.', 'minutes_ago': 55},
                         {'author': 'demo_admin', 'content': 'Perfect. I\'ll update the presentation slides with our latest metrics.', 'minutes_ago': 45},
                     ]
@@ -138,7 +138,7 @@ class Command(BaseCommand):
                     'description': 'Technical questions, debugging help, and code reviews',
                     'messages': [
                         {'author': 'sam', 'content': 'Has anyone encountered issues with the database migration on PostgreSQL 15?', 'minutes_ago': 240},
-                        {'author': 'demo_admin', 'content': '@sam_rivera_demo Yes! Try running `python manage.py migrate --fake-initial` first.', 'minutes_ago': 235},
+                        {'author': 'demo_admin', 'content': '@marcus.chen Yes! Try running `python manage.py migrate --fake-initial` first.', 'minutes_ago': 235},
                         {'author': 'sam', 'content': 'That worked! Thanks @demo_admin_solo 🙏', 'minutes_ago': 230},
                         {'author': 'alex', 'content': 'Good tip! I\'ll add this to our troubleshooting docs.', 'minutes_ago': 200},
                         {'author': 'sam', 'content': 'Also, the WebSocket connection is dropping occasionally. Need to investigate.', 'minutes_ago': 90},
@@ -149,7 +149,7 @@ class Command(BaseCommand):
                     'name': 'Code Reviews',
                     'description': 'Pull request discussions and code review feedback',
                     'messages': [
-                        {'author': 'demo_admin', 'content': 'Just submitted PR #142 for the new authentication module. @sam_rivera_demo could you review?', 'minutes_ago': 300},
+                        {'author': 'demo_admin', 'content': 'Just submitted PR #142 for the new authentication module. @marcus.chen could you review?', 'minutes_ago': 300},
                         {'author': 'sam', 'content': 'On it! Give me about 30 minutes. 🔍', 'minutes_ago': 295},
                         {'author': 'sam', 'content': 'Reviewed! LGTM with minor suggestions. Left a few comments on the token refresh logic.', 'minutes_ago': 260},
                         {'author': 'demo_admin', 'content': 'Great feedback! I\'ll address those comments and update the PR.', 'minutes_ago': 255},
@@ -498,7 +498,7 @@ class Command(BaseCommand):
             {'author': 'alex', 'content': 'Great progress on this! Let me know if you need any help.'},
             {'author': 'sam', 'content': 'I\'ve started working on this. Should have an update by EOD.'},
             {'author': 'jordan', 'content': '@demo_admin_solo Can you review the latest changes?'},
-            {'author': 'demo_admin', 'content': 'Looks good! Moving this to review. @sam_rivera_demo please verify.'},
+            {'author': 'demo_admin', 'content': 'Looks good! Moving this to review. @marcus.chen please verify.'},
             {'author': 'sam', 'content': 'Verified and tested. Ready for production! 🚀'},
         ]
 
