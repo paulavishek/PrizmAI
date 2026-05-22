@@ -140,7 +140,7 @@ This is the most important thing to understand. The Stress Test page shows two c
 
 #### 🎯 Attack Scenarios — "Mark Addressed"
 
-An attack scenario is something the AI *invented* as a hypothetical future threat. "Sam Rivera Vanishes" didn't happen — the AI simulated it because Sam has 11 tasks and no backup.
+An attack scenario is something the AI *invented* as a hypothetical future threat. "Marcus Chen Vanishes" didn't happen — the AI simulated it because Marcus has 11 tasks and no backup.
 
 **"Mark Addressed"** means: *"I, the project manager, have read this scenario, I understand the risk it describes, and I am actively watching for the early warning signs."*
 
@@ -150,7 +150,7 @@ The AI gives credit (3–8 points) for addressed scenarios because a team that's
 
 #### 💉 Vaccines — "Mark as Applied"
 
-A vaccine is a **structural change** the AI prescribes to close the specific gap that made the attack possible. "Implement Critical Role Redundancy" means: actually cross-train a second person on Sam's top tasks, document that knowledge, and schedule regular knowledge-transfer sessions.
+A vaccine is a **structural change** the AI prescribes to close the specific gap that made the attack possible. "Implement Critical Role Redundancy" means: actually cross-train a second person on Marcus's top tasks, document that knowledge, and schedule regular knowledge-transfer sessions.
 
 **"Mark as Applied"** means: *"We have actually made this structural change."* The budget contingency exists. The cross-training happened. The dependency was decoupled.
 
@@ -815,8 +815,11 @@ cp .env.example .env
 # Apply migrations
 python manage.py migrate
 
-# (Optional) Populate demo boards with sample data
-python manage.py populate_test_data
+# (Optional) Set up the demo organisation, personas, and board structure
+python manage.py create_demo_organization
+
+# (Optional) Populate the Software Development demo board with tasks, milestones, and dependencies
+python manage.py populate_all_demo_data
 
 # (Optional) Populate PrizmDiscovery with demo ideas
 python manage.py populate_discovery_demo_data
@@ -831,19 +834,22 @@ Open [http://localhost:8000](http://localhost:8000) and sign up to get started.
 
 ## Demo Data & Test Accounts
 
-PrizmAI ships with a demo-mode toggle that gives you access to pre-populated demo boards — a software development sprint, a bug-tracking workflow, and a marketing campaign — each populated with realistic tasks, milestones, budgets, and dependencies. All demo dates are calculated relative to today so the boards always appear current.
+PrizmAI ships with a demo-mode toggle that gives you access to a pre-populated **Software Development** board — a realistic mid-flight project with 28 child tasks across 4 phases, 4 epics, 3 Gantt milestones, 21 task dependencies, budgets, time entries, and stakeholders. All demo dates are calculated relative to today so the board always appears current.
 
-To populate the demo data, run the setup commands first:
+To populate the demo data, run the setup commands in order:
 
 ```bash
-# Core demo boards (software sprint, bug tracker, marketing campaign)
-python manage.py populate_test_data
+# 1. Create the demo organisation, board structure, and three personas
+python manage.py create_demo_organization
 
-# PrizmDiscovery inbox with 8 scored demo ideas across all four quadrants
+# 2. Seed the Software Development board with tasks, milestones, dependencies, and all related data
+python manage.py populate_all_demo_data
+
+# 3. (Optional) Populate PrizmDiscovery with 8 scored demo ideas across all four quadrants
 python manage.py populate_discovery_demo_data
 ```
 
-After signing up, activate **demo mode** from the UI to explore the sample boards.
+After signing up, activate **demo mode** from the UI to explore the sample board.
 
 ### Demo Test Accounts
 
@@ -851,15 +857,17 @@ To explore without creating an account:
 
 | Username | Password |
 |---|---|
-| `alex_chen_demo` | `demo123` |
-| `sam_rivera_demo` | `demo123` |
-| `jordan_taylor_demo` | `demo123` |
+| `priya.sharma` | `DemoUser@2026` |
+| `marcus.chen` | `DemoUser@2026` |
+| `elena.vasquez` | `DemoUser@2026` |
+
+**Priya Sharma** (Backend Lead) is the board owner. **Marcus Chen** (Frontend/UX) and **Elena Vasquez** (DevOps/QA) are members. All three are synthetic personas with `@demo.prizmai.local` email addresses — they exist solely within the demo workspace and cannot log in to real workspaces.
 
 Demo accounts can explore all demo boards and use every read feature freely, but cannot make permanent changes — create, edit, and delete actions are blocked to keep the shared demo environment clean for everyone.
 
 > Demo accounts have rate-limited AI features (5 calls per 10 minutes). Create your own account for unrestricted AI access.
 
-> **Want to experiment freely?** Enter demo mode and PrizmAI creates a private, persistent copy of all demo boards with full write access — just for you. See the [Demo Experience — Personal Sandbox](#demo-experience--personal-sandbox) section for details.
+> **Want to experiment freely?** Enter demo mode and PrizmAI creates a private, persistent copy of the demo board with full write access — just for you. See the [Demo Experience — Personal Sandbox](#demo-experience--personal-sandbox) section for details.
 
 ### Keeping Demo Data Fresh
 
