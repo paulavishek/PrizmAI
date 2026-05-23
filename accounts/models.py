@@ -326,6 +326,16 @@ class GoogleCalendarToken(models.Model):
         default=True,
         help_text="Master toggle. When False, no sync happens even if the token is valid.",
     )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the most recent successful calendar sync.",
+    )
+    last_sync_error = models.TextField(
+        blank=True,
+        default="",
+        help_text="Error message from the most recent failed sync attempt, if any.",
+    )
     connected_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

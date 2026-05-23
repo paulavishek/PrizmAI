@@ -189,7 +189,7 @@ class UserProfileForm(forms.ModelForm):
             'rows': 3,
             'placeholder': 'Enter skills separated by commas (e.g., Python, JavaScript, Project Management)'
         }),
-        help_text='Enter your skills separated by commas. Example: Python, Django, React, AWS',
+        help_text='Enter your skills separated by commas. Example: Python, Django, React, AWS. Skill matching is case-insensitive (e.g., "python" matches "Python").',
         label='Skills'
     )
     

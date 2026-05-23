@@ -25,6 +25,7 @@ def sync_task_to_calendar(self, task_id):
 
     Token refresh is handled automatically by google.oauth2.credentials.Credentials.
     """
+    token_obj = None
     try:
         from django.utils import timezone as tz
         from googleapiclient.discovery import build
@@ -159,9 +160,23 @@ def sync_task_to_calendar(self, task_id):
             task.google_calendar_event_id = created.get("id")
             task.save(update_fields=["google_calendar_event_id"])
 
+        # Record successful sync
+        from django.utils import timezone as _tz
+        token_obj.last_synced_at = _tz.now()
+        token_obj.last_sync_error = ""
+        token_obj.save(update_fields=["last_synced_at", "last_sync_error", "updated_at"])
+
     except Exception as exc:
         error_msg = str(exc)
         logger.error(f"sync_task_to_calendar task={task_id} failed: {error_msg}", exc_info=True)
+
+        # Persist the error so the profile page can surface it to the user.
+        try:
+            if token_obj is not None:
+                token_obj.last_sync_error = error_msg[:500]
+                token_obj.save(update_fields=["last_sync_error", "updated_at"])
+        except Exception:
+            pass
 
         # If the Google Calendar API itself is disabled in the Cloud project,
         # or the OAuth scope was rejected, retrying won't help — mark the token
