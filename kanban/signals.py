@@ -1508,23 +1508,67 @@ def create_board_preset_for_board(sender, instance, created, **kwargs):
 
 
 # ---------------------------------------------------------------------------
+# Workload tracking — keep UserProfile.current_workload_hours up to date
+# ---------------------------------------------------------------------------
+
+def _recalc_user_workload(user):
+    """Recalculate and persist current_workload_hours for a user's profile."""
+    from django.db.models import Q as _Q
+    try:
+        profile = user.profile
+    except Exception:
+        return
+    active_count = user.assigned_tasks.exclude(
+        _Q(column__name__icontains='done') | _Q(column__name__icontains='complete')
+    ).count()
+    profile.current_workload_hours = active_count * 8
+    profile.save(update_fields=['current_workload_hours'])
+
+
+@receiver(post_save, sender=Task)
+def update_assignee_workload(sender, instance, created, **kwargs):
+    """Keep UserProfile.current_workload_hours current when tasks are assigned or column changes."""
+    from django.contrib.auth import get_user_model as _get_user_model
+    AuthUser = _get_user_model()
+
+    if instance.assigned_to_id:
+        _recalc_user_workload(instance.assigned_to)
+
+    old_id = getattr(instance, '_old_assigned_to_id', None)
+    if old_id and old_id != instance.assigned_to_id:
+        try:
+            _recalc_user_workload(AuthUser.objects.get(pk=old_id))
+        except AuthUser.DoesNotExist:
+            pass
+
+
+@receiver(post_delete, sender=Task)
+def update_assignee_workload_on_delete(sender, instance, **kwargs):
+    """Recalculate workload when a task is deleted."""
+    if instance.assigned_to:
+        _recalc_user_workload(instance.assigned_to)
+
+
+# ---------------------------------------------------------------------------
 # Google Calendar sync — track due_date changes before save
 # ---------------------------------------------------------------------------
 
 @receiver(pre_save, sender=Task)
 def track_due_date_change(sender, instance, **kwargs):
     """
-    Store the old due_date on the instance so the post_save signal can decide
-    whether to trigger a Calendar sync.
+    Store old due_date and assigned_to_id so post_save signals can react to changes.
     """
     if instance.pk:
         try:
             old = Task.objects.get(pk=instance.pk)
             instance._old_due_date = old.due_date
+            instance._old_assigned_to_id = old.assigned_to_id
         except Task.DoesNotExist:
             instance._old_due_date = None
+            instance._old_assigned_to_id = None
     else:
         instance._old_due_date = None
+        instance._old_assigned_to_id = None
 
 
 @receiver(post_save, sender=Task)

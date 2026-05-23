@@ -236,7 +236,19 @@
                             {% if token.sync_enabled %}Sync Active{% else %}Sync Paused{% endif %}
                         </span>
                         <small class="text-muted">Connected {{ token.connected_at|date:"M j, Y" }}</small>
+                        {% if token.last_synced_at %}
+                        <small class="text-muted">Last synced: {{ token.last_synced_at|date:"M j, Y H:i" }}</small>
+                        {% endif %}
                     </div>
+                    {% if token.last_sync_error %}
+                    <div class="alert alert-warning alert-sm d-flex align-items-start gap-2 py-2 px-3 mb-3" style="font-size:0.85rem;">
+                        <i class="bi bi-exclamation-triangle-fill mt-1 flex-shrink-0"></i>
+                        <div>
+                            <strong>Last sync failed:</strong> {{ token.last_sync_error }}
+                            <div class="mt-1 text-muted" style="font-size:0.8rem;">Check that your Google Calendar connection is still authorised, or disconnect and reconnect.</div>
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="d-flex gap-2 flex-wrap">
                         <form method="post" action="{% url 'google_calendar_toggle_sync' %}" class="d-inline">
                             {% csrf_token %}
