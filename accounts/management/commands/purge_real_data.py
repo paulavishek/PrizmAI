@@ -29,6 +29,8 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.db import transaction
 
+from accounts.demo_personas import DEMO_PERSONAS
+
 # ---------------------------------------------------------------------------
 # Demo identity constants  (must match create_demo_organization.py)
 # ---------------------------------------------------------------------------
@@ -89,10 +91,11 @@ class Command(BaseCommand):
             ))
             return
 
-        alex = User.objects.filter(username='priya.sharma').first()
+        lead_username = DEMO_PERSONAS['lead']['username']
+        alex = User.objects.filter(username=lead_username).first()
         if not alex:
             self.stdout.write(self.style.ERROR(
-                'Demo user priya.sharma not found. '
+                f'Demo user {lead_username} not found. '
                 'Run: python manage.py create_demo_organization first.'
             ))
             return

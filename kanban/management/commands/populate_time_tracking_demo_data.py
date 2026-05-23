@@ -25,6 +25,8 @@ from datetime import timedelta
 from decimal import Decimal
 import random
 
+from accounts.demo_personas import DEMO_PERSONAS
+
 from accounts.models import Organization
 from kanban.models import Board, Task
 from kanban.budget_models import TimeEntry
@@ -56,9 +58,9 @@ class Command(BaseCommand):
 
         # Get demo users
         demo_users = {
-            'alex': User.objects.filter(username='priya.sharma').first(),
-            'sam': User.objects.filter(username='marcus.chen').first(),
-            'jordan': User.objects.filter(username='elena.vasquez').first(),
+            'alex': User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first(),
+            'sam': User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first(),
+            'jordan': User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first(),
         }
         
         # Filter out None values

@@ -17,6 +17,8 @@ from django.utils import timezone
 from django.db import transaction
 from datetime import timedelta, datetime, time
 
+from accounts.demo_personas import DEMO_PERSONAS
+
 
 CHECKLIST_MAP = {
     # ── Sprint 0 ───────────────────────────────────────────────────────────────
@@ -320,9 +322,9 @@ class Command(BaseCommand):
 
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        alex = User.objects.filter(username='priya.sharma').first()
-        sam = User.objects.filter(username='marcus.chen').first()
-        jordan = User.objects.filter(username='elena.vasquez').first()
+        alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
         if not all([alex, sam, jordan]):
             self.stdout.write(self.style.ERROR('Demo users not found.'))
             return

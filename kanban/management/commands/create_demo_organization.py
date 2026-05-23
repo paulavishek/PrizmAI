@@ -15,6 +15,10 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from accounts.models import Organization, UserProfile
+from accounts.demo_personas import (
+    DEMO_PERSONAS, DEMO_EMAILS, DEMO_USERNAMES,
+    LEGACY_DEMO_USERNAMES, LEGACY_DEMO_EMAILS,
+)
 from kanban.models import Board, Column, BoardMembership
 from django.utils import timezone
 from django.db import transaction
@@ -83,19 +87,11 @@ class Command(BaseCommand):
         if demo_org:
             self.stdout.write(f'  Deleting demo organization: {demo_org.name}')
             
-            # Delete demo users entirely (including their profiles)
+            # Delete demo users entirely (including their profiles).
             # This must be done first as Users may have references.
             # Includes legacy usernames so a half-migrated DB is cleaned up.
-            demo_emails = [
-                'priya.sharma@demo.prizmai.local',
-                'marcus.chen@demo.prizmai.local',
-                'elena.vasquez@demo.prizmai.local',
-                # Legacy - remove old personas if still present
-                'alex.chen@demo.prizmai.local',
-                'sam.rivera@demo.prizmai.local',
-                'jordan.taylor@demo.prizmai.local',
-            ]
-            legacy_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+            demo_emails = list(DEMO_EMAILS) + list(LEGACY_DEMO_EMAILS)
+            legacy_usernames = list(LEGACY_DEMO_USERNAMES)
 
             for email in demo_emails:
                 try:
@@ -153,57 +149,16 @@ class Command(BaseCommand):
         return demo_org
 
     def create_demo_personas(self, demo_org):
-        """Create 3 demo personas as members of demo org"""
+        """Create 3 demo personas as members of demo org.
+
+        Persona definitions come from ``accounts.demo_personas.DEMO_PERSONAS``
+        — that module is the single source of truth for persona identifiers
+        when swapping demo personas in the future.
+        """
         self.stdout.write('\n2. Creating demo personas...')
-        
-        personas_data = [
-            {
-                'username': 'priya.sharma',
-                'email': 'priya.sharma@demo.prizmai.local',
-                'first_name': 'Priya',
-                'last_name': 'Sharma',
-                'org_role': 'admin',   # Owner of the Software Development board
-                'skills': [
-                    {'name': 'Python', 'level': 'Expert'},
-                    {'name': 'Django', 'level': 'Expert'},
-                    {'name': 'REST APIs', 'level': 'Expert'},
-                    {'name': 'PostgreSQL', 'level': 'Advanced'},
-                    {'name': 'System Architecture', 'level': 'Advanced'},
-                ],
-                'weekly_capacity': 40,
-            },
-            {
-                'username': 'marcus.chen',
-                'email': 'marcus.chen@demo.prizmai.local',
-                'first_name': 'Marcus',
-                'last_name': 'Chen',
-                'org_role': 'member',  # Frontend / UX
-                'skills': [
-                    {'name': 'JavaScript', 'level': 'Expert'},
-                    {'name': 'React', 'level': 'Advanced'},
-                    {'name': 'CSS / Tailwind', 'level': 'Advanced'},
-                    {'name': 'UX Design', 'level': 'Advanced'},
-                    {'name': 'Accessibility (WCAG)', 'level': 'Intermediate'},
-                ],
-                'weekly_capacity': 40,
-            },
-            {
-                'username': 'elena.vasquez',
-                'email': 'elena.vasquez@demo.prizmai.local',
-                'first_name': 'Elena',
-                'last_name': 'Vasquez',
-                'org_role': 'member',  # DevOps / QA
-                'skills': [
-                    {'name': 'Docker / Containers', 'level': 'Expert'},
-                    {'name': 'CI/CD (GitHub Actions)', 'level': 'Expert'},
-                    {'name': 'Google Cloud Platform', 'level': 'Advanced'},
-                    {'name': 'Test Automation', 'level': 'Advanced'},
-                    {'name': 'Security Scanning', 'level': 'Intermediate'},
-                ],
-                'weekly_capacity': 40,
-            }
-        ]
-        
+
+        personas_data = list(DEMO_PERSONAS.values())
+
         personas = []
         
         for persona_data in personas_data:
@@ -259,8 +214,10 @@ class Command(BaseCommand):
         """Create demo boards in the demo org"""
         self.stdout.write('\n3. Creating demo boards...')
 
-        # Priya Sharma is the Owner of the Software Development board
-        creator = personas[0]  # Priya Sharma
+        # The 'lead' persona (currently Priya Sharma) is the Owner of the
+        # Software Development board. ``personas[0]`` matches DEMO_PERSONAS.values()
+        # iteration order, which starts with 'lead'.
+        creator = personas[0]
 
         boards_data = [
             {
@@ -331,18 +288,16 @@ class Command(BaseCommand):
         Preserves existing real user memberships (non-demo users)."""
         self.stdout.write('\n4. Assigning board memberships...')
         
-        # Role mapping based on persona
+        # Role mapping derived from DEMO_PERSONAS: org_role 'admin' is the
+        # board Owner; everyone else maps to 'member'.
         role_map = {
-            'priya.sharma':   'owner',   # Priya Sharma - Backend/API lead, board owner
-            'marcus.chen':    'member',  # Marcus Chen - Frontend/UX
-            'elena.vasquez':  'member',  # Elena Vasquez - DevOps/QA
+            p['username']: ('owner' if p['org_role'] == 'admin' else 'member')
+            for p in DEMO_PERSONAS.values()
         }
 
         # Usernames that identify any demo persona (legacy or new) - preserved when
         # we scan existing membership for real users to keep around.
-        demo_usernames = set(role_map.keys()) | {
-            'alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo',  # legacy
-        }
+        demo_usernames = set(role_map.keys()) | set(LEGACY_DEMO_USERNAMES)
 
         total_assigned = 0
 

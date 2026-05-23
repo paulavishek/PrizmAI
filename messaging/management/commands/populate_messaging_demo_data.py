@@ -20,6 +20,7 @@ import random
 
 from kanban.models import Board, Task
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS
 from messaging.models import (
     ChatRoom, ChatMessage, Notification, 
     FileAttachment, TaskThreadComment
@@ -56,9 +57,9 @@ class Command(BaseCommand):
 
         # Get demo users
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
-        self.alex = User.objects.filter(username='priya.sharma').first()
-        self.sam = User.objects.filter(username='marcus.chen').first()
-        self.jordan = User.objects.filter(username='elena.vasquez').first()
+        self.alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        self.sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        self.jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')

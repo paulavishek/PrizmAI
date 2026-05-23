@@ -14,6 +14,7 @@ from datetime import timedelta
 from wiki.models import WikiPage, WikiCategory, WikiLink
 from kanban.models import Board, Task
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS
 
 
 class Command(BaseCommand):
@@ -41,7 +42,7 @@ class Command(BaseCommand):
             return
 
         # Get a demo user to be the author (prefer priya.sharma)
-        demo_user = User.objects.filter(username='priya.sharma').first()
+        demo_user = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
         if not demo_user:
             demo_user = User.objects.filter(profile__organization=demo_org).first()
         if not demo_user:

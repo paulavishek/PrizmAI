@@ -24,6 +24,7 @@ import random
 
 from kanban.models import Board
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS
 from knowledge_graph.models import MemoryNode, MemoryConnection
 
 
@@ -62,9 +63,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'[OK] Found board: {self.sd_board.name} (ID: {self.sd_board.pk})'))
 
         # Get demo users
-        self.alex = User.objects.filter(username='priya.sharma').first()
-        self.sam = User.objects.filter(username='marcus.chen').first()
-        self.jordan = User.objects.filter(username='elena.vasquez').first()
+        self.alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        self.sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        self.jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
 
         if not self.alex:
             # Fallback to any demo user

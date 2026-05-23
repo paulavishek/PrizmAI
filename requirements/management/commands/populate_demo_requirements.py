@@ -6,6 +6,8 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from accounts.demo_personas import DEMO_PERSONAS
+
 User = get_user_model()
 
 
@@ -29,9 +31,9 @@ class Command(BaseCommand):
             return
 
         # Get demo users
-        alex = User.objects.filter(username='priya.sharma').first()
-        sam = User.objects.filter(username='marcus.chen').first()
-        jordan = User.objects.filter(username='elena.vasquez').first()
+        alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
         if not alex:
             self.stdout.write(self.style.WARNING('Demo users not found. Skipping.'))
             return
