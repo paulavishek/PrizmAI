@@ -188,10 +188,13 @@ def save_custom_field_values_from_post(task, post_data, user, files=None):
         is_blank = (len(raw_values) == 0)
 
         if fdef.field_type == FIELD_TYPE_BOOLEAN:
-            # Unchecked boxes don't post a value — that's not "blank", it's False.
-            is_blank = False
-            bool_val = bool(raw_values)
-            _upsert_value(task, fdef, user, value_boolean=bool_val)
+            raw = raw_values[0] if raw_values else ''
+            if raw == 'true':
+                _upsert_value(task, fdef, user, value_boolean=True)
+            elif raw == 'false':
+                _upsert_value(task, fdef, user, value_boolean=False)
+            else:
+                _upsert_value(task, fdef, user, value_boolean=None)
             continue
 
         if is_blank:

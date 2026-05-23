@@ -63,17 +63,14 @@ The view layer parses these into TaskCustomFieldValue rows.
                            {% if f.is_required %}required{% endif %}>
 
                 {% elif f.field_type == 'boolean' %}
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input"
-                               id="cf_bool_{{ f.field_id }}"
-                               name="custom_field_{{ f.field_id }}"
-                               value="1"
-                               {% if form_id %}form="{{ form_id }}"{% endif %}
-                               {% if f.value %}checked{% endif %}>
-                        <label class="form-check-label" for="cf_bool_{{ f.field_id }}">
-                            Yes
-                        </label>
-                    </div>
+                    <select class="form-select"
+                            name="custom_field_{{ f.field_id }}"
+                            {% if form_id %}form="{{ form_id }}"{% endif %}
+                            {% if f.is_required %}required{% endif %}>
+                        <option value=""    {% if f.value is None %}selected{% endif %}>Unknown</option>
+                        <option value="true"  {% if f.value == True %}selected{% endif %}>Yes</option>
+                        <option value="false" {% if f.value == False %}selected{% endif %}>No</option>
+                    </select>
 
                 {% elif f.field_type == 'list' %}
                     {% if f.is_multi_select %}
