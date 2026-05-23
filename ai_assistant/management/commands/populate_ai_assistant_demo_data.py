@@ -23,6 +23,7 @@ from ai_assistant.models import (
 )
 from kanban.models import Board, Task
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS
 
 
 class Command(BaseCommand):
@@ -156,7 +157,7 @@ class Command(BaseCommand):
         
         # Prioritize demo_admin_solo for solo demo mode, fall back to priya.sharma
         primary_user = demo_users.filter(username='demo_admin_solo').first() or \
-                       demo_users.filter(username='priya.sharma').first() or \
+                       demo_users.filter(username=DEMO_PERSONAS['lead']['username']).first() or \
                        demo_users.first()
         secondary_user = demo_users.exclude(pk=primary_user.pk).first()
         

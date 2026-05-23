@@ -20,6 +20,8 @@ from datetime import timedelta, datetime, time
 from decimal import Decimal
 import json
 
+from accounts.demo_personas import DEMO_PERSONAS
+
 
 class Command(BaseCommand):
     help = 'Populate demo data for features missing from the official demo board'
@@ -58,9 +60,9 @@ class Command(BaseCommand):
         self.stdout.write(f'  Board: {board.name} (id={board.id})')
 
         # Get demo users
-        alex = User.objects.filter(username='priya.sharma').first()
-        sam = User.objects.filter(username='marcus.chen').first()
-        jordan = User.objects.filter(username='elena.vasquez').first()
+        alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
 
         if not all([alex, sam, jordan]):
             self.stdout.write(self.style.ERROR('[FAIL] Demo users not found.'))

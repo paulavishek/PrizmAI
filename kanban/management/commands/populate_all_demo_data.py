@@ -37,6 +37,9 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Organization
+from accounts.demo_personas import (
+    DEMO_PERSONAS, DEMO_USERNAMES, LEGACY_DEMO_USERNAMES, LEGACY_DEMO_EMAILS,
+)
 from kanban.models import (
     Board, Column, Task, TaskLabel, Comment, BoardMembership, ChecklistItem,
     Workspace,
@@ -69,13 +72,12 @@ LSS_WASTE = 'waste'
 # risk_likelihood / risk_impact are IntegerFields 1=Low, 2=Med, 3=High
 RISK = {'low': 1, 'medium': 2, 'high': 3}
 
-PERSONA_USERNAMES = ('priya.sharma', 'marcus.chen', 'elena.vasquez')
-LEGACY_USERNAMES = ('alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo')
-LEGACY_EMAILS = (
-    'alex.chen@demo.prizmai.local',
-    'sam.rivera@demo.prizmai.local',
-    'jordan.taylor@demo.prizmai.local',
-)
+# Demo persona identifiers come from accounts.demo_personas — the single
+# source of truth for username/email/role. Re-exported under the old local
+# names so internal references stay short.
+PERSONA_USERNAMES = DEMO_USERNAMES
+LEGACY_USERNAMES = LEGACY_DEMO_USERNAMES
+LEGACY_EMAILS = LEGACY_DEMO_EMAILS
 LEGACY_BOARD_NAMES = ('Marketing Campaign', 'Bug Tracking', 'Software Project')
 
 # Phase labels stored on Task.phase (CharField). Must match the bare "Phase N"
@@ -189,9 +191,9 @@ class Command(BaseCommand):
             self.stdout.write('One or more personas missing - running create_demo_organization...')
             call_command('create_demo_organization')
 
-        self.priya = User.objects.get(username='priya.sharma')
-        self.marcus = User.objects.get(username='marcus.chen')
-        self.elena = User.objects.get(username='elena.vasquez')
+        self.priya = User.objects.get(username=DEMO_PERSONAS['lead']['username'])
+        self.marcus = User.objects.get(username=DEMO_PERSONAS['frontend']['username'])
+        self.elena = User.objects.get(username=DEMO_PERSONAS['devops']['username'])
 
         # Board: created by create_demo_organization
         try:

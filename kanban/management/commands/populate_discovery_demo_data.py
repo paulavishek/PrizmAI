@@ -12,6 +12,8 @@ them fresh. This ensures stages and scores are always restored to seed state
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from accounts.demo_personas import DEMO_PERSONAS
+
 
 class Command(BaseCommand):
     help = 'Seed PrizmDiscovery demo ideas for the Acme Corporation demo organisation.'
@@ -48,13 +50,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE('Discovery demo ideas cleared - recreating fresh.'))
 
         # ── Demo users ─────────────────────────────────────────────────
-        alex = User.objects.filter(username='priya.sharma').first()
-        sam = User.objects.filter(username='marcus.chen').first()
-        jordan = User.objects.filter(username='elena.vasquez').first()
+        alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
 
         if not (alex and sam and jordan):
             self.stderr.write(self.style.ERROR(
-                'Demo users not found (priya.sharma, marcus.chen, elena.vasquez). '
+                f'Demo users not found ({", ".join(p["username"] for p in DEMO_PERSONAS.values())}). '
                 'Run create_demo_organization first.'
             ))
             return

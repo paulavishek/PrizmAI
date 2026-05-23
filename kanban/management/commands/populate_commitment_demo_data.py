@@ -19,6 +19,7 @@ from datetime import timedelta, date, time, datetime
 import json
 
 from accounts.models import Organization
+from accounts.demo_personas import DEMO_PERSONAS
 from kanban.models import Board, Task
 from kanban.commitment_models import (
     CommitmentProtocol,
@@ -63,9 +64,9 @@ class Command(BaseCommand):
             return
 
         # --- Get demo users ---
-        alex = User.objects.filter(username='priya.sharma').first()
-        sam = User.objects.filter(username='marcus.chen').first()
-        jordan = User.objects.filter(username='elena.vasquez').first()
+        alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
         if not all([alex, sam, jordan]):
             self.stdout.write(self.style.ERROR(
                 '[FAIL] Demo users not found. Run create_demo_organization first.'

@@ -10,6 +10,7 @@ import time
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
+from accounts.demo_personas import DEMO_PERSONAS
 from ai_assistant.models import AIAssistantSession
 from ai_assistant.utils.chatbot_service import TaskFlowChatbotService
 from ai_assistant.utils.spectra_data_fetchers import (
@@ -22,6 +23,14 @@ from ai_assistant.utils.spectra_data_fetchers import (
     DONE_COLUMN_NAMES,
 )
 from kanban.models import Board
+
+# Persona display names + first-name aliases for assertion matching.
+LEAD_NAME = DEMO_PERSONAS['lead']['display_name']           # e.g. "Priya Sharma"
+FRONTEND_NAME = DEMO_PERSONAS['frontend']['display_name']   # e.g. "Marcus Chen"
+DEVOPS_NAME = DEMO_PERSONAS['devops']['display_name']       # e.g. "Elena Vasquez"
+LEAD_FIRST = DEMO_PERSONAS['lead']['first_name'].lower()
+FRONTEND_FIRST = DEMO_PERSONAS['frontend']['first_name'].lower()
+DEVOPS_FIRST = DEMO_PERSONAS['devops']['first_name'].lower()
 
 
 # ── Expected answers derived from VDF verification on board 78 ───────────
@@ -79,9 +88,14 @@ CHECKS = [
             ("only 2", lambda r: "2" in r),
         ],
     ),
-    # Q7: Sam Rivera's tasks (Bug 5 - must list exactly his tasks)
+    # Q7: Frontend persona's tasks (Bug 5 - must list exactly their tasks).
+    # NOTE: task-list assertions below reflect the OLD persona's assignments
+    # and will need re-baselining against the current seeder
+    # (populate_all_demo_data.py) when running this regression. The persona
+    # name in the question is now driven by DEMO_PERSONAS so a future swap
+    # doesn't break the test wiring.
     (
-        "Show me all tasks assigned to Sam Rivera",
+        f"Show me all tasks assigned to {FRONTEND_NAME}",
         [
             ("Performance Optimization", lambda r: "performance optimization" in r.lower()),
             ("Security Audit", lambda r: "security audit" in r.lower()),
@@ -111,9 +125,9 @@ CHECKS = [
             ("User Management API blocks 2", lambda r: "user management" in r.lower()),
         ],
     ),
-    # Q10: Alex Chen's tasks
+    # Q10: Lead persona's tasks (task list may need re-baselining — see Q7 note).
     (
-        "What tasks are assigned to Alex Chen?",
+        f"What tasks are assigned to {LEAD_NAME}?",
         [
             ("Core Features Code Review", lambda r: "core features" in r.lower()),
             ("User Onboarding Flow", lambda r: "user onboarding" in r.lower() or "onboarding flow" in r.lower()),
@@ -148,9 +162,9 @@ CHECKS = [
     (
         "Show me the team workload distribution",
         [
-            ("Jordan Taylor", lambda r: "jordan" in r.lower()),
-            ("Sam Rivera", lambda r: "sam" in r.lower()),
-            ("Alex Chen", lambda r: "alex" in r.lower()),
+            (DEVOPS_NAME, lambda r: DEVOPS_FIRST in r.lower()),
+            (FRONTEND_NAME, lambda r: FRONTEND_FIRST in r.lower()),
+            (LEAD_NAME, lambda r: LEAD_FIRST in r.lower()),
         ],
     ),
     # Q14: Unassigned tasks
