@@ -44,7 +44,14 @@ The view layer parses these into TaskCustomFieldValue rows.
                 {% elif f.field_type == 'number' %}
                     <input type="number" step="any" class="form-control"
                            name="custom_field_{{ f.field_id }}"
-                           value="{{ f.value|default_if_none:'' }}"
+                           value="{{ f.display|default_if_none:'' }}"
+                           {% if form_id %}form="{{ form_id }}"{% endif %}
+                           {% if f.is_required %}required{% endif %}>
+
+                {% elif f.field_type == 'integer' %}
+                    <input type="number" step="1" class="form-control"
+                           name="custom_field_{{ f.field_id }}"
+                           value="{{ f.display|default_if_none:'' }}"
                            {% if form_id %}form="{{ form_id }}"{% endif %}
                            {% if f.is_required %}required{% endif %}>
 

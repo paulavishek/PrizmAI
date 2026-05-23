@@ -153,6 +153,7 @@ def save_custom_field_values_from_post(task, post_data, user, files=None):
         TaskCustomFieldValue,
         FIELD_TYPE_BOOLEAN,
         FIELD_TYPE_DATE,
+        FIELD_TYPE_INTEGER,
         FIELD_TYPE_LIST,
         FIELD_TYPE_LONG_TEXT,
         FIELD_TYPE_NUMBER,
@@ -211,6 +212,14 @@ def save_custom_field_values_from_post(task, post_data, user, files=None):
                 errors[fdef.name] = "must be a number"
                 continue
             _upsert_value(task, fdef, user, value_number=num)
+
+        elif fdef.field_type == FIELD_TYPE_INTEGER:
+            try:
+                int_val = int(str(raw_values[0]).strip())
+            except (ValueError, TypeError):
+                errors[fdef.name] = "must be a whole number"
+                continue
+            _upsert_value(task, fdef, user, value_number=Decimal(int_val))
 
         elif fdef.field_type == FIELD_TYPE_DATE:
             try:
@@ -308,6 +317,7 @@ def _resolve_workspace_id(task):
 
 def _format_default_display(fdef):
     """String form of a field's default for template rendering."""
+    from decimal import Decimal
     default = fdef.resolved_default()
     if default is None:
         return ''
@@ -315,4 +325,9 @@ def _format_default_display(fdef):
         return ', '.join(str(x) for x in default)
     if isinstance(default, bool):
         return 'Yes' if default else 'No'
+    if isinstance(default, int):
+        return str(default)
+    if isinstance(default, Decimal):
+        normalized = default.normalize()
+        return format(normalized, 'f') if normalized == normalized.to_integral_value() else str(normalized)
     return str(default)
