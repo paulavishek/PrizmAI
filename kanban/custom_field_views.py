@@ -31,11 +31,17 @@ from .custom_field_models import (
     FIELD_TYPE_LIST,
 )
 from .models import Workspace
-from .permissions import is_user_org_admin
+from .permissions import is_user_org_admin, is_demo_context
 
 
 def _require_workspace_admin(request, workspace):
-    """Permission gate: must be Org Admin of the workspace's organization."""
+    """Permission gate: must be Org Admin of the workspace's organization.
+
+    Demo workspaces bypass the org-admin and same-org checks so that any
+    authenticated user exploring the demo can freely manage custom fields.
+    """
+    if is_demo_context(request, workspace=workspace):
+        return None
     if not is_user_org_admin(request.user):
         return HttpResponseForbidden(
             "Only workspace admins can manage custom fields."

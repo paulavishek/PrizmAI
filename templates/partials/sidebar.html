@@ -356,6 +356,8 @@
                     {% endif %}
                     {% if can_rename_workspace and active_workspace %}
                     <li><a class="dropdown-item" href="{% url 'custom_field_list' active_workspace.pk %}"><i class="fas fa-tags me-2"></i>Custom Fields</a></li>
+                    {% elif is_viewing_demo and demo_workspace %}
+                    <li><a class="dropdown-item" href="{% url 'custom_field_list' demo_workspace.pk %}"><i class="fas fa-tags me-2"></i>Custom Fields</a></li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}"><i class="fas fa-robot me-2"></i>AI Usage</a></li>
