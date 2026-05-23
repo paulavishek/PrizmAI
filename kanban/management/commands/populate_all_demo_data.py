@@ -33,6 +33,7 @@ from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Organization
@@ -70,6 +71,11 @@ RISK = {'low': 1, 'medium': 2, 'high': 3}
 
 PERSONA_USERNAMES = ('priya.sharma', 'marcus.chen', 'elena.vasquez')
 LEGACY_USERNAMES = ('alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo')
+LEGACY_EMAILS = (
+    'alex.chen@demo.prizmai.local',
+    'sam.rivera@demo.prizmai.local',
+    'jordan.taylor@demo.prizmai.local',
+)
 LEGACY_BOARD_NAMES = ('Marketing Campaign', 'Bug Tracking', 'Software Project')
 
 # Phase labels stored on Task.phase (CharField). Must match the bare "Phase N"
@@ -122,6 +128,11 @@ class Command(BaseCommand):
 
             # Always: delete legacy boards from the demo org (Marketing/Bug Tracking)
             self._delete_legacy_demo_boards()
+
+            # Always: purge legacy demo persona accounts. Old User+BoardMembership
+            # rows would otherwise still appear in AI Resource Optimization and
+            # other per-board reports. Self-heals on every seeder invocation.
+            self._delete_legacy_demo_accounts()
 
             # Idempotency: if the board already has seed tasks AND we're not
             # resetting, this is a no-op (the heavy seed work has nothing safe
@@ -289,6 +300,63 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f'  [OK] Deleted legacy demo boards: {", ".join(deleted)}'
             ))
+
+    def _delete_legacy_demo_accounts(self):
+        """Neutralise old persona accounts (alex_chen_demo / sam_rivera_demo /
+        jordan_taylor_demo) so they stop appearing in AI Resource Optimization
+        and other per-board reports.
+
+        We deliberately do NOT ``delete()`` the User rows: ``Organization.created_by``
+        and several other FKs cascade-on-delete to the User, so removing a
+        legacy User would wipe the entire demo Organization, Workspace, Board,
+        Tasks, and historical training data.
+
+        Instead we:
+          1. Drop their BoardMembership rows on demo-org boards — this removes
+             them from the team-workload report query
+             (``User.objects.filter(board_memberships__board=board)``).
+          2. Drop their WorkspaceMembership rows on demo workspaces.
+          3. Set ``is_active=False`` so they can't log in.
+          4. Tag profile.is_demo_account=False so demo-only queries skip them.
+        """
+        from kanban.models import BoardMembership, WorkspaceMembership, Board, Workspace
+        from accounts.models import UserProfile
+
+        legacy_qs = User.objects.filter(
+            Q(username__in=LEGACY_USERNAMES) | Q(email__in=LEGACY_EMAILS)
+        )
+        legacy_ids = list(legacy_qs.values_list('id', flat=True))
+        if not legacy_ids:
+            return
+
+        # 1. Strip board memberships on demo-org boards
+        demo_board_ids = list(Board.objects.filter(
+            organization=self.demo_org
+        ).values_list('id', flat=True))
+        bm_deleted, _ = BoardMembership.objects.filter(
+            user_id__in=legacy_ids, board_id__in=demo_board_ids
+        ).delete()
+
+        # 2. Strip workspace memberships on demo workspaces
+        demo_ws_ids = list(Workspace.objects.filter(
+            organization=self.demo_org
+        ).values_list('id', flat=True))
+        wm_deleted, _ = WorkspaceMembership.objects.filter(
+            user_id__in=legacy_ids, workspace_id__in=demo_ws_ids
+        ).delete()
+
+        # 3. Deactivate accounts (prevents login + removes from active dropdowns)
+        legacy_qs.update(is_active=False)
+
+        # 4. Untag as demo accounts so demo-only filters exclude them
+        UserProfile.objects.filter(user_id__in=legacy_ids).update(is_demo_account=False)
+
+        names = list(legacy_qs.values_list('username', flat=True))
+        self.stdout.write(self.style.WARNING(
+            f'  [OK] Neutralised legacy demo accounts ({", ".join(names)}): '
+            f'{bm_deleted} board memberships, {wm_deleted} workspace memberships removed; '
+            f'accounts deactivated'
+        ))
 
     # ------------------------------------------------------------------
     # Labels
@@ -1745,11 +1813,18 @@ class Command(BaseCommand):
 
         Idempotent: uses get_or_create throughout so re-running is safe.
         """
-        workspace = self.board.workspace
+        try:
+            workspace = self.board.workspace
+        except Workspace.DoesNotExist:
+            workspace = None
         if workspace is None:
             workspace = Workspace.objects.filter(
                 organization=self.demo_org, is_demo=True
             ).first()
+            if workspace is not None:
+                # Self-heal: repoint board to the real workspace
+                self.board.workspace = workspace
+                self.board.save(update_fields=['workspace'])
         if workspace is None:
             self.stdout.write(self.style.WARNING(
                 '  [WARN] Custom fields: no demo workspace found — skipping.'

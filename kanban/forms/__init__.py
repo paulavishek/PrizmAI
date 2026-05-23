@@ -779,7 +779,7 @@ class TaskSearchForm(forms.Form):
             # For regular boards: show only actual board members (RBAC).
             from django.db.models import Q
             if getattr(board, 'is_official_demo_board', False):
-                demo_q = Q(username__endswith='_demo')
+                demo_q = Q(profile__is_demo_account=True)
                 if current_user:
                     demo_q |= Q(id=current_user.id)
                 self.fields['assignee'].queryset = User.objects.filter(

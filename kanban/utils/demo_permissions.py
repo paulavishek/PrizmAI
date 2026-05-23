@@ -204,7 +204,7 @@ class DemoPermissions:
         """
         descriptions = {
             'admin': {
-                'name': 'Alex Chen',
+                'name': 'Priya Sharma',
                 'title': 'Administrator',
                 'icon': 'fa-user-shield',
                 'description': 'Full access to all features and settings',
@@ -218,7 +218,7 @@ class DemoPermissions:
                 'cannot_do': []
             },
             'member': {
-                'name': 'Sam Rivera',
+                'name': 'Marcus Chen',
                 'title': 'Team Member',
                 'icon': 'fa-user',
                 'description': 'Create and edit tasks, limited administrative access',
@@ -237,7 +237,7 @@ class DemoPermissions:
                 ]
             },
             'viewer': {
-                'name': 'Jordan Taylor',
+                'name': 'Elena Vasquez',
                 'title': 'Viewer',
                 'icon': 'fa-eye',
                 'description': 'View-only access to boards and analytics',

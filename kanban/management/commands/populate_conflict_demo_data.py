@@ -118,8 +118,8 @@ class Command(BaseCommand):
                 {
                     'conflict_type': 'resource',
                     'severity': 'high',
-                    'title': 'Sam Rivera has excessive workload',
-                    'description': 'Sam has 11 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 8 tasks per developer and may cause delays or quality issues.',
+                    'title': 'Marcus Chen has excessive workload',
+                    'description': 'Marcus has 11 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 8 tasks per developer and may cause delays or quality issues.',
                     'conflict_data': {
                         'affected_user': 'marcus.chen',
                         'current_tasks': 11,
@@ -229,7 +229,7 @@ class Command(BaseCommand):
                         'task_1': 'Performance Optimization',
                         'task_2': 'Security Audit & Fixes',
                         'overlap_days': 5,
-                        'shared_resource': 'Sam Rivera'
+                        'shared_resource': 'Marcus Chen'
                     },
                     'ai_confidence_score': 72,
                     'suggested_resolutions': [

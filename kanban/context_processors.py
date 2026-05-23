@@ -219,8 +219,8 @@ def demo_context(request):
         # Role display names
         role_names = {
             'admin': 'Demo Admin (Solo)',
-            'member': 'Sam Rivera (Member)',
-            'viewer': 'Jordan Taylor (Viewer)'
+            'member': 'Marcus Chen (Member)',
+            'viewer': 'Elena Vasquez (Viewer)'
         }
         context['demo_role_display'] = role_names.get(
             context['current_demo_role'], 

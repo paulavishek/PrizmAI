@@ -68,7 +68,7 @@ class Command(BaseCommand):
 
         if not self.alex:
             # Fallback to any demo user
-            self.alex = User.objects.filter(username__endswith='_demo').first()
+            self.alex = User.objects.filter(profile__is_demo_account=True).first()
         if not self.sam:
             self.sam = self.alex
         if not self.jordan:
@@ -556,10 +556,10 @@ class Command(BaseCommand):
                 'node_type': 'conflict_resolution',
                 'title': 'Conflict resolved: ownership of Database Schema & Migrations task',
                 'content': (
-                    'A resource conflict was detected: both Sam Rivera and Jordan Taylor were '
+                    'A resource conflict was detected: both Priya Sharma and Elena Vasquez were '
                     'assigned as owners of the Database Schema & Migrations task (SD-10299). '
-                    'Resolved by clarifying Jordan owns the schema design and migration scripts; '
-                    'Sam owns the data migration pipeline and rollback procedures. '
+                    'Resolved by clarifying Priya owns the schema design and migration scripts; '
+                    'Elena owns the data migration pipeline and rollback procedures. '
                     'Resolution documented to prevent recurrence on future migration tasks.'
                 ),
                 'tags': ['conflict-resolution', 'resource-conflict', 'ownership', 'database'],
@@ -567,7 +567,7 @@ class Command(BaseCommand):
                 'context_data': {
                     'conflict_type': 'resource',
                     'task_ref': 'SD-10299',
-                    'parties': ['Sam Rivera', 'Jordan Taylor'],
+                    'parties': ['Priya Sharma', 'Elena Vasquez'],
                     'resolution': 'split_ownership',
                 },
                 'created_at': past(79),
@@ -578,7 +578,7 @@ class Command(BaseCommand):
                 'content': (
                     'A schedule conflict was detected: Integration Testing Suite (SD-10280) '
                     'and API Rate Limiting (SD-10279) both had the same target window with '
-                    'the same assignee (Jordan Taylor). Integration tests were moved 1 week '
+                    'the same assignee (Elena Vasquez). Integration tests were moved 1 week '
                     'later; API Rate Limiting retained priority. Conflict auto-detected by '
                     'schedule analysis.'
                 ),
@@ -587,7 +587,7 @@ class Command(BaseCommand):
                 'context_data': {
                     'conflict_type': 'schedule',
                     'tasks': ['SD-10280', 'SD-10279'],
-                    'assignee': 'Jordan Taylor',
+                    'assignee': 'Elena Vasquez',
                     'resolution': 'reprioritised_timeline',
                 },
                 'created_at': past(41),
