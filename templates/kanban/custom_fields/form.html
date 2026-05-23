@@ -55,9 +55,12 @@
             <label class="col-sm-3 col-form-label">Default value</label>
             <div class="col-sm-9">{{ form.default_text }}</div>
         </div>
-        <div class="row mb-3 cf-default-row" data-cf-type="number">
-            <label class="col-sm-3 col-form-label">Default number</label>
-            <div class="col-sm-9">{{ form.default_number }}</div>
+        <div class="row mb-3 cf-default-row" data-cf-type="number integer" id="cf-default-number-row">
+            <label class="col-sm-3 col-form-label" id="cf-default-number-label">Default number</label>
+            <div class="col-sm-9">
+                {{ form.default_number }}
+                <div class="form-text d-none" id="cf-integer-hint">Whole numbers only — no decimal places.</div>
+            </div>
         </div>
         <div class="row mb-3 cf-default-row" data-cf-type="date">
             <label class="col-sm-3 col-form-label">Default date</label>
@@ -173,12 +176,28 @@
     const typeSelect = document.querySelector('#id_field_type');
     const defaultRows = document.querySelectorAll('.cf-default-row');
 
+    const defaultNumberInput = document.querySelector('#id_default_number');
+    const defaultNumberLabel = document.querySelector('#cf-default-number-label');
+    const integerHint = document.querySelector('#cf-integer-hint');
+
     function refreshTypeVisibility() {
         const current = typeSelect ? typeSelect.value : '';
         defaultRows.forEach(row => {
             const supported = (row.dataset.cfType || '').split(' ');
             row.style.display = supported.includes(current) ? '' : 'none';
         });
+        // Adjust number input behaviour for integer vs decimal.
+        if (defaultNumberInput) {
+            if (current === 'integer') {
+                defaultNumberInput.setAttribute('step', '1');
+                if (defaultNumberLabel) defaultNumberLabel.textContent = 'Default integer';
+                if (integerHint) integerHint.classList.remove('d-none');
+            } else {
+                defaultNumberInput.setAttribute('step', 'any');
+                if (defaultNumberLabel) defaultNumberLabel.textContent = 'Default number';
+                if (integerHint) integerHint.classList.add('d-none');
+            }
+        }
     }
     if (typeSelect) {
         typeSelect.addEventListener('change', refreshTypeVisibility);

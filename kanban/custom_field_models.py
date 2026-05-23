@@ -24,6 +24,7 @@ from django.db.models import Q, UniqueConstraint
 FIELD_TYPE_TEXT = 'text'
 FIELD_TYPE_LONG_TEXT = 'long_text'
 FIELD_TYPE_NUMBER = 'number'
+FIELD_TYPE_INTEGER = 'integer'
 FIELD_TYPE_DATE = 'date'
 FIELD_TYPE_BOOLEAN = 'boolean'
 FIELD_TYPE_LIST = 'list'
@@ -32,6 +33,7 @@ FIELD_TYPE_CHOICES = [
     (FIELD_TYPE_TEXT, 'Text'),
     (FIELD_TYPE_LONG_TEXT, 'Long Text'),
     (FIELD_TYPE_NUMBER, 'Number'),
+    (FIELD_TYPE_INTEGER, 'Integer'),
     (FIELD_TYPE_DATE, 'Date'),
     (FIELD_TYPE_BOOLEAN, 'Boolean'),
     (FIELD_TYPE_LIST, 'List'),
@@ -112,6 +114,8 @@ class CustomFieldDefinition(models.Model):
             return self.default_text or None
         if ft == FIELD_TYPE_NUMBER:
             return self.default_number
+        if ft == FIELD_TYPE_INTEGER:
+            return int(self.default_number) if self.default_number is not None else None
         if ft == FIELD_TYPE_DATE:
             return self.default_date
         if ft == FIELD_TYPE_BOOLEAN:
@@ -211,6 +215,8 @@ class TaskCustomFieldValue(models.Model):
             return self.value_text or None
         if ft == FIELD_TYPE_NUMBER:
             return self.value_number
+        if ft == FIELD_TYPE_INTEGER:
+            return int(self.value_number) if self.value_number is not None else None
         if ft == FIELD_TYPE_DATE:
             return self.value_date
         if ft == FIELD_TYPE_BOOLEAN:
@@ -231,8 +237,11 @@ class TaskCustomFieldValue(models.Model):
             return ', '.join(str(x) for x in v)
         if isinstance(v, bool):
             return 'Yes' if v else 'No'
+        if isinstance(v, int):
+            # Integer type — no decimal places.
+            return str(v)
         if isinstance(v, Decimal):
-            # Trim trailing zeros for cleaner display.
+            # Strip trailing zeros (e.g. 987654.0000 → 987654, 3.50 → 3.5).
             normalized = v.normalize()
             return format(normalized, 'f') if normalized == normalized.to_integral_value() else str(normalized)
         return str(v)
