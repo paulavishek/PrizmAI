@@ -38,6 +38,10 @@ from django.utils import timezone
 from accounts.models import Organization
 from kanban.models import (
     Board, Column, Task, TaskLabel, Comment, BoardMembership, ChecklistItem,
+    Workspace,
+)
+from kanban.custom_field_models import (
+    CustomFieldDefinition, CustomFieldOption, TaskCustomFieldValue,
 )
 from kanban.budget_models import ProjectBudget, TaskCost, TimeEntry
 from kanban.coach_models import CoachingSuggestion
@@ -149,6 +153,9 @@ class Command(BaseCommand):
                 self._create_priority_decisions(tasks_by_code)
                 self._create_wiki_pages()
 
+            # Always run — idempotent via get_or_create
+            self._create_custom_fields()
+
         # Optional sub-seeders (best-effort, outside the transaction)
         self._call_optional_subseeders()
 
@@ -246,6 +253,12 @@ class Command(BaseCommand):
             CoachingSuggestion.objects.filter(board=b).delete()
             ChatMessage.objects.filter(chat_room__board=b).delete()
             ChatRoom.objects.filter(board=b).delete()
+
+        # Custom field definitions for the demo workspace (cascade deletes values)
+        demo_workspaces = Workspace.objects.filter(
+            organization=self.demo_org, is_demo=True
+        )
+        CustomFieldDefinition.objects.filter(workspace__in=demo_workspaces).delete()
 
         self.stdout.write('  [OK] Reset complete')
 
@@ -1723,6 +1736,177 @@ class Command(BaseCommand):
                 },
             )
         self.stdout.write('  [OK] Wiki: 1 category + 3 pages created')
+
+    # ------------------------------------------------------------------
+    # Custom fields
+    # ------------------------------------------------------------------
+    def _create_custom_fields(self):
+        """Seed custom field definitions and sample values for the demo workspace.
+
+        Idempotent: uses get_or_create throughout so re-running is safe.
+        """
+        workspace = self.board.workspace
+        if workspace is None:
+            workspace = Workspace.objects.filter(
+                organization=self.demo_org, is_demo=True
+            ).first()
+        if workspace is None:
+            self.stdout.write(self.style.WARNING(
+                '  [WARN] Custom fields: no demo workspace found — skipping.'
+            ))
+            return
+
+        # ── Field definitions ─────────────────────────────────────────────
+        sprint_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Sprint', is_active=True,
+            defaults={
+                'field_type': 'list',
+                'is_required': False,
+                'is_multi_select': False,
+                'applies_to_tasks': True,
+                'position': 1,
+            },
+        )
+        sprint_opts = {}
+        for pos, label in enumerate(
+            ['Sprint 1', 'Sprint 2', 'Sprint 3', 'Sprint 4 (Current)'], start=1
+        ):
+            opt, _ = CustomFieldOption.objects.get_or_create(
+                field=sprint_field, value=label,
+                defaults={'position': pos, 'is_default': label == 'Sprint 4 (Current)'},
+            )
+            sprint_opts[label] = opt
+
+        story_points_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Story Points', is_active=True,
+            defaults={
+                'field_type': 'integer',
+                'is_required': False,
+                'applies_to_tasks': True,
+                'position': 2,
+            },
+        )
+
+        env_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Environment', is_active=True,
+            defaults={
+                'field_type': 'list',
+                'is_required': False,
+                'is_multi_select': True,
+                'applies_to_tasks': True,
+                'position': 3,
+            },
+        )
+        env_opts = {}
+        for pos, label in enumerate(['Development', 'Staging', 'Production'], start=1):
+            opt, _ = CustomFieldOption.objects.get_or_create(
+                field=env_field, value=label,
+                defaults={'position': pos, 'is_default': False},
+            )
+            env_opts[label] = opt
+
+        category_field, _ = CustomFieldDefinition.objects.get_or_create(
+            workspace=workspace, name='Feature Category', is_active=True,
+            defaults={
+                'field_type': 'list',
+                'is_required': False,
+                'is_multi_select': False,
+                'applies_to_tasks': True,
+                'position': 4,
+            },
+        )
+        cat_opts = {}
+        for pos, label in enumerate(
+            ['Backend', 'Frontend', 'DevOps', 'QA', 'Documentation'], start=1
+        ):
+            opt, _ = CustomFieldOption.objects.get_or_create(
+                field=category_field, value=label,
+                defaults={'position': pos, 'is_default': False},
+            )
+            cat_opts[label] = opt
+
+        # ── Task values ───────────────────────────────────────────────────
+        # Map task title fragments → (sprint_label, story_pts, env_labels, category)
+        task_data = {
+            'Requirements Analysis':      ('Sprint 1', 3,  ['Development'],             'Documentation'),
+            'System Architecture':        ('Sprint 1', 8,  ['Development'],             'Backend'),
+            'CI/CD Pipeline':             ('Sprint 1', 5,  ['Development', 'Staging'],  'DevOps'),
+            'Development Environment':    ('Sprint 1', 3,  ['Development'],             'DevOps'),
+            'Database Schema':            ('Sprint 2', 8,  ['Development'],             'Backend'),
+            'User Registration':          ('Sprint 2', 5,  ['Development', 'Staging'],  'Backend'),
+            'OAuth Integration':          ('Sprint 2', 8,  ['Development', 'Staging'],  'Backend'),
+            'JWT Token':                  ('Sprint 2', 5,  ['Development'],             'Backend'),
+            'Role-Based Access':          ('Sprint 2', 8,  ['Development'],             'Backend'),
+            'REST API':                   ('Sprint 3', 13, ['Development', 'Staging'],  'Backend'),
+            'Unit Test Suite':            ('Sprint 3', 5,  ['Development'],             'QA'),
+            'Integration Test':           ('Sprint 3', 8,  ['Staging'],                 'QA'),
+            'Performance Optimisation':   ('Sprint 4 (Current)', 8,  ['Staging'],        'Backend'),
+            'Social Login Integration':   ('Sprint 4 (Current)', 8,  ['Development'],   'Backend'),
+            'Email Notification':         ('Sprint 4 (Current)', 5,  ['Development'],   'Backend'),
+            'Push Notification':          ('Sprint 4 (Current)', 5,  ['Development'],   'Backend'),
+            'Real-Time Dashboard':        ('Sprint 4 (Current)', 8,  ['Frontend'],       'Frontend'),
+            'Webhook':                    ('Sprint 4 (Current)', 5,  ['Staging'],        'Backend'),
+            'Mobile-Responsive':          ('Sprint 4 (Current)', 8,  ['Frontend'],       'Frontend'),
+            'Accessibility':              ('Sprint 4 (Current)', 5,  ['Frontend'],       'Frontend'),
+            'API Documentation':          ('Sprint 4 (Current)', 3,  ['Production'],     'Documentation'),
+            'Security Audit':             ('Sprint 4 (Current)', 8,  ['Staging', 'Production'], 'QA'),
+            'Load Testing':               ('Sprint 4 (Current)', 5,  ['Staging'],        'QA'),
+            'Deployment Pipeline':        ('Sprint 4 (Current)', 8,  ['Staging', 'Production'], 'DevOps'),
+            'Monitoring & Alerting':      ('Sprint 4 (Current)', 5,  ['Production'],     'DevOps'),
+            'Feature Flag':               ('Sprint 4 (Current)', 3,  ['Development'],   'DevOps'),
+            'User Onboarding Flow':       ('Sprint 4 (Current)', 8,  ['Frontend'],       'Frontend'),
+            'Analytics Integration':      ('Sprint 4 (Current)', 5,  ['Staging'],        'Backend'),
+        }
+
+        tasks = Task.objects.filter(
+            column__board=self.board,
+            item_type='task',
+            is_seed_demo_data=True,
+        )
+
+        updated = 0
+        for task in tasks:
+            matched_key = next(
+                (k for k in task_data if k.lower() in task.title.lower()), None
+            )
+            if matched_key is None:
+                continue
+            sprint_label, pts, envs, category = task_data[matched_key]
+
+            # Sprint
+            sprint_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=sprint_field,
+            )
+            sprint_val.selected_options.set([sprint_opts[sprint_label]])
+
+            # Story Points
+            pts_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=story_points_field,
+            )
+            from decimal import Decimal as D
+            pts_val.value_number = D(pts)
+            pts_val.save(update_fields=['value_number', 'updated_at'])
+
+            # Environment (multi-select)
+            env_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=env_field,
+            )
+            env_val.selected_options.set(
+                [env_opts[e] for e in envs if e in env_opts]
+            )
+
+            # Feature Category
+            cat_val, _ = TaskCustomFieldValue.objects.get_or_create(
+                task=task, field=category_field,
+            )
+            if category in cat_opts:
+                cat_val.selected_options.set([cat_opts[category]])
+
+            updated += 1
+
+        self.stdout.write(
+            f'  [OK] Custom fields: 4 definitions + values on {updated} tasks'
+        )
 
     # ------------------------------------------------------------------
     # Optional sub-seeders
