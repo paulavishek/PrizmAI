@@ -2537,6 +2537,27 @@ def task_detail(request, task_id):
             for field_name in ai_relevant_fields:
                 old_values[field_name] = getattr(original_task, field_name, None)
 
+            # Snapshot non-excluded custom-field values before save for stale-banner detection.
+            from kanban.custom_field_models import CustomFieldDefinition as _CFDef, TaskCustomFieldValue as _TCFV
+            _cf_ws_id = board.workspace_id
+            _old_cf_snapshot = {}
+            if _cf_ws_id:
+                _ai_cf_defs = list(
+                    _CFDef.objects.filter(
+                        workspace_id=_cf_ws_id, is_active=True,
+                        applies_to_tasks=True, exclude_from_ai=False,
+                    )
+                )
+                _cf_old_map = {
+                    v.field_id: v
+                    for v in _TCFV.objects.filter(
+                        task=original_task, field__in=_ai_cf_defs,
+                    ).prefetch_related('selected_options')
+                }
+                for _fdef in _ai_cf_defs:
+                    _v = _cf_old_map.get(_fdef.id)
+                    _old_cf_snapshot[_fdef.id] = (_fdef.name, _v.display_value() if _v else None)
+
             # Track changes automatically
             with AuditLogContext(task, request.user, request, 'task.updated'):
                 task = form.save(commit=False)
@@ -2573,12 +2594,44 @@ def task_detail(request, task_id):
                 'skill_match_score': 'skill match score',
                 'collaboration_required': 'collaboration required',
             }
+            def _norm_for_stale_cmp(v):
+                """Normalize a value for stale-banner comparison.
+
+                DateTimeField values stored in DB are tz-aware UTC; values from
+                a datetime-local HTML input are tz-naive local time at minute
+                precision (seconds are stripped by the browser). Comparing them
+                directly raises TypeError or produces false positives due to the
+                second/sub-second difference. Normalize both sides to naive local
+                time at minute precision so unchanged datetimes compare equal.
+                """
+                from datetime import datetime as _dt
+                from django.utils import timezone as _tz
+                if isinstance(v, _dt):
+                    if _tz.is_aware(v):
+                        v = _tz.localtime(v)
+                    return v.replace(second=0, microsecond=0, tzinfo=None)
+                return v
+
             changed_ai_fields = []
             for field_name in ai_relevant_fields:
                 new_val = getattr(task, field_name, None)
-                if old_values[field_name] != new_val:
+                if _norm_for_stale_cmp(old_values[field_name]) != _norm_for_stale_cmp(new_val):
                     changed_ai_fields.append(ai_field_labels.get(field_name, field_name))
-            
+
+            # Extend with non-excluded custom fields that changed.
+            if _old_cf_snapshot:
+                _cf_new_map = {
+                    v.field_id: v
+                    for v in _TCFV.objects.filter(
+                        task=task, field_id__in=_old_cf_snapshot,
+                    ).prefetch_related('selected_options')
+                }
+                for _cf_id, (_cf_name, _old_disp) in _old_cf_snapshot.items():
+                    _new_row = _cf_new_map.get(_cf_id)
+                    _new_disp = _new_row.display_value() if _new_row else None
+                    if _old_disp != _new_disp:
+                        changed_ai_fields.append(_cf_name)
+
             # Record activity
             TaskActivity.objects.create(
                 task=task,
