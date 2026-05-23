@@ -591,8 +591,8 @@ def switch_demo_role(request):
     # Get role display name
     role_names = {
         'admin': 'Demo Admin (Solo)',
-        'member': 'Sam Rivera (Member)',
-        'viewer': 'Jordan Taylor (Viewer)'
+        'member': 'Marcus Chen (Member)',
+        'viewer': 'Elena Vasquez (Viewer)'
     }
     
     return JsonResponse({

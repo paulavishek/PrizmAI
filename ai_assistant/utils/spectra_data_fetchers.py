@@ -363,7 +363,7 @@ def fetch_assignee_workload(board):
 
     Returns dict keyed by display name:
     {
-        "Sam Rivera": {
+        "Marcus Chen": {
             "username": "marcus.chen",
             "tasks": [task_dict, ...],   # ALL tasks, not just top-5
             "count": int,

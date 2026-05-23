@@ -193,9 +193,9 @@
         flex-shrink: 0;
     }
 
-    .cred-avatar.avatar-ac { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .cred-avatar.avatar-sr { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); }
-    .cred-avatar.avatar-jt { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .cred-avatar.avatar-ps { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .cred-avatar.avatar-mc { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); }
+    .cred-avatar.avatar-ev { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
 
     .demo-cred-card .cred-name {
         font-weight: 700;
@@ -1244,13 +1244,13 @@
         <!-- Section 1: Demo user credentials -->
         <p class="demo-section-label mt-3">SIGN IN AS ANY OF THESE DEMO USERS</p>
         <div class="demo-cred-grid">
-            <!-- Alex Chen -->
+            <!-- Priya Sharma -->
             <div class="demo-cred-card">
                 <div class="cred-header">
-                    <div class="cred-avatar avatar-ac">AC</div>
+                    <div class="cred-avatar avatar-ps">PS</div>
                     <div>
-                        <p class="cred-name">Alex Chen</p>
-                        <p class="cred-role">Project Lead</p>
+                        <p class="cred-name">Priya Sharma</p>
+                        <p class="cred-role">Backend Lead</p>
                     </div>
                 </div>
                 <div class="cred-field">
@@ -1259,26 +1259,26 @@
                 </div>
                 <div class="cred-field">
                     <span class="cred-field-label">Password</span>
-                    <span class="cred-field-value">demo123</span>
+                    <span class="cred-field-value">DemoUser@2026</span>
                 </div>
                 <div class="cred-skills">
                     <p class="cred-skills-label">Skills</p>
-                    <span class="cred-skill-tag">Project Management</span>
-                    <span class="cred-skill-tag">Agile</span>
-                    <span class="cred-skill-tag">Stakeholder Mgmt</span>
-                    <span class="cred-skill-tag">Risk Analysis</span>
+                    <span class="cred-skill-tag">Python</span>
+                    <span class="cred-skill-tag">Django</span>
+                    <span class="cred-skill-tag">REST APIs</span>
+                    <span class="cred-skill-tag">PostgreSQL</span>
                 </div>
                 <a href="{% url 'quick_demo_login' 'priya.sharma' %}" class="cred-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Alex
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Priya
                 </a>
             </div>
-            <!-- Sam Rivera -->
+            <!-- Marcus Chen -->
             <div class="demo-cred-card">
                 <div class="cred-header">
-                    <div class="cred-avatar avatar-sr">SR</div>
+                    <div class="cred-avatar avatar-mc">MC</div>
                     <div>
-                        <p class="cred-name">Sam Rivera</p>
-                        <p class="cred-role">Developer</p>
+                        <p class="cred-name">Marcus Chen</p>
+                        <p class="cred-role">Frontend / UX</p>
                     </div>
                 </div>
                 <div class="cred-field">
@@ -1287,26 +1287,26 @@
                 </div>
                 <div class="cred-field">
                     <span class="cred-field-label">Password</span>
-                    <span class="cred-field-value">demo123</span>
+                    <span class="cred-field-value">DemoUser@2026</span>
                 </div>
                 <div class="cred-skills">
                     <p class="cred-skills-label">Skills</p>
-                    <span class="cred-skill-tag">Python</span>
-                    <span class="cred-skill-tag">Django</span>
+                    <span class="cred-skill-tag">JavaScript</span>
                     <span class="cred-skill-tag">React</span>
-                    <span class="cred-skill-tag">API Design</span>
+                    <span class="cred-skill-tag">CSS / Tailwind</span>
+                    <span class="cred-skill-tag">UX Design</span>
                 </div>
                 <a href="{% url 'quick_demo_login' 'marcus.chen' %}" class="cred-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Sam
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Marcus
                 </a>
             </div>
-            <!-- Jordan Taylor -->
+            <!-- Elena Vasquez -->
             <div class="demo-cred-card">
                 <div class="cred-header">
-                    <div class="cred-avatar avatar-jt">JT</div>
+                    <div class="cred-avatar avatar-ev">EV</div>
                     <div>
-                        <p class="cred-name">Jordan Taylor</p>
-                        <p class="cred-role">Designer</p>
+                        <p class="cred-name">Elena Vasquez</p>
+                        <p class="cred-role">DevOps / QA</p>
                     </div>
                 </div>
                 <div class="cred-field">
@@ -1315,17 +1315,17 @@
                 </div>
                 <div class="cred-field">
                     <span class="cred-field-label">Password</span>
-                    <span class="cred-field-value">demo123</span>
+                    <span class="cred-field-value">DemoUser@2026</span>
                 </div>
                 <div class="cred-skills">
                     <p class="cred-skills-label">Skills</p>
-                    <span class="cred-skill-tag">UI/UX Design</span>
-                    <span class="cred-skill-tag">Figma</span>
-                    <span class="cred-skill-tag">CSS</span>
-                    <span class="cred-skill-tag">Prototyping</span>
+                    <span class="cred-skill-tag">Docker</span>
+                    <span class="cred-skill-tag">CI/CD</span>
+                    <span class="cred-skill-tag">Google Cloud</span>
+                    <span class="cred-skill-tag">Test Automation</span>
                 </div>
                 <a href="{% url 'quick_demo_login' 'elena.vasquez' %}" class="cred-login-btn">
-                    <i class="fas fa-sign-in-alt me-1"></i>Login as Jordan
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Elena
                 </a>
             </div>
         </div>

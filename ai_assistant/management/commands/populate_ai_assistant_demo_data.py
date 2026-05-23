@@ -614,31 +614,31 @@ Would you like me to create subtasks for this parallel approach?""",
 
 | Team Member | Assigned Tasks | Est. Hours | Utilization |
 |-------------|----------------|------------|-------------|
-| Sam Rivera | 11 tasks | 44 hours | [WARN] 110% |
-| Jordan Taylor | 12 tasks | 38 hours | [OK] 95% |
-| Alex Chen | 7 tasks | 28 hours | [OK] 70% |
+| Marcus Chen | 11 tasks | 44 hours | [WARN] 110% |
+| Elena Vasquez | 12 tasks | 38 hours | [OK] 95% |
+| Priya Sharma | 7 tasks | 28 hours | [OK] 70% |
 
-**[WARN] Alert: Sam Rivera is overloaded**
+**[WARN] Alert: Marcus Chen is overloaded**
 
-Sam has 11 active implementation tasks with an estimated 44 hours of work, which exceeds their 40-hour weekly capacity.
+Marcus has 11 active implementation tasks with an estimated 44 hours of work, which exceeds their 40-hour weekly capacity.
 
 **Recommended Actions:**
 
-1. **Immediate:** Reassign 1-2 tasks from Sam to Jordan or Alex (who have capacity)
+1. **Immediate:** Reassign 1-2 tasks from Marcus to Elena or Priya (who have capacity)
 2. **Tasks to consider moving:**
-   - "Error Tracking & Monitoring" (Medium priority, 3 hours) -> Jordan
-   - "Security Audit & Fixes" (Medium priority, 4 hours) -> Jordan
+   - "Error Tracking & Monitoring" (Medium priority, 3 hours) -> Elena
+   - "Security Audit & Fixes" (Medium priority, 4 hours) -> Elena
 
-3. **Long-term:** 
+3. **Long-term:**
    - Review task estimation accuracy
-   - Consider breaking down Sam's complex tasks
+   - Consider breaking down Marcus's complex tasks
 
 Would you like me to suggest specific task reassignments?""",
                         'is_helpful': True,
                     },
                     {
                         'role': 'user',
-                        'content': 'Yes, please suggest which tasks to move to Jordan',
+                        'content': 'Yes, please suggest which tasks to move to Elena',
                     },
                     {
                         'role': 'assistant',
@@ -646,30 +646,30 @@ Would you like me to suggest specific task reassignments?""",
 
 **Recommended Reassignments:**
 
-**1. "Error Tracking & Monitoring" -> Jordan**
-- **Current Owner:** Sam Rivera
+**1. "Error Tracking & Monitoring" -> Elena**
+- **Current Owner:** Marcus Chen
 - **Estimated Hours:** 3 hours
 - **Priority:** Medium
-- **Why Jordan:** 
-  - Monitoring setup aligns with Jordan's QA skills
+- **Why Elena:**
+  - Monitoring setup aligns with Elena's DevOps/QA skills
   - Task is well-defined with clear scope
   - No technical blockers
 
-**2. "Security Audit & Fixes" -> Jordan**
-- **Current Owner:** Sam Rivera  
+**2. "Security Audit & Fixes" -> Elena**
+- **Current Owner:** Marcus Chen
 - **Estimated Hours:** 4 hours
 - **Priority:** Medium
-- **Why Jordan:**
-  - Jordan has strong Quality Assurance skills
+- **Why Elena:**
+  - Elena has strong Quality Assurance skills
   - Testing-adjacent task, natural fit
-  - Sam can provide context on security patterns
+  - Marcus can provide context on UX impact
 
 **After Reassignment:**
 
 | Team Member | Tasks | Hours | Utilization |
 |-------------|-------|-------|-------------|
-| Sam Rivera | 9 | 37h | [OK] 92% |
-| Jordan Taylor | 14 | 45h | [OK] 95% (shared across test/doc tasks) |
+| Marcus Chen | 9 | 37h | [OK] 92% |
+| Elena Vasquez | 14 | 45h | [OK] 95% (shared across test/doc tasks) |
 
 **New Team Balance:** [OK] Healthy distribution
 
@@ -1151,9 +1151,9 @@ Would you like a detailed action plan for reducing this debt?""",
 - [ ] Update API documentation
 
 **Assignment Recommendation:**
-- **Lead:** Sam Rivera (Django/Python expert)
-- **Review:** Alex Chen (project oversight)
-- **Testing:** Jordan Taylor (business validation)
+- **Lead:** Priya Sharma (Django/Python expert)
+- **Review:** Marcus Chen (UX & API review)
+- **Testing:** Elena Vasquez (QA validation)
 
 **Success Metrics:**
 - [OK] Zero security vulnerabilities in auth module

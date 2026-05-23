@@ -44,10 +44,15 @@ class ResourceLevelingService:
         has_logged_hours = profile.current_workload_hours > 0
         return has_completed_tasks or has_skills or has_logged_hours
     
-    def get_or_create_profile(self, user):
+    def get_or_create_profile(self, user, board=None):
         """
         Get or create performance profile for user
-        Always fetches fresh data from database and updates workload
+        Always fetches fresh data from database and updates workload.
+
+        ``board`` (optional): when provided, the workload is computed against
+        this specific board instead of the user's own workspace scope. Pass
+        this from per-board reports so a user's demo-mode flag doesn't hide
+        their tasks on the board being analyzed.
         """
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
@@ -58,17 +63,17 @@ class ResourceLevelingService:
                 'quality_score': 3.0
             }
         )
-        
+
         # For existing profiles, refresh from database to avoid stale data
         if not created:
             profile.refresh_from_db()
-        
+
         if created or not profile.total_tasks_completed:
             # Initialize with historical data
-            profile.update_metrics()
-        
+            profile.update_metrics(board=board)
+
         # Always refresh current workload to ensure real-time accuracy
-        profile.update_current_workload()
+        profile.update_current_workload(board=board)
         
         # Merge user's declared profile skills into AI skill_keywords so the
         # resource optimizer can use them for skill matching and qualification.
@@ -981,7 +986,7 @@ class ResourceLevelingService:
         }
         
         for member in members:
-            profile = self.get_or_create_profile(member)
+            profile = self.get_or_create_profile(member, board=board)
             
             # Profile is already fresh from get_or_create_profile()
             
@@ -1042,8 +1047,8 @@ class ResourceLevelingService:
         
         for member in members:
             try:
-                profile = self.get_or_create_profile(member)
-                profile.update_metrics()
+                profile = self.get_or_create_profile(member, board=board)
+                profile.update_metrics(board=board)
                 updated += 1
             except Exception as e:
                 logger.error(f"Error updating profile for {member.username}: {e}")

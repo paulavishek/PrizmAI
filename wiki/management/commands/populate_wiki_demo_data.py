@@ -353,9 +353,9 @@ Welcome to the team! This knowledge hub contains everything you need to get star
 
 | Role | Person | Contact |
 |------|--------|---------|
-| Project Manager | Alex Chen | alex.chen@acme.com |
-| Lead Developer | Sam Rivera | sam.rivera@acme.com |
-| Stakeholder | Jordan Taylor | jordan.taylor@acme.com |
+| Backend Lead | Priya Sharma | priya.sharma@acme.com |
+| Frontend / UX | Marcus Chen | marcus.chen@acme.com |
+| DevOps / QA | Elena Vasquez | elena.vasquez@acme.com |
 
 ## First Week Checklist
 
@@ -924,7 +924,7 @@ python manage.py showmigrations
                 'content': f"""# Sprint 45 Planning Meeting
 
 **Date:** {past_date}  
-**Attendees:** Alex Chen, Sam Rivera, Jordan Taylor  
+**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez
 **Duration:** 60 minutes
 
 ## Sprint Goals
@@ -952,9 +952,9 @@ python manage.py showmigrations
 
 | Team Member | Capacity | Assigned Points |
 |-------------|----------|-----------------|
-| Alex Chen | 8 pts | 6 pts |
-| Sam Rivera | 10 pts | 9 pts |
-| Jordan Taylor | 5 pts | 4 pts |
+| Priya Sharma | 8 pts | 6 pts |
+| Marcus Chen | 10 pts | 9 pts |
+| Elena Vasquez | 5 pts | 4 pts |
 
 **Total Sprint Capacity:** 23 points
 
@@ -966,9 +966,9 @@ python manage.py showmigrations
 
 ## Action Items
 
-- [ ] @Alex: Create detailed task breakdown for AUTH-234
-- [ ] @Sam: Set up monitoring for new endpoints
-- [ ] @Jordan: Coordinate with stakeholders on dashboard requirements
+- [ ] @Priya: Create detailed task breakdown for AUTH-234
+- [ ] @Marcus: Set up monitoring for new endpoints
+- [ ] @Elena: Coordinate with stakeholders on dashboard requirements
 
 ## Next Steps
 
@@ -978,7 +978,7 @@ python manage.py showmigrations
 
 ---
 
-*Notes taken by Alex Chen*
+*Notes taken by Priya Sharma*
 """
             },
             {
@@ -990,11 +990,11 @@ python manage.py showmigrations
                 'content': f"""# Weekly Team Standup Summary
 
 **Week of:** {current_date}  
-**Facilitator:** Sam Rivera
+**Facilitator:** Marcus Chen
 
 ## Team Updates
 
-### Alex Chen - Project Manager
+### Priya Sharma - Backend Lead
 **Yesterday:**
 - Reviewed sprint backlog and reprioritized items
 - Met with stakeholders about Q1 roadmap
@@ -1009,7 +1009,7 @@ python manage.py showmigrations
 
 ---
 
-### Sam Rivera - Lead Developer
+### Marcus Chen - Frontend / UX
 **Yesterday:**
 - Completed API endpoint for user preferences
 - Code review for authentication PR
@@ -1024,7 +1024,7 @@ python manage.py showmigrations
 
 ---
 
-### Jordan Taylor - Business Analyst
+### Elena Vasquez - DevOps / QA
 **Yesterday:**
 - Gathered requirements for new reporting feature
 - Created wireframes for stakeholder review
@@ -1047,8 +1047,8 @@ python manage.py showmigrations
 
 ## Action Items
 
-- @Sam: Submit database migration request today
-- @Alex: Get Jordan production analytics access
+- @Marcus: Submit database migration request today
+- @Priya: Get Elena production analytics access
 - @All: Complete timesheet entries by Friday
 
 ---
@@ -1065,7 +1065,7 @@ python manage.py showmigrations
                 'content': f"""# Sprint 44 Retrospective
 
 **Date:** {retro_date}  
-**Facilitator:** Jordan Taylor  
+**Facilitator:** Elena Vasquez
 **Format:** Start, Stop, Continue
 
 ---
@@ -1388,17 +1388,17 @@ On-call engineer acknowledges alert within:
 
 | Week | Primary | Secondary |
 |------|---------|-----------|
-| Current | Sam Rivera | Alex Chen |
-| Next | Alex Chen | Jordan Taylor |
-| Following | Jordan Taylor | Sam Rivera |
+| Current | Marcus Chen | Priya Sharma |
+| Next | Priya Sharma | Elena Vasquez |
+| Following | Elena Vasquez | Marcus Chen |
 
 ## Key Contacts
 
 | Role | Name | Phone |
 |------|------|-------|
 | On-Call Primary | See rotation | PagerDuty |
-| Engineering Manager | Alex Chen | 555-0100 |
-| CTO | Jordan Taylor | 555-0101 |
+| Backend Lead | Priya Sharma | 555-0100 |
+| DevOps / QA | Elena Vasquez | 555-0101 |
 | Security | security@acme.com | - |
 
 ---
@@ -1435,8 +1435,8 @@ On-call engineer acknowledges alert within:
 
 | Initiative | Status | Owner |
 |------------|--------|-------|
-| AI Task Suggestions v2 | In Progress | Sam Rivera |
-| Dashboard Redesign | Complete | Jordan Taylor |
+| AI Task Suggestions v2 | In Progress | Marcus Chen |
+| Dashboard Redesign | Complete | Elena Vasquez |
 | Performance Optimization | In Progress | Engineering |
 | Mobile App Refresh | Planning | Mobile Team |
 
@@ -1449,7 +1449,7 @@ On-call engineer acknowledges alert within:
 | Initiative | Status | Owner |
 |------------|--------|-------|
 | Advanced Analytics | Planning | Data Team |
-| Team Workload Balancing | Planning | Sam Rivera |
+| Team Workload Balancing | Planning | Marcus Chen |
 | Enterprise SSO | In Progress | Security |
 | API v2 Launch | Planning | Engineering |
 
@@ -1597,7 +1597,7 @@ python manage.py rebuild_search_index
 
 **Document Version:** 1.2  
 **Last Updated:** {current_date}  
-**Author:** Jordan Taylor  
+**Author:** Elena Vasquez
 **Status:** In Development
 
 ---
@@ -1704,7 +1704,7 @@ Users currently lack visibility into:
 
 ---
 
-*Feedback? Comment on this document or reach out to Jordan Taylor*
+*Feedback? Comment on this document or reach out to Elena Vasquez*
 """
             },
         ]

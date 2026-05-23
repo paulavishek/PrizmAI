@@ -50,8 +50,14 @@ class UserPerformanceProfile(models.Model):
     def __str__(self):
         return f"{self.user.username} - Performance Profile"
     
-    def update_metrics(self):
-        """Recalculate all performance metrics from historical data"""
+    def update_metrics(self, board=None):
+        """Recalculate all performance metrics from historical data.
+
+        If ``board`` is provided, the current-workload calculation is scoped
+        to that board (rather than ``get_user_boards(self.user)``) — useful
+        when computing per-board workload reports for users who aren't in
+        their own demo session.
+        """
         from kanban.models import Task
         
         # Get completed tasks in last 90 days
@@ -96,7 +102,7 @@ class UserPerformanceProfile(models.Model):
         self.update_skill_profile(completed_tasks)
         
         # Update current workload (don't save yet, we'll save once after all updates)
-        self.update_current_workload(save=False)
+        self.update_current_workload(save=False, board=board)
         
         self.total_tasks_completed = task_count
         self.last_task_completed = completed_tasks.latest('completed_at').completed_at
@@ -123,26 +129,34 @@ class UserPerformanceProfile(models.Model):
         # Store top 50 keywords
         self.skill_keywords = dict(word_counts.most_common(50))
     
-    def update_current_workload(self, save=True):
+    def update_current_workload(self, save=True, board=None):
         """
         Calculate current workload from active tasks
-        
+
         Args:
-            save: If True, saves the profile after updating. Set to False when 
+            save: If True, saves the profile after updating. Set to False when
                   calling from methods that will save afterwards to avoid duplicate saves.
+            board: Optional Board to scope active-tasks to. When provided, this overrides
+                  the ``get_user_boards`` workspace scoping — required for per-board reports
+                  (e.g. AI Resource Optimization) that need this user's workload on a
+                  specific board even when the user isn't in their own demo session.
         """
         from kanban.models import Task
         from kanban.utils.demo_protection import get_user_boards
 
-        # Scope to boards visible in the user's current workspace/demo context,
-        # consistent with Dashboard "My Tasks" scoping.
-        user_boards = get_user_boards(self.user)
-        
+        if board is not None:
+            board_filter = {'column__board': board}
+        else:
+            # Scope to boards visible in the user's current workspace/demo context,
+            # consistent with Dashboard "My Tasks" scoping.
+            user_boards = get_user_boards(self.user)
+            board_filter = {'column__board__in': user_boards}
+
         active_tasks = Task.objects.filter(
             assigned_to=self.user,
-            column__board__in=user_boards,
             item_type='task',
-            completed_at__isnull=True
+            completed_at__isnull=True,
+            **board_filter,
         ).exclude(column__name__icontains='done')
         
         self.current_active_tasks = active_tasks.count()
