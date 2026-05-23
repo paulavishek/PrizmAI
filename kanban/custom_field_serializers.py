@@ -308,14 +308,33 @@ def serialize_field_definitions_for_workspace(workspace_id):
 
 def _resolve_workspace_id(task):
     """Walk task → column → board → workspace_id without extra queries
-    (assumes the caller select_related('column__board'))."""
+    (assumes the caller select_related('column__board')).
+
+    Sandbox boards created before the workspace-copy fix may have
+    workspace_id=None. For those, we fall back to the template board's
+    workspace so workspace-scoped features (custom fields, etc.) work correctly.
+    """
     column = getattr(task, 'column', None)
     if column is None:
         return None
     board = getattr(column, 'board', None)
     if board is None:
         return None
-    return getattr(board, 'workspace_id', None)
+    ws_id = getattr(board, 'workspace_id', None)
+    if ws_id is not None:
+        return ws_id
+    # Fallback for sandbox copies whose workspace wasn't set at clone time.
+    if getattr(board, 'is_sandbox_copy', False):
+        template = getattr(board, 'cloned_from', None)
+        if template is None and board.cloned_from_id:
+            from .models import Board as _Board
+            try:
+                template = _Board.objects.only('workspace_id').get(pk=board.cloned_from_id)
+            except _Board.DoesNotExist:
+                pass
+        if template is not None:
+            return getattr(template, 'workspace_id', None)
+    return None
 
 
 def _format_default_display(fdef):
