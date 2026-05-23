@@ -124,13 +124,13 @@
 
         <div class="row mb-3">
             <div class="col-sm-9 offset-sm-3">
-                <div class="form-check">
+                <div class="form-check cf-option-check">
                     {{ form.is_required }}
                     <label class="form-check-label" for="{{ form.is_required.id_for_label }}">
                         Required (users must set a value when creating a task)
                     </label>
                 </div>
-                <div class="form-check">
+                <div class="form-check cf-option-check">
                     {{ form.exclude_from_ai }}
                     <label class="form-check-label" for="{{ form.exclude_from_ai.id_for_label }}">
                         <strong>Exclude from AI</strong> — Spectra and other AI features will not see
@@ -139,6 +139,21 @@
                 </div>
             </div>
         </div>
+        <style>
+            .cf-option-check .form-check-input {
+                border: 2px solid #6c757d;
+                width: 1.1em;
+                height: 1.1em;
+            }
+            .cf-option-check .form-check-input:checked {
+                border-color: #0d6efd;
+                background-color: #0d6efd;
+            }
+            .cf-option-check .form-check-input:focus {
+                border-color: #0d6efd;
+                box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+            }
+        </style>
 
         <div class="row">
             <div class="col-sm-9 offset-sm-3 d-flex gap-2">
