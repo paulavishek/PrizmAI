@@ -53,12 +53,17 @@ class WhatIfEngine:
         tasks_added = int(params.get('tasks_added', 0))
         team_delta = int(params.get('team_size_delta', 0))
         deadline_shift = int(params.get('deadline_shift_days', 0))
+        # velocity_health is an optional multiplicative health signal supplied by
+        # the live shadow-branch recalculation path: actual_7d_velocity / branch_baseline_velocity.
+        # What-If dashboard calls leave this as 1.0 (neutral) so baseline simulations
+        # remain deterministic across runs.
+        velocity_health = params.get('velocity_health', 1.0)
 
         baseline = self._capture_baseline()
         projected = self._compute_projected(baseline, tasks_added, team_delta, deadline_shift)
         deltas = self._compute_deltas(baseline, projected)
         conflicts = self._detect_new_conflicts(baseline, projected, tasks_added, team_delta, deadline_shift)
-        feasibility = self._compute_feasibility(projected, deltas, conflicts)
+        feasibility = self._compute_feasibility(projected, deltas, conflicts, velocity_health)
         warnings = self._generate_warnings(baseline)
 
         return {
@@ -175,6 +180,16 @@ class WhatIfEngine:
             if counts:
                 velocity = sum(counts) / len(counts)
 
+        # Recompute predicted_date from live remaining tasks and velocity so the
+        # baseline date uses the same derivation method as `_compute_projected`.
+        # Without this, baseline.predicted_date stays pinned to whatever the
+        # scheduled BurndownPrediction job last saved (often weeks stale), while
+        # projected.predicted_date is recomputed from today on every call — making
+        # the timeline delta look implausible (the AI then calls it a "fundamental
+        # flaw" even when the math is self-consistent).
+        if velocity and velocity >= 0.5 and remaining > 0:
+            predicted_date = date.today() + timedelta(weeks=remaining / velocity)
+
         # Team
         team_size = board.memberships.count() or 1
 
@@ -229,32 +244,17 @@ class WhatIfEngine:
         new_velocity = round(max(new_velocity, 0.1), 2)
 
         # --- Timeline ---
-        # Guard: velocity below threshold → don't extrapolate a date (avoids year-2034 explosions)
+        # Predicted completion is purely a function of remaining work and team
+        # velocity.  The deadline shift moves `new_deadline` (below) but never
+        # the predicted-completion date itself — conflating the two produced
+        # the +207-day projection artefact when scope was reduced.
         VELOCITY_THRESHOLD = 0.5
         low_velocity = new_velocity < VELOCITY_THRESHOLD
 
-        if not low_velocity and new_velocity > 0:
-            weeks_for_remaining = new_remaining / new_velocity
-            additional_weeks = weeks_for_remaining - (
-                baseline['remaining_tasks'] / baseline['velocity_per_week']
-                if baseline['velocity_per_week'] >= VELOCITY_THRESHOLD else 0
-            )
-        else:
-            additional_weeks = 0
-
-        timeline_shift_days = round(additional_weeks * 7) - deadline_shift
-
         new_predicted_date = None
-        if not low_velocity and baseline['velocity_per_week'] >= VELOCITY_THRESHOLD:
-            # Anchor to a freshly computed expected completion date derived from the
-            # live remaining task count rather than the stored BurndownPrediction
-            # date.  The stored prediction is only refreshed by the scheduled
-            # burndown job — not on every task completion — so anchoring to it
-            # freezes new_predicted_date (and therefore delay_probability and the
-            # feasibility score) even as tasks are completed on the real board.
-            live_weeks_remaining = baseline['remaining_tasks'] / baseline['velocity_per_week']
-            live_base_date = date.today() + timedelta(weeks=live_weeks_remaining)
-            new_predicted_date = live_base_date + timedelta(days=timeline_shift_days)
+        if not low_velocity:
+            weeks_for_remaining = new_remaining / new_velocity
+            new_predicted_date = date.today() + timedelta(weeks=weeks_for_remaining)
 
         new_deadline = None
         if baseline['effective_deadline']:
@@ -392,45 +392,72 @@ class WhatIfEngine:
     # ------------------------------------------------------------------
     # Feasibility score  (0.0 – 1.0)
     # ------------------------------------------------------------------
-    def _compute_feasibility(self, projected, deltas, conflicts) -> float:
+    def _compute_feasibility(self, projected, deltas, conflicts,
+                             velocity_health: float = 1.0) -> float:
+        """
+        Continuous, piecewise-linear penalty curves.  Each curve preserves the
+        prior step-function's upper anchor values so existing What-If baselines
+        don't shift, but interpolates linearly between anchors so small board
+        changes (e.g. a single task completion) produce a small visible score
+        movement instead of being clamped to the same step.
+
+        `velocity_health` is `actual_recent_velocity / branch_baseline_velocity`,
+        supplied only by the shadow-branch recalc path.  Values > 1.0 (team is
+        outperforming the original projection) add up to +0.10; values < 1.0
+        subtract up to -0.10.  Capped so the velocity signal never dominates
+        the structural penalties.
+        """
         score = 1.0
 
-        # Penalize high delay probability
+        # --- Delay probability (continuous; anchors preserved at 40/60/80) ---
+        # 0–40   →  0
+        # 40–60  →  0    → -0.10
+        # 60–80  →  -0.10 → -0.20
+        # 80–100 →  -0.20 → -0.35  (steeper, matches prior >80 cliff)
         dp = projected.get('delay_probability', 0)
         if dp > 80:
-            score -= 0.35
+            score -= 0.20 + min(dp - 80, 20) / 20 * 0.15
         elif dp > 60:
-            score -= 0.2
+            score -= 0.10 + (dp - 60) / 20 * 0.10
         elif dp > 40:
-            score -= 0.1
+            score -= (dp - 40) / 20 * 0.10
 
-        # Penalize resource overload.  The 130–200% band uses a continuous
-        # linear scale so that gradual utilization improvements from task
-        # completions produce proportional score movement rather than staying
-        # frozen until a hard threshold is crossed.
-        # Anchors: 130% → -0.15, 200% (cap) → -0.25 (same as prior step values).
+        # --- Resource utilization (continuous; same anchors as before) ---
+        # 100–130 →  -0.05 → -0.15  (was a flat -0.15 step; now ramps from -0.05)
+        # 130–200 →  -0.15 → -0.25  (preserved from prior linear band)
         util = projected.get('utilization_pct', 0)
         if util > 130:
-            excess_pct = min(util - 130, 70) / 70  # 0.0 at 130%, 1.0 at 200%+
+            excess_pct = min(util - 130, 70) / 70
             score -= 0.15 + excess_pct * 0.10
         elif util > 100:
-            score -= 0.15
+            score -= 0.05 + (util - 100) / 30 * 0.10
 
-        # Penalize budget overrun
+        # --- Budget overrun (continuous) ---
+        # 100–120 →  0    → -0.10
+        # 120–150 →  -0.10 → -0.20  (extrapolated cap at -0.20)
         bu = projected.get('budget_utilization_pct', 0)
         if bu > 120:
-            score -= 0.2
+            score -= 0.10 + min(bu - 120, 30) / 30 * 0.10
         elif bu > 100:
-            score -= 0.1
+            score -= (bu - 100) / 20 * 0.10
 
-        # Penalize each conflict
+        # --- Conflicts (kept as discrete since each conflict is a discrete event) ---
         for c in conflicts:
             if c['severity'] == 'critical':
                 score -= 0.1
             elif c['severity'] == 'high':
                 score -= 0.05
 
-        return round(max(score, 0.0), 2)
+        # --- Velocity health adjustment (live recalc path only) ---
+        # velocity_health = actual_recent_velocity / branch_baseline_velocity.
+        # Each 10% deviation moves the feasibility score by ~1 point, capped at
+        # +/-10 points so the velocity signal never overwhelms structural penalties.
+        # Accept 0.0 as a valid signal (means "no real-board completions in the
+        # last 7 days") — that should *penalize*, not be silently skipped.
+        if velocity_health is not None and velocity_health >= 0:
+            score += max(-0.10, min(0.10, velocity_health - 1.0))
+
+        return round(max(score, 0.0), 4)
 
     # ------------------------------------------------------------------
     # Warnings for missing data

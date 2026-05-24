@@ -27,17 +27,16 @@ def _parse_date(value):
 
 def scale_feasibility(float_score):
     """
-    Scale feasibility from 0-1 float to 0-100 integer.
-    
-    Args:
-        float_score: Float value between 0-1
-    
-    Returns:
-        Integer value between 0-100 (rounded to nearest int)
+    Scale feasibility from 0-1 float to 0-100 with 2dp precision.
+
+    Returns float (the BranchSnapshot.feasibility_score column is a
+    DecimalField that quantizes on save).  2dp retention is important so
+    single-task micro-nudges (sub-integer score changes) persist instead
+    of being rounded away into duplicates.
     """
     if float_score is None:
-        return 0
-    return round(min(1.0, max(0.0, float_score)) * 100)
+        return 0.0
+    return round(min(1.0, max(0.0, float(float_score))) * 100, 2)
 
 
 def extract_branch_params(branch):
@@ -121,6 +120,90 @@ def _format_ai_recommendation(ai_result):
     return '\n'.join(parts).strip()
 
 
+def compute_baseline_velocity(board):
+    """
+    Snapshot the board's current tasks/week velocity at branch-creation time.
+
+    Uses the same logic as WhatIfEngine._capture_baseline so the velocity
+    health comparison stays self-consistent.
+
+    Returns:
+        float (tasks/week) or 0.0 if no velocity data available yet.
+    """
+    from kanban.utils.whatif_engine import WhatIfEngine
+    try:
+        baseline = WhatIfEngine(board)._capture_baseline()
+        return float(baseline.get('velocity_per_week') or 0.0)
+    except Exception as exc:
+        logger.warning('compute_baseline_velocity failed for board %s: %s', board.pk, exc)
+        return 0.0
+
+
+def compute_actual_7d_velocity(board):
+    """
+    Live 7-day completion rate (tasks/week) on the real board.
+
+    Counts unique tasks moved into a Done/Complete column in the last 7 days,
+    using TaskActivity rows so demo data seeding doesn't pollute the signal
+    (Task.completed_at is stamped by the seeder; TaskActivity is only written
+    by user-facing views).
+    """
+    from datetime import timedelta
+    from django.db.models import Q
+    from kanban.models import TaskActivity
+
+    cutoff = timezone.now() - timedelta(days=7)
+    qs = (
+        TaskActivity.objects
+        .filter(
+            task__column__board=board,
+            task__item_type='task',
+            activity_type__in=['moved', 'updated'],
+            created_at__gte=cutoff,
+        )
+        .filter(Q(description__icontains='done') | Q(description__icontains='complete'))
+        .select_related('task', 'task__column')
+    )
+
+    seen = set()
+    for act in qs:
+        if act.task_id in seen:
+            continue
+        col_lower = act.task.column.name.lower()
+        if 'done' in col_lower or 'complete' in col_lower:
+            seen.add(act.task_id)
+
+    # 7-day count IS already per-week; no scaling needed.
+    return float(len(seen))
+
+
+def _is_duplicate_snapshot(latest, new_feasibility, new_proj_date,
+                            new_budget_util, new_conflicts):
+    """
+    True if a new snapshot would be identical to the latest one AND we already
+    have one today.  Allows exactly one heartbeat snapshot per day so the
+    Feasibility Trend chart stays continuous on quiet days without bloating
+    Snapshot History with minute-by-minute duplicates.
+    """
+    if not latest:
+        return False
+    if latest.captured_at.date() != date_type.today():
+        return False  # first capture today — always allow
+    # Decimal vs float/int comparison tolerance — round to 2dp for the dedup check.
+    try:
+        latest_score = round(float(latest.feasibility_score), 2)
+    except (TypeError, ValueError):
+        latest_score = 0.0
+    new_score = round(float(new_feasibility), 2)
+    return (
+        latest_score == new_score
+        and latest.projected_completion_date == new_proj_date
+        and round(float(latest.projected_budget_utilization or 0), 2)
+            == round(float(new_budget_util or 0), 2)
+        and (latest.conflicts_detected or []) == (new_conflicts or [])
+    )
+
+
 def _estimate_completion_date(simulation_results):
     """
     Estimate a projected completion date from simulation results when the engine
@@ -201,10 +284,32 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
         divergences_created = 0
         snapshots_created = 0
 
+        # Compute the board-wide actual 7-day velocity once per recalc cycle.
+        # Each branch then derives its own velocity_health by comparing this
+        # against the velocity captured at branch creation.
+        actual_7d_velocity = compute_actual_7d_velocity(board)
+
         for branch in active_branches:
             try:
                 # Extract current parameters from branch's latest snapshot
                 params = extract_branch_params(branch)
+
+                # Derive velocity health for this branch.  If the branch has no
+                # baseline velocity recorded (legacy / pre-migration branches),
+                # snapshot the current board velocity now so subsequent recalcs
+                # have something to compare against, and treat this run as neutral.
+                if not branch.baseline_velocity_per_week:
+                    branch.baseline_velocity_per_week = (
+                        compute_baseline_velocity(board) or actual_7d_velocity or 0.0
+                    )
+                    if branch.baseline_velocity_per_week:
+                        branch.save(update_fields=['baseline_velocity_per_week'])
+                if branch.baseline_velocity_per_week and branch.baseline_velocity_per_week > 0:
+                    params['velocity_health'] = (
+                        actual_7d_velocity / branch.baseline_velocity_per_week
+                    )
+                else:
+                    params['velocity_health'] = 1.0
 
                 # Re-run what-if simulation with same parameters
                 engine = WhatIfEngine(board)
@@ -249,6 +354,22 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 if not projected_date:
                     projected_date = _estimate_completion_date(results)
 
+                new_budget_util = results.get('projected', {}).get('budget_utilization_pct')
+                new_conflicts = results.get('new_conflicts', [])
+
+                # --- Dedup + daily heartbeat ---
+                # Skip snapshot creation if all the user-facing fields would be
+                # identical to the latest snapshot AND we already captured one today.
+                # First snapshot of a new day always proceeds (heartbeat tick) so
+                # the trend chart stays continuous on quiet days.
+                if _is_duplicate_snapshot(latest_snapshot, new_feasibility,
+                                          projected_date, new_budget_util, new_conflicts):
+                    logger.debug(
+                        f'Skipping duplicate snapshot for branch {branch.id} '
+                        f'(score={new_feasibility} unchanged today)'
+                    )
+                    continue
+
                 # Create new snapshot with current results
                 new_snapshot = BranchSnapshot.objects.create(
                     branch=branch,
@@ -257,14 +378,14 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                     deadline_delta_weeks=params['deadline_shift_days'] // 7,  # Convert days back to weeks
                     feasibility_score=new_feasibility,
                     projected_completion_date=projected_date,
-                    projected_budget_utilization=results.get('projected', {}).get('budget_utilization_pct'),
-                    conflicts_detected=results.get('new_conflicts', []),
+                    projected_budget_utilization=new_budget_util,
+                    conflicts_detected=new_conflicts,
                     gemini_recommendation=recommendation_text,
                 )
                 snapshots_created += 1
 
                 # Log divergence if score changed by more than 5 points
-                if abs(new_feasibility - old_score) > 5:
+                if abs(float(new_feasibility) - float(old_score)) > 5:
                     divergence_log = BranchDivergenceLog.objects.create(
                         branch=branch,
                         old_score=old_score,

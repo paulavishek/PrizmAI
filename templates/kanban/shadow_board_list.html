@@ -371,15 +371,15 @@
                                 {% for log in branch_impacts_today %}
                                 <tr class="{% if log.score_delta > 0 %}table-success{% elif log.score_delta < 0 %}table-warning{% endif %}">
                                     <td><small><strong>{{ log.branch.name }}</strong></small></td>
-                                    <td class="text-center"><small><span class="badge bg-secondary">{{ log.old_score }}</span></small></td>
-                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 70 %}bg-success{% elif log.new_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score }}</span></small></td>
+                                    <td class="text-center"><small><span class="badge bg-secondary">{{ log.old_score|floatformat:0 }}</span></small></td>
+                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 70 %}bg-success{% elif log.new_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score|floatformat:0 }}</span></small></td>
                                     <td class="text-center"><small>
                                         {% if log.score_delta > 0 %}
-                                            <span class="text-success"><i class="fas fa-arrow-up me-1"></i>+{{ log.score_delta }}</span>
+                                            <span class="text-success"><i class="fas fa-arrow-up me-1"></i>+{{ log.score_delta|floatformat:1 }}</span>
                                         {% elif log.score_delta < 0 %}
-                                            <span class="text-danger"><i class="fas fa-arrow-down me-1"></i>{{ log.score_delta }}</span>
+                                            <span class="text-danger"><i class="fas fa-arrow-down me-1"></i>{{ log.score_delta|floatformat:1 }}</span>
                                         {% else %}
-                                            <span class="text-muted">—</span>
+                                            <span class="text-muted" title="Recalculated, no change">±0</span>
                                         {% endif %}
                                     </small></td>
                                 </tr>

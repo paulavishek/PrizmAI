@@ -261,6 +261,11 @@ class CreateBranchView(CreateView):
             except WhatIfScenario.DoesNotExist:
                 scenario = None
 
+        # Snapshot baseline velocity at creation time so live recalculations
+        # can compare actual 7-day velocity against the projection's assumption.
+        from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
+        branch.baseline_velocity_per_week = compute_baseline_velocity(board)
+
         branch.save()
 
         # Create initial snapshot from linked scenario's slider values
@@ -300,6 +305,7 @@ class CreateBranchView(CreateView):
                 if not name:
                     return JsonResponse({'error': 'Branch name required'}, status=400)
 
+                from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
                 branch = ShadowBranch.objects.create(
                     board=board,
                     created_by=request.user,
@@ -307,6 +313,7 @@ class CreateBranchView(CreateView):
                     description=description,
                     branch_color=color,
                     source_scenario_id=scenario_id if scenario_id else None,
+                    baseline_velocity_per_week=compute_baseline_velocity(board),
                 )
 
                 # Create initial snapshot from linked scenario's slider values
@@ -642,6 +649,7 @@ def promote_scenario_to_branch(request, board_id):
             branch_name = f'{scenario.name} (Promoted)'
 
         # Create branch linked to scenario
+        from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
         branch = ShadowBranch.objects.create(
             board=board,
             created_by=request.user,
@@ -649,6 +657,7 @@ def promote_scenario_to_branch(request, board_id):
             description=description or f'Promoted from scenario: {scenario.name}',
             source_scenario=scenario,
             branch_color=color,
+            baseline_velocity_per_week=compute_baseline_velocity(board),
         )
 
         # Create initial snapshot from scenario's slider values

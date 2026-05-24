@@ -53,6 +53,15 @@ class ShadowBranch(models.Model):
     )
     is_starred = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
+    baseline_velocity_per_week = models.FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            'Team velocity (tasks/week) the branch projection was created against. '
+            'Compared against the live 7-day actual velocity to produce the velocity '
+            'health adjustment in feasibility recalculations.'
+        ),
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -114,10 +123,13 @@ class BranchSnapshot(models.Model):
         help_text='Weeks to extend/reduce deadline (+/-)',
     )
     
-    # Computed outcomes (0-100 integer scale)
-    feasibility_score = models.IntegerField(
+    # Computed outcomes — feasibility kept at 2dp so micro-nudges from single
+    # task completions actually persist instead of being rounded away.
+    feasibility_score = models.DecimalField(
         default=0,
-        help_text='Feasibility score 0-100',
+        max_digits=6,
+        decimal_places=2,
+        help_text='Feasibility score 0-100 (2dp precision retains micro-nudges)',
     )
     projected_completion_date = models.DateField(
         null=True,
@@ -129,10 +141,10 @@ class BranchSnapshot(models.Model):
         blank=True,
         help_text='Projected budget utilization percentage',
     )
-    
+
     # Conflict and recommendation data
     conflicts_detected = models.JSONField(
-        default=dict,
+        default=list,
         blank=True,
         help_text='JSON array of detected conflicts from feasibility analysis',
     )

@@ -286,19 +286,41 @@ def run_stress_test(request, board_id):
         }, status=500)
 
     # --- Save session ---
+    # Snapshot board-wide applied-vaccine count at the moment the run kicks off
+    # so Session History can show cumulative progress across runs (Image 7
+    # report: showed "0/5" for a re-run after 2 vaccines had been applied).
+    vaccines_applied_now = Vaccine.objects.filter(
+        board=board, is_applied=True
+    ).count()
     session = StressTestSession.objects.create(
         board=board,
         run_by=request.user,
         assumptions_made=result.get('assumptions_made', []),
         score_rationale=result.get('score_rationale', ''),
+        vaccines_applied_at_run=vaccines_applied_now,
     )
 
     # Save immunity score — coerce None → safe defaults
     dim_scores = result.get('dimension_scores') or {}
     dim_rationale = result.get('dimension_rationale') or {}
+    # Defense-in-depth floor: even though the prompt instructs Gemini to respect
+    # the minimum score, occasionally it returns a lower value.  Clamp server-side
+    # so vaccines always produce visible improvement on re-run.
+    last_score = board_data.get('last_immunity_score') or 0
+    total_vaccine_credit = board_data.get('total_vaccine_improvement') or 0
+    score_floor = max(1, last_score + int(total_vaccine_credit * 0.6))
+    raw_overall = result.get('overall_immunity_score') or 50
+    overall_score = max(raw_overall, score_floor)
+    if overall_score != raw_overall:
+        logger.info(
+            "Stress Test board %s: clamped AI score %s → %s (floor=%s, last=%s, "
+            "vaccine_credit=%s)",
+            board_id, raw_overall, overall_score, score_floor, last_score,
+            total_vaccine_credit,
+        )
     ImmunityScore.objects.create(
         session=session,
-        overall=result.get('overall_immunity_score') or 50,
+        overall=overall_score,
         schedule=dim_scores.get('schedule') or 50,
         budget=dim_scores.get('budget') or 50,
         team=dim_scores.get('team') or 50,
