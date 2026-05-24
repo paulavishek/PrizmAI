@@ -1334,6 +1334,7 @@ def _duplicate_board(template_board, user):
                 source_scenario=new_source,
                 branch_color=branch.branch_color,
                 is_starred=branch.is_starred,
+                baseline_velocity_per_week=branch.baseline_velocity_per_week,
             )
             ShadowBranch.objects.filter(pk=new_branch.pk).update(created_at=branch.created_at)
 
@@ -1413,6 +1414,7 @@ def _duplicate_board(template_board, user):
                 run_by=session.run_by,
                 score_rationale=session.score_rationale,
                 assumptions_made=session.assumptions_made,
+                vaccines_applied_at_run=session.vaccines_applied_at_run,
             )
             StressTestSession.objects.filter(pk=new_session.pk).update(created_at=session.created_at)
 

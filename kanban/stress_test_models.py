@@ -20,6 +20,15 @@ class StressTestSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     score_rationale = models.TextField(blank=True)
     assumptions_made = models.JSONField(default=list)
+    # Snapshot of board-wide cumulative applied-vaccine count at the moment
+    # this session ran.  Distinct from `vaccines_applied_count` (which only
+    # counts this session's freshly-prescribed vaccines marked applied — always
+    # 0 right after a run completes).  Surfaced in Session History so users
+    # see the cumulative work they've done across runs, not a misleading "0/5".
+    vaccines_applied_at_run = models.IntegerField(
+        default=0,
+        help_text='Cumulative count of board-wide applied vaccines at the moment this session was created.',
+    )
 
     class Meta:
         ordering = ['-created_at']

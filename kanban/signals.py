@@ -1269,7 +1269,24 @@ def trigger_branch_recalculation_on_task_completion(sender, instance, created, *
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         board_id = instance.column.board_id
         task_title = instance.title or 'Unknown task'
-        
+
+        # --- Instant micro-nudge ---
+        # The Celery recalc runs ~5s later (batched) and overwrites with the
+        # canonical AI-driven score.  In the meantime, write a tiny nudge
+        # snapshot synchronously so the user sees the Feasibility Trend chart
+        # move within a render cycle of completing a task.  Magnitude is
+        # intentionally small (+1.0) so it can't drown out the real recalc.
+        try:
+            from django.core.cache import cache as _cache
+            if not _cache.get(f'demo_shadow_lock_{board_id}'):
+                _write_micro_nudge(board_id, direction=+1.0,
+                                   trigger=f'Task "{task_title}" completed')
+        except Exception as nudge_err:
+            import logging
+            logging.getLogger(__name__).warning(
+                f'Micro-nudge skipped for board {board_id}: {nudge_err}'
+            )
+
         recalculate_branches_for_board.apply_async(
             args=[board_id],
             kwargs={'trigger_event': f'Task "{task_title}" completed'},
@@ -1281,6 +1298,40 @@ def trigger_branch_recalculation_on_task_completion(sender, instance, created, *
         logger.error(
             f'Error triggering branch recalculation for task completion: {e}',
             exc_info=True
+        )
+
+
+def _write_micro_nudge(board_id, direction, trigger):
+    """
+    Synchronously write a tiny snapshot per active branch so the UI moves
+    immediately after a task completion.  The full Celery recalc runs ~5s
+    later and replaces this with the canonical AI-driven value (the dedup
+    guard in the Celery task will retain or replace as appropriate).
+
+    `direction` is the nudge magnitude in score points (e.g. +1.0 for a
+    completion, -1.0 if work is reverted).
+    """
+    from kanban.shadow_models import ShadowBranch, BranchSnapshot
+
+    active = ShadowBranch.objects.filter(board_id=board_id, status='active')
+    for branch in active:
+        latest = branch.get_latest_snapshot()
+        if not latest:
+            continue
+        nudged = max(0.0, min(100.0, float(latest.feasibility_score) + direction))
+        # Skip if the nudge wouldn't actually move the score (already at cap).
+        if round(nudged, 2) == round(float(latest.feasibility_score), 2):
+            continue
+        BranchSnapshot.objects.create(
+            branch=branch,
+            scope_delta=latest.scope_delta,
+            team_delta=latest.team_delta,
+            deadline_delta_weeks=latest.deadline_delta_weeks,
+            feasibility_score=round(nudged, 2),
+            projected_completion_date=latest.projected_completion_date,
+            projected_budget_utilization=latest.projected_budget_utilization,
+            conflicts_detected=latest.conflicts_detected,
+            gemini_recommendation=latest.gemini_recommendation,
         )
 
 
