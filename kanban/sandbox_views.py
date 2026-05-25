@@ -1364,7 +1364,47 @@ def _duplicate_board(template_board, user):
                 new_captured_at = _clone_now if snap.pk == latest_snap_pk else snap.captured_at
                 BranchSnapshot.objects.filter(pk=new_snap.pk).update(captured_at=new_captured_at)
 
-            for div in BranchDivergenceLog.objects.filter(branch_id=old_branch_pk):
+            # Clone divergence logs, but:
+            #   (a) drop entries whose trigger_event looks like leftover
+            #       internal testing (e.g. "Test task", "Verification:",
+            #       "Test #1") — these polluted the template during earlier
+            #       hand-testing and survive every reset until filtered;
+            #   (b) collapse consecutive identical entries (same trigger
+            #       and same old/new scores) so a single real adjustment
+            #       can't surface as 8 back-to-back rows of "Board
+            #       recalculation after scope/team adjustment (+12.0)".
+            TEST_TRIGGER_PATTERNS = (
+                'test task',
+                'test #',
+                'verification:',
+                'regenerate ai rec',
+                'manual test',
+                'debug',
+            )
+
+            def _looks_like_test_trigger(text: str) -> bool:
+                if not text:
+                    return False
+                lowered = text.lower()
+                return any(p in lowered for p in TEST_TRIGGER_PATTERNS)
+
+            previous_key = None
+            div_logs = (
+                BranchDivergenceLog.objects
+                .filter(branch_id=old_branch_pk)
+                .order_by('logged_at')
+            )
+            for div in div_logs:
+                if _looks_like_test_trigger(div.trigger_event):
+                    continue
+                key = (
+                    div.trigger_event,
+                    str(div.old_score),
+                    str(div.new_score),
+                )
+                if key == previous_key:
+                    continue
+                previous_key = key
                 new_div = BranchDivergenceLog.objects.create(
                     branch=new_branch,
                     old_score=div.old_score,
