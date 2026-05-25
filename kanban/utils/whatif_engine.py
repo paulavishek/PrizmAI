@@ -566,9 +566,36 @@ class WhatIfEngine:
             f"  - [{c['severity'].upper()}] {c['description']}" for c in conflicts
         ) or '  None detected.'
 
+        # Pre-bind the feasibility tier so the AI's assessment field cannot
+        # disagree with the computed score.  Past prompts let the model freely
+        # label a 41% scenario "Medium" or even contradict the number with its
+        # own narrative ("a critical error", "mathematically inconsistent");
+        # locking the tier and explicitly telling the model not to argue with
+        # the inputs eliminated that whole class of incoherent recommendations.
+        feasibility_pct = round(feasibility * 100, 1)
+        if feasibility_pct >= 70:
+            forced_tier = 'High'
+        elif feasibility_pct >= 50:
+            forced_tier = 'Medium'
+        else:
+            forced_tier = 'Low'
+
         return f"""You are a senior program manager and strategic advisor. A project manager is
 considering the following hypothetical changes to their project and needs your
 expert analysis of the trade-offs.
+
+GROUND RULES (do not violate):
+- Treat every number under "Current State", "Projected State After Changes",
+  "Key Deltas", and "Feasibility Score" as authoritative inputs computed by a
+  deterministic engine.  Do NOT call them "errors", "inconsistent",
+  "mathematically impossible", or "implausible" — they are the engine's
+  ground truth.  Your job is to interpret and advise, not to audit the math.
+- Your "feasibility_assessment" field MUST be exactly "{forced_tier}" because
+  the computed feasibility is {feasibility_pct:.1f}% (High ≥70, Medium 50-69,
+  Low <50).  Do not pick a different tier.
+- Mitigations and trade-offs must be consistent with the sign of each delta
+  (e.g., if tasks_added is negative, that's a scope REDUCTION, not an
+  expansion; if deadline_shift_days is negative, the deadline got TIGHTER).
 
 **Project:** {self.board.name}
 

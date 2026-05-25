@@ -390,9 +390,52 @@ class BranchDetailView(DetailView):
         # Add board to context so templates can generate back-links
         context['board'] = branch.board
 
-        # Get last 30 snapshots for history
-        snapshots = branch.snapshots.all()[:30]
-        context['snapshots'] = snapshots
+        # Pull a wider window than we display so collapsing runs of identical
+        # snapshots still gives the user ~30 distinct rows to scroll through.
+        raw_snapshots = list(branch.snapshots.all()[:200])
+
+        # Collapse consecutive snapshots whose user-visible fields (score,
+        # scope/team/deadline deltas) are identical into a single row.
+        # Pre-existing snapshot bloat (from before the tighter creation-time
+        # dedup landed) was making history feel broken — every row looked the
+        # same.  Display-side collapsing fixes the perception immediately
+        # without rewriting the DB.  We expose `repeat_count` and
+        # `first_captured_at` so the template can show "Snapshot 12 (×5,
+        # first seen 18:14)" instead of five back-to-back identical rows.
+        collapsed = []
+        # raw_snapshots is newest-first; iterate that order so the row labelled
+        # with the latest captured_at survives, and we accumulate the earliest
+        # captured_at as the "first seen" timestamp.
+        for snap in raw_snapshots:
+            key = (
+                round(float(snap.feasibility_score), 2),
+                snap.scope_delta,
+                snap.team_delta,
+                snap.deadline_delta_weeks,
+            )
+            if collapsed and collapsed[-1]['key'] == key:
+                # Merge into the previous (newer) entry — bump repeat count and
+                # push first_captured_at further back in time.
+                collapsed[-1]['repeat_count'] += 1
+                collapsed[-1]['first_captured_at'] = snap.captured_at
+            else:
+                collapsed.append({
+                    'snapshot': snap,
+                    'key': key,
+                    'repeat_count': 1,
+                    'first_captured_at': snap.captured_at,
+                })
+            if len(collapsed) >= 30:
+                break
+
+        context['snapshots'] = [
+            {
+                'snapshot': entry['snapshot'],
+                'repeat_count': entry['repeat_count'],
+                'first_captured_at': entry['first_captured_at'],
+            }
+            for entry in collapsed
+        ]
 
         # Get divergence logs
         divergence_logs = branch.divergence_logs.all()[:50]
@@ -402,11 +445,19 @@ class BranchDetailView(DetailView):
         latest = branch.get_latest_snapshot()
         context['latest_snapshot'] = latest
 
-        # Build feasibility history for chart
+        # Build feasibility history for chart.
+        # IMPORTANT: feasibility_score is a DecimalField; rendering it through
+        # the template's |safe filter as Python repr produces `Decimal('40.75')`
+        # which is not valid JS and throws "Decimal is not defined" in the
+        # browser, blanking the Feasibility Trend chart.  Coerce to float and
+        # serialize with json.dumps so the template can embed it via
+        # |json_script (preferred) or |safe (legacy).
         history = branch.get_score_history(limit=30)
-        context['feasibility_history'] = [
-            {'date': dt.isoformat(), 'score': score} for dt, score in history
+        feasibility_history = [
+            {'date': dt.isoformat(), 'score': float(score)} for dt, score in history
         ]
+        context['feasibility_history'] = feasibility_history
+        context['feasibility_history_json'] = json.dumps(feasibility_history)
 
         return context
 

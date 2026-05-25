@@ -1303,36 +1303,35 @@ def trigger_branch_recalculation_on_task_completion(sender, instance, created, *
 
 def _write_micro_nudge(board_id, direction, trigger):
     """
-    Synchronously write a tiny snapshot per active branch so the UI moves
-    immediately after a task completion.  The full Celery recalc runs ~5s
-    later and replaces this with the canonical AI-driven value (the dedup
-    guard in the Celery task will retain or replace as appropriate).
+    Update the latest snapshot's score in place so the UI moves immediately
+    after a task completion.  The full Celery recalc runs ~5s later and
+    overwrites it with the canonical AI-driven value.
+
+    We deliberately UPDATE rather than INSERT here: a micro-nudge is a
+    cosmetic placeholder that exists only to bridge the 5-second window
+    until the real recalc lands.  Inserting a new BranchSnapshot per nudge
+    used to flood Snapshot History with near-identical rows (every task
+    completion produced two rows: nudge + recalc), making users feel
+    "something is wrong."  An in-place score bump keeps the trend chart
+    moving without polluting history.
 
     `direction` is the nudge magnitude in score points (e.g. +1.0 for a
     completion, -1.0 if work is reverted).
     """
-    from kanban.shadow_models import ShadowBranch, BranchSnapshot
+    from kanban.shadow_models import ShadowBranch
 
     active = ShadowBranch.objects.filter(board_id=board_id, status='active')
     for branch in active:
         latest = branch.get_latest_snapshot()
         if not latest:
             continue
-        nudged = max(0.0, min(100.0, float(latest.feasibility_score) + direction))
+        current = float(latest.feasibility_score)
+        nudged = max(0.0, min(100.0, current + direction))
         # Skip if the nudge wouldn't actually move the score (already at cap).
-        if round(nudged, 2) == round(float(latest.feasibility_score), 2):
+        if round(nudged, 2) == round(current, 2):
             continue
-        BranchSnapshot.objects.create(
-            branch=branch,
-            scope_delta=latest.scope_delta,
-            team_delta=latest.team_delta,
-            deadline_delta_weeks=latest.deadline_delta_weeks,
-            feasibility_score=round(nudged, 2),
-            projected_completion_date=latest.projected_completion_date,
-            projected_budget_utilization=latest.projected_budget_utilization,
-            conflicts_detected=latest.conflicts_detected,
-            gemini_recommendation=latest.gemini_recommendation,
-        )
+        latest.feasibility_score = round(nudged, 2)
+        latest.save(update_fields=['feasibility_score'])
 
 
 @receiver(pre_save, sender='kanban.Board')

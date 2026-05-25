@@ -123,11 +123,26 @@ function drawSparkline(canvas, scores, timestamps) {
     if (typeof Chart === 'undefined') return;
 
     const ctx = canvas.getContext('2d');
-    const colors = scores.map(s => {
+
+    // Per-point colors (still used for hover dots so users can see when a
+    // specific snapshot crossed a tier boundary).
+    const pointColors = scores.map(s => {
         if (s >= 70) return '#198754';
         if (s >= 50) return '#fd7e14';
         return '#dc3545';
     });
+
+    // Color the line and fill by the LATEST tier — at low scores a thin
+    // blue band at the bottom of the canvas was visually washed out and
+    // made active cards look "dim" next to cards with healthier scores.
+    // Tying the trace color to the current feasibility tier keeps the
+    // sparkline consistently legible regardless of score height.
+    const tierColors = (() => {
+        const latest = scores.length ? scores[scores.length - 1] : 0;
+        if (latest >= 70) return { border: '#198754', fill: 'rgba(25, 135, 84, 0.18)' };
+        if (latest >= 50) return { border: '#fd7e14', fill: 'rgba(253, 126, 20, 0.18)' };
+        return { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.18)' };
+    })();
 
     // Build human-readable date labels (e.g. "Apr 25, 2026") for the hover tooltip
     // so each point can be correlated to its snapshot date.
@@ -146,14 +161,14 @@ function drawSparkline(canvas, scores, timestamps) {
             datasets: [{
                 label: 'Feasibility',
                 data: scores,
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.15)',
+                borderColor: tierColors.border,
+                backgroundColor: tierColors.fill,
                 borderWidth: 2,
                 fill: true,
                 tension: 0,
                 pointRadius: 0,
                 pointHoverRadius: 4,
-                pointBackgroundColor: colors
+                pointBackgroundColor: pointColors
             }]
         },
         options: {
