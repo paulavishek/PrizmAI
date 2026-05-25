@@ -168,7 +168,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-wand-magic-sparkles me-2"></i>AI Recommendation
+                    <h6 class="mb-0"><i class="fas fa-wand-magic-sparkles me-2"></i>AI Recommendation</h6>
                 </div>
                 <div class="card-body ai-recommendation-body" style="max-height: 300px; overflow-y: auto;">
                     {% if latest_snapshot.gemini_recommendation %}
@@ -207,23 +207,33 @@
         <div class="card-body">
             {% if snapshots|length > 0 %}
             <div class="snapshot-timeline">
-                {% for snapshot in snapshots %}
+                {% for entry in snapshots %}
                 <div class="snapshot-timeline-item">
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
                                 <strong>Snapshot {{ forloop.revcounter }}</strong>
-                                <small class="text-muted d-block">{{ snapshot.captured_at|date:"M d, Y H:i" }}</small>
+                                {% if entry.repeat_count > 1 %}
+                                <span class="badge bg-light text-muted ms-1" title="No measurable change across these recalculations; consecutive duplicates have been collapsed.">
+                                    ×{{ entry.repeat_count }} unchanged
+                                </span>
+                                {% endif %}
+                                <small class="text-muted d-block">
+                                    {{ entry.snapshot.captured_at|date:"M d, Y H:i" }}
+                                    {% if entry.repeat_count > 1 %}
+                                        <span class="text-muted">(first seen {{ entry.first_captured_at|date:"M d, Y H:i" }})</span>
+                                    {% endif %}
+                                </small>
                             </div>
                             <span class="badge bg-primary">
-                                {{ snapshot.feasibility_score }}%
+                                {{ entry.snapshot.feasibility_score }}%
                             </span>
                         </div>
                         <p class="small text-muted mb-0">
-                            <i class="fas fa-tasks me-1"></i>Δ Scope: {{ snapshot.scope_delta|stringformat:"+d" }}
-                            <i class="fas fa-users ms-3 me-1"></i>Δ Team: {{ snapshot.team_delta|stringformat:"+d" }}
-                            <i class="fas fa-calendar ms-3 me-1"></i>Δ Deadline: {{ snapshot.deadline_delta_weeks|stringformat:"+d" }}w
+                            <i class="fas fa-tasks me-1"></i>Δ Scope: {{ entry.snapshot.scope_delta|stringformat:"+d" }}
+                            <i class="fas fa-users ms-3 me-1"></i>Δ Team: {{ entry.snapshot.team_delta|stringformat:"+d" }}
+                            <i class="fas fa-calendar ms-3 me-1"></i>Δ Deadline: {{ entry.snapshot.deadline_delta_weeks|stringformat:"+d" }}w
                         </p>
                     </div>
                 </div>
@@ -258,7 +268,7 @@
                         <small class="text-muted d-block">{{ log.logged_at|date:"M d, Y H:i" }}</small>
                     </div>
                     <span class="badge {% if log.score_delta > 0 %}bg-success{% else %}bg-danger{% endif %}">
-                        {{ log.old_score }} → {{ log.new_score }} ({{ log.score_delta|stringformat:"+d" }})
+                        {{ log.old_score|floatformat:1 }} → {{ log.new_score|floatformat:1 }} ({{ log.score_delta|floatformat:"+1" }})
                     </span>
                 </div>
                 <p class="small mb-0">
@@ -383,10 +393,24 @@
     // Feasibility Trend Chart
     const ctx = document.getElementById('feasibilityChart');
     if (ctx) {
-        const data = {{ feasibility_history|safe }};
+        // feasibility_history_json is a json.dumps'd string from the view, so
+        // Decimal values are safely coerced to JS numbers (avoids the
+        // "Decimal is not defined" runtime error that previously blanked
+        // this chart).
+        const data = JSON.parse('{{ feasibility_history_json|escapejs }}');
         const labels = data.map(d => new Date(d.date).toLocaleDateString());
         const scores = data.map(d => d.score);
-        
+
+        // Color the trace by the current (latest) feasibility tier so the
+        // chart's visual weight matches the headline score even when the
+        // line sits low on the y-axis.
+        const latest = scores.length ? scores[scores.length - 1] : 0;
+        const tierColor = latest >= 70
+            ? { border: '#198754', fill: 'rgba(25, 135, 84, 0.15)' }
+            : latest >= 50
+                ? { border: '#fd7e14', fill: 'rgba(253, 126, 20, 0.15)' }
+                : { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.15)' };
+
         new Chart(ctx, {
             type: 'line',
             data: {
@@ -394,12 +418,11 @@
                 datasets: [{
                     label: 'Feasibility Score',
                     data: scores,
-                    borderColor: '#0d6efd',
-                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    borderColor: tierColor.border,
+                    backgroundColor: tierColor.fill,
                     tension: 0.4,
                     fill: true,
                     pointRadius: 4,
-                    pointClassName: 'point',
                     pointBackgroundColor: function(context) {
                         const score = context.raw;
                         if (score >= 70) return '#198754';

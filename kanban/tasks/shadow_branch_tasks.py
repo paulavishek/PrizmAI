@@ -178,12 +178,31 @@ def compute_actual_7d_velocity(board):
 
 
 def _is_duplicate_snapshot(latest, new_feasibility, new_proj_date,
-                            new_budget_util, new_conflicts):
+                            new_budget_util, new_conflicts,
+                            new_scope_delta=None, new_team_delta=None,
+                            new_deadline_delta_weeks=None):
     """
-    True if a new snapshot would be identical to the latest one AND we already
-    have one today.  Allows exactly one heartbeat snapshot per day so the
-    Feasibility Trend chart stays continuous on quiet days without bloating
-    Snapshot History with minute-by-minute duplicates.
+    True if a new snapshot would be functionally identical to the latest one
+    AND we already have one today.  Allows exactly one heartbeat snapshot per
+    day so the Feasibility Trend chart stays continuous on quiet days without
+    bloating Snapshot History with minute-by-minute duplicates.
+
+    What "identical" means here:
+      * Feasibility score (rounded to 2dp — matches what users see in the UI)
+      * Scenario sliders (scope, team, deadline) — these are the user's actual
+        levers and never drift on their own.
+      * Conflicts list — different conflicts represent a meaningful change.
+
+    What we INTENTIONALLY ignore for dedup:
+      * projected_completion_date — recomputed live each recalc (remaining
+        tasks / velocity), drifts by 1 day naturally as the calendar moves;
+        treating those as "different" was flooding the timeline with cosmetic
+        duplicates.
+      * projected_budget_utilization — float arithmetic produces sub-percent
+        wobble even when nothing meaningful changed.
+
+    Those two are still persisted on the new snapshot; we just don't gate
+    snapshot creation on them.
     """
     if not latest:
         return False
@@ -195,13 +214,21 @@ def _is_duplicate_snapshot(latest, new_feasibility, new_proj_date,
     except (TypeError, ValueError):
         latest_score = 0.0
     new_score = round(float(new_feasibility), 2)
-    return (
-        latest_score == new_score
-        and latest.projected_completion_date == new_proj_date
-        and round(float(latest.projected_budget_utilization or 0), 2)
-            == round(float(new_budget_util or 0), 2)
-        and (latest.conflicts_detected or []) == (new_conflicts or [])
-    )
+    if latest_score != new_score:
+        return False
+    if (latest.conflicts_detected or []) != (new_conflicts or []):
+        return False
+    # Compare scenario sliders when the caller supplies them.  (Legacy callers
+    # that don't pass them get the score+conflicts check only — still tighter
+    # than the old date/budget-sensitive comparison.)
+    if new_scope_delta is not None and latest.scope_delta != new_scope_delta:
+        return False
+    if new_team_delta is not None and latest.team_delta != new_team_delta:
+        return False
+    if (new_deadline_delta_weeks is not None
+            and latest.deadline_delta_weeks != new_deadline_delta_weeks):
+        return False
+    return True
 
 
 def _estimate_completion_date(simulation_results):
@@ -358,12 +385,19 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 new_conflicts = results.get('new_conflicts', [])
 
                 # --- Dedup + daily heartbeat ---
-                # Skip snapshot creation if all the user-facing fields would be
-                # identical to the latest snapshot AND we already captured one today.
-                # First snapshot of a new day always proceeds (heartbeat tick) so
-                # the trend chart stays continuous on quiet days.
-                if _is_duplicate_snapshot(latest_snapshot, new_feasibility,
-                                          projected_date, new_budget_util, new_conflicts):
+                # Skip snapshot creation if the user-facing fields would be
+                # identical to the latest snapshot AND we already captured one
+                # today.  First snapshot of a new day always proceeds
+                # (heartbeat tick) so the trend chart stays continuous on
+                # quiet days.
+                new_deadline_weeks = params['deadline_shift_days'] // 7
+                if _is_duplicate_snapshot(
+                    latest_snapshot, new_feasibility,
+                    projected_date, new_budget_util, new_conflicts,
+                    new_scope_delta=params['tasks_added'],
+                    new_team_delta=params['team_size_delta'],
+                    new_deadline_delta_weeks=new_deadline_weeks,
+                ):
                     logger.debug(
                         f'Skipping duplicate snapshot for branch {branch.id} '
                         f'(score={new_feasibility} unchanged today)'

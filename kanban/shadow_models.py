@@ -181,11 +181,18 @@ class BranchDivergenceLog(models.Model):
         related_name='divergence_logs',
     )
     logged_at = models.DateTimeField(auto_now_add=True)
-    old_score = models.IntegerField(
-        help_text='Previous feasibility score (0-100)',
+    # 2dp precision, matching BranchSnapshot.feasibility_score, so sub-integer
+    # divergences (e.g. a 5.4-point shift) don't get truncated to a misleading
+    # integer when displayed in the "Significant Score Changes" feed.
+    old_score = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        help_text='Previous feasibility score (0-100, 2dp precision)',
     )
-    new_score = models.IntegerField(
-        help_text='New feasibility score (0-100)',
+    new_score = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        help_text='New feasibility score (0-100, 2dp precision)',
     )
     trigger_event = models.TextField(
         help_text='Description of what triggered the recalculation (e.g., "Task XYZ completed")',
