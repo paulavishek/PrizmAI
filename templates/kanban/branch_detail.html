@@ -400,19 +400,37 @@
         // this chart).
         const data = JSON.parse('{{ feasibility_history_json|escapejs }}');
         // Time-scale points: Chart.js consumes {x: Date, y: number} when
-        // parsing is disabled.  Using a real time axis (vs. category labels)
-        // means two snapshots seconds apart cluster tightly instead of
-        // stretching across the full chart width.
-        const points = data.map(d => ({ x: new Date(d.date), y: d.score }));
+        // parsing is disabled.  Using a real time axis (vs. category
+        // labels) means two snapshots seconds apart cluster tightly
+        // instead of stretching across the full chart width.
+        let points = data.map(d => ({ x: new Date(d.date), y: d.score }));
 
-        // Bound the visible window to the last 7 days, anchored on the
-        // latest point.  Brand-new branches with one snapshot get a single
-        // dot at the right edge instead of a full-width diagonal artefact.
-        const latestTs = points.length
-            ? points[points.length - 1].x
-            : new Date();
-        const windowMs = 7 * 24 * 60 * 60 * 1000;
-        const windowStart = new Date(latestTs.getTime() - windowMs);
+        // Adaptive window: anchored on the latest snapshot, sized to the
+        // larger of (actual data span * 1.2) and a 24-hour minimum.
+        // - All snapshots today within 8 minutes  → 24h window, cluster
+        //   sits at the right edge (still bounded enough to avoid the
+        //   original "30 seconds look like weeks" artefact).
+        // - Snapshots over multiple days         → fit-to-data with
+        //   padding, so the trend is clearly visible across the chart.
+        const xs = points.map(p => p.x.getTime());
+        const minX = xs.length ? Math.min(...xs) : Date.now();
+        const maxX = xs.length ? Math.max(...xs) : Date.now();
+        const actualSpan = maxX - minX;
+        const MIN_WINDOW_MS = 24 * 60 * 60 * 1000;
+        const windowSpan = Math.max(actualSpan * 1.2, MIN_WINDOW_MS);
+        const latestTs = new Date(maxX);
+        const windowStart = new Date(maxX - windowSpan);
+
+        // Single-snapshot or all-same-timestamp branches: stretch the
+        // score across the window as a flat reference line so the chart
+        // shows the current level instead of an invisible cluster.
+        if (points.length > 0 && actualSpan === 0) {
+            const flatScore = points[points.length - 1].y;
+            points = [
+                { x: windowStart, y: flatScore },
+                { x: latestTs, y: flatScore },
+            ];
+        }
 
         const latestScore = points.length ? points[points.length - 1].y : 0;
         const tierColor = latestScore >= 70
@@ -466,10 +484,16 @@
                         min: windowStart,
                         max: latestTs,
                         time: {
-                            unit: 'day',
+                            // Pick tick granularity based on the visible
+                            // window: hour-level for sub-2-day windows,
+                            // day-level for longer ranges.  Without this,
+                            // forcing 'day' on a 24h chart produces a
+                            // single label ('May 25') with no sense of
+                            // intra-day position.
+                            unit: windowSpan <= 2 * MIN_WINDOW_MS ? 'hour' : 'day',
                             tooltipFormat: 'MMM d, HH:mm',
                             displayFormats: {
-                                hour: 'MMM d HH:mm',
+                                hour: 'HH:mm',
                                 day: 'MMM d'
                             }
                         },

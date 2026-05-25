@@ -466,6 +466,11 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 snapshots_created += 1
 
                 # Log divergence if score changed by more than 5 points.
+                # Skip the divergence entry entirely on a branch's very
+                # first snapshot — there's no real prior score to
+                # diverge from, only a default of 0, which would surface
+                # as a misleading "0.0 -> 40.8" row in Significant Score
+                # Changes immediately after branch promotion.
                 # Runtime dedup: when the same trigger + same old/new scores
                 # already produced a divergence log within the last 60 s,
                 # skip the new one.  Without this, a single user action that
@@ -473,7 +478,8 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 # surfaces as a run of identical "Significant Score Changes"
                 # rows, e.g. eight back-to-back "Board recalculation after
                 # scope/team adjustment (+12.0)" entries.
-                if abs(float(new_feasibility) - float(old_score)) > 5:
+                if (latest_snapshot is not None
+                        and abs(float(new_feasibility) - float(old_score)) > 5):
                     recent_cutoff = timezone.now() - timedelta(seconds=60)
                     is_recent_dup = BranchDivergenceLog.objects.filter(
                         branch=branch,
