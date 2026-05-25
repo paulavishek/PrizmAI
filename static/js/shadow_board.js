@@ -144,23 +144,42 @@ function drawSparkline(canvas, scores, timestamps) {
         return { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.18)' };
     })();
 
-    // Build human-readable date labels (e.g. "Apr 25, 2026") for the hover tooltip
-    // so each point can be correlated to its snapshot date.
-    const labels = Array.isArray(timestamps) && timestamps.length === scores.length
-        ? timestamps.map(ts => {
-            try {
-                return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-            } catch (_) { return ts; }
-          })
-        : scores.map((_, i) => i);
+    // Build {x: Date, y: score} points for a time-scale axis.  Falling back
+    // to a synthetic past-week timeline when timestamps aren't supplied
+    // (legacy API responses) keeps the sparkline rendering without
+    // collapsing into a single point.
+    const haveTimestamps = Array.isArray(timestamps)
+        && timestamps.length === scores.length;
+    const nowTs = Date.now();
+    const points = scores.map((s, i) => {
+        let x;
+        if (haveTimestamps) {
+            x = new Date(timestamps[i]);
+        } else {
+            // Spread synthetic points across the past 7 days for legacy data.
+            const span = 7 * 24 * 60 * 60 * 1000;
+            const ratio = scores.length > 1 ? i / (scores.length - 1) : 1;
+            x = new Date(nowTs - span * (1 - ratio));
+        }
+        return { x, y: s };
+    });
+
+    // Bound the visible window to the last 7 days anchored on the latest
+    // point so two near-simultaneous snapshots cluster tightly instead of
+    // stretching across the card.
+    const latestTs = points.length
+        ? points[points.length - 1].x
+        : new Date();
+    const windowMs = 7 * 24 * 60 * 60 * 1000;
+    const windowStart = new Date(latestTs.getTime() - windowMs);
 
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels,
             datasets: [{
                 label: 'Feasibility',
-                data: scores,
+                data: points,
+                parsing: false,
                 borderColor: tierColors.border,
                 backgroundColor: tierColors.fill,
                 borderWidth: 2,
@@ -178,8 +197,14 @@ function drawSparkline(canvas, scores, timestamps) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: (items) => items[0].label,
-                        label: (context) => `Feasibility: ${context.parsed.y}%`
+                        title: (items) => {
+                            const d = items[0] && items[0].raw && items[0].raw.x;
+                            return d ? new Date(d).toLocaleString() : '';
+                        },
+                        label: (context) => {
+                            const v = context.raw && context.raw.y;
+                            return v != null ? `Feasibility: ${v}%` : '';
+                        }
                     }
                 }
             },
@@ -191,6 +216,9 @@ function drawSparkline(canvas, scores, timestamps) {
                     grid: { display: false }
                 },
                 x: {
+                    type: 'time',
+                    min: windowStart,
+                    max: latestTs,
                     display: false,
                     grid: { display: false }
                 }

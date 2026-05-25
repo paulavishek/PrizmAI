@@ -178,6 +178,12 @@ class Command(BaseCommand):
                 user.save()
                 self.stdout.write(self.style.SUCCESS(f'  [OK] Created: {user.get_full_name()} ({user.email})'))
             else:
+                # Re-sync first/last name so legacy demo accounts that pre-date
+                # the persona-definition cleanup always have populated display
+                # names — Quantum Standup "Completed By" surfaces these and
+                # blank first_name used to render as "Unknown".
+                user.first_name = persona_data['first_name']
+                user.last_name = persona_data['last_name']
                 user.set_password('DemoUser@2026')
                 user.save()
                 self.stdout.write(self.style.WARNING(f'  ! Already exists: {user.get_full_name()} - password reset'))
