@@ -465,19 +465,41 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 )
                 snapshots_created += 1
 
-                # Log divergence if score changed by more than 5 points
+                # Log divergence if score changed by more than 5 points.
+                # Runtime dedup: when the same trigger + same old/new scores
+                # already produced a divergence log within the last 60 s,
+                # skip the new one.  Without this, a single user action that
+                # fans out to multiple recalc cycles (or a Celery retry)
+                # surfaces as a run of identical "Significant Score Changes"
+                # rows, e.g. eight back-to-back "Board recalculation after
+                # scope/team adjustment (+12.0)" entries.
                 if abs(float(new_feasibility) - float(old_score)) > 5:
-                    divergence_log = BranchDivergenceLog.objects.create(
+                    recent_cutoff = timezone.now() - timedelta(seconds=60)
+                    is_recent_dup = BranchDivergenceLog.objects.filter(
                         branch=branch,
+                        trigger_event=trigger_event,
                         old_score=old_score,
                         new_score=new_feasibility,
-                        trigger_event=trigger_event,
-                    )
-                    divergences_created += 1
-                    logger.info(
-                        f'Logged divergence for branch {branch.name}: {old_score} → {new_feasibility} '
-                        f'(trigger: {trigger_event})'
-                    )
+                        logged_at__gte=recent_cutoff,
+                    ).exists()
+                    if is_recent_dup:
+                        logger.debug(
+                            f'Skipping duplicate divergence log for branch '
+                            f'{branch.name}: identical entry within 60s '
+                            f'(trigger: {trigger_event})'
+                        )
+                    else:
+                        divergence_log = BranchDivergenceLog.objects.create(
+                            branch=branch,
+                            old_score=old_score,
+                            new_score=new_feasibility,
+                            trigger_event=trigger_event,
+                        )
+                        divergences_created += 1
+                        logger.info(
+                            f'Logged divergence for branch {branch.name}: {old_score} → {new_feasibility} '
+                            f'(trigger: {trigger_event})'
+                        )
 
                 # Update Redis cache with latest snapshot (15-min TTL)
                 try:
