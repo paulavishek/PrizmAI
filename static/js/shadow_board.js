@@ -92,16 +92,10 @@ function renderSparklines() {
             .then(r => r.json())
             .then(data => {
                 if (data.scores && data.scores.length > 0) {
-                    // Chart.js draws no line segment when given exactly 1 point, and
-                    // pointRadius:0 makes the dot invisible too — the sparkline appears
-                    // blank.  Duplicate the single value so a flat reference line is drawn.
-                    const scores = data.scores.length === 1
-                        ? [data.scores[0], data.scores[0]]
-                        : data.scores;
-                    const timestamps = (data.timestamps || []).length === 1
-                        ? [data.timestamps[0], data.timestamps[0]]
-                        : (data.timestamps || []);
-                    drawSparkline(canvas, scores, timestamps);
+                    // drawSparkline handles single-snapshot and same-timestamp
+                    // data internally by stretching the score across a
+                    // minimum 1-hour window as a flat reference line.
+                    drawSparkline(canvas, data.scores, data.timestamps || []);
                 } else {
                     const ctx = canvas.getContext('2d');
                     canvas.style.height = '30px';
@@ -151,12 +145,11 @@ function drawSparkline(canvas, scores, timestamps) {
     const haveTimestamps = Array.isArray(timestamps)
         && timestamps.length === scores.length;
     const nowTs = Date.now();
-    const points = scores.map((s, i) => {
+    let points = scores.map((s, i) => {
         let x;
         if (haveTimestamps) {
             x = new Date(timestamps[i]);
         } else {
-            // Spread synthetic points across the past 7 days for legacy data.
             const span = 7 * 24 * 60 * 60 * 1000;
             const ratio = scores.length > 1 ? i / (scores.length - 1) : 1;
             x = new Date(nowTs - span * (1 - ratio));
@@ -164,14 +157,35 @@ function drawSparkline(canvas, scores, timestamps) {
         return { x, y: s };
     });
 
-    // Bound the visible window to the last 7 days anchored on the latest
-    // point so two near-simultaneous snapshots cluster tightly instead of
-    // stretching across the card.
-    const latestTs = points.length
-        ? points[points.length - 1].x
-        : new Date();
-    const windowMs = 7 * 24 * 60 * 60 * 1000;
-    const windowStart = new Date(latestTs.getTime() - windowMs);
+    // Fit-to-data window (with a minimum span) so single-snapshot branches
+    // and freshly-promoted branches show a visible trace instead of an
+    // invisible cluster at the right edge.  Sparklines have no axis
+    // labels, so spreading a short data span across the card width is
+    // fine — there's no "30 seconds look like weeks" hazard like on the
+    // main detail chart.
+    const MIN_SPARKLINE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+    const xs = points.map(p => p.x.getTime());
+    const minX = xs.length ? Math.min(...xs) : nowTs;
+    const maxX = xs.length ? Math.max(...xs) : nowTs;
+    const actualSpan = maxX - minX;
+    const windowSpan = Math.max(actualSpan * 1.1, MIN_SPARKLINE_WINDOW_MS);
+    const latestTs = new Date(maxX);
+    const windowStart = new Date(maxX - windowSpan);
+
+    // When every snapshot is at the same timestamp (single-snapshot
+    // branches and ones whose history has been freshly initialised in
+    // one Celery cycle), the time-scale renderer would stack all points
+    // on the same X coordinate and the line would be invisible.  Stretch
+    // the score across the window as a flat reference line.
+    if (points.length === 0) {
+        // nothing to do — drawSparkline shouldn't have been called
+    } else if (actualSpan === 0) {
+        const flatScore = points[points.length - 1].y;
+        points = [
+            { x: windowStart, y: flatScore },
+            { x: latestTs, y: flatScore },
+        ];
+    }
 
     new Chart(ctx, {
         type: 'line',

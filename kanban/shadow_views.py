@@ -165,8 +165,15 @@ class ShadowBoardListView(ListView):
             captured_at__lt=today_end,
         ).select_related('branch').order_by('branch_id', 'captured_at')
 
+        # Track BOTH the first and the latest snapshot of today per
+        # branch.  Querysets are ascending by captured_at, so the first
+        # value written wins for "earliest" and the last value written
+        # wins for "latest".
+        earliest_today: dict = {}
         latest_today: dict = {}
         for snap in today_snapshots_qs:
+            if snap.branch_id not in earliest_today:
+                earliest_today[snap.branch_id] = snap
             latest_today[snap.branch_id] = snap
 
         branch_impacts = []
@@ -177,7 +184,21 @@ class ShadowBoardListView(ListView):
                 .order_by('-captured_at')
                 .first()
             )
-            old_score = prev_snap.feasibility_score if prev_snap else 0
+            # Baseline preference: yesterday's last snapshot (a real
+            # "before today" anchor).  When the branch was created or
+            # recovered today and has no pre-today history, fall back to
+            # today's earliest snapshot so the "Change" column reflects
+            # movement *during today* instead of "score went from 0 to N"
+            # — the latter visually surfaces as a huge swing (e.g. +61.8)
+            # that misrepresents what the team actually did today.
+            if prev_snap is not None:
+                old_score = prev_snap.feasibility_score
+            else:
+                earliest_snap = earliest_today.get(branch_id)
+                old_score = (
+                    earliest_snap.feasibility_score
+                    if earliest_snap is not None else 0
+                )
             new_score = latest_snap.feasibility_score
             branch_impacts.append(types.SimpleNamespace(
                 branch=latest_snap.branch,
@@ -189,7 +210,13 @@ class ShadowBoardListView(ListView):
         branch_impacts.sort(key=lambda x: abs(x.score_delta), reverse=True)
         context['branch_impacts_today'] = branch_impacts
 
-        # Auto-heal: if any active branches have no snapshots, re-trigger recalculation
+        # Auto-heal: if any active branches have no snapshots, re-trigger
+        # recalculation.  The recalc loops over ALL active branches on the
+        # board, not just the missing ones — so the trigger_event must be
+        # a neutral description that doesn't lie about other branches.
+        # The previous text ("Auto-heal: branches missing snapshots")
+        # showed up in every branch's Significant Score Changes feed,
+        # implying the OTHER branches were also missing snapshots.
         branches_without_snapshots = ShadowBranch.objects.filter(
             board=board, status='active',
         ).exclude(
@@ -200,7 +227,7 @@ class ShadowBoardListView(ListView):
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
                 recalculate_branches_for_board.apply_async(
                     args=[board.id],
-                    kwargs={'trigger_event': 'Auto-heal: branches missing snapshots'},
+                    kwargs={'trigger_event': 'Periodic branch refresh'},
                     countdown=2,
                 )
             except Exception:
