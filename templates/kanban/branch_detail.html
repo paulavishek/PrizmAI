@@ -389,6 +389,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
     // Feasibility Trend Chart
     const ctx = document.getElementById('feasibilityChart');
@@ -398,33 +399,42 @@
         // "Decimal is not defined" runtime error that previously blanked
         // this chart).
         const data = JSON.parse('{{ feasibility_history_json|escapejs }}');
-        const labels = data.map(d => new Date(d.date).toLocaleDateString());
-        const scores = data.map(d => d.score);
+        // Time-scale points: Chart.js consumes {x: Date, y: number} when
+        // parsing is disabled.  Using a real time axis (vs. category labels)
+        // means two snapshots seconds apart cluster tightly instead of
+        // stretching across the full chart width.
+        const points = data.map(d => ({ x: new Date(d.date), y: d.score }));
 
-        // Color the trace by the current (latest) feasibility tier so the
-        // chart's visual weight matches the headline score even when the
-        // line sits low on the y-axis.
-        const latest = scores.length ? scores[scores.length - 1] : 0;
-        const tierColor = latest >= 70
+        // Bound the visible window to the last 7 days, anchored on the
+        // latest point.  Brand-new branches with one snapshot get a single
+        // dot at the right edge instead of a full-width diagonal artefact.
+        const latestTs = points.length
+            ? points[points.length - 1].x
+            : new Date();
+        const windowMs = 7 * 24 * 60 * 60 * 1000;
+        const windowStart = new Date(latestTs.getTime() - windowMs);
+
+        const latestScore = points.length ? points[points.length - 1].y : 0;
+        const tierColor = latestScore >= 70
             ? { border: '#198754', fill: 'rgba(25, 135, 84, 0.15)' }
-            : latest >= 50
+            : latestScore >= 50
                 ? { border: '#fd7e14', fill: 'rgba(253, 126, 20, 0.15)' }
                 : { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.15)' };
 
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
                 datasets: [{
                     label: 'Feasibility Score',
-                    data: scores,
+                    data: points,
+                    parsing: false,
                     borderColor: tierColor.border,
                     backgroundColor: tierColor.fill,
                     tension: 0.4,
                     fill: true,
                     pointRadius: 4,
                     pointBackgroundColor: function(context) {
-                        const score = context.raw;
+                        const score = context.raw && context.raw.y;
                         if (score >= 70) return '#198754';
                         if (score >= 50) return '#fd7e14';
                         return '#dc3545';
@@ -435,9 +445,36 @@
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) {
+                                if (!items.length) return '';
+                                const d = items[0].raw && items[0].raw.x;
+                                return d ? new Date(d).toLocaleString() : '';
+                            },
+                            label: function(item) {
+                                const v = item.raw && item.raw.y;
+                                return v != null ? v.toFixed(2) + '%' : '';
+                            }
+                        }
+                    }
                 },
                 scales: {
+                    x: {
+                        type: 'time',
+                        min: windowStart,
+                        max: latestTs,
+                        time: {
+                            unit: 'day',
+                            tooltipFormat: 'MMM d, HH:mm',
+                            displayFormats: {
+                                hour: 'MMM d HH:mm',
+                                day: 'MMM d'
+                            }
+                        },
+                        ticks: { maxRotation: 0, autoSkip: true }
+                    },
                     y: {
                         min: 0,
                         max: 100,

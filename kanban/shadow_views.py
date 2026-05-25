@@ -31,22 +31,6 @@ from kanban.decorators import demo_write_guard
 logger = logging.getLogger(__name__)
 
 
-def _compute_initial_feasibility(board, params):
-    """Compute feasibility score synchronously so branches don't start at 0%."""
-    try:
-        from kanban.utils.whatif_engine import WhatIfEngine
-        from kanban.tasks.shadow_branch_tasks import scale_feasibility
-        engine = WhatIfEngine(board)
-        results = engine.simulate({
-            'tasks_added': int(params.get('tasks_added', 0)),
-            'team_size_delta': int(params.get('team_size_delta', 0)),
-            'deadline_shift_days': int(params.get('deadline_shift_days', 0)),
-        })
-        return scale_feasibility(results.get('feasibility_score', 0))
-    except Exception:
-        logger.warning("Could not compute initial feasibility, defaulting to 50", exc_info=True)
-        return 50
-
 # Define predefined color palette for branches
 BRANCH_COLOR_PALETTE = [
     '#0d6efd',  # Blue (default)
@@ -156,7 +140,13 @@ class ShadowBoardListView(ListView):
             col_lower = act.task.column.name.lower()
             if 'done' not in col_lower and 'complete' not in col_lower:
                 continue  # moved back out of Done later today
-            act.task.completer = act.user
+            # Prefer the task's owner (assignee) for "Completed By" — that's
+            # who's actually responsible for the work.  Fall back to whoever
+            # logged the move activity (drag-and-drop user) only when no
+            # assignee is set.  The view used to assign act.user directly,
+            # which surfaced "Unknown" whenever the dragger's first_name
+            # was blank (common on seeded demo users).
+            act.task.completer = act.task.assigned_to or act.user
             completed_today.append(act.task)
             if len(completed_today) >= 10:
                 break
@@ -268,18 +258,11 @@ class CreateBranchView(CreateView):
 
         branch.save()
 
-        # Create initial snapshot from linked scenario's slider values
-        if branch.source_scenario and branch.source_scenario.input_parameters:
-            params = branch.source_scenario.input_parameters
-            BranchSnapshot.objects.create(
-                branch=branch,
-                scope_delta=int(params.get('tasks_added', 0)),
-                team_delta=int(params.get('team_size_delta', 0)),
-                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=_compute_initial_feasibility(board, params),
-            )
-
-        # Trigger initial branch recalculation
+        # Trigger initial branch recalculation — the Celery task produces the
+        # canonical first snapshot (with velocity_health applied).  We used to
+        # write a placeholder BranchSnapshot here too, but the recalc landed
+        # within seconds with a different score, leaving two snapshots at the
+        # same minute on the Feasibility Trend chart.
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
             args=[board_id],
@@ -316,21 +299,8 @@ class CreateBranchView(CreateView):
                     baseline_velocity_per_week=compute_baseline_velocity(board),
                 )
 
-                # Create initial snapshot from linked scenario's slider values
-                if scenario_id:
-                    try:
-                        scenario = WhatIfScenario.objects.get(id=scenario_id, board=board)
-                        if scenario.input_parameters:
-                            params = scenario.input_parameters
-                            BranchSnapshot.objects.create(
-                                branch=branch,
-                                scope_delta=int(params.get('tasks_added', 0)),
-                                team_delta=int(params.get('team_size_delta', 0)),
-                                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                                feasibility_score=_compute_initial_feasibility(board, params),
-                            )
-                    except WhatIfScenario.DoesNotExist:
-                        pass
+                # No placeholder snapshot here — the Celery recalc below
+                # writes the canonical first snapshot.  Mirrors form_valid().
 
                 # Trigger recalculation
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
@@ -711,16 +681,10 @@ def promote_scenario_to_branch(request, board_id):
             baseline_velocity_per_week=compute_baseline_velocity(board),
         )
 
-        # Create initial snapshot from scenario's slider values
-        if scenario.input_parameters:
-            params = scenario.input_parameters
-            BranchSnapshot.objects.create(
-                branch=branch,
-                scope_delta=int(params.get('tasks_added', 0)),
-                team_delta=int(params.get('team_size_delta', 0)),
-                deadline_delta_weeks=int(params.get('deadline_shift_days', 0)) // 7,
-                feasibility_score=_compute_initial_feasibility(board, params),
-            )
+        # No placeholder snapshot — the Celery recalc below produces the
+        # canonical first snapshot (with velocity_health applied).  Writing
+        # one here used to double-up Snapshot History with two entries at
+        # the same minute.  Mirrors CreateBranchView.
 
         # Trigger recalculation with scenario's parameters as seed
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board

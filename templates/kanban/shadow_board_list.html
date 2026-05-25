@@ -339,7 +339,7 @@
                                 {% for task in tasks_completed_today %}
                                 <tr>
                                     <td><small><i class="fas fa-check-circle text-success me-1"></i>{{ task.title|truncatewords:5 }}</small></td>
-                                    <td><small>{{ task.completer.first_name|default:"Unknown" }}</small></td>
+                                    <td><small>{% if task.completer %}{{ task.completer.get_full_name|default:task.completer.username|default:"Unassigned" }}{% else %}Unassigned{% endif %}</small></td>
                                     <td class="text-end"><small>{{ task.completed_at|time }}</small></td>
                                 </tr>
                                 {% endfor %}
@@ -641,6 +641,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="{% static 'js/shadow_board.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {

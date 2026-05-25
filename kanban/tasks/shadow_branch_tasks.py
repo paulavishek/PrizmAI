@@ -13,6 +13,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+MIN_BASELINE_VELOCITY = 0.5
+MAX_PER_EVENT_DELTA = 15.0
+
+
 def _parse_date(value):
     """Safely convert a date value that may be a string, date, or None."""
     if value is None:
@@ -133,7 +137,14 @@ def compute_baseline_velocity(board):
     from kanban.utils.whatif_engine import WhatIfEngine
     try:
         baseline = WhatIfEngine(board)._capture_baseline()
-        return float(baseline.get('velocity_per_week') or 0.0)
+        raw = float(baseline.get('velocity_per_week') or 0.0)
+        # Floor the baseline when the engine reports a real but tiny value
+        # so velocity_health = actual / baseline can't explode to 20x-50x.
+        # 0.0 still propagates as "no data" — the recalc path treats that
+        # as neutral (velocity_health = 1.0).
+        if raw > 0:
+            return max(raw, MIN_BASELINE_VELOCITY)
+        return 0.0
     except Exception as exc:
         logger.warning('compute_baseline_velocity failed for board %s: %s', board.pk, exc)
         return 0.0
@@ -326,9 +337,14 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 # snapshot the current board velocity now so subsequent recalcs
                 # have something to compare against, and treat this run as neutral.
                 if not branch.baseline_velocity_per_week:
-                    branch.baseline_velocity_per_week = (
+                    lazy_baseline = (
                         compute_baseline_velocity(board) or actual_7d_velocity or 0.0
                     )
+                    # Apply the same floor as compute_baseline_velocity so the
+                    # lazy-fill path can't capture a sub-floor value either.
+                    if lazy_baseline > 0:
+                        lazy_baseline = max(lazy_baseline, MIN_BASELINE_VELOCITY)
+                    branch.baseline_velocity_per_week = lazy_baseline
                     if branch.baseline_velocity_per_week:
                         branch.save(update_fields=['baseline_velocity_per_week'])
                 if branch.baseline_velocity_per_week and branch.baseline_velocity_per_week > 0:
@@ -383,6 +399,37 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
 
                 new_budget_util = results.get('projected', {}).get('budget_utilization_pct')
                 new_conflicts = results.get('new_conflicts', [])
+
+                # --- Per-event delta cap ---
+                # No single recalc cycle should move feasibility by more than
+                # MAX_PER_EVENT_DELTA points.  This bounds compound movement
+                # in the underlying penalty curves (delay_probability +
+                # utilization + velocity_health) so a single task completion
+                # can never produce a 50-point swing.  Only applied when
+                # there's a prior snapshot to cap against — the first
+                # snapshot for a branch is unconstrained.
+                if latest_snapshot is not None:
+                    try:
+                        old_score_float = float(old_score)
+                    except (TypeError, ValueError):
+                        old_score_float = 0.0
+                    raw_delta = new_feasibility - old_score_float
+                    if abs(raw_delta) > MAX_PER_EVENT_DELTA:
+                        capped_delta = (
+                            MAX_PER_EVENT_DELTA if raw_delta > 0
+                            else -MAX_PER_EVENT_DELTA
+                        )
+                        capped = old_score_float + capped_delta
+                        logger.warning(
+                            'Feasibility delta cap triggered for branch %s: '
+                            'raw_delta=%.2f capped_delta=%.2f '
+                            '(old=%.2f new_raw=%.2f new_capped=%.2f, '
+                            'trigger=%s)',
+                            branch.id, raw_delta, capped_delta,
+                            old_score_float, new_feasibility, capped,
+                            trigger_event,
+                        )
+                        new_feasibility = round(capped, 2)
 
                 # --- Dedup + daily heartbeat ---
                 # Skip snapshot creation if the user-facing fields would be
