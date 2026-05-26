@@ -162,10 +162,15 @@
                         {{ metrics.budget.status|upper }}
                     </h3>
                     <div class="progress mt-2" style="height: 8px;">
-                        <div class="progress-bar bg-{{ metrics.budget.status }}" 
+                        <div class="progress-bar bg-{{ metrics.budget.status }}"
                              style="width: {{ metrics.budget.utilization_percent }}%"></div>
                     </div>
                     <small class="text-muted">{{ metrics.budget.utilization_percent }}% utilized</small>
+                    {% if burn_rate and burn_rate.has_deadline and not burn_rate.is_sustainable and metrics.budget.status == 'ok' %}
+                    <small class="text-warning mt-1 d-block">
+                        <i class="fas fa-exclamation-triangle"></i> Projected trajectory at risk
+                    </small>
+                    {% endif %}
                 </div>
             </div>
         </div>
