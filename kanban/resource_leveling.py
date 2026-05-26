@@ -230,8 +230,26 @@ class ResourceLevelingService:
                     threshold = 5  # Lower bar when assignee is overloaded
                 else:
                     threshold = 15  # Standard: at least 15 points improvement
-                
+
                 improvement = top_candidate['overall_score'] - current_analysis['overall_score']
+
+                # Workload-safety guard: never recommend moving a task TO someone
+                # who is meaningfully MORE overloaded than the current assignee.
+                # The diversity penalty (applied earlier in this run) can push the
+                # engine to pick a worse candidate just to avoid the same person —
+                # the resulting "Move from testuser1 (65%) to Marcus (93%)" cards
+                # confuse users and actively harm workload balance. Allow such a
+                # move only when skill match is decisively better (>25 points)
+                # AND the recommended person isn't already past 90%.
+                rec_util = top_candidate['utilization']
+                cur_util = current_analysis['utilization']
+                skill_advantage = top_candidate['skill_match'] - current_analysis['skill_match']
+                makes_balance_worse = rec_util > cur_util + 5
+                if makes_balance_worse and (skill_advantage < 25 or rec_util > 90):
+                    # Don't generate this suggestion — it would degrade workload
+                    # balance without a clear skill-fit justification.
+                    return result
+
                 if improvement > threshold:
                     result['should_reassign'] = True
                     result['reasoning'] = self._generate_reassignment_reasoning(
@@ -257,13 +275,17 @@ class ResourceLevelingService:
         # 1. Skill match score (0-100)
         skill_score = profile.calculate_skill_match(task_text)
 
-        # 2. Calculate ACTUAL current workload for this board
-        # This is more accurate than profile.current_active_tasks which might be org-filtered
+        # 2. Calculate ACTUAL current workload for this board.
+        # IMPORTANT: must filter by item_type='task' to match update_current_workload's
+        # filter. Without that filter, epics and milestones get counted here but not in
+        # the workload bars at the top of the modal, producing the "suggestion says
+        # 5 tasks but the bar shows 4" mismatch the user reported.
         from kanban.models import Task
         if board:
             actual_task_count = Task.objects.filter(
                 assigned_to=profile.user,
                 column__board=board,
+                item_type='task',
                 completed_at__isnull=True
             ).exclude(column__name__icontains='done').count()
         else:
@@ -356,8 +378,18 @@ class ResourceLevelingService:
             'quality': round(quality_normalized, 1),
             'estimated_hours': round(estimated_hours, 1),
             'estimated_completion': estimated_completion_date.isoformat(),
-            'current_workload': total_task_count,  # Use actual + temporary count
-            'utilization': round(adjusted_utilization, 1)  # Use adjusted utilization
+            # Projected state — used for ranking and scoring so the engine doesn't
+            # over-stack on a single person across a multi-suggestion run.
+            'current_workload': total_task_count,
+            'utilization': round(adjusted_utilization, 1),
+            # Actual DB state — used in user-facing reasoning text so the numbers
+            # match the workload bars at the top of the modal. The user reads
+            # "testuser1 has 4 tasks (65%)" and sees the same 4 tasks / 65% on
+            # the bar; previously these disagreed when projected deltas were
+            # non-zero, making the suggestion appear to be talking about a
+            # different state than the rest of the UI.
+            'actual_workload': actual_task_count,
+            'actual_utilization': round(profile.utilization_percentage, 1),
         }
     
     def _predict_completion_time_with_workload(self, profile, task, actual_task_count):
@@ -424,21 +456,36 @@ class ResourceLevelingService:
         return estimated_time
     
     def _generate_reassignment_reasoning(self, recommended, current, improvement):
-        """Generate human-readable reasoning for reassignment"""
+        """Generate human-readable reasoning for reassignment.
+
+        Uses ACTUAL DB state (not projected) for the displayed numbers so the
+        text agrees with the workload bars at the top of the modal. Projected
+        deltas are used for scoring decisions but never bleed into user-facing
+        copy — otherwise a single suggestion can read "testuser1 has 5 tasks
+        (80%)" while the bar above shows them at "4 tasks (65%)".
+        """
         reasons = []
-        
+
+        # Pull actual DB counts/utilization for display. Fall back to projected
+        # values if actual_* keys are missing (e.g., from alternative-candidate
+        # paths that construct the dict slightly differently).
+        rec_workload = recommended.get('actual_workload', recommended['current_workload'])
+        rec_util = recommended.get('actual_utilization', recommended['utilization'])
+        cur_workload = current.get('actual_workload', current['current_workload'])
+        cur_util = current.get('actual_utilization', current['utilization'])
+
         # Workload comparison - most important for balancing
-        if recommended['current_workload'] == 0:
+        if rec_workload == 0:
             reasons.append(f"{recommended['display_name']} is available (0 tasks, 100% capacity free)")
-        elif recommended['utilization'] < current['utilization'] - 20:
+        elif rec_util < cur_util - 20:
             reasons.append(
-                f"Better workload balance: {recommended['display_name']} has {recommended['current_workload']} tasks "
-                f"({recommended['utilization']:.0f}%) vs {current['username']} with {current['current_workload']} tasks "
-                f"({current['utilization']:.0f}%)"
+                f"Better workload balance: {recommended['display_name']} has {rec_workload} tasks "
+                f"({rec_util:.0f}%) vs {current['username']} with {cur_workload} tasks "
+                f"({cur_util:.0f}%)"
             )
-        elif recommended['current_workload'] < current['current_workload'] - 1:
+        elif rec_workload < cur_workload - 1:
             reasons.append(
-                f"{recommended['display_name']} less loaded: {recommended['current_workload']} tasks vs {current['current_workload']} tasks"
+                f"{recommended['display_name']} less loaded: {rec_workload} tasks vs {cur_workload} tasks"
             )
         
         # Skill match comparison
@@ -460,17 +507,24 @@ class ResourceLevelingService:
         return f"Move task to {recommended['display_name']}: " + ", ".join(reasons)
     
     def _generate_initial_assignment_reasoning(self, recommended):
-        """Generate reasoning for initial assignment - provide objective facts"""
+        """Generate reasoning for initial assignment - provide objective facts.
+
+        Uses actual DB state for displayed numbers so they agree with the
+        workload bars (see _generate_reassignment_reasoning for full rationale).
+        """
         reasons = []
-        
+
+        rec_workload = recommended.get('actual_workload', recommended['current_workload'])
+        rec_util = recommended.get('actual_utilization', recommended['utilization'])
+
         # 1. Availability (most objective metric)
-        if recommended['current_workload'] == 0:
+        if rec_workload == 0:
             reasons.append(f"Available (0 tasks, 100% capacity free)")
         else:
-            task_info = f"{recommended['current_workload']} tasks, {recommended['utilization']:.0f}% capacity used"
-            if recommended['utilization'] < 30:
+            task_info = f"{rec_workload} tasks, {rec_util:.0f}% capacity used"
+            if rec_util < 30:
                 reasons.append(f"Low workload ({task_info})")
-            elif recommended['utilization'] < 60:
+            elif rec_util < 60:
                 reasons.append(f"Moderate workload ({task_info})")
             else:
                 reasons.append(f"Current workload: {task_info}")
@@ -970,6 +1024,13 @@ class ResourceLevelingService:
                                 continue  # Don't suggest keeping current assignee
                             if candidate['utilization'] > 90:
                                 continue  # Don't pile more work onto overloaded members
+                            # Same safety guard as in analyze_task_assignment: don't fall
+                            # back to a candidate who is meaningfully MORE loaded than the
+                            # source, unless skill match is decisively better.
+                            if current_analysis and candidate['utilization'] > current_analysis['utilization'] + 5:
+                                skill_adv = candidate['skill_match'] - current_analysis['skill_match']
+                                if skill_adv < 25:
+                                    continue
                             alt_count = suggestion_counts_per_user.get(candidate['user_id'], 0)
                             if alt_count >= max_suggestions_per_user:
                                 continue  # This candidate also capped
