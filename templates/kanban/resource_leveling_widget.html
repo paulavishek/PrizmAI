@@ -514,10 +514,13 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
             icon.className = 'fas fa-info-circle fa-3x text-muted mb-3';
             text.innerHTML = 'No reallocation suggestions &mdash; insufficient team data for other members.<br><small>Team members need at least 1 completed task, 1 skill tag, or 1 hour logged to be considered for reassignment.</small>';
         } else if (overloadedMembers && overloadedMembers.length > 0) {
-            // Members ARE overloaded but no actionable suggestions could be generated
+            // Members ARE overloaded but no actionable suggestions could be generated.
+            // With the workload-relief override in place this should be rare — it
+            // happens when every other team member is also at/near overload, so
+            // there's nowhere to move tasks to without creating a new bottleneck.
             const names = overloadedMembers.map(m => `<strong>${m.name}</strong> (${m.utilization}%)`).join(', ');
             icon.className = 'fas fa-exclamation-triangle fa-3x text-warning mb-3';
-            text.innerHTML = `${overloadedMembers.length} team member(s) overloaded: ${names}.<br><small>To generate reassignment suggestions, ensure tasks have due dates or time logs, and that at least one other team member has completed tasks on this board.</small>`;
+            text.innerHTML = `${overloadedMembers.length} team member(s) overloaded: ${names}.<br><small>No safe reassignment found — every other team member is also at or near capacity, so moving work would just shift the bottleneck. Consider adding resources or extending deadlines.</small>`;
         } else {
             icon.className = 'fas fa-check-circle fa-3x text-success mb-3';
             text.innerHTML = 'No optimization suggestions at this time.<br>Your team workload is well balanced!';
