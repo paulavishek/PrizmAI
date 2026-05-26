@@ -289,7 +289,21 @@ function loadWorkloadReport() {
 
 function displayWorkloadSummary(data) {
     const container = document.getElementById('workload-summary');
-    container.innerHTML = '<h6 class="text-muted mb-3">Team Workload</h6>';
+    // Show a refresh timestamp so users have visible confirmation the bars and
+    // the team-capacity alert below them were just recomputed from the database.
+    // Without this, an unchanged number after an accept can look like cached
+    // data — even when the value is genuinely the same (e.g. when a task moves
+    // within the team, total utilization stays constant by construction).
+    const now = new Date();
+    const updatedLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    container.innerHTML = `
+        <div class="d-flex justify-content-between align-items-baseline mb-3">
+            <h6 class="text-muted mb-0">Team Workload</h6>
+            <small class="text-muted" style="font-size:0.72rem;" title="Workload bars and capacity alert recalculated from live database state. Total team utilization is invariant under task reassignment — it changes only when work is added or removed.">
+                <i class="fas fa-sync-alt"></i> Updated ${updatedLabel}
+            </small>
+        </div>
+    `;
     
     const template = document.getElementById('workload-member-template');
     
@@ -412,15 +426,45 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     
     noSuggestions.classList.add('d-none');
 
-    // Sort suggestions by confidence descending (highest first)
-    suggestions.sort((a, b) => b.confidence - a.confidence);
+    // Group suggestions by type so a quick scanner doesn't accept a "Slower"
+    // card thinking it speeds the task up. Genuine time-savers come first
+    // (sorted by confidence desc); pure workload-balance / speed-regression
+    // suggestions follow under a clear divider.
+    const isBalanceOnly = (s) => s.is_speed_regression || s.time_savings === '0%';
+    const timeSavers = suggestions.filter(s => !isBalanceOnly(s)).sort((a, b) => b.confidence - a.confidence);
+    const balanceOnly = suggestions.filter(isBalanceOnly).sort((a, b) => b.confidence - a.confidence);
+    const orderedSuggestions = [...timeSavers, ...balanceOnly];
 
     // Show suggestion count + accept-all button (header was hidden above)
     const suggestionsCount = document.getElementById('suggestions-count');
     if (suggestionsHeader) suggestionsHeader.classList.remove('d-none');
     suggestionsCount.textContent = `${suggestions.length} optimization suggestion${suggestions.length !== 1 ? 's' : ''} found`;
-    
-    suggestions.forEach(suggestion => {
+
+    let dividerInserted = false;
+    orderedSuggestions.forEach((suggestion, index) => {
+        // Insert a clearly labelled divider before the first balance-only card
+        // so users see the category change before scanning the card itself.
+        if (!dividerInserted && isBalanceOnly(suggestion) && index > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'balance-only-divider mt-3 mb-2';
+            divider.innerHTML = `
+                <div class="d-flex align-items-center" style="gap:8px;">
+                    <hr class="flex-grow-1" style="border-color:#cbd5e1; margin:0;">
+                    <small class="text-muted" style="white-space:nowrap; font-size:0.78rem;">
+                        <i class="fas fa-balance-scale"></i> Workload-balance only · these reassignments do NOT speed up the task
+                    </small>
+                    <hr class="flex-grow-1" style="border-color:#cbd5e1; margin:0;">
+                </div>
+            `;
+            container.appendChild(divider);
+            dividerInserted = true;
+        }
+        renderSuggestionCard(suggestion, template, container);
+    });
+    return;
+}
+
+function renderSuggestionCard(suggestion, template, container) {
         const clone = template.content.cloneNode(true);
         const card = clone.querySelector('.suggestion-card');
         
@@ -533,7 +577,6 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
         }
         
         container.appendChild(clone);
-    });
 }
 
 function acceptAllSuggestions() {
