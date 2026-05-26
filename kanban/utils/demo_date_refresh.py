@@ -1059,34 +1059,41 @@ def _refresh_resource_leveling_dates(now, base_date):
 
 
 def _refresh_roi_snapshot_dates(base_date):
-    """Refresh ProjectROI snapshot dates."""
+    """Refresh ProjectROI snapshot dates.
+
+    Snapshots were created in chronological order of project progress (cost,
+    completion, and realized value all increase with snapshot.id). Assign
+    weekly dates per-board in that same order so the timeline matches the
+    data progression — the oldest snapshot lands furthest in the past and
+    the newest snapshot sits ~7 days ago, producing a smooth historical
+    series rather than a scrambled one with spikes.
+    """
     try:
         from kanban.budget_models import ProjectROI
-        
+
         demo_board_ids = _get_demo_board_ids()
-        snapshots = list(ProjectROI.objects.filter(
-            board_id__in=demo_board_ids
-        ))
-        
-        if not snapshots:
-            return 0
-        
         snapshots_to_update = []
-        
-        for i, snapshot in enumerate(snapshots):
-            # Weekly snapshots over past months.
-            # Use record ID so the spread is stable when sandbox boards are
-            # added or removed (no global-index dependency).
-            days_offset = -(snapshot.id % 24 * 7 + 7)
-            snapshot.snapshot_date = timezone.now() + timedelta(days=days_offset)
-            snapshots_to_update.append(snapshot)
-        
+
+        for board_id in demo_board_ids:
+            board_snapshots = list(
+                ProjectROI.objects.filter(board_id=board_id).order_by('id')
+            )
+            n = len(board_snapshots)
+            if n == 0:
+                continue
+
+            for i, snapshot in enumerate(board_snapshots):
+                # i=0 (earliest data) → furthest in past; i=n-1 (latest) → 7 days ago
+                days_offset = -((n - 1 - i) * 7 + 7)
+                snapshot.snapshot_date = timezone.now() + timedelta(days=days_offset)
+                snapshots_to_update.append(snapshot)
+
         if snapshots_to_update:
-            ProjectROI.objects.bulk_update(snapshots_to_update, 
+            ProjectROI.objects.bulk_update(snapshots_to_update,
                                            ['snapshot_date'], batch_size=100)
-        
+
         return len(snapshots_to_update)
-        
+
     except Exception as e:
         logger.warning(f"Error refreshing ROI snapshot dates: {e}")
         return 0
