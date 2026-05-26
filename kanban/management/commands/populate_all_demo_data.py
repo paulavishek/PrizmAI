@@ -159,6 +159,7 @@ class Command(BaseCommand):
                 self._create_budget_and_time(tasks_by_code, epics)
                 self._create_stakeholders(tasks_by_code)
                 self._create_scope_baseline()
+                self._create_scope_autopsy()
                 self._create_retrospective()
                 self._create_chat_rooms()
                 self._create_coaching_suggestions(tasks_by_code)
@@ -272,6 +273,27 @@ class Command(BaseCommand):
             CoachingSuggestion.objects.filter(board=b).delete()
             ChatMessage.objects.filter(chat_room__board=b).delete()
             ChatRoom.objects.filter(board=b).delete()
+
+            # Scope tracking: snapshots, alerts, autopsy reports, and per-task
+            # reasons. Without this, every --reset run accumulates another
+            # baseline row, producing the duplicate "May 09, 2026" entries in
+            # the Scope History list. Also reset the cached baseline_* fields
+            # on the board so the next seed call can set them cleanly.
+            from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
+            from kanban.scope_autopsy_models import (
+                ScopeAutopsyReport, TaskScopeReason,
+            )
+            ScopeCreepAlert.objects.filter(board=b).delete()
+            ScopeChangeSnapshot.objects.filter(board=b).delete()
+            # Cascades to ScopeTimelineEvent via the FK on_delete=CASCADE
+            ScopeAutopsyReport.objects.filter(board=b).delete()
+            TaskScopeReason.objects.filter(board=b).delete()
+            Board.objects.filter(pk=b.pk).update(
+                baseline_task_count=None,
+                baseline_complexity_total=None,
+                baseline_set_date=None,
+                baseline_set_by=None,
+            )
 
         # Custom field definitions for the demo workspace (cascade deletes values)
         demo_workspaces = Workspace.objects.filter(
@@ -1423,6 +1445,15 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def _create_scope_baseline(self):
         try:
+            from kanban.models import ScopeChangeSnapshot
+            # Idempotent: a non-reset re-run must not stack another baseline
+            # row on top of the existing one.
+            existing = ScopeChangeSnapshot.objects.filter(
+                board=self.board, is_baseline=True,
+            ).first()
+            if existing:
+                self.stdout.write('  [OK] Scope baseline already present - skipped')
+                return
             self.board.create_scope_snapshot(
                 user=self.priya,
                 snapshot_type='manual',
@@ -1433,6 +1464,297 @@ class Command(BaseCommand):
             self.stdout.write('  [OK] Scope baseline snapshot recorded')
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'  [WARN] Could not create scope snapshot: {e}'))
+
+    # ------------------------------------------------------------------
+    # Scope Autopsy (forensic scope growth report)
+    # ------------------------------------------------------------------
+    def _create_scope_autopsy(self):
+        """Seed a completed Scope Autopsy report with a believable
+        Scope Growth Timeline.
+
+        The Autopsy feature would normally be generated on demand by an AI
+        worker, but for the demo we pre-populate a finished report so visitors
+        immediately see the timeline, events, and recommendations without
+        burning AI quota. The story is intentionally a *mild* growth scenario
+        (16.7%, all documented) rather than a catastrophic one — the demo
+        should showcase the feature, not slander the demo project.
+        """
+        try:
+            from kanban.scope_autopsy_models import (
+                ScopeAutopsyReport, ScopeTimelineEvent, TaskScopeReason,
+            )
+            from kanban.models import Task
+            from decimal import Decimal
+
+            # Remove any prior report so re-running this seeder is idempotent
+            ScopeAutopsyReport.objects.filter(board=self.board).delete()
+
+            current_task_count = Task.objects.filter(
+                column__board=self.board, item_type='task',
+            ).count()
+            # Story: project started with 24 tasks, grew to current count
+            # (typically 28) over the project lifecycle. All four additions
+            # are documented, so the AI verdict is "well-managed scope".
+            baseline_count = max(1, current_task_count - 4)
+            growth_pct = round(
+                ((current_task_count - baseline_count) / baseline_count) * 100, 1
+            )
+
+            kickoff = self.NOW - timedelta(days=56)
+            baseline_date = kickoff + timedelta(hours=24)
+
+            # Pre-build timeline event payload — dates flow chronologically
+            # through Phases 1 and 2 so the timeline aligns with the rest of
+            # the demo's narrative.
+            events_payload = [
+                {
+                    'days_ago': 49,
+                    'title': 'Authentication Testing Suite added',
+                    'description': (
+                        'Security team requested a dedicated testing harness for the '
+                        'authentication flow after the threat-modeling workshop. Added 1 task '
+                        'and updated the Security Architecture Patterns acceptance criteria.'
+                    ),
+                    'source_type': 'task_added',
+                    'tasks_added': 1,
+                    'delay_days': 2,
+                    'budget_impact': Decimal('1800.00'),
+                    'added_by': self.priya,
+                    'reason': 'requirement_change',
+                    'reason_note': (
+                        'Security review at end of week 1 surfaced a gap in our auth test '
+                        'coverage; scoped a dedicated suite rather than expanding existing tests.'
+                    ),
+                },
+                {
+                    'days_ago': 38,
+                    'title': 'API Rate Limiting added during security review',
+                    'description': (
+                        'External penetration test highlighted brute-force exposure on the auth '
+                        'endpoints. Added rate-limiting middleware as a Phase 1 deliverable.'
+                    ),
+                    'source_type': 'scope_alert',
+                    'tasks_added': 1,
+                    'delay_days': 3,
+                    'budget_impact': Decimal('2400.00'),
+                    'added_by': self.elena,
+                    'reason': 'discovered_complexity',
+                    'reason_note': (
+                        'Pen-test finding — could not ship Phase 1 without remediation. '
+                        'Scoped as a hard requirement, accepted small delay.'
+                    ),
+                },
+                {
+                    'days_ago': 24,
+                    'title': 'Accessibility Compliance task added',
+                    'description': (
+                        'Product Director requested WCAG 2.1 AA compliance as a launch '
+                        'requirement. Added an accessibility audit and remediation task to '
+                        'Phase 2 ahead of the public beta.'
+                    ),
+                    'source_type': 'task_added',
+                    'tasks_added': 1,
+                    'delay_days': 2,
+                    'budget_impact': Decimal('1900.00'),
+                    'added_by': self.marcus,
+                    'reason': 'stakeholder_request',
+                    'reason_note': (
+                        'Sarah Mitchell (Product Director) confirmed accessibility is a '
+                        'launch gate; absorbed into Phase 2 with stakeholder sign-off.'
+                    ),
+                },
+                {
+                    'days_ago': 11,
+                    'title': 'Error Tracking & Monitoring added',
+                    'description': (
+                        'AI Coach suggestion accepted: add Sentry-based error tracking and '
+                        'a dashboard pre-launch so we can monitor the beta rollout.'
+                    ),
+                    'source_type': 'ai_suggestion',
+                    'tasks_added': 1,
+                    'delay_days': 1,
+                    'budget_impact': Decimal('1200.00'),
+                    'added_by': self.elena,
+                    'reason': 'discovered_complexity',
+                    'reason_note': (
+                        'Observability gap flagged by AI Coach; better to add it before '
+                        'launch than scramble post-launch.'
+                    ),
+                },
+            ]
+
+            total_delay = sum(e['delay_days'] for e in events_payload)
+            total_budget = sum(e['budget_impact'] for e in events_payload)
+
+            ai_summary = (
+                f'The Software Development project grew from {baseline_count} tasks at '
+                f'kickoff to {current_task_count} tasks today — a {growth_pct}% expansion '
+                f'over roughly 8 weeks. All four scope additions were recorded with a '
+                'documented reason, putting this project well below the 25%+ undocumented '
+                'growth typical of comparable engineering programs. Two of the four '
+                'additions (Rate Limiting, Error Tracking) addressed real risks discovered '
+                'during execution; the other two (Auth Test Suite, Accessibility) were '
+                'planning gaps surfaced in week-1 security review and stakeholder '
+                'alignment.'
+            )
+            pattern_analysis = (
+                'Scope growth was front-loaded and event-driven rather than chaotic — three '
+                'of four additions came during Phase 1 security/quality reviews, which is '
+                'the *right* time to absorb new requirements. The remaining Phase 2 addition '
+                '(observability) was a coach-suggested gap closure. There is no evidence of '
+                'gold-plating or stakeholder churn.'
+            )
+            recommendations = [
+                {
+                    'title': 'Move the threat-modeling workshop into kickoff week',
+                    'description': (
+                        'The Auth Test Suite and Rate Limiting tasks were both surfaced by '
+                        'security reviews after kickoff. Folding a lightweight threat-modeling '
+                        'session into Day 2 of kickoff would have captured both during the '
+                        'initial baseline.'
+                    ),
+                    'applies_to': 'planning',
+                },
+                {
+                    'title': 'Confirm launch-gate requirements with stakeholders pre-baseline',
+                    'description': (
+                        'Accessibility compliance was added in Phase 2 but is a launch-gate '
+                        'requirement. A short pre-baseline stakeholder confirmation call (15 '
+                        'minutes per key stakeholder) would catch these earlier.'
+                    ),
+                    'applies_to': 'stakeholder_management',
+                },
+                {
+                    'title': 'Pre-commit observability into Phase 1 by default',
+                    'description': (
+                        'Error tracking is a standard launch requirement; rather than relying '
+                        'on coach suggestions in Phase 2, ship it as a default Phase 1 '
+                        'deliverable in the project template.'
+                    ),
+                    'applies_to': 'execution',
+                },
+            ]
+
+            board_snapshot = {
+                'board_name': self.board.name,
+                'project_context': self.board.name,
+                'baseline_task_count': baseline_count,
+                'baseline_date': str(baseline_date),
+                'final_task_count': current_task_count,
+                'growth_percentage': growth_pct,
+                'days_elapsed': 56,
+                'total_events': len(events_payload),
+            }
+
+            timeline_json = []
+            cumulative = baseline_count
+            for e in events_payload:
+                cumulative += e['tasks_added']
+                timeline_json.append({
+                    'date': str(self.NOW - timedelta(days=e['days_ago'])),
+                    'title': e['title'],
+                    'description': e['description'],
+                    'source_type': e['source_type'],
+                    'tasks_added': e['tasks_added'],
+                    'net_task_change': e['tasks_added'],
+                    'is_major_event': e['tasks_added'] >= 3,
+                    'estimated_delay_days': e['delay_days'],
+                    'estimated_budget_impact': float(e['budget_impact']),
+                    'added_by_name': (
+                        e['added_by'].get_full_name() or e['added_by'].username
+                    ) if e['added_by'] else '',
+                })
+
+            report = ScopeAutopsyReport.objects.create(
+                board=self.board,
+                created_by=self.priya,
+                status='complete',
+                baseline_task_count=baseline_count,
+                baseline_date=baseline_date,
+                final_task_count=current_task_count,
+                total_scope_growth_percentage=growth_pct,
+                total_delay_days=total_delay,
+                total_budget_impact=total_budget,
+                timeline_json=timeline_json,
+                pattern_analysis=pattern_analysis,
+                ai_summary=ai_summary,
+                recommendations=recommendations,
+                board_snapshot=board_snapshot,
+            )
+            # ScopeAutopsyReport.created_at uses auto_now_add — override so
+            # the report's "Analyzed" timestamp lives a few days back (the
+            # original analysis happened during the last sprint review,
+            # not literally today).
+            ScopeAutopsyReport.objects.filter(pk=report.pk).update(
+                created_at=self.NOW - timedelta(days=3),
+            )
+
+            # Timeline events (cumulative counts are computed inline)
+            cumulative = baseline_count
+            for e in events_payload:
+                cumulative += e['tasks_added']
+                ScopeTimelineEvent.objects.create(
+                    report=report,
+                    event_date=self.NOW - timedelta(days=e['days_ago']),
+                    title=e['title'],
+                    description=e['description'],
+                    source_type=e['source_type'],
+                    source_object_type='',
+                    source_object_id=None,
+                    tasks_added=e['tasks_added'],
+                    tasks_removed=0,
+                    net_task_change=e['tasks_added'],
+                    added_by=e['added_by'],
+                    estimated_delay_days=e['delay_days'],
+                    estimated_budget_impact=e['budget_impact'],
+                    cumulative_task_count=cumulative,
+                    is_major_event=e['tasks_added'] >= 3,
+                )
+
+            # Backfill TaskScopeReason rows so the timeline shows the
+            # documented reason + note alongside each task_added event. We
+            # match each seeded event to a real demo task by title-keyword so
+            # the Scope Reason modal isn't blank when the user clicks through.
+            reason_targets = [
+                ('Authentication Testing Suite',
+                 events_payload[0]['reason'], events_payload[0]['reason_note'],
+                 events_payload[0]['added_by']),
+                ('API Rate Limiting',
+                 events_payload[1]['reason'], events_payload[1]['reason_note'],
+                 events_payload[1]['added_by']),
+                ('Accessibility',
+                 events_payload[2]['reason'], events_payload[2]['reason_note'],
+                 events_payload[2]['added_by']),
+                ('Error Tracking',
+                 events_payload[3]['reason'], events_payload[3]['reason_note'],
+                 events_payload[3]['added_by']),
+            ]
+            for keyword, reason, note, recorder in reason_targets:
+                t = Task.objects.filter(
+                    column__board=self.board,
+                    item_type='task',
+                    title__icontains=keyword,
+                ).first()
+                if t:
+                    TaskScopeReason.objects.update_or_create(
+                        task=t,
+                        defaults={
+                            'board': self.board,
+                            'reason': reason,
+                            'note': note,
+                            'recorded_by': recorder,
+                        },
+                    )
+
+            self.stdout.write(
+                f'  [OK] Scope autopsy report seeded ({baseline_count} -> '
+                f'{current_task_count} tasks, +{growth_pct}%, '
+                f'{len(events_payload)} events)'
+            )
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(
+                f'  [WARN] Could not seed scope autopsy: {e}'
+            ))
 
     # ------------------------------------------------------------------
     # Retrospective
