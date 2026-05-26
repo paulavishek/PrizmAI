@@ -292,6 +292,18 @@ def get_board_suggestions(request, board_id):
             is_speed_regression = bool(
                 re.search(r'-\d+%\s+time savings', reasoning_text, re.IGNORECASE)
             )
+            # Detect data-quality fallback usage by scanning for the sentinel phrases
+            # written into reasoning when create_suggestion couldn't find a time log,
+            # due date, or peer history. The frontend uses these to render a
+            # "Limited data" warning banner on the card so users know which inputs
+            # would tighten the recommendation.
+            limited_data_flags = []
+            if 'no time log entries' in reasoning_text or 'board-average hours per task' in reasoning_text:
+                limited_data_flags.append('time_log')
+            if 'No due date set' in reasoning_text:
+                limited_data_flags.append('due_date')
+            if 'No other team member has completed tasks' in reasoning_text:
+                limited_data_flags.append('peer_history')
             suggestion_list.append({
                 'id': s.id,
                 'task_id': s.task.id,
@@ -307,16 +319,16 @@ def get_board_suggestions(request, board_id):
                 'reasoning': s.reasoning,
                 'projected_completion': s.suggested_projected_date.isoformat() if s.suggested_projected_date else None,
                 'expires_at': s.expires_at.isoformat(),
+                'created_at': s.created_at.isoformat(),
                 'status': s.status,
                 'is_speed_regression': is_speed_regression,
+                'limited_data_flags': limited_data_flags,
             })
             total_savings += s.time_savings_hours
         
-        # If no suggestions and insufficient qualified members, tell the UI why
-        insufficient_data = (len(suggestion_list) == 0 and qualified_count < 2)
-        
         # Check if any team members are overloaded (>90% utilization)
-        # so the UI doesn't claim "well balanced" when people are clearly overworked
+        # so the UI doesn't claim "well balanced" when people are clearly overworked.
+        # Compute this BEFORE the insufficient_data flag so we can defer to it.
         overloaded_members = []
         try:
             report = service.get_team_workload_report(board, requesting_user=request.user)
@@ -328,6 +340,17 @@ def get_board_suggestions(request, board_id):
                     })
         except Exception:
             pass  # Don't fail suggestions if workload report errors
+
+        # The "insufficient team data" empty state should NOT pre-empt the
+        # overloaded-members message. Per spec: if anyone is overloaded, we
+        # always want to surface that — even when we couldn't generate a
+        # suggestion. Only show the data-insufficient state on calm boards
+        # where no one is overworked.
+        insufficient_data = (
+            len(suggestion_list) == 0
+            and qualified_count < 2
+            and not overloaded_members
+        )
         
         response = JsonResponse({
             'suggestions': suggestion_list,

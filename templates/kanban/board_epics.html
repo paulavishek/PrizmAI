@@ -1,0 +1,294 @@
+{% extends 'base.html' %}
+{% load static kanban_filters %}
+
+{% block title %}{{ board.name }} - Epics{% endblock %}
+
+{% block extra_css %}
+<style>
+    .epics-container {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .epic-card {
+        border: 1px solid #e2e8f0;
+        border-left: 4px solid #f59e0b;
+        border-radius: 8px;
+        background: #fff;
+        margin-bottom: 12px;
+        transition: box-shadow 0.15s ease;
+    }
+    .epic-card:hover {
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .epic-card-header {
+        padding: 14px 16px;
+        cursor: pointer;
+        user-select: none;
+    }
+    .epic-card-header[aria-expanded="true"] .epic-chevron {
+        transform: rotate(90deg);
+    }
+    .epic-chevron {
+        transition: transform 0.15s ease;
+        font-size: 0.75rem;
+        color: #94a3b8;
+    }
+    .epic-title-line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .epic-id-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        background: #fef3c7;
+        color: #92400e;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+    .epic-title-text {
+        font-weight: 600;
+        font-size: 1rem;
+        color: #1e293b;
+    }
+    .epic-meta-line {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+    .epic-meta-line > span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .epic-priority-badge {
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+    .epic-priority-low { background: #f1f5f9; color: #475569; }
+    .epic-priority-medium { background: #dbeafe; color: #1e40af; }
+    .epic-priority-high { background: #fed7aa; color: #9a3412; }
+    .epic-priority-urgent { background: #fecaca; color: #991b1b; }
+
+    .epic-progress-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 180px;
+    }
+    .epic-progress-bar {
+        flex-grow: 1;
+        height: 8px;
+        background: #e2e8f0;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .epic-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981, #34d399);
+        transition: width 0.3s ease;
+    }
+    .epic-progress-fill.no-children {
+        background: #cbd5e1;
+    }
+    .epic-progress-text {
+        font-size: 0.78rem;
+        color: #475569;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .epic-children-list {
+        border-top: 1px solid #e2e8f0;
+        padding: 8px 16px 12px 16px;
+        background: #fafbfc;
+    }
+    .epic-child-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 0;
+        font-size: 0.88rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .epic-child-row:last-child {
+        border-bottom: none;
+    }
+    /* Child-task status badges. All three states share the same icon family
+       (Font Awesome solid circle variants) and the same rendered width so the
+       column lines up cleanly regardless of which mix of statuses appears.
+       The previous setup mixed `fa-spinner`, `fa-check-circle`, and
+       `far fa-circle` — three different visual weights — which made the
+       list look uneven when scrolled. */
+    .epic-child-status {
+        width: 18px;
+        flex-shrink: 0;
+        text-align: center;
+        font-size: 0.95rem;
+        line-height: 1;
+    }
+    .epic-child-status.done { color: #10b981; }
+    .epic-child-status.in-progress { color: #2563eb; }
+    .epic-child-status.todo { color: #cbd5e1; }
+    .epic-child-title {
+        flex-grow: 1;
+        color: #1e293b;
+        text-decoration: none;
+    }
+    .epic-child-title:hover { color: #2563eb; text-decoration: underline; }
+    .epic-child-meta {
+        color: #64748b;
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+
+    .epics-empty {
+        text-align: center;
+        padding: 48px 24px;
+        color: #64748b;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-2">
+        <div>
+            <h1 style="font-size:20px;font-weight:500;margin-bottom:0;" class="mb-0">
+                <i class="fas fa-layer-group me-2 text-warning"></i>{{ board.name }}
+            </h1>
+            <p class="text-muted mb-0">Epics — work containers grouping related tasks</p>
+        </div>
+    </div>
+
+    <!-- View Mode Tabs -->
+    <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        {% if features.show_gantt %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+        {% endif %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{% url 'board_epics' board.id %}"><i class="fas fa-layer-group me-1"></i>Epics</a></li>
+        {% if features.show_automations %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-1"></i>Automations</a></li>
+        {% endif %}
+    </ul>
+
+    <div class="epics-container">
+        <div class="d-flex justify-content-between align-items-baseline mb-3">
+            <h2 style="font-size:1.1rem; margin:0; font-weight:600;">
+                {{ total_epics }} Epic{{ total_epics|pluralize }}
+            </h2>
+            <small class="text-muted">Click an epic to expand its child tasks</small>
+        </div>
+
+        {% if epic_rows %}
+            {% for row in epic_rows %}
+            <div class="epic-card">
+                <div class="epic-card-header" data-bs-toggle="collapse"
+                     data-bs-target="#epic-children-{{ row.epic.id }}"
+                     aria-expanded="false" aria-controls="epic-children-{{ row.epic.id }}">
+                    <div class="epic-title-line">
+                        <i class="fas fa-chevron-right epic-chevron"></i>
+                        <span class="epic-id-badge">{{ task_prefix }}-{{ row.epic.id }}</span>
+                        <span class="epic-title-text">{{ row.epic.title }}</span>
+                        <span class="epic-priority-badge epic-priority-{{ row.epic.priority }}">
+                            {{ row.epic.get_priority_display }}
+                        </span>
+                    </div>
+                    <div class="epic-meta-line">
+                        <span title="Owner">
+                            <i class="fas fa-user"></i>
+                            {% if row.epic.assigned_to %}
+                                {{ row.epic.assigned_to.get_full_name|default:row.epic.assigned_to.username }}
+                            {% else %}
+                                <em class="text-muted">Unassigned</em>
+                            {% endif %}
+                        </span>
+                        {% if row.epic.due_date %}
+                        <span title="Due date">
+                            <i class="far fa-calendar"></i>
+                            {{ row.epic.due_date|date:"M d, Y" }}
+                        </span>
+                        {% endif %}
+                        <span title="Column">
+                            <i class="fas fa-columns"></i>
+                            {{ row.epic.column.name }}
+                        </span>
+                        <span title="Child tasks">
+                            <i class="fas fa-tasks"></i>
+                            {{ row.total }} child task{{ row.total|pluralize }}
+                        </span>
+                        <span class="epic-progress-wrap ms-auto">
+                            <span class="epic-progress-text">
+                                {{ row.completed }} of {{ row.total }} done
+                            </span>
+                            <span class="epic-progress-bar" title="{{ row.progress_pct }}% complete">
+                                <span class="epic-progress-fill {% if not row.total %}no-children{% endif %}"
+                                      style="width: {{ row.progress_pct }}%;"></span>
+                            </span>
+                            <span class="epic-progress-text">{{ row.progress_pct }}%</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="collapse" id="epic-children-{{ row.epic.id }}">
+                    <div class="epic-children-list">
+                        {% if row.children %}
+                            {% for child in row.children %}
+                            <div class="epic-child-row">
+                                {% if child.progress >= 100 or child.completed_at %}
+                                    <span class="epic-child-status done" title="Done"><i class="fas fa-circle-check"></i></span>
+                                {% elif child.progress > 0 %}
+                                    <span class="epic-child-status in-progress" title="In progress"><i class="fas fa-circle-half-stroke"></i></span>
+                                {% else %}
+                                    <span class="epic-child-status todo" title="Not started"><i class="far fa-circle"></i></span>
+                                {% endif %}
+                                <a class="epic-child-title" href="{% url 'task_detail' child.id %}">
+                                    <span class="epic-id-badge me-1">{{ task_prefix }}-{{ child.id }}</span>
+                                    {{ child.title }}
+                                </a>
+                                <span class="epic-child-meta">
+                                    {{ child.column.name }}
+                                    {% if child.assigned_to %} · {{ child.assigned_to.username }}{% endif %}
+                                    {% if child.due_date %} · {{ child.due_date|date:"M d" }}{% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-muted small py-2 px-1">
+                                <em>No child tasks linked to this epic yet.</em>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="epics-empty">
+                <i class="fas fa-layer-group fa-2x mb-2 text-muted"></i>
+                <p class="mb-0">No epics on this board yet.</p>
+                <small>Epics are container items that group related child tasks.</small>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

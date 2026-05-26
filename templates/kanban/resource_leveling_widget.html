@@ -73,6 +73,9 @@
                     <div class="speed-regression-warning d-none mt-1 mb-1">
                         <small class="text-warning"><i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> This reassignment prioritizes workload balance, not speed. The suggested person may take longer to complete this task.</small>
                     </div>
+                    <div class="limited-data-warning d-none mt-1 mb-1">
+                        <small class="text-warning"><i class="fas fa-info-circle"></i> <strong>Limited data:</strong> <span class="limited-data-detail"></span> Add due dates and time logs for more accurate recommendations.</small>
+                    </div>
                     <div class="reasoning-collapse">
                         <a href="#" class="see-reasoning-link small text-info" onclick="toggleReasoning(this); return false;">
                             <i class="fas fa-chevron-right reasoning-chevron" style="font-size:0.7em;"></i> See reasoning
@@ -101,11 +104,11 @@
                     <button class="btn btn-outline-secondary btn-sm reject-btn" onclick="rejectSuggestion(this)">
                         <i class="fas fa-times"></i> Dismiss
                     </button>
-                    <div class="expires-info text-muted small mt-2">
-                        <i class="far fa-clock"></i> <span class="expires-text"></span>
+                    <div class="expires-info text-muted small mt-2" data-expires-at="">
+                        <i class="far fa-clock expires-icon"></i> <span class="expires-text"></span>
                         <span
                             class="expires-tooltip ml-1"
-                            title="Suggestions expire after this time. Expired suggestions are removed automatically and can be refreshed."
+                            title="Suggestions expire 48h after generation. The label updates every minute and turns yellow at 12h, orange at 6h, and red within the final hour."
                             style="cursor:help;">
                             <i class="fas fa-info-circle" style="font-size:0.72em;"></i>
                         </span>
@@ -219,6 +222,19 @@
     border-left-color: #adb5bd !important;
     opacity: 0.88;
 }
+
+/* Expires-time milestone styling. The label ticks every minute via JS;
+   colors escalate as expiry approaches so users can scan urgency at a glance. */
+.expires-info.expires-soft { color: #6c757d; }                                          /* >12h, normal muted */
+.expires-info.expires-warn { color: #b45309; font-weight: 600; }                        /* ≤12h */
+.expires-info.expires-orange { color: #c2410c; font-weight: 600; }                      /* ≤6h */
+.expires-info.expires-urgent { color: #b91c1c; font-weight: 700; }                      /* ≤1h */
+.expires-info.expires-expired { color: #6b7280; text-decoration: line-through; }        /* past expiry */
+.expires-info.expires-urgent .expires-icon { animation: pulse-expires 1.5s ease-in-out infinite; }
+@keyframes pulse-expires {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
 </style>
 
 <script>
@@ -246,6 +262,91 @@ function reloadResourceOptimization() {
     if (!currentBoardId) return;
     loadWorkloadReport();
     loadSuggestions();
+}
+
+// ───────── Expires-timer logic ─────────
+// Updates every visible suggestion card's "Expires in …" label and color state.
+// Runs at render time and then once per minute so the timer ticks live without
+// any further fetch. Color escalates at 12h / 6h / 1h thresholds so the label
+// stops looking like a frozen "48h" string and conveys real urgency.
+function updateExpiresLabel(infoEl) {
+    if (!infoEl) return;
+    const expiresAt = infoEl.dataset.expiresAt;
+    if (!expiresAt) return;
+    const expiresDate = new Date(expiresAt);
+    const ms = expiresDate - new Date();
+    const textEl = infoEl.querySelector('.expires-text');
+    if (!textEl) return;
+
+    // Clear all state classes before re-applying.
+    infoEl.classList.remove(
+        'expires-soft', 'expires-warn', 'expires-orange',
+        'expires-urgent', 'expires-expired'
+    );
+
+    if (ms <= 0) {
+        textEl.textContent = 'Expired';
+        infoEl.classList.add('expires-expired');
+        return;
+    }
+
+    const totalSec = Math.floor(ms / 1000);
+    const totalMin = Math.floor(totalSec / 60);
+    const totalHr  = Math.floor(totalMin / 60);
+    const days     = Math.floor(totalHr / 24);
+    const hrs      = totalHr % 24;
+    const mins     = totalMin % 60;
+
+    let label;
+    if (totalMin < 60) {
+        // Final hour — show minutes (and seconds when very close) so the
+        // urgency is unmistakable.
+        if (totalMin < 5) {
+            const secs = totalSec % 60;
+            label = `Expires in ${totalMin}m ${secs.toString().padStart(2, '0')}s`;
+        } else {
+            label = `Expires in ${totalMin}m`;
+        }
+        infoEl.classList.add('expires-urgent');
+    } else if (totalHr < 6) {
+        label = `Expires in ${hrs}h ${mins}m`;
+        infoEl.classList.add('expires-orange');
+    } else if (totalHr < 12) {
+        label = `Expires in ${hrs}h ${mins}m`;
+        infoEl.classList.add('expires-warn');
+    } else if (days >= 1) {
+        // 1d+ remaining — coarse label, no need to show minutes.
+        const remHrs = totalHr - (days * 24);
+        label = remHrs > 0
+            ? `Expires in ${days}d ${remHrs}h`
+            : `Expires in ${days}d`;
+        infoEl.classList.add('expires-soft');
+    } else {
+        label = `Expires in ${hrs}h ${mins}m`;
+        infoEl.classList.add('expires-soft');
+    }
+    textEl.textContent = label;
+}
+
+function tickAllExpiresLabels() {
+    document.querySelectorAll('.expires-info[data-expires-at]').forEach(updateExpiresLabel);
+}
+
+// Tick once per minute. <1h cards switch to a 10-second cadence so the
+// minute counter visibly moves in the final stretch.
+let _expiresInterval = null;
+let _expiresFastInterval = null;
+function ensureExpiresTimerRunning() {
+    if (!_expiresInterval) {
+        _expiresInterval = setInterval(tickAllExpiresLabels, 60 * 1000);
+    }
+    if (!_expiresFastInterval) {
+        _expiresFastInterval = setInterval(() => {
+            // Only re-render the urgent (<1h) cards on the fast cadence so
+            // we don't thrash the DOM for cards days away from expiring.
+            document.querySelectorAll('.expires-info.expires-urgent').forEach(updateExpiresLabel);
+        }, 10 * 1000);
+    }
 }
 
 function showError(message) {
@@ -461,6 +562,10 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
         }
         renderSuggestionCard(suggestion, template, container);
     });
+
+    // Kick off the per-minute timer (idempotent — only starts once per session)
+    // so every newly-rendered card stays live.
+    ensureExpiresTimerRunning();
     return;
 }
 
@@ -543,39 +648,39 @@ function renderSuggestionCard(suggestion, template, container) {
             clone.querySelector('.low-confidence-indicator').classList.remove('d-none');
         }
         
-        // Expires — calculated live from the suggestion's stored expires_at timestamp.
-        // Use Math.floor so display ticks down monotonically as time passes (rather
-        // than rounding up, which made every freshly-generated suggestion read "48h"
-        // even when minutes had elapsed). When less than 1 hour remains, switch to
-        // minutes so the urgency is visible.
-        const expiresDate = new Date(suggestion.expires_at);
-        const msUntilExpiry = expiresDate - new Date();
-        let expiresLabel;
-        if (msUntilExpiry <= 0) {
-            expiresLabel = 'Expired';
-        } else {
-            const totalMinutes = Math.floor(msUntilExpiry / 1000 / 60);
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
-            if (hours >= 1) {
-                expiresLabel = minutes > 0
-                    ? `Expires in ${hours}h ${minutes}m`
-                    : `Expires in ${hours}h`;
-            } else {
-                expiresLabel = `Expires in ${totalMinutes}m`;
-            }
+        // Expires-info: stash the raw timestamp on the element, render the initial
+        // label/color, and let tickAllExpiresLabels() keep it fresh from now on.
+        const expiresInfo = clone.querySelector('.expires-info');
+        if (expiresInfo) {
+            expiresInfo.dataset.expiresAt = suggestion.expires_at;
+            updateExpiresLabel(expiresInfo);
         }
-        clone.querySelector('.expires-text').textContent = expiresLabel;
-        // Expose the exact expiry timestamp on the info icon so the value is
-        // visibly traceable to real data, not a hardcoded string.
+        const expiresDate = new Date(suggestion.expires_at);
         const expiresTooltip = clone.querySelector('.expires-tooltip');
         if (expiresTooltip) {
             expiresTooltip.title =
                 `Suggestion expires ${expiresDate.toLocaleString()} ` +
-                `(48h after generation). Expired suggestions are removed automatically ` +
-                `and regenerated against the latest workload.`;
+                `(48h after generation). Label updates live every minute; ` +
+                `colors escalate at 12h, 6h, and 1h remaining. ` +
+                `Expired suggestions are removed automatically and regenerated against the latest workload.`;
         }
-        
+
+        // Limited-data warning. Render the banner when the API reports missing
+        // inputs so the user understands why confidence dropped and what to add.
+        const limitedFlags = suggestion.limited_data_flags || [];
+        if (limitedFlags.length > 0) {
+            const warningEl = clone.querySelector('.limited-data-warning');
+            const detailEl = clone.querySelector('.limited-data-detail');
+            if (warningEl && detailEl) {
+                const fragments = [];
+                if (limitedFlags.includes('time_log')) fragments.push('no time log');
+                if (limitedFlags.includes('due_date')) fragments.push('no due date');
+                if (limitedFlags.includes('peer_history')) fragments.push('no peer with completed-task history');
+                detailEl.textContent = fragments.join(', ') + '.';
+                warningEl.classList.remove('d-none');
+            }
+        }
+
         container.appendChild(clone);
 }
 

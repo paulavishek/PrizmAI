@@ -119,6 +119,7 @@ urlpatterns = [
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
     path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
     path('boards/<int:board_id>/list/', views.board_list_view, name='board_list_view'),
+    path('boards/<int:board_id>/epics/', views.board_epics, name='board_epics'),
 
     # -----------------------------------------------------------------------
     # Unified Cross-Board Calendar
