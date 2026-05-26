@@ -123,19 +123,31 @@ class ResourceLevelingService:
             performance_profile.skill_keywords = keywords
             performance_profile.save(update_fields=['skill_keywords'])
     
-    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None, temp_workload_adjustments=None, board=None):
+    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None, temp_workload_adjustments=None, board=None, diversity_penalties=None):
         """
         Analyze a task and suggest optimal assignment
-        
+
         Args:
             task: Task object to analyze
-            potential_assignees: Optional list of User objects to consider. 
+            potential_assignees: Optional list of User objects to consider.
                                 If None, considers all board members
             requesting_user: User requesting the analysis (unused, kept for API compatibility)
-            temp_workload_adjustments: Dict of {user_id: additional_task_count} for tracking pending suggestions
+            temp_workload_adjustments: Dict of {user_id: task_count_delta} for tracking
+                                       pending suggestions. Values can be POSITIVE (user is
+                                       projected to receive tasks from earlier suggestions
+                                       in this run) or NEGATIVE (user is projected to lose
+                                       tasks). This enables cascading projected-state
+                                       generation: each suggestion is analyzed against the
+                                       state that would result after all earlier accepted
+                                       suggestions in the same run are applied.
             board: Optional Board object. If provided, used instead of task.column.board
                    (allows analysis of unsaved/proxy tasks during task creation)
-        
+            diversity_penalties: Dict of {user_id: penalty_points} to subtract from each
+                                 candidate's overall_score. Used to deprioritize team
+                                 members who have already been selected as the target of
+                                 prior suggestions in the same generation run, so a
+                                 single user isn't recommended for every task.
+
         Returns:
             Dict with suggestions and impact analysis
         """
@@ -186,7 +198,9 @@ class ResourceLevelingService:
         # Analyze each candidate
         candidates = []
         for profile in profiles:
-            analysis = self._analyze_candidate(task, task_text, profile, temp_workload_adjustments, board)
+            analysis = self._analyze_candidate(
+                task, task_text, profile, temp_workload_adjustments, board, diversity_penalties
+            )
             candidates.append(analysis)
         
         # Sort by overall score
@@ -231,18 +245,18 @@ class ResourceLevelingService:
         
         return result
     
-    def _analyze_candidate(self, task, task_text, profile, temp_workload_adjustments=None, board=None):
+    def _analyze_candidate(self, task, task_text, profile, temp_workload_adjustments=None, board=None, diversity_penalties=None):
         """
         Analyze a single candidate for task assignment
-        
+
         Returns dict with scores and metrics
         """
         # Check if user has task history on this board
         has_history = profile.total_tasks_completed > 0
-        
+
         # 1. Skill match score (0-100)
         skill_score = profile.calculate_skill_match(task_text)
-        
+
         # 2. Calculate ACTUAL current workload for this board
         # This is more accurate than profile.current_active_tasks which might be org-filtered
         from kanban.models import Task
@@ -255,17 +269,21 @@ class ResourceLevelingService:
         else:
             # Fallback to profile's stored count
             actual_task_count = profile.current_active_tasks
-        
-        # Adjust for temporary assignments from this batch
+
+        # Adjust for projected workload changes from earlier suggestions in this run.
+        # Delta can be POSITIVE (user is projected to receive tasks from prior accepted
+        # suggestions) or NEGATIVE (user is projected to lose tasks because they were
+        # the current_assignee in a prior suggestion that moves work elsewhere).
         temp_task_count = 0
         if temp_workload_adjustments and profile.user.id in temp_workload_adjustments:
             temp_task_count = temp_workload_adjustments[profile.user.id]
-        
-        total_task_count = actual_task_count + temp_task_count
-        
-        # Use the profile's actual utilization (already computed from active tasks)
-        # Only add overhead for temporary (pending suggestion) tasks from this batch
-        adjusted_utilization = profile.utilization_percentage + (temp_task_count * 15)
+
+        total_task_count = max(actual_task_count + temp_task_count, 0)
+
+        # Adjust utilization to reflect the projected state. ~15% per task is a
+        # rough but consistent overhead estimate matching the per-task workload
+        # we apply elsewhere. Clamp at 0 — a user can't have negative utilization.
+        adjusted_utilization = max(profile.utilization_percentage + (temp_task_count * 15), 0)
         availability_score = max(100 - adjusted_utilization, 0)
         
         # 3. Velocity score (normalized to 0-100)
@@ -312,7 +330,16 @@ class ResourceLevelingService:
             # Apply confidence discount: 25% discount if they have skills, 40% if they don't
             confidence_factor = 0.75 if has_skills else 0.60
             overall_score = raw_score * confidence_factor
-        
+
+        # Diversity penalty: deprioritize users who have already been selected as the
+        # target of one or more prior suggestions in the same generation run. Without
+        # this, the candidate with the lowest baseline utilization wins every task
+        # because the per-task projected overhead (15%) is smaller than the
+        # availability gap to the next-best candidate.
+        if diversity_penalties:
+            penalty = diversity_penalties.get(profile.user.id, 0)
+            overall_score = max(overall_score - penalty, 0)
+
         # Predict completion time (use actual task count for workload calculation)
         estimated_hours = self._predict_completion_time_with_workload(profile, task, total_task_count)
         estimated_completion_date = timezone.now() + timedelta(hours=estimated_hours)
@@ -465,16 +492,21 @@ class ResourceLevelingService:
         
         return f"Assign to {recommended['display_name']}: " + ", ".join(reasons)
     
-    def create_suggestion(self, task, force_analysis=False, requesting_user=None, temp_workload_adjustments=None):
+    def create_suggestion(self, task, force_analysis=False, requesting_user=None, temp_workload_adjustments=None, diversity_penalties=None):
         """
         Create and store a ResourceLevelingSuggestion if beneficial
-        
+
         Args:
             task: Task object
             force_analysis: If True, create suggestion even for well-assigned tasks
             requesting_user: User requesting the suggestion
-            temp_workload_adjustments: Dict of {user_id: additional_task_count} for tracking pending suggestions
-        
+            temp_workload_adjustments: Dict of {user_id: task_count_delta} for cascading
+                                       projected state across a multi-suggestion run.
+                                       See analyze_task_assignment for full semantics.
+            diversity_penalties: Dict of {user_id: penalty_points} to deprioritize users
+                                 who have already been targeted in earlier suggestions
+                                 in this run.
+
         Returns:
             ResourceLevelingSuggestion object or None
         """
@@ -522,7 +554,12 @@ class ResourceLevelingService:
 
         # --- End of guard conditions ---
 
-        analysis = self.analyze_task_assignment(task, requesting_user=requesting_user, temp_workload_adjustments=temp_workload_adjustments)
+        analysis = self.analyze_task_assignment(
+            task,
+            requesting_user=requesting_user,
+            temp_workload_adjustments=temp_workload_adjustments,
+            diversity_penalties=diversity_penalties,
+        )
         
         if 'error' in analysis:
             logger.warning(f"Cannot analyze task {task.id}: {analysis['error']}")
@@ -619,146 +656,140 @@ class ResourceLevelingService:
     
     def _calculate_suggestion_confidence(self, recommended, current, workload_impact):
         """
-        Calculate AI's confidence in this suggestion (0-100)
-        This is different from user suitability score - it's about how certain
-        we are that this action will improve the situation.
-        
-        High confidence factors:
-        - Large workload imbalance being corrected
-        - Good availability data (objective)
-        - Clear improvement in multiple dimensions
+        Calculate AI's confidence in this suggestion (0-100).
+
+        Confidence has two distinct components:
+
+        1. Data-quality ceiling: how much real historical data backs this
+           recommendation. A suggestion based on dozens of completed tasks and
+           a populated skill profile can credibly claim 90%; a suggestion based
+           on a user with no completed tasks and no declared skills cannot
+           credibly claim more than ~70% regardless of how clean the workload
+           math is.
+        2. Improvement signal: how strong the case for this specific move is —
+           workload imbalance corrected, availability gap, skill fit, score
+           delta. Strong signals push toward the ceiling; weak signals leave
+           confidence well below it.
+
+        The two components multiply, not add. This is why every suggestion no
+        longer pegs at 92% — the ceiling itself moves with the data.
         """
-        base_confidence = 62.0  # Reasonable baseline
-        
-        # Factor 1: Data quality — confidence reflects how much real data backs
-        # the recommendation. Both users having history = reliable comparison.
         recommended_profile = UserPerformanceProfile.objects.filter(user_id=recommended['user_id']).first()
         current_profile = UserPerformanceProfile.objects.filter(user_id=current['user_id']).first() if current else None
-        
+
         recommended_has_history = recommended_profile and recommended_profile.total_tasks_completed > 0
         current_has_history = current_profile and current_profile.total_tasks_completed > 0
-        
-        if recommended_has_history and current_has_history:
-            # Both users have track records — high-quality comparison
-            base_confidence += 8
-        elif recommended_has_history or current_has_history:
-            # One side has data — moderate quality
-            base_confidence += 3
-        
-        if not recommended_has_history:
-            # Penalty: recommending someone with no track record
-            base_confidence -= 8
-        if current and not current_has_history:
-            # Penalty: baseline comparison is unreliable
-            base_confidence -= 4
-        
-        # Factor 2: Workload improvement (most objective metric)
+
+        # -------- Component 1: Data-quality ceiling (50–92) --------
+        # Start at a modest 50; each piece of real data raises the ceiling.
+        ceiling = 50.0
+
+        # Recommended user's velocity backing: each completed task adds a little,
+        # capped so a single prolific person doesn't max out alone.
+        if recommended_profile:
+            completed = recommended_profile.total_tasks_completed
+            ceiling += min(completed * 1.5, 18)  # up to +18 from 12+ completed tasks
+
+        # Current assignee's history makes the comparison more reliable.
+        if current_profile:
+            current_completed = current_profile.total_tasks_completed
+            ceiling += min(current_completed * 0.8, 10)  # up to +10
+        elif not current:
+            # Unassigned task — no comparison needed, neutral.
+            ceiling += 5
+
+        # Skill keyword coverage on the recommended profile.
+        if recommended_profile and recommended_profile.skill_keywords:
+            ceiling += min(len(recommended_profile.skill_keywords) * 0.3, 8)  # up to +8
+
+        # On-time history on the recommended profile adds reliability evidence.
+        if recommended_profile and recommended_profile.on_time_completion_rate > 0:
+            ceiling += 3
+
+        # Hard cap at 92 — never claim certainty.
+        ceiling = min(ceiling, 92.0)
+
+        # -------- Component 2: Improvement signal (0.0–1.0) --------
+        # 1.0 = strong, clear, multi-dimensional improvement.
+        # 0.5 = mild improvement.
+        # <0.5 = weak case; recommended barely beats current.
+        signal = 0.55  # neutral starting point
+
+        # Workload improvement (the most objective evidence).
         if current:
             util_diff = current['utilization'] - recommended['utilization']
-            if util_diff > 40:  # Major imbalance
-                base_confidence += 10
-            elif util_diff > 20:  # Significant imbalance
-                base_confidence += 7
-            elif util_diff > 10:  # Moderate imbalance
-                base_confidence += 5
-            elif util_diff > 0:  # Any positive improvement
-                base_confidence += 2
-            elif util_diff < -10:  # Would make things worse
-                base_confidence -= 5
+            if util_diff > 40:
+                signal += 0.20
+            elif util_diff > 20:
+                signal += 0.13
+            elif util_diff > 10:
+                signal += 0.08
+            elif util_diff > 0:
+                signal += 0.03
+            elif util_diff < -10:
+                signal -= 0.10
         else:
-            # First assignment - moderate confidence
-            base_confidence += 4
-        
-        # Factor 3: Availability difference (objective data)
-        if current:
-            avail_diff = recommended['availability'] - current['availability']
-            if avail_diff > 30:
-                base_confidence += 6
-            elif avail_diff > 15:
-                base_confidence += 4
-            elif avail_diff > 0:
-                base_confidence += 1
-            elif avail_diff < -15:  # Recommended person is MORE loaded
-                base_confidence -= 3
-        
-        # Factor 4: Skill match of recommended person
-        has_real_skills = recommended_profile and bool(recommended_profile.skill_keywords)
-        if has_real_skills:
-            if recommended['skill_match'] > 70:
-                base_confidence += 6
-            elif recommended['skill_match'] > 50:
-                base_confidence += 4
-            elif recommended['skill_match'] > 30:
-                base_confidence += 2
-            elif recommended['skill_match'] < 20:
-                base_confidence -= 2
-        else:
-            # Skill match is based on neutral default (50) — minimal confidence impact
-            base_confidence -= 1
-        
-        # Factor 5: Overall suitability score difference
+            signal += 0.05  # first assignment — small boost
+
+        # Overall suitability score gap.
         if current:
             score_diff = recommended['overall_score'] - current['overall_score']
             if score_diff > 20:
-                base_confidence += 6
+                signal += 0.12
             elif score_diff > 10:
-                base_confidence += 4
+                signal += 0.07
             elif score_diff > 3:
-                base_confidence += 2
-            elif score_diff < 0:  # Actually worse
-                base_confidence -= 3
+                signal += 0.03
+            elif score_diff < 0:
+                signal -= 0.08
         else:
-            # For unassigned, use absolute score
             if recommended['overall_score'] > 75:
-                base_confidence += 5
+                signal += 0.08
             elif recommended['overall_score'] > 60:
-                base_confidence += 3
-            elif recommended['overall_score'] > 45:
-                base_confidence += 1
+                signal += 0.04
             elif recommended['overall_score'] < 45:
-                base_confidence -= 2
-        
-        # Factor 6: Workload impact type
-        if workload_impact == 'reduces_bottleneck':
-            base_confidence += 5
-        elif workload_impact == 'balances_load':
-            base_confidence += 4
-        elif workload_impact == 'better_skills':
-            base_confidence += 3
-        elif workload_impact == 'improves_timeline':
-            base_confidence += 2
-        
-        # Factor 7: Recommended person's current workload
-        if recommended['current_workload'] == 0:
-            if recommended_has_history:
-                base_confidence += 5  # Genuinely available and proven
-            else:
-                base_confidence += 1  # Available but unproven
-        elif 1 <= recommended['current_workload'] <= 3:
-            base_confidence += 4  # Ideal workload range
+                signal -= 0.05
+
+        # Skill match contributes — but only if the profile has real skill data
+        # (otherwise the score is a neutral 50 placeholder, not real evidence).
+        has_real_skills = recommended_profile and bool(recommended_profile.skill_keywords)
+        if has_real_skills:
+            if recommended['skill_match'] > 70:
+                signal += 0.08
+            elif recommended['skill_match'] > 50:
+                signal += 0.04
+            elif recommended['skill_match'] < 20:
+                signal -= 0.03
+
+        # Recommended user's current workload — penalize piling onto someone
+        # already loaded; reward when they're in the sweet spot.
+        if 1 <= recommended['current_workload'] <= 3:
+            signal += 0.05
         elif 4 <= recommended['current_workload'] <= 7:
-            base_confidence += 2  # Acceptable range
+            signal += 0.02
         elif recommended['current_workload'] > 10:
-            base_confidence -= 4  # Already overloaded
-        
-        # Factor 8: Task-specific variance — use multiple data points to produce
-        # different confidence scores for different tasks/user combinations
-        import random
-        task_id = recommended.get('user_id', 0)
-        if current:
-            task_id += current.get('user_id', 0) * 7
-        variance_seed = int(abs(
-            task_id * 31 +
-            recommended.get('skill_match', 0) * 17 +
-            recommended.get('estimated_hours', 0) * 13 +
-            (current.get('estimated_hours', 0) if current else 0) * 11
-        ))
-        random.seed(variance_seed)
-        variance = random.uniform(-3, 3)
-        base_confidence += variance
-        
-        # Cap at 92 and floor at 45
-        return max(45.0, min(round(base_confidence, 1), 92.0))
+            signal -= 0.08
+
+        # Workload impact type — small additive nudges.
+        impact_boost = {
+            'reduces_bottleneck': 0.06,
+            'balances_load': 0.04,
+            'better_skills': 0.03,
+            'improves_timeline': 0.02,
+        }
+        signal += impact_boost.get(workload_impact, 0)
+
+        # Clamp signal to [0.35, 1.05] — even a weak case has some merit if it
+        # was generated, and a great case can briefly exceed 1.0 before clamping.
+        signal = max(0.35, min(signal, 1.05))
+
+        # -------- Combine: ceiling × signal, with a floor --------
+        # Floor of 38 means we never show truly unconfident suggestions — they
+        # would have been filtered out upstream by the reassignment threshold.
+        confidence = ceiling * signal
+        confidence = max(38.0, min(confidence, ceiling))
+
+        return round(confidence, 1)
     
     def _determine_workload_impact(self, recommended, current):
         """Determine the type of workload impact"""
@@ -858,38 +889,77 @@ class ResourceLevelingService:
         ).select_related('assigned_to', 'column')
         
         suggestions = []
-        
-        # Track how many suggestions target each user to avoid flooding one person
-        # This is used to LIMIT suggestions per user, not to inflate displayed workload
-        # Max 3 suggestions per user to distribute recommendations
+
+        # Track how many suggestions target each user to avoid flooding one person.
+        # Used both to enforce a hard per-user cap and to drive the diversity penalty
+        # so that subsequent suggestions in the same run consider other candidates.
         suggestion_counts_per_user = {}
         max_suggestions_per_user = 3
-        
+
+        # Cascading projected state across the run. After each suggestion is accepted
+        # into the result list, we mutate this dict so the NEXT analysis sees the
+        # workload as it would be AFTER the prior accepted suggestion(s) are applied.
+        # Positive delta = user gained tasks; negative = user lost tasks.
+        projected_adjustments = {}
+
+        # Diversity penalty grows linearly per prior suggestion targeting a given
+        # user. 20 points per hit is large enough to overcome the typical 20–25
+        # point availability advantage a single low-utilization person enjoys
+        # over peers on a busy board, so suggestion #2 picks someone else when
+        # any other credible candidate exists. The hard cap (3 per user) still
+        # bounds the worst case if no alternative qualifies.
+        DIVERSITY_PENALTY_PER_HIT = 20.0
+
+        def _build_diversity_penalties():
+            return {
+                uid: DIVERSITY_PENALTY_PER_HIT * count
+                for uid, count in suggestion_counts_per_user.items()
+                if count > 0
+            }
+
         for task in tasks:
-            # Create suggestion based on CURRENT actual workload
+            # Generate the suggestion against the projected state from prior accepted
+            # suggestions in this run, with a diversity penalty against already-picked
+            # targets so the engine doesn't keep recommending the same person.
             suggestion = self.create_suggestion(
-                task, 
+                task,
                 requesting_user=requesting_user,
-                temp_workload_adjustments=None  # Always use actual current workload
+                temp_workload_adjustments=projected_adjustments,
+                diversity_penalties=_build_diversity_penalties(),
             )
             if suggestion:
                 suggested_user_id = suggestion.suggested_assignee.id
                 current_count = suggestion_counts_per_user.get(suggested_user_id, 0)
-                
-                # Only add suggestion if user hasn't reached the limit
+
+                # Only add suggestion if user hasn't reached the hard cap
                 if current_count < max_suggestions_per_user:
                     suggestions.append(suggestion)
                     suggestion_counts_per_user[suggested_user_id] = current_count + 1
+                    # Reflect the projected reassignment in the running state so the
+                    # NEXT iteration sees workload as it would be after this move.
+                    projected_adjustments[suggested_user_id] = (
+                        projected_adjustments.get(suggested_user_id, 0) + 1
+                    )
+                    if suggestion.current_assignee:
+                        cur_id = suggestion.current_assignee.id
+                        projected_adjustments[cur_id] = (
+                            projected_adjustments.get(cur_id, 0) - 1
+                        )
                 else:
-                    # Top candidate is capped — try the next-best candidate
+                    # Top candidate hit the cap — try the next-best candidate, still
+                    # operating against the projected state so the alternative also
+                    # accounts for earlier accepted suggestions in this run.
                     suggestion.delete()
-                    
-                    # Re-analyze to find alternative candidates
-                    analysis = self.analyze_task_assignment(task)
+
+                    analysis = self.analyze_task_assignment(
+                        task,
+                        temp_workload_adjustments=projected_adjustments,
+                        diversity_penalties=_build_diversity_penalties(),
+                    )
                     if 'error' not in analysis and analysis.get('all_candidates'):
                         current_assignee = task.assigned_to
                         current_analysis = next(
-                            (c for c in analysis['all_candidates'] 
+                            (c for c in analysis['all_candidates']
                              if current_assignee and c['user_id'] == current_assignee.id), None
                         )
                         # Try candidates in score order, skipping the capped one and current assignee
@@ -915,14 +985,22 @@ class ResourceLevelingService:
                             if alt_suggestion:
                                 suggestions.append(alt_suggestion)
                                 suggestion_counts_per_user[candidate['user_id']] = alt_count + 1
+                                projected_adjustments[candidate['user_id']] = (
+                                    projected_adjustments.get(candidate['user_id'], 0) + 1
+                                )
+                                if current_assignee:
+                                    cur_id = current_assignee.id
+                                    projected_adjustments[cur_id] = (
+                                        projected_adjustments.get(cur_id, 0) - 1
+                                    )
                                 break  # Use first valid alternative
-        
+
         # Sort by impact (time savings percentage * confidence)
         suggestions.sort(
             key=lambda s: s.time_savings_percentage * (s.confidence_score / 100),
             reverse=True
         )
-        
+
         return suggestions[:limit]
     
     def optimize_board_workload(self, board, auto_apply=False):

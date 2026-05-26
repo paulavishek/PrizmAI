@@ -329,14 +329,21 @@ def get_board_suggestions(request, board_id):
         except Exception:
             pass  # Don't fail suggestions if workload report errors
         
-        return JsonResponse({
+        response = JsonResponse({
             'suggestions': suggestion_list,
             'total_suggestions': len(suggestion_list),
             'total_potential_savings_hours': round(total_savings, 1),
             'insufficient_team_data': insufficient_data,
             'overloaded_members': overloaded_members,
         })
-        
+        # Suggestions reflect live workload — never serve from cache. Without these
+        # headers a browser back/forward navigation or repeated modal-open within
+        # the same session can show suggestions generated against stale data.
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+
     except Board.DoesNotExist:
         return JsonResponse({'error': 'Board not found'}, status=404)
     except Exception as e:
