@@ -165,6 +165,7 @@ class Command(BaseCommand):
                 self._create_historical_tasks_for_ml()
                 self._create_priority_decisions(tasks_by_code)
                 self._create_wiki_pages()
+                self._create_velocity_snapshots()
 
             # Always run — idempotent via get_or_create
             self._create_custom_fields()
@@ -1984,6 +1985,22 @@ class Command(BaseCommand):
         self.stdout.write(
             f'  [OK] Custom fields: 4 definitions + values on {updated} tasks'
         )
+
+    # ------------------------------------------------------------------
+    # Velocity snapshots
+    # ------------------------------------------------------------------
+    def _create_velocity_snapshots(self):
+        """Seed TeamVelocitySnapshot records by running the predictor's snapshot
+        builder against the just-created tasks.  This ensures the Velocity History
+        chart shows a realistic spread of bars immediately after demo reset instead
+        of waiting for the first burndown page visit."""
+        try:
+            from kanban.utils.burndown_predictor import BurndownPredictor
+            predictor = BurndownPredictor()
+            predictor._ensure_velocity_snapshots(self.board)
+            self.stdout.write('  [OK] Velocity snapshots seeded')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  [WARN] Could not seed velocity snapshots: {e}'))
 
     # ------------------------------------------------------------------
     # Optional sub-seeders

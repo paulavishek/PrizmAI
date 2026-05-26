@@ -830,6 +830,15 @@
                     tooltip: {
                         mode: 'index',
                         intersect: false,
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                if (tooltipItems.length > 0) {
+                                    const d = new Date(tooltipItems[0].parsed.x);
+                                    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                                }
+                                return '';
+                            }
+                        }
                     }
                 },
                 scales: {
