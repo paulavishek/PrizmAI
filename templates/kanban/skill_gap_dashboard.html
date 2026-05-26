@@ -135,6 +135,14 @@
     {% if team_profile and team_profile.last_analysis %}
     <div class="text-muted small mb-2"><i class="fas fa-clock me-1"></i>Last run: {{ team_profile.last_analysis|timesince }} ago</div>
     {% endif %}
+    <div id="skill-gap-loading" class="text-center mt-2 mb-3" style="display:none;" data-prizm-container>
+        <div class="prizm-spinner prizm-spinner--sm"></div>
+        <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="skillGap">Running skill gap analysis…</span>
+    </div>
+    <div id="skill-gap-status" class="text-center text-muted small mt-1 mb-2" style="display:none;">
+        <i class="fas fa-circle-notch fa-spin me-1 text-primary"></i>
+        <span id="skill-gap-status-text">Generating AI recommendations…</span>
+    </div>
 
     <!-- Summary Cards -->
     <div class="row mb-4">
@@ -496,16 +504,13 @@
             showLoadingOverlay('Running skill gap analysis...');
             window.skillGapAnalyzer.analyzeGaps(14).then((data) => {
                 hideLoadingOverlay();
-                
-                // Check if recommendations are pending
+
+                // analyzeGaps() already fires showNotification for completion;
+                // only start polling if recommendations are still being generated.
                 const pendingCount = data.gaps.filter(g => g.recommendations_pending).length;
                 if (pendingCount > 0) {
-                    showToast(`Analysis complete! AI generating ${pendingCount} recommendation(s)...`, 'info');
-                    // Poll for completion instead of fixed wait
                     pollForRecommendations(data.gaps.filter(g => g.recommendations_pending).map(g => g.id));
                 } else {
-                    showToast('Analysis complete!', 'success');
-                    // Update UI immediately without reload
                     updateGapsDisplay(data.gaps);
                 }
             }).catch(error => {
@@ -517,14 +522,20 @@
 
     // Poll for recommendation completion (max 5 attempts, 2 seconds apart)
     async function pollForRecommendations(gapIds, attempt = 1, maxAttempts = 5) {
+        var statusEl = document.getElementById('skill-gap-status');
+        var statusText = document.getElementById('skill-gap-status-text');
+
+        if (attempt === 1 && statusEl) statusEl.style.display = '';
+
         if (attempt > maxAttempts) {
+            if (statusEl) statusEl.style.display = 'none';
             showToast('Recommendations still generating. Refresh page later to see them.', 'info');
             updateGapsDisplay(window.skillGapAnalyzer.gaps);
             return;
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-        
+
         try {
             // Check if recommendations are ready
             const response = await fetch(`/api/skill-gaps/list/${boardId}/`, {
@@ -534,23 +545,25 @@
                     'X-CSRFToken': getCsrfToken()
                 }
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
-                const stillPending = data.gaps.filter(g => 
+                const stillPending = data.gaps.filter(g =>
                     gapIds.includes(g.id) && (!g.ai_recommendations || g.ai_recommendations.length === 0)
                 );
-                
+
                 if (stillPending.length === 0) {
+                    if (statusEl) statusEl.style.display = 'none';
                     showToast('All recommendations ready!', 'success');
                     updateGapsDisplay(data.gaps);
                 } else {
-                    showToast(`Waiting for ${stillPending.length} recommendation(s)... (${attempt}/${maxAttempts})`, 'info');
+                    if (statusText) statusText.textContent = `Generating AI recommendations… (${attempt}/${maxAttempts})`;
                     pollForRecommendations(gapIds, attempt + 1, maxAttempts);
                 }
             }
         } catch (error) {
             console.error('Error polling for recommendations:', error);
+            if (statusEl) statusEl.style.display = 'none';
             updateGapsDisplay(window.skillGapAnalyzer.gaps);
         }
     }
@@ -1368,19 +1381,14 @@
     };
 
     // Utility functions
-    var _skillGapHandle = null;
-
     window.showLoadingOverlay = function(message) {
-        _skillGapHandle = PrizmLoading.showOverlay(null, {
-            messages: PrizmLoading.messages.skillGap
-        });
+        var loadingEl = document.getElementById('skill-gap-loading');
+        if (loadingEl) loadingEl.style.display = '';
     };
 
     window.hideLoadingOverlay = function() {
-        if (_skillGapHandle) {
-            _skillGapHandle.remove();
-            _skillGapHandle = null;
-        }
+        var loadingEl = document.getElementById('skill-gap-loading');
+        if (loadingEl) loadingEl.style.display = 'none';
     };
 
     window.showToast = function(message, type = 'info') {
