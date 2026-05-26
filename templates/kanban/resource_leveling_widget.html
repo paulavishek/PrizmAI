@@ -239,6 +239,15 @@ function loadResourceOptimization() {
     }
 }
 
+// Re-fetch workload + suggestions from the database. Called after any accept/dismiss
+// so the team workload bars and remaining suggestions reflect the current DB state
+// (including the projected effects of suggestions accepted earlier in this session).
+function reloadResourceOptimization() {
+    if (!currentBoardId) return;
+    loadWorkloadReport();
+    loadSuggestions();
+}
+
 function showError(message) {
     const container = document.getElementById('workload-summary');
     if (container) {
@@ -374,7 +383,14 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     const template = document.getElementById('suggestion-card-template');
     
     container.innerHTML = '';
-    
+
+    // Hide the suggestions header by default — re-shown below only when we have
+    // suggestions to render. Without this, a re-render that produces zero
+    // suggestions (e.g. after accepting the last one) leaves a stale "N
+    // suggestions found" header and Accept-All button on screen.
+    const suggestionsHeader = document.getElementById('suggestions-header');
+    if (suggestionsHeader) suggestionsHeader.classList.add('d-none');
+
     if (suggestions.length === 0) {
         noSuggestions.classList.remove('d-none');
         const icon = document.getElementById('no-suggestions-icon');
@@ -395,14 +411,13 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     }
     
     noSuggestions.classList.add('d-none');
-    
+
     // Sort suggestions by confidence descending (highest first)
     suggestions.sort((a, b) => b.confidence - a.confidence);
-    
-    // Show suggestion count + accept-all button
-    const suggestionsHeader = document.getElementById('suggestions-header');
+
+    // Show suggestion count + accept-all button (header was hidden above)
     const suggestionsCount = document.getElementById('suggestions-count');
-    suggestionsHeader.classList.remove('d-none');
+    if (suggestionsHeader) suggestionsHeader.classList.remove('d-none');
     suggestionsCount.textContent = `${suggestions.length} optimization suggestion${suggestions.length !== 1 ? 's' : ''} found`;
     
     suggestions.forEach(suggestion => {
@@ -484,11 +499,38 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
             clone.querySelector('.low-confidence-indicator').classList.remove('d-none');
         }
         
-        // Expires — with tooltip on the info icon (uses browser native title attribute)
+        // Expires — calculated live from the suggestion's stored expires_at timestamp.
+        // Use Math.floor so display ticks down monotonically as time passes (rather
+        // than rounding up, which made every freshly-generated suggestion read "48h"
+        // even when minutes had elapsed). When less than 1 hour remains, switch to
+        // minutes so the urgency is visible.
         const expiresDate = new Date(suggestion.expires_at);
-        const hoursUntilExpiry = Math.round((expiresDate - new Date()) / 1000 / 60 / 60);
-        clone.querySelector('.expires-text').textContent = 
-            `Expires in ${hoursUntilExpiry}h`;
+        const msUntilExpiry = expiresDate - new Date();
+        let expiresLabel;
+        if (msUntilExpiry <= 0) {
+            expiresLabel = 'Expired';
+        } else {
+            const totalMinutes = Math.floor(msUntilExpiry / 1000 / 60);
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            if (hours >= 1) {
+                expiresLabel = minutes > 0
+                    ? `Expires in ${hours}h ${minutes}m`
+                    : `Expires in ${hours}h`;
+            } else {
+                expiresLabel = `Expires in ${totalMinutes}m`;
+            }
+        }
+        clone.querySelector('.expires-text').textContent = expiresLabel;
+        // Expose the exact expiry timestamp on the info icon so the value is
+        // visibly traceable to real data, not a hardcoded string.
+        const expiresTooltip = clone.querySelector('.expires-tooltip');
+        if (expiresTooltip) {
+            expiresTooltip.title =
+                `Suggestion expires ${expiresDate.toLocaleString()} ` +
+                `(48h after generation). Expired suggestions are removed automatically ` +
+                `and regenerated against the latest workload.`;
+        }
         
         container.appendChild(clone);
     });
@@ -540,14 +582,14 @@ function acceptAllSuggestions() {
 function acceptSuggestion(button) {
     const card = button.closest('.suggestion-card');
     const suggestionId = card.dataset.suggestionId;
-    
+
     if (!confirm('Accept this resource optimization suggestion?')) {
         return;
     }
-    
+
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Accepting...';
-    
+
     fetch(`/api/resource-leveling/suggestions/${suggestionId}/accept/`, {
         method: 'POST',
         headers: {
@@ -558,20 +600,22 @@ function acceptSuggestion(button) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success message
+            // Brief inline acknowledgement, then re-fetch workload + suggestions
+            // so the bars at the top update and the remaining suggestions are
+            // regenerated against the new database state. No full page reload —
+            // that closes the modal and forces the user to re-open it.
             card.classList.remove('border-info');
             card.classList.add('border-success');
             card.querySelector('.card-body').innerHTML = `
                 <div class="alert alert-success mb-0">
-                    <i class="fas fa-check-circle"></i> 
-                    Task successfully reassigned to ${data.new_assignee}. Refreshing page...
+                    <i class="fas fa-check-circle"></i>
+                    Task reassigned to ${data.new_assignee}. Updating workload…
                 </div>
             `;
-            
-            // Reload the page to show updated task assignment on board and widget
+
             setTimeout(() => {
-                window.location.reload();
-            }, 1500);
+                reloadResourceOptimization();
+            }, 600);
         } else {
             alert('Error accepting suggestion: ' + (data.error || 'Unknown error'));
             button.disabled = false;
@@ -610,16 +654,14 @@ function rejectSuggestion(button) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Fade out and remove
+            // Fade out, then refresh workload + suggestions. Dismissing doesn't
+            // change DB workload, but it lets the engine regenerate suggestions
+            // (which can pick a different person for the same task next time)
+            // and keeps the modal in sync with backend state.
             card.style.opacity = '0';
             setTimeout(() => {
                 card.remove();
-                
-                // Check if there are any remaining suggestions
-                const container = document.getElementById('suggestions-container');
-                if (container.children.length === 0) {
-                    document.getElementById('no-suggestions').classList.remove('d-none');
-                }
+                reloadResourceOptimization();
             }, 300);
         } else {
             alert('Error rejecting suggestion: ' + (data.error || 'Unknown error'));
