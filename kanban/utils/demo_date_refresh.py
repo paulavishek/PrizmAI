@@ -601,7 +601,7 @@ def _refresh_velocity_snapshot_dates(base_date):
         
         for i, snapshot in enumerate(snapshots):
             period_type = getattr(snapshot, 'period_type', 'weekly')
-            
+
             # Spread snapshots across past periods using record ID so the
             # ordering is stable regardless of how many total snapshots exist
             # across all boards (no global-index dependency).
@@ -616,7 +616,12 @@ def _refresh_velocity_snapshot_dates(base_date):
                 period_duration = 14
             else:  # monthly
                 period_end_offset = -(snapshot.id % 6 * 30 + 30)
-        
+                period_duration = 30
+
+            snapshot.period_end = base_date + timedelta(days=period_end_offset)
+            snapshot.period_start = snapshot.period_end - timedelta(days=period_duration)
+            snapshots_to_update.append(snapshot)
+
         if snapshots_to_update:
             TeamVelocitySnapshot.objects.bulk_update(snapshots_to_update, 
                                                      ['period_start', 'period_end'], batch_size=100)
