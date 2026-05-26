@@ -3945,6 +3945,53 @@ def board_list_view(request, board_id):
     return render(request, 'kanban/board_list_view.html', context)
 
 
+def board_epics(request, board_id):
+    """Epics view: list all Epic items on a board with their child-task summary.
+
+    Each row shows the epic's title, prefix-id, owner, priority, due date,
+    child-task progress (X of Y completed), and an expandable list of its
+    child tasks. Expansion is handled inline via a Bootstrap collapse on the
+    same page — no separate detail navigation required.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.view_board', board):
+        raise Http404
+
+    epics = (
+        Task.objects
+        .filter(column__board=board, item_type='epic')
+        .select_related('assigned_to', 'column')
+        .prefetch_related('subtasks__assigned_to', 'subtasks__column')
+        .order_by('column__position', 'position')
+    )
+
+    # Annotate each epic with child-task summary stats. Done in Python rather
+    # than aggregated SQL so we can also surface the child rows for the inline
+    # expand view in the same template render.
+    epic_rows = []
+    for epic in epics:
+        children = list(epic.subtasks.filter(item_type='task'))
+        total = len(children)
+        completed = sum(1 for c in children if (c.progress or 0) >= 100 or c.completed_at)
+        progress_pct = round((completed / total) * 100) if total else 0
+        epic_rows.append({
+            'epic': epic,
+            'children': children,
+            'total': total,
+            'completed': completed,
+            'progress_pct': progress_pct,
+        })
+
+    context = {
+        'board': board,
+        'epic_rows': epic_rows,
+        'task_prefix': board.get_task_prefix(),
+        'total_epics': len(epic_rows),
+    }
+    return render(request, 'kanban/board_epics.html', context)
+
+
 def add_gantt_milestone(request, board_id):
     """Create a new milestone (stored as a Task with item_type='milestone') from the Gantt chart."""
     if not request.user.is_authenticated:

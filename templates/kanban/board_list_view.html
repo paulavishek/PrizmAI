@@ -270,6 +270,9 @@
         {% endif %}
         <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
         <li class="nav-item"><a class="nav-link active" href="{% url 'board_list_view' board.id %}"><i class="fas fa-list me-1"></i>List</a></li>
+        {% if board.has_epics %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_epics' board.id %}"><i class="fas fa-layer-group me-1"></i>Epics</a></li>
+        {% endif %}
     </ul>
 
     <!-- Summary Chips -->

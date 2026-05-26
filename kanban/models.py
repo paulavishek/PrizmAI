@@ -901,6 +901,13 @@ class Board(models.Model):
         """Return count of tasks with progress == 100 on this board."""
         return Task.objects.filter(column__board=self, item_type='task', progress=100).count()
 
+    @property
+    def has_epics(self):
+        """True if this board has at least one Epic. Used by view templates to
+        conditionally render the Epics tab in the board navigation — boards
+        without epics hide the tab entirely so the nav stays clean."""
+        return Task.objects.filter(column__board=self, item_type='epic').exists()
+
     def create_scope_snapshot(self, user=None, snapshot_type='manual', is_baseline=False, notes=None):
         """
         Create a scope snapshot for this board

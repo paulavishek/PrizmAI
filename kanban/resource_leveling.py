@@ -564,39 +564,31 @@ class ResourceLevelingService:
         Returns:
             ResourceLevelingSuggestion object or None
         """
-        # --- Guard: require sufficient task and team data before generating a suggestion ---
-        # This prevents fabricated metrics (e.g. "88% savings vs team median") for brand-new
-        # tasks that lack any real historical grounding.
-
-        # 1. Task must have at least one time log entry OR a due date set.
-        #    A task with neither has no concrete scope or pacing data.
+        # --- Data-quality inputs (used for confidence + transparency, NOT as gates) ---
+        # Previously, missing time logs / due dates / peer history were hard gates that
+        # suppressed suggestions entirely. That left users staring at obviously
+        # overloaded team members with a "cannot generate suggestions" message —
+        # technically defensible but not useful. The new policy: capture what's
+        # missing, lower confidence accordingly, and surface the gap in the
+        # reasoning text so the user knows where the recommendation is shaky.
         from kanban.budget_models import TimeEntry
         has_time_log = TimeEntry.objects.filter(task=task).exists()
         has_due_date = bool(task.due_date)
-        if not (has_time_log or has_due_date):
-            logger.debug(
-                f"Suppressing resource suggestion for task {task.id}: no time log entries and no due date."
-            )
-            return None
-
-        # 2. At least one board member (other than the current assignee) must have
-        #    completed at least one task, so the team median is backed by real data.
         board = task.column.board if hasattr(task, 'column') and task.column else None
+
+        # Peer-history is still tracked but no longer blocks. With no peer history
+        # the suggestion gets a "limited data" warning rather than being suppressed.
+        has_peer_history = True
         if board:
             exclude_user_ids = [task.assigned_to.id] if task.assigned_to else []
             has_peer_history = UserPerformanceProfile.objects.filter(
                 user__in=User.objects.filter(board_memberships__board=board),
                 total_tasks_completed__gt=0,
             ).exclude(user_id__in=exclude_user_ids).exists()
-            if not has_peer_history:
-                logger.debug(
-                    f"Suppressing resource suggestion for task {task.id}: no peer with completed-task history on this board."
-                )
-                return None
 
-        # 3. Task must have been open for at least 1 hour before any suggestion is shown.
-        #    This prevents a banner firing the instant a task is saved.
-        #    Tasks with future created_at (e.g. demo/refreshed boards) are always allowed.
+        # Task-age gate is preserved — a brand-new task firing a banner the instant
+        # it's saved is jarring UX and almost never useful. 1 hour is short enough
+        # that demo / refreshed boards don't trip it.
         if hasattr(task, 'created_at') and task.created_at:
             task_age = timezone.now() - task.created_at
             if timedelta(0) <= task_age < timedelta(hours=1):
@@ -606,7 +598,15 @@ class ResourceLevelingService:
                 )
                 return None
 
-        # --- End of guard conditions ---
+        # Collect data-quality flags so we can lower confidence and add a warning
+        # marker. Each missing input docks confidence by ~15 points downstream.
+        data_quality_flags = {
+            'missing_time_log': not has_time_log,
+            'missing_due_date': not has_due_date,
+            'no_peer_history': not has_peer_history,
+        }
+        missing_count = sum(1 for v in data_quality_flags.values() if v)
+        # --- End of data-quality capture ---
 
         analysis = self.analyze_task_assignment(
             task,
@@ -680,14 +680,43 @@ class ResourceLevelingService:
         
         # Determine workload impact
         workload_impact = self._determine_workload_impact(top, current_analysis)
-        
+
         # Calculate actual AI confidence in this suggestion (not user suitability)
         ai_confidence = self._calculate_suggestion_confidence(top, current_analysis, workload_impact)
-        
+
+        # Apply data-quality penalty: every missing input (time log, due date,
+        # peer history) docks ~15 points. Floor at 25 — anything below that we
+        # explicitly flag as "limited data" rather than silently downgrading.
+        DATA_QUALITY_PENALTY_PER_MISSING_FIELD = 15.0
+        ai_confidence = max(25.0, ai_confidence - missing_count * DATA_QUALITY_PENALTY_PER_MISSING_FIELD)
+
         # Enhance reasoning with explainability - add calculation explanation
         enhanced_reasoning = analysis['reasoning']
         if time_savings_explanation:
             enhanced_reasoning += time_savings_explanation
+
+        # Surface the data-quality gaps in the reasoning so users see WHY confidence
+        # is lower, not just THAT it's lower. These are appended after the main
+        # explainability sentence.
+        fallback_notes = []
+        if data_quality_flags['missing_time_log'] and data_quality_flags['missing_due_date']:
+            fallback_notes.append(
+                "Estimated using board-average hours per task — this task has no time log entries and no due date set."
+            )
+        elif data_quality_flags['missing_time_log']:
+            fallback_notes.append(
+                "Estimated using board-average hours per task — no time log entries are recorded for this task."
+            )
+        elif data_quality_flags['missing_due_date']:
+            fallback_notes.append(
+                "No due date set — completion-by-deadline cannot be evaluated; estimate is based on workload and velocity only."
+            )
+        if data_quality_flags['no_peer_history']:
+            fallback_notes.append(
+                "No other team member has completed tasks on this board yet — the comparison baseline is theoretical."
+            )
+        if fallback_notes:
+            enhanced_reasoning += " " + " ".join(fallback_notes)
         
         # Create suggestion
         suggestion = ResourceLevelingSuggestion.objects.create(
@@ -934,9 +963,17 @@ class ResourceLevelingService:
         ).update(status='expired')
         
         # Get all incomplete tasks on the board - no filtering by organization
-        # All board members should see suggestions for all tasks
+        # All board members should see suggestions for all tasks.
+        #
+        # Epics (and milestones) are EXCLUDED from the candidate pool. An Epic
+        # is a container that groups child tasks — reassigning the Epic itself
+        # doesn't move any actual work, so accepting such a suggestion leaves
+        # workload bars unchanged and confuses the user (e.g. "I accepted a
+        # suggestion but testuser1 still shows 3 tasks"). Only item_type='task'
+        # rows represent unit-of-work that the AI can meaningfully redistribute.
         tasks = Task.objects.filter(
             column__board=board,
+            item_type='task',
             completed_at__isnull=True
         ).exclude(
             column__name__icontains='done'
