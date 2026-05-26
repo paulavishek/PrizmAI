@@ -224,6 +224,39 @@ class ResourceLevelingService:
         if top_candidate and current_assignee:
             current_analysis = next((c for c in candidates if c['user_id'] == current_assignee.id), None)
             if current_analysis:
+                # --- Workload-relief override (handles the "Marcus 93%, no suggestions" case) ---
+                #
+                # When the current assignee is overloaded (>90%), the score-based
+                # comparison frequently fails to suggest a move because a high-velocity
+                # overloaded user can still out-score a less-loaded peer with less
+                # history — and so `improvement > threshold` never trips. That leaves
+                # users staring at a clearly overloaded teammate with zero suggestions.
+                #
+                # The override: if any candidate has meaningfully less projected
+                # utilization (>15% gap) AND isn't themselves near overload, surface
+                # them as the recommendation regardless of overall_score. Workload
+                # relief is the explicit goal here; velocity differences belong to
+                # the confidence score, not the reassign/don't-reassign gate.
+                if current_analysis['utilization'] > 90:
+                    relief_candidates = sorted(
+                        [c for c in candidates
+                         if c['user_id'] != current_assignee.id
+                         and c['utilization'] < 85],
+                        key=lambda c: c['utilization']
+                    )
+                    if relief_candidates:
+                        relief_target = relief_candidates[0]
+                        util_gap = current_analysis['utilization'] - relief_target['utilization']
+                        if util_gap > 15:
+                            result['top_recommendation'] = relief_target
+                            result['should_reassign'] = True
+                            result['reasoning'] = self._generate_reassignment_reasoning(
+                                relief_target, current_analysis,
+                                relief_target['overall_score'] - current_analysis['overall_score']
+                            )
+                            return result
+                # --- End workload-relief override ---
+
                 # Use a lower threshold when the current assignee is overloaded (>90% utilization)
                 # to make the system more responsive to workload imbalance
                 if current_analysis['utilization'] > 90:
@@ -1192,27 +1225,85 @@ class ResourceLevelingService:
         # Sort by utilization
         report['members'].sort(key=lambda x: x['utilization'], reverse=True)
         
-        # Check for team capacity issues
-        avg_utilization = sum(m['utilization'] for m in report['members']) / len(report['members']) if report['members'] else 0
+        # ── Team-level metrics ──────────────────────────────────────────
+        #
+        # IMPORTANT: average utilization is mathematically INVARIANT under
+        # task reassignment. Moving work between team members preserves both
+        # total workload-hours and total team capacity, so the team average
+        # never moves. That made the previous "Team is at 79% capacity"
+        # banner look hardcoded — it's correct, but useless as a feedback
+        # signal for users actively rebalancing workload.
+        #
+        # The warning now leads with metrics that DO change when tasks move:
+        #   * overload count  (drops when someone crosses back below 90%)
+        #   * spread          (max − min utilization — collapses as work balances)
+        #   * max/min names   (concrete handles for "who" is the bottleneck)
+        # Average is still computed and exposed in the JSON for back-compat
+        # but no longer drives the headline number.
+        member_utils = [m['utilization'] for m in report['members']]
+        avg_utilization = sum(member_utils) / len(member_utils) if member_utils else 0
         overloaded_count = len(report['bottlenecks'])
-        
+
+        if member_utils:
+            max_util = max(member_utils)
+            min_util = min(member_utils)
+            spread = max_util - min_util
+            # Find the people behind the max/min so the message can name them.
+            max_member = next((m for m in report['members'] if m['utilization'] == max_util), None)
+            min_member = next((m for m in report['members'] if m['utilization'] == min_util), None)
+        else:
+            max_util = min_util = spread = 0
+            max_member = min_member = None
+
         report['average_utilization'] = round(avg_utilization, 1)
+        report['max_utilization'] = round(max_util, 1)
+        report['min_utilization'] = round(min_util, 1)
+        report['utilization_spread'] = round(spread, 1)
         report['team_capacity_warning'] = None
-        
-        # Generate capacity warnings
-        if avg_utilization > 85 and overloaded_count >= len(report['members']) * 0.5:
+
+        # Generate capacity warnings driven by metrics that respond to rebalancing.
+        # Critical: half or more of the team is overloaded — adding resources is
+        # the only real fix (rebalancing within an overloaded team is shuffling chairs).
+        if overloaded_count >= max(1, len(report['members']) * 0.5) and avg_utilization > 85:
+            names = ', '.join(b['name'] for b in report['bottlenecks'])
             report['team_capacity_warning'] = {
                 'level': 'critical',
-                'message': f'Team is at {avg_utilization:.0f}% capacity with {overloaded_count} overloaded members. Consider adding resources or extending deadlines.',
+                'message': (
+                    f"{overloaded_count} of {len(report['members'])} members overloaded "
+                    f"({names}). Spread {spread:.0f} pts (max {max_util:.0f}%, min {min_util:.0f}%). "
+                    f"Consider adding resources or extending deadlines."
+                ),
                 'recommendation': 'add_resources'
             }
-        elif avg_utilization > 75:
+        # Imbalance: at least one overloaded member AND meaningful spread.
+        # This message drops away naturally as the user accepts suggestions —
+        # spread shrinks as work moves from the most-loaded to the least-loaded.
+        elif overloaded_count > 0:
+            max_name = max_member['name'] if max_member else 'a team member'
+            min_name = min_member['name'] if min_member else 'another'
             report['team_capacity_warning'] = {
                 'level': 'warning',
-                'message': f'Team is at {avg_utilization:.0f}% capacity. Monitor workload closely.',
-                'recommendation': 'monitor'
+                'message': (
+                    f"{overloaded_count} overloaded — {max_name} at {max_util:.0f}%, "
+                    f"{min_name} at {min_util:.0f}% ({spread:.0f} pt spread). "
+                    f"Reassign work from the most-loaded to balance."
+                ),
+                'recommendation': 'rebalance'
             }
-        
+        # No one overloaded but workload is uneven — softer nudge.
+        elif spread > 30:
+            max_name = max_member['name'] if max_member else 'a team member'
+            min_name = min_member['name'] if min_member else 'another'
+            report['team_capacity_warning'] = {
+                'level': 'warning',
+                'message': (
+                    f"Workload uneven: {max_name} at {max_util:.0f}% vs "
+                    f"{min_name} at {min_util:.0f}% ({spread:.0f} pt spread)."
+                ),
+                'recommendation': 'rebalance'
+            }
+        # else: balanced enough — no alert.
+
         return report
     
     def update_all_profiles(self, board):
