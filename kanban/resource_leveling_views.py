@@ -271,10 +271,11 @@ def get_board_suggestions(request, board_id):
         service = ResourceLevelingService()
         
         # Check if there are enough qualified candidates on this board
-        # to produce meaningful suggestions
+        # to produce meaningful suggestions. Pass board so utilization is
+        # computed from board-specific workload, not cross-workspace totals.
         qualified_count = 0
         for member in User.objects.filter(board_memberships__board=board):
-            profile = service.get_or_create_profile(member)
+            profile = service.get_or_create_profile(member, board=board)
             if service._is_qualified_candidate(profile):
                 qualified_count += 1
         
