@@ -1024,18 +1024,22 @@ class ROICalculator:
         # Calculate current costs
         task_costs = TaskCost.objects.filter(task__column__board=board)
         total_cost = sum([tc.get_total_actual_cost() for tc in task_costs])
-        
+
         # Task metrics - use progress instead of column name
         tasks = Task.objects.filter(column__board=board)
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
-        
-        # Calculate ROI
+
+        # Calculate ROI against allocated budget (not just task-tracked costs) so
+        # history snapshots are consistent with the header ROI card formula.
+        from kanban.budget_models import ProjectBudget as _ProjectBudget
+        _budget = _ProjectBudget.objects.filter(board=board).first()
         roi_percentage = None
         if expected_value or realized_value:
             value = realized_value or expected_value or Decimal('0.00')
-            if total_cost > 0:
-                roi_percentage = ((value - total_cost) / total_cost) * 100
+            cost_basis = _budget.allocated_budget if (_budget and _budget.allocated_budget > 0) else total_cost
+            if cost_basis > 0:
+                roi_percentage = ((value - cost_basis) / cost_basis) * 100
         
         # Create snapshot
         snapshot = ProjectROI.objects.create(

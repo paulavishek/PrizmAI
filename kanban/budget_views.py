@@ -331,8 +331,17 @@ def roi_dashboard(request, board_id):
     roi_metrics = BudgetAnalyzer.calculate_roi_metrics(board)
     
     # Get historical ROI snapshots (chronological order - oldest first)
-    roi_snapshots = ProjectROI.objects.filter(board=board).order_by('snapshot_date')[:10]
-    
+    roi_snapshots = list(ProjectROI.objects.filter(board=board).order_by('snapshot_date')[:10])
+
+    # Recalculate each snapshot's ROI against the allocated budget so history
+    # is consistent with the header card (which uses allocated_budget as the
+    # cost basis, not the smaller task-cost figure stored at snapshot time).
+    if budget and budget.allocated_budget > 0:
+        for snap in roi_snapshots:
+            value = snap.realized_value if snap.realized_value else snap.expected_value
+            if value:
+                snap.roi_percentage = ((value - budget.allocated_budget) / budget.allocated_budget * 100)
+
     context = {
         'board': board,
         'budget': budget,
