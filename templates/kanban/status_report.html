@@ -324,8 +324,98 @@ function copyReport(event) {
 }
 
 function downloadPDF() {
-    document.title = 'Status Report — {{ board.name|escapejs }} — ' + new Date().toLocaleDateString();
-    window.print();
+    const reportEl = document.getElementById('report-output');
+    if (!reportEl) return;
+    const reportHtml = reportEl.innerHTML;
+    const today = new Date().toLocaleDateString();
+
+    // Build explainability block (fully expanded — no collapsed elements)
+    let explainHtml = '';
+    if (srExplainData) {
+        const pct = Math.round(srExplainData.confidenceScore * 100);
+        const dcPct = Math.round(srExplainData.dataCompleteness * 100);
+        const color = pct >= 75 ? '#28a745' : pct >= 50 ? '#ffc107' : '#dc3545';
+        const ragColors = { green: '#28a745', amber: '#ffc107', red: '#dc3545' };
+        const ragLabels = { green: '🟢 On Track', amber: '🟡 At Risk', red: '🔴 Off Track' };
+        const ragColor = ragColors[srExplainData.ragStatus] || ragColors.amber;
+        const ragLabel = ragLabels[srExplainData.ragStatus] || ragLabels.amber;
+        const ragTextColor = srExplainData.ragStatus === 'amber' ? '#212529' : '#fff';
+
+        const reasoningBlock = srExplainData.ragReasoning ? `
+            <div class="explain-section">
+                <div class="explain-label">RAG Reasoning</div>
+                <p>${srExplainData.ragReasoning}</p>
+            </div>` : '';
+
+        const driversBlock = srExplainData.keyDataDrivers && srExplainData.keyDataDrivers.length > 0 ? `
+            <div class="explain-section">
+                <div class="explain-label">Key Data Drivers</div>
+                <ul>${srExplainData.keyDataDrivers.map(d => `<li>${d}</li>`).join('')}</ul>
+            </div>` : '';
+
+        explainHtml = `
+<div class="explainability">
+  <h3>AI Explainability</h3>
+  <div class="conf-row">
+    <span class="badge" style="background:${ragColor};color:${ragTextColor};">${ragLabel}</span>
+    <span class="conf-label">Confidence:</span>
+    <div class="conf-bar-wrap"><div class="conf-bar" style="width:${pct}%;background:${color};"></div></div>
+    <span class="conf-pct" style="color:${color};">${pct}%</span>
+  </div>
+  ${reasoningBlock}
+  ${driversBlock}
+  <div class="data-complete">Data completeness: <strong>${dcPct}%</strong></div>
+</div>`;
+    }
+
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Status Report — {{ board.name|escapejs }} — ${today}</title>
+<style>
+  @page { margin: 1.5cm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; margin: 0; color: #212529; }
+  h2 { font-size: 1.05rem; font-weight: 700; margin: 1.2rem 0 0.3rem; color: #212529; }
+  ul, ol { padding-left: 1.5rem; margin: 0.3rem 0 0.5rem; }
+  li { margin-bottom: 0.2rem; }
+  p { margin: 0 0 0.5rem; }
+  strong { font-weight: 700; }
+  .report-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0d6efd; padding-bottom: 10px; margin-bottom: 18px; }
+  .report-header h1 { font-size: 13pt; margin: 0; }
+  .report-header .subtitle { font-size: 9pt; color: #6c757d; margin-top: 3px; }
+  .report-header .meta { font-size: 9pt; color: #6c757d; text-align: right; }
+  .report-output { border-left: 3px solid #0d6efd; padding: 14px 18px; background: #f8f9fa; border-radius: 4px; margin-bottom: 18px; line-height: 1.7; }
+  .explainability { border: 1px solid #d0e3ff; border-radius: 6px; padding: 14px 16px; background: linear-gradient(135deg,#f0f7ff,#f8f0ff); margin-top: 4px; }
+  .explainability h3 { font-size: 0.88rem; font-weight: 700; margin: 0 0 10px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; }
+  .conf-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .conf-label { font-size: 0.78rem; color: #6c757d; }
+  .conf-bar-wrap { width: 80px; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; }
+  .conf-bar { height: 100%; border-radius: 3px; }
+  .conf-pct { font-size: 0.78rem; font-weight: 700; }
+  .explain-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 9px 12px; margin-bottom: 8px; }
+  .explain-label { font-size: 0.78rem; font-weight: 700; margin-bottom: 4px; }
+  .explain-section p, .explain-section li { font-size: 0.82rem; }
+  .data-complete { font-size: 0.8rem; color: #6c757d; margin-top: 4px; }
+  .pdf-footer { margin-top: 24px; border-top: 1px solid #dee2e6; padding-top: 8px; font-size: 8pt; color: #6c757d; text-align: center; }
+</style>
+</head><body>
+<div class="report-header">
+  <div>
+    <h1>AI Status Report — {{ board.name|escapejs }}</h1>
+    <div class="subtitle">{{ board.name|escapejs }} — stakeholder-ready weekly update</div>
+  </div>
+  <div class="meta">Generated: ${today}<br>PrizmAI</div>
+</div>
+<div class="report-output">${reportHtml}</div>
+${explainHtml}
+<div class="pdf-footer">PrizmAI AI Status Report &nbsp;&middot;&nbsp; {{ board.name|escapejs }} &nbsp;&middot;&nbsp; Generated ${today}</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
 }
 
 function shareLink(event) {
@@ -356,6 +446,19 @@ function shareLink(event) {
         dataPct.textContent = Math.round(dc * 100) + '%';
     }
 })();
+
+// Explainability data exposed for PDF export
+{% if report_explainability %}
+var srExplainData = {
+    ragStatus: '{{ report_explainability.rag_status|escapejs }}',
+    ragReasoning: '{{ report_explainability.rag_reasoning|escapejs }}',
+    confidenceScore: {{ report_explainability.confidence_score|default:"0.5" }},
+    dataCompleteness: {{ report_explainability.data_completeness|default:"0.5" }},
+    keyDataDrivers: [{% for driver in report_explainability.key_data_drivers %}'{{ driver|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}]
+};
+{% else %}
+var srExplainData = null;
+{% endif %}
 
 function loadHistoryReport(index) {
     const dataEl = document.getElementById('history-data');
