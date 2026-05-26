@@ -195,6 +195,11 @@ class Command(BaseCommand):
         self.priya = User.objects.get(username=DEMO_PERSONAS['lead']['username'])
         self.marcus = User.objects.get(username=DEMO_PERSONAS['frontend']['username'])
         self.elena = User.objects.get(username=DEMO_PERSONAS['devops']['username'])
+        # testuser1 is the real observer/tester account in the demo workspace.
+        # Optional: not present in every environment (e.g. CI). Falls back to
+        # marcus so the archive-board spread still uses 4 slots.
+        self.testuser1 = User.objects.filter(username='testuser1').first()
+        self.fourth_member = self.testuser1 or self.marcus
 
         # Board: created by create_demo_organization
         try:
@@ -620,7 +625,7 @@ class Command(BaseCommand):
             complexity=7, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3500, est_hours=40, hourly=87.5, actual_cost=3325,
-            assignee=self.priya, creator=self.marcus, completed_offset=33,
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=33,
             label_names=['Database', 'Backend', 'Value-Added'], labels=labels,
             checklist=[
                 ('Create ER diagram for all core entities', True),
@@ -628,7 +633,7 @@ class Command(BaseCommand):
                 ('Add indexes for all foreign keys and frequent query fields', True),
             ],
             comments=[
-                (self.priya, 'Added GIN indexes for full-text search fields. The initial migration set covers 23 tables. Composite indexes on (board_id, created_at) are showing sub-10ms query times in local testing.', 35),
+                (self.fourth_member, 'Added GIN indexes for full-text search fields. The initial migration set covers 23 tables. Composite indexes on (board_id, created_at) are showing sub-10ms query times in local testing.', 35),
                 (self.marcus, 'Schema looks solid. Good call on the composite indexes.', 33),
             ],
         )
@@ -667,7 +672,7 @@ class Command(BaseCommand):
             complexity=6, risk_l='low', risk_i='medium', risk_level='low',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=2800, est_hours=32, hourly=87.5, actual_cost=2650,
-            assignee=self.priya, creator=self.marcus, completed_offset=22,
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=22,
             label_names=['Backend', 'API', 'Value-Added'], labels=labels,
             checklist=[
                 ('Configure DRF router and URL patterns under /api/v1/', True),
@@ -675,7 +680,7 @@ class Command(BaseCommand):
                 ('Add token authentication and standardized response format', True),
             ],
             comments=[
-                (self.priya, 'API foundation is complete. Standardized error responses, pagination, and filtering are all in. Ready for feature teams to build on top.', 23),
+                (self.fourth_member, 'API foundation is complete. Standardized error responses, pagination, and filtering are all in. Ready for feature teams to build on top.', 23),
             ],
         )
         out['D7'] = self._make_task(
@@ -712,7 +717,7 @@ class Command(BaseCommand):
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='high', collab=True,
             est_cost=4800, est_hours=56, hourly=85, actual_cost=4650,
-            assignee=self.priya, creator=self.priya, completed_offset=12,
+            assignee=self.fourth_member, creator=self.priya, completed_offset=12,
             label_names=['Security', 'Backend', 'Value-Added'], labels=labels,
             checklist=[
                 ('Implement django-rules permission predicates for all roles', True),
@@ -720,7 +725,7 @@ class Command(BaseCommand):
                 ('Test permission inheritance through the hierarchy', True),
             ],
             comments=[
-                (self.priya, 'RBAC implementation complete. All 4 roles tested across the hierarchy. django-rules predicates are clean and easy to extend. Every view now has @permission_required decorators.', 13),
+                (self.fourth_member, 'RBAC implementation complete. All 4 roles tested across the hierarchy. django-rules predicates are clean and easy to extend. Every view now has @permission_required decorators.', 13),
                 (self.marcus, 'Security review passed. No privilege escalation paths found in testing.', 12),
             ],
         )
@@ -1646,6 +1651,9 @@ class Command(BaseCommand):
         )
 
         rng = random.Random(42)  # deterministic so re-runs are stable
+        # Include fourth_member (testuser1 when present) so history is spread
+        # across all demo workspace members, giving the AI enough per-user
+        # velocity and reliability data to generate reassignment suggestions.
         task_templates = [
             'Refactor user notification queue', 'Migrate legacy logging to structured JSON',
             'Add audit trail for permission changes', 'Improve search relevance scoring',
@@ -1662,7 +1670,7 @@ class Command(BaseCommand):
             'Implement password breach check on signup',
         ]
         priorities = ['low', 'medium', 'high', 'urgent']
-        assignees = [self.priya, self.marcus, self.elena]
+        assignees = [self.priya, self.marcus, self.elena, self.fourth_member]
 
         for i, title in enumerate(task_templates):
             complexity = rng.randint(2, 9)

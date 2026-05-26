@@ -141,45 +141,47 @@ class ResourceLevelingService:
         """
         from kanban.models import Task
         
+        # Resolve board first so profile fetching uses board-specific utilization.
+        # Without board context, demo personas (who have no personal boards) appear
+        # at 0% utilization, making the AI think they are not overloaded and setting
+        # the reassignment threshold to 15 pts instead of 5 — so no suggestions fire.
+        if board is None:
+            board = task.column.board if hasattr(task, 'column') and task.column else None
+
         # Get potential assignees - all board members are eligible
         if potential_assignees is None:
-            if board is None:
-                board = task.column.board if hasattr(task, 'column') and task.column else None
             if not board:
                 return {'error': 'Task must be in a column on a board'}
             # Show ALL board members as potential assignees
             potential_assignees = list(User.objects.filter(board_memberships__board=board))
-        
+
         if not potential_assignees:
             return {'error': 'No potential assignees available'}
-        
+
         # IMPORTANT: Include current assignee in analysis for comparison
         # even if they're not a board member (e.g., demo users)
         current_assignee = task.assigned_to
         if current_assignee and current_assignee not in potential_assignees:
             potential_assignees = [current_assignee] + potential_assignees
-        
-        # Get profiles for all candidates, filtering out unqualified users
+
+        # Get profiles with board context so utilization_percentage reflects this
+        # board's actual workload (not the user's cross-board workspace total).
         profiles = []
         for user in potential_assignees:
-            profile = self.get_or_create_profile(user)
+            profile = self.get_or_create_profile(user, board=board)
             # Always include the current assignee for comparison, even if unqualified
             is_current = (current_assignee and user.id == current_assignee.id)
             if is_current or self._is_qualified_candidate(profile):
                 profiles.append(profile)
-        
+
         if not profiles:
             return {
                 'error': 'No reallocation suggestions — insufficient team data for other members',
                 'no_qualified_candidates': True
             }
-        
+
         # Build task context
         task_text = f"{task.title} {task.description or ''}"
-        
-        # Get the board for context (use provided board or derive from task)
-        if board is None:
-            board = task.column.board if hasattr(task, 'column') and task.column else None
         
         # Analyze each candidate
         candidates = []
