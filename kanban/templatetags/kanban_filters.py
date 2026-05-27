@@ -218,6 +218,10 @@ def format_coach_action(action_text):
     if not action_text:
         return mark_safe('')
 
+    # Unwrap dict items stored by the AI (e.g. {'action': '...'} or {'title': '...'})
+    if isinstance(action_text, dict):
+        action_text = action_text.get('action') or action_text.get('title') or next(iter(action_text.values()), '')
+
     parts = [p.strip() for p in str(action_text).split(' • ')]
     if not parts:
         return mark_safe(escape(action_text))
