@@ -140,14 +140,16 @@ def compute_board_health_score(board_id, force=False):
     activity_factor = min(days_inactive / 30, 1.0)
 
     # ── Count available dimensions ──
-    weights = {
-        'velocity': (0.30, velocity_factor),
-        'budget': (0.25, budget_factor),
-        'deadline': (0.25, deadline_factor),
-        'activity': (0.20, activity_factor),
+    # Keys MUST match exit_protocol.scoring.WEIGHTS so the live score here and
+    # the breakdown the dashboard rebuilds from the stored signal stay in sync.
+    candidate_factors = {
+        'velocity': velocity_factor,
+        'budget': budget_factor,
+        'deadlines': deadline_factor,
+        'activity': activity_factor,
     }
 
-    available = {k: v for k, v in weights.items() if v[1] is not None}
+    available = {k: v for k, v in candidate_factors.items() if v is not None}
     dimensions_available = len(available)
 
     # RULE: Need at least 2 dimensions for a valid score
@@ -168,12 +170,9 @@ def compute_board_health_score(board_id, force=False):
         )
         return
 
-    # ── Re-normalize weights and compute score ──
-    total_weight = sum(w for w, _ in available.values())
-    risk_score = sum(
-        (w / total_weight) * factor for w, factor in available.values()
-    )
-    risk_score = min(max(risk_score, 0.0), 1.0)
+    # ── Re-normalize weights and compute score (shared formula) ──
+    from .scoring import weighted_score
+    risk_score = weighted_score(available)
 
     # ── Should we trigger hospice? ──
     should_trigger = (
