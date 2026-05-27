@@ -1458,8 +1458,12 @@ def record_project_signal_on_task_save(sender, instance, created, **kwargs):
                 task=instance,
                 ai_generated=True,
             )
-        elif getattr(instance, 'progress', 0) == 100:
-            # Task completed — positive signal
+        elif getattr(instance, '_just_completed', False):
+            # Task transitioned to completed — positive signal.
+            # Using _just_completed (set by track_priority_and_progress_change
+            # pre_save) rather than progress == 100 prevents duplicate signals
+            # when an already-completed task is re-saved (e.g. after updating
+            # actual_duration_days during demo data population).
             from kanban.project_confidence_service import ProjectConfidenceService
             ProjectConfidenceService.record_signal(
                 board=board,

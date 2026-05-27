@@ -633,8 +633,24 @@
             <div class="card" style="border-top: 4px solid #6f42c1;">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <div>
-                        <h5 class="mb-0"><i class="fas fa-heartbeat me-2" style="color:#6f42c1;"></i>Project Confidence</h5>
-                        <small class="text-muted">Auto-computed from scope, budget, and schedule health</small>
+                        <h5 class="mb-0">
+                            <i class="fas fa-heartbeat me-2" style="color:#6f42c1;"></i>Project Confidence
+                            <span class="badge ms-2 fw-normal"
+                                  style="font-size:.7rem; background:rgba(111,66,193,.12); color:#6f42c1; border:1px solid rgba(111,66,193,.3);">
+                                Score 0–100
+                            </span>
+                        </h5>
+                        <small class="text-muted">
+                            Auto-computed composite — scope stability × 30%, budget health × 30%, schedule adherence × 40%.
+                            <span
+                                tabindex="0"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="right"
+                                title="This score blends three dimensions into one number. Because budget and scope can be perfect while schedule lags, the composite may read higher than the AI's standalone opinion below, which weights velocity more aggressively. Both views are intentional — they highlight different risks."
+                                style="cursor:help; color:#6c757d;"
+                                aria-label="Why this score may differ from the AI analysis"
+                            ><i class="fas fa-info-circle"></i> May differ from AI score below</span>
+                        </small>
                     </div>
                     <div class="d-flex gap-2">
                         <form method="post" action="{% url 'recalculate_confidence' board.id %}">
@@ -857,7 +873,26 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-robot me-2 text-primary"></i>AI Triple Constraint Analysis</h5>
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="fas fa-robot me-2 text-primary"></i>AI Triple Constraint Analysis
+                            <span class="badge ms-2 fw-normal"
+                                  style="font-size:.7rem; background:rgba(13,110,253,.1); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
+                                Score 1–10
+                            </span>
+                        </h5>
+                        <small class="text-muted">
+                            Independent AI opinion — weights velocity and momentum more heavily than the composite above.
+                            <span
+                                tabindex="0"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="right"
+                                title="The AI analyses narrative risk — if velocity has stalled it will flag 'At Risk' even when budget and scope are healthy. The Project Confidence score above averages all three dimensions mathematically. Use both together: the composite tells you the balanced picture; the AI tells you what's most likely to hurt you first."
+                                style="cursor:help; color:#6c757d;"
+                                aria-label="How this score relates to Project Confidence"
+                            ><i class="fas fa-info-circle"></i> Complements the composite score above</span>
+                        </small>
+                    </div>
                     <form method="post">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="ai_analyze">
