@@ -189,6 +189,9 @@ class CoachingSuggestion(models.Model):
         self.acknowledged_at = timezone.now()
         if self.status == 'active':
             self.status = 'acknowledged'
+        # Count as "acted on" so coaching engagement metrics reflect the user's response
+        if not self.action_taken:
+            self.action_taken = 'accepted'
         self.save()
     
     def resolve(self, action_taken=None, was_helpful=None):
