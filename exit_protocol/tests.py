@@ -43,8 +43,11 @@ class ExitProtocolTestBase(TestCase):
         for i in range(10):
             t = Task.objects.create(column=self.col_todo, title=f'Task {i}', created_by=self.user)
             if i < 3:
+                # progress=100 is the canonical "done" marker — Task.save() then
+                # sets completed_at. Setting completed_at directly would be wiped,
+                # since save() clears it whenever progress < 100.
                 t.column = self.col_done
-                t.completed_at = timezone.now()
+                t.progress = 100
                 t.save()
 
         self.client = Client()
