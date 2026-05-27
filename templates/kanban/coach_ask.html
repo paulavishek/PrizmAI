@@ -192,15 +192,21 @@
         <button onclick="askCoach()" class="btn-ask" id="askBtn">
             <i class="fas fa-paper-plane me-2"></i>Get AI Advice
         </button>
-        <div id="coach-ask-loading" class="text-center mt-3" style="display:none;" data-prizm-container>
-            <div class="prizm-spinner prizm-spinner--sm"></div>
-            <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="coach">Thinking…</span>
-        </div>
     </div>
 
     <div id="adviceContainer" style="display: none;">
         <div class="advice-box">
-            <h4><i class="fas fa-lightbulb me-2"></i>AI Coach's Advice</h4>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                <h4 class="mb-0"><i class="fas fa-lightbulb me-2"></i>AI Coach's Advice</h4>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="copyAdviceBtn" onclick="copyAdvice()" title="Copy advice to clipboard">
+                        <i class="fas fa-copy me-1"></i><span id="copyAdviceLabel">Copy</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="askAnother()" title="Ask another question">
+                        <i class="fas fa-redo me-1"></i>Ask Another
+                    </button>
+                </div>
+            </div>
             <div class="advice-content" id="adviceContent"></div>
         </div>
         <!-- Explainability panel -->
@@ -329,6 +335,47 @@ function parseMarkdownSimple(text) {
     return html;
 }
 
+// Holds the raw markdown advice for the Copy button
+let lastAdviceText = '';
+let lastAdviceQuestion = '';
+
+function copyAdvice() {
+    if (!lastAdviceText) return;
+    const header = lastAdviceQuestion ? `Q: ${lastAdviceQuestion}\n\n` : '';
+    const payload = header + lastAdviceText;
+    const done = () => {
+        const label = document.getElementById('copyAdviceLabel');
+        if (!label) return;
+        const original = label.textContent;
+        label.textContent = 'Copied!';
+        setTimeout(() => { label.textContent = original; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(payload).then(done).catch(() => {
+            showAskToast('Failed to copy. Please select and copy manually.', 'error');
+        });
+    } else {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = payload;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); }
+        catch (e) { showAskToast('Failed to copy. Please select and copy manually.', 'error'); }
+        document.body.removeChild(ta);
+    }
+}
+
+function askAnother() {
+    const input = document.getElementById('question');
+    input.value = '';
+    input.focus();
+    document.getElementById('adviceContainer').style.display = 'none';
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function askCoach() {
     const question = document.getElementById('question').value.trim();
     
@@ -341,8 +388,7 @@ function askCoach() {
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Thinking...';
-    document.getElementById('coach-ask-loading').style.display = '';
-    
+
     // Hide previous advice
     document.getElementById('adviceContainer').style.display = 'none';
     
@@ -357,6 +403,9 @@ function askCoach() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Store raw advice for the Copy button
+            lastAdviceText = data.advice || '';
+            lastAdviceQuestion = question;
             // Parse markdown formatting in AI response
             document.getElementById('adviceContent').innerHTML = parseMarkdownSimple(data.advice);
             document.getElementById('adviceContainer').style.display = 'block';
@@ -380,7 +429,6 @@ function askCoach() {
     .finally(() => {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        document.getElementById('coach-ask-loading').style.display = 'none';
     });
 }
 
