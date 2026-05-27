@@ -64,7 +64,7 @@ class ModelTests(ExitProtocolTestBase):
         )
         self.assertEqual(signal.board, self.board)
         self.assertAlmostEqual(signal.hospice_risk_score, 0.42)
-        self.assertEqual(str(signal), f"{self.board.name} — 0.42 @ {signal.recorded_at}")
+        self.assertEqual(str(signal), f"HealthSignal({self.board.id}, score=0.42, valid=True)")
 
     def test_create_hospice_session(self):
         from .models import HospiceSession
