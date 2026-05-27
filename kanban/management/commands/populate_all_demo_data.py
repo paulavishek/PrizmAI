@@ -50,7 +50,10 @@ from kanban.custom_field_models import (
 from kanban.budget_models import ProjectBudget, TaskCost, TimeEntry
 from kanban.coach_models import CoachingSuggestion
 from kanban.priority_models import PriorityDecision
-from kanban.retrospective_models import ProjectRetrospective
+from kanban.retrospective_models import (
+    ProjectRetrospective, LessonLearned, RetrospectiveActionItem,
+    ImprovementMetric,
+)
 from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
 from messaging.models import ChatRoom, ChatMessage
 from wiki.models import WikiCategory, WikiPage
@@ -1760,16 +1763,53 @@ class Command(BaseCommand):
     # Retrospective
     # ------------------------------------------------------------------
     def _create_retrospective(self):
-        ProjectRetrospective.objects.create(
+        # The dashboard, Lessons and Action Items pages read from the relational
+        # LessonLearned / RetrospectiveActionItem / ImprovementMetric models, NOT
+        # from the JSON snapshot fields on the retrospective. The real AI generator
+        # (RetrospectiveGenerator.create_retrospective) stores the JSON snapshot AND
+        # creates those relational records, so the demo seed mirrors that here.
+        recommendations = [
+            {'title': 'Adopt an ADR-first workflow for Phase 2',
+             'description': 'Make "ADR drafted and approved" a Definition-of-Ready gate for any '
+                            'task that introduces or changes architecture.',
+             'priority': 'high', 'action_type': 'process_change',
+             'expected_impact': 'Fewer mid-implementation architecture reversals and rework cycles.'},
+            {'title': 'Add a security review gate to the phase-milestone checklist',
+             'description': 'Schedule the security/penetration review at the start of the milestone, '
+                            'not the end, so findings never threaten the phase deadline.',
+             'priority': 'critical', 'action_type': 'process_change',
+             'expected_impact': 'Security findings surface early with slack to remediate before milestone.'},
+            {'title': 'Publish the Docker onboarding guide in the wiki',
+             'description': 'Document the Docker-first dev environment setup so onboarding stays '
+                            'self-service as the team grows.',
+             'priority': 'medium', 'action_type': 'documentation',
+             'expected_impact': 'New engineers productive in under 30 minutes without pairing.'},
+            {'title': 'Introduce planning poker for Phase 2 estimation',
+             'description': 'Use planning poker on tasks with hidden complexity (e.g. schema work) '
+                            'to surface estimation disagreement before commitment.',
+             'priority': 'high', 'action_type': 'process_change',
+             'expected_impact': 'Tighter estimates and fewer overruns on complex tasks.'},
+            {'title': 'Create an acceptance-criteria template for task creation',
+             'description': 'A reusable acceptance-criteria checklist on the task form so tasks are '
+                            'not started with thin criteria.',
+             'priority': 'medium', 'action_type': 'documentation',
+             'expected_impact': 'Fewer revision rounds caused by ambiguous requirements.'},
+        ]
+
+        retrospective = ProjectRetrospective.objects.create(
             board=self.board,
             title='Phase 1 Foundation Retrospective',
             retrospective_type='milestone',
             status='finalized',
             period_start=(self.NOW - timedelta(days=56)).date(),
             period_end=(self.NOW - timedelta(days=21)).date(),
+            # Keys must match what RetrospectiveGenerator.collect_metrics produces
+            # (total_tasks / completed_tasks / completion_rate / avg_completion_time),
+            # otherwise retrospective_detail falls back to live board counts and shows
+            # the current board state instead of this historical Phase-1 snapshot.
             metrics_snapshot={
-                'tasks_completed': 8, 'tasks_planned': 8, 'velocity': 52,
-                'completion_rate': 100, 'average_cycle_time': 8.5,
+                'total_tasks': 8, 'completed_tasks': 8, 'completion_rate': 100,
+                'velocity': 52, 'avg_completion_time': 8.5,
                 'quality_score': 9.1, 'budget_variance': -3.2,
             },
             what_went_well=(
@@ -1798,7 +1838,10 @@ class Command(BaseCommand):
                  'priority': 'high', 'category': 'quality'},
                 {'lesson': 'Docker-first dev environments eliminate "works on my machine" entirely',
                  'priority': 'medium', 'category': 'technical'},
+                {'lesson': 'Tasks with hidden complexity need detailed acceptance criteria before estimation',
+                 'priority': 'high', 'category': 'planning'},
             ],
+            improvement_recommendations=recommendations,
             overall_sentiment_score=Decimal('0.88'),
             team_morale_indicator='high',
             performance_trend='improving',
@@ -1808,7 +1851,124 @@ class Command(BaseCommand):
             finalized_by=self.priya,
             finalized_at=self.NOW - timedelta(days=20),
         )
-        self.stdout.write('  [OK] Phase 1 retrospective created')
+
+        # --- Lessons Learned (relational records the Lessons page & dashboard read) ---
+        lesson_adr = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Write ADRs before implementation, not during',
+            description=('Several architecture decisions were revisited mid-implementation because '
+                         'the ADRs were authored alongside the code rather than ahead of it.'),
+            category='planning', priority='high',
+            trigger_event='Two architecture choices were reversed after coding had already started.',
+            impact_description='Roughly three days of rework across the data-model and auth layers.',
+            recommended_action='Make "ADR approved" a Definition-of-Ready gate for architecture tasks.',
+            action_owner=self.priya, status='implemented',
+            implementation_date=(self.NOW - timedelta(days=15)).date(),
+            expected_benefit='Fewer mid-implementation reversals.',
+            actual_benefit='Phase 2 architecture tasks have had zero reversals so far.',
+            ai_suggested=True, ai_confidence=Decimal('0.90'),
+        )
+        lesson_security = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Schedule security review as a phase-milestone gate',
+            description=('The RBAC security review was scheduled near the end of the phase and came '
+                         'close to blocking the milestone when two medium findings surfaced.'),
+            category='quality', priority='high',
+            trigger_event='Penetration test ran in the final week of Phase 1.',
+            impact_description='Milestone was at risk for ~48 hours while findings were remediated.',
+            recommended_action='Move the security review to the start of each milestone window.',
+            action_owner=self.elena, status='in_progress',
+            expected_benefit='Security findings surface with time to remediate.',
+            ai_suggested=True, ai_confidence=Decimal('0.88'),
+        )
+        lesson_docker = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Standardise on Docker-first development environments',
+            description=('Elena\'s Docker configuration eliminated "works on my machine" issues and '
+                         'made onboarding effectively instant.'),
+            category='technical', priority='medium',
+            trigger_event='A new team member was productive within 30 minutes of joining.',
+            impact_description='Onboarding time dropped from roughly half a day to under 30 minutes.',
+            recommended_action='Keep the Docker setup as the single supported dev environment.',
+            action_owner=self.elena, status='validated',
+            implementation_date=(self.NOW - timedelta(days=44)).date(),
+            validation_date=(self.NOW - timedelta(days=18)).date(),
+            expected_benefit='Faster, consistent onboarding.',
+            actual_benefit='A second engineer onboarded in 25 minutes during Phase 2 with no setup issues.',
+            success_metrics=[{'metric': 'onboarding_time_minutes', 'before': 240, 'after': 25}],
+            ai_suggested=True, ai_confidence=Decimal('0.85'),
+        )
+        lesson_estimation = LessonLearned.objects.create(
+            retrospective=retrospective, board=self.board,
+            title='Tasks with hidden complexity need detailed acceptance criteria before estimation',
+            description=('Database schema work overran due to a circular reference between Board and '
+                         'Organization, and two tasks needed re-work because their acceptance criteria '
+                         'were too thin to estimate accurately.'),
+            category='planning', priority='high',
+            trigger_event='Schema task overran by two days; two tasks went through a second revision round.',
+            impact_description='Estimation accuracy suffered on the most complex tasks of the phase.',
+            recommended_action='Adopt planning poker and an acceptance-criteria template before estimating.',
+            action_owner=self.priya, status='identified',
+            is_recurring_issue=True, recurrence_count=2,
+            expected_benefit='More reliable estimates on complex work.',
+            ai_suggested=True, ai_confidence=Decimal('0.80'),
+        )
+
+        # --- Action Items (relational records the Action Items page & dashboard read) ---
+        # Each row mirrors one improvement recommendation, with realistic mixed statuses
+        # so the dashboard's completion rate and "Urgent Action Items" panel are populated.
+        action_specs = [
+            dict(rec=recommendations[0], owner=self.priya, related=lesson_adr,
+                 status='completed', progress=100,
+                 actual_completion_date=(self.NOW - timedelta(days=15)).date(),
+                 actual_impact='ADR-first gate added to the Phase 2 Definition of Ready.'),
+            dict(rec=recommendations[1], owner=self.elena, related=lesson_security,
+                 status='in_progress', progress=60,
+                 target_completion_date=(self.NOW + timedelta(days=10)).date()),
+            dict(rec=recommendations[2], owner=self.elena, related=lesson_docker,
+                 status='completed', progress=100,
+                 actual_completion_date=(self.NOW - timedelta(days=18)).date(),
+                 actual_impact='Docker onboarding guide published in the Engineering wiki.'),
+            dict(rec=recommendations[3], owner=self.priya, related=lesson_estimation,
+                 status='pending', progress=0,
+                 target_completion_date=(self.NOW + timedelta(days=14)).date()),
+            dict(rec=recommendations[4], owner=self.marcus, related=lesson_estimation,
+                 status='in_progress', progress=30,
+                 target_completion_date=(self.NOW + timedelta(days=20)).date()),
+        ]
+        for spec in action_specs:
+            rec = spec['rec']
+            RetrospectiveActionItem.objects.create(
+                retrospective=retrospective, board=self.board,
+                title=rec['title'], description=rec['description'],
+                action_type=rec['action_type'], priority=rec['priority'],
+                expected_impact=rec['expected_impact'],
+                status=spec['status'], progress_percentage=spec['progress'],
+                assigned_to=spec['owner'], related_lesson=spec['related'],
+                target_completion_date=spec.get('target_completion_date'),
+                actual_completion_date=spec.get('actual_completion_date'),
+                actual_impact=spec.get('actual_impact', ''),
+                ai_suggested=True, ai_confidence=Decimal('0.82'),
+            )
+
+        # --- Improvement Metrics (relational records the dashboard charts read) ---
+        metric_specs = [
+            ('velocity', 'Team Velocity', Decimal('8'), 'tasks', True),
+            ('quality', 'Completion Rate', Decimal('100'), 'percentage', True),
+            ('cycle_time', 'Average Completion Time', Decimal('8.5'), 'days', False),
+        ]
+        for mtype, mname, value, unit, higher_better in metric_specs:
+            ImprovementMetric.objects.create(
+                board=self.board, retrospective=retrospective,
+                metric_type=mtype, metric_name=mname, metric_value=value,
+                unit_of_measure=unit, higher_is_better=higher_better,
+                measured_at=retrospective.period_end,
+            )
+
+        self.stdout.write(
+            '  [OK] Phase 1 retrospective created '
+            '(4 lessons, 5 action items, 3 improvement metrics)'
+        )
 
     # ------------------------------------------------------------------
     # Chat rooms
