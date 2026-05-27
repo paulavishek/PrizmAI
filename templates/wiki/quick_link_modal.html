@@ -47,7 +47,7 @@
     <div class="row">
         <div class="col-lg-10 mx-auto">
             <div class="mb-3">
-                <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+                <a href="{% if item and content_type == 'task' %}{% url 'task_detail' item.id %}{% elif item and content_type == 'board' %}{% url 'board_detail' item.id %}{% else %}{% url 'dashboard' %}{% endif %}" class="btn btn-outline-secondary btn-sm">
                     <i class="fas fa-arrow-left"></i> Back
                 </a>
             </div>
@@ -121,7 +121,7 @@
                             <button type="submit" class="btn btn-primary btn-lg">
                                 <i class="fas fa-check me-2"></i> Create Links
                             </button>
-                            <a href="javascript:history.back()" class="btn btn-outline-secondary btn-lg">
+                            <a href="{% if item and content_type == 'task' %}{% url 'task_detail' item.id %}{% elif item and content_type == 'board' %}{% url 'board_detail' item.id %}{% else %}{% url 'dashboard' %}{% endif %}" class="btn btn-outline-secondary btn-lg">
                                 <i class="fas fa-times me-2"></i> Cancel
                             </a>
                         </div>

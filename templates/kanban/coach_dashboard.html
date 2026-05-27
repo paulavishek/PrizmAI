@@ -775,21 +775,6 @@ function provideFeedback(suggestionId) {
     window.location.href = `/coach/suggestion/${suggestionId}/`;
 }
 
-// Handle back navigation
-function goBack() {
-    // Don't use browser back if coming from suggestion detail (prevents loop)
-    if (document.referrer && document.referrer.includes('/coach/suggestion/')) {
-        // Coming from suggestion detail, go directly to board
-        window.location.href = '{% url "board_detail" board.id %}';
-    } else if (document.referrer && document.referrer !== window.location.href) {
-        // Normal back navigation
-        window.history.back();
-    } else {
-        // Fallback to board detail if no history (demo-aware)
-        window.location.href = '{% url "board_detail" board.id %}';
-    }
-}
-
 // Guide toggle label
 document.addEventListener('DOMContentLoaded', function() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));

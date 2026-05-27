@@ -380,7 +380,7 @@
             ðŸ“… {{ period_start|date:"M d, Y" }} - {{ period_end|date:"M d, Y" }} (3 weeks)
         </div>
         <div class="action-buttons">
-            <a href="{% url 'board_detail' board.id %}" class="btn-action" style="background: #95a5a6; color: white; text-decoration: none;">â¬…ï¸ Back to Board</a>
+            <a href="{% url 'board_detail' board.id %}" class="btn-action" style="background: #95a5a6; color: white; text-decoration: none;">⬅️ Back to Board</a>
             <button class="btn-action btn-refresh" onclick="location.reload();">ðŸ”„ Refresh</button>
             <a href="{% url 'workload_recommendations' board.id %}" class="btn-action btn-recommendations">ðŸ’¡ View All Recommendations</a>
         </div>
@@ -426,7 +426,7 @@
     <!-- Alerts Section -->
     {% if critical_alerts or warning_alerts %}
     <div class="alerts-section">
-        <div class="alerts-header">âš ï¸ Active Alerts</div>
+        <div class="alerts-header">⚠️ Active Alerts</div>
         
         {% for alert in critical_alerts %}
         <div class="alert-item critical">
@@ -584,17 +584,6 @@
 {% block extra_js %}
 <script src="{% static 'js/forecast_dashboard.js' %}"></script>
 <script>
-// Handle back navigation
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to board detail if no history (demo-aware)
-        window.location.href = '{% url "board_detail" board.id %}';
-    }
-}
-
 // Render forecast confidence badges
 document.querySelectorAll('.forecast-conf-badge').forEach(badge => {
     const conf = parseFloat(badge.dataset.conf) || 0;

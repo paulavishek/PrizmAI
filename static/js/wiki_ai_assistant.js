@@ -765,14 +765,6 @@ function getProbabilityColor(probability) {
     return colors[probability] || 'secondary';
 }
 
-// Handle back navigation to previous page
-function goBack() {
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        window.location.href = wikiListUrl;
-    }
-}
 
 // Import transcript functionality
 async function importTranscript() {

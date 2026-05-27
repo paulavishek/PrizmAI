@@ -386,15 +386,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to stakeholder list if no history
-        window.location.href = '{% url "stakeholder:stakeholder_list" board.id %}';
-    }
-}
 </script>
 {% endblock %}

@@ -1212,14 +1212,6 @@ function getCsrfToken() {
     return cookie ? cookie.split('=')[1] : '';
 }
 
-// Back button functionality
-function goBack() {
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        window.location.href = '{% url "demo_dashboard" %}';
-    }
-}
 </script>
 
 <!-- Task Search Script -->

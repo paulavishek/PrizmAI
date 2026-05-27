@@ -596,7 +596,7 @@
 document.addEventListener('keydown', function(e) {
     // ESC key to go back
     if (e.key === 'Escape') {
-        goBack();
+        window.location.href = "{% url 'dashboard' %}";
     }
 });
 </script>
