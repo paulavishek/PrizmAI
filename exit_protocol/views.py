@@ -97,6 +97,23 @@ def _reconcile_outcome_content(node, entry):
     )
 
 
+def _align_project_name(node, entry):
+    """Display the cemetery entry's project name in preserved records that still
+    refer to the source board's internal name, so the whole autopsy reads as one
+    project (e.g. a board internally named 'Software Development' archived as
+    'Legacy Bug Tracker v1'). Rewrites are in-memory only — stored data is left
+    untouched."""
+    board_name = (entry.board.name if entry.board else '') or ''
+    project_name = entry.project_name or ''
+    if not board_name or not project_name or board_name == project_name:
+        return
+    pattern = re.compile(r'\b' + re.escape(board_name) + r'\b')
+    if node.title:
+        node.title = pattern.sub(project_name, node.title)
+    if node.content:
+        node.content = pattern.sub(project_name, node.content)
+
+
 def build_preserved_knowledge(entry):
     """Ordered, de-duplicated MemoryNodes for the autopsy 'Knowledge Preserved'
     section, shared by the on-screen report and the PDF export.
@@ -105,7 +122,8 @@ def build_preserved_knowledge(entry):
     collapsed (most recent kept). Scope Autopsy summaries and scope-creep alerts
     reporting the same growth percentage collapse to one event; distinct growth
     figures and scope reductions are preserved. Project-completion figures are
-    reconciled against the entry's archived snapshot.
+    reconciled against the entry's archived snapshot, and source-board name
+    references are shown under the entry's project name.
     """
     from knowledge_graph.models import MemoryNode
 
@@ -119,6 +137,7 @@ def build_preserved_knowledge(entry):
     nodes = list(best_by_key.values())
     for node in nodes:
         _reconcile_outcome_content(node, entry)
+        _align_project_name(node, entry)
 
     nodes.sort(key=lambda n: (
         n.node_type,

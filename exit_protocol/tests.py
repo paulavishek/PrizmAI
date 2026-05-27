@@ -381,7 +381,9 @@ class BurialTaskTests(ExitProtocolTestBase):
         self.assertIsNotNone(entry)
         self.assertEqual(entry.project_name, 'Project Omega')
         self.assertEqual(entry.cause_of_death, 'velocity_collapse')
-        self.assertEqual(entry.total_tasks, 13)  # 10 + 3 completed
+        # setUp creates 10 tasks total, 3 of which are moved to Done/completed.
+        self.assertEqual(entry.total_tasks, 10)
+        self.assertEqual(entry.completed_tasks, 3)
 
         # Verify board archived
         self.board.refresh_from_db()
