@@ -1816,7 +1816,7 @@
                 <i class="fas fa-robot" style="color:#0e9f6e;"></i>
                 <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
                 <span class="text-muted" style="font-size:0.82rem;">
-                    — {% if daily_briefing.pulse %}{{ daily_briefing.pulse|truncatechars:80 }}{% else %}{{ daily_briefing.action|truncatechars:80 }}{% endif %}
+                    — {% if daily_briefing.pulse %}{{ daily_briefing.pulse|truncatewords:12 }}{% else %}{{ daily_briefing.action|truncatewords:12 }}{% endif %}
                 </span>
                 <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;" id="briefingChevron"></i>
             </div>
