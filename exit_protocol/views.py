@@ -4,6 +4,7 @@ Views for Exit Protocol: Hospice, Organ Transplant, Cemetery.
 
 import json
 import logging
+import re
 from datetime import timedelta
 from io import BytesIO
 
@@ -28,6 +29,103 @@ from .models import (
 from kanban.decorators import demo_write_guard, demo_ai_guard
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────
+# Knowledge Preserved helpers
+# ──────────────────────────
+# The autopsy report (on-screen and PDF) both render the "Knowledge Preserved"
+# section from a board's MemoryNodes. These helpers build one de-duplicated,
+# ordered list so the two renderers can never diverge.
+
+# em / en / figure / horizontal-bar / minus — autopsy AI prose mixes these with
+# plain hyphens, which would otherwise leave the same lesson recorded twice.
+_DASH_CHARS = ('—', '–', '‒', '―', '−')
+
+_COMPLETION_RE = re.compile(r'\d+\s*/\s*\d+\s+tasks completed\s*\([\d.]+%\)')
+
+
+def _normalize_node_title(title):
+    """Collapse dash style, whitespace and case so near-identical titles dedupe."""
+    t = (title or '').strip()
+    for dash in _DASH_CHARS:
+        t = t.replace(dash, '-')
+    t = re.sub(r'\s+', ' ', t)
+    return t.lower()
+
+
+def _scope_growth_key(node):
+    """Dedup key grouping scope-growth records (forensic Scope Autopsy runs and
+    scope-creep alerts) by their growth percentage, so repeated analyses of the
+    same event collapse to one. Returns None for non-growth scope changes (e.g.
+    a scope *reduction*) and non-scope nodes, which fall back to title dedup."""
+    if node.node_type != 'scope_change':
+        return None
+    ctx = node.context_data or {}
+    pct = ctx.get('growth_pct', ctx.get('scope_increase_pct'))
+    if pct is None:
+        return None
+    try:
+        return ('scope_growth', round(float(pct), 1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_newer(node, other):
+    a, b = node.created_at, other.created_at
+    if a is None:
+        return False
+    if b is None:
+        return True
+    return a > b
+
+
+def _reconcile_outcome_content(node, entry):
+    """Rewrite a project-completion outcome's task figures to match the cemetery
+    entry's archived board snapshot — the same source Vital Statistics uses — so
+    the two sections can't report contradictory completion numbers."""
+    if node.node_type != 'outcome':
+        return
+    content = node.content or ''
+    if not _COMPLETION_RE.search(content):
+        return
+    total = entry.total_tasks or 0
+    completed = entry.completed_tasks or 0
+    pct = round(completed / total * 100) if total else 0
+    node.content = _COMPLETION_RE.sub(
+        f'{completed}/{total} tasks completed ({pct}%)', content,
+    )
+
+
+def build_preserved_knowledge(entry):
+    """Ordered, de-duplicated MemoryNodes for the autopsy 'Knowledge Preserved'
+    section, shared by the on-screen report and the PDF export.
+
+    Records whose titles differ only by dash style, whitespace or case are
+    collapsed (most recent kept). Scope Autopsy summaries and scope-creep alerts
+    reporting the same growth percentage collapse to one event; distinct growth
+    figures and scope reductions are preserved. Project-completion figures are
+    reconciled against the entry's archived snapshot.
+    """
+    from knowledge_graph.models import MemoryNode
+
+    best_by_key = {}
+    for node in MemoryNode.objects.filter(board=entry.board):
+        key = _scope_growth_key(node) or (node.node_type, _normalize_node_title(node.title))
+        current = best_by_key.get(key)
+        if current is None or _is_newer(node, current):
+            best_by_key[key] = node
+
+    nodes = list(best_by_key.values())
+    for node in nodes:
+        _reconcile_outcome_content(node, entry)
+
+    nodes.sort(key=lambda n: (
+        n.node_type,
+        -(n.importance_score or 0.0),
+        -(n.created_at.timestamp() if n.created_at else 0.0),
+    ))
+    return nodes
 
 
 # ──────────────────────────
@@ -561,17 +659,7 @@ def autopsy_report(request, entry_id):
         organ__source_board=entry.board
     ).select_related('organ', 'target_board', 'approved_by')
 
-    from knowledge_graph.models import MemoryNode
-    seen = set()
-    unique_nodes = []
-    for node in MemoryNode.objects.filter(
-        board=entry.board,
-    ).order_by('node_type', '-importance_score'):
-        key = (node.node_type, node.title)
-        if key not in seen:
-            seen.add(key)
-            unique_nodes.append(node)
-    memory_nodes = unique_nodes
+    memory_nodes = build_preserved_knowledge(entry)
 
     return render(request, 'exit_protocol/cemetery/autopsy_report.html', {
         'entry': entry,
@@ -892,7 +980,6 @@ def export_autopsy_pdf(request, entry_id):
 
     # Section 5: Knowledge Preserved — mirrors the on-screen autopsy report so a
     # downloaded PDF carries the same depth (decisions, risks, conflicts, etc.).
-    from knowledge_graph.models import MemoryNode
     from xml.sax.saxutils import escape
 
     node_labels = {
@@ -906,15 +993,8 @@ def export_autopsy_pdf(request, entry_id):
         'ai_recommendation': 'AI Recommendations',
         'manual_log': 'Manual Logs',
     }
-    seen_nodes = set()
     grouped_nodes = {}
-    for node in MemoryNode.objects.filter(
-        board=entry.board
-    ).order_by('node_type', '-importance_score'):
-        key = (node.node_type, node.title)
-        if key in seen_nodes:
-            continue
-        seen_nodes.add(key)
+    for node in build_preserved_knowledge(entry):
         grouped_nodes.setdefault(node.node_type, []).append(node)
 
     if grouped_nodes:
