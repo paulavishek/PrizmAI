@@ -1027,7 +1027,11 @@ def perform_burial(session_id):
 
 
 def _build_decline_timeline(board):
-    """Constructs chronological timeline of key negative events."""
+    """Constructs chronological timeline of key negative events.
+
+    Severity is on a 0–100 scale to match the autopsy chart's y-axis and the
+    PDF export's "Severity: n/100" label.
+    """
     timeline = []
 
     # From Knowledge Graph
@@ -1039,11 +1043,11 @@ def _build_decline_timeline(board):
         ).order_by('created_at')
 
         for event in events:
-            severity = 3  # default
+            severity = 50  # default (conflict_resolution)
             if event.node_type == 'risk_event':
-                severity = 4
+                severity = 80
             elif event.node_type == 'scope_change':
-                severity = 3
+                severity = 60
             timeline.append({
                 'date': event.created_at.strftime('%Y-%m-%d'),
                 'event': event.title,
@@ -1066,7 +1070,7 @@ def _build_decline_timeline(board):
                 timeline.append({
                     'date': snapshots[i].period_end.strftime('%Y-%m-%d'),
                     'event': f"Velocity dropped {round((prev - curr) / prev * 100)}%",
-                    'severity': 4,
+                    'severity': 80,
                     'source': 'Velocity Data',
                 })
     except Exception:
@@ -1083,7 +1087,7 @@ def _build_decline_timeline(board):
             timeline.append({
                 'date': se.event_date.strftime('%Y-%m-%d') if se.event_date else 'Unknown',
                 'event': se.description if hasattr(se, 'description') else f"Scope change: +{se.net_task_change} tasks",
-                'severity': min(abs(se.net_task_change or 0) // 3 + 2, 5),
+                'severity': min((abs(se.net_task_change or 0) // 3 + 2) * 20, 100),
                 'source': 'Scope Autopsy',
             })
     except Exception:
