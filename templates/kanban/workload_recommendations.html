@@ -462,15 +462,5 @@
 </div>
 
 <script>
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to board detail if no history (demo-aware)
-        window.location.href = '{% url "board_detail" board.id %}';
-    }
-}
 </script>
 {% endblock %}
