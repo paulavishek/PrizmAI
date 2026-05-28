@@ -178,27 +178,33 @@ class ShadowBoardListView(ListView):
 
         branch_impacts = []
         for branch_id, latest_snap in latest_today.items():
-            prev_snap = (
-                BranchSnapshot.objects
-                .filter(branch_id=branch_id, captured_at__lt=today_start)
-                .order_by('-captured_at')
-                .first()
-            )
-            # Baseline preference: yesterday's last snapshot (a real
-            # "before today" anchor).  When the branch was created or
-            # recovered today and has no pre-today history, fall back to
-            # today's earliest snapshot so the "Change" column reflects
-            # movement *during today* instead of "score went from 0 to N"
-            # — the latter visually surfaces as a huge swing (e.g. +61.8)
-            # that misrepresents what the team actually did today.
-            if prev_snap is not None:
-                old_score = prev_snap.feasibility_score
+            # Baseline = today's earliest snapshot (start-of-day state).
+            # This matches what the branch card displayed at the start of
+            # the user's session, so the "Before" column and the cards
+            # are anchored to the same reference point.  Falling back to
+            # yesterday's last snapshot here (the prior behaviour) created
+            # a mismatch: cards showed today's heartbeat value while the
+            # table showed yesterday's tail, confusing users who expected
+            # them to agree.
+            earliest_snap = earliest_today.get(branch_id)
+            if earliest_snap is not None and earliest_snap.pk != latest_snap.pk:
+                old_score = earliest_snap.feasibility_score
             else:
-                earliest_snap = earliest_today.get(branch_id)
-                old_score = (
-                    earliest_snap.feasibility_score
-                    if earliest_snap is not None else 0
+                # Only one snapshot today (just the heartbeat).  Fall back
+                # to yesterday's last snapshot so the table still tells a
+                # story instead of showing "no change since this morning".
+                prev_snap = (
+                    BranchSnapshot.objects
+                    .filter(branch_id=branch_id, captured_at__lt=today_start)
+                    .order_by('-captured_at')
+                    .first()
                 )
+                if prev_snap is not None:
+                    old_score = prev_snap.feasibility_score
+                elif earliest_snap is not None:
+                    old_score = earliest_snap.feasibility_score
+                else:
+                    old_score = 0
             new_score = latest_snap.feasibility_score
             branch_impacts.append(types.SimpleNamespace(
                 branch=latest_snap.branch,

@@ -1270,27 +1270,19 @@ def trigger_branch_recalculation_on_task_completion(sender, instance, created, *
         board_id = instance.column.board_id
         task_title = instance.title or 'Unknown task'
 
-        # --- Instant micro-nudge ---
-        # The Celery recalc runs ~5s later (batched) and overwrites with the
-        # canonical AI-driven score.  In the meantime, write a tiny nudge
-        # snapshot synchronously so the user sees the Feasibility Trend chart
-        # move within a render cycle of completing a task.  Magnitude is
-        # intentionally small (+1.0) so it can't drown out the real recalc.
-        try:
-            from django.core.cache import cache as _cache
-            if not _cache.get(f'demo_shadow_lock_{board_id}'):
-                _write_micro_nudge(board_id, direction=+1.0,
-                                   trigger=f'Task "{task_title}" completed')
-        except Exception as nudge_err:
-            import logging
-            logging.getLogger(__name__).warning(
-                f'Micro-nudge skipped for board {board_id}: {nudge_err}'
-            )
-
+        # The recalc is the single source of truth for branch feasibility.
+        # We used to also write a synchronous +1.0 "micro-nudge" in place on
+        # the latest snapshot so the trend chart moved instantly, but that
+        # mutated a historical snapshot's score (Snapshot N's captured_at
+        # said 07:56 with score 40.75, while the row silently re-read 41.75
+        # after the nudge) — breaking audit-trail integrity AND causing
+        # apparent two-stage updates (cosmetic +1, then real recalc).
+        # Shortened countdown from 5s → 2s to keep the perceived latency
+        # close to the old nudge-then-recalc UX without polluting history.
         recalculate_branches_for_board.apply_async(
             args=[board_id],
             kwargs={'trigger_event': f'Task "{task_title}" completed'},
-            countdown=5,  # 5-second delay to batch multiple completions
+            countdown=2,
         )
     except Exception as e:
         import logging
@@ -1299,39 +1291,6 @@ def trigger_branch_recalculation_on_task_completion(sender, instance, created, *
             f'Error triggering branch recalculation for task completion: {e}',
             exc_info=True
         )
-
-
-def _write_micro_nudge(board_id, direction, trigger):
-    """
-    Update the latest snapshot's score in place so the UI moves immediately
-    after a task completion.  The full Celery recalc runs ~5s later and
-    overwrites it with the canonical AI-driven value.
-
-    We deliberately UPDATE rather than INSERT here: a micro-nudge is a
-    cosmetic placeholder that exists only to bridge the 5-second window
-    until the real recalc lands.  Inserting a new BranchSnapshot per nudge
-    used to flood Snapshot History with near-identical rows (every task
-    completion produced two rows: nudge + recalc), making users feel
-    "something is wrong."  An in-place score bump keeps the trend chart
-    moving without polluting history.
-
-    `direction` is the nudge magnitude in score points (e.g. +1.0 for a
-    completion, -1.0 if work is reverted).
-    """
-    from kanban.shadow_models import ShadowBranch
-
-    active = ShadowBranch.objects.filter(board_id=board_id, status='active')
-    for branch in active:
-        latest = branch.get_latest_snapshot()
-        if not latest:
-            continue
-        current = float(latest.feasibility_score)
-        nudged = max(0.0, min(100.0, current + direction))
-        # Skip if the nudge wouldn't actually move the score (already at cap).
-        if round(nudged, 2) == round(current, 2):
-            continue
-        latest.feasibility_score = round(nudged, 2)
-        latest.save(update_fields=['feasibility_score'])
 
 
 @receiver(pre_save, sender='kanban.Board')
