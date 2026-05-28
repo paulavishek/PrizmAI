@@ -680,7 +680,7 @@
         csrfToken: '{{ csrf_token }}',
     };
 </script>
-<script src="{% static 'js/whatif_analyzer.js' %}"></script>
+<script src="{% static 'js/whatif_analyzer.js' %}?v={{ STATIC_VERSION }}"></script>
 <script>
     // ── Promote to Shadow Branch — modal handler ──────────────────
     var _promoteScenarioId = null;
