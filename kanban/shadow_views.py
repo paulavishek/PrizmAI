@@ -217,25 +217,30 @@ class ShadowBoardListView(ListView):
         context['branch_impacts_today'] = branch_impacts
 
         # Auto-heal: if any active branches have no snapshots, re-trigger
-        # recalculation.  The recalc loops over ALL active branches on the
-        # board, not just the missing ones — so the trigger_event must be
-        # a neutral description that doesn't lie about other branches.
-        # The previous text ("Auto-heal: branches missing snapshots")
-        # showed up in every branch's Significant Score Changes feed,
-        # implying the OTHER branches were also missing snapshots.
-        branches_without_snapshots = ShadowBranch.objects.filter(
-            board=board, status='active',
-        ).exclude(
-            id__in=BranchSnapshot.objects.values_list('branch_id', flat=True)
+        # recalculation — but ONLY for the missing ones, not the whole
+        # board.  Recalculating siblings here would overwrite their last
+        # known scores against the live board state, which a user perceives
+        # as "scores randomly changed when I opened the page".
+        branches_without_snapshots = list(
+            ShadowBranch.objects.filter(
+                board=board, status='active',
+            ).exclude(
+                id__in=BranchSnapshot.objects.filter(branch__board=board)
+                .values_list('branch_id', flat=True)
+            ).values_list('id', flat=True)
         )
-        if branches_without_snapshots.exists():
+        if branches_without_snapshots:
             try:
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
-                recalculate_branches_for_board.apply_async(
-                    args=[board.id],
-                    kwargs={'trigger_event': 'Periodic branch refresh'},
-                    countdown=2,
-                )
+                for missing_id in branches_without_snapshots:
+                    recalculate_branches_for_board.apply_async(
+                        args=[board.id],
+                        kwargs={
+                            'trigger_event': 'Periodic branch refresh',
+                            'branch_id': missing_id,
+                        },
+                        countdown=2,
+                    )
             except Exception:
                 pass
 
@@ -296,10 +301,19 @@ class CreateBranchView(CreateView):
         # write a placeholder BranchSnapshot here too, but the recalc landed
         # within seconds with a different score, leaving two snapshots at the
         # same minute on the Feasibility Trend chart.
+        #
+        # Scope the recalc to ONLY the newly-created branch.  Creating a new
+        # branch must not overwrite the snapshots of unrelated branches —
+        # otherwise every existing branch's "latest snapshot" gets a fresh
+        # value computed against the live board, which visibly converges
+        # their displayed scores even when nothing about them changed.
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
             args=[board_id],
-            kwargs={'trigger_event': f'Branch "{branch.name}" created'},
+            kwargs={
+                'trigger_event': f'Branch "{branch.name}" created',
+                'branch_id': branch.id,
+            },
         )
 
         messages.success(self.request, f'Branch "{branch.name}" created and recalculating...')
@@ -335,11 +349,16 @@ class CreateBranchView(CreateView):
                 # No placeholder snapshot here — the Celery recalc below
                 # writes the canonical first snapshot.  Mirrors form_valid().
 
-                # Trigger recalculation
+                # Scope the recalc to the newly-created branch only.  See the
+                # comment in form_valid() for the cross-branch contamination
+                # this prevents.
                 from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
                 recalculate_branches_for_board.apply_async(
                     args=[board_id],
-                    kwargs={'trigger_event': f'Branch "{branch.name}" created'},
+                    kwargs={
+                        'trigger_event': f'Branch "{branch.name}" created',
+                        'branch_id': branch.id,
+                    },
                 )
 
                 return JsonResponse({
@@ -716,10 +735,10 @@ def promote_scenario_to_branch(request, board_id):
 
         # Create an initial snapshot synchronously (no AI) so the branch
         # card shows a score immediately instead of "Calculating first snapshot..."
-        # while Celery picks up the full recalc.  The subsequent Celery task
-        # uses a heartbeat trigger so the dedup logic skips writing a second
-        # snapshot when the score is unchanged — preventing the duplicate
-        # entries that led to this comment's original placement.
+        # while Celery picks up the AI backfill.  Without the sync snapshot the
+        # list page renders "Calculating..." and polls until Celery finishes;
+        # with it the user sees a real score the instant the redirect lands.
+        initial_snapshot_id = None
         try:
             from kanban.tasks.shadow_branch_tasks import (
                 extract_branch_params, compute_actual_7d_velocity,
@@ -739,7 +758,7 @@ def promote_scenario_to_branch(request, board_id):
                 _proj_date = _parse_date(
                     _results.get('projected', {}).get('predicted_date')
                 ) or _estimate_completion_date(_results)
-                BranchSnapshot.objects.create(
+                initial_snapshot = BranchSnapshot.objects.create(
                     branch=branch,
                     scope_delta=_params['tasks_added'],
                     team_delta=_params['team_size_delta'],
@@ -750,17 +769,39 @@ def promote_scenario_to_branch(request, board_id):
                     conflicts_detected=_results.get('new_conflicts', []),
                     gemini_recommendation='',
                 )
+                initial_snapshot_id = initial_snapshot.pk
         except Exception as _snap_err:
             logger.warning(f'Quick initial snapshot failed for branch {branch.id}: {_snap_err}')
 
-        # Trigger full recalc (with AI) in the background.  Heartbeat trigger
-        # ensures the dedup check suppresses a second identical snapshot if
-        # Celery computes the same score as the sync snapshot above.
-        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
-        recalculate_branches_for_board.apply_async(
-            args=[board_id],
-            kwargs={'trigger_event': 'Periodic branch refresh'},
-        )
+        # Background AI generation: backfill the gemini_recommendation on the
+        # snapshot we just wrote so the branch detail page shows an AI
+        # recommendation within a few seconds instead of "No AI recommendation
+        # available for this snapshot."  The task updates the existing
+        # snapshot in place — no second snapshot is created, so the
+        # Feasibility Trend chart and Snapshot History stay clean.
+        if initial_snapshot_id is not None:
+            try:
+                from kanban.tasks.shadow_branch_tasks import generate_ai_for_branch_snapshot
+                generate_ai_for_branch_snapshot.apply_async(
+                    args=[initial_snapshot_id],
+                )
+            except Exception as _ai_err:
+                logger.warning(
+                    f'Failed to queue AI generation for branch {branch.id} '
+                    f'snapshot {initial_snapshot_id}: {_ai_err}'
+                )
+        else:
+            # Sync snapshot failed — fall back to the full recalc path so the
+            # branch still ends up with a snapshot (scoped to just this branch
+            # so it cannot overwrite siblings).
+            from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+            recalculate_branches_for_board.apply_async(
+                args=[board_id],
+                kwargs={
+                    'trigger_event': f'Branch "{branch.name}" created',
+                    'branch_id': branch.id,
+                },
+            )
 
         return JsonResponse({
             'success': True,
@@ -980,10 +1021,15 @@ def link_scenario_to_branch(request, board_id, branch_id):
 
         # Trigger recalculation — extract_branch_params now reads directly from
         # source_scenario.input_parameters, so no zero-score seed snapshot is needed.
+        # Scope the recalc to this branch only: linking a scenario to one
+        # branch must not nudge the scores of unrelated branches on the board.
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
             args=[board_id],
-            kwargs={'trigger_event': f'Linked scenario "{scenario.name}" to branch "{branch.name}"'},
+            kwargs={
+                'trigger_event': f'Linked scenario "{scenario.name}" to branch "{branch.name}"',
+                'branch_id': branch.id,
+            },
         )
 
         return JsonResponse({

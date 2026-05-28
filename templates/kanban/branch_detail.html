@@ -408,6 +408,10 @@
         // Adaptive window: anchored on the latest snapshot.  The window is
         // sized to keep the line *visible* regardless of how clustered the
         // snapshots are:
+        //   - Single snapshot (brand-new branch) → tight 1-hour window
+        //     centred on the snapshot, no extended flat line.  Older
+        //     behaviour stretched a flat segment across a 24h axis,
+        //     making a brand-new branch look "broken and empty".
         //   - All snapshots within an hour → zoom in to ~3× the actual span
         //     (30 min floor) so two snapshots a few minutes apart still draw
         //     a recognisable curve instead of collapsing into a right-edge
@@ -421,29 +425,35 @@
         const actualSpan = maxX - minX;
         const ONE_HOUR_MS = 60 * 60 * 1000;
         const MIN_WINDOW_MS = 24 * ONE_HOUR_MS;
+        const isSinglePoint = points.length === 1 || actualSpan === 0;
         let windowSpan;
-        if (actualSpan === 0) {
-            windowSpan = MIN_WINDOW_MS;
+        let windowStart;
+        let latestTs;
+        if (isSinglePoint) {
+            // Anchor the window on the single snapshot — 45 min before to
+            // 15 min after — so the dot lands ~3/4 of the way across the
+            // axis and the user sees a meaningful timestamp scale around
+            // the branch creation time, not a 24h flat line.
+            windowSpan = ONE_HOUR_MS;
+            latestTs = new Date(maxX + 15 * 60 * 1000);
+            windowStart = new Date(maxX - 45 * 60 * 1000);
         } else if (actualSpan < ONE_HOUR_MS) {
             windowSpan = Math.max(actualSpan * 3, 30 * 60 * 1000);
+            latestTs = new Date(maxX);
+            windowStart = new Date(maxX - windowSpan);
         } else if (actualSpan < 12 * ONE_HOUR_MS) {
             windowSpan = Math.max(actualSpan * 1.5, 2 * ONE_HOUR_MS);
+            latestTs = new Date(maxX);
+            windowStart = new Date(maxX - windowSpan);
         } else {
             windowSpan = Math.max(actualSpan * 1.2, MIN_WINDOW_MS);
+            latestTs = new Date(maxX);
+            windowStart = new Date(maxX - windowSpan);
         }
-        const latestTs = new Date(maxX);
-        const windowStart = new Date(maxX - windowSpan);
 
-        // Single-snapshot or all-same-timestamp branches: stretch the
-        // score across the window as a flat reference line so the chart
-        // shows the current level instead of an invisible cluster.
-        if (points.length > 0 && actualSpan === 0) {
-            const flatScore = points[points.length - 1].y;
-            points = [
-                { x: windowStart, y: flatScore },
-                { x: latestTs, y: flatScore },
-            ];
-        }
+        // For single-snapshot branches we DELIBERATELY leave `points` as a
+        // single {x, y} so Chart.js renders a single visible dot rather
+        // than a flat horizontal line stretched across the window.
 
         const latestScore = points.length ? points[points.length - 1].y : 0;
         const tierColor = latestScore >= 70
@@ -462,8 +472,14 @@
                     borderColor: tierColor.border,
                     backgroundColor: tierColor.fill,
                     tension: 0.4,
-                    fill: true,
-                    pointRadius: 4,
+                    // Single-snapshot branches: enlarge the dot so it reads
+                    // as an intentional "current score marker" rather than
+                    // an empty chart.  Also drop the fill so there's no
+                    // ambiguous shaded region implying a trend that doesn't
+                    // exist yet.
+                    pointRadius: isSinglePoint ? 8 : 4,
+                    pointHoverRadius: isSinglePoint ? 10 : 6,
+                    fill: !isSinglePoint,
                     pointBackgroundColor: function(context) {
                         const score = context.raw && context.raw.y;
                         if (score >= 70) return '#198754';
