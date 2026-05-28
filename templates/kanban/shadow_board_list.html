@@ -409,7 +409,10 @@
             <div>
                 <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
             </div>
-            <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <button class="btn btn-sm btn-primary" id="refreshScoresBtn" title="Recalculate all branches against the current board state">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh Scores
+                </button>
                 {% if has_archived_branches %}
                 <button class="btn btn-sm btn-outline-secondary" id="restoreAllArchivedBtn" title="Restore all archived branches to active">
                     <i class="fas fa-history me-1"></i>Restore All Archived
@@ -423,6 +426,13 @@
                 </div>
             </div>
         </div>
+
+        <p class="small text-muted mb-3">
+            <i class="fas fa-info-circle me-1"></i>
+            Scores update after task completions. If you just moved a task and
+            don't see the new score yet, click <strong>Refresh Scores</strong>
+            to force an immediate recalculation.
+        </p>
 
         <!-- Info note about commit behaviour -->
         <div class="alert alert-info alert-dismissible py-2 px-3 mb-3" id="commitInfoBanner" role="alert">
@@ -473,8 +483,16 @@
                             </div>
                             {% endif %}
 
-                            <!-- Sparkline -->
-                            <canvas id="sparkline-{{ branch.id }}" class="sparkline" data-branch-scores="{{ branch_scores|safe }}"></canvas>
+                            <!-- Mini sparkline removed: a brand-new branch has a
+                                 single data point that previously stretched as
+                                 a flat horizontal line across the card, falsely
+                                 implying "score has been stable for a long
+                                 time" when reality was just one snapshot.  Open
+                                 the branch detail page for the full trend
+                                 chart, which renders single-point branches as
+                                 a labelled dot.  Spacer keeps card heights
+                                 visually consistent. -->
+                            <div style="height: 24px;"></div>
 
                             <!-- Actions -->
                             <div class="btn-group btn-group-sm w-100 mt-auto" role="group">
