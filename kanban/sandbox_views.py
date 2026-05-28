@@ -1125,7 +1125,11 @@ def _duplicate_board(template_board, user):
             )
             ChatRoom.objects.filter(pk=new_cr.pk).update(created_at=cr.created_at)
             chatroom_map[old_pk] = new_cr
-            new_cr.members.set(cr.members.all())
+            # Include the sandbox owner so the Messages badge has correct
+            # unread counts before they ever open the Messages page.
+            # Template members are demo personas; the real user is added
+            # alongside them.
+            new_cr.members.set(list(cr.members.all()) + [user])
 
         for cm in ChatMessage.objects.filter(chat_room__board=template_board).order_by('created_at'):
             new_room = chatroom_map.get(cm.chat_room_id)

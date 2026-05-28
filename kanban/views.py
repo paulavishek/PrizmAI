@@ -177,11 +177,38 @@ def dashboard(request):
             if not has_assigned:
                 from kanban.models import DemoSandbox
                 from kanban.sandbox_views import _reassign_demo_tasks_to_user
-                try:
-                    sandbox = request.user.demo_sandbox
-                    _reassign_demo_tasks_to_user(sandbox, request.user)
-                except DemoSandbox.DoesNotExist:
-                    pass
+                # If provisioning raced ahead of the DemoSandbox row, create
+                # it now so reassignment can persist the mapping. Without
+                # this, the catch-up silently no-ops forever and "My Tasks"
+                # stays empty until the user clicks Reset Demo.
+                sandbox, _ = DemoSandbox.objects.get_or_create(user=request.user)
+                _reassign_demo_tasks_to_user(sandbox, request.user)
+
+            # Catch-up: add the user to sandbox chat rooms if a prior
+            # provisioning pass missed them. Sandbox boards are not
+            # ``is_official_demo_board``, so the Messages badge endpoint
+            # requires explicit ChatRoom membership before it will count
+            # unread messages.
+            from messaging.models import ChatRoom
+            missing_rooms = ChatRoom.objects.filter(
+                board__in=sandbox_boards,
+            ).exclude(members=request.user)
+            for _room in missing_rooms:
+                _room.members.add(request.user)
+
+            # Catch-up: seed Decision Center items if the user has none.
+            # ``collect_for_user`` is only called during provisioning, so a
+            # silent failure there leaves Focus Today permanently empty.
+            try:
+                from decision_center.models import DecisionItem
+                if not DecisionItem.objects.filter(created_for=request.user).exists():
+                    from decision_center.tasks import (
+                        collect_for_user, generate_briefing_for_user,
+                    )
+                    collect_for_user(request.user)
+                    generate_briefing_for_user(request.user)
+            except Exception:
+                pass
     elif active_ws and not active_ws.is_demo:
         # Workspace-scoped: delegate to the centralized helper.
         from kanban.utils.demo_protection import get_user_boards as _get_user_boards
