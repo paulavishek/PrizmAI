@@ -111,26 +111,20 @@ function renderSparklines() {
 
 /**
  * Draw a sparkline chart on a canvas.
- * timestamps: ISO-string array parallel to scores; used as tooltip labels.
+ * Uses a linear index-based x-axis — no date adapter required.
+ * timestamps: ISO-string array parallel to scores; shown only in hover tooltips.
  */
 function drawSparkline(canvas, scores, timestamps) {
     if (typeof Chart === 'undefined') return;
 
     const ctx = canvas.getContext('2d');
 
-    // Per-point colors (still used for hover dots so users can see when a
-    // specific snapshot crossed a tier boundary).
     const pointColors = scores.map(s => {
         if (s >= 70) return '#198754';
         if (s >= 50) return '#fd7e14';
         return '#dc3545';
     });
 
-    // Color the line and fill by the LATEST tier — at low scores a thin
-    // blue band at the bottom of the canvas was visually washed out and
-    // made active cards look "dim" next to cards with healthier scores.
-    // Tying the trace color to the current feasibility tier keeps the
-    // sparkline consistently legible regardless of score height.
     const tierColors = (() => {
         const latest = scores.length ? scores[scores.length - 1] : 0;
         if (latest >= 70) return { border: '#198754', fill: 'rgba(25, 135, 84, 0.18)' };
@@ -138,53 +132,19 @@ function drawSparkline(canvas, scores, timestamps) {
         return { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.18)' };
     })();
 
-    // Build {x: Date, y: score} points for a time-scale axis.  Falling back
-    // to a synthetic past-week timeline when timestamps aren't supplied
-    // (legacy API responses) keeps the sparkline rendering without
-    // collapsing into a single point.
-    const haveTimestamps = Array.isArray(timestamps)
-        && timestamps.length === scores.length;
-    const nowTs = Date.now();
-    let points = scores.map((s, i) => {
-        let x;
-        if (haveTimestamps) {
-            x = new Date(timestamps[i]);
-        } else {
-            const span = 7 * 24 * 60 * 60 * 1000;
-            const ratio = scores.length > 1 ? i / (scores.length - 1) : 1;
-            x = new Date(nowTs - span * (1 - ratio));
-        }
-        return { x, y: s };
-    });
+    // Use sequential integer indices for x — no date adapter needed.
+    // Timestamps are stored as a separate field for tooltip display only.
+    let points = scores.map((s, i) => ({
+        x: i,
+        y: s,
+        ts: (Array.isArray(timestamps) && timestamps[i]) ? timestamps[i] : null,
+    }));
 
-    // Fit-to-data window (with a minimum span) so single-snapshot branches
-    // and freshly-promoted branches show a visible trace instead of an
-    // invisible cluster at the right edge.  Sparklines have no axis
-    // labels, so spreading a short data span across the card width is
-    // fine — there's no "30 seconds look like weeks" hazard like on the
-    // main detail chart.
-    const MIN_SPARKLINE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-    const xs = points.map(p => p.x.getTime());
-    const minX = xs.length ? Math.min(...xs) : nowTs;
-    const maxX = xs.length ? Math.max(...xs) : nowTs;
-    const actualSpan = maxX - minX;
-    const windowSpan = Math.max(actualSpan * 1.1, MIN_SPARKLINE_WINDOW_MS);
-    const latestTs = new Date(maxX);
-    const windowStart = new Date(maxX - windowSpan);
-
-    // When every snapshot is at the same timestamp (single-snapshot
-    // branches and ones whose history has been freshly initialised in
-    // one Celery cycle), the time-scale renderer would stack all points
-    // on the same X coordinate and the line would be invisible.  Stretch
-    // the score across the window as a flat reference line.
-    if (points.length === 0) {
-        // nothing to do — drawSparkline shouldn't have been called
-    } else if (actualSpan === 0) {
-        const flatScore = points[points.length - 1].y;
-        points = [
-            { x: windowStart, y: flatScore },
-            { x: latestTs, y: flatScore },
-        ];
+    // Duplicate single-point to produce a visible flat line instead of
+    // an invisible dot at the left edge of the canvas.
+    if (points.length === 1) {
+        points = [{ x: 0, y: points[0].y, ts: points[0].ts },
+                  { x: 1, y: points[0].y, ts: points[0].ts }];
     }
 
     new Chart(ctx, {
@@ -201,7 +161,7 @@ function drawSparkline(canvas, scores, timestamps) {
                 tension: 0,
                 pointRadius: 0,
                 pointHoverRadius: 4,
-                pointBackgroundColor: pointColors
+                pointBackgroundColor: pointColors,
             }]
         },
         options: {
@@ -212,8 +172,8 @@ function drawSparkline(canvas, scores, timestamps) {
                 tooltip: {
                     callbacks: {
                         title: (items) => {
-                            const d = items[0] && items[0].raw && items[0].raw.x;
-                            return d ? new Date(d).toLocaleString() : '';
+                            const ts = items[0] && items[0].raw && items[0].raw.ts;
+                            return ts ? new Date(ts).toLocaleString() : '';
                         },
                         label: (context) => {
                             const v = context.raw && context.raw.y;
@@ -230,9 +190,7 @@ function drawSparkline(canvas, scores, timestamps) {
                     grid: { display: false }
                 },
                 x: {
-                    type: 'time',
-                    min: windowStart,
-                    max: latestTs,
+                    type: 'linear',
                     display: false,
                     grid: { display: false }
                 }
