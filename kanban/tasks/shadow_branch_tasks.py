@@ -4,6 +4,7 @@ Shadow Board Celery Tasks
 Async tasks for recalculating shadow branches whenever real board changes occur.
 All Gemini API calls happen here in the Celery worker, not in the request cycle.
 """
+import math
 from celery import shared_task
 from datetime import date as date_type, timedelta
 from django.utils import timezone
@@ -14,7 +15,44 @@ logger = logging.getLogger(__name__)
 
 
 MIN_BASELINE_VELOCITY = 0.5
-MAX_PER_EVENT_DELTA = 15.0
+# Soft cap on a single recalc cycle's feasibility movement.
+# Inside ±SOFT_DELTA_LINEAR the raw delta passes through unchanged.
+# Outside, we apply a logarithmic compression so two branches with raw
+# deltas of, say, +25 and +60 still land at meaningfully different final
+# scores (instead of both saturating at the same hard cap).
+# Combined absolute movement is bounded near SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL.
+SOFT_DELTA_LINEAR = 15.0
+SOFT_DELTA_TAIL = 10.0
+# Legacy alias kept for any external callers that imported the hard cap.
+MAX_PER_EVENT_DELTA = SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL
+
+# Trigger strings that represent a heartbeat / housekeeping recalc rather
+# than a real-world event.  Snapshots from these may be dedup'd; snapshots
+# from any other trigger always land in history so the audit trail reflects
+# every task completion, deadline shift, team change, branch link, etc.
+HEARTBEAT_TRIGGERS = frozenset({
+    'Periodic branch refresh',
+    'Manual recalculation',
+})
+
+
+def soft_compress_delta(raw_delta: float) -> float:
+    """
+    Map a raw feasibility delta through a piecewise function:
+        |raw| ≤ SOFT_DELTA_LINEAR   → pass through
+        |raw|  > SOFT_DELTA_LINEAR   → SOFT_DELTA_LINEAR + tail compression
+    The tail uses `tanh` so the marginal effect of each additional raw point
+    diminishes but never goes to zero — preserving cross-branch ordering.
+    Asymptote: ±(SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL).
+    """
+    sign = 1.0 if raw_delta >= 0 else -1.0
+    magnitude = abs(raw_delta)
+    if magnitude <= SOFT_DELTA_LINEAR:
+        return raw_delta
+    excess = magnitude - SOFT_DELTA_LINEAR
+    # tanh(excess / SOFT_DELTA_TAIL) ∈ (0, 1); scale by SOFT_DELTA_TAIL.
+    compressed_excess = SOFT_DELTA_TAIL * math.tanh(excess / SOFT_DELTA_TAIL)
+    return sign * (SOFT_DELTA_LINEAR + compressed_excess)
 
 
 def _parse_date(value):
@@ -400,36 +438,36 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 new_budget_util = results.get('projected', {}).get('budget_utilization_pct')
                 new_conflicts = results.get('new_conflicts', [])
 
-                # --- Per-event delta cap ---
-                # No single recalc cycle should move feasibility by more than
-                # MAX_PER_EVENT_DELTA points.  This bounds compound movement
-                # in the underlying penalty curves (delay_probability +
-                # utilization + velocity_health) so a single task completion
-                # can never produce a 50-point swing.  Only applied when
-                # there's a prior snapshot to cap against — the first
-                # snapshot for a branch is unconstrained.
+                # --- Per-event delta soft compression ---
+                # Bound compound movement from underlying penalty curves
+                # (delay_probability + utilization + velocity_health) so a
+                # single task completion can't produce a 50-point swing,
+                # but preserve cross-branch ordering when multiple branches
+                # would all "saturate" — under the old hard cap, three
+                # branches with raw deltas of +25, +40, +60 all collapsed
+                # to +15, making the Shadow Board comparison meaningless.
+                # The soft compression keeps them at distinct outputs.
+                # Only applied when there's a prior snapshot to compare
+                # against — the first snapshot for a branch is unconstrained.
                 if latest_snapshot is not None:
                     try:
                         old_score_float = float(old_score)
                     except (TypeError, ValueError):
                         old_score_float = 0.0
                     raw_delta = new_feasibility - old_score_float
-                    if abs(raw_delta) > MAX_PER_EVENT_DELTA:
-                        capped_delta = (
-                            MAX_PER_EVENT_DELTA if raw_delta > 0
-                            else -MAX_PER_EVENT_DELTA
-                        )
-                        capped = old_score_float + capped_delta
-                        logger.warning(
-                            'Feasibility delta cap triggered for branch %s: '
-                            'raw_delta=%.2f capped_delta=%.2f '
-                            '(old=%.2f new_raw=%.2f new_capped=%.2f, '
+                    if abs(raw_delta) > SOFT_DELTA_LINEAR:
+                        compressed_delta = soft_compress_delta(raw_delta)
+                        compressed = old_score_float + compressed_delta
+                        logger.info(
+                            'Feasibility delta compressed for branch %s: '
+                            'raw_delta=%.2f compressed_delta=%.2f '
+                            '(old=%.2f new_raw=%.2f new_compressed=%.2f, '
                             'trigger=%s)',
-                            branch.id, raw_delta, capped_delta,
-                            old_score_float, new_feasibility, capped,
+                            branch.id, raw_delta, compressed_delta,
+                            old_score_float, new_feasibility, compressed,
                             trigger_event,
                         )
-                        new_feasibility = round(capped, 2)
+                        new_feasibility = round(compressed, 2)
 
                 # --- Dedup + daily heartbeat ---
                 # Skip snapshot creation if the user-facing fields would be
@@ -437,8 +475,17 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                 # today.  First snapshot of a new day always proceeds
                 # (heartbeat tick) so the trend chart stays continuous on
                 # quiet days.
+                #
+                # Event-driven recalcs (task completion, deadline change,
+                # team change, branch link, etc.) ALWAYS create a snapshot
+                # even if the post-compression score happens to land on the
+                # same 2dp value as the latest.  Otherwise the audit trail
+                # silently drops "Task X completed" rows whose computed
+                # impact rounded back to the previous value — and users see
+                # task completions that "didn't register" on the timeline.
                 new_deadline_weeks = params['deadline_shift_days'] // 7
-                if _is_duplicate_snapshot(
+                is_heartbeat = trigger_event in HEARTBEAT_TRIGGERS
+                if is_heartbeat and _is_duplicate_snapshot(
                     latest_snapshot, new_feasibility,
                     projected_date, new_budget_util, new_conflicts,
                     new_scope_delta=params['tasks_added'],
@@ -446,8 +493,8 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                     new_deadline_delta_weeks=new_deadline_weeks,
                 ):
                     logger.debug(
-                        f'Skipping duplicate snapshot for branch {branch.id} '
-                        f'(score={new_feasibility} unchanged today)'
+                        f'Skipping duplicate heartbeat snapshot for branch '
+                        f'{branch.id} (score={new_feasibility} unchanged today)'
                     )
                     continue
 

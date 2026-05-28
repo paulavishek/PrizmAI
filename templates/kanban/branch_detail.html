@@ -405,19 +405,32 @@
         // instead of stretching across the full chart width.
         let points = data.map(d => ({ x: new Date(d.date), y: d.score }));
 
-        // Adaptive window: anchored on the latest snapshot, sized to the
-        // larger of (actual data span * 1.2) and a 24-hour minimum.
-        // - All snapshots today within 8 minutes  → 24h window, cluster
-        //   sits at the right edge (still bounded enough to avoid the
-        //   original "30 seconds look like weeks" artefact).
-        // - Snapshots over multiple days         → fit-to-data with
-        //   padding, so the trend is clearly visible across the chart.
+        // Adaptive window: anchored on the latest snapshot.  The window is
+        // sized to keep the line *visible* regardless of how clustered the
+        // snapshots are:
+        //   - All snapshots within an hour → zoom in to ~3× the actual span
+        //     (30 min floor) so two snapshots a few minutes apart still draw
+        //     a recognisable curve instead of collapsing into a right-edge
+        //     sliver.
+        //   - Snapshots over half a day or more → use a 24-hour floor so the
+        //     visual scale stays familiar.
+        //   - Snapshots over multiple days → fit-to-data with 20% padding.
         const xs = points.map(p => p.x.getTime());
         const minX = xs.length ? Math.min(...xs) : Date.now();
         const maxX = xs.length ? Math.max(...xs) : Date.now();
         const actualSpan = maxX - minX;
-        const MIN_WINDOW_MS = 24 * 60 * 60 * 1000;
-        const windowSpan = Math.max(actualSpan * 1.2, MIN_WINDOW_MS);
+        const ONE_HOUR_MS = 60 * 60 * 1000;
+        const MIN_WINDOW_MS = 24 * ONE_HOUR_MS;
+        let windowSpan;
+        if (actualSpan === 0) {
+            windowSpan = MIN_WINDOW_MS;
+        } else if (actualSpan < ONE_HOUR_MS) {
+            windowSpan = Math.max(actualSpan * 3, 30 * 60 * 1000);
+        } else if (actualSpan < 12 * ONE_HOUR_MS) {
+            windowSpan = Math.max(actualSpan * 1.5, 2 * ONE_HOUR_MS);
+        } else {
+            windowSpan = Math.max(actualSpan * 1.2, MIN_WINDOW_MS);
+        }
         const latestTs = new Date(maxX);
         const windowStart = new Date(maxX - windowSpan);
 
@@ -485,14 +498,19 @@
                         max: latestTs,
                         time: {
                             // Pick tick granularity based on the visible
-                            // window: hour-level for sub-2-day windows,
-                            // day-level for longer ranges.  Without this,
+                            // window: minute-level under 2h, hour-level
+                            // under 48h, day-level beyond.  Without this,
                             // forcing 'day' on a 24h chart produces a
                             // single label ('May 25') with no sense of
-                            // intra-day position.
-                            unit: windowSpan <= 2 * MIN_WINDOW_MS ? 'hour' : 'day',
+                            // intra-day position, and forcing 'hour' on a
+                            // 30-minute zoom produces only one or two
+                            // labels.
+                            unit: windowSpan <= 2 * ONE_HOUR_MS
+                                ? 'minute'
+                                : (windowSpan <= 2 * MIN_WINDOW_MS ? 'hour' : 'day'),
                             tooltipFormat: 'MMM d, HH:mm',
                             displayFormats: {
+                                minute: 'HH:mm',
                                 hour: 'HH:mm',
                                 day: 'MMM d'
                             }
