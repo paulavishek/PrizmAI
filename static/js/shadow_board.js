@@ -9,31 +9,30 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize sparklines
-    renderSparklines();
-    
-    // Initialize compare mode
+    // Mini sparklines on cards were removed — a single-snapshot branch
+    // rendered as a flat line that misleadingly implied long-term
+    // stability.  The Feasibility Trend chart on the branch detail page
+    // remains the authoritative trend view.
+
     initCompareMode();
-    
-    // Initialize branch card actions
     initBranchCardActions();
-    
-    // Initialize create branch form
     initCreateBranchForm();
-    
-    // Initialize color picker
     initColorPicker();
-
-    // Load saved scenarios into select
     loadScenarios();
-
-    // Poll for branches still calculating their first snapshot
     pollPendingBranches();
 
-    // Restore All Archived button
     const restoreAllBtn = document.getElementById('restoreAllArchivedBtn');
     if (restoreAllBtn) {
         restoreAllBtn.addEventListener('click', restoreAllArchived);
+    }
+
+    // Manual refresh button: forces a synchronous recalc against the
+    // current board state, then reloads.  Lets the user explicitly
+    // resolve the "did anything change?" question after moving tasks,
+    // without having to guess whether Celery has finished.
+    const refreshBtn = document.getElementById('refreshScoresBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', refreshAllBranchScores);
     }
 });
 
@@ -78,124 +77,46 @@ function pollPendingBranches() {
 }
 
 /**
- * Render sparklines for each branch
+ * Manual refresh: synchronously recalculate every active branch on this
+ * board against the live state, then reload the page so the cards and
+ * the Quantum Standup table reflect the new snapshots.
+ *
+ * Why this exists: signal-driven recalcs run in Celery and can take a
+ * few seconds.  Users who move a task and immediately re-open the
+ * Shadow Board see "did anything change?" stale data.  The button
+ * lets them resolve the question on demand without polling.
  */
-function renderSparklines() {
-    const branchCards = document.querySelectorAll('.branch-card');
+function refreshAllBranchScores() {
+    const btn = document.getElementById('refreshScoresBtn');
+    if (!btn) return;
 
-    branchCards.forEach(card => {
-        const branchId = card.dataset.branchId;
-        const canvas = document.getElementById(`sparkline-${branchId}`);
-        if (!canvas) return;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing…';
 
-        fetch(`/api/boards/${getBoardId()}/shadow/branch/${branchId}/snapshots/`)
-            .then(r => r.json())
-            .then(data => {
-                if (data.scores && data.scores.length > 0) {
-                    // drawSparkline handles single-snapshot and same-timestamp
-                    // data internally by stretching the score across a
-                    // minimum 1-hour window as a flat reference line.
-                    drawSparkline(canvas, data.scores, data.timestamps || []);
-                } else {
-                    const ctx = canvas.getContext('2d');
-                    canvas.style.height = '30px';
-                    ctx.font = '11px sans-serif';
-                    ctx.fillStyle = '#999';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('No trend data yet', canvas.width / 2, 20);
-                }
-            })
-            .catch(e => console.warn('Could not load sparkline:', e));
-    });
-}
-
-/**
- * Draw a sparkline chart on a canvas.
- * Uses a linear index-based x-axis — no date adapter required.
- * timestamps: ISO-string array parallel to scores; shown only in hover tooltips.
- */
-function drawSparkline(canvas, scores, timestamps) {
-    if (typeof Chart === 'undefined') return;
-
-    const ctx = canvas.getContext('2d');
-
-    const pointColors = scores.map(s => {
-        if (s >= 70) return '#198754';
-        if (s >= 50) return '#fd7e14';
-        return '#dc3545';
-    });
-
-    const tierColors = (() => {
-        const latest = scores.length ? scores[scores.length - 1] : 0;
-        if (latest >= 70) return { border: '#198754', fill: 'rgba(25, 135, 84, 0.18)' };
-        if (latest >= 50) return { border: '#fd7e14', fill: 'rgba(253, 126, 20, 0.18)' };
-        return { border: '#dc3545', fill: 'rgba(220, 53, 69, 0.18)' };
-    })();
-
-    // Use sequential integer indices for x — no date adapter needed.
-    // Timestamps are stored as a separate field for tooltip display only.
-    let points = scores.map((s, i) => ({
-        x: i,
-        y: s,
-        ts: (Array.isArray(timestamps) && timestamps[i]) ? timestamps[i] : null,
-    }));
-
-    // Duplicate single-point to produce a visible flat line instead of
-    // an invisible dot at the left edge of the canvas.
-    if (points.length === 1) {
-        points = [{ x: 0, y: points[0].y, ts: points[0].ts },
-                  { x: 1, y: points[0].y, ts: points[0].ts }];
-    }
-
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            datasets: [{
-                label: 'Feasibility',
-                data: points,
-                parsing: false,
-                borderColor: tierColors.border,
-                backgroundColor: tierColors.fill,
-                borderWidth: 2,
-                fill: true,
-                tension: 0,
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                pointBackgroundColor: pointColors,
-            }]
+    fetch(`/api/boards/${getBoardId()}/shadow/refresh/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest',
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: (items) => {
-                            const ts = items[0] && items[0].raw && items[0].raw.ts;
-                            return ts ? new Date(ts).toLocaleString() : '';
-                        },
-                        label: (context) => {
-                            const v = context.raw && context.raw.y;
-                            return v != null ? `Feasibility: ${v}%` : '';
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    min: 0,
-                    max: 100,
-                    ticks: { display: false },
-                    grid: { display: false }
-                },
-                x: {
-                    type: 'linear',
-                    display: false,
-                    grid: { display: false }
-                }
-            }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Server already wrote new snapshots; reloading is enough
+            // to pick them up everywhere on the page.
+            window.location.reload();
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            alertError('Could not refresh: ' + (data.error || 'Unknown error'));
         }
+    })
+    .catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alertError('Could not refresh: ' + e.message);
     });
 }
 

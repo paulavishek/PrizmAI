@@ -457,7 +457,15 @@ class WhatIfEngine:
         if velocity_health is not None and velocity_health >= 0:
             score += max(-0.10, min(0.10, velocity_health - 1.0))
 
-        return round(max(score, 0.0), 4)
+        # Soft ceiling: real projects never have *zero* residual risk —
+        # unforeseen scope creep, illness, dependencies — so we cap the
+        # displayed score at 0.98.  Without this, scenarios that clear
+        # every structural penalty AND ride a +10% velocity boost
+        # saturate at exactly 1.00, which reads as "the engine is
+        # claiming perfect certainty" — a UX cliff users rightly
+        # distrust.  The 0.0 floor stays at hard zero (a project can
+        # legitimately be fully blocked).
+        return round(max(0.0, min(score, 0.98)), 4)
 
     # ------------------------------------------------------------------
     # Warnings for missing data

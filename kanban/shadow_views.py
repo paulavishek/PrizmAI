@@ -947,6 +947,49 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
 
 @login_required
+@require_POST
+@demo_write_guard
+def refresh_branch_scores(request, board_id):
+    """
+    API endpoint: synchronously recalculate every active shadow branch on
+    this board against the live state, then return.
+
+    Why this exists separately from the Celery-driven recalcs: signal-driven
+    recalcs (task completion, deadline change, team change) run in a worker
+    and can take a few seconds.  Users who move a task and immediately
+    re-open the Shadow Board see stale scores and have no way to tell
+    whether the recalc has finished.  This endpoint lets the UI offer a
+    "Refresh Scores" button that resolves the question on demand.
+
+    AI recommendation generation is skipped here (skip_ai=True) — a Gemini
+    call per branch would add 5-10 seconds of latency to a click the user
+    expects to be near-instant.  The recommendation is backfilled by the
+    next event-driven or heartbeat recalc, which writes the same score
+    again but with the AI text populated.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        from kanban.tasks.shadow_branch_tasks import run_branch_recalc_sync
+        result = run_branch_recalc_sync(
+            board.id,
+            trigger_event='Manual refresh',
+            skip_ai=True,
+        )
+        return JsonResponse({
+            'success': True,
+            'snapshots_created': result.get('snapshots_created', 0),
+            'divergences_logged': result.get('divergences_logged', 0),
+        })
+    except Exception as e:
+        logger.error(f'refresh_branch_scores failed: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
 def get_branches_comparison_multi(request, board_id):
     """
     API endpoint: Compare an arbitrary number of branches side-by-side.

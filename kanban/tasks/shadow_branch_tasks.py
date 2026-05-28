@@ -33,6 +33,10 @@ MAX_PER_EVENT_DELTA = SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL
 HEARTBEAT_TRIGGERS = frozenset({
     'Periodic branch refresh',
     'Manual recalculation',
+    # User-clicked "Refresh Scores" on the Shadow Board.  Treated as a
+    # heartbeat so an idle click on a quiet board doesn't bloat Snapshot
+    # History with identical entries every time.
+    'Manual refresh',
 })
 
 
@@ -306,126 +310,120 @@ def _estimate_completion_date(simulation_results):
     return None
 
 
-@shared_task(
-    bind=True,
-    name='kanban.recalculate_branches',
-    max_retries=2,
-    default_retry_delay=10,
-    time_limit=300,
-    soft_time_limit=270,
-)
-def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalculation',
-                                   branch_id=None):
+def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
+                           branch_id=None, skip_ai=False):
     """
-    Recalculate feasibility scores for shadow branches on a board.
+    Run the per-branch recalc loop synchronously in the caller's thread.
 
-    Triggered by Django signals when:
-      - A task is completed
-      - Team membership changes
-      - Board deadline changes
+    This is the shared implementation behind both the Celery task
+    (`recalculate_branches_for_board`) and the manual "Refresh Scores"
+    HTTP endpoint.  Splitting it out lets the refresh endpoint produce
+    fresh snapshots inline so the user sees results immediately after
+    the page reload, instead of relying on a Celery worker to pick up
+    the task in the next few seconds.
 
     Args:
-        board_id: Integer board ID
-        trigger_event: String description of what triggered the recalculation
-                      (e.g., "Task 'Design API' completed", "Team member added")
-        branch_id: Optional integer branch ID. When supplied, recalculates ONLY
-                   that branch instead of every active branch on the board.
-                   Used by branch creation / link-scenario paths so promoting a
-                   new branch cannot overwrite the scores of unrelated branches.
+        board_id: Integer board ID.
+        trigger_event: Human-readable description of what triggered the
+            recalc — surfaces in BranchDivergenceLog.trigger_event.
+        branch_id: When supplied, only that branch is recalculated.  Used
+            by creation / link-scenario paths so they cannot mutate
+            unrelated branches' snapshots.
+        skip_ai: When True, do NOT call Gemini for the AI recommendation.
+            The manual-refresh endpoint sets this so the user isn't
+            blocked for 5–10 seconds per branch on a slow AI call; the
+            recommendation gets backfilled by the next scheduled recalc.
 
     Returns:
-        dict with summary of divergences logged
+        dict {'divergences_logged': int, 'snapshots_created': int}
     """
-    try:
-        from django.core.cache import cache as _cache
-        if _cache.get(f'demo_shadow_lock_{board_id}'):
-            logger.info(
-                f'Skipping branch recalculation for board {board_id}: '
-                'demo data populate in progress'
-            )
-            return {'divergences_logged': 0, 'snapshots_created': 0}
-
-        from kanban.models import Board
-        from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
-        from kanban.utils.whatif_engine import WhatIfEngine
-
-        board = Board.objects.get(pk=board_id)
+    from django.core.cache import cache as _cache
+    if _cache.get(f'demo_shadow_lock_{board_id}'):
         logger.info(
-            f'Recalculating branches for board {board.name} (ID: {board_id}), '
-            f'trigger: {trigger_event}, scope: '
-            f'{"branch=" + str(branch_id) if branch_id else "all active"}'
+            f'Skipping branch recalculation for board {board_id}: '
+            'demo data populate in progress'
         )
+        return {'divergences_logged': 0, 'snapshots_created': 0}
 
-        # Fetch branches to recalculate. When branch_id is supplied, restrict
-        # to that single branch — events scoped to one branch (creation,
-        # scenario link) must never touch other branches' snapshots.
-        active_branches = ShadowBranch.objects.filter(
-            board=board,
-            status='active',
-        ).select_related('board')
-        if branch_id is not None:
-            active_branches = active_branches.filter(id=branch_id)
+    from kanban.models import Board
+    from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+    from kanban.utils.whatif_engine import WhatIfEngine
 
-        if not active_branches.exists():
-            logger.info(f'No active branches found for board {board_id}')
-            return {'divergences_logged': 0, 'snapshots_created': 0}
+    board = Board.objects.get(pk=board_id)
+    logger.info(
+        f'Recalculating branches for board {board.name} (ID: {board_id}), '
+        f'trigger: {trigger_event}, scope: '
+        f'{"branch=" + str(branch_id) if branch_id else "all active"}, '
+        f'skip_ai={skip_ai}'
+    )
 
-        divergences_created = 0
-        snapshots_created = 0
+    # Fetch branches to recalculate. When branch_id is supplied, restrict
+    # to that single branch — events scoped to one branch (creation,
+    # scenario link) must never touch other branches' snapshots.
+    active_branches = ShadowBranch.objects.filter(
+        board=board,
+        status='active',
+    ).select_related('board')
+    if branch_id is not None:
+        active_branches = active_branches.filter(id=branch_id)
 
-        # Compute the board-wide actual 7-day velocity once per recalc cycle.
-        # Each branch then derives its own velocity_health by comparing this
-        # against the velocity captured at branch creation.
-        actual_7d_velocity = compute_actual_7d_velocity(board)
+    if not active_branches.exists():
+        logger.info(f'No active branches found for board {board_id}')
+        return {'divergences_logged': 0, 'snapshots_created': 0}
 
-        for branch in active_branches:
-            try:
-                # Extract current parameters from branch's latest snapshot
-                params = extract_branch_params(branch)
+    divergences_created = 0
+    snapshots_created = 0
 
-                # Derive velocity health for this branch.  If the branch has no
-                # baseline velocity recorded (legacy / pre-migration branches),
-                # snapshot the current board velocity now so subsequent recalcs
-                # have something to compare against, and treat this run as neutral.
-                if not branch.baseline_velocity_per_week:
-                    lazy_baseline = (
-                        compute_baseline_velocity(board) or actual_7d_velocity or 0.0
-                    )
-                    # Apply the same floor as compute_baseline_velocity so the
-                    # lazy-fill path can't capture a sub-floor value either.
-                    if lazy_baseline > 0:
-                        lazy_baseline = max(lazy_baseline, MIN_BASELINE_VELOCITY)
-                    branch.baseline_velocity_per_week = lazy_baseline
-                    if branch.baseline_velocity_per_week:
-                        branch.save(update_fields=['baseline_velocity_per_week'])
-                if branch.baseline_velocity_per_week and branch.baseline_velocity_per_week > 0:
-                    params['velocity_health'] = (
-                        actual_7d_velocity / branch.baseline_velocity_per_week
-                    )
-                else:
-                    params['velocity_health'] = 1.0
+    # Compute the board-wide actual 7-day velocity once per recalc cycle.
+    # Each branch then derives its own velocity_health by comparing this
+    # against the velocity captured at branch creation.
+    actual_7d_velocity = compute_actual_7d_velocity(board)
 
-                # Re-run what-if simulation with same parameters
-                engine = WhatIfEngine(board)
-                results = engine.simulate(params)
+    for branch in active_branches:
+        try:
+            params = extract_branch_params(branch)
 
-                if not results:
-                    logger.warning(f'Simulate returned empty results for branch {branch.id}')
-                    continue
+            # Derive velocity health for this branch.  If the branch has no
+            # baseline velocity recorded (legacy / pre-migration branches),
+            # snapshot the current board velocity now so subsequent recalcs
+            # have something to compare against, and treat this run as neutral.
+            if not branch.baseline_velocity_per_week:
+                lazy_baseline = (
+                    compute_baseline_velocity(board) or actual_7d_velocity or 0.0
+                )
+                if lazy_baseline > 0:
+                    lazy_baseline = max(lazy_baseline, MIN_BASELINE_VELOCITY)
+                branch.baseline_velocity_per_week = lazy_baseline
+                if branch.baseline_velocity_per_week:
+                    branch.save(update_fields=['baseline_velocity_per_week'])
+            if branch.baseline_velocity_per_week and branch.baseline_velocity_per_week > 0:
+                params['velocity_health'] = (
+                    actual_7d_velocity / branch.baseline_velocity_per_week
+                )
+            else:
+                params['velocity_health'] = 1.0
 
-                # Scale feasibility from 0-1 to 0-100
-                # This captures how the SAME what-if parameters affect the CURRENT board state
-                new_feasibility = scale_feasibility(results.get('feasibility_score', 0))
+            engine = WhatIfEngine(board)
+            results = engine.simulate(params)
 
-                # Get previous feasibility score from last snapshot
-                latest_snapshot = branch.get_latest_snapshot()
-                old_score = 0
-                if latest_snapshot:
-                    old_score = latest_snapshot.feasibility_score
+            if not results:
+                logger.warning(f'Simulate returned empty results for branch {branch.id}')
+                continue
 
-                # --- Gemini AI Analysis ---
-                # Call Gemini to generate a recommendation and enrich the snapshot
-                recommendation_text = ''
+            new_feasibility = scale_feasibility(results.get('feasibility_score', 0))
+
+            latest_snapshot = branch.get_latest_snapshot()
+            old_score = 0
+            if latest_snapshot:
+                old_score = latest_snapshot.feasibility_score
+
+            # --- Gemini AI Analysis ---
+            # The manual-refresh endpoint sets skip_ai=True so the user
+            # isn't blocked for 5-10s per branch waiting on Gemini.  When
+            # skipped, the snapshot lands without a recommendation; the
+            # next heartbeat / event recalc backfills it.
+            recommendation_text = ''
+            if not skip_ai:
                 try:
                     ai_result = engine.analyze_with_ai(params, results)
                     recommendation_text = _format_ai_recommendation(ai_result)
@@ -438,173 +436,155 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
                         f'Gemini AI analysis failed for branch {branch.id}: {ai_err}',
                         exc_info=True,
                     )
-                    # Graceful degradation — snapshot is still created without recommendation
 
-                # --- Projected Completion Date ---
-                # Try the engine's computed date first, then fall back to velocity estimate
-                projected_date = _parse_date(
-                    results.get('projected', {}).get('predicted_date')
-                )
-                if not projected_date:
-                    projected_date = _estimate_completion_date(results)
+            projected_date = _parse_date(
+                results.get('projected', {}).get('predicted_date')
+            )
+            if not projected_date:
+                projected_date = _estimate_completion_date(results)
 
-                new_budget_util = results.get('projected', {}).get('budget_utilization_pct')
-                new_conflicts = results.get('new_conflicts', [])
+            new_budget_util = results.get('projected', {}).get('budget_utilization_pct')
+            new_conflicts = results.get('new_conflicts', [])
 
-                # --- Per-event delta soft compression ---
-                # Bound compound movement from underlying penalty curves
-                # (delay_probability + utilization + velocity_health) so a
-                # single task completion can't produce a 50-point swing,
-                # but preserve cross-branch ordering when multiple branches
-                # would all "saturate" — under the old hard cap, three
-                # branches with raw deltas of +25, +40, +60 all collapsed
-                # to +15, making the Shadow Board comparison meaningless.
-                # The soft compression keeps them at distinct outputs.
-                # Only applied when there's a prior snapshot to compare
-                # against — the first snapshot for a branch is unconstrained.
-                if latest_snapshot is not None:
-                    try:
-                        old_score_float = float(old_score)
-                    except (TypeError, ValueError):
-                        old_score_float = 0.0
-                    raw_delta = new_feasibility - old_score_float
-                    if abs(raw_delta) > SOFT_DELTA_LINEAR:
-                        compressed_delta = soft_compress_delta(raw_delta)
-                        compressed = old_score_float + compressed_delta
-                        logger.info(
-                            'Feasibility delta compressed for branch %s: '
-                            'raw_delta=%.2f compressed_delta=%.2f '
-                            '(old=%.2f new_raw=%.2f new_compressed=%.2f, '
-                            'trigger=%s)',
-                            branch.id, raw_delta, compressed_delta,
-                            old_score_float, new_feasibility, compressed,
-                            trigger_event,
-                        )
-                        new_feasibility = round(compressed, 2)
-
-                # --- Dedup + daily heartbeat ---
-                # Skip snapshot creation if the user-facing fields would be
-                # identical to the latest snapshot AND we already captured one
-                # today.  First snapshot of a new day always proceeds
-                # (heartbeat tick) so the trend chart stays continuous on
-                # quiet days.
-                #
-                # Event-driven recalcs (task completion, deadline change,
-                # team change, branch link, etc.) ALWAYS create a snapshot
-                # even if the post-compression score happens to land on the
-                # same 2dp value as the latest.  Otherwise the audit trail
-                # silently drops "Task X completed" rows whose computed
-                # impact rounded back to the previous value — and users see
-                # task completions that "didn't register" on the timeline.
-                new_deadline_weeks = params['deadline_shift_days'] // 7
-                is_heartbeat = trigger_event in HEARTBEAT_TRIGGERS
-                if is_heartbeat and _is_duplicate_snapshot(
-                    latest_snapshot, new_feasibility,
-                    projected_date, new_budget_util, new_conflicts,
-                    new_scope_delta=params['tasks_added'],
-                    new_team_delta=params['team_size_delta'],
-                    new_deadline_delta_weeks=new_deadline_weeks,
-                ):
-                    logger.debug(
-                        f'Skipping duplicate heartbeat snapshot for branch '
-                        f'{branch.id} (score={new_feasibility} unchanged today)'
-                    )
-                    continue
-
-                # Create new snapshot with current results
-                new_snapshot = BranchSnapshot.objects.create(
-                    branch=branch,
-                    scope_delta=params['tasks_added'],
-                    team_delta=params['team_size_delta'],
-                    deadline_delta_weeks=params['deadline_shift_days'] // 7,  # Convert days back to weeks
-                    feasibility_score=new_feasibility,
-                    projected_completion_date=projected_date,
-                    projected_budget_utilization=new_budget_util,
-                    conflicts_detected=new_conflicts,
-                    gemini_recommendation=recommendation_text,
-                )
-                snapshots_created += 1
-
-                # Log divergence if score changed by more than 5 points.
-                # Skip the divergence entry entirely on a branch's very
-                # first snapshot — there's no real prior score to
-                # diverge from, only a default of 0, which would surface
-                # as a misleading "0.0 -> 40.8" row in Significant Score
-                # Changes immediately after branch promotion.
-                # Runtime dedup: when the same trigger + same old/new scores
-                # already produced a divergence log within the last 60 s,
-                # skip the new one.  Without this, a single user action that
-                # fans out to multiple recalc cycles (or a Celery retry)
-                # surfaces as a run of identical "Significant Score Changes"
-                # rows, e.g. eight back-to-back "Board recalculation after
-                # scope/team adjustment (+12.0)" entries.
-                if (latest_snapshot is not None
-                        and abs(float(new_feasibility) - float(old_score)) > 5):
-                    recent_cutoff = timezone.now() - timedelta(seconds=60)
-                    is_recent_dup = BranchDivergenceLog.objects.filter(
-                        branch=branch,
-                        trigger_event=trigger_event,
-                        old_score=old_score,
-                        new_score=new_feasibility,
-                        logged_at__gte=recent_cutoff,
-                    ).exists()
-                    if is_recent_dup:
-                        logger.debug(
-                            f'Skipping duplicate divergence log for branch '
-                            f'{branch.name}: identical entry within 60s '
-                            f'(trigger: {trigger_event})'
-                        )
-                    else:
-                        divergence_log = BranchDivergenceLog.objects.create(
-                            branch=branch,
-                            old_score=old_score,
-                            new_score=new_feasibility,
-                            trigger_event=trigger_event,
-                        )
-                        divergences_created += 1
-                        logger.info(
-                            f'Logged divergence for branch {branch.name}: {old_score} → {new_feasibility} '
-                            f'(trigger: {trigger_event})'
-                        )
-
-                # Update Redis cache with latest snapshot (15-min TTL)
+            # --- Per-event delta soft compression ---
+            if latest_snapshot is not None:
                 try:
-                    cache = caches['default']
-                    cache_key = f'branch_snapshot:{branch.id}'
-                    snapshot_data = {
-                        'branch_id': branch.id,
-                        'feasibility_score': new_snapshot.feasibility_score,
-                        'projected_completion_date': str(new_snapshot.projected_completion_date),
-                        'projected_budget_utilization': new_snapshot.projected_budget_utilization,
-                        'scope_delta': new_snapshot.scope_delta,
-                        'team_delta': new_snapshot.team_delta,
-                        'deadline_delta_weeks': new_snapshot.deadline_delta_weeks,
-                        'conflicts_detected': new_snapshot.conflicts_detected,
-                        'gemini_recommendation': new_snapshot.gemini_recommendation,
-                        'captured_at': new_snapshot.captured_at.isoformat(),
-                    }
-                    cache.set(cache_key, snapshot_data, timeout=15 * 60)  # 15 minutes
-                    logger.debug(f'Cached branch snapshot {branch.id} in Redis')
-                except Exception as cache_err:
-                    logger.warning(f'Failed to cache branch snapshot {branch.id}: {cache_err}')
+                    old_score_float = float(old_score)
+                except (TypeError, ValueError):
+                    old_score_float = 0.0
+                raw_delta = new_feasibility - old_score_float
+                if abs(raw_delta) > SOFT_DELTA_LINEAR:
+                    compressed_delta = soft_compress_delta(raw_delta)
+                    compressed = old_score_float + compressed_delta
+                    logger.info(
+                        'Feasibility delta compressed for branch %s: '
+                        'raw_delta=%.2f compressed_delta=%.2f '
+                        '(old=%.2f new_raw=%.2f new_compressed=%.2f, '
+                        'trigger=%s)',
+                        branch.id, raw_delta, compressed_delta,
+                        old_score_float, new_feasibility, compressed,
+                        trigger_event,
+                    )
+                    new_feasibility = round(compressed, 2)
 
-            except Exception as branch_err:
-                logger.error(f'Error recalculating branch {branch.id}: {branch_err}', exc_info=True)
-                # Continue with other branches even if one fails
+            # --- Dedup + daily heartbeat ---
+            new_deadline_weeks = params['deadline_shift_days'] // 7
+            is_heartbeat = trigger_event in HEARTBEAT_TRIGGERS
+            if is_heartbeat and _is_duplicate_snapshot(
+                latest_snapshot, new_feasibility,
+                projected_date, new_budget_util, new_conflicts,
+                new_scope_delta=params['tasks_added'],
+                new_team_delta=params['team_size_delta'],
+                new_deadline_delta_weeks=new_deadline_weeks,
+            ):
+                logger.debug(
+                    f'Skipping duplicate heartbeat snapshot for branch '
+                    f'{branch.id} (score={new_feasibility} unchanged today)'
+                )
                 continue
 
-        logger.info(
-            f'Branch recalculation complete: {snapshots_created} snapshots created, '
-            f'{divergences_created} divergences logged'
-        )
-        return {
-            'divergences_logged': divergences_created,
-            'snapshots_created': snapshots_created,
-        }
+            new_snapshot = BranchSnapshot.objects.create(
+                branch=branch,
+                scope_delta=params['tasks_added'],
+                team_delta=params['team_size_delta'],
+                deadline_delta_weeks=params['deadline_shift_days'] // 7,
+                feasibility_score=new_feasibility,
+                projected_completion_date=projected_date,
+                projected_budget_utilization=new_budget_util,
+                conflicts_detected=new_conflicts,
+                gemini_recommendation=recommendation_text,
+            )
+            snapshots_created += 1
 
+            # Log divergence if score changed by more than 5 points.
+            if (latest_snapshot is not None
+                    and abs(float(new_feasibility) - float(old_score)) > 5):
+                recent_cutoff = timezone.now() - timedelta(seconds=60)
+                is_recent_dup = BranchDivergenceLog.objects.filter(
+                    branch=branch,
+                    trigger_event=trigger_event,
+                    old_score=old_score,
+                    new_score=new_feasibility,
+                    logged_at__gte=recent_cutoff,
+                ).exists()
+                if is_recent_dup:
+                    logger.debug(
+                        f'Skipping duplicate divergence log for branch '
+                        f'{branch.name}: identical entry within 60s '
+                        f'(trigger: {trigger_event})'
+                    )
+                else:
+                    BranchDivergenceLog.objects.create(
+                        branch=branch,
+                        old_score=old_score,
+                        new_score=new_feasibility,
+                        trigger_event=trigger_event,
+                    )
+                    divergences_created += 1
+                    logger.info(
+                        f'Logged divergence for branch {branch.name}: {old_score} → {new_feasibility} '
+                        f'(trigger: {trigger_event})'
+                    )
+
+            try:
+                cache = caches['default']
+                cache_key = f'branch_snapshot:{branch.id}'
+                snapshot_data = {
+                    'branch_id': branch.id,
+                    'feasibility_score': new_snapshot.feasibility_score,
+                    'projected_completion_date': str(new_snapshot.projected_completion_date),
+                    'projected_budget_utilization': new_snapshot.projected_budget_utilization,
+                    'scope_delta': new_snapshot.scope_delta,
+                    'team_delta': new_snapshot.team_delta,
+                    'deadline_delta_weeks': new_snapshot.deadline_delta_weeks,
+                    'conflicts_detected': new_snapshot.conflicts_detected,
+                    'gemini_recommendation': new_snapshot.gemini_recommendation,
+                    'captured_at': new_snapshot.captured_at.isoformat(),
+                }
+                cache.set(cache_key, snapshot_data, timeout=15 * 60)
+                logger.debug(f'Cached branch snapshot {branch.id} in Redis')
+            except Exception as cache_err:
+                logger.warning(f'Failed to cache branch snapshot {branch.id}: {cache_err}')
+
+        except Exception as branch_err:
+            logger.error(f'Error recalculating branch {branch.id}: {branch_err}', exc_info=True)
+            continue
+
+    logger.info(
+        f'Branch recalculation complete: {snapshots_created} snapshots created, '
+        f'{divergences_created} divergences logged'
+    )
+    return {
+        'divergences_logged': divergences_created,
+        'snapshots_created': snapshots_created,
+    }
+
+
+@shared_task(
+    bind=True,
+    name='kanban.recalculate_branches',
+    max_retries=2,
+    default_retry_delay=10,
+    time_limit=300,
+    soft_time_limit=270,
+)
+def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalculation',
+                                   branch_id=None):
+    """
+    Celery wrapper around `run_branch_recalc_sync`.  Used by Django signals
+    (task completion, deadline change, team change) and by the create /
+    link-scenario paths.  The Celery indirection gives those code paths
+    retry semantics and prevents AI latency from blocking the request.
+    """
+    try:
+        return run_branch_recalc_sync(
+            board_id, trigger_event=trigger_event, branch_id=branch_id,
+        )
     except Exception as e:
-        logger.error(f'Task recalculate_branches_for_board failed for board {board_id}: {e}', exc_info=True)
-        # Retry with exponential backoff
+        logger.error(
+            f'Task recalculate_branches_for_board failed for board {board_id}: {e}',
+            exc_info=True,
+        )
         raise self.retry(exc=e, countdown=10)
 
 
