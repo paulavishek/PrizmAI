@@ -287,7 +287,7 @@
                 </div>
                 <div class="col-md-3">
                     <strong>Sentiment Score:</strong><br>
-                    {% if retrospective.overall_sentiment_score is not None %}{{ retrospective.overall_sentiment_score|floatformat:2 }} ({{ retrospective.team_morale_indicator|default:"—" }}){% else %}<span class="text-muted">Not calculated</span>{% endif %}
+                    {% if retrospective.overall_sentiment_score is not None %}{{ retrospective.overall_sentiment_score|as_percentage }}% ({{ retrospective.team_morale_indicator|default:"—" }}){% else %}<span class="text-muted">Not calculated</span>{% endif %}
                 </div>
                 <div class="col-md-3">
                     <strong>Generated:</strong><br>

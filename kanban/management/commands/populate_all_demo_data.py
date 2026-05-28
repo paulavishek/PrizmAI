@@ -1796,6 +1796,16 @@ class Command(BaseCommand):
              'expected_impact': 'Fewer revision rounds caused by ambiguous requirements.'},
         ]
 
+        # Reflect the configured AI provider rather than hard-coding a model name,
+        # so the demo's "Model Used" matches whatever provider this instance runs.
+        from ai_assistant.utils.ai_router import AIRouter
+        from ai_assistant.models import OrganizationAISettings
+        try:
+            demo_provider = self.demo_org.ai_settings.provider or 'gemini'
+        except (OrganizationAISettings.DoesNotExist, AttributeError):
+            demo_provider = 'gemini'
+        demo_ai_model = AIRouter.get_model_name(demo_provider, 'complex')
+
         retrospective = ProjectRetrospective.objects.create(
             board=self.board,
             title='Phase 1 Foundation Retrospective',
@@ -1847,6 +1857,7 @@ class Command(BaseCommand):
             performance_trend='improving',
             ai_generated_at=self.NOW - timedelta(days=20),
             ai_confidence_score=Decimal('0.91'),
+            ai_model_used=demo_ai_model,
             created_by=self.priya,
             finalized_by=self.priya,
             finalized_at=self.NOW - timedelta(days=20),

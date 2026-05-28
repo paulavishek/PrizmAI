@@ -430,25 +430,32 @@ def organizational_memory_search(request):
         '}'
     )
 
-    from ai_assistant.utils.ai_router import AIRouter
+    from ai_assistant.utils.ai_router import AIRouter, AIProviderError
     start_time = time.time()
 
     router = AIRouter()
-    response = router.complete(
-        prompt=user_prompt,
-        user=request.user,
-        system_prompt=system_prompt,
-        complexity='complex',
-    )
+    try:
+        response = router.complete(
+            prompt=user_prompt,
+            user=request.user,
+            system_prompt=system_prompt,
+            complexity='complex',
+        )
+    except AIProviderError as exc:
+        logger.error(f"Organizational memory search AI call failed: {exc}")
+        return JsonResponse(
+            {'error': 'The AI service is temporarily unavailable. Please try again in a moment.'},
+            status=503,
+        )
     elapsed_ms = int((time.time() - start_time) * 1000)
     raw_content = response.get('text', '')
-    tokens = response.get('tokens', 0)
+    tokens = response.get('tokens_used', 0)
 
     track_ai_request(
         user=request.user,
         feature='organizational_memory',
         request_type='search',
-        ai_model=response.get('model_used', 'gemini'),
+        ai_model=response.get('model', 'gemini'),
         tokens_used=tokens,
         response_time_ms=elapsed_ms,
     )
@@ -677,16 +684,21 @@ def deja_vu_check(request, board_id):
         "Return maximum 3 matches. Return empty array if nothing is truly relevant."
     )
 
-    from ai_assistant.utils.ai_router import AIRouter
+    from ai_assistant.utils.ai_router import AIRouter, AIProviderError
     start_time = time.time()
 
     router = AIRouter()
-    response = router.complete(
-        prompt=user_prompt,
-        user=request.user,
-        system_prompt=system_prompt,
-        complexity='simple',
-    )
+    try:
+        response = router.complete(
+            prompt=user_prompt,
+            user=request.user,
+            system_prompt=system_prompt,
+            complexity='simple',
+        )
+    except AIProviderError as exc:
+        logger.error(f"Deja Vu similarity check AI call failed: {exc}")
+        # Don't cache transient AI outages — let the next check retry.
+        return JsonResponse({'results': [], 'reason': 'ai_unavailable'})
     elapsed_ms = int((time.time() - start_time) * 1000)
 
     track_ai_request(
@@ -694,8 +706,8 @@ def deja_vu_check(request, board_id):
         feature='deja_vu',
         request_type='similarity_check',
         board_id=board_id,
-        ai_model=response.get('model_used', 'gemini'),
-        tokens_used=response.get('tokens', 0),
+        ai_model=response.get('model', 'gemini'),
+        tokens_used=response.get('tokens_used', 0),
         response_time_ms=elapsed_ms,
     )
 
