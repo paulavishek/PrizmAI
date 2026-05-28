@@ -216,6 +216,29 @@ class ShadowBoardListView(ListView):
         branch_impacts.sort(key=lambda x: abs(x.score_delta), reverse=True)
         context['branch_impacts_today'] = branch_impacts
 
+        # Anchor each branch card's "latest snapshot" to the SAME data the
+        # Quantum Standup table just read from.  Without this, the card's
+        # `branch.get_latest_snapshot` does a fresh DB query at template-
+        # render time and can pick up a snapshot Celery wrote *after* the
+        # table query — causing the cards and the table to disagree by one
+        # recalc cycle (cards show post-2nd-task; table shows post-1st-task).
+        # For branches that have no snapshot today, fall back to the most
+        # recent prior snapshot from the prefetched relation.
+        for branch in context['branches']:
+            today_snap = latest_today.get(branch.id)
+            if today_snap is not None:
+                branch.cached_latest_snapshot = today_snap
+                continue
+            # No snapshot today — pick the most recent from the prefetched
+            # relation (avoids another DB hit per card).
+            prefetched = list(branch.snapshots.all())
+            if prefetched:
+                branch.cached_latest_snapshot = max(
+                    prefetched, key=lambda s: s.captured_at
+                )
+            else:
+                branch.cached_latest_snapshot = None
+
         # Auto-heal: if any active branches have no snapshots, re-trigger
         # recalculation — but ONLY for the missing ones, not the whole
         # board.  Recalculating siblings here would overwrite their last
@@ -920,6 +943,103 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
     except Exception as e:
         logger.error(f'Error fetching branches comparison: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def get_branches_comparison_multi(request, board_id):
+    """
+    API endpoint: Compare an arbitrary number of branches side-by-side.
+
+    Query params:
+        branch_ids: comma-separated list of branch IDs (e.g. "12,15,18,21")
+
+    Returns JSON: {
+        success: True,
+        branches: [
+            {id, name, color, snapshot: {...}, snapshot_missing: bool}, ...
+        ]
+    }
+
+    Branches with no snapshot yet are still included (with `snapshot_missing:
+    True`) so the frontend can render an explanatory cell instead of dropping
+    the column entirely — important for branches that the user just promoted.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        raw_ids = request.GET.get('branch_ids', '')
+        try:
+            branch_ids = [int(x) for x in raw_ids.split(',') if x.strip().isdigit()]
+        except ValueError:
+            return JsonResponse({'error': 'Invalid branch_ids parameter'}, status=400)
+
+        if len(branch_ids) < 2:
+            return JsonResponse(
+                {'error': 'Provide at least 2 branch IDs in branch_ids'},
+                status=400,
+            )
+
+        # Cap the comparison at 8 branches.  Beyond that the diff table
+        # becomes unreadable on a typical screen, and there's no project-
+        # management use case for staring at 10+ parallel scenarios at once.
+        if len(branch_ids) > 8:
+            return JsonResponse(
+                {'error': 'Comparing more than 8 branches at once is not supported'},
+                status=400,
+            )
+
+        branches_qs = (
+            ShadowBranch.objects
+            .filter(board=board, id__in=branch_ids)
+            .select_related('source_scenario')
+            .prefetch_related('snapshots')
+        )
+        # Preserve caller-supplied ordering so the columns line up with the
+        # checkbox click order in the UI.
+        branches_by_id = {b.id: b for b in branches_qs}
+        ordered = [branches_by_id[bid] for bid in branch_ids if bid in branches_by_id]
+        if len(ordered) != len(branch_ids):
+            return JsonResponse(
+                {'error': 'One or more branch IDs not found on this board'},
+                status=404,
+            )
+
+        result_branches = []
+        for branch in ordered:
+            snapshot = branch.get_latest_snapshot()
+            entry = {
+                'id': branch.id,
+                'name': branch.name,
+                'color': branch.branch_color,
+                'status': branch.status,
+            }
+            if snapshot is None:
+                entry['snapshot_missing'] = True
+                entry['snapshot'] = None
+            else:
+                entry['snapshot_missing'] = False
+                entry['snapshot'] = {
+                    'scope_delta': snapshot.scope_delta,
+                    'team_delta': snapshot.team_delta,
+                    'deadline_delta_weeks': snapshot.deadline_delta_weeks,
+                    'feasibility_score': float(snapshot.feasibility_score),
+                    'projected_completion_date': (
+                        snapshot.projected_completion_date.isoformat()
+                        if snapshot.projected_completion_date else None
+                    ),
+                    'projected_budget_utilization': snapshot.projected_budget_utilization,
+                    'captured_at': snapshot.captured_at.isoformat(),
+                }
+            result_branches.append(entry)
+
+        return JsonResponse({'success': True, 'branches': result_branches})
+
+    except Exception as e:
+        logger.error(f'Error in get_branches_comparison_multi: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 

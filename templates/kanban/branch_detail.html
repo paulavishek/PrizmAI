@@ -438,14 +438,25 @@
             latestTs = new Date(maxX + 15 * 60 * 1000);
             windowStart = new Date(maxX - 45 * 60 * 1000);
         } else if (actualSpan < ONE_HOUR_MS) {
-            windowSpan = Math.max(actualSpan * 3, 30 * 60 * 1000);
-            latestTs = new Date(maxX);
-            windowStart = new Date(maxX - windowSpan);
+            // Short span (≤1h, multi-snapshot): centre the data with a
+            // ~20% pad on each side, floored at 2 minutes.  The previous
+            // logic anchored the latest point at the right edge and
+            // stretched 3× to the left, which jammed every snapshot of a
+            // brand-new branch into the rightmost ~15% of the chart.
+            const padding = Math.max(actualSpan * 0.2, 2 * 60 * 1000);
+            windowSpan = actualSpan + 2 * padding;
+            latestTs = new Date(maxX + padding);
+            windowStart = new Date(minX - padding);
         } else if (actualSpan < 12 * ONE_HOUR_MS) {
-            windowSpan = Math.max(actualSpan * 1.5, 2 * ONE_HOUR_MS);
-            latestTs = new Date(maxX);
-            windowStart = new Date(maxX - windowSpan);
+            // Same centring approach for the multi-hour band so a
+            // sub-day branch doesn't lean entirely right either.
+            const padding = Math.max(actualSpan * 0.15, 30 * 60 * 1000);
+            windowSpan = actualSpan + 2 * padding;
+            latestTs = new Date(maxX + padding);
+            windowStart = new Date(minX - padding);
         } else {
+            // Multi-day branches: keep anchoring on the latest point so
+            // the trend reads left→right with today on the right edge.
             windowSpan = Math.max(actualSpan * 1.2, MIN_WINDOW_MS);
             latestTs = new Date(maxX);
             windowStart = new Date(maxX - windowSpan);
