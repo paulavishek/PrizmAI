@@ -200,7 +200,6 @@ def dashboard(request):
             # ``collect_for_user`` is only called during provisioning, so a
             # silent failure there leaves Focus Today permanently empty.
             try:
-                from decision_center.models import DecisionItem
                 if not DecisionItem.objects.filter(created_for=request.user).exists():
                     from decision_center.tasks import (
                         collect_for_user, generate_briefing_for_user,
