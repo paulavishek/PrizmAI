@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.db.models import Avg, Count, Sum, Q, F, Max, Min
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from ai_assistant.utils.ai_router import AIRouter
+from ai_assistant.utils.ai_router import AIRouter, AIProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -438,24 +438,29 @@ class RetrospectiveGenerator:
                     logger.debug("Retrospective AI cache HIT but empty sections — discarding stale entry")
                     ai_cache.invalidate(prompt, 'retrospective', context_id)
         
-        # Get AI response with complex task routing
-        response = self.router.complete(
-            prompt=prompt,
-            user=None,
-            system_prompt="You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement.",
-            complexity='complex',
-        )
-        if response.get('error'):
-            logger.error(f"Error generating AI insights: {response['error']}")
+        # Get AI response with complex task routing.
+        # AIRouter raises AIProviderError on failure (it never returns an error
+        # dict), so the failure path must be a try/except to fall back gracefully.
+        try:
+            response = self.router.complete(
+                prompt=prompt,
+                user=None,
+                system_prompt="You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement.",
+                complexity='complex',
+            )
+        except AIProviderError as exc:
+            logger.error(f"Error generating AI insights: {exc}")
             return self._generate_fallback_insights(metrics, patterns)
-        
+
         # Parse AI response
         ai_content = response.get('text', '')
-        
+
         # Extract structured insights from AI response
         insights = self._parse_ai_response(ai_content, metrics, patterns)
-        insights['ai_model_used'] = response.get('model_used', 'gemini-2.0-flash-exp')
-        insights['tokens_used'] = response.get('tokens', 0)
+        # AIRouter normalises every response to keys 'model' and 'tokens_used';
+        # record the model that actually answered so the provider is accurate.
+        insights['ai_model_used'] = response.get('model') or 'unknown'
+        insights['tokens_used'] = response.get('tokens_used', 0)
         
         # Cache the result
         if ai_cache and insights:
