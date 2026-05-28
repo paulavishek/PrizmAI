@@ -314,20 +314,25 @@ def _estimate_completion_date(simulation_results):
     time_limit=300,
     soft_time_limit=270,
 )
-def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalculation'):
+def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalculation',
+                                   branch_id=None):
     """
-    Recalculate feasibility scores for all active shadow branches on a board.
-    
+    Recalculate feasibility scores for shadow branches on a board.
+
     Triggered by Django signals when:
       - A task is completed
       - Team membership changes
       - Board deadline changes
-    
+
     Args:
         board_id: Integer board ID
         trigger_event: String description of what triggered the recalculation
                       (e.g., "Task 'Design API' completed", "Team member added")
-    
+        branch_id: Optional integer branch ID. When supplied, recalculates ONLY
+                   that branch instead of every active branch on the board.
+                   Used by branch creation / link-scenario paths so promoting a
+                   new branch cannot overwrite the scores of unrelated branches.
+
     Returns:
         dict with summary of divergences logged
     """
@@ -345,13 +350,21 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
         from kanban.utils.whatif_engine import WhatIfEngine
 
         board = Board.objects.get(pk=board_id)
-        logger.info(f'Recalculating branches for board {board.name} (ID: {board_id}), trigger: {trigger_event}')
+        logger.info(
+            f'Recalculating branches for board {board.name} (ID: {board_id}), '
+            f'trigger: {trigger_event}, scope: '
+            f'{"branch=" + str(branch_id) if branch_id else "all active"}'
+        )
 
-        # Fetch all active branches for this board
+        # Fetch branches to recalculate. When branch_id is supplied, restrict
+        # to that single branch — events scoped to one branch (creation,
+        # scenario link) must never touch other branches' snapshots.
         active_branches = ShadowBranch.objects.filter(
             board=board,
             status='active',
         ).select_related('board')
+        if branch_id is not None:
+            active_branches = active_branches.filter(id=branch_id)
 
         if not active_branches.exists():
             logger.info(f'No active branches found for board {board_id}')
@@ -593,3 +606,92 @@ def recalculate_branches_for_board(self, board_id, trigger_event='Manual recalcu
         logger.error(f'Task recalculate_branches_for_board failed for board {board_id}: {e}', exc_info=True)
         # Retry with exponential backoff
         raise self.retry(exc=e, countdown=10)
+
+
+@shared_task(
+    bind=True,
+    name='kanban.generate_ai_for_branch_snapshot',
+    max_retries=2,
+    default_retry_delay=15,
+    time_limit=180,
+    soft_time_limit=150,
+)
+def generate_ai_for_branch_snapshot(self, snapshot_id):
+    """
+    Generate the Gemini AI recommendation for an existing BranchSnapshot and
+    save it in place. Used immediately after branch creation so the freshly
+    promoted branch's detail page shows an AI recommendation within seconds
+    instead of "No AI recommendation available for this snapshot."
+
+    Args:
+        snapshot_id: PK of BranchSnapshot to enrich. The snapshot's existing
+                     scope/team/deadline deltas + the current board state are
+                     fed to WhatIfEngine.analyze_with_ai.
+
+    Updates the snapshot's `gemini_recommendation` field only — feasibility
+    score, conflicts, projection date, etc. are not recomputed (the snapshot
+    was just produced by the same engine moments ago and should not drift).
+    """
+    try:
+        from kanban.shadow_models import BranchSnapshot
+        from kanban.utils.whatif_engine import WhatIfEngine
+
+        snapshot = (
+            BranchSnapshot.objects
+            .select_related('branch', 'branch__board')
+            .get(pk=snapshot_id)
+        )
+        if snapshot.gemini_recommendation:
+            return {'skipped': True, 'reason': 'already populated'}
+
+        branch = snapshot.branch
+        board = branch.board
+
+        params = {
+            'tasks_added': snapshot.scope_delta,
+            'team_size_delta': snapshot.team_delta,
+            'deadline_shift_days': snapshot.deadline_delta_weeks * 7,
+        }
+        # Match the live recalc path: include velocity_health so the AI sees
+        # the same projection signal the score is anchored to.
+        actual_vel = compute_actual_7d_velocity(board)
+        baseline_vel = branch.baseline_velocity_per_week or actual_vel or 0.0
+        params['velocity_health'] = (
+            (actual_vel / baseline_vel) if baseline_vel > 0 else 1.0
+        )
+
+        engine = WhatIfEngine(board)
+        results = engine.simulate(params)
+        if not results:
+            return {'skipped': True, 'reason': 'simulate returned empty'}
+
+        ai_result = engine.analyze_with_ai(params, results)
+        recommendation_text = _format_ai_recommendation(ai_result)
+
+        if recommendation_text:
+            BranchSnapshot.objects.filter(pk=snapshot.pk).update(
+                gemini_recommendation=recommendation_text,
+            )
+            logger.info(
+                f'Backfilled AI recommendation for branch {branch.id} '
+                f'snapshot {snapshot.pk}'
+            )
+            return {'updated': True}
+
+        logger.warning(
+            f'AI returned no recommendation text for branch {branch.id} '
+            f'snapshot {snapshot.pk}'
+        )
+        return {'updated': False}
+
+    except BranchSnapshot.DoesNotExist:
+        logger.warning(
+            f'generate_ai_for_branch_snapshot: snapshot {snapshot_id} not found'
+        )
+        return {'error': 'snapshot not found'}
+    except Exception as e:
+        logger.error(
+            f'generate_ai_for_branch_snapshot failed for snapshot {snapshot_id}: {e}',
+            exc_info=True,
+        )
+        raise self.retry(exc=e, countdown=15)

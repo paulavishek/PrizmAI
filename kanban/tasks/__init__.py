@@ -52,6 +52,7 @@ from kanban.tasks.scope_autopsy_tasks import (
 
 from kanban.tasks.shadow_branch_tasks import (
     recalculate_branches_for_board,
+    generate_ai_for_branch_snapshot,
 )
 
 from kanban.tasks.sandbox_tasks import (
@@ -107,6 +108,7 @@ __all__ = [
     'generate_scope_autopsy',
     # Shadow branch tasks
     'recalculate_branches_for_board',
+    'generate_ai_for_branch_snapshot',
     # Commitment protocol tasks
     'run_commitment_decay_all',
     'reset_weekly_tokens',
