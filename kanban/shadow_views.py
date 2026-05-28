@@ -714,16 +714,52 @@ def promote_scenario_to_branch(request, board_id):
             baseline_velocity_per_week=compute_baseline_velocity(board),
         )
 
-        # No placeholder snapshot — the Celery recalc below produces the
-        # canonical first snapshot (with velocity_health applied).  Writing
-        # one here used to double-up Snapshot History with two entries at
-        # the same minute.  Mirrors CreateBranchView.
+        # Create an initial snapshot synchronously (no AI) so the branch
+        # card shows a score immediately instead of "Calculating first snapshot..."
+        # while Celery picks up the full recalc.  The subsequent Celery task
+        # uses a heartbeat trigger so the dedup logic skips writing a second
+        # snapshot when the score is unchanged — preventing the duplicate
+        # entries that led to this comment's original placement.
+        try:
+            from kanban.tasks.shadow_branch_tasks import (
+                extract_branch_params, compute_actual_7d_velocity,
+                scale_feasibility, _estimate_completion_date, _parse_date,
+            )
+            from kanban.shadow_models import BranchSnapshot
+            from kanban.utils.whatif_engine import WhatIfEngine as _WIEngine
 
-        # Trigger recalculation with scenario's parameters as seed
+            _params = extract_branch_params(branch)
+            _actual_vel = compute_actual_7d_velocity(board)
+            _baseline = branch.baseline_velocity_per_week or _actual_vel or 0.0
+            _params['velocity_health'] = (_actual_vel / _baseline) if _baseline > 0 else 1.0
+
+            _results = _WIEngine(board).simulate(_params)
+            if _results:
+                _score = scale_feasibility(_results.get('feasibility_score', 0))
+                _proj_date = _parse_date(
+                    _results.get('projected', {}).get('predicted_date')
+                ) or _estimate_completion_date(_results)
+                BranchSnapshot.objects.create(
+                    branch=branch,
+                    scope_delta=_params['tasks_added'],
+                    team_delta=_params['team_size_delta'],
+                    deadline_delta_weeks=_params['deadline_shift_days'] // 7,
+                    feasibility_score=_score,
+                    projected_completion_date=_proj_date,
+                    projected_budget_utilization=_results.get('projected', {}).get('budget_utilization_pct'),
+                    conflicts_detected=_results.get('new_conflicts', []),
+                    gemini_recommendation='',
+                )
+        except Exception as _snap_err:
+            logger.warning(f'Quick initial snapshot failed for branch {branch.id}: {_snap_err}')
+
+        # Trigger full recalc (with AI) in the background.  Heartbeat trigger
+        # ensures the dedup check suppresses a second identical snapshot if
+        # Celery computes the same score as the sync snapshot above.
         from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
         recalculate_branches_for_board.apply_async(
             args=[board_id],
-            kwargs={'trigger_event': f'Scenario "{scenario.name}" promoted to branch "{branch.name}"'},
+            kwargs={'trigger_event': 'Periodic branch refresh'},
         )
 
         return JsonResponse({
