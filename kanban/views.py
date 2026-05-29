@@ -6566,11 +6566,19 @@ def task_update_assignee(request, task_id):
 
     assignee_id = request.POST.get('assignee_id')
 
+    # Capture old calendar event id before changing the assignee so the sync
+    # task can delete the stale event from the old assignee's calendar.
+    task._prev_calendar_event_id = task.google_calendar_event_id
+
     if assignee_id:
         user = get_object_or_404(User, id=assignee_id)
         task.assigned_to = user
     else:
         task.assigned_to = None
+
+    # Clear the stored event id — sync_task_to_calendar will create a fresh
+    # event for the new assignee instead of trying to update the old one.
+    task.google_calendar_event_id = None
 
     task.save()
 

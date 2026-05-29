@@ -1588,35 +1588,52 @@ def track_due_date_change(sender, instance, **kwargs):
 def sync_due_date_to_google_calendar(sender, instance, created, **kwargs):
     """
     Queue a Celery task to sync this task's due_date to Google Calendar
-    when the due_date has changed (or been set for the first time).
+    when the due_date has changed (or been set for the first time), or when
+    the assigned user changes (so the event moves to the new assignee's calendar).
 
     Only fires when:
-      - The task has an assigned user.
-      - The due_date actually changed (or was just set on a new task).
-      - The assigned user has an active GoogleCalendarToken with sync_enabled=True.
+      - The due_date actually changed (or was just set on a new task), OR
+        the assigned user changed.
+      - The current (or previous) assignee has an active GoogleCalendarToken
+        with sync_enabled=True.
     """
-    if not instance.assigned_to_id:
-        return
-
     old_due_date = getattr(instance, '_old_due_date', None)
     new_due_date = instance.due_date
+    old_assigned_to_id = getattr(instance, '_old_assigned_to_id', None)
 
     due_date_changed = (created and new_due_date) or (old_due_date != new_due_date)
-    if not due_date_changed:
+    assignee_changed = (not created) and (old_assigned_to_id != instance.assigned_to_id)
+
+    if not due_date_changed and not assignee_changed:
         return
+
+    # When the assignee changed, we may need to delete the stale event from the
+    # old assignee's calendar.  The view stores the old event id on the instance
+    # before clearing google_calendar_event_id.
+    old_event_id = getattr(instance, '_prev_calendar_event_id', None)
+    old_assignee_id_for_cleanup = (
+        old_assigned_to_id if (assignee_changed and old_event_id) else None
+    )
 
     try:
         from accounts.models import GoogleCalendarToken
-        has_token = GoogleCalendarToken.objects.filter(
-            user_id=instance.assigned_to_id, sync_enabled=True
-        ).exists()
-        if not has_token:
+        has_current_token = (
+            instance.assigned_to_id and
+            GoogleCalendarToken.objects.filter(
+                user_id=instance.assigned_to_id, sync_enabled=True
+            ).exists()
+        )
+        if not has_current_token and not old_assignee_id_for_cleanup:
             return
 
         from accounts.tasks import sync_task_to_calendar
         try:
             # Dispatch asynchronously when a Celery worker is running.
-            sync_task_to_calendar.delay(instance.pk)
+            sync_task_to_calendar.delay(
+                instance.pk,
+                old_assignee_id=old_assignee_id_for_cleanup,
+                old_event_id=old_event_id,
+            )
         except Exception as celery_exc:
             # Celery / Redis not reachable — run synchronously so the calendar
             # event is created immediately (Daphne-only / no-worker setup).
@@ -1625,13 +1642,49 @@ def sync_due_date_to_google_calendar(sender, instance, created, **kwargs):
                 f"sync_due_date_to_google_calendar: Celery unavailable "
                 f"({celery_exc}), running synchronously for task {instance.pk}."
             )
-            sync_task_to_calendar(instance.pk)
+            sync_task_to_calendar(
+                instance.pk,
+                old_assignee_id=old_assignee_id_for_cleanup,
+                old_event_id=old_event_id,
+            )
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning(
             f"sync_due_date_to_google_calendar: could not sync for task {instance.pk}: {exc}"
         )
 
+
+@receiver(post_delete, sender=Task)
+def delete_google_calendar_event_on_task_delete(sender, instance, **kwargs):
+    """
+    When a task is deleted, remove its corresponding Google Calendar event so
+    the user's calendar doesn't accumulate stale entries.
+
+    Works for both individual deletes and bulk queryset deletes (demo reset,
+    board deletion) because Django fires post_delete for each object.
+    """
+    event_id = getattr(instance, 'google_calendar_event_id', None)
+    assignee_id = getattr(instance, 'assigned_to_id', None)
+    if not event_id or not assignee_id:
+        return
+
+    try:
+        from accounts.tasks import delete_calendar_event
+        try:
+            delete_calendar_event.delay(assignee_id, event_id)
+        except Exception as celery_exc:
+            import logging
+            logging.getLogger(__name__).info(
+                f"delete_google_calendar_event_on_task_delete: Celery unavailable "
+                f"({celery_exc}), running synchronously for task {instance.pk}."
+            )
+            delete_calendar_event(assignee_id, event_id)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"delete_google_calendar_event_on_task_delete: could not queue "
+            f"calendar cleanup for task {instance.pk}: {exc}"
+        )
 
 
 # ─── Phase 1b: Task label added (m2m_changed) ───────────────────────────────
