@@ -454,13 +454,25 @@ class GeminiClient:
 
 
 # Embedding model identifier — exported so other modules can record which
-# model produced a stored vector. text-embedding-004 outputs 768-dim vectors.
-GEMINI_EMBEDDING_MODEL = 'models/text-embedding-004'
+# model produced a stored vector.
+#
+# text-embedding-004 was retired from the Gemini v1beta API (embedContent now
+# returns 404 for it), so we use gemini-embedding-001.  That model defaults to
+# 3072-dim output; we pin it to 768 via output_dimensionality (see embed_text)
+# so newly-generated vectors keep the same width as the existing stored
+# column and don't require a schema change.  NOTE: 001 vectors live in a
+# different embedding space than the old 004 vectors, so semantic search that
+# mixes the two is degraded until a re-backfill — run
+# `python manage.py backfill_kb_embeddings` to regenerate all rows.
+GEMINI_EMBEDDING_MODEL = 'models/gemini-embedding-001'
+
+# Output width pinned to match the legacy 768-dim stored vectors.
+GEMINI_EMBEDDING_DIM = 768
 
 
 def embed_text(text, task_type='RETRIEVAL_DOCUMENT'):
     """
-    Embed `text` via Gemini's text-embedding-004 model.
+    Embed `text` via Gemini's gemini-embedding-001 model (768-dim output).
 
     Args:
         text: String to embed. Empty/None returns None.
@@ -510,6 +522,7 @@ def embed_text(text, task_type='RETRIEVAL_DOCUMENT'):
             text = text[:8000]
         result = genai.embed_content(
             model=GEMINI_EMBEDDING_MODEL, content=text, task_type=task_type,
+            output_dimensionality=GEMINI_EMBEDDING_DIM,
         )
         vec = result.get('embedding') if isinstance(result, dict) else getattr(result, 'embedding', None)
         if not vec:

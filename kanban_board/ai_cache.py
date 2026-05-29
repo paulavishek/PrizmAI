@@ -40,6 +40,11 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# The local-memory / database cache backends don't support pattern deletion.
+# Warn about it ONCE per process instead of on every invalidate_operation call
+# (a demo reset invalidates hundreds of operations and was flooding the log).
+_pattern_delete_unsupported_warned = False
+
 
 # =============================================================================
 # TTL CONFIGURATION BY OPERATION TYPE
@@ -318,7 +323,16 @@ class AICacheManager:
                 logger.info(f"Invalidated {count} cache entries for operation: {operation}")
                 return count
             else:
-                logger.warning("Pattern deletion not supported by cache backend")
+                global _pattern_delete_unsupported_warned
+                if not _pattern_delete_unsupported_warned:
+                    _pattern_delete_unsupported_warned = True
+                    logger.warning(
+                        "Pattern deletion not supported by cache backend — "
+                        "AI cache entries expire by TTL instead. "
+                        "(Logged once; suppressing further occurrences.)"
+                    )
+                else:
+                    logger.debug("Pattern deletion not supported by cache backend")
                 return 0
         except Exception as e:
             logger.warning(f"AI cache pattern invalidation error: {e}")

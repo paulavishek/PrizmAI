@@ -36,6 +36,10 @@ HEARTBEAT_TRIGGERS = frozenset({
 BASELINE_CORRECTION_PREFIXES = (
     'Branch restored',
     'Branch "',  # 'Branch "<name>" created'
+    # Demo sandbox provisioning/reset clones branches with the template's stale
+    # snapshot and then recalcs them to the live value — a baseline correction,
+    # not real-world work, so it must not log a divergence or show in standup.
+    'Sandbox provisioned',
 )
 
 
