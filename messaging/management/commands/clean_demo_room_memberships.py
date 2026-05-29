@@ -53,9 +53,14 @@ class Command(BaseCommand):
         for room in demo_rooms:
             # Real users are those whose UserProfile.is_demo_account is False.
             # Guard against users without a profile (shouldn't happen, but be safe).
+            # The sandbox board OWNER is a real user but legitimately belongs to
+            # their own sandbox rooms — never remove them, or their Messages
+            # badge unread count breaks.
+            board_owner_id = getattr(room.board, 'owner_id', None)
             real_members = [
                 u for u in room.members.all()
                 if not getattr(getattr(u, 'profile', None), 'is_demo_account', False)
+                and u.id != board_owner_id
             ]
 
             if not real_members:
