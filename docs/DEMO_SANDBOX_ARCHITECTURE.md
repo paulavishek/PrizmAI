@@ -369,6 +369,23 @@ Multiple views have explicit demo guards:
 
 **Fix:** Org admin paths now filter by `Q(workspace__organization=org)`.
 
+### 6.10 Messaging Hub — Duplicate Boards & Template Room Pollution
+
+**Symptom:** In demo mode the Messaging Hub showed the **same board twice** (two "Software Development" cards), with doubled message counts (e.g. "18"). Resetting the demo did not fix it, and the problem recurred every session.
+
+**Root Cause:** Commit `a6e4a14` (2026-05-23) made sandbox copies inherit the template's workspace (`_duplicate_board()` → `workspace=template_board.workspace`) so that workspace-scoped features (custom fields) resolve for sandbox tasks. Previously sandbox boards had `workspace=None`. This broke the implicit invariant *"a board in the demo workspace is a template."*
+
+`messaging_hub()` identified demo rooms with `Q(board__workspace__is_demo=True) | Q(board__is_official_demo_board=True)`. After the workspace change, this matched **both** the immutable template board **and** the user's sandbox copy (both share the demo workspace), producing duplicate boards. The hub then auto-added the real user to *every* matched room — including the template's rooms — polluting the immutable template. Because reset only purges the user's sandbox (not template room memberships), the pollution and duplication persisted across resets.
+
+**Fix:**
+1. `messaging_hub()` demo branch now scopes rooms via `get_user_boards(request.user)` (the centralized helper, already used by `get_unread_message_count()`), which returns only the user's sandbox copies — never the template.
+2. The hub's member auto-add is now restricted to `is_sandbox_copy=True` rooms; real users are never added to official demo template rooms.
+3. `clean_demo_room_memberships` command no longer strips the sandbox **owner** from their own sandbox rooms.
+
+**Data cleanup:** Removed real-user memberships from the 3 official demo template chat rooms (restored to persona-only).
+
+**Lesson:** Now that sandbox copies live in the demo workspace, **never identify template-vs-sandbox boards by `workspace__is_demo` alone.** Use `get_user_boards()`, or combine the workspace check with `is_official_demo_board` / `is_sandbox_copy` / `owner`.
+
 ---
 
 ## 7. Files Modified
@@ -701,4 +718,4 @@ print('ALL CHECKS PASSED')
 
 ---
 
-*Last updated: April 9, 2026*
+*Last updated: May 29, 2026*

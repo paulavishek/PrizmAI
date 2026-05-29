@@ -48,26 +48,35 @@ def messaging_hub(request):
     active_ws = getattr(profile, 'active_workspace', None)
 
     if is_demo:
-        # Scope to boards that live in the demo workspace OR are flagged as
-        # the official demo board (covers the ``is_official_demo_board=True``
-        # board that may predate the workspace object).
+        # Scope to the user's OWN demo boards via the centralised helper —
+        # in demo mode this returns the user's personal sandbox copies
+        # (``owner=user, is_sandbox_copy=True``), falling back to the official
+        # template boards only when no sandbox has been provisioned yet.
+        #
+        # We must NOT scope by ``board__workspace__is_demo`` here: sandbox
+        # copies now inherit the template's demo workspace, so a workspace
+        # filter would match BOTH the immutable template board AND the user's
+        # sandbox copy — surfacing duplicate boards and doubled message counts.
+        user_board_ids = list(
+            get_user_boards(request.user).values_list('id', flat=True)
+        )
         user_rooms = (
             ChatRoom.objects
-            .filter(
-                Q(board__workspace__is_demo=True)
-                | Q(board__is_official_demo_board=True)
-            )
+            .filter(board_id__in=user_board_ids)
             .select_related('board', 'board__workspace')
             .order_by('board__name', 'name')
         )
 
-        # Auto-add the real user to every demo room upfront so the member
-        # count is already correct before they enter any individual room.
-        # (Previously this was done lazily on WebSocket connect, which meant
-        # rooms the user hadn't visited yet still showed the wrong count.)
+        # Auto-add the real user to their OWN sandbox rooms upfront so the
+        # member count is correct before they open any individual room.
+        # (Provisioning already adds them; this self-heals any gap.)
+        # Never auto-add to official demo template rooms — those stay
+        # persona-only to preserve template immutability.
         _is_demo_account = getattr(profile, 'is_demo_account', False)
         if not _is_demo_account:
-            _rooms_needing_add = user_rooms.exclude(members=request.user)
+            _rooms_needing_add = user_rooms.filter(
+                board__is_sandbox_copy=True,
+            ).exclude(members=request.user)
             for _room in _rooms_needing_add:
                 _room.members.add(request.user)
     else:
