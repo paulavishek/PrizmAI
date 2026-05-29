@@ -211,6 +211,7 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     # Trigger 'Sandbox provisioned' is treated as a baseline correction, so it
     # writes no divergence log and doesn't appear in the Quantum Standup.
     try:
+        from django.core.cache import cache as _shadow_cache
         from kanban.tasks.shadow_branch_tasks import (
             run_branch_recalc_sync, generate_ai_for_branch_snapshot,
         )
@@ -218,6 +219,15 @@ def provision_sandbox_task(self, user_id, is_reset=False):
         for board in new_boards:
             if not ShadowBranch.objects.filter(board=board, status='active').exists():
                 continue
+            # _duplicate_board sets a 120s demo_shadow_lock to suppress recalcs
+            # *during* the clone.  Cloning is finished now, so clear the lock for
+            # this board before recalculating — otherwise run_branch_recalc_sync
+            # early-returns ("demo data populate in progress") and the branches
+            # keep their stale cloned scores until a later signal recalc.
+            try:
+                _shadow_cache.delete(f'demo_shadow_lock_{board.id}')
+            except Exception:
+                pass
             recalc = run_branch_recalc_sync(
                 board.id,
                 trigger_event='Sandbox provisioned',
