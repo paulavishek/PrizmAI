@@ -116,8 +116,13 @@
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header bg-light">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Current Projection</h6>
+                    {% if latest_snapshot %}
+                    <small class="text-muted" title="Scores update live as the real board changes">
+                        <i class="fas fa-clock me-1"></i>Updated {{ latest_snapshot.captured_at|timesince }} ago
+                    </small>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -173,6 +178,15 @@
                 <div class="card-body ai-recommendation-body" style="max-height: 300px; overflow-y: auto;">
                     {% if latest_snapshot.gemini_recommendation %}
                         <div class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</div>
+                    {% elif ai_pending %}
+                        <p class="text-muted mb-0" id="ai-pending">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Generating AI analysis… this usually takes a few seconds.
+                        </p>
+                        <script>
+                            // The recommendation is backfilled by a background task.
+                            // Reload once shortly so it appears without a manual refresh.
+                            setTimeout(function () { window.location.reload(); }, 8000);
+                        </script>
                     {% else %}
                         <p class="text-muted mb-0"><em>No AI recommendation available for this snapshot.</em></p>
                     {% endif %}

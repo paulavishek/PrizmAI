@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initColorPicker();
     loadScenarios();
     pollPendingBranches();
+    pollBranchScoresForSettle();
 
     const restoreAllBtn = document.getElementById('restoreAllArchivedBtn');
     if (restoreAllBtn) {
@@ -74,6 +75,57 @@ function pollPendingBranches() {
             }
         });
     }, 5000);  // Poll every 5 seconds
+}
+
+/**
+ * Briefly poll the live score endpoint so card numbers settle in place when a
+ * background recalc (e.g. triggered by a task completion or AI backfill) lands
+ * while the user is already looking at the board — no manual reload needed.
+ *
+ * Bounded on purpose: a handful of polls over ~16s, not a permanent poller.
+ * Updates the score text, the high/medium/low colour class, and the "Updated
+ * N ago" line.  Skips branches still showing "Calculating first snapshot…"
+ * (those are handled by pollPendingBranches, which reloads when ready).
+ */
+function pollBranchScoresForSettle() {
+    const badges = document.querySelectorAll('[data-score-badge]');
+    if (badges.length === 0) return;
+
+    const boardId = getBoardId();
+    let polls = 0;
+    const maxPolls = 4;
+    const timer = setInterval(function () {
+        polls++;
+        fetch(`/api/boards/${boardId}/shadow/scores/`)
+            .then(r => r.json())
+            .then(data => {
+                (data.scores || []).forEach(function (s) {
+                    const badge = document.querySelector(
+                        `[data-score-badge="${s.branch_id}"]`
+                    );
+                    if (!badge) return;
+                    const score = Number(s.feasibility_score);
+                    const shown = `${score}%`;
+                    if (badge.textContent.trim() !== shown) {
+                        badge.textContent = shown;
+                        badge.classList.remove('score-high', 'score-medium', 'score-low');
+                        badge.classList.add(
+                            score >= 70 ? 'score-high'
+                            : score >= 50 ? 'score-medium'
+                            : 'score-low'
+                        );
+                        const updated = badge.parentElement
+                            ? badge.parentElement.querySelector('small[title]')
+                            : null;
+                        if (updated) {
+                            updated.innerHTML = '<i class="fas fa-clock me-1"></i>Updated just now';
+                        }
+                    }
+                });
+            })
+            .catch(() => {});
+        if (polls >= maxPolls) clearInterval(timer);
+    }, 4000);
 }
 
 /**

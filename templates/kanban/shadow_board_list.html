@@ -388,7 +388,7 @@
                         </table>
                     </div>
                     {% else %}
-                    <p class="text-muted mb-0">No branch recalculations today yet.</p>
+                    <p class="text-muted mb-0">No real board activity has affected your branches today yet. Complete a task, or change the team or deadline, to see the impact here.</p>
                     {% endif %}
                 </div>
             </div>
@@ -400,6 +400,18 @@
         <i class="fas fa-lightbulb me-2 text-info"></i>
         <strong>Tip:</strong> Shadow Board works best when you check in regularly. After your team completes tasks, return here to see how each branch's feasibility score has shifted — then commit the branch that's winning.
         <button type="button" class="btn-close" id="shadowBoardTipDismiss" aria-label="Close"></button>
+    </div>
+
+    <!-- How scores behave — explains the "live simulation" nature so the
+         updates users see between visits don't read as a bug. -->
+    <div class="alert alert-light border alert-dismissible py-2 px-3 mb-4" id="shadowScoringExplainer" role="alert">
+        <i class="fas fa-circle-info me-2 text-secondary"></i>
+        <small><strong>How these scores behave:</strong>
+        Shadow Board is a <strong>live simulation</strong> — scores recalculate automatically as your real board changes (tasks completed, deadline or team changes), so they can differ between visits.
+        <strong>AI analysis</strong> is generated in the background and may take a few seconds to appear after a branch is created or restored.
+        Two branches can show <strong>similar scores when both are well past the point of being feasible</strong> — open a branch to see its specific risks.
+        Click <strong>Refresh Scores</strong> to force an immediate recalculation.</small>
+        <button type="button" class="btn-close" style="font-size:0.65rem;" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
     {% endif %}
 
@@ -470,9 +482,13 @@
                             <!-- Feasibility Score -->
                             <div class="mb-3">
                                 <small class="text-muted d-block">Feasibility Score</small>
-                                <div class="feasibility-badge {% if latest.feasibility_score >= 70 %}score-high{% elif latest.feasibility_score >= 50 %}score-medium{% else %}score-low{% endif %}">
+                                <div class="feasibility-badge {% if latest.feasibility_score >= 70 %}score-high{% elif latest.feasibility_score >= 50 %}score-medium{% else %}score-low{% endif %}"
+                                     data-score-badge="{{ branch.id }}">
                                     {{ latest.feasibility_score }}%
                                 </div>
+                                <small class="text-muted d-block mt-1" title="Scores update live as the real board changes">
+                                    <i class="fas fa-clock me-1"></i>Updated {{ latest.captured_at|timesince }} ago
+                                </small>
                             </div>
 
                             <!-- Projected Completion -->

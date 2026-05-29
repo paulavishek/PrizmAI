@@ -1382,6 +1382,17 @@ def _delete_user_board_safely(board):
         pass
 
     try:
+        # Board-scoped signals are written by the project confidence service
+        # (~35 rows per board).  FK checks are disabled before board.delete()
+        # below, so SQLite won't auto-cascade these — delete them explicitly
+        # to avoid orphaned ProjectSignal rows accumulating across resets.
+        from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+        ProjectSignal.objects.filter(board=board).delete()
+        ProjectConfidenceScore.objects.filter(board=board).delete()
+    except Exception:
+        pass
+
+    try:
         from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
         PreMortemScenarioAcknowledgment.objects.filter(pre_mortem__board=board).delete()
         PreMortemAnalysis.objects.filter(board=board).delete()

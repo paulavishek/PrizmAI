@@ -154,10 +154,21 @@ class ShadowBoardListView(ListView):
         context['tasks_completed_today'] = completed_today
         context['tasks_completed_count'] = len(completed_today)
 
-        # Bug 4 fix: use BranchSnapshot records created today for "How It Affected
-        # Your Branches" instead of BranchDivergenceLog (which only logs >5-point
-        # changes). Compare each branch's latest-today snapshot against the snapshot
-        # immediately before today to derive old_score / new_score / score_delta.
+        # "How It Affected Your Branches" must reflect *today's real board
+        # events* (tasks completed, deadline/team changes) — NOT baseline
+        # corrections or heartbeats.  A restored or freshly-created branch
+        # writes a snapshot that re-baselines its score against the live
+        # board; counting that as "today's progress" produced phantom swings
+        # (e.g. a restored branch correcting a stale 81% to 40.75% looked like
+        # a -40-point drop caused by today's work, which is false).
+        #
+        # We therefore key the table off snapshots whose trigger_event is a
+        # genuine board event (see is_real_board_event).  before = the score
+        # immediately PRIOR to today's first real event; after = the latest
+        # real-event snapshot today.  Branches with no real-event snapshot
+        # today are omitted.
+        from kanban.tasks.shadow_branch_tasks import is_real_board_event
+
         today_snapshots_qs = BranchSnapshot.objects.filter(
             branch__board=board,
             branch__status='active',
@@ -165,49 +176,40 @@ class ShadowBoardListView(ListView):
             captured_at__lt=today_end,
         ).select_related('branch').order_by('branch_id', 'captured_at')
 
-        # Track BOTH the first and the latest snapshot of today per
-        # branch.  Querysets are ascending by captured_at, so the first
-        # value written wins for "earliest" and the last value written
-        # wins for "latest".
-        earliest_today: dict = {}
+        # Group today's snapshots per branch (ascending by captured_at) and
+        # track the absolute latest for card anchoring further below.
+        today_by_branch: dict = {}
         latest_today: dict = {}
         for snap in today_snapshots_qs:
-            if snap.branch_id not in earliest_today:
-                earliest_today[snap.branch_id] = snap
+            today_by_branch.setdefault(snap.branch_id, []).append(snap)
             latest_today[snap.branch_id] = snap
 
         branch_impacts = []
-        for branch_id, latest_snap in latest_today.items():
-            # Baseline = today's earliest snapshot (start-of-day state).
-            # This matches what the branch card displayed at the start of
-            # the user's session, so the "Before" column and the cards
-            # are anchored to the same reference point.  Falling back to
-            # yesterday's last snapshot here (the prior behaviour) created
-            # a mismatch: cards showed today's heartbeat value while the
-            # table showed yesterday's tail, confusing users who expected
-            # them to agree.
-            earliest_snap = earliest_today.get(branch_id)
-            if earliest_snap is not None and earliest_snap.pk != latest_snap.pk:
-                old_score = earliest_snap.feasibility_score
-            else:
-                # Only one snapshot today (just the heartbeat).  Fall back
-                # to yesterday's last snapshot so the table still tells a
-                # story instead of showing "no change since this morning".
-                prev_snap = (
-                    BranchSnapshot.objects
-                    .filter(branch_id=branch_id, captured_at__lt=today_start)
-                    .order_by('-captured_at')
-                    .first()
-                )
-                if prev_snap is not None:
-                    old_score = prev_snap.feasibility_score
-                elif earliest_snap is not None:
-                    old_score = earliest_snap.feasibility_score
-                else:
-                    old_score = 0
-            new_score = latest_snap.feasibility_score
+        for branch_id, snaps in today_by_branch.items():
+            real_events = [s for s in snaps if is_real_board_event(s.trigger_event)]
+            if not real_events:
+                # Only heartbeats / baseline corrections today — no real work
+                # affected this branch, so it doesn't belong in the table.
+                continue
+            first_real = real_events[0]
+            after_snap = real_events[-1]
+
+            # Baseline = the score immediately before today's first real event
+            # (could be an earlier-today heartbeat or yesterday's tail).
+            before_snap = (
+                BranchSnapshot.objects
+                .filter(branch_id=branch_id, captured_at__lt=first_real.captured_at)
+                .order_by('-captured_at')
+                .first()
+            )
+            old_score = (
+                before_snap.feasibility_score
+                if before_snap is not None
+                else first_real.feasibility_score
+            )
+            new_score = after_snap.feasibility_score
             branch_impacts.append(types.SimpleNamespace(
-                branch=latest_snap.branch,
+                branch=after_snap.branch,
                 old_score=old_score,
                 new_score=new_score,
                 score_delta=new_score - old_score,
@@ -489,6 +491,17 @@ class BranchDetailView(DetailView):
         # Get latest snapshot
         latest = branch.get_latest_snapshot()
         context['latest_snapshot'] = latest
+
+        # AI pending state: a snapshot that was just written (e.g. by a manual
+        # refresh, branch create, or restore) may not have its AI text yet —
+        # it's backfilled by a background task within seconds.  Flag a recent
+        # empty-AI snapshot so the template can show "Generating AI analysis…"
+        # (with auto-refresh) instead of a permanent "not available" message.
+        context['ai_pending'] = bool(
+            latest is not None
+            and not latest.gemini_recommendation
+            and (timezone.now() - latest.captured_at) <= timedelta(minutes=3)
+        )
 
         # Build feasibility history for chart.
         # IMPORTANT: feasibility_score is a DecimalField; rendering it through
@@ -963,9 +976,13 @@ def refresh_branch_scores(request, board_id):
 
     AI recommendation generation is skipped here (skip_ai=True) — a Gemini
     call per branch would add 5-10 seconds of latency to a click the user
-    expects to be near-instant.  The recommendation is backfilled by the
-    next event-driven or heartbeat recalc, which writes the same score
-    again but with the AI text populated.
+    expects to be near-instant.  Instead we enqueue a background AI backfill
+    for each freshly-written snapshot so the recommendation appears within
+    seconds rather than waiting for an arbitrary later event-driven recalc.
+
+    Compression is disabled (apply_compression=False) so a single click lands
+    each branch on the engine's true value instead of creeping toward it over
+    several clicks.
     """
     try:
         board = get_object_or_404(Board, id=board_id)
@@ -973,12 +990,25 @@ def refresh_branch_scores(request, board_id):
         if not request.user.has_perm('prizmai.edit_board', board):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
-        from kanban.tasks.shadow_branch_tasks import run_branch_recalc_sync
+        from kanban.tasks.shadow_branch_tasks import (
+            run_branch_recalc_sync, generate_ai_for_branch_snapshot,
+        )
         result = run_branch_recalc_sync(
             board.id,
             trigger_event='Manual refresh',
             skip_ai=True,
+            apply_compression=False,
         )
+
+        # Backfill AI text for the snapshots we just wrote (skip_ai left them
+        # empty) so the "Generating AI analysis…" pending state resolves
+        # quickly instead of lingering until the next heartbeat.
+        for snapshot_id in result.get('snapshot_ids', []):
+            try:
+                generate_ai_for_branch_snapshot.delay(snapshot_id)
+            except Exception:
+                pass
+
         return JsonResponse({
             'success': True,
             'snapshots_created': result.get('snapshots_created', 0),
@@ -987,6 +1017,39 @@ def refresh_branch_scores(request, board_id):
     except Exception as e:
         logger.error(f'refresh_branch_scores failed: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def branch_scores_json(request, board_id):
+    """
+    Lightweight read-only endpoint returning the current feasibility score and
+    capture time for every active branch on the board.
+
+    The Shadow Board page polls this for a few seconds after load / after a
+    manual refresh so card numbers settle in place as background recalcs land,
+    instead of the user having to reload to see the value stop moving.
+    """
+    board = get_object_or_404(Board, id=board_id)
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    branches = ShadowBranch.objects.filter(
+        board=board, status='active',
+    ).prefetch_related('snapshots')
+
+    scores = []
+    for branch in branches:
+        latest = branch.get_latest_snapshot()
+        if latest is None:
+            continue
+        scores.append({
+            'branch_id': branch.id,
+            'feasibility_score': float(latest.feasibility_score),
+            'captured_at': latest.captured_at.isoformat(),
+            'has_ai': bool(latest.gemini_recommendation),
+        })
+
+    return JsonResponse({'scores': scores})
 
 
 @login_required
@@ -1221,8 +1284,19 @@ def restore_all_archived_branches(request, board_id):
             return JsonResponse({'error': 'Permission denied'}, status=403)
 
         archived_qs = ShadowBranch.objects.filter(board=board, status='archived')
-        count = archived_qs.count()
+        restored_ids = list(archived_qs.values_list('id', flat=True))
+        count = len(restored_ids)
         archived_qs.update(status='active')
+
+        # Recalculate each restored branch against the live board (scoped per
+        # branch, AI included) so none of them linger on a stale snapshot.
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        for restored_id in restored_ids:
+            recalculate_branches_for_board.apply_async(
+                args=[board.id],
+                kwargs={'trigger_event': 'Branch restored', 'branch_id': restored_id},
+                countdown=2,
+            )
 
         logger.info(f'All {count} archived branch(es) restored by {request.user.username} on board {board_id}')
         return JsonResponse({
@@ -1253,6 +1327,19 @@ def restore_branch(request, board_id, branch_id):
 
         branch.status = 'active'
         branch.save(update_fields=['status'])
+
+        # Recalculate the restored branch against the live board right away so
+        # it doesn't display a stale snapshot (and a missing AI recommendation)
+        # until some unrelated event happens to sweep it.  Scope to THIS branch
+        # only — recalculating siblings here would re-baseline their scores
+        # against the live board, which users perceive as "scores changed on
+        # their own".  This path leaves skip_ai unset, so AI text is generated.
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        recalculate_branches_for_board.apply_async(
+            args=[board.id],
+            kwargs={'trigger_event': 'Branch restored', 'branch_id': branch.id},
+            countdown=2,
+        )
 
         logger.info(f'Branch "{branch.name}" (id={branch_id}) restored by {request.user.username}')
         return JsonResponse({

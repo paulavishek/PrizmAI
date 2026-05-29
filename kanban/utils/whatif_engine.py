@@ -263,6 +263,16 @@ class WhatIfEngine:
                 + timedelta(days=deadline_shift)
             )
 
+        # --- Schedule overshoot (UNCLAMPED severity signal) ---
+        # How many days the projected completion overshoots the deadline.
+        # This keeps growing with scope/scenario severity even after
+        # delay_probability has saturated at 99, so two deeply-infeasible
+        # branches can still be ordered against each other.  Display/conflict
+        # logic continues to use the clamped delay_probability below.
+        schedule_overshoot_days = 0
+        if new_predicted_date and new_deadline and new_predicted_date > new_deadline:
+            schedule_overshoot_days = (new_predicted_date - new_deadline).days
+
         # --- Delay probability ---
         new_delay_prob = self._estimate_delay_probability(
             new_remaining, new_velocity, new_predicted_date, new_deadline,
@@ -281,8 +291,12 @@ class WhatIfEngine:
         )
 
         # --- Utilization ---
+        # `utilization_raw` is the UNCLAMPED value (can exceed 200); kept as a
+        # severity signal so over-allocated scenarios stay ordered after the
+        # displayed `utilization_pct` saturates at 200.
         active_per_member = new_remaining / new_team if new_team else new_remaining
-        new_utilization = min(round(active_per_member / 8 * 100, 1), 200)
+        utilization_raw = round(active_per_member / 8 * 100, 1)
+        new_utilization = min(utilization_raw, 200)
 
         return {
             'total_tasks': new_total,
@@ -302,6 +316,8 @@ class WhatIfEngine:
             'risk_level': new_risk,
             'confidence_pct': baseline['confidence_pct'],
             'utilization_pct': new_utilization,
+            'utilization_raw': utilization_raw,
+            'schedule_overshoot_days': schedule_overshoot_days,
         }
 
     # ------------------------------------------------------------------
@@ -456,6 +472,29 @@ class WhatIfEngine:
         # last 7 days") — that should *penalize*, not be silently skipped.
         if velocity_health is not None and velocity_health >= 0:
             score += max(-0.10, min(0.10, velocity_health - 1.0))
+
+        # --- Saturation differentiation tail ---
+        # The structural penalties above stop responding once delay_probability
+        # pins at its 99 ceiling and utilization clamps at 200, so two
+        # deeply-infeasible scenarios of very different magnitude (e.g. +4 vs
+        # +8 tasks) collapse to the *same* score.  This tail keeps subtracting
+        # a small, bounded amount that grows with the UNCLAMPED severity
+        # signals, restoring strict ordering between such scenarios.
+        #
+        # It contributes EXACTLY 0 below the clamps (delay_probability < 99 and
+        # raw utilization <= 200), so any scenario that isn't already saturated
+        # keeps its previous score unchanged.  Combined tail capped at 0.10 so
+        # it differentiates without flipping the High/Medium/Low tier.
+        tail = 0.0
+        if projected.get('delay_probability', 0) >= 99:
+            overshoot = projected.get('schedule_overshoot_days', 0) or 0
+            if overshoot > 0:
+                tail += 0.06 * math.tanh(overshoot / 120.0)
+        util_raw = projected.get('utilization_raw', util)
+        if util_raw > 200:
+            tail += 0.04 * math.tanh((util_raw - 200) / 100.0)
+        if tail:
+            score -= min(tail, 0.10)
 
         # Soft ceiling: real projects never have *zero* residual risk —
         # unforeseen scope creep, illness, dependencies — so we cap the

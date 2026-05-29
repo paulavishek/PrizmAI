@@ -39,6 +39,33 @@ HEARTBEAT_TRIGGERS = frozenset({
     'Manual refresh',
 })
 
+# Trigger prefixes for snapshots that re-baseline a branch against the live
+# board WITHOUT a real-world board event having occurred (branch creation,
+# restoring an archived branch).  Like heartbeats, these must NOT be counted
+# as "today's progress" in the Quantum Standup impact table — otherwise a
+# restore that corrects a stale demo score reads as a dramatic same-day swing.
+BASELINE_CORRECTION_PREFIXES = (
+    'Branch restored',
+    'Branch "',  # 'Branch "<name>" created'
+)
+
+
+def is_real_board_event(trigger_event: str) -> bool:
+    """
+    True when `trigger_event` represents a genuine real-world board change
+    (task completed, deadline moved, team member added/removed) rather than a
+    heartbeat or a baseline correction (create/restore).  Drives which
+    snapshots the "How It Affected Your Branches" standup attributes to
+    today's progress.
+    """
+    if not trigger_event:
+        return False
+    if trigger_event in HEARTBEAT_TRIGGERS:
+        return False
+    if any(trigger_event.startswith(p) for p in BASELINE_CORRECTION_PREFIXES):
+        return False
+    return True
+
 
 def soft_compress_delta(raw_delta: float) -> float:
     """
@@ -311,7 +338,7 @@ def _estimate_completion_date(simulation_results):
 
 
 def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
-                           branch_id=None, skip_ai=False):
+                           branch_id=None, skip_ai=False, apply_compression=True):
     """
     Run the per-branch recalc loop synchronously in the caller's thread.
 
@@ -333,9 +360,15 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             The manual-refresh endpoint sets this so the user isn't
             blocked for 5–10 seconds per branch on a slow AI call; the
             recommendation gets backfilled by the next scheduled recalc.
+        apply_compression: When True (default), large per-cycle score moves
+            are softened via `soft_compress_delta` to prevent jitter on
+            automatic/background recalcs.  The manual "Refresh Scores"
+            endpoint passes False so a single click lands the engine's true
+            value instead of creeping toward it over several clicks.
 
     Returns:
-        dict {'divergences_logged': int, 'snapshots_created': int}
+        dict {'divergences_logged': int, 'snapshots_created': int,
+              'snapshot_ids': list[int]}
     """
     from django.core.cache import cache as _cache
     if _cache.get(f'demo_shadow_lock_{board_id}'):
@@ -373,6 +406,7 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
 
     divergences_created = 0
     snapshots_created = 0
+    snapshot_ids = []
 
     # Compute the board-wide actual 7-day velocity once per recalc cycle.
     # Each branch then derives its own velocity_health by comparing this
@@ -447,7 +481,9 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             new_conflicts = results.get('new_conflicts', [])
 
             # --- Per-event delta soft compression ---
-            if latest_snapshot is not None:
+            # Skipped when apply_compression is False (manual "Refresh Scores")
+            # so a single click lands the engine's real value.
+            if apply_compression and latest_snapshot is not None:
                 try:
                     old_score_float = float(old_score)
                 except (TypeError, ValueError):
@@ -493,8 +529,10 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
                 projected_budget_utilization=new_budget_util,
                 conflicts_detected=new_conflicts,
                 gemini_recommendation=recommendation_text,
+                trigger_event=trigger_event,
             )
             snapshots_created += 1
+            snapshot_ids.append(new_snapshot.id)
 
             # Log divergence if score changed by more than 5 points.
             if (latest_snapshot is not None
@@ -557,6 +595,7 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
     return {
         'divergences_logged': divergences_created,
         'snapshots_created': snapshots_created,
+        'snapshot_ids': snapshot_ids,
     }
 
 

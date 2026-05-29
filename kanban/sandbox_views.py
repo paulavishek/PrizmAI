@@ -1985,6 +1985,18 @@ def _purge_existing_sandbox(user):
         except Exception:
             pass
 
+        # Explicitly delete board-scoped signal rows first.  With FK checks
+        # disabled for the bulk board delete below, SQLite won't auto-cascade
+        # and Django's collector has been observed to leave these behind —
+        # producing orphaned ProjectSignal rows that accumulate on every demo
+        # reset and later block migrations (PRAGMA foreign_key_check fails).
+        try:
+            from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+            ProjectSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
+            ProjectConfidenceScore.objects.filter(board_id__in=sandbox_board_ids).delete()
+        except Exception:
+            pass
+
         # ── Now delete sandbox boards + user-created demo boards (cascades most other models) ──
         from django.db import connection
         if connection.vendor == 'sqlite':
