@@ -980,9 +980,9 @@ def refresh_branch_scores(request, board_id):
     for each freshly-written snapshot so the recommendation appears within
     seconds rather than waiting for an arbitrary later event-driven recalc.
 
-    Compression is disabled (apply_compression=False) so a single click lands
-    each branch on the engine's true value instead of creeping toward it over
-    several clicks.
+    The recalc lands each branch on the engine's true deterministic value, so
+    clicking with no board change is idempotent — the snapshot dedup means a
+    second click produces no new snapshot and the score stays put.
     """
     try:
         board = get_object_or_404(Board, id=board_id)
@@ -997,7 +997,6 @@ def refresh_branch_scores(request, board_id):
             board.id,
             trigger_event='Manual refresh',
             skip_ai=True,
-            apply_compression=False,
         )
 
         # Backfill AI text for the snapshots we just wrote (skip_ai left them

@@ -105,7 +105,9 @@ function pollBranchScoresForSettle() {
                     );
                     if (!badge) return;
                     const score = Number(s.feasibility_score);
-                    const shown = `${score}%`;
+                    // Whole-number display to match the server-rendered card
+                    // badge (|floatformat:0); the stored value keeps 2dp.
+                    const shown = `${Math.round(score)}%`;
                     if (badge.textContent.trim() !== shown) {
                         badge.textContent = shown;
                         badge.classList.remove('score-high', 'score-medium', 'score-low');

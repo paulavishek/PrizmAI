@@ -4,7 +4,6 @@ Shadow Board Celery Tasks
 Async tasks for recalculating shadow branches whenever real board changes occur.
 All Gemini API calls happen here in the Celery worker, not in the request cycle.
 """
-import math
 from celery import shared_task
 from datetime import date as date_type, timedelta
 from django.utils import timezone
@@ -15,16 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 MIN_BASELINE_VELOCITY = 0.5
-# Soft cap on a single recalc cycle's feasibility movement.
-# Inside ±SOFT_DELTA_LINEAR the raw delta passes through unchanged.
-# Outside, we apply a logarithmic compression so two branches with raw
-# deltas of, say, +25 and +60 still land at meaningfully different final
-# scores (instead of both saturating at the same hard cap).
-# Combined absolute movement is bounded near SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL.
-SOFT_DELTA_LINEAR = 15.0
-SOFT_DELTA_TAIL = 10.0
-# Legacy alias kept for any external callers that imported the hard cap.
-MAX_PER_EVENT_DELTA = SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL
 
 # Trigger strings that represent a heartbeat / housekeeping recalc rather
 # than a real-world event.  Snapshots from these may be dedup'd; snapshots
@@ -65,25 +54,6 @@ def is_real_board_event(trigger_event: str) -> bool:
     if any(trigger_event.startswith(p) for p in BASELINE_CORRECTION_PREFIXES):
         return False
     return True
-
-
-def soft_compress_delta(raw_delta: float) -> float:
-    """
-    Map a raw feasibility delta through a piecewise function:
-        |raw| ≤ SOFT_DELTA_LINEAR   → pass through
-        |raw|  > SOFT_DELTA_LINEAR   → SOFT_DELTA_LINEAR + tail compression
-    The tail uses `tanh` so the marginal effect of each additional raw point
-    diminishes but never goes to zero — preserving cross-branch ordering.
-    Asymptote: ±(SOFT_DELTA_LINEAR + SOFT_DELTA_TAIL).
-    """
-    sign = 1.0 if raw_delta >= 0 else -1.0
-    magnitude = abs(raw_delta)
-    if magnitude <= SOFT_DELTA_LINEAR:
-        return raw_delta
-    excess = magnitude - SOFT_DELTA_LINEAR
-    # tanh(excess / SOFT_DELTA_TAIL) ∈ (0, 1); scale by SOFT_DELTA_TAIL.
-    compressed_excess = SOFT_DELTA_TAIL * math.tanh(excess / SOFT_DELTA_TAIL)
-    return sign * (SOFT_DELTA_LINEAR + compressed_excess)
 
 
 def _parse_date(value):
@@ -338,7 +308,7 @@ def _estimate_completion_date(simulation_results):
 
 
 def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
-                           branch_id=None, skip_ai=False, apply_compression=True):
+                           branch_id=None, skip_ai=False):
     """
     Run the per-branch recalc loop synchronously in the caller's thread.
 
@@ -360,11 +330,13 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             The manual-refresh endpoint sets this so the user isn't
             blocked for 5–10 seconds per branch on a slow AI call; the
             recommendation gets backfilled by the next scheduled recalc.
-        apply_compression: When True (default), large per-cycle score moves
-            are softened via `soft_compress_delta` to prevent jitter on
-            automatic/background recalcs.  The manual "Refresh Scores"
-            endpoint passes False so a single click lands the engine's true
-            value instead of creeping toward it over several clicks.
+
+    Every recalc path (task completion, deadline/team change, restore,
+    create, manual refresh) lands the engine's true deterministic value
+    directly.  There is intentionally no per-cycle smoothing: the score is
+    a pure function of the live board state, so recalculating with no real
+    change returns the identical number every time (and the daily-heartbeat
+    dedup then suppresses a duplicate snapshot).
 
     Returns:
         dict {'divergences_logged': int, 'snapshots_created': int,
@@ -480,28 +452,10 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             new_budget_util = results.get('projected', {}).get('budget_utilization_pct')
             new_conflicts = results.get('new_conflicts', [])
 
-            # --- Per-event delta soft compression ---
-            # Skipped when apply_compression is False (manual "Refresh Scores")
-            # so a single click lands the engine's real value.
-            if apply_compression and latest_snapshot is not None:
-                try:
-                    old_score_float = float(old_score)
-                except (TypeError, ValueError):
-                    old_score_float = 0.0
-                raw_delta = new_feasibility - old_score_float
-                if abs(raw_delta) > SOFT_DELTA_LINEAR:
-                    compressed_delta = soft_compress_delta(raw_delta)
-                    compressed = old_score_float + compressed_delta
-                    logger.info(
-                        'Feasibility delta compressed for branch %s: '
-                        'raw_delta=%.2f compressed_delta=%.2f '
-                        '(old=%.2f new_raw=%.2f new_compressed=%.2f, '
-                        'trigger=%s)',
-                        branch.id, raw_delta, compressed_delta,
-                        old_score_float, new_feasibility, compressed,
-                        trigger_event,
-                    )
-                    new_feasibility = round(compressed, 2)
+            # No per-cycle smoothing: new_feasibility is the engine's true
+            # value for the current board state.  Every path (event, restore,
+            # create, manual refresh) lands it directly, so recalculating with
+            # no real change is idempotent and repeated refreshes never drift.
 
             # --- Dedup + daily heartbeat ---
             new_deadline_weeks = params['deadline_shift_days'] // 7
@@ -534,8 +488,15 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             snapshots_created += 1
             snapshot_ids.append(new_snapshot.id)
 
-            # Log divergence if score changed by more than 5 points.
+            # Log divergence only for genuine board events that moved the
+            # score by more than 5 points.  Heartbeats ("Manual refresh") and
+            # baseline corrections ("Branch restored", "Branch <name> created")
+            # are excluded — they correct a stale/intermediate value rather
+            # than reflecting real-world work, so surfacing them as a
+            # "Significant Score Change" (e.g. "Manual refresh -25") misled
+            # users into thinking a refresh tanked the score.
             if (latest_snapshot is not None
+                    and is_real_board_event(trigger_event)
                     and abs(float(new_feasibility) - float(old_score)) > 5):
                 recent_cutoff = timezone.now() - timedelta(seconds=60)
                 is_recent_dup = BranchDivergenceLog.objects.filter(
