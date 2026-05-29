@@ -200,6 +200,37 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not seed automation hierarchy data after sandbox provision: %s", e)
 
+    # Recalculate shadow branches against the freshly-provisioned board so
+    # their feasibility scores reflect THIS sandbox's tasks/deadline/team right
+    # away.  Branches are deep-copied from the template carrying the template's
+    # last snapshot (often a stale score like 81%); without this the user sees
+    # that stale value until they manually click "Refresh Scores", and the
+    # first refresh then appears to "jump" the score by 40+ points.  Run
+    # synchronously (we're already in a worker) with skip_ai so provisioning
+    # isn't blocked on Gemini, then enqueue the AI backfill per new snapshot.
+    # Trigger 'Sandbox provisioned' is treated as a baseline correction, so it
+    # writes no divergence log and doesn't appear in the Quantum Standup.
+    try:
+        from kanban.tasks.shadow_branch_tasks import (
+            run_branch_recalc_sync, generate_ai_for_branch_snapshot,
+        )
+        from kanban.shadow_models import ShadowBranch
+        for board in new_boards:
+            if not ShadowBranch.objects.filter(board=board, status='active').exists():
+                continue
+            recalc = run_branch_recalc_sync(
+                board.id,
+                trigger_event='Sandbox provisioned',
+                skip_ai=True,
+            )
+            for snapshot_id in recalc.get('snapshot_ids', []):
+                try:
+                    generate_ai_for_branch_snapshot.delay(snapshot_id)
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning("Could not recalc shadow branches after sandbox provision: %s", e)
+
     redirect_url = '/dashboard/'
     _send_provision_status(user_id, 'Your workspace is ready!', 100)
     _send_provision_result(user_id, {

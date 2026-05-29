@@ -370,7 +370,9 @@ def invalidate_board_cache(board_id: int, cache_name: str = 'default') -> None:
             cache.delete_pattern(pattern)
             logger.info(f"Invalidated cache for board {board_id}")
         else:
-            logger.warning("Pattern deletion not supported - board cache may be stale")
+            # Non-Redis backends can't pattern-delete; entries expire by TTL.
+            # Debug level so a demo reset (many boards) doesn't flood the log.
+            logger.debug("Pattern deletion not supported - board cache may be stale")
     except Exception as e:
         logger.warning(f"Board cache invalidation error: {e}")
 
