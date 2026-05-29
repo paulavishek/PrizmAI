@@ -154,6 +154,17 @@ class BranchSnapshot(models.Model):
         help_text='AI recommendation text from Gemini analysis',
     )
 
+    # What produced this snapshot (e.g. 'Task "X" completed', 'Branch restored',
+    # 'Manual refresh', 'Periodic branch refresh').  Used to tell real board
+    # events apart from baseline corrections / heartbeats so the "How It
+    # Affected Your Branches" standup only attributes change to genuine work.
+    trigger_event = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Human-readable event that triggered this snapshot',
+    )
+
     class Meta:
         ordering = ['-captured_at']
         verbose_name = 'Branch Snapshot'
