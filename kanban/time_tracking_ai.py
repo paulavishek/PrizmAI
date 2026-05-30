@@ -341,14 +341,22 @@ class TimeTrackingAIService:
         ).select_related('task')
         
         for entry in large_entries:
+            # Truncate gracefully so the task name isn't cut mid-word (e.g.
+            # "Role-Based Access Control (RBAC)" was being clipped to "...(RBA").
+            title = entry.task.title
+            display_title = title if len(title) <= 50 else title[:49].rstrip() + '…'
             alerts.append({
                 'type': 'large_entry',
                 'severity': 'warning',
                 'entry_id': entry.id,
-                'task_title': entry.task.title,
+                'task_title': title,
                 'hours': float(entry.hours_spent),
                 'date': entry.work_date,
-                'message': f'Single entry of {entry.hours_spent}h for "{entry.task.title[:30]}".',
+                # date_str is required by the Split Entry / acknowledge buttons in
+                # the template; without it the modal receives an empty date and
+                # shows "Invalid Date".
+                'date_str': entry.work_date.isoformat(),
+                'message': f'Single entry of {entry.hours_spent}h for "{display_title}".',
                 'suggestion': 'Consider breaking this into multiple smaller entries with descriptions.'
             })
         
