@@ -135,6 +135,26 @@
                         </div>
                         
                         <!-- Progress (editable on detail page) -->
+                        {% if task.is_epic %}
+                        <!-- Epic: progress is rolled up from child tasks (read-only). The
+                             manual field is kept hidden so form submits don't reset it. -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-tasks text-info me-1"></i> Progress
+                                <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up from child tasks</span>
+                            </label>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:14px;">
+                                    <div class="progress-bar bg-success" role="progressbar"
+                                         style="width: {{ epic_rollup.progress_pct }}%;"
+                                         aria-valuenow="{{ epic_rollup.progress_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <small class="text-muted text-nowrap">{{ epic_rollup.completed }} of {{ epic_rollup.total }} done · {{ epic_rollup.progress_pct }}%</small>
+                            </div>
+                            <small class="form-text text-muted">Auto-calculated from completed child tasks — not editable directly.</small>
+                            <div class="d-none">{{ form.progress }}</div>
+                        </div>
+                        {% else %}
                         <div class="mb-3">
                             <label for="{{ form.progress.id_for_label }}" class="form-label">
                                 <i class="fas fa-tasks text-info me-1"></i> Progress
@@ -145,17 +165,47 @@
                                 <div class="invalid-feedback d-block">{{ form.progress.errors }}</div>
                             {% endif %}
                         </div>
+                        {% endif %}
 
                         <!-- Assignee (moved from Section 2 into Overview for quick access) -->
                         <div class="mb-3">
                             <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
+                                {% if task.is_epic %}
+                                <i class="fas fa-user-check me-1"></i> Epic Owner
+                                {% else %}
                                 <i class="fas fa-user-check me-1"></i> Assigned To
+                                {% endif %}
                             </label>
                             {{ form.assigned_to }}
+                            {% if task.is_epic %}
+                            <small class="form-text text-muted">Accountable owner of the Epic — the actual work spans the contributors below.</small>
+                            {% endif %}
                             {% if form.assigned_to.errors %}
                                 <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
                             {% endif %}
                         </div>
+
+                        {% if task.is_epic %}
+                        <!-- Epic Contributors: distinct assignees across the child tasks (read-only) -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-users me-1"></i> Contributors
+                                <span class="badge bg-secondary ms-1" style="font-size:0.7em;">{{ epic_rollup.contributors|length }}</span>
+                            </label>
+                            {% if epic_rollup.contributors %}
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for user in epic_rollup.contributors %}
+                                <span class="badge bg-light text-dark border d-inline-flex align-items-center" style="font-size:0.85em;padding:0.4em 0.6em;">
+                                    <i class="fas fa-user-circle me-1 text-secondary"></i>{{ user.get_full_name|default:user.username }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">Everyone assigned to this Epic's child tasks.</small>
+                            {% else %}
+                            <small class="text-muted fst-italic">No contributors yet — no child tasks have an assignee.</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                         
                         <!-- Labels (badge picker, mirrors the sidebar AJAX panel) -->
                         <div class="mb-3" id="detail-labels-section">
@@ -314,7 +364,8 @@
                             </div>
                         </div>
 
-                        <!-- Lean Six Sigma Classification -->
+                        <!-- Lean Six Sigma Classification (task-level only — not meaningful for an Epic container) -->
+                        {% if not task.is_epic %}
                         <div class="card border-primary mb-3">
                             <div class="card-body">
                                 <label class="form-label mb-2">
@@ -351,10 +402,57 @@
                                 {% endif %}
                             </div>
                         </div>
+                        {% endif %}
                     </div><!-- /tab-overview -->
 
                     <!-- ═══════ TAB 3: DETAILS (Constraints) ═══════ -->
                     <div class="tab-pane fade" id="tab-details" role="tabpanel">
+                        {% if task.is_epic %}
+                        <!-- Epic Aggregates: rolled-up totals across all child tasks -->
+                        <div class="card border-warning mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-layer-group text-warning me-2"></i>Epic Aggregates
+                                    <span class="badge bg-secondary ms-2">across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Child Tasks</div>
+                                        <div class="fs-4 fw-bold">{{ epic_rollup.total }}</div>
+                                        <div class="small text-success">{{ epic_rollup.completed }} done</div>
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Total Est. Hours</div>
+                                        <div class="fs-4 fw-bold">{{ epic_rollup.total_estimated_hours|floatformat:"0" }}h</div>
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Total Est. Cost</div>
+                                        <div class="fs-4 fw-bold">${{ epic_rollup.total_estimated_cost|floatformat:"2" }}</div>
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <div class="text-muted small">Contributors</div>
+                                        <div class="fs-4 fw-bold">{{ epic_rollup.contributors|length }}</div>
+                                    </div>
+                                </div>
+                                <hr class="my-2">
+                                <div class="small">
+                                    <span class="text-muted me-2"><i class="fas fa-shield-alt me-1"></i>Combined risk:</span>
+                                    {% if epic_rollup.risk_breakdown.critical %}<span class="badge bg-dark me-1">{{ epic_rollup.risk_breakdown.critical }} critical</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.high %}<span class="badge bg-danger me-1">{{ epic_rollup.risk_breakdown.high }} high</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.medium %}<span class="badge bg-warning text-dark me-1">{{ epic_rollup.risk_breakdown.medium }} medium</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.low %}<span class="badge bg-success me-1">{{ epic_rollup.risk_breakdown.low }} low</span>{% endif %}
+                                    {% if epic_rollup.risk_breakdown.none %}<span class="badge bg-light text-dark border me-1">{{ epic_rollup.risk_breakdown.none }} unrated</span>{% endif %}
+                                </div>
+                                {% if epic_rollup.deadline_conflicts %}
+                                <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    {{ epic_rollup.deadline_conflicts|length }} child task{{ epic_rollup.deadline_conflicts|length|pluralize }} due after the Epic's own due date.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
                         <div class="card border-secondary">
                             <div class="card-header bg-light">
                                 <h6 class="mb-0">
@@ -400,7 +498,10 @@
 
                                     <hr>
                                     
-                                    <!-- 📊 Manual Complexity Score -->
+                                    <!-- 📊 Manual Complexity Score (per-task — hidden for Epics; value preserved) -->
+                                    {% if task.is_epic %}
+                                    <input type="hidden" name="complexity_score" id="id_complexity_score" value="{{ task.complexity_score|default:5 }}">
+                                    {% else %}
                                     <div class="mb-4">
                                         <h6><i class="fas fa-chart-line text-warning"></i> Task Complexity</h6>
                                         <div class="mb-3">
@@ -410,18 +511,19 @@
                                             </label>
                                             <div class="d-flex align-items-center gap-3">
                                                 <small class="text-muted">Simple (1)</small>
-                                                <input type="range" name="complexity_score" id="id_complexity_score" 
-                                                       class="form-range" min="1" max="10" step="1" 
+                                                <input type="range" name="complexity_score" id="id_complexity_score"
+                                                       class="form-range" min="1" max="10" step="1"
                                                        value="{{ task.complexity_score|default:5 }}"
                                                        title="Task complexity from 1 (simple) to 10 (very complex)">
                                                 <small class="text-muted">Complex (10)</small>
                                             </div>
                                             <small class="form-text text-muted">Rate the task complexity from 1 (simple) to 10 (very complex).</small>
                                         </div>
-                                        
+
                                     </div>
 
                                     <hr>
+                                    {% endif %}
 
                                     <!-- 📦 Resource Information -->
                                     <div class="mb-4">
@@ -551,6 +653,67 @@
 
                     <!-- ═══════ TAB 4: RELATIONSHIPS ═══════ -->
                     <div class="tab-pane fade" id="tab-relationships" role="tabpanel">
+                        {% if task.is_epic %}
+                        <!-- Epic: child-task summary (status, assignee, due date, health) -->
+                        <div class="mb-4">
+                            <h6><i class="fas fa-sitemap text-warning me-1"></i> Child Tasks
+                                <span class="badge bg-secondary ms-1">{{ epic_rollup.total }}</span>
+                            </h6>
+                            <small class="text-muted d-block mb-2">All tasks rolled up under this Epic, with status and health at a glance.</small>
+                            {% if epic_rollup.children %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr class="text-muted" style="font-size:0.8rem;">
+                                            <th style="width:32px;"></th>
+                                            <th>Task</th>
+                                            <th>Assignee</th>
+                                            <th>Due</th>
+                                            <th>Health</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for child in epic_rollup.children %}
+                                        <tr>
+                                            <td>
+                                                {% if child.progress >= 100 or child.completed_at %}
+                                                    <i class="fas fa-circle-check text-success" title="Done"></i>
+                                                {% elif child.progress > 0 %}
+                                                    <i class="fas fa-circle-half-stroke text-primary" title="In progress"></i>
+                                                {% else %}
+                                                    <i class="far fa-circle text-secondary" title="Not started"></i>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'task_detail' child.id %}" class="text-decoration-none">
+                                                    <span class="badge bg-light text-dark border me-1" style="font-size:0.7em;">{{ board.get_task_prefix }}-{{ child.id }}</span>
+                                                    {{ child.title }}
+                                                </a>
+                                            </td>
+                                            <td><small>{% if child.assigned_to %}{{ child.assigned_to.username }}{% else %}<span class="text-muted fst-italic">Unassigned</span>{% endif %}</small></td>
+                                            <td><small>{% if child.due_date %}{{ child.due_date|date:"M d" }}{% else %}—{% endif %}</small></td>
+                                            <td>
+                                                {% if child.progress_status == 'late' %}
+                                                    <span class="badge bg-danger" style="font-size:0.7em;">Overdue</span>
+                                                {% elif child.risk_level == 'critical' or child.risk_level == 'high' %}
+                                                    <span class="badge bg-warning text-dark" style="font-size:0.7em;">{{ child.risk_level|capfirst }} risk</span>
+                                                {% elif child.progress_status == 'at_risk' %}
+                                                    <span class="badge bg-warning text-dark" style="font-size:0.7em;">At risk</span>
+                                                {% else %}
+                                                    <span class="badge bg-success" style="font-size:0.7em;">On track</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-muted fst-italic small py-2">No child tasks linked to this Epic yet.</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                         <!-- Task Relationships -->
                         <div class="mb-4">
                             <h6><i class="fas fa-project-diagram text-info me-1"></i> Task Relationships</h6>
@@ -578,6 +741,50 @@
 
                     <!-- ═══════ TAB 2: AI INSIGHTS ═══════ -->
                     <div class="tab-pane fade" id="tab-ai" role="tabpanel">
+
+                        {% if task.is_epic %}
+                        <!-- ═══ EPIC-LEVEL AI: collective health of all child tasks ═══ -->
+                        <div class="alert alert-light border-start border-4 border-warning mb-3" role="alert">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-info-circle text-warning me-2 mt-1"></i>
+                                <div>
+                                    <strong class="d-block mb-1">Epic-level AI insights</strong>
+                                    <small class="text-muted">
+                                        Unlike a single task, an Epic is analyzed across <strong>all its child tasks</strong>. The Epic Health report looks at
+                                        cross-task risk, conflicts between the Epic's due date and its children's, how work is distributed across contributors,
+                                        and which child tasks are blocking others.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card border-warning mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-heart-pulse text-warning me-1"></i> Epic Health Analysis</h6>
+                                        <small class="text-muted">AI review of collective child-task health: risk, deadline conflicts, workload &amp; blockers</small>
+                                    </div>
+                                    <button type="button" id="analyze-epic-health-btn" class="btn btn-sm btn-outline-warning"
+                                            data-epic-id="{{ task.id }}" title="Analyze the collective health of this Epic's child tasks">
+                                        <i class="fas fa-heart-pulse me-1"></i> Analyze Epic Health
+                                    </button>
+                                </div>
+                                <div id="epic-health-spinner" class="d-none text-center mt-3">
+                                    <div class="spinner-border spinner-border-sm text-warning" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted">Analyzing {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}…</span>
+                                </div>
+                                <div id="epic-health-result" class="mt-3"></div>
+                                {% if not epic_rollup.total %}
+                                <div class="alert alert-light border mt-3 mb-0 small text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>This Epic has no child tasks yet. Add child tasks to get a health analysis.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
 
                         <!-- AI Insights Verification Note -->
                         <div class="alert alert-light border-start border-4 border-primary mb-3" role="alert">
@@ -865,6 +1072,7 @@
                                 </div>
                             </div>
                         </div>
+                        {% endif %}{# /not task.is_epic — AI Insights #}
                     </div><!-- /tab-ai -->
 
                     <!-- ═══════ TAB 5: ACTIVITY ═══════ -->
@@ -1172,8 +1380,8 @@
                 {% endif %}
                 {% endwith %}
 
-                <!-- 🔮 AI Predicted Completion Date -->
-                {% if task.progress < 100 %}
+                <!-- 🔮 AI Predicted Completion Date (single-task forecast — not shown for Epics) -->
+                {% if task.progress < 100 and not task.is_epic %}
                 <div class="mb-3">
                     <label class="text-muted d-flex align-items-center">
                         <i class="fas fa-wand-magic-sparkles text-primary me-2"></i> Predicted Completion
@@ -1340,27 +1548,47 @@
                 </div>
 
                 <!-- Task Progress Section -->
+                {% if task.is_epic %}
+                <!-- Epic: rolled-up progress (read-only, no manual +/- control) -->
+                <div class="mb-3">
+                    <label class="text-muted">Progress <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up</span></label>
+                    <div class="p-2 bg-light rounded">
+                        <div class="progress" style="height: 15px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="--progress-width: {{ epic_rollup.progress_pct }}%; width: var(--progress-width);"
+                                 aria-valuenow="{{ epic_rollup.progress_pct }}" aria-valuemin="0" aria-valuemax="100">
+                            </div>
+                        </div>
+                        <div class="text-center mt-1">
+                            <span>{{ epic_rollup.completed }} of {{ epic_rollup.total }} child tasks done · {{ epic_rollup.progress_pct }}%</span>
+                            {% if not epic_rollup.total %}
+                            <div class="mt-1"><small class="text-muted"><i class="fas fa-info-circle me-1"></i>No child tasks yet — add child tasks to track Epic progress.</small></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
                 <div class="mb-3">
                     <label class="text-muted">Progress</label>
                     <div class="p-2 bg-light rounded">
                         <div class="task-progress-container">
                             <div class="d-flex justify-content-between align-items-center">
-                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn decrease-progress" 
+                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn decrease-progress"
                                         data-task-id="{{ task.id }}" title="Decrease progress by 10%">
                                     <i class="fas fa-minus"></i>
                                 </button>
-                                
+
                                 <div class="progress flex-grow-1 mx-1" style="height: 15px;">
-                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}" 
-                                         role="progressbar" 
-                                         style="--progress-width: {{ task.progress }}%; width: var(--progress-width);" 
-                                         aria-valuenow="{{ task.progress }}" 
-                                         aria-valuemin="0" 
+                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         role="progressbar"
+                                         style="--progress-width: {{ task.progress }}%; width: var(--progress-width);"
+                                         aria-valuenow="{{ task.progress }}"
+                                         aria-valuemin="0"
                                          aria-valuemax="100">
                                     </div>
                                 </div>
-                                
-                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn increase-progress" 
+
+                                <button type="button" class="btn btn-sm btn-outline-secondary progress-btn increase-progress"
                                         data-task-id="{{ task.id }}" title="Increase progress by 10%">
                                     <i class="fas fa-plus"></i>
                                 </button>
@@ -1373,7 +1601,8 @@
                             </div>
                         </div>
                     </div>
-                </div>                <!--  Stakeholder Involvement Section -->
+                </div>
+                {% endif %}                <!--  Stakeholder Involvement Section -->
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <label class="text-muted mb-0">👥 Stakeholders</label>
@@ -4337,6 +4566,97 @@
                 });
             });
         }
+    });
+</script>
+<script>
+    // ═══ Epic Health Analysis (Epic-level AI Insights) ═══
+    document.addEventListener('DOMContentLoaded', function() {
+        const epicBtn = document.getElementById('analyze-epic-health-btn');
+        if (!epicBtn) return;
+
+        const sevClass = { high: 'danger', medium: 'warning', low: 'info', info: 'secondary' };
+
+        epicBtn.addEventListener('click', function() {
+            const epicId = this.getAttribute('data-epic-id');
+            const spinner = document.getElementById('epic-health-spinner');
+            const resultDiv = document.getElementById('epic-health-result');
+            const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            spinner.classList.remove('d-none');
+            resultDiv.innerHTML = '';
+            epicBtn.disabled = true;
+
+            fetch(`/api/epic/${epicId}/analyze-health/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    resultDiv.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-1"></i>' +
+                        (data.error || 'Failed to analyze Epic health.') + '</div>';
+                    return;
+                }
+                const a = data.analysis || {};
+                const m = data.meta || {};
+                const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                let labelClass = 'success';
+                if (a.health_label === 'At risk') labelClass = 'danger';
+                else if (a.health_label === 'Needs attention') labelClass = 'warning';
+
+                let html = '<div class="bg-light rounded p-3">';
+                html += '<div class="d-flex align-items-center mb-2">';
+                html += '<span class="badge bg-' + labelClass + ' me-2">' + esc(a.health_label || 'Reviewed') + '</span>';
+                if (a.confidence != null) {
+                    html += '<small class="text-muted">' + esc(a.confidence) + '% confidence</small>';
+                }
+                html += '</div>';
+
+                // Deterministic facts (computed server-side from the rollup)
+                html += '<div class="mb-2 small text-muted">';
+                html += '<span class="me-3"><i class="fas fa-tasks me-1"></i>' + esc(m.completed) + '/' + esc(m.total_children) + ' done</span>';
+                if (m.high_risk_count) html += '<span class="me-3 text-danger"><i class="fas fa-shield-alt me-1"></i>' + esc(m.high_risk_count) + ' high-risk</span>';
+                if (m.deadline_conflict_count) html += '<span class="me-3 text-warning"><i class="fas fa-calendar-exclamation me-1"></i>' + esc(m.deadline_conflict_count) + ' deadline conflict(s)</span>';
+                if (m.blocker_count) html += '<span class="me-3"><i class="fas fa-ban me-1"></i>' + esc(m.blocker_count) + ' blocker(s)</span>';
+                html += '<span class="me-3"><i class="fas fa-users me-1"></i>' + esc(m.contributor_count) + ' contributor(s)</span>';
+                html += '</div>';
+
+                if (a.health_summary) {
+                    html += '<p class="text-dark mb-3">' + esc(a.health_summary) + '</p>';
+                }
+
+                if (Array.isArray(a.findings) && a.findings.length) {
+                    html += '<div class="list-group mb-2">';
+                    a.findings.forEach(f => {
+                        const cls = sevClass[f.severity] || 'secondary';
+                        html += '<div class="list-group-item">';
+                        html += '<span class="badge bg-' + cls + ' me-2">' + esc(f.category || 'note') + '</span>';
+                        html += '<strong>' + esc(f.title || '') + '</strong>';
+                        if (f.detail) html += '<div class="small text-muted mt-1">' + esc(f.detail) + '</div>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
+
+                if (Array.isArray(a.recommendations) && a.recommendations.length) {
+                    html += '<div class="mt-2"><strong class="small"><i class="fas fa-lightbulb text-warning me-1"></i>Recommendations</strong><ul class="small mb-0 mt-1">';
+                    a.recommendations.forEach(r => { html += '<li>' + esc(r) + '</li>'; });
+                    html += '</ul></div>';
+                }
+
+                html += '</div>';
+                resultDiv.innerHTML = html;
+            })
+            .catch(err => {
+                console.error('Epic health error:', err);
+                resultDiv.innerHTML = '<div class="alert alert-danger">An error occurred. Please try again.</div>';
+            })
+            .finally(() => {
+                spinner.classList.add('d-none');
+                epicBtn.disabled = false;
+            });
+        });
     });
 </script>
 <script>

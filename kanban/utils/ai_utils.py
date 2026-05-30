@@ -2900,6 +2900,113 @@ def analyze_workflow_optimization(board_analytics: Dict) -> Optional[Dict]:
         return None
 
 
+def analyze_epic_health(epic_data: Dict) -> Optional[Dict]:
+    """Analyze the collective health of an Epic across all its child tasks.
+
+    Unlike the per-task AI insights (complexity, risk, assignee for one task),
+    this produces a single consolidated report covering cross-task risk,
+    Epic-vs-child deadline conflicts, workload distribution across contributors,
+    and blocking child tasks.
+
+    Args:
+        epic_data: dict built by the API view, containing the Epic's title/due
+            date, deterministic rollup counts, a per-contributor workload list,
+            and a compact per-child list (id, title, due, assignee, complexity,
+            risk_level, dependency/dependent counts).
+
+    Returns:
+        Parsed JSON dict matching the frontend contract
+        (health_label, health_summary, findings[], recommendations[], confidence),
+        or None if the AI call/parse fails.
+    """
+    try:
+        title = epic_data.get('title', 'Untitled Epic')
+        epic_due = epic_data.get('due_date') or 'not set'
+        total = epic_data.get('total', 0)
+        completed = epic_data.get('completed', 0)
+        progress_pct = epic_data.get('progress_pct', 0)
+        risk_breakdown = epic_data.get('risk_breakdown', {})
+        contributors = epic_data.get('contributors', [])  # [{name, task_count, est_hours}]
+        children = epic_data.get('children', [])           # compact per-child dicts
+        deadline_conflicts = epic_data.get('deadline_conflicts', [])  # [{title, due}]
+        blocking_children = epic_data.get('blocking_children', [])    # [{title, blocks}]
+
+        # Compact, token-friendly renderings of the lists.
+        child_lines = '\n'.join(
+            f"  - {c.get('title')}: status={c.get('status')}, assignee={c.get('assignee') or 'unassigned'}, "
+            f"due={c.get('due') or 'none'}, complexity={c.get('complexity') or 'n/a'}, risk={c.get('risk') or 'unrated'}"
+            for c in children
+        ) or '  (no child tasks)'
+        contributor_lines = '\n'.join(
+            f"  - {u.get('name')}: {u.get('task_count')} task(s), ~{u.get('est_hours', 0)}h"
+            for u in contributors
+        ) or '  (no contributors)'
+        conflict_lines = '\n'.join(
+            f"  - {c.get('title')} due {c.get('due')}" for c in deadline_conflicts
+        ) or '  (none)'
+        blocker_lines = '\n'.join(
+            f"  - {b.get('title')} blocks {b.get('blocks')} task(s)" for b in blocking_children
+        ) or '  (none)'
+
+        prompt = f"""
+You are reviewing the health of an EPIC (a container grouping many child tasks), NOT a single task.
+Analyze the COLLECTIVE health of its child tasks and produce one consolidated report.
+
+## Epic
+- Title: {title}
+- Epic due date: {epic_due}
+- Child tasks: {total} ({completed} done, {progress_pct}% complete)
+- Risk breakdown across children: {risk_breakdown}
+
+## Contributors (people doing the child-task work)
+{contributor_lines}
+
+## Child tasks
+{child_lines}
+
+## Deadline conflicts (children due AFTER the Epic's own due date)
+{conflict_lines}
+
+## Blocking child tasks (children other tasks depend on)
+{blocker_lines}
+
+Analyze across these four lenses:
+1. Cross-task risk — concentration of high/critical risk children.
+2. Deadline conflicts — children due after the Epic deadline; schedule realism.
+3. Workload distribution — imbalance across contributors; owner-vs-doer mismatch.
+4. Blocking tasks — children gating others and sequencing implications.
+
+Respond ONLY with JSON in this exact shape:
+{{
+  "health_label": "Healthy" | "Needs attention" | "At risk",
+  "health_summary": "2-3 sentence plain-language summary of the Epic's overall health",
+  "confidence": 0-100,
+  "findings": [
+    {{
+      "category": "risk" | "deadline" | "workload" | "blockers",
+      "title": "short finding title",
+      "severity": "high" | "medium" | "low" | "info",
+      "detail": "1-2 sentence explanation grounded in the data above"
+    }}
+  ],
+  "recommendations": ["specific, actionable next step", "..."]
+}}
+Base every finding on the data provided. Do not invent task names or people not listed.
+"""
+
+        response_text = generate_ai_content(prompt, task_type='complex', use_cache=False)
+        if not response_text:
+            return None
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].strip()
+        return json.loads(response_text)
+    except Exception as e:
+        logger.error(f"Error analyzing epic health: {str(e)}")
+        return None
+
+
 def analyze_critical_path(board_data: Dict) -> Optional[Dict]:
     """
     Analyze task dependencies and identify critical path using AI.

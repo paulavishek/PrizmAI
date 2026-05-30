@@ -31,6 +31,7 @@ from kanban.utils.ai_utils import (
     recommend_board_columns,
     suggest_task_breakdown,
     analyze_workflow_optimization,
+    analyze_epic_health,
     summarize_task_details,
     analyze_critical_path,
     predict_task_completion,
@@ -3624,6 +3625,127 @@ def summarize_task_details_api(request, task_id):
         )
         logger.error(f"Error in summarize_task_details_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+@demo_ai_guard
+def analyze_epic_health_api(request, epic_id):
+    """API endpoint: analyze the collective health of an Epic's child tasks.
+
+    Builds an epic_data payload from the shared Task.get_epic_rollup() helper
+    (plus a compact per-child list) and runs analyze_epic_health(). Returns the
+    AI report alongside deterministic meta counts the frontend renders directly.
+    """
+    start_time = time.time()
+    board = None
+    try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+
+        epic = get_object_or_404(Task, id=epic_id)
+        board = epic.column.board
+
+        if not request.user.has_perm('prizmai.view_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        if not epic.is_epic:
+            return JsonResponse({'error': 'This task is not an Epic.'}, status=400)
+
+        rollup = epic.get_epic_rollup()
+        if not rollup['total']:
+            return JsonResponse({'error': 'This Epic has no child tasks to analyze yet.'}, status=400)
+
+        def _status(c):
+            if (c.progress or 0) >= 100 or c.completed_at:
+                return 'done'
+            return 'in progress' if (c.progress or 0) > 0 else 'not started'
+
+        # Per-contributor workload (task count + estimated hours).
+        contributor_workload = {}
+        for c in rollup['children']:
+            if not c.assigned_to:
+                continue
+            name = c.assigned_to.get_full_name() or c.assigned_to.username
+            entry = contributor_workload.setdefault(name, {'name': name, 'task_count': 0, 'est_hours': 0.0})
+            entry['task_count'] += 1
+            try:
+                entry['est_hours'] += float(c.cost.estimated_hours or 0)
+            except Exception:
+                pass
+
+        epic_data = {
+            'title': epic.title,
+            'due_date': epic.due_date.strftime('%Y-%m-%d') if epic.due_date else None,
+            'total': rollup['total'],
+            'completed': rollup['completed'],
+            'progress_pct': rollup['progress_pct'],
+            'risk_breakdown': rollup['risk_breakdown'],
+            'contributors': list(contributor_workload.values()),
+            'children': [
+                {
+                    'title': c.title,
+                    'status': _status(c),
+                    'assignee': c.assigned_to.username if c.assigned_to else None,
+                    'due': c.due_date.strftime('%Y-%m-%d') if c.due_date else None,
+                    'complexity': c.complexity_score,
+                    'risk': c.risk_level,
+                }
+                for c in rollup['children']
+            ],
+            'deadline_conflicts': [
+                {'title': c.title, 'due': c.due_date.strftime('%Y-%m-%d') if c.due_date else None}
+                for c in rollup['deadline_conflicts']
+            ],
+            'blocking_children': [
+                {'title': c.title, 'blocks': c.dependent_tasks.count()}
+                for c in rollup['blocking_children']
+            ],
+        }
+
+        analysis = analyze_epic_health(epic_data)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        if not analysis:
+            track_ai_request(
+                user=request.user, feature='epic_health', request_type='analyze',
+                board_id=board.id, success=False,
+                error_message='Failed to analyze epic health', response_time_ms=response_time_ms,
+            )
+            return JsonResponse({'success': False, 'error': 'Failed to analyze Epic health. Please try again.'}, status=500)
+
+        track_ai_request(
+            user=request.user, feature='epic_health', request_type='analyze',
+            board_id=board.id, success=True, response_time_ms=response_time_ms,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'analysis': analysis,
+            'meta': {
+                'total_children': rollup['total'],
+                'completed': rollup['completed'],
+                'progress_pct': rollup['progress_pct'],
+                'high_risk_count': rollup['risk_breakdown'].get('high', 0) + rollup['risk_breakdown'].get('critical', 0),
+                'deadline_conflict_count': len(rollup['deadline_conflicts']),
+                'blocker_count': len(rollup['blocking_children']),
+                'contributor_count': len(rollup['contributors']),
+            },
+        })
+    except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user, feature='epic_health', request_type='analyze',
+            board_id=board.id if board else None, success=False,
+            error_message=str(e), response_time_ms=response_time_ms,
+        )
+        logger.error(f"Error in analyze_epic_health_api: {str(e)}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @login_required
