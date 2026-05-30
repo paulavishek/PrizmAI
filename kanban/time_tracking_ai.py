@@ -296,12 +296,22 @@ class TimeTrackingAIService:
         daily_totals = entries_qs.values('work_date').annotate(
             total_hours=Sum('hours_spent')
         ).order_by('-total_hours')
-        
+
+        # Track day totals + which dates already raised a day-level alert, so a
+        # single large entry that IS the whole day isn't flagged twice (once as a
+        # "long day" and again as a "large single entry").
+        day_total_map = {}
+        flagged_dates = set()
+
         for day_data in daily_totals:
             total = day_data['total_hours']
             total_rounded = round(float(total), 2)
             work_date = day_data['work_date']
-            
+            day_total_map[work_date] = total
+
+            if total >= self.HIGH_HOURS_THRESHOLD:
+                flagged_dates.add(work_date)
+
             if total >= self.CRITICAL_HOURS_THRESHOLD:
                 alerts.append({
                     'type': 'high_hours_critical',
@@ -341,6 +351,14 @@ class TimeTrackingAIService:
         ).select_related('task')
         
         for entry in large_entries:
+            # Skip when this entry is the sole contributor to a day that already
+            # raised a "long day" alert — the two would point at the same log and
+            # read as duplicates. When the day has other entries too, the per-entry
+            # alert still adds value by pinpointing the large one, so keep it.
+            if (entry.work_date in flagged_dates
+                    and entry.hours_spent == day_total_map.get(entry.work_date)):
+                continue
+
             # Truncate gracefully so the task name isn't cut mid-word (e.g.
             # "Role-Based Access Control (RBAC)" was being clipped to "...(RBA").
             title = entry.task.title
