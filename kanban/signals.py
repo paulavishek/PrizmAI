@@ -1597,6 +1597,13 @@ def sync_due_date_to_google_calendar(sender, instance, created, **kwargs):
       - The current (or previous) assignee has an active GoogleCalendarToken
         with sync_enabled=True.
     """
+    try:
+        from kanban.utils.demo_protection import calendar_sync_suppressed
+        if calendar_sync_suppressed():
+            return
+    except Exception:
+        pass
+
     old_due_date = getattr(instance, '_old_due_date', None)
     new_due_date = instance.due_date
     old_assigned_to_id = getattr(instance, '_old_assigned_to_id', None)
@@ -1663,6 +1670,13 @@ def delete_google_calendar_event_on_task_delete(sender, instance, **kwargs):
     Works for both individual deletes and bulk queryset deletes (demo reset,
     board deletion) because Django fires post_delete for each object.
     """
+    try:
+        from kanban.utils.demo_protection import calendar_sync_suppressed
+        if calendar_sync_suppressed():
+            return
+    except Exception:
+        pass
+
     event_id = getattr(instance, 'google_calendar_event_id', None)
     assignee_id = getattr(instance, 'assigned_to_id', None)
     if not event_id or not assignee_id:

@@ -40,6 +40,27 @@ def allow_demo_writes():
         _local.demo_bypass = prev
 
 
+def calendar_sync_suppressed():
+    """Return True when Google Calendar sync should be skipped (e.g. during demo reset)."""
+    return getattr(_local, 'suppress_calendar_sync', False)
+
+
+@contextmanager
+def suppress_calendar_sync():
+    """
+    Temporarily disable Google Calendar sync signals.
+
+    Used during demo-data repopulation so that creating dozens of seed tasks
+    does not flood the connected user's Google Calendar with events.
+    """
+    prev = getattr(_local, 'suppress_calendar_sync', False)
+    _local.suppress_calendar_sync = True
+    try:
+        yield
+    finally:
+        _local.suppress_calendar_sync = prev
+
+
 # ── Centralised board queryset for demo / real workspace ─────────────────────
 
 def get_user_boards(user):

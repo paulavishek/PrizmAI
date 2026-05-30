@@ -1805,14 +1805,44 @@ def reset_demo_data(request):
             except Exception:
                 pass
 
-            # The --reset flag clears seed data and recreates it fresh
-            call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
-
-            # Refresh all dates to current
+            # ---- Pre-clean Google Calendar events before wiping seed tasks ----
+            # The management command below deletes and recreates every seed task.
+            # Any task that previously had a google_calendar_event_id (set during
+            # the user's session) would leave a ghost event in their calendar if
+            # we don't remove it now.  We do this explicitly so the signal-level
+            # suppression below can then safely skip sync on all new task creates.
             try:
-                call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
+                from accounts.tasks import delete_calendar_event as _del_cal_evt
+                _gcal_tasks = list(
+                    Task.objects.filter(column__board__in=demo_boards)
+                    .exclude(google_calendar_event_id__isnull=True)
+                    .exclude(google_calendar_event_id='')
+                    .filter(assigned_to__isnull=False)
+                    .values_list('assigned_to_id', 'google_calendar_event_id')
+                )
+                for _uid, _eid in _gcal_tasks:
+                    try:
+                        _del_cal_evt.delay(_uid, _eid)
+                    except Exception:
+                        try:
+                            _del_cal_evt(_uid, _eid)
+                        except Exception:
+                            pass
             except Exception:
                 pass
+
+            # The --reset flag clears seed data and recreates it fresh.
+            # Wrap in suppress_calendar_sync so that creating dozens of seed
+            # tasks does not flood the user's Google Calendar with new events.
+            from kanban.utils.demo_protection import suppress_calendar_sync
+            with suppress_calendar_sync():
+                call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
+
+                # Refresh all dates to current
+                try:
+                    call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
+                except Exception:
+                    pass
 
             # Detect conflicts for fresh data
             try:
