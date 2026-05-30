@@ -25,6 +25,7 @@ class CustomFieldDefinitionForm(forms.ModelForm):
             'default_date',
             'default_boolean',
             'exclude_from_ai',
+            'applies_to_epics',
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -34,6 +35,7 @@ class CustomFieldDefinitionForm(forms.ModelForm):
             'default_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'is_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'exclude_from_ai': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'applies_to_epics': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, workspace=None, **kwargs):

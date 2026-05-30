@@ -140,6 +140,13 @@
                         this field's values. Use for sensitive data like client budgets or PII.
                     </label>
                 </div>
+                <div class="form-check cf-option-check">
+                    {{ form.applies_to_epics }}
+                    <label class="form-check-label" for="{{ form.applies_to_epics.id_for_label }}">
+                        <strong>Show on Epics</strong> — uncheck to hide this field on Epic detail pages.
+                        Useful for task-level metadata like Story Points or Sprint that doesn't apply to an Epic container.
+                    </label>
+                </div>
             </div>
         </div>
         <style>

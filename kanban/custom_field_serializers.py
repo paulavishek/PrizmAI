@@ -60,6 +60,9 @@ def serialize_task_custom_fields(task):
         .prefetch_related('options')
         .order_by('position', 'name')
     )
+    # On an Epic, only show fields flagged to apply to Epics.
+    if getattr(task, 'is_epic', False):
+        fields = fields.filter(applies_to_epics=True)
 
     # Build a lookup of existing values for this task.
     values_by_field = {v.field_id: v for v in task.custom_field_values.all()}
@@ -166,10 +169,14 @@ def save_custom_field_values_from_post(task, post_data, user, files=None):
     if workspace_id is None:
         return
 
-    fields = list(
-        CustomFieldDefinition.objects
-        .filter(workspace_id=workspace_id, is_active=True, applies_to_tasks=True)
+    fields_qs = CustomFieldDefinition.objects.filter(
+        workspace_id=workspace_id, is_active=True, applies_to_tasks=True,
     )
+    # On an Epic, only process fields that apply to Epics — so Epic-hidden
+    # fields don't trip required-field validation or get blank-saved.
+    if getattr(task, 'is_epic', False):
+        fields_qs = fields_qs.filter(applies_to_epics=True)
+    fields = list(fields_qs)
 
     errors = {}
     for fdef in fields:

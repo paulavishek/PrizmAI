@@ -1559,6 +1559,9 @@ class Task(models.Model):
         risk_breakdown = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'none': 0}
         deadline_conflicts = []
         blocking_children = []
+        complexity_values = []
+        start_dates = []
+        due_dates = []
 
         for c in children:
             # Budget/hours from the OneToOne TaskCost record (may not exist).
@@ -1572,6 +1575,13 @@ class Task(models.Model):
 
             risk_breakdown[c.risk_level if c.risk_level in risk_breakdown else 'none'] += 1
 
+            if c.complexity_score:
+                complexity_values.append(c.complexity_score)
+            if c.start_date:
+                start_dates.append(c.start_date)
+            if c.due_date:
+                due_dates.append(c.due_date)
+
             # A child due AFTER the Epic's own due date is a rollup conflict.
             if self.due_date and c.due_date and c.due_date > self.due_date:
                 deadline_conflicts.append(c)
@@ -1579,6 +1589,9 @@ class Task(models.Model):
             # A child that other tasks depend on is blocking work.
             if c.dependent_tasks.exists():
                 blocking_children.append(c)
+
+        avg_complexity = round(sum(complexity_values) / len(complexity_values), 1) if complexity_values else None
+        max_complexity = max(complexity_values) if complexity_values else None
 
         return {
             'children': children,
@@ -1591,6 +1604,11 @@ class Task(models.Model):
             'risk_breakdown': risk_breakdown,
             'deadline_conflicts': deadline_conflicts,
             'blocking_children': blocking_children,
+            'avg_complexity': avg_complexity,
+            'max_complexity': max_complexity,
+            # Derived schedule span across children (earliest start, latest due).
+            'earliest_start': min(start_dates) if start_dates else None,
+            'latest_due': max(due_dates) if due_dates else None,
         }
     
     def get_all_parent_tasks(self):

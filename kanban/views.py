@@ -2571,12 +2571,14 @@ def task_detail(request, task_id):
             _cf_ws_id = board.workspace_id
             _old_cf_snapshot = {}
             if _cf_ws_id:
-                _ai_cf_defs = list(
-                    _CFDef.objects.filter(
-                        workspace_id=_cf_ws_id, is_active=True,
-                        applies_to_tasks=True, exclude_from_ai=False,
-                    )
+                _ai_cf_defs_qs = _CFDef.objects.filter(
+                    workspace_id=_cf_ws_id, is_active=True,
+                    applies_to_tasks=True, exclude_from_ai=False,
                 )
+                # Epic-hidden fields aren't editable here, so don't track them.
+                if task.is_epic:
+                    _ai_cf_defs_qs = _ai_cf_defs_qs.filter(applies_to_epics=True)
+                _ai_cf_defs = list(_ai_cf_defs_qs)
                 _cf_old_map = {
                     v.field_id: v
                     for v in _TCFV.objects.filter(
@@ -2863,7 +2865,7 @@ def task_detail(request, task_id):
     total_time_logged = TimeEntry.objects.filter(task=task).aggregate(
         total=Sum('hours_spent')
     )['total'] or 0
-    
+
     from kanban.custom_field_serializers import serialize_task_custom_fields
     custom_fields_for_task = serialize_task_custom_fields(task)
 
@@ -2872,11 +2874,20 @@ def task_detail(request, task_id):
     # regular tasks so the template's {% if epic_rollup %} branches stay off.
     epic_rollup = task.get_epic_rollup() if task.is_epic else None
 
+    # For Epics, time is logged against child tasks, not the container — roll up
+    # the total logged across all children for a read-only display.
+    epic_time_logged = None
+    if epic_rollup:
+        epic_time_logged = TimeEntry.objects.filter(
+            task__in=epic_rollup['children']
+        ).aggregate(total=Sum('hours_spent'))['total'] or 0
+
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
         'form': form,
         'epic_rollup': epic_rollup,
+        'epic_time_logged': epic_time_logged,
         'custom_fields_for_task': custom_fields_for_task,
         'comment_form': comment_form,
         'comments': comments,
