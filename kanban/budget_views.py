@@ -1049,6 +1049,60 @@ def my_timesheet(request, board_id=None):
     return render(request, 'kanban/my_timesheet.html', context)
 
 
+def _resolve_time_scope(request, board_id=None):
+    """Resolve (display_user, boards, board, showing_demo_data) for time-tracking views.
+
+    Single source of truth for board scoping across the dashboard and its AJAX
+    endpoints. Uses the canonical ``get_user_boards()`` helper for demo-vs-real
+    separation (which returns a single sandbox copy per logical board in demo
+    mode and excludes demo/sandbox boards in a real workspace), so time-entry
+    aggregations never double-count tasks or leak demo data into a real
+    workspace.
+
+    The legacy demo-user fallback (showing a seeded demo user's data when the
+    requesting user has none) is only applied in demo mode. Those demo users'
+    entries live on the official demo boards, so the board scope is switched to
+    ``is_official_demo_board=True`` when the fallback fires.
+    """
+    from kanban.utils.demo_protection import get_user_boards
+
+    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+
+    boards = get_user_boards(request.user)
+    board = None
+    if board_id:
+        board = get_object_or_404(Board, id=board_id)
+        boards = boards.filter(id=board_id)
+
+    display_user = request.user
+    showing_demo_data = False
+
+    # Only fall back to demo-user data when actually in demo mode and the user
+    # has no entries of their own on the in-context boards.
+    if is_demo_mode:
+        user_has_entries = TimeEntry.objects.filter(
+            user=request.user,
+            task__column__board__in=boards,
+        ).exists()
+        if not user_has_entries:
+            demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
+            for demo_username in demo_usernames:
+                demo_user = User.objects.filter(username=demo_username).first()
+                if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
+                    display_user = demo_user
+                    showing_demo_data = True
+                    break
+
+    # When showing a fallback demo user, scope to the official demo boards their
+    # entries actually live on (the requesting user's sandbox may be empty).
+    if showing_demo_data:
+        boards = Board.objects.filter(is_official_demo_board=True).distinct()
+        if board_id:
+            boards = boards.filter(id=board_id)
+
+    return display_user, boards, board, showing_demo_data
+
+
 @login_required
 def time_tracking_dashboard(request, board_id=None):
     """
@@ -1057,69 +1111,18 @@ def time_tracking_dashboard(request, board_id=None):
     """
     from datetime import timedelta
     from django.db.models import Sum, Count, Avg
-    from accounts.models import Organization
-    
-    # Check if user has any time entries; only fall back to demo data in demo mode.
-    # In demo mode, only count entries on demo/sandbox boards so a real-workspace
-    # entry doesn't collapse demo mode and expose real workspace data.
-    is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
-    if is_demo_mode:
-        _demo_org = Organization.objects.filter(is_demo=True).first()
-        _demo_board_qs = Board.objects.filter(
-            models.Q(is_sandbox_copy=True) | models.Q(organization=_demo_org)
-        ) if _demo_org else Board.objects.filter(is_sandbox_copy=True)
-        user_has_entries = TimeEntry.objects.filter(
-            user=request.user,
-            task__column__board__in=_demo_board_qs,
-        ).exists()
-    else:
-        user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
-    showing_demo_data = False
-    display_user = request.user
 
-    if not user_has_entries and is_demo_mode:
-        # Only show demo user data when explicitly in demo mode
-        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
-        for demo_username in demo_usernames:
-            demo_user = User.objects.filter(username=demo_username).first()
-            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
-                display_user = demo_user
-                showing_demo_data = True
-                break
-    
-    # Filter by board if specified
-    if board_id:
-        board = get_object_or_404(Board, id=board_id)
-        boards = [board]
-    else:
-        # MVP Mode: Include demo boards when showing demo data OR when user is in demo mode.
-        # In demo mode, always scope to demo/sandbox boards to prevent real workspace data
-        # from bleeding through (e.g. after user logs their first time entry in demo mode,
-        # showing_demo_data flips to False but we must still restrict to demo boards).
-        if showing_demo_data or is_demo_mode:
-            demo_org = Organization.objects.filter(is_demo=True).first()
-            if demo_org:
-                boards = Board.objects.filter(
-                    models.Q(is_sandbox_copy=True) |
-                    models.Q(organization=demo_org)
-                ).distinct()
-            else:
-                boards = Board.objects.filter(is_sandbox_copy=True).distinct()
-        else:
-            boards = Board.objects.filter(
-                models.Q(created_by=request.user) | models.Q(memberships__user=request.user),
-                is_sandbox_copy=False,
-                is_official_demo_board=False,
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-        board = None
-    
-    # Get time entries for display_user (either request.user or demo user)
-    entries = TimeEntry.objects.filter(user=display_user)
-    if board_id:
-        entries = entries.filter(task__column__board=board)
-    
+    # Resolve workspace board scope + display user via the canonical helper so
+    # demo data never leaks into a real workspace and tasks aren't double-counted
+    # across an official demo board and its sandbox copy.
+    display_user, boards, board, showing_demo_data = _resolve_time_scope(request, board_id)
+
+    # Get time entries for display_user, scoped to the in-context boards.
+    entries = TimeEntry.objects.filter(
+        user=display_user,
+        task__column__board__in=boards,
+    )
+
     # Date ranges
     today = timezone.localdate()
     week_start = today - timedelta(days=today.weekday())
@@ -1153,14 +1156,12 @@ def time_tracking_dashboard(request, board_id=None):
         'task', 'task__column', 'task__column__board'
     ).order_by('-work_date', '-created_at')[:10]
     
-    # Tasks with time logged (use display_user for MVP mode)
+    # Tasks with time logged (use display_user for MVP mode), scoped to the
+    # in-context boards. .distinct() guards against join fan-out before slicing.
     tasks_with_time = Task.objects.filter(
-        time_entries__user=display_user
-    )
-    if board_id:
-        tasks_with_time = tasks_with_time.filter(column__board=board)
-    
-    tasks_with_time = tasks_with_time.annotate(
+        time_entries__user=display_user,
+        column__board__in=boards,
+    ).distinct().annotate(
         total_hours=Sum('time_entries__hours_spent')
     ).order_by('-total_hours')[:10]
     
@@ -1506,27 +1507,16 @@ def time_entries_by_date(request):
     except ValueError:
         return JsonResponse({'success': False, 'error': 'Invalid date format'}, status=400)
     
-    # MVP Mode: use demo user when the logged-in user has no entries of their own
-    display_user = request.user
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
-    if not user_has_entries:
-        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
-        for demo_username in demo_usernames:
-            demo_user = User.objects.filter(username=demo_username).first()
-            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
-                display_user = demo_user
-                break
-    
-    # Get entries for this date
+    # Resolve display user + board scope consistently with the dashboard so the
+    # drill-down only counts in-context boards (no demo leakage / duplicate tasks).
+    display_user, boards, board, showing_demo_data = _resolve_time_scope(request, board_id)
+
+    # Get entries for this date, scoped to the in-context boards
     entries_qs = TimeEntry.objects.filter(
         user=display_user,
-        work_date=work_date
-    ).select_related('task', 'task__column', 'task__column__board')
-    
-    if board_id:
-        entries_qs = entries_qs.filter(task__column__board_id=board_id)
-    
-    entries_qs = entries_qs.order_by('-hours_spent')
+        work_date=work_date,
+        task__column__board__in=boards,
+    ).select_related('task', 'task__column', 'task__column__board').order_by('-hours_spent')
     
     entries_data = []
     total_hours = Decimal('0.00')
@@ -1585,27 +1575,21 @@ def time_entries_by_period(request):
         end_date = None
         period_display = "All Time"
     
-    # MVP Mode: use demo user when the logged-in user has no entries of their own
-    display_user = request.user
-    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
-    if not user_has_entries:
-        demo_usernames = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
-        for demo_username in demo_usernames:
-            demo_user = User.objects.filter(username=demo_username).first()
-            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
-                display_user = demo_user
-                break
+    # Resolve display user + board scope consistently with the dashboard so the
+    # breakdown only counts in-context boards (no demo leakage / duplicate tasks).
+    display_user, boards, board, showing_demo_data = _resolve_time_scope(request, board_id)
 
-    # Get entries
-    entries_qs = TimeEntry.objects.filter(user=display_user)
-    
+    # Get entries, scoped to the in-context boards
+    entries_qs = TimeEntry.objects.filter(
+        user=display_user,
+        task__column__board__in=boards,
+    )
+
     if start_date:
         entries_qs = entries_qs.filter(work_date__gte=start_date)
     if end_date:
         entries_qs = entries_qs.filter(work_date__lte=end_date)
-    if board_id:
-        entries_qs = entries_qs.filter(task__column__board_id=board_id)
-    
+
     entries_qs = entries_qs.select_related(
         'task', 'task__column', 'task__column__board'
     ).order_by('-work_date', '-hours_spent')
