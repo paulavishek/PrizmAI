@@ -1985,11 +1985,9 @@ def _purge_existing_sandbox(user):
         except Exception:
             pass
 
-        # Explicitly delete board-scoped signal rows first.  With FK checks
-        # disabled for the bulk board delete below, SQLite won't auto-cascade
-        # and Django's collector has been observed to leave these behind —
-        # producing orphaned ProjectSignal rows that accumulate on every demo
-        # reset and later block migrations (PRAGMA foreign_key_check fails).
+        # Explicitly delete board-scoped signal rows first. This clears the rows
+        # that exist *before* the cascade; the post-cascade sweep below handles
+        # rows created *during* it.
         try:
             from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
             ProjectSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
@@ -2011,6 +2009,24 @@ def _purge_existing_sandbox(user):
                 cursor.execute('PRAGMA foreign_keys = ON')
         else:
             all_boards_to_delete.delete()
+
+        # ── Post-cascade orphan sweep (root-cause fix) ──────────────────────
+        # A post_delete handler (record_project_signal_on_task_delete) inserts a
+        # fresh ProjectSignal for every task removed *during* the cascade above.
+        # Those rows are born after Django's collector already chose what to
+        # delete, so the pre-delete cleanup can't see them — and with FK checks
+        # off, SQLite doesn't reject them either. The result is orphaned rows
+        # that accumulate on every reset and eventually block migrations
+        # (PRAGMA foreign_key_check fails). Sweep them here, keyed on the id sets
+        # captured *before* deletion, so any rows created mid-cascade are removed.
+        try:
+            from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+            from kanban.models import TaskActivity
+            ProjectSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
+            ProjectConfidenceScore.objects.filter(board_id__in=sandbox_board_ids).delete()
+            TaskActivity.objects.filter(task_id__in=sandbox_task_ids).delete()
+        except Exception:
+            pass
 
     # ── User-scoped data (not board-scoped, survives board deletion) ──
     try:
