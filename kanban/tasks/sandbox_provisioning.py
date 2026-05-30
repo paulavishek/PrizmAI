@@ -169,6 +169,29 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Error refreshing sandbox board dates: %s", e)
 
+    # Pre-populate conflicts so the Conflict Dashboard isn't empty on first
+    # visit (matches every other pre-populated demo feature). Only run for
+    # boards that don't already have conflicts copied from the template, and
+    # only after dates are refreshed so overdue/overlap detection is accurate.
+    try:
+        from kanban.utils.conflict_detection import ConflictDetectionService
+        from kanban.conflict_models import ConflictDetection
+        with allow_demo_writes():
+            for board in new_boards:
+                try:
+                    has_conflicts = ConflictDetection.objects.filter(
+                        board=board, status='active'
+                    ).exists()
+                    if not has_conflicts:
+                        ConflictDetectionService(board=board).detect_all_conflicts()
+                except Exception as detect_err:
+                    logger.warning(
+                        "Error detecting conflicts for sandbox board %s: %s",
+                        board.id, detect_err,
+                    )
+    except Exception as e:
+        logger.warning("Error during sandbox conflict detection: %s", e)
+
     # Regenerate Decision Center items so the dashboard/DC page
     # show fresh, accurate counts immediately after provisioning.
     try:

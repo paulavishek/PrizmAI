@@ -148,18 +148,80 @@ class ConflictDetection(models.Model):
         }
         return colors.get(self.severity, 'secondary')
     
+    def _derive_recipients(self):
+        """
+        Build the set of users who should be notified about this conflict.
+
+        Notifications must reach the people actually involved in a conflict,
+        not just whoever happens to be in the ``affected_users`` M2M (which can
+        be empty for seeded/copied/legacy conflicts). We therefore derive the
+        recipient set from three sources and de-duplicate:
+
+        1. The existing ``affected_users`` M2M.
+        2. The assignee of every affected task (covers schedule conflicts ->
+           overdue task assignee, and dependency conflicts -> blocked task
+           assignee).
+        3. The user referenced in ``conflict_data`` (resource conflicts store
+           ``user_id``; schedule/dependency configs may store ``assigned_to``
+           as a username).
+
+        Returns a list of distinct ``User`` instances.
+        """
+        recipients = {}  # id -> User (preserves uniqueness)
+
+        for user in self.affected_users.all():
+            recipients[user.id] = user
+
+        for task in self.tasks.all():
+            assignee = getattr(task, 'assigned_to', None)
+            if assignee:
+                recipients[assignee.id] = assignee
+
+        data = self.conflict_data or {}
+        # Resource conflicts: the overbooked user's primary key.
+        user_id = data.get('user_id')
+        if user_id and user_id not in recipients:
+            user = User.objects.filter(pk=user_id).first()
+            if user:
+                recipients[user.id] = user
+        # Schedule/dependency configs may store the assignee as a username.
+        assigned_username = data.get('assigned_to') or data.get('affected_user')
+        if assigned_username and not any(
+            u.username == assigned_username for u in recipients.values()
+        ):
+            user = User.objects.filter(username=assigned_username).first()
+            if user:
+                recipients[user.id] = user
+
+        return list(recipients.values())
+
     def ensure_notifications(self):
         """
         Ensure notifications exist for all affected users.
-        Creates missing notifications if needed.
+
+        Derives the full recipient set (see :meth:`_derive_recipients`),
+        backfills the ``affected_users`` M2M so the detail page and the
+        "N user(s)" count stay consistent, then creates any missing
+        notifications. The ``(conflict, user)`` unique constraint plus
+        ``get_or_create`` guarantee exactly one notification per user per
+        conflict, so a user who is both an affected member and a board owner
+        is never notified twice.
+
         Returns the number of notifications created.
         """
         if self.status != 'active':
             return 0  # Only create notifications for active conflicts
-        
+
+        recipients = self._derive_recipients()
+
+        # Backfill the M2M with anyone we derived but who wasn't already linked.
+        existing_ids = set(self.affected_users.values_list('id', flat=True))
+        missing = [u for u in recipients if u.id not in existing_ids]
+        if missing:
+            self.affected_users.add(*missing)
+
         created_count = 0
-        for user in self.affected_users.all():
-            # Check if notification already exists
+        for user in recipients:
             notification, created = ConflictNotification.objects.get_or_create(
                 conflict=self,
                 user=user,
@@ -170,7 +232,7 @@ class ConflictDetection(models.Model):
             )
             if created:
                 created_count += 1
-        
+
         return created_count
 
 

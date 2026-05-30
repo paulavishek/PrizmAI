@@ -304,9 +304,16 @@ class Command(BaseCommand):
                     affected_tasks = random.sample(board_tasks, min(3, len(board_tasks)))
                     conflict.tasks.set(affected_tasks)
 
-                # Add affected users
-                affected_users = random.sample(self.demo_users, min(2, len(self.demo_users)))
-                conflict.affected_users.set(affected_users)
+                # Add affected users — prefer the person actually named in the
+                # conflict so THEY receive the notification (mirrors real
+                # detection). Only fall back to a random demo user when no named
+                # subject can be resolved from the conflict data.
+                named_user = self._resolve_named_user(config)
+                if named_user:
+                    conflict.affected_users.add(named_user)
+                else:
+                    affected_users = random.sample(self.demo_users, min(2, len(self.demo_users)))
+                    conflict.affected_users.set(affected_users)
 
                 conflicts_created += 1
                 self.stdout.write(f'   [OK] Created: {board_name} -> {config["title"][:50]}...')
@@ -344,6 +351,26 @@ class Command(BaseCommand):
                         resolution.save()
 
         self.stdout.write(self.style.SUCCESS(f'   Created {conflicts_created} conflicts, {resolutions_created} resolutions'))
+
+    def _resolve_named_user(self, config):
+        """Resolve the User named in a conflict config's data, if any.
+
+        Conflict configs reference their subject as ``affected_user`` (a
+        username-like value, e.g. 'marcus.chen') or ``shared_resource`` (a
+        display name, e.g. 'Marcus Chen'). Returns the matching User or None.
+        """
+        data = config.get('conflict_data', {}) or {}
+        for cand in (data.get('affected_user'), data.get('shared_resource')):
+            if not cand:
+                continue
+            user = User.objects.filter(username=cand).first()
+            if user:
+                return user
+            for u in self.demo_users:
+                display = (u.get_full_name() or u.username)
+                if display.lower() == str(cand).lower():
+                    return u
+        return None
 
     def create_resolution_patterns(self):
         """Create resolution patterns for learning"""

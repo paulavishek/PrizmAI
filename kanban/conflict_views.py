@@ -46,14 +46,48 @@ def conflict_dashboard(request):
         else:
             boards_to_show = boards
         
-        # Get active conflicts
-        active_conflicts = ConflictDetection.objects.filter(
-            board__in=boards_to_show,
-            status='active'
-        ).select_related('board').prefetch_related(
-            'tasks', 'affected_users', 'resolutions'
-        ).order_by('-severity', '-detected_at')
-        
+        # Order by logical severity priority (critical -> low), not the raw
+        # string value — alphabetical ordering would push 'critical' to the
+        # bottom. Newest first within each severity tier.
+        from django.db.models import Case, When, IntegerField, Value
+        severity_rank = Case(
+            When(severity='critical', then=Value(0)),
+            When(severity='high', then=Value(1)),
+            When(severity='medium', then=Value(2)),
+            When(severity='low', then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        )
+
+        def _active_conflicts_qs():
+            return ConflictDetection.objects.filter(
+                board__in=boards_to_show,
+                status='active'
+            ).select_related('board').prefetch_related(
+                'tasks', 'affected_users', 'resolutions'
+            ).annotate(severity_rank=severity_rank).order_by(
+                'severity_rank', '-detected_at'
+            )
+
+        active_conflicts = _active_conflicts_qs()
+
+        # Demo workspace only: behave like every other pre-populated demo
+        # feature. If the demo sandbox has no conflicts yet, run detection
+        # synchronously on first visit so the dashboard isn't empty. This
+        # NEVER runs for real workspaces — they keep the manual "Scan Now"
+        # empty state.
+        is_demo = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
+        if is_demo and active_conflicts.count() == 0:
+            for board in boards_to_show:
+                try:
+                    ConflictDetectionService(board=board).detect_all_conflicts()
+                except Exception as detect_err:
+                    logger.warning(
+                        f"Demo auto-detection failed for board {board.id}: {detect_err}"
+                    )
+            # Re-query now that detection has populated conflicts.
+            active_conflicts = _active_conflicts_qs()
+
         # Ensure notifications exist for all active conflicts (safety check)
         for conflict in active_conflicts:
             conflict.ensure_notifications()
@@ -516,10 +550,20 @@ def conflict_analytics(request):
         # Get boards user has access to (demo-aware)
         boards = get_user_boards(request.user)
         
-        # Get resolution patterns
+        # Get resolution patterns (board-specific + global) for the learned
+        # patterns list. The global ones are pre-seeded and shipped with the
+        # system, which is why this list looks populated even for brand-new
+        # users.
         patterns = ResolutionPattern.objects.filter(
             Q(board__in=boards) | Q(board__isnull=True)
         ).order_by('-success_rate', '-times_used')[:20]
+
+        # Personal patterns only (board-specific = learned from THIS user's own
+        # resolutions). Used for the Quick Stats panel so we never present a
+        # global-derived success rate as if it were the user's own.
+        personal_patterns = list(
+            ResolutionPattern.objects.filter(board__in=boards)
+        )
         
         # Historical data
         resolved_conflicts = ConflictDetection.objects.filter(
@@ -614,12 +658,27 @@ def conflict_analytics(request):
             trend_detected.append(daily_detected)
             trend_resolved.append(daily_resolved)
         
+        # Quick Stats — user's OWN history only. If the user has resolved
+        # nothing (or has no personal patterns), show "No data yet" rather than
+        # a percentage derived from the global seeded patterns.
+        personal_success_rate = None  # float 0..1 or None
+        personal_most_used = None     # display string or None
+        if total_resolved > 0 and personal_patterns:
+            total_used = sum(p.times_used for p in personal_patterns)
+            if total_used > 0:
+                total_successful = sum(p.times_successful for p in personal_patterns)
+                personal_success_rate = total_successful / total_used
+                most_used = max(personal_patterns, key=lambda p: p.times_used)
+                personal_most_used = most_used.get_resolution_type_display()
+
         context = {
             'patterns': patterns,
             'total_resolved': total_resolved,
             'avg_resolution_time': avg_resolution_time,
             'avg_effectiveness': avg_effectiveness,
             'rated_count': rated_conflicts.count(),
+            'personal_success_rate': personal_success_rate,
+            'personal_most_used': personal_most_used,
             'trend_labels_json': json.dumps(trend_labels),
             'trend_detected_json': json.dumps(trend_detected),
             'trend_resolved_json': json.dumps(trend_resolved),
