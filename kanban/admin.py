@@ -1363,9 +1363,9 @@ class CustomFieldOptionInline(admin.TabularInline):
 class CustomFieldDefinitionAdmin(admin.ModelAdmin):
     list_display = (
         'name', 'field_type', 'workspace', 'is_required',
-        'exclude_from_ai', 'is_active', 'position',
+        'exclude_from_ai', 'applies_to_epics', 'is_active', 'position',
     )
-    list_filter = ('field_type', 'is_active', 'exclude_from_ai', 'workspace')
+    list_filter = ('field_type', 'is_active', 'exclude_from_ai', 'applies_to_epics', 'workspace')
     search_fields = ('name', 'workspace__name')
     readonly_fields = ('created_at', 'updated_at')
     inlines = [CustomFieldOptionInline]

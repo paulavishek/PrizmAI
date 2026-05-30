@@ -67,6 +67,17 @@ class CustomFieldDefinition(models.Model):
     applies_to_tasks = models.BooleanField(default=True)
     applies_to_boards = models.BooleanField(default=False)
 
+    # When False, this field is hidden on Epic detail pages. Defaults to True so
+    # existing fields keep showing on Epics; uncheck for task-only metadata like
+    # Story Points or Sprint that doesn't make sense on an Epic container.
+    applies_to_epics = models.BooleanField(
+        default=True,
+        help_text=(
+            "When unchecked, this field is hidden on Epics. Use for task-level "
+            "metadata (e.g. Story Points, Sprint) that doesn't apply to an Epic."
+        ),
+    )
+
     exclude_from_ai = models.BooleanField(
         default=False,
         help_text=(

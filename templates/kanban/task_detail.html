@@ -306,8 +306,11 @@
                         })();
                         </script>
 
-                        <!-- Phase Selection -->
+                        <!-- Phase Selection (hidden for Epics — an Epic spans phases; value preserved) -->
                         {% if form.phase %}
+                        {% if task.is_epic %}
+                        <input type="hidden" name="{{ form.phase.html_name }}" value="{{ form.phase.value|default_if_none:'' }}">
+                        {% else %}
                         <div class="mb-3">
                             <label for="{{ form.phase.id_for_label }}" class="form-label">
                                 <i class="fas fa-layer-group text-primary me-1"></i> Sprint / Phase <span class="text-danger">*</span>
@@ -318,6 +321,7 @@
                                 <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
                             {% endif %}
                         </div>
+                        {% endif %}
                         {% endif %}
 
                         <!-- Scheduling -->
@@ -363,6 +367,31 @@
                                 </div>
                             </div>
                         </div>
+
+                        {% if task.is_epic %}
+                        <!-- Epic: dates above are the TARGET; show the actual span derived from child tasks -->
+                        <div class="alert {% if epic_rollup.deadline_conflicts %}alert-warning{% else %}alert-light border{% endif %} py-2 px-3 mb-3">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-calendar-week me-2 mt-1"></i>
+                                <div>
+                                    <strong class="d-block">Child-task span</strong>
+                                    <small class="text-muted">
+                                        Earliest start: <strong>{% if epic_rollup.earliest_start %}{{ epic_rollup.earliest_start|date:"M d, Y" }}{% else %}—{% endif %}</strong>
+                                        &nbsp;→&nbsp;
+                                        Latest due: <strong>{% if epic_rollup.latest_due %}{{ epic_rollup.latest_due|date:"M d, Y" }}{% else %}—{% endif %}</strong>
+                                    </small>
+                                    {% if epic_rollup.deadline_conflicts %}
+                                    <div class="mt-1"><small class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>
+                                        {{ epic_rollup.deadline_conflicts|length }} child task{{ epic_rollup.deadline_conflicts|length|pluralize }} due after the Epic's target due date above.
+                                    </small></div>
+                                    {% else %}
+                                    <div class="mt-1"><small class="text-success"><i class="fas fa-check me-1"></i>All child tasks fit within the Epic's target dates.</small></div>
+                                    {% endif %}
+                                    <small class="text-muted d-block fst-italic mt-1">The dates above are your Epic target — they're not auto-synced to children.</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <!-- Lean Six Sigma Classification (task-level only — not meaningful for an Epic container) -->
                         {% if not task.is_epic %}
@@ -464,7 +493,12 @@
                                     
                                     <!-- 🛡️ Risk Assessment Section -->
                                     <div class="mb-4">
+                                        {% if task.is_epic %}
+                                        <h6><i class="fas fa-shield-alt text-warning"></i> Program-Level Risk Assessment</h6>
+                                        <small class="text-muted d-block mb-2">Overall risk for the Epic as a whole — distinct from the rolled-up child-task risk shown in Epic Aggregates above.</small>
+                                        {% else %}
                                         <h6><i class="fas fa-shield-alt text-warning"></i> Risk Assessment</h6>
+                                        {% endif %}
                                         <div class="row">
                                             <div class="col-md-4 mb-3">
                                                 <label for="{{ form.risk_likelihood.id_for_label }}" class="form-label">Risk Likelihood</label>
@@ -613,11 +647,12 @@
 
                                     <hr>
 
-                                    <!-- 🛠️ Required Skills (Chip UI) -->
+                                    <!-- 🛠️ Required Skills (Chip UI) — per-task; hidden for Epics (value preserved) -->
                                     <div class="mb-4">
-                                        <h6><i class="fas fa-tools text-secondary"></i> Required Skills</h6>
-                                        {# Hidden textarea — keeps JSON value for form submission #}
+                                        {# Hidden textarea — keeps JSON value for form submission (both task & epic) #}
                                         <div class="d-none">{{ form.required_skills }}</div>
+                                        {% if not task.is_epic %}
+                                        <h6><i class="fas fa-tools text-secondary"></i> Required Skills</h6>
                                         {# Chip display area #}
                                         <div id="skills-chip-container"
                                              class="d-flex flex-wrap gap-1 p-2 border rounded bg-light mb-2"
@@ -644,6 +679,7 @@
                                         {% if form.required_skills.errors %}
                                             <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
                                         {% endif %}
+                                        {% endif %}{# /not task.is_epic — Required Skills #}
                                     </div>
 
                                     <!-- Task Relationships → moved to Relationships tab -->
@@ -1770,7 +1806,8 @@
                         {% endif %}
                     </div>
 
-                    <!-- ✅ Checklist / Sub-task Items -->
+                    <!-- ✅ Checklist / Sub-task Items (hidden for Epics — child tasks ARE the Epic's checklist) -->
+                    {% if not task.is_epic %}
                     <div class="p-2 bg-light rounded mb-2" id="checklist-section" data-task-id="{{ task.id }}">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
@@ -1840,7 +1877,8 @@
                             </div>
                         </div>
                     </div>
-                    
+                    {% endif %}{# /not task.is_epic — Checklist #}
+
                     <!-- 📎 Additional Information -->
                     <div class="p-2 bg-light rounded">
                         <div class="mb-2">
@@ -1860,6 +1898,7 @@
                             {% endif %}
                         </div>
                         
+                        {% if not task.is_epic %}
                         <div class="mb-2">
                             <small class="text-muted">Required Skills:</small>
                             {% if task.required_skills %}
@@ -1874,26 +1913,42 @@
                             <small class="text-muted d-block fst-italic">Not specified. Edit task to add required skills.</small>
                             {% endif %}
                         </div>
-                        
+                        {% endif %}
+
                         <div class="mt-2">
+                            {% if task.is_epic %}
+                            {# Epic: a single complexity score is meaningless on a container — show the child average. #}
+                            <small class="text-muted d-block mb-1">Child Complexity (avg):</small>
+                            {% if epic_rollup.avg_complexity %}
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar {% if epic_rollup.avg_complexity >= 8 %}bg-danger{% elif epic_rollup.avg_complexity >= 5 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar" style="width: {% widthratio epic_rollup.avg_complexity 10 100 %}%;"></div>
+                            </div>
+                            <small class="text-muted">avg {{ epic_rollup.avg_complexity }}/10 · max {{ epic_rollup.max_complexity }}/10 across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}</small>
+                            {% else %}
+                            <small class="text-muted fst-italic">No child complexity scores set yet.</small>
+                            {% endif %}
+                            {% else %}
                             <small class="text-muted d-block mb-1">Complexity Score:</small>
                             {% if task.complexity_score %}
                             <div class="progress" style="height: 10px;">
-                                <div class="progress-bar {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning{% else %}bg-success{% endif %}" 
-                                     role="progressbar" 
+                                <div class="progress-bar {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar"
                                      style="width: {{ task.complexity_score }}0%;"></div>
                             </div>
-                            <small class="text-muted">{{ task.complexity_score }}/10 
+                            <small class="text-muted">{{ task.complexity_score }}/10
                                 {% if task.complexity_score >= 8 %}(Very Complex){% elif task.complexity_score >= 5 %}(Moderate){% else %}(Simple){% endif %}
                             </small>
                             {% else %}
                             <small class="text-muted fst-italic">Not assessed. Edit task to set complexity.</small>
                             {% endif %}
+                            {% endif %}
                         </div>
                     </div>
                 </div>
 
-                <!-- 📦 Resource Information - Always show -->
+                {% if not task.is_epic %}
+                <!-- 📦 Resource Information (per-assignee — hidden for Epics) -->
                 <div class="mb-3">
                     <label class="text-muted">📦 Resource Information</label>
                     <div class="p-2 bg-light rounded">
@@ -1908,7 +1963,7 @@
                             <small class="text-muted d-block fst-italic">Not calculated. Assign skills and an assignee to calculate.</small>
                             {% endif %}
                         </div>
-                        
+
                         <div class="mb-2">
                             <small class="text-muted">Workload Impact: </small>
                             {% if task.workload_impact %}
@@ -1917,7 +1972,7 @@
                             <span class="badge bg-secondary">Not Set</span>
                             {% endif %}
                         </div>
-                        
+
                         <div>
                             <small class="text-muted"><i class="fas fa-users me-1"></i>Collaboration Required: </small>
                             {% if task.collaboration_required %}
@@ -1928,9 +1983,26 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
 
                 <!-- 💰 Budget & Cost Information -->
                 <div class="mb-3">
+                    {% if task.is_epic %}
+                    <label class="text-muted">💰 Budget & Cost <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up</span></label>
+                    <div class="p-2 bg-light rounded">
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Total Est. Cost</small>
+                                <strong class="text-success">${{ epic_rollup.total_estimated_cost|floatformat:2 }}</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Total Est. Hours</small>
+                                <strong>{{ epic_rollup.total_estimated_hours|floatformat:1 }}h</strong>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-1 fst-italic">Summed across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}.</small>
+                    </div>
+                    {% else %}
                     <label class="text-muted">💰 Budget & Cost</label>
                     <div class="p-2 bg-light rounded">
                         {% with task.cost as task_cost %}
@@ -1977,6 +2049,7 @@
                         {% endif %}
                         {% endwith %}
                     </div>
+                    {% endif %}
                 </div>
 
                 <!-- Labels — inline add/remove panel -->
@@ -2192,6 +2265,15 @@
                 </a>
             </div>
             <div class="card-body">
+                {% if task.is_epic %}
+                <!-- Epic: time is logged on child tasks — show rolled-up total, no manual logging here. -->
+                <div class="mb-2 p-3 bg-light rounded text-center">
+                    <div class="text-muted mb-1">Total Time Logged <span class="badge bg-secondary ms-1" style="font-size:0.7em;">Rolled up</span></div>
+                    <h3 class="mb-0 text-primary">{{ epic_time_logged|floatformat:2 }}h</h3>
+                    <small class="text-muted">across {{ epic_rollup.total }} child task{{ epic_rollup.total|pluralize }}</small>
+                </div>
+                <small class="text-muted fst-italic d-block">Log time on individual child tasks — an Epic groups work rather than holding it directly.</small>
+                {% else %}
                 <!-- Total Time Logged -->
                 <div class="mb-3 p-3 bg-light rounded text-center">
                     <div class="text-muted mb-1">Total Time Logged</div>
@@ -2267,6 +2349,7 @@
                     <p class="text-muted small text-center py-2 mb-0">No time logged yet</p>
                     {% endif %}
                 </div>
+                {% endif %}{# /not task.is_epic — Time Tracking #}
             </div>
         </div>
 
