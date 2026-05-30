@@ -1195,9 +1195,11 @@ def time_tracking_dashboard(request, board_id=None):
     
     my_tasks = my_tasks.select_related('column', 'column__board')[:20]
     
-    # AI-powered features
+    # AI-powered features. Build the service with display_user (the user whose
+    # data the cards/plots show) so alerts and suggestions describe the same
+    # user, and scope it to the in-context boards.
     from kanban.time_tracking_ai import TimeTrackingAIService
-    ai_service = TimeTrackingAIService(request.user, board, boards=boards)
+    ai_service = TimeTrackingAIService(display_user, board, boards=boards)
     
     # Get anomaly alerts (warnings about unusual time patterns)
     time_alerts = ai_service.detect_anomalies(days_back=14)

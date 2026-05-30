@@ -39,7 +39,23 @@ class TimeTrackingAIService:
         self.user = user
         self.board = board
         self.boards = boards
-    
+
+    def _scope_entries(self, qs):
+        """Scope a TimeEntry queryset to the boards in the current context.
+
+        Single source of truth for board scoping across the service so that
+        anomaly alerts, reminders, suggestions and insights all aggregate over
+        exactly the same boards as the dashboard cards (no demo data leaking
+        into a real workspace, no entries from boards outside the current view).
+        When neither ``board`` nor ``boards`` is set (e.g. background digest
+        tasks) the queryset is returned unchanged.
+        """
+        if self.board:
+            return qs.filter(task__column__board=self.board)
+        if self.boards is not None:
+            return qs.filter(task__column__board__in=self.boards)
+        return qs
+
     def validate_time_entry(self, task, hours: Decimal, work_date: date) -> Dict:
         """
         Validate a proposed time entry and suggest splits if excessive.
@@ -269,16 +285,13 @@ class TimeTrackingAIService:
         today = timezone.localdate()
         start_date = today - timedelta(days=days_back)
         
-        # Get entries for the period
-        entries_qs = TimeEntry.objects.filter(
+        # Get entries for the period, scoped to the boards in the current context
+        entries_qs = self._scope_entries(TimeEntry.objects.filter(
             user=self.user,
             work_date__gte=start_date,
             work_date__lte=today
-        )
-        
-        if self.board:
-            entries_qs = entries_qs.filter(task__column__board=self.board)
-        
+        ))
+
         # Check for high-hour days
         daily_totals = entries_qs.values('work_date').annotate(
             total_hours=Sum('hours_spent')
@@ -387,11 +400,7 @@ class TimeTrackingAIService:
         unassigned_qs = unassigned_qs.select_related('column', 'column__board')
 
         # 1. Last logged task (most likely to continue working on) - scoped to boards in context
-        last_entry_qs = TimeEntry.objects.filter(user=self.user)
-        if self.board:
-            last_entry_qs = last_entry_qs.filter(task__column__board=self.board)
-        elif self.boards is not None:
-            last_entry_qs = last_entry_qs.filter(task__column__board__in=self.boards)
+        last_entry_qs = self._scope_entries(TimeEntry.objects.filter(user=self.user))
         last_entry = last_entry_qs.select_related('task').order_by('-created_at').first()
         
         if last_entry and last_entry.task.progress < 100:
@@ -442,14 +451,10 @@ class TimeTrackingAIService:
         
         # 4. Tasks with most recent time entries (frequently worked on) -
         # scoped to boards in context so IDs don't bleed across workspaces.
-        frequent_entry_qs = TimeEntry.objects.filter(
+        frequent_entry_qs = self._scope_entries(TimeEntry.objects.filter(
             user=self.user,
             work_date__gte=today - timedelta(days=7)
-        )
-        if self.board:
-            frequent_entry_qs = frequent_entry_qs.filter(task__column__board=self.board)
-        elif self.boards is not None:
-            frequent_entry_qs = frequent_entry_qs.filter(task__column__board__in=self.boards)
+        ))
         frequent_task_ids = frequent_entry_qs.values('task_id').annotate(
             entry_count=Count('id')
         ).order_by('-entry_count').values_list('task_id', flat=True)[:3]
@@ -489,21 +494,21 @@ class TimeTrackingAIService:
         if today.weekday() >= 5:
             return None
         
-        # Check if user has logged any time today
-        today_hours = TimeEntry.objects.filter(
+        # Check if user has logged any time today (scoped to current boards)
+        today_hours = self._scope_entries(TimeEntry.objects.filter(
             user=self.user,
             work_date=today
-        ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
-        
+        )).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+
         # If it's afternoon and no time logged, suggest reminder
         if now.hour >= 14 and today_hours == 0:
             # Get expected daily hours based on user's average
             week_start = today - timedelta(days=today.weekday())
-            avg_daily = TimeEntry.objects.filter(
+            avg_daily = self._scope_entries(TimeEntry.objects.filter(
                 user=self.user,
                 work_date__gte=week_start - timedelta(days=14),
                 work_date__lt=today
-            ).values('work_date').annotate(
+            )).values('work_date').annotate(
                 total=Sum('hours_spent')
             ).aggregate(avg=Avg('total'))['avg'] or Decimal('6.00')
             
@@ -529,10 +534,8 @@ class TimeTrackingAIService:
         week_start = today - timedelta(days=today.weekday())
         month_start = today.replace(day=1)
         
-        entries_qs = TimeEntry.objects.filter(user=self.user)
-        if self.board:
-            entries_qs = entries_qs.filter(task__column__board=self.board)
-        
+        entries_qs = self._scope_entries(TimeEntry.objects.filter(user=self.user))
+
         # Weekly statistics
         week_entries = entries_qs.filter(work_date__gte=week_start, work_date__lte=today)
         week_total = week_entries.aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
