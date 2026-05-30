@@ -1518,6 +1518,80 @@ class Task(models.Model):
         for subtask in subtasks:
             subtasks.extend(subtask.get_all_subtasks())
         return subtasks
+
+    def get_epic_rollup(self):
+        """Aggregate child-task stats for an Epic detail/list view.
+
+        Single source of truth shared by the Epics list view (``board_epics``)
+        and the Epic detail page so the two can never diverge. Only direct
+        children of ``item_type='task'`` are counted (nested epics excluded).
+
+        The "done" rule mirrors ``board_epics``: ``progress >= 100`` OR
+        ``completed_at`` is set.
+
+        Returns a dict with:
+          children              - list of direct child Tasks
+          total / completed     - counts
+          progress_pct          - rounded completion percentage (0 when no children)
+          contributors          - distinct assignees across children
+          total_estimated_hours - sum of child TaskCost.estimated_hours (float)
+          total_estimated_cost  - sum of child TaskCost.estimated_cost (float)
+          risk_breakdown        - {'critical','high','medium','low','none': count}
+          deadline_conflicts    - children whose due_date is after the Epic's
+          blocking_children     - children that block other tasks (have dependents)
+        """
+        children = list(self.subtasks.filter(item_type='task'))
+        total = len(children)
+        completed = sum(1 for c in children if (c.progress or 0) >= 100 or c.completed_at)
+        progress_pct = round((completed / total) * 100) if total else 0
+
+        # Distinct contributors (child assignees), preserving first-seen order.
+        contributors = []
+        seen_contributor_ids = set()
+        for c in children:
+            user = c.assigned_to
+            if user and user.id not in seen_contributor_ids:
+                seen_contributor_ids.add(user.id)
+                contributors.append(user)
+
+        total_estimated_hours = 0.0
+        total_estimated_cost = 0.0
+        risk_breakdown = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'none': 0}
+        deadline_conflicts = []
+        blocking_children = []
+
+        for c in children:
+            # Budget/hours from the OneToOne TaskCost record (may not exist).
+            try:
+                cost = c.cost
+            except Exception:
+                cost = None
+            if cost:
+                total_estimated_hours += float(cost.estimated_hours or 0)
+                total_estimated_cost += float(cost.estimated_cost or 0)
+
+            risk_breakdown[c.risk_level if c.risk_level in risk_breakdown else 'none'] += 1
+
+            # A child due AFTER the Epic's own due date is a rollup conflict.
+            if self.due_date and c.due_date and c.due_date > self.due_date:
+                deadline_conflicts.append(c)
+
+            # A child that other tasks depend on is blocking work.
+            if c.dependent_tasks.exists():
+                blocking_children.append(c)
+
+        return {
+            'children': children,
+            'total': total,
+            'completed': completed,
+            'progress_pct': progress_pct,
+            'contributors': contributors,
+            'total_estimated_hours': total_estimated_hours,
+            'total_estimated_cost': total_estimated_cost,
+            'risk_breakdown': risk_breakdown,
+            'deadline_conflicts': deadline_conflicts,
+            'blocking_children': blocking_children,
+        }
     
     def get_all_parent_tasks(self):
         """Get all parent tasks up the hierarchy"""

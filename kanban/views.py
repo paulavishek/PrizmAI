@@ -2521,6 +2521,9 @@ def task_detail(request, task_id):
         ).prefetch_related(
             'labels',
             'subtasks',
+            'subtasks__assigned_to',
+            'subtasks__cost',
+            'subtasks__dependent_tasks',
             'related_tasks',
             'dependencies',
             'checklist_items',
@@ -2739,7 +2742,12 @@ def task_detail(request, task_id):
     
     # Get task completion prediction if available
     prediction_data = None
-    if task.progress < 100:
+    # Skip for Epics: the single-task completion forecast isn't shown for an
+    # Epic (it's a child-task rollup), so computing it would waste DB queries
+    # and persist a misleading predicted_completion_date onto the Epic row.
+    # NOTE: this is a local statistical estimate, not an AI/LLM call — guarding
+    # it saves DB/CPU work, not API tokens.
+    if task.progress < 100 and not task.is_epic:
         from kanban.utils.task_prediction import predict_task_completion_date
         from kanban.utils.task_prediction import update_task_prediction
         
@@ -2859,10 +2867,16 @@ def task_detail(request, task_id):
     from kanban.custom_field_serializers import serialize_task_custom_fields
     custom_fields_for_task = serialize_task_custom_fields(task)
 
+    # Epic rollup: aggregated child-task stats for the Epic-specific rendering
+    # (read-only progress, contributors, aggregates, child summary). None for
+    # regular tasks so the template's {% if epic_rollup %} branches stay off.
+    epic_rollup = task.get_epic_rollup() if task.is_epic else None
+
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
         'form': form,
+        'epic_rollup': epic_rollup,
         'custom_fields_for_task': custom_fields_for_task,
         'comment_form': comment_form,
         'comments': comments,
@@ -3992,21 +4006,19 @@ def board_epics(request, board_id):
         .order_by('column__position', 'position')
     )
 
-    # Annotate each epic with child-task summary stats. Done in Python rather
-    # than aggregated SQL so we can also surface the child rows for the inline
-    # expand view in the same template render.
+    # Annotate each epic with child-task summary stats via the shared rollup
+    # helper (Task.get_epic_rollup) so the list and detail pages can't diverge.
+    # Done in Python rather than aggregated SQL so we can also surface the child
+    # rows for the inline expand view in the same template render.
     epic_rows = []
     for epic in epics:
-        children = list(epic.subtasks.filter(item_type='task'))
-        total = len(children)
-        completed = sum(1 for c in children if (c.progress or 0) >= 100 or c.completed_at)
-        progress_pct = round((completed / total) * 100) if total else 0
+        rollup = epic.get_epic_rollup()
         epic_rows.append({
             'epic': epic,
-            'children': children,
-            'total': total,
-            'completed': completed,
-            'progress_pct': progress_pct,
+            'children': rollup['children'],
+            'total': rollup['total'],
+            'completed': rollup['completed'],
+            'progress_pct': rollup['progress_pct'],
         })
 
     context = {

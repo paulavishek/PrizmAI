@@ -202,6 +202,9 @@ urlpatterns = [
     path('api/download-analytics-pdf/<int:board_id>/', api_views.download_analytics_summary_pdf, name='download_analytics_summary_pdf'),
     path('api/summarize-task-details/<int:task_id>/', api_views.summarize_task_details_api, name='summarize_task_details_api'),
 
+    # Epic-level AI: collective health of an Epic's child tasks
+    path('api/epic/<int:epic_id>/analyze-health/', api_views.analyze_epic_health_api, name='analyze_epic_health_api'),
+
     # Bubble-up AI Summary endpoints (persist summaries at each hierarchy level)
     path('api/generate-task-summary/<int:task_id>/', api_views.generate_task_summary_api, name='generate_task_summary_api'),
     path('api/generate-board-summary/<int:board_id>/', api_views.generate_board_summary_api, name='generate_board_summary_api'),
