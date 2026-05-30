@@ -228,7 +228,7 @@
                                     </div>
                                     <div>
                                         <small class="text-muted">
-                                            <i class="fas fa-clock"></i> {{ conflict.detected_at|timesince }} ago
+                                            <i class="fas fa-clock"></i> <span class="js-timeago" data-timestamp="{{ conflict.detected_at|date:'c' }}">{{ conflict.detected_at|timesince }} ago</span>
                                         </small>
                                     </div>
                                 </div>
@@ -287,7 +287,7 @@
                                 <div>
                                     <strong>{{ notif.conflict.get_conflict_type_display }} Conflict</strong>
                                     <p class="mb-1 small">{{ notif.conflict.title }}</p>
-                                    <small class="text-muted">{{ notif.sent_at|timesince }} ago</small>
+                                    <small class="text-muted js-timeago" data-timestamp="{{ notif.sent_at|date:'c' }}">{{ notif.sent_at|timesince }} ago</small>
                                 </div>
                                 <span class="badge bg-{{ notif.conflict.get_severity_color }}">
                                     {{ notif.conflict.get_severity_display }}
@@ -332,7 +332,7 @@
                                 {% endfor %}
                             </div>
                             {% endif %}
-                            <small class="text-muted">{{ conflict.resolved_at|timesince }} ago</small>
+                            <small class="text-muted js-timeago" data-timestamp="{{ conflict.resolved_at|date:'c' }}">{{ conflict.resolved_at|timesince }} ago</small>
                         </div>
                         {% endfor %}
                     {% else %}
@@ -399,6 +399,46 @@
 {% block extra_js %}
 <script>
 let currentConflictId = null;
+
+// ── Live "time ago" timestamps ────────────────────────────────────────────
+// Re-render every element carrying a machine-readable data-timestamp so the
+// relative time stays accurate while the user sits on the page. Pure frontend,
+// no server round-trips.
+function formatTimeAgo(isoString) {
+    const then = new Date(isoString);
+    if (isNaN(then.getTime())) return null;
+    let seconds = Math.floor((Date.now() - then.getTime()) / 1000);
+    if (seconds < 0) seconds = 0;
+    const units = [
+        ['year', 31536000],
+        ['month', 2592000],
+        ['week', 604800],
+        ['day', 86400],
+        ['hour', 3600],
+        ['minute', 60],
+    ];
+    for (const [name, secs] of units) {
+        const value = Math.floor(seconds / secs);
+        if (value >= 1) {
+            return value + ' ' + name + (value === 1 ? '' : 's') + ' ago';
+        }
+    }
+    return 'just now';
+}
+
+function refreshTimeAgo() {
+    document.querySelectorAll('.js-timeago').forEach(el => {
+        const ts = el.dataset.timestamp;
+        if (!ts) return;
+        const text = formatTimeAgo(ts);
+        if (text) el.textContent = text;
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    refreshTimeAgo();
+    setInterval(refreshTimeAgo, 60000);
+});
 
 // Filter by severity (stat card clicks)
 function filterBySeverity(severity) {

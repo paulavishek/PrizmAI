@@ -141,6 +141,10 @@
                         <i class="fas fa-wand-magic-sparkles"></i> Learned Resolution Patterns
                     </h5>
                     <small class="text-muted">AI confidence adjustments based on your team's history</small>
+                    <br>
+                    <small class="text-muted fst-italic">
+                        <i class="fas fa-globe"></i> Showing global patterns. Your personal patterns will appear here as you resolve conflicts.
+                    </small>
                 </div>
                 <div class="card-body" style="max-height: 600px; overflow-y: auto;">
                     {% if patterns %}
@@ -353,18 +357,20 @@
                     <div class="d-flex justify-content-between mb-2">
                         <span class="small">Most Used Pattern:</span>
                         <strong class="small">
-                            {% with patterns|dictsort:"times_used"|last as most_used %}
-                                {{ most_used.get_resolution_type_display|truncatewords:3 }}
-                            {% endwith %}
+                            {% if personal_most_used %}
+                                {{ personal_most_used|truncatewords:3 }}
+                            {% else %}
+                                No data yet
+                            {% endif %}
                         </strong>
                     </div>
                     <div class="d-flex justify-content-between">
                         <span class="small">Overall Success Rate:</span>
                         <strong class="text-success">
-                            {% if patterns %}
-                                {% widthratio patterns|avg_success_rate 1 100 %}%
+                            {% if personal_success_rate is not None %}
+                                {% widthratio personal_success_rate 1 100 %}%
                             {% else %}
-                                N/A
+                                No data yet
                             {% endif %}
                         </strong>
                     </div>
@@ -394,16 +400,28 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Locally bundled Chart.js — avoids intermittent CDN ERR_CACHE_READ_FAILURE
+     that left "Chart is not defined" and a blank chart on first visit. -->
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
 <script>
 // Resolution Trends Chart
 const ctx = document.getElementById('resolutionTrendsChart');
 if (ctx) {
+    // Fallback: if the chart library somehow failed to load, show a friendly
+    // message instead of a blank white box.
+    if (typeof Chart === 'undefined') {
+        const container = ctx.closest('.chart-container') || ctx.parentNode;
+        container.innerHTML =
+            '<div class="text-center text-muted py-5">' +
+            '<i class="fas fa-exclamation-triangle fa-2x mb-2"></i>' +
+            '<p class="mb-0">Chart failed to load — please refresh the page.</p>' +
+            '</div>';
+    } else {
     // Use real data from backend
     const labels = {{ trend_labels_json|safe }};
     const detectedData = {{ trend_detected_json|safe }};
     const resolvedData = {{ trend_resolved_json|safe }};
-    
+
     new Chart(ctx, {
         type: 'bar',  // Changed from 'line' to 'bar'
         data: {
@@ -495,6 +513,7 @@ if (ctx) {
             }
         }
     });
+    }  // end else (Chart available)
 }
 </script>
 {% endblock %}
