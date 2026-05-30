@@ -165,7 +165,14 @@ class ConflictDetection(models.Model):
            ``user_id``; schedule/dependency configs may store ``assigned_to``
            as a username).
 
-        Returns a list of distinct ``User`` instances.
+        RBAC: the result is filtered to users who can actually access the
+        conflict's board (via the canonical ``can_access_board`` check). A task
+        may be assigned to — or ``conflict_data`` may reference — someone who is
+        not a member of the board; such a user must never receive a conflict
+        notification or be listed as an affected member, as that would leak
+        cross-workspace information and violate board-level access control.
+
+        Returns a list of distinct ``User`` instances who have board access.
         """
         recipients = {}  # id -> User (preserves uniqueness)
 
@@ -193,29 +200,43 @@ class ConflictDetection(models.Model):
             if user:
                 recipients[user.id] = user
 
-        return list(recipients.values())
+        # RBAC enforcement: keep only users who can access this conflict's board.
+        from kanban.simple_access import can_access_board  # late import (avoids circular deps)
+        return [u for u in recipients.values() if can_access_board(u, self.board)]
 
     def ensure_notifications(self):
         """
         Ensure notifications exist for all affected users.
 
-        Derives the full recipient set (see :meth:`_derive_recipients`),
-        backfills the ``affected_users`` M2M so the detail page and the
-        "N user(s)" count stay consistent, then creates any missing
-        notifications. The ``(conflict, user)`` unique constraint plus
-        ``get_or_create`` guarantee exactly one notification per user per
-        conflict, so a user who is both an affected member and a board owner
-        is never notified twice.
+        Derives the full recipient set (see :meth:`_derive_recipients`, which is
+        already RBAC-filtered to users with board access), backfills the
+        ``affected_users`` M2M so the detail page and the "N user(s)" count stay
+        consistent, then creates any missing notifications. The
+        ``(conflict, user)`` unique constraint plus ``get_or_create`` guarantee
+        exactly one notification per user per conflict, so a user who is both an
+        affected member and a board owner is never notified twice.
+
+        RBAC: any user currently linked in ``affected_users`` who can no longer
+        access the board is removed here, so the affected-members list and the
+        set of notified users never include someone without board access.
 
         Returns the number of notifications created.
         """
         if self.status != 'active':
             return 0  # Only create notifications for active conflicts
 
-        recipients = self._derive_recipients()
+        recipients = self._derive_recipients()  # RBAC-filtered
+        recipient_ids = {u.id for u in recipients}
+
+        existing_ids = set(self.affected_users.values_list('id', flat=True))
+
+        # RBAC: drop any linked affected user who is no longer board-accessible
+        # (e.g. a task was assigned to a non-member, or membership was revoked).
+        stale_ids = existing_ids - recipient_ids
+        if stale_ids:
+            self.affected_users.remove(*stale_ids)
 
         # Backfill the M2M with anyone we derived but who wasn't already linked.
-        existing_ids = set(self.affected_users.values_list('id', flat=True))
         missing = [u for u in recipients if u.id not in existing_ids]
         if missing:
             self.affected_users.add(*missing)

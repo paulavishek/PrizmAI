@@ -92,13 +92,20 @@ def conflict_dashboard(request):
         for conflict in active_conflicts:
             conflict.ensure_notifications()
         
-        # Get user's notifications
-        # Filter by board if a specific board is selected
+        # Get the user's notifications for conflicts that are STILL ACTIVE.
+        #
+        # We intentionally do NOT filter on ``acknowledged`` here. Acknowledging
+        # a notification is not the same as resolving the conflict — a user who
+        # has merely opened (or dismissed) an alert should still see it while the
+        # underlying conflict remains active and unresolved. Once a conflict is
+        # resolved or ignored its status changes and the notification naturally
+        # drops out of this list. The ``acknowledged`` flag is still used purely
+        # for read/unread styling in the template.
         user_notifications = ConflictNotification.objects.filter(
             user=request.user,
-            acknowledged=False,
+            conflict__status='active',
             conflict__board__in=boards_to_show  # Filter by selected board(s)
-        ).select_related('conflict').order_by('-sent_at')[:10]
+        ).select_related('conflict').order_by('acknowledged', '-conflict__detected_at')[:10]
         
         # Statistics
         stats = {

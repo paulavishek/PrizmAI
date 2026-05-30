@@ -1555,6 +1555,30 @@ class Task(models.Model):
         self.dependency_chain = chain
         self.save()
     
+    def clean(self):
+        """Validate that the assignee actually has access to the task's board.
+
+        A task must not be assigned to someone who is not a member of (and has
+        no access to) the board — otherwise they would be treated as an
+        affected user for conflicts and receive notifications for a board they
+        cannot see. This runs for any code path that calls ``full_clean()``
+        (ModelForms, DRF serializers configured to validate, admin). Direct
+        ``.save()`` calls (seed scripts, sandbox duplication) are intentionally
+        not blocked here — those assign known board members.
+        """
+        super().clean()
+        if self.assigned_to_id and self.column_id:
+            from kanban.simple_access import can_be_assigned_to_board
+            board = self.column.board
+            if not can_be_assigned_to_board(self.assigned_to, board):
+                from django.core.exceptions import ValidationError
+                raise ValidationError({
+                    'assigned_to': (
+                        "This user is not a member of the board and cannot be "
+                        "assigned to its tasks."
+                    )
+                })
+
     def save(self, *args, **kwargs):
         """Override save to track completion and update predictions"""
         # Sanitize rich-text HTML description to prevent XSS before persisting

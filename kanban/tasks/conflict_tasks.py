@@ -120,28 +120,17 @@ def notify_conflict_users_task(detection_run_id):
             detection_run_id=detection_run_id,
             status='active'
         ).prefetch_related('affected_users')
-        
+
         notifications_sent = 0
-        
+
+        # Delegate to the model's ensure_notifications(), which derives the
+        # recipient set, enforces board-level RBAC (only users who can access
+        # the conflict's board are notified), backfills affected_users, and
+        # dedups via get_or_create. This keeps a single source of truth for
+        # who gets notified across the sync detector, the dashboard, and here.
         for conflict in new_conflicts:
-            for user in conflict.affected_users.all():
-                # Check if user already notified about this conflict
-                existing = ConflictNotification.objects.filter(
-                    conflict=conflict,
-                    user=user
-                ).exists()
-                
-                if not existing:
-                    # Create notification
-                    ConflictNotification.objects.create(
-                        conflict=conflict,
-                        user=user,
-                        notification_type='in_app'
-                    )
-                    notifications_sent += 1
-                    
-                    logger.info(f"Notified {user.username} about conflict: {conflict.title}")
-        
+            notifications_sent += conflict.ensure_notifications()
+
         logger.info(f"Sent {notifications_sent} notifications for run {detection_run_id}")
         
         return {

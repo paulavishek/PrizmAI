@@ -159,14 +159,34 @@ def can_modify_board_content(user, board):
 def can_access_task(user, task):
     """
     Check if user can access a task.
-    
+
     Rules:
     - User must be able to access the parent board
-    
+
     Returns:
         Boolean
     """
     return can_access_board(user, task.column.board)
+
+
+def can_be_assigned_to_board(user, board):
+    """
+    Whether ``user`` may be assigned to work items (tasks) on ``board``.
+
+    Assignment uses the same gate as board access, so an assignee is always
+    someone who can actually see and work on the board (creator/owner, an
+    explicit member, a scoped org admin, or any user on an official demo
+    board). This keeps task assignment consistent with conflict-notification
+    RBAC — anyone assignable is notifiable, and vice-versa — and prevents
+    tasks from being assigned to non-members (which previously leaked
+    cross-workspace conflict notifications).
+
+    Returns:
+        Boolean
+    """
+    if user is None:
+        return True  # unassigning is always allowed
+    return can_access_board(user, board)
 
 
 def can_modify_task(user, task):

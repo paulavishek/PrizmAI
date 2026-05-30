@@ -5138,9 +5138,19 @@ def _create_board_from_import_result(result, user, organization, session):
                 if not assigned_user and '@' in assigned_username:
                     assigned_user = User.objects.filter(email__iexact=assigned_username).first()
                 
-                # Verify user is in the same organization
+                # Verify user is in the same organization, then ensure they are
+                # a member of the imported board before assigning. The import
+                # describes the board's team, so we add the assignee as a member
+                # — this keeps the invariant "assignee always has board access"
+                # and prevents non-member assignees from leaking conflict
+                # notifications later.
                 if assigned_user:
                     if hasattr(assigned_user, 'profile') and assigned_user.profile.organization == organization:
+                        from kanban.models import BoardMembership
+                        BoardMembership.objects.get_or_create(
+                            board=new_board, user=assigned_user,
+                            defaults={'role': 'member'}
+                        )
                         new_task.assigned_to = assigned_user
             except Exception:
                 pass  # Skip if user lookup fails
@@ -6572,6 +6582,14 @@ def task_update_assignee(request, task_id):
 
     if assignee_id:
         user = get_object_or_404(User, id=assignee_id)
+        # RBAC: only board members (or owner/creator/scoped org admin) can be
+        # assigned — never a user without access to this board.
+        from kanban.simple_access import can_be_assigned_to_board
+        if not can_be_assigned_to_board(user, board):
+            return JsonResponse(
+                {'error': 'That user is not a member of this board and cannot be assigned.'},
+                status=400,
+            )
         task.assigned_to = user
     else:
         task.assigned_to = None

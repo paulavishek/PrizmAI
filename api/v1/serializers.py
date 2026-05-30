@@ -89,7 +89,26 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def get_progress_status(self, obj):
         return obj.progress_status
-    
+
+    def validate(self, attrs):
+        """Reject assigning a task to a user who can't access its board."""
+        attrs = super().validate(attrs)
+        assigned = attrs.get('assigned_to', serializers.empty)
+        if assigned is serializers.empty:
+            return attrs  # assignee not being changed
+        # Resolve the board from the incoming column or the existing instance.
+        column = attrs.get('column') or getattr(self.instance, 'column', None)
+        if assigned and column is not None:
+            from kanban.simple_access import can_be_assigned_to_board
+            if not can_be_assigned_to_board(assigned, column.board):
+                raise serializers.ValidationError({
+                    'assigned_to': (
+                        "This user is not a member of the board and cannot be "
+                        "assigned to its tasks."
+                    )
+                })
+        return attrs
+
     def create(self, validated_data):
         # Set created_by from request user
         validated_data['created_by'] = self.context['request'].user
