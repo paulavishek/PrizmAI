@@ -1126,7 +1126,7 @@ function addSplitRow() {
             </div>
         </div>
         <div class="col-2">
-            ${rowIndex > 1 ? `<button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSplitRow(this)"><i class="fas fa-times"></i></button>` : ''}
+            ${rowIndex > 0 ? `<button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSplitRow(this)"><i class="fas fa-times"></i></button>` : ''}
         </div>
     `;
     container.appendChild(row);

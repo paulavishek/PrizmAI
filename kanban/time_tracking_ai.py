@@ -372,15 +372,20 @@ class TimeTrackingAIService:
         suggestions = []
         today = timezone.localdate()
         
-        # Build base task queryset - scoped to boards in current context
-        task_qs = Task.objects.filter(assigned_to=self.user)
+        # Candidate pool for AI suggestions: tasks NOT already assigned to the
+        # user, scoped to boards in current context. This keeps the "AI Suggested"
+        # section conceptually distinct from "My Assigned Tasks" — it surfaces
+        # unassigned work the user could pick up, rather than re-ranking their own
+        # assignments. (The "last logged" heuristic below is the deliberate
+        # exception: continuing recent work is high-value even if assigned.)
+        unassigned_qs = Task.objects.filter(assigned_to__isnull=True)
         if self.board:
-            task_qs = task_qs.filter(column__board=self.board)
+            unassigned_qs = unassigned_qs.filter(column__board=self.board)
         elif self.boards is not None:
-            task_qs = task_qs.filter(column__board__in=self.boards)
-        
-        task_qs = task_qs.select_related('column', 'column__board')
-        
+            unassigned_qs = unassigned_qs.filter(column__board__in=self.boards)
+
+        unassigned_qs = unassigned_qs.select_related('column', 'column__board')
+
         # 1. Last logged task (most likely to continue working on) - scoped to boards in context
         last_entry_qs = TimeEntry.objects.filter(user=self.user)
         if self.board:
@@ -398,7 +403,7 @@ class TimeTrackingAIService:
             })
         
         # 2. In-progress tasks (status in "Doing" or similar columns)
-        in_progress_tasks = task_qs.filter(
+        in_progress_tasks = unassigned_qs.filter(
             Q(column__name__icontains='doing') |
             Q(column__name__icontains='progress') |
             Q(column__name__icontains='working') |
@@ -417,7 +422,7 @@ class TimeTrackingAIService:
         
         # 3. Tasks with upcoming deadlines
         week_from_now = today + timedelta(days=7)
-        deadline_tasks = task_qs.filter(
+        deadline_tasks = unassigned_qs.filter(
             due_date__isnull=False,
             due_date__lte=week_from_now,
             progress__lt=100
@@ -435,15 +440,21 @@ class TimeTrackingAIService:
                 'priority': 3
             })
         
-        # 4. Tasks with most recent time entries (frequently worked on)
-        frequent_task_ids = TimeEntry.objects.filter(
+        # 4. Tasks with most recent time entries (frequently worked on) -
+        # scoped to boards in context so IDs don't bleed across workspaces.
+        frequent_entry_qs = TimeEntry.objects.filter(
             user=self.user,
             work_date__gte=today - timedelta(days=7)
-        ).values('task_id').annotate(
+        )
+        if self.board:
+            frequent_entry_qs = frequent_entry_qs.filter(task__column__board=self.board)
+        elif self.boards is not None:
+            frequent_entry_qs = frequent_entry_qs.filter(task__column__board__in=self.boards)
+        frequent_task_ids = frequent_entry_qs.values('task_id').annotate(
             entry_count=Count('id')
         ).order_by('-entry_count').values_list('task_id', flat=True)[:3]
-        
-        frequent_tasks = task_qs.filter(
+
+        frequent_tasks = unassigned_qs.filter(
             id__in=frequent_task_ids,
             progress__lt=100
         ).exclude(

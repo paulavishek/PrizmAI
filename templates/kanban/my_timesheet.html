@@ -104,7 +104,7 @@
                                 {% if entry_data.entry %}
                                 <div class="time-entry" data-entry-id="{{ entry_data.entry.id }}"
                                      data-hours="{{ entry_data.hours }}"
-                                     data-description="{{ entry_data.entry.description|escapejs }}"
+                                     data-description="{{ entry_data.entry.description }}"
                                      data-is-billable="{{ entry_data.entry.is_billable|yesno:'true,false' }}"
                                      style="cursor:pointer;" title="Click to edit">
                                     <span class="hours-display">{{ entry_data.hours }}</span>
