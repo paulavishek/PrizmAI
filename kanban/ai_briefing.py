@@ -9,11 +9,19 @@ Falls back to the rule-based logic if AI is unavailable or returns an
 unparseable response.
 """
 
+import hashlib
 import json
 import logging
+from django.core.cache import cache
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# The action plan is identical across repeated dashboard loads until the
+# underlying tasks (or their risk/overdue context) change, so cache it to avoid
+# a synchronous Gemini call on every page view. TTL is a safety net; the cache
+# key already changes when any input task is edited (see _action_plan_cache_key).
+BRIEFING_CACHE_TTL = 6 * 60 * 60  # 6 hours
 
 
 # ---------------------------------------------------------------------------
@@ -296,3 +304,72 @@ def build_action_plan(tasks, action_type, overdue_count, total_high_risk, briefi
     plan    = _rule_based_action_plan(tasks[:3], action_type, overdue_count, now)
     summary = _rule_based_summary(plan, action_type, overdue_count, briefing_action)
     return plan, summary, False
+
+
+def _action_plan_cache_key(scope_id, action_type, overdue_count, total_high_risk, tasks):
+    """Build a cache key that changes whenever any input affecting the plan changes.
+
+    Including each task's ``updated_at`` means editing a task naturally
+    invalidates the cached plan without relying on pattern-based cache deletion
+    (which the local cache backend does not support).
+    """
+    sig_parts = [
+        str(scope_id), str(action_type),
+        str(overdue_count), str(total_high_risk),
+    ]
+    for t in tasks[:3]:
+        ts = getattr(t, 'updated_at', None)
+        sig_parts.append(f"{t.pk}:{ts.isoformat() if ts else ''}")
+    digest = hashlib.md5('|'.join(sig_parts).encode('utf-8')).hexdigest()
+    return f"briefing_action_plan:{digest}"
+
+
+def build_action_plan_cached(scope_id, tasks, action_type, overdue_count,
+                             total_high_risk, briefing_action, now=None):
+    """Cache wrapper around :func:`build_action_plan`.
+
+    Avoids a synchronous Gemini call on every dashboard load. The cached payload
+    is fully serialisable (no model instances); live ``Task`` objects are
+    re-attached on a cache hit. ``scope_id`` should uniquely identify the
+    user+workspace so plans are never shared across accounts.
+    """
+    if not tasks:
+        # Cheap path — no AI call, nothing worth caching.
+        return build_action_plan(tasks, action_type, overdue_count,
+                                 total_high_risk, briefing_action, now=now)
+
+    cache_key = _action_plan_cache_key(
+        scope_id, action_type, overdue_count, total_high_risk, tasks
+    )
+
+    try:
+        cached = cache.get(cache_key)
+    except Exception as exc:  # never let a cache hiccup break the dashboard
+        logger.warning(f"Briefing cache read failed, regenerating: {exc}")
+        cached = None
+
+    if cached is not None:
+        # Re-attach live task objects to the cached AI text.
+        plan = [
+            {'task': tasks[i], 'why': e['why'], 'next_action': e['next_action']}
+            for i, e in enumerate(cached['entries'])
+            if i < len(tasks)
+        ]
+        return plan, cached['summary'], cached['ai_powered']
+
+    plan, summary, ai_powered = build_action_plan(
+        tasks, action_type, overdue_count, total_high_risk, briefing_action, now=now
+    )
+
+    try:
+        cache.set(cache_key, {
+            'entries': [
+                {'why': p['why'], 'next_action': p['next_action']} for p in plan
+            ],
+            'summary': summary,
+            'ai_powered': ai_powered,
+        }, BRIEFING_CACHE_TTL)
+    except Exception as exc:
+        logger.warning(f"Briefing cache write failed: {exc}")
+
+    return plan, summary, ai_powered

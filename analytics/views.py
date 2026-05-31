@@ -73,7 +73,9 @@ class CustomLogoutView(View):
             min_engagement = getattr(settings, 'ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK', 2)
             show_feedback_form = session.duration_minutes >= min_engagement
             
-            logger.info(f"Logout - User: {session.user}, Duration: {session.duration_minutes}min, "
+            # Log the user PK rather than the username to avoid leaking PII into
+            # server logs (consistent with AXES masking auth identifiers).
+            logger.info(f"Logout - User ID: {session.user_id}, Duration: {session.duration_minutes}min, "
                        f"Min Required: {min_engagement}min, Show Form: {show_feedback_form}")
             
             # Create feedback prompt record
