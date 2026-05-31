@@ -332,3 +332,163 @@ def sync_task_to_calendar(self, task_id, old_assignee_id=None, old_event_id=None
         except Exception:
             # Not in a Celery context — just re-raise the original error.
             raise exc
+
+
+# ---------------------------------------------------------------------------
+# Bulk cleanup — purge every PrizmAI-synced event from a user's calendar
+# ---------------------------------------------------------------------------
+# Marker written into the description of every event we create (see the
+# event_body in sync_task_to_calendar above). It lets us recognise PrizmAI
+# events on the calendar even when the local Task.google_calendar_event_id
+# pointer has been lost — i.e. *orphaned* events. Orphans are created, for
+# example, when a demo reset deletes tasks while calendar sync is suppressed
+# (see kanban.utils.demo_protection.allow_demo_writes): the per-task delete
+# signal short-circuits, so the Google event survives with nothing pointing
+# at it, and the app can never clean it up by event id again.
+PRIZMAI_EVENT_MARKER = "PrizmAI Task"
+
+
+def _calendar_service_for_token(token_obj):
+    """Build an authorised Google Calendar service from a stored token.
+
+    Mirrors the credential build/refresh handling used by the sync tasks
+    above. Returns ``(service, calendar_id)``.
+    """
+    from googleapiclient.discovery import build
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request as GoogleRequest
+    from django.conf import settings
+
+    expiry = token_obj.token_expiry
+    if expiry is not None and expiry.tzinfo is not None:
+        from datetime import timezone as _stdlib_tz
+        expiry = expiry.astimezone(_stdlib_tz.utc).replace(tzinfo=None)
+
+    creds = Credentials(
+        token=token_obj.access_token,
+        refresh_token=token_obj.refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.GOOGLE_OAUTH2_CLIENT_ID,
+        client_secret=settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+        scopes=settings.GOOGLE_CALENDAR_SCOPES,
+        expiry=expiry,  # naive UTC — required by google-auth
+    )
+    if not creds.valid and creds.refresh_token:
+        creds.refresh(GoogleRequest())
+        from datetime import timezone as _stdlib_tz
+        new_expiry = creds.expiry
+        if new_expiry is not None and new_expiry.tzinfo is None:
+            new_expiry = new_expiry.replace(tzinfo=_stdlib_tz.utc)
+        token_obj.access_token = creds.token
+        token_obj.token_expiry = new_expiry
+        token_obj.save(update_fields=["access_token", "token_expiry", "updated_at"])
+
+    service = build("calendar", "v3", credentials=creds)
+    calendar_id = token_obj.calendar_id or "primary"
+    return service, calendar_id
+
+
+def purge_calendar_events_for_user(user_id, dry_run=False):
+    """Delete EVERY PrizmAI-synced event from a user's Google Calendar.
+
+    Unlike :func:`delete_calendar_event` (which removes a single known event
+    id), this scans the calendar for events carrying ``PRIZMAI_EVENT_MARKER``
+    in their description and removes them — so it also catches *orphaned*
+    events whose ``Task.google_calendar_event_id`` pointer was already lost.
+    Local pointers are cleared afterwards so the DB and the calendar end up
+    consistent.
+
+    Args:
+        user_id: id of the user whose calendar to purge.
+        dry_run: when True, only count what would be deleted; delete nothing.
+
+    Returns:
+        dict with integer keys ``found``, ``deleted``, ``failed``, ``cleared``.
+    """
+    from googleapiclient.errors import HttpError
+    from accounts.models import GoogleCalendarToken
+    from kanban.models import Task
+
+    result = {'found': 0, 'deleted': 0, 'failed': 0, 'cleared': 0}
+
+    # Cleanup must work even when sync is paused, so don't filter on
+    # sync_enabled — any stored token has the credentials we need.
+    token_obj = GoogleCalendarToken.objects.filter(user_id=user_id).first()
+    if token_obj is None:
+        logger.info(
+            "purge_calendar_events_for_user: no calendar token for user %s", user_id
+        )
+        return result
+
+    service, calendar_id = _calendar_service_for_token(token_obj)
+
+    page_token = None
+    while True:
+        resp = service.events().list(
+            calendarId=calendar_id,
+            q=PRIZMAI_EVENT_MARKER,   # narrow the scan; verified below
+            maxResults=2500,
+            singleEvents=True,
+            showDeleted=False,
+            pageToken=page_token,
+        ).execute()
+
+        for event in resp.get('items', []):
+            description = event.get('description') or ''
+            if PRIZMAI_EVENT_MARKER not in description:
+                # `q` does loose full-text matching — only delete events we
+                # are certain we created.
+                continue
+            result['found'] += 1
+            if dry_run:
+                continue
+            try:
+                service.events().delete(
+                    calendarId=calendar_id, eventId=event['id'],
+                ).execute()
+                result['deleted'] += 1
+            except HttpError as e:
+                if e.resp.status == 404:
+                    result['deleted'] += 1  # already gone — that's the goal
+                else:
+                    result['failed'] += 1
+                    logger.warning(
+                        "purge_calendar_events_for_user: could not delete "
+                        "event %s for user %s: %s",
+                        event.get('id'), user_id, e,
+                    )
+
+        page_token = resp.get('nextPageToken')
+        if not page_token:
+            break
+
+    if not dry_run:
+        result['cleared'] = (
+            Task.objects.filter(assigned_to_id=user_id)
+            .exclude(google_calendar_event_id__isnull=True)
+            .exclude(google_calendar_event_id='')
+            .update(google_calendar_event_id=None)
+        )
+
+    logger.info(
+        "purge_calendar_events_for_user(user=%s, dry_run=%s): %s",
+        user_id, dry_run, result,
+    )
+    return result
+
+
+@shared_task(bind=True, max_retries=1, default_retry_delay=30)
+def purge_user_calendar_events(self, user_id, dry_run=False):
+    """Best-effort Celery wrapper around :func:`purge_calendar_events_for_user`.
+
+    Failures are swallowed (and returned in the result) so a purge can never
+    block the caller — e.g. a demo reset request.
+    """
+    try:
+        return purge_calendar_events_for_user(user_id, dry_run=dry_run)
+    except Exception as exc:
+        logger.warning(
+            "purge_user_calendar_events: purge failed for user %s: %s",
+            user_id, exc,
+        )
+        return {'found': 0, 'deleted': 0, 'failed': 0, 'cleared': 0, 'error': str(exc)}
