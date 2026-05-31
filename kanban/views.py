@@ -26,7 +26,7 @@ from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, 
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 from .favorite_views import is_user_favorite as _is_fav
-from .ai_briefing import build_action_plan as _build_action_plan
+from .ai_briefing import build_action_plan_cached as _build_action_plan_cached
 from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
 
@@ -1296,9 +1296,14 @@ def dashboard(request):
         briefing_action = "Focus on in-progress tasks to maintain momentum toward your delivery goals."
         briefing_action_type = 'general'
 
-    # Build AI-powered action plan (falls back to rule-based if Gemini is unavailable)
+    # Build AI-powered action plan (cached per user+workspace; falls back to
+    # rule-based if Gemini is unavailable). Caching avoids a synchronous Gemini
+    # call on every dashboard load — the cache key changes when any input task
+    # is edited, so it stays fresh without pattern-based invalidation.
     _now_for_plan = timezone.now()
-    briefing_action_plan, briefing_action_summary, briefing_ai_powered = _build_action_plan(
+    _briefing_scope = f"{request.user.id}:{getattr(active_ws, 'id', '')}"
+    briefing_action_plan, briefing_action_summary, briefing_ai_powered = _build_action_plan_cached(
+        scope_id=_briefing_scope,
         tasks=briefing_action_tasks,
         action_type=briefing_action_type,
         overdue_count=overdue_count,
