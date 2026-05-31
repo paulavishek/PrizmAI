@@ -150,7 +150,18 @@ def provision_sandbox_task(self, user_id, is_reset=False):
 
         # Join demo org and reassign a few tasks to the real user
         _join_demo_org(user)
-        _reassign_demo_tasks_to_user(sandbox, user)
+        # Suppress Google Calendar sync while reassigning demo tasks to the
+        # real user. These are demo-content tasks and must not push events to
+        # the user's personal Google Calendar — same rationale as the demo
+        # reset / seed path, which also wraps task writes in
+        # suppress_calendar_sync(). Without this, every demo task reassigned to
+        # the user (with a due date) creates a calendar event on each sandbox
+        # (re-)provision — the "notifications come back after Reset Demo" bug.
+        # NB: allow_demo_writes() above sets a *different* thread-local flag and
+        # does NOT suppress calendar sync.
+        from kanban.utils.demo_protection import suppress_calendar_sync
+        with suppress_calendar_sync():
+            _reassign_demo_tasks_to_user(sandbox, user)
 
     # Set the profile flag
     try:
@@ -164,8 +175,13 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     # relative to today (template dates may have been refreshed hours ago).
     try:
         from kanban.utils.demo_date_refresh import refresh_single_board_dates
-        for board in new_boards:
-            refresh_single_board_dates(board.id)
+        from kanban.utils.demo_protection import suppress_calendar_sync
+        # Suppress calendar sync — these due-date changes are on demo tasks
+        # (including those just reassigned to the user) and must not push
+        # events to the user's Google Calendar.
+        with suppress_calendar_sync():
+            for board in new_boards:
+                refresh_single_board_dates(board.id)
     except Exception as e:
         logger.warning("Error refreshing sandbox board dates: %s", e)
 
