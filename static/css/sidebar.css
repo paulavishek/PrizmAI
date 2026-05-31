@@ -1010,6 +1010,8 @@
 .kpi-pill-sub {
     font-size: 0.78rem;
     color: var(--text-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 /* KPI strip pipe separator */
 .kpi-strip-separator {

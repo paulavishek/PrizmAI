@@ -85,8 +85,11 @@ def commit_onboarding_workspace(user, preview):
     # or if their current org is the shared demo org (must never use demo org for real workspaces).
     if not org or getattr(org, 'is_demo', False):
         from accounts.models import Organization
-        first_name = (user.first_name or user.username).strip()
-        org_name = f"{first_name}'s Workspace"
+        # Prefer the user's full name (e.g. "Program Manager") over the username, and
+        # title-case it so lowercase OAuth profile names ("program manager") still read
+        # cleanly as "Program Manager's Workspace".
+        display_name = (user.get_full_name() or user.username).strip().title()
+        org_name = f"{display_name}'s Workspace"
         org = Organization.objects.create(
             name=org_name,
             created_by=user,

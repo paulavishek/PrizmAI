@@ -199,11 +199,14 @@
             {% endif %}
 
             <!-- Consent checkbox -->
-            <div class="mb-4" style="display:flex;gap:0.65rem;align-items:flex-start;">
-                <input class="form-check-input" type="checkbox" id="terms-checkbox" required style="margin-top:3px;flex-shrink:0;">
+            <div class="mb-1" style="display:flex;gap:0.65rem;align-items:flex-start;">
+                <input class="form-check-input" type="checkbox" id="terms-checkbox" style="margin-top:3px;flex-shrink:0;">
                 <label class="form-check-label" for="terms-checkbox" style="font-size:0.875rem;color:#374151;line-height:1.5;cursor:pointer;">
                     I agree to create a PrizmAI account with my Google credentials.
                 </label>
+            </div>
+            <div id="terms-error" class="mb-4" style="display:none;font-size:0.8rem;color:#dc2626;padding-left:1.4rem;">
+                <i class="fas fa-circle-exclamation me-1"></i>Please agree to continue with your Google credentials.
             </div>
 
             <!-- Actions -->
@@ -227,6 +230,26 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('input[type=text], input[type=email]').forEach(function(el) {
         el.classList.add('auth-input');
     });
+
+    // Custom consent validation — styled inline error instead of the native
+    // browser tooltip, which floated awkwardly over the Cancel button.
+    var termsCheckbox = document.getElementById('terms-checkbox');
+    var termsError = document.getElementById('terms-error');
+    if (termsCheckbox && termsError) {
+        var form = termsCheckbox.closest('form');
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                if (!termsCheckbox.checked) {
+                    e.preventDefault();
+                    termsError.style.display = 'block';
+                    termsCheckbox.focus();
+                }
+            });
+        }
+        termsCheckbox.addEventListener('change', function () {
+            if (termsCheckbox.checked) { termsError.style.display = 'none'; }
+        });
+    }
 });
 </script>
 {% endblock %}

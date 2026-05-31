@@ -1307,6 +1307,18 @@ def dashboard(request):
         now=_now_for_plan,
     )
 
+    # First-run briefing facts — let the new-workspace message reference the actual
+    # goal and the hierarchy Spectra just generated instead of a generic line.
+    ws_goal_name = None
+    ws_mission_count = 0
+    ws_board_count = 0
+    ws_total_tasks = 0
+    if workspace_is_new:
+        ws_mission_count = len(mission_tree)
+        ws_total_tasks = sum(mi.get('total_tasks', 0) for mi in mission_tree)
+        ws_board_count = sum(len(si.get('boards', [])) for mi in mission_tree for si in mi.get('strategies', []))
+        ws_goal_name = next((ge['goal'].name for ge in goal_tree if ge.get('goal')), None)
+
     daily_briefing = {
         'pulse':          briefing_pulse,
         'risk':           briefing_risk,
@@ -1319,6 +1331,10 @@ def dashboard(request):
         'action_summary': briefing_action_summary,
         'ai_powered':     briefing_ai_powered,
         'workspace_is_new': workspace_is_new,
+        'ws_goal_name':   ws_goal_name,
+        'ws_mission_count': ws_mission_count,
+        'ws_board_count': ws_board_count,
+        'ws_total_tasks': ws_total_tasks,
         'has_content':    bool(briefing_pulse or briefing_risk or briefing_action or workspace_is_new),
     }
 
