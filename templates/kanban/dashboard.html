@@ -1506,6 +1506,13 @@
         {% endif %}
         <a href="{% url 'discovery_dashboard' %}" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.78rem;">Open Inbox</a>
     </div>
+    {% if daily_briefing.workspace_is_new and discovery_ideas_to_score > 0 %}
+    <div class="px-3 pb-2" style="margin-top:-4px;">
+        <span class="text-muted" style="font-size:0.75rem;">
+            <i class="fas fa-robot me-1"></i>Spectra suggested these {{ discovery_ideas_to_score }} starter idea{{ discovery_ideas_to_score|pluralize }} from your goal — score them to prioritise, or ignore for now.
+        </span>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 <!-- /Discovery Widget -->
@@ -1808,7 +1815,10 @@
             <i class="fas fa-robot" style="color:#0e9f6e;"></i>
             <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
         </div>
-        <p class="mt-2 mb-0 small" style="color:#374151;">Your workspace is all set. Open a board and move your first task forward to get started.</p>
+        <p class="mt-2 mb-0 small" style="color:#374151;">
+            {% if daily_briefing.ws_goal_name %}Your <strong>{{ daily_briefing.ws_goal_name }}</strong> workspace is ready — {% else %}Your workspace is ready — {% endif %}
+            {% if daily_briefing.ws_board_count %}Spectra built {{ daily_briefing.ws_mission_count }} mission{{ daily_briefing.ws_mission_count|pluralize }}, {{ daily_briefing.ws_board_count }} board{{ daily_briefing.ws_board_count|pluralize }} and {{ daily_briefing.ws_total_tasks }} starter task{{ daily_briefing.ws_total_tasks|pluralize }}. Open a board and move your first task forward to get started.{% else %}Open a board and move your first task forward to get started.{% endif %}
+        </p>
         {% else %}
         <div class="d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center gap-2" role="button" data-bs-toggle="collapse" data-bs-target="#briefingDetail" 
@@ -2471,9 +2481,9 @@
                 {% with bp_color=forloop.counter0|divisibleby:1 %}
                 <div class="mb-2">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="small fw-semibold text-truncate d-flex align-items-center gap-1" style="max-width:145px;" title="{{ b.name }}">
-                            <span style="width:9px;height:9px;border-radius:50%;background:{% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' as bp_dot %};flex-shrink:0;display:inline-block;"></span>
-                            <span class="text-truncate">{{ b.name }}</span>
+                        <span class="small fw-semibold d-flex align-items-start gap-1" style="max-width:145px;" title="{{ b.name }}">
+                            <span style="width:9px;height:9px;border-radius:50%;background:{% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' as bp_dot %};flex-shrink:0;display:inline-block;margin-top:3px;"></span>
+                            <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.25;">{{ b.name }}</span>
                         </span>
                         <span class="small text-muted fw-bold">{{ b.completion_pct }}%</span>
                     </div>
@@ -4242,6 +4252,18 @@
             var sLabels = chartData.strategies.map(function(s){ return s.name; });
             var sDone   = chartData.strategies.map(function(s){ return s.completion_pct; });
             var sRem    = chartData.strategies.map(function(s){ return +(100 - s.completion_pct).toFixed(1); });
+            // When nothing has been completed yet, a stacked "Remaining %" of 100 paints a
+            // full-width bar that misreads as full progress. Show an explicit empty state instead.
+            var sTotalDone = sDone.reduce(function(a, b){ return a + b; }, 0);
+            if (sTotalDone === 0) {
+                var sBody = sCanvas.parentElement;
+                sBody.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100 text-muted small">'
+                    + '<div class="text-center"><i class="fas fa-chess-knight fa-2x mb-2 d-block" style="opacity:0.2;"></i>'
+                    + 'No progress yet across ' + sLabels.length + ' strateg' + (sLabels.length !== 1 ? 'ies' : 'y') + '.<br>'
+                    + '<small>Complete tasks to see Done vs Remaining here.</small></div></div>';
+                var sCountBadge0 = document.getElementById('strategyChartCount');
+                if (sCountBadge0) sCountBadge0.textContent = sLabels.length + ' strateg' + (sLabels.length !== 1 ? 'ies' : 'y');
+            } else {
             // Vertical scroll: 44px per row, uncapped — outer container scrolls
             var sWrap  = sCanvas.parentElement;
             var sMinH  = Math.max(sWrap.clientHeight || 120, sLabels.length * 44);
@@ -4275,6 +4297,7 @@
                     },
                 },
             });
+            }
         }
         // --- Velocity sparkline (weekly task completions) ---
         var vCanvas = document.getElementById('velocityChart');
