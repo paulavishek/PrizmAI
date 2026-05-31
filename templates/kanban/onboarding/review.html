@@ -1127,12 +1127,21 @@
             return;
         }
 
-        // Amber — suggestions
+        // Amber — suggestions. Frame these as a proactive quality pass, not the
+        // AI second-guessing itself, so the suggestions read as polish (not errors).
+        const introCard = document.createElement('div');
+        introCard.className = 'mb-2 text-muted';
+        introCard.style.fontSize = '0.85rem';
+        introCard.innerHTML = '<i class="bi bi-stars me-1"></i>Spectra double-checked your workspace and has ' +
+            result.flags.length + ' optional refinement' + (result.flags.length === 1 ? '' : 's') +
+            '. Apply them or keep your version — both are fine.';
+        validationPanel.appendChild(introCard);
+
         result.flags.forEach(function(flag) {
             const card = document.createElement('div');
             card.className = 'validation-card amber mb-2';
             card.innerHTML =
-                '<div><i class="bi bi-lightbulb me-1"></i><strong>Suggestion</strong> — ' + esc(flag.item_title || '') + ' <span class="badge bg-warning bg-opacity-10 text-warning" style="font-size:0.7rem;">' + esc(flag.level || '') + '</span></div>' +
+                '<div><i class="bi bi-lightbulb me-1"></i><strong>Optional refinement</strong> — ' + esc(flag.item_title || '') + ' <span class="badge bg-warning bg-opacity-10 text-warning" style="font-size:0.7rem;">' + esc(flag.level || '') + '</span></div>' +
                 '<div class="mt-1">' + esc(flag.message) + '</div>' +
                 (flag.suggested_fix ? '<div class="mt-1 text-muted" style="font-size:0.825rem;"><strong>Suggested fix:</strong> ' + esc(flag.suggested_fix) + '</div>' : '') +
                 '<div class="mt-2 d-flex gap-2">' +
