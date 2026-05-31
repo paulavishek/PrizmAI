@@ -1505,6 +1505,27 @@ def reset_demo_data(request):
             out = StringIO()
 
             # ============================================================
+            # STEP 0: Purge the user's PrizmAI Google Calendar events
+            # ============================================================
+            # Calendar sync is suppressed inside allow_demo_writes(), so the
+            # per-task post_delete signal below will NOT remove the Google
+            # Calendar events for the tasks we are about to delete — they would
+            # be left orphaned on the user's calendar (the exact cause of the
+            # "stale notifications that come back" bug). Do one batched purge
+            # up front instead. Best-effort: a calendar failure must never
+            # block the demo reset.
+            try:
+                from accounts.tasks import purge_user_calendar_events
+                try:
+                    # Async when a Celery worker is available …
+                    purge_user_calendar_events.delay(request.user.id)
+                except Exception:
+                    # … otherwise run it inline (Daphne-only / no broker).
+                    purge_user_calendar_events(request.user.id)
+            except Exception:
+                pass
+
+            # ============================================================
             # STEP 1: Identify demo boards and user-created boards
             # ============================================================
             # Official demo board: only 'Software Development'

@@ -1059,8 +1059,22 @@ def google_calendar_disconnect(request):
     Future task saves will no longer trigger calendar sync.
     """
     from accounts.models import GoogleCalendarToken
+
+    # Remove the events we created from the user's calendar *before* deleting
+    # the token — once the token is gone we lose the credentials needed to
+    # reach the Google Calendar API, which would orphan every synced event.
+    try:
+        from accounts.tasks import purge_calendar_events_for_user
+        purge_calendar_events_for_user(request.user.id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "google_calendar_disconnect: could not purge calendar events for "
+            "user %s; deleting token anyway.", request.user.id, exc_info=True,
+        )
+
     GoogleCalendarToken.objects.filter(user=request.user).delete()
-    messages.success(request, "Google Calendar disconnected.")
+    messages.success(request, "Google Calendar disconnected and synced events removed.")
     return redirect("profile")
 
 
