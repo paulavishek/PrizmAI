@@ -66,19 +66,24 @@ def demo_context(request):
                     context['real_workspaces'] = [w for w in all_ws if not w.is_demo]
                     context['demo_workspace'] = next((w for w in all_ws if w.is_demo), None)
 
-                    # When viewing demo, the user's org is temporarily the demo org
-                    # so real_workspaces will be empty.  Find their actual workspace
-                    # from their own (non-demo) org so the "My Workspace" button shows.
-                    if getattr(profile, 'is_viewing_demo', False) and not context['real_workspaces']:
+                    # When viewing demo, profile.organization is temporarily the
+                    # demo org, so the list above reflects the *demo* org — which
+                    # may contain leaked non-demo persona workspaces (e.g.
+                    # "Elena's Workspace").  The real user's "My Workspace" must
+                    # always resolve to their OWN non-demo workspace, found by
+                    # creator and never inside a demo org.  Recompute it
+                    # unconditionally — don't trust the demo org's contents.
+                    if getattr(profile, 'is_viewing_demo', False):
                         own_ws = list(
                             Workspace.objects.filter(
                                 created_by=request.user,
                                 is_demo=False,
                                 is_active=True,
+                            ).exclude(
+                                organization__is_demo=True,
                             ).order_by('-created_at')
                         )
-                        if own_ws:
-                            context['real_workspaces'] = own_ws
+                        context['real_workspaces'] = own_ws
                     # Workspace setup permission:
                     # - Org creator can always set up new workspaces
                     # - Demo-exploring users who haven't created their own
