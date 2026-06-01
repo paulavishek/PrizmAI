@@ -281,6 +281,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastAnswer = '';
     let lastSourceTitles = [];
 
+    // Titles can carry a trailing ellipsis when truncated — strip it so the
+    // search box never shows a dangling fragment.
+    function cleanForSearch(text) {
+        return (text || '').replace(/[…\s]+$/, '').trim();
+    }
+
     function doSearch() {
         const query = queryInput.value.trim();
         if (!query) return;
@@ -374,14 +380,23 @@ document.addEventListener('DOMContentLoaded', function() {
     if (continueSpectraBtn) {
         continueSpectraBtn.addEventListener('click', function() {
             if (!lastAnswer) return;
-            let prompt = "I'm reviewing this from our Organizational Memory and want to dig deeper.\n\n";
-            prompt += "Question I asked: " + lastQuestion + "\n\n";
-            prompt += "Answer I got: " + lastAnswer + "\n\n";
+            // Reframe the hand-off as an auditor task: these are knowledge gaps to
+            // log, NOT facts already sitting in the database.
+            let prompt = "This is a brief entry from our Organizational Memory — a high-level log, not a complete record. The deeper details below are most likely NOT yet documented in PrizmAI.\n\n";
+            prompt += "What was asked: " + lastQuestion + "\n";
+            prompt += "Memory summary: " + lastAnswer + "\n";
             if (lastSourceTitles.length) {
-                prompt += "Source memories: " + lastSourceTitles.join('; ') + "\n\n";
+                prompt += "Source memories: " + lastSourceTitles.join('; ') + "\n";
             }
-            prompt += "Help me explore the context and follow-up questions around this.";
-            window.location.href = "{% url 'ai_assistant:chat' %}?q=" + encodeURIComponent(prompt);
+            prompt += "\nHelp me strengthen this memory. Rather than assuming the answers already exist in our system, identify the key Knowledge Gaps — the specific details our team should add to make this record robust (e.g. root cause, owner, impact, follow-up actions) — and flag any critical blind spots worth investigating. Present them as 'Recommended details to log'.";
+
+            // Build a clean, human-readable session name from the original question.
+            const cleanQ = (lastQuestion || '').replace(/[…\s]+$/, '').trim();
+            const words = cleanQ.split(/\s+/).filter(Boolean);
+            const sessionTitle = 'Memory Review: ' + (words.slice(0, 6).join(' ') || 'memory') + (words.length > 6 ? '…' : '');
+
+            window.location.href = "{% url 'ai_assistant:chat' %}?title=" +
+                encodeURIComponent(sessionTitle) + "&q=" + encodeURIComponent(prompt);
         });
     }
 
@@ -406,7 +421,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Recent memory cards — click to pre-fill search and run it
     document.querySelectorAll('.recent-memory-card').forEach(card => {
         card.addEventListener('click', function() {
-            queryInput.value = this.dataset.title;
+            queryInput.value = cleanForSearch(this.dataset.title);
             queryInput.focus();
             doSearch();
         });
@@ -486,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         document.querySelectorAll('.browse-card-title').forEach(el => {
             el.addEventListener('click', function() {
-                const title = this.dataset.title;
+                const title = cleanForSearch(this.dataset.title);
                 const panel = bootstrap.Offcanvas.getInstance(document.getElementById('memoryBrowsePanel'));
                 if (panel) panel.hide();
                 queryInput.value = title;

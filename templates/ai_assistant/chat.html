@@ -1526,6 +1526,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         const urlParams = new URLSearchParams(window.location.search);
         const urlQuery = urlParams.get('q');
+        const urlTitle = urlParams.get('title');  // optional caller-supplied session name
         const initialQuery = "{{ initial_query|escapejs }}";
         
         console.log('DOMContentLoaded - URL query param:', urlQuery);
@@ -1547,7 +1548,7 @@
                         'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                     },
                     body: JSON.stringify({
-                        title: 'Quick Query: ' + (queryToSend.substring(0, 30) + (queryToSend.length > 30 ? '...' : '')),
+                        title: urlTitle || ('Quick Query: ' + (queryToSend.substring(0, 30) + (queryToSend.length > 30 ? '...' : ''))),
                         description: 'Auto-created session for quick query from wiki',
                         force: true
                     })
