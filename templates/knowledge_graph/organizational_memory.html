@@ -110,6 +110,19 @@
                     <div class="card-body py-2 px-3">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <span class="badge bg-secondary" style="font-size:0.65rem;">{{ node.get_node_type_display }}</span>
+                            {% if node.has_gaps %}
+                            {% with pk_s=node.pk|stringformat:"s" %}{% with gapid="recent-gap-"|add:pk_s %}
+                            {{ node.gap_questions|json_script:gapid }}
+                            <span class="badge bg-warning text-dark gap-badge" style="font-size:0.6rem;cursor:pointer;" tabindex="0"
+                                  data-gap-target="{{ gapid }}"
+                                  data-manageable="{{ node.manageable|yesno:'1,0' }}"
+                                  {% if node.manageable %}data-node-id="{{ node.pk }}"
+                                  data-node-type="{{ node.node_type }}"
+                                  data-content="{{ node.content }}"
+                                  data-org-wide="{{ node.is_org_wide|yesno:'1,0' }}"
+                                  data-board-id="{{ node.board_id }}"{% endif %}><i class="fas fa-triangle-exclamation me-1"></i>Gaps Noted</span>
+                            {% endwith %}{% endwith %}
+                            {% endif %}
                             {% if node.is_org_wide %}<span class="badge bg-info text-dark" style="font-size:0.6rem;" title="Visible to everyone in your organization"><i class="fas fa-globe me-1"></i>Org-wide</span>{% endif %}
                             <small class="text-muted ms-auto">{{ node.created_at|date:"M d" }}</small>
                             {% if node.manageable %}
@@ -222,6 +235,21 @@
                     <label for="memoryWhat" class="form-label">What happened? <span class="text-danger">*</span></label>
                     <textarea id="memoryWhat" class="form-control" rows="4" maxlength="2000"
                               placeholder="Plain English — e.g. Vendor warned their API will be deprecated in Q3, so we should plan a migration."></textarea>
+                    <!-- Spectra pre-save gap review (Part 1) -->
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="askSpectraGapsBtn" style="display:none;">
+                        <i class="fas fa-wand-magic-sparkles me-1"></i>Ask Spectra what's missing
+                    </button>
+                    <div id="spectraGapsLoading" class="text-muted small mt-2" style="display:none;">
+                        <span class="spinner-border spinner-border-sm me-1"></span>Spectra is reviewing…
+                    </div>
+                    <div id="spectraGapsList" class="mt-2" style="display:none;">
+                        <small class="text-muted fw-semibold d-block mb-1">
+                            <i class="fas fa-wand-magic-sparkles me-1 text-primary"></i>Spectra suggests answering these before saving:
+                        </small>
+                        <ol class="small text-muted mb-0 ps-3" id="spectraGapsItems"></ol>
+                    </div>
+                    <input type="hidden" id="gapQuestionsField" value="">
+                    <input type="hidden" id="gapReviewDescLen" value="">
                 </div>
                 <div class="mb-3">
                     <label for="memoryType" class="form-label">Type</label>
@@ -381,14 +409,31 @@ document.addEventListener('DOMContentLoaded', function() {
         continueSpectraBtn.addEventListener('click', function() {
             if (!lastAnswer) return;
             // Reframe the hand-off as an auditor task: these are knowledge gaps to
-            // log, NOT facts already sitting in the database.
-            let prompt = "This is a brief entry from our Organizational Memory — a high-level log, not a complete record. The deeper details below are most likely NOT yet documented in PrizmAI.\n\n";
-            prompt += "What was asked: " + lastQuestion + "\n";
-            prompt += "Memory summary: " + lastAnswer + "\n";
+            // log, NOT facts already sitting in the database. Build the prompt as
+            // labelled sections separated by blank lines so it renders as readable
+            // paragraphs in the chat rather than one collapsed wall of text.
+            const lines = [];
+            lines.push("This is a brief entry from our Organizational Memory");
+            lines.push("— a high-level log, not a complete record.");
+            lines.push("The deeper details below are most likely NOT yet");
+            lines.push("documented in PrizmAI.");
+            lines.push("");
+            lines.push("What was asked: " + lastQuestion);
+            lines.push("");
+            lines.push("Memory summary: " + lastAnswer);
+            lines.push("");
             if (lastSourceTitles.length) {
-                prompt += "Source memories: " + lastSourceTitles.join('; ') + "\n";
+                lines.push("Source memories: " + lastSourceTitles.join("; "));
+                lines.push("");
             }
-            prompt += "\nHelp me strengthen this memory. Rather than assuming the answers already exist in our system, identify the key Knowledge Gaps — the specific details our team should add to make this record robust (e.g. root cause, owner, impact, follow-up actions) — and flag any critical blind spots worth investigating. Present them as 'Recommended details to log'.";
+            lines.push("Help me strengthen this memory. Rather than assuming");
+            lines.push("the answers already exist in our system, identify the");
+            lines.push("key Knowledge Gaps — the specific details our team");
+            lines.push("should add to make this record robust (e.g. root cause,");
+            lines.push("owner, impact, follow-up actions) — and flag any");
+            lines.push("critical blind spots worth investigating. Present them");
+            lines.push("as 'Recommended details to log'.");
+            const prompt = lines.join("\n");
 
             // Build a clean, human-readable session name from the original question.
             const cleanQ = (lastQuestion || '').replace(/[…\s]+$/, '').trim();
@@ -426,6 +471,65 @@ document.addEventListener('DOMContentLoaded', function() {
             doSearch();
         });
     });
+
+    // ── "Gaps Noted" badges + popovers (Part 3C) ───────────────────────────────
+    function buildGapPopoverContent(badge) {
+        let questions = [];
+        try {
+            const el = document.getElementById(badge.dataset.gapTarget);
+            if (el) questions = JSON.parse(el.textContent) || [];
+        } catch (e) { questions = []; }
+        let html = '<div class="small" style="max-width:280px;">';
+        html += '<div class="fw-semibold mb-1"><i class="fas fa-wand-magic-sparkles me-1 text-primary"></i>Spectra identified missing context</div>';
+        if (questions.length) {
+            html += '<ol class="ps-3 mb-2">';
+            questions.forEach(q => { html += '<li>' + escapeHtml(q) + '</li>'; });
+            html += '</ol>';
+        }
+        html += '<div class="text-muted fst-italic mb-2" style="font-size:0.72rem;">Adding this context makes this memory more useful for future searches.</div>';
+        if (badge.dataset.manageable === '1') {
+            html += '<button type="button" class="btn btn-sm btn-primary gap-expand-btn" data-badge-ref="' +
+                    escapeHtml(badge.dataset.gapTarget) + '"><i class="fas fa-pen me-1"></i>Expand this memory</button>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function initGapPopovers(root) {
+        (root || document).querySelectorAll('.gap-badge').forEach(badge => {
+            if (bootstrap.Popover.getInstance(badge)) return;
+            new bootstrap.Popover(badge, {
+                html: true,
+                sanitize: false,
+                trigger: 'click',
+                placement: 'bottom',
+                container: 'body',
+                content: function() { return buildGapPopoverContent(badge); }
+            });
+            // Keep a badge click from bubbling to the card (which runs a search).
+            badge.addEventListener('click', function(e) { e.stopPropagation(); });
+        });
+    }
+
+    // Delegated: "Expand this memory" inside a gap popover opens the edit modal
+    // pre-populated with that memory's content.
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.gap-expand-btn');
+        if (!btn) return;
+        const badge = document.querySelector('.gap-badge[data-gap-target="' + btn.dataset.badgeRef + '"]');
+        if (!badge) return;
+        const pop = bootstrap.Popover.getInstance(badge);
+        if (pop) pop.hide();
+        openEditMemoryFromData({
+            nodeId: badge.dataset.nodeId,
+            boardId: badge.dataset.boardId,
+            content: badge.dataset.content,
+            nodeType: badge.dataset.nodeType,
+            orgWide: badge.dataset.orgWide,
+        });
+    });
+
+    initGapPopovers(document);
 
     // ── Browse Panel ──────────────────────────────────────────────────────────────────────
     let browseSort = 'newest';
@@ -508,6 +612,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 queryInput.focus();
             });
         });
+        initGapPopovers(document.getElementById('browsePanelBody'));
     }
 
     // Load panel content when offcanvas is opened
@@ -539,6 +644,77 @@ document.addEventListener('DOMContentLoaded', function() {
     const nodeIdField = document.getElementById('memoryNodeId');
     const modalLabel = document.getElementById('logMemoryModalLabel');
 
+    // Spectra pre-save gap review (Part 1)
+    const askSpectraGapsBtn = document.getElementById('askSpectraGapsBtn');
+    const spectraGapsLoading = document.getElementById('spectraGapsLoading');
+    const spectraGapsList = document.getElementById('spectraGapsList');
+    const spectraGapsItems = document.getElementById('spectraGapsItems');
+    const gapQuestionsField = document.getElementById('gapQuestionsField');
+    const gapReviewDescLen = document.getElementById('gapReviewDescLen');
+    let gapQuestions = [];
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = (s == null) ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    // Reset the gap-review UI whenever the modal opens. Button is visible only
+    // when the textarea already holds ≥20 characters (e.g. when editing).
+    function resetGapReviewUI() {
+        gapQuestions = [];
+        if (gapQuestionsField) gapQuestionsField.value = '';
+        if (gapReviewDescLen) gapReviewDescLen.value = '';
+        if (spectraGapsItems) spectraGapsItems.innerHTML = '';
+        if (spectraGapsList) spectraGapsList.style.display = 'none';
+        if (spectraGapsLoading) spectraGapsLoading.style.display = 'none';
+        if (askSpectraGapsBtn && whatField) {
+            askSpectraGapsBtn.style.display = (whatField.value.trim().length >= 20) ? '' : 'none';
+        }
+    }
+
+    if (whatField && askSpectraGapsBtn) {
+        whatField.addEventListener('input', function() {
+            askSpectraGapsBtn.style.display = (this.value.trim().length >= 20) ? '' : 'none';
+        });
+    }
+
+    if (askSpectraGapsBtn) {
+        askSpectraGapsBtn.addEventListener('click', function() {
+            const description = (whatField.value || '').trim();
+            if (description.length < 20) return;
+            spectraGapsLoading.style.display = '';
+            spectraGapsList.style.display = 'none';
+            askSpectraGapsBtn.disabled = true;
+            fetch("{% url 'review_memory_gaps' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({ description: description, node_type: typeField.value })
+            })
+            .then(r => r.json())
+            .then(data => {
+                const qs = (data && data.questions) || [];
+                gapQuestions = qs;
+                gapQuestionsField.value = qs.length ? JSON.stringify(qs) : '';
+                gapReviewDescLen.value = description.length;
+                spectraGapsItems.innerHTML = '';
+                if (qs.length) {
+                    qs.forEach(q => {
+                        const li = document.createElement('li');
+                        li.textContent = q;
+                        spectraGapsItems.appendChild(li);
+                    });
+                    spectraGapsList.style.display = '';
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                spectraGapsLoading.style.display = 'none';
+                askSpectraGapsBtn.disabled = false;
+            });
+        });
+    }
+
     function getLogModal() {
         if (!logMemoryModalEl) return null;
         return bootstrap.Modal.getInstance(logMemoryModalEl) || new bootstrap.Modal(logMemoryModalEl);
@@ -554,21 +730,33 @@ document.addEventListener('DOMContentLoaded', function() {
         typeField.selectedIndex = 0;
         if (orgWideField) orgWideField.checked = false;
         logError.classList.add('d-none');
+        resetGapReviewUI();
+        getLogModal().show();
+    }
+
+    function openEditMemoryFromData(d) {
+        if (!boardSelect) return;
+        nodeIdField.value = d.nodeId || '';
+        modalLabel.innerHTML = '<i class="fas fa-pen me-2"></i>Edit Memory';
+        // Board can't be changed on edit — pin it to the node's board.
+        boardSelect.value = d.boardId;
+        boardSelect.disabled = true;
+        whatField.value = d.content || '';
+        typeField.value = d.nodeType || 'decision';
+        if (orgWideField) orgWideField.checked = d.orgWide === '1';
+        logError.classList.add('d-none');
+        resetGapReviewUI();
         getLogModal().show();
     }
 
     function openEditMemory(card) {
-        if (!boardSelect) return;
-        nodeIdField.value = card.dataset.nodeId;
-        modalLabel.innerHTML = '<i class="fas fa-pen me-2"></i>Edit Memory';
-        // Board can't be changed on edit — pin it to the node's board.
-        boardSelect.value = card.dataset.boardId;
-        boardSelect.disabled = true;
-        whatField.value = card.dataset.content || '';
-        typeField.value = card.dataset.nodeType || 'decision';
-        if (orgWideField) orgWideField.checked = card.dataset.orgWide === '1';
-        logError.classList.add('d-none');
-        getLogModal().show();
+        openEditMemoryFromData({
+            nodeId: card.dataset.nodeId,
+            boardId: card.dataset.boardId,
+            content: card.dataset.content,
+            nodeType: card.dataset.nodeType,
+            orgWide: card.dataset.orgWide,
+        });
     }
 
     if (logMemoryBtn) logMemoryBtn.addEventListener('click', openCreateMemory);
@@ -595,6 +783,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 tags: '',
                 is_org_wide: orgWideField ? orgWideField.checked : false
             };
+            // On create, carry the Spectra gap-review result so the server can
+            // decide whether the saved memory still has open gaps.
+            if (!nodeId) {
+                payload.gap_questions = gapQuestions;
+                payload.review_desc_len = parseInt(gapReviewDescLen.value || '0', 10) || 0;
+            }
 
             saveLogMemoryBtn.disabled = true;
             saveLogMemoryBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving…';

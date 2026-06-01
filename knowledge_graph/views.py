@@ -75,6 +75,51 @@ def _derive_title(content, limit=120):
     return cut.rstrip() + '…'
 
 
+def gap_analysis_system_prompt(node_type, description):
+    """Build the exact system prompt used for Spectra gap analysis.
+
+    Shared by the pre-save review endpoint (Part 1) and the lazy Celery task
+    (knowledge_graph.tasks.analyze_memory_gaps) so both ask Gemini the same way.
+    """
+    return (
+        "You are reviewing a brief memory entry written by a project "
+        "manager. Your job is to identify what critical context is missing. "
+        "Do not answer questions. Do not make assumptions. Do not add "
+        "generic advice.\n\n"
+        f"Memory type: {node_type}\n"
+        f"Memory entry: {description}\n\n"
+        "Generate exactly 3 to 5 specific questions whose answers would "
+        "make this memory significantly more useful to a team member "
+        "reading it months from now. Focus on: root cause, decision owner, "
+        "impact, timeline, follow-up actions, and risks. Be specific to "
+        "what was written — do not ask generic project management questions "
+        "that could apply to any situation.\n\n"
+        "Return ONLY a JSON array of question strings. No preamble, no "
+        "explanation, no markdown. Example format:\n"
+        '["Question one?", "Question two?", "Question three?"]'
+    )
+
+
+def parse_gap_questions(raw):
+    """Parse Gemini's response into a list of question strings.
+
+    Strips ```` ``` ```` fences (mirroring the other knowledge_graph views) and
+    returns a list, or [] if parsing fails or the shape is unexpected.
+    """
+    cleaned = (raw or '').strip()
+    if cleaned.startswith('```'):
+        cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
+    if cleaned.endswith('```'):
+        cleaned = cleaned[:-3]
+    try:
+        parsed = json.loads(cleaned.strip())
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if isinstance(parsed, list):
+        return [str(q).strip() for q in parsed if str(q).strip()]
+    return []
+
+
 def _can_manage_memory(request, node):
     """True if the user may edit/delete this manual memory.
 
@@ -217,6 +262,19 @@ def add_manual_memory(request, board_id):
 
     tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
 
+    # ── Spectra gap review (Part 1) ───────────────────────────────────────────
+    # The client sends the questions Spectra raised plus the description length
+    # at the moment of review. If the user saw the questions but did NOT expand
+    # the entry by more than 30 characters, the gaps are still open.
+    gap_questions = data.get('gap_questions') or []
+    if not isinstance(gap_questions, list):
+        gap_questions = []
+    try:
+        review_desc_len = int(data.get('review_desc_len') or 0)
+    except (ValueError, TypeError):
+        review_desc_len = 0
+    has_gaps = bool(gap_questions) and (len(content) - review_desc_len) <= 30
+
     node = MemoryNode.objects.create(
         board=board,
         mission=board.strategy.mission if board.strategy else None,
@@ -228,6 +286,9 @@ def add_manual_memory(request, board_id):
         is_auto_captured=False,
         is_org_wide=is_org_wide,
         importance_score=0.6,
+        gap_questions=gap_questions or None,
+        has_gaps=has_gaps,
+        gaps_analyzed=True,
     )
 
     try:
@@ -300,6 +361,11 @@ def edit_manual_memory(request, node_id):
     # Org-wide visibility is privileged — only Owners/Org Admins may change it.
     if request.user.has_perm('prizmai.invite_board_member', node.board):
         node.is_org_wide = bool(data.get('is_org_wide'))
+
+    # Editing a memory addresses its gaps (constraint #7): the user has now had
+    # the chance to add the missing context, so clear the "Gaps Noted" flag.
+    node.has_gaps = False
+    node.gaps_analyzed = True
     node.save()
 
     try:
@@ -371,6 +437,37 @@ def delete_manual_memory(request, node_id):
     return JsonResponse({'status': 'success'})
 
 
+# ── View 2d: Pre-Save Spectra Gap Review ────────────────────────────────────
+
+@login_required
+@require_POST
+def review_memory_gaps(request):
+    """Ask Spectra what context is missing from a draft memory entry.
+
+    Pre-save, frontend-only review (no DB writes happen here). Returns a JSON
+    array of 3–5 questions, or an empty array on any failure (silent graceful
+    fallback — never surfaces an error to the user)."""
+    try:
+        data = json.loads(request.body)
+        description = (data.get('description') or '').strip()
+        node_type = (data.get('node_type') or 'note').strip()
+        if not description:
+            return JsonResponse({'questions': []})
+
+        from ai_assistant.utils.ai_router import AIRouter
+        response = AIRouter().complete(
+            prompt='Generate the JSON array of questions now.',
+            user=request.user,
+            system_prompt=gap_analysis_system_prompt(node_type, description),
+            complexity='simple',
+        )
+        questions = parse_gap_questions(response.get('text', ''))
+        return JsonResponse({'questions': questions})
+    except Exception as exc:
+        logger.warning(f"review_memory_gaps failed, returning no questions: {exc}")
+        return JsonResponse({'questions': []})
+
+
 # ── View 3: Organizational Memory Page ──────────────────────────────────────
 
 @login_required
@@ -411,6 +508,23 @@ def organizational_memory(request):
             recent_nodes.append(_n)
             if len(recent_nodes) >= 5:
                 break
+
+    # ── Lazy gap analysis (Part 3B) ───────────────────────────────────────────
+    # Dispatch Spectra gap analysis for up to 5 not-yet-analysed memories.
+    # Fully async via .delay(); wrapped so a down broker never breaks the page.
+    # Skipped in demo/sandbox so the curated demo badges stay meaningful and we
+    # don't spend Gemini quota flagging every demo memory on each page view.
+    from kanban.permissions import is_demo_context
+    if not is_demo_context(request):
+        try:
+            from knowledge_graph.tasks import analyze_memory_gaps
+            unanalyzed_ids = list(
+                accessible.filter(gaps_analyzed=False).values_list('id', flat=True)[:5]
+            )
+            for _node_id in unanalyzed_ids:
+                analyze_memory_gaps.delay(_node_id)
+        except Exception as exc:
+            logger.warning(f"Could not dispatch lazy gap analysis: {exc}")
 
     # Boards the user can log a memory against (edit access), plus whether they
     # may mark any of them organization-wide (Owner/Org Admin level).
@@ -474,8 +588,13 @@ def memory_browse(request):
 
     total = nodes_qs.count()
     offset = (page - 1) * PER_PAGE
-    nodes = nodes_qs[offset:offset + PER_PAGE]
+    nodes = list(nodes_qs[offset:offset + PER_PAGE])
     has_more = (offset + PER_PAGE) < total
+
+    # Flag whether the current user may edit each node so the "Gaps Noted"
+    # popover can show the "Expand this memory" button conditionally.
+    for _n in nodes:
+        _n.manageable = _can_manage_memory(request, _n)
 
     projects_qs = (
         Board.objects.filter(id__in=board_ids)

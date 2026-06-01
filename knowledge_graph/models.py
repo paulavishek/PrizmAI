@@ -45,6 +45,14 @@ class MemoryNode(models.Model):
     source_object_id = models.IntegerField(null=True, blank=True)
     importance_score = models.FloatField(default=0.5)
 
+    # ── Spectra Gap Analysis ──────────────────────────────────────────────────
+    # Questions Spectra raised about missing context, and whether this memory
+    # has been reviewed for gaps yet. Populated at creation (pre-save review) or
+    # lazily by the analyze_memory_gaps Celery task.
+    gap_questions = models.JSONField(null=True, blank=True)
+    has_gaps = models.BooleanField(default=False)
+    gaps_analyzed = models.BooleanField(default=False)
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
