@@ -1711,6 +1711,25 @@ def _reassign_demo_tasks_to_user(sandbox, user):
     if not boards.exists():
         return
 
+    # Idempotency guard: never reassign if the user already has tasks assigned
+    # on their sandbox.  This function runs on EVERY demo (re-)entry
+    # (toggle_demo_mode / switch_workspace).  Without this guard, a "dirty"
+    # exit — leaving demo by navigating away or letting the session end, so the
+    # restore step never ran — leaves the previous batch still assigned to the
+    # user.  The candidate filter below only picks persona-owned tasks, so a
+    # second pass selects a *different* set of NUM_TASKS_TO_REASSIGN tasks and
+    # overwrites ``reassigned_tasks`` — the user accumulates 3 → 6 → 9… tasks
+    # while the restore mapping only tracks the latest batch (orphaning the
+    # rest).  If tasks are already assigned, the sandbox is already in a valid
+    # state; leave it untouched.
+    already_assigned = Task.objects.filter(
+        column__board__in=boards,
+        item_type='task',
+        assigned_to=user,
+    ).exclude(progress=100).exists()
+    if already_assigned:
+        return
+
     # Find tasks on sandbox boards that are assigned to demo personas
     candidates = list(
         Task.objects

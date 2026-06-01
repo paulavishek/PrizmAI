@@ -34,6 +34,14 @@ def get_or_create_real_workspace(user):
     if not org:
         return None
 
+    # Never create or return a real workspace for demo persona accounts or
+    # inside a demo organization.  Demo personas (Priya/Marcus/Elena) live in
+    # the demo org; auto-creating a "{name}'s Workspace" here pollutes the demo
+    # org with a non-demo workspace that then leaks into other users' "My
+    # Workspace" routing (see kanban.context_processors).
+    if getattr(profile, 'is_demo_account', False) or getattr(org, 'is_demo', False):
+        return None
+
     # Look for an existing real workspace
     real_ws = Workspace.objects.filter(
         organization=org,
