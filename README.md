@@ -61,7 +61,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **AI Bubble-up Summaries** — On-demand AI summaries generated and propagated at every level of the hierarchy (task, board, strategy, mission)
 - **Deadline Prediction & Risk Assessment** — AI-powered deadline estimates and risk scoring with mitigation suggestions
 - **Semantic Task Search** — Find tasks by meaning and intent, not just keywords
-- **Knowledge Graph Project Memory** — Automatically captures decisions, risk events, lessons learned, conflicts, scope changes, and milestones as an interconnected knowledge graph. AI discovers causal links between events and surfaces relevant past patterns when similar situations arise, preserving organizational memory across projects.
+- **Knowledge Graph Project Memory** — Automatically captures decisions, risk events, lessons learned, conflicts, scope changes, and milestones as an interconnected knowledge graph. AI discovers causal links between events and surfaces relevant past patterns when similar situations arise, preserving organizational memory across projects. Teams can also **log memories manually** (optionally organization-wide), search them in natural language on the Organizational Memory page, and rely on **Spectra Gap Analysis** to flag thin or unreviewed memories that are missing critical context. See the [Organizational Memory & Spectra Gap Analysis guide](#organizational-memory--spectra-gap-analysis) below.
 - **Cognitive Load Guardian** — Monitors per-member task complexity, assignment density, and context-switching frequency. Alerts managers when team members are at cognitive overload risk and recommends re-sequencing or redistribution to protect focus and prevent burnout.
 - **Pre-Mortem AI** — Before scope locks in, AI simulates five distinct ways a project could fail. Each scenario includes a risk level, root-cause analysis, and mitigation strategy, with team acknowledgment tracking so no critical risk goes unaddressed.
 - **Project Stress Test** — A "Red Team" AI that tries to break your project plan before real life does. It simulates five targeted attacks (e.g., a key person leaving, a critical dependency breaking, a sudden budget spike) and scores your plan's resilience from 0 to 100 across five dimensions: Schedule, Budget, Team, Dependencies, and Scope Stability. For each attack, it prescribes a structural "Vaccine" fix — a concrete change you can apply to strengthen your plan. Run multiple sessions to track your immunity score over time and watch it improve as you apply vaccines. Linked to Pre-Mortem so risk scenarios flow naturally into stress testing.
@@ -551,6 +551,44 @@ The demo workspace ships with 8 pre-populated ideas spanning all four quadrants 
 
 ```bash
 python manage.py populate_discovery_demo_data
+```
+
+---
+
+## Organizational Memory — Spectra Gap Analysis
+
+> **In plain English:** A memory is only useful months later if it actually captured *why* something happened — the root cause, who decided it, the impact, and what came next. People rarely write all that down; they jot one line and move on. Spectra Gap Analysis catches that the moment a memory is created — and flags older, thin, or auto-captured memories so the missing context can be filled in before anyone needs it.
+
+### Why it exists
+
+Organizational Memory is only as valuable as the detail inside each entry. Auto-captured memories (a missed deadline, a budget breach) are always terse because no human reviewed them, and manually logged ones are usually a sentence or two written in a hurry. Three months later a teammate searches, gets the gist, but the critical context — root cause, owner, impact, timeline, follow-up — is gone. Gap Analysis closes that window while the person who knows the story is still at the form.
+
+### Logging a memory
+
+On the **Organizational Memory** page (`/memory/`), click **Log a Memory**. Pick the board, describe what happened in plain English, choose a type (Decision, Lesson Learned, Risk Event, Milestone, Note), and — for Owners/Org Admins — optionally mark it **organization-wide** so it's visible beyond the board's members. A clean title is derived automatically from the text. Manually logged memories can be edited or deleted by their creator, board overseers, or anyone in the demo sandbox.
+
+### Pre-save review — "Ask Spectra what's missing"
+
+Once you've typed at least ~20 characters, a **✨ Ask Spectra what's missing** button appears under the description. Click it and Spectra returns 3–5 specific questions about the context this entry is missing — tailored to what you actually wrote, not generic advice. It's optional: you can still save directly. If you save *without* expanding the entry, it's flagged as having gaps; if you substantially address the questions first, it saves clean.
+
+### "Gaps Noted" badges
+
+Memories that still need context show an amber **⚠ Gaps Noted** badge — on the recent-memory grid, in the Browse panel, and on auto-captured system memories (which are analysed lazily in the background, a few per page load). Clicking the badge opens a popover listing the missing-context questions, with an **Expand this memory** button that opens the edit form pre-filled and shows exactly which gaps to address. Memories saved without a review are flagged too, with a prompt to open them and ask Spectra.
+
+### Smart flag clearing
+
+Editing a flagged memory re-runs Spectra against the new content: the badge clears once few critical gaps remain (a threshold, not all-or-nothing), and otherwise stays with a refreshed question list. A typo-fix won't clear a genuinely thin memory; meaningfully enriching it will.
+
+### Searching & continuing in Spectra
+
+Ask questions in natural language ("Have we migrated databases before? What went wrong?") and Spectra synthesises an answer from the memories you can access, citing its sources, with thumbs-up/down feedback that nudges memory rankings and seeds future answers. Results are cached per user for an hour, so reopening the same memory is instant and consistent. **Continue in Ask Spectra** hands the answer off to the full assistant as a structured "knowledge gaps" prompt for a deeper dive.
+
+### Demo data
+
+The demo workspace pre-seeds a handful of prominent memories with realistic gap flags so the feature is visible immediately, without waiting for background analysis. It's seeded as part of the full demo (`populate_all_demo_data`) or standalone:
+
+```bash
+python manage.py populate_knowledge_demo_data
 ```
 
 ---

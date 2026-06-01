@@ -1461,8 +1461,9 @@ def fetch_memory_detail(board, accessible_boards, organization, query=''):
 
     nodes = []
     for n in qs.order_by('-importance_score', '-created_at')[:10]:
-        excerpt = (n.content or '')[:200]
-        if len(n.content or '') > 200:
+        # 500 chars so enriched memories are usable in chat, not just one-liners.
+        excerpt = (n.content or '')[:500]
+        if len(n.content or '') > 500:
             excerpt += '…'
         nodes.append({
             'type': n.get_node_type_display(),

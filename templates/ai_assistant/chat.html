@@ -196,6 +196,7 @@
     .message.user .message-content {
         background: #667eea;
         color: white;
+        white-space: pre-wrap;  /* preserve line breaks in multi-line messages */
     }
     
     .message.assistant .message-content {
@@ -1055,7 +1056,7 @@
     // Send message
     let _sendInProgress = false;
 
-    function sendMessage() {
+    function sendMessage(overrideMessage) {
         // Prevent duplicate submissions from double-click or Enter+click overlap
         if (_sendInProgress) return;
 
@@ -1064,9 +1065,11 @@
             alert('Please create a new chat session first by clicking "New Chat".');
             return;
         }
-        
+
         const input = document.getElementById('chat-input');
-        const message = input.value.trim();
+        // An explicit override (e.g. a multi-line hand-off from another page) is
+        // used verbatim — the single-line #chat-input would strip its newlines.
+        const message = (typeof overrideMessage === 'string' ? overrideMessage : input.value).trim();
         
         if (!message) return;
         
@@ -1571,21 +1574,13 @@
                     alert('Error creating chat session. Please try clicking "New Chat" button.');
                 });
             } else {
-                // Session exists, chat input should be available
-                const chatInput = document.getElementById('chat-input');
-                if (chatInput) {
-                    // Pre-fill the input with the query
-                    chatInput.value = queryToSend;
-                    console.log('Pre-filled chat input with:', queryToSend);
-                    
-                    // Auto-send the message after a short delay
-                    setTimeout(() => {
-                        console.log('Sending message...');
-                        sendMessage();
-                    }, 500);
-                } else {
-                    console.error('Chat input element not found even with active session!');
-                }
+                // Session exists — send the query directly. We must NOT route it
+                // through the single-line #chat-input, which strips newlines, so
+                // multi-line hand-offs keep their section formatting.
+                setTimeout(() => {
+                    console.log('Sending initial query directly...');
+                    sendMessage(queryToSend);
+                }, 500);
             }
         } else {
             console.log('No initial query to process');
