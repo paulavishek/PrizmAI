@@ -159,6 +159,13 @@
                         <i class="fas fa-check-circle me-1"></i>Got it — memory updated!
                     </small>
                 </div>
+                <hr class="my-3">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <small class="text-muted"><i class="fas fa-comments me-1 opacity-50"></i>Want to dig deeper into this?</small>
+                    <button class="btn btn-sm btn-outline-primary" id="continueSpectraBtn">
+                        <i class="fas fa-robot me-1"></i>Continue in Ask Spectra
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -172,7 +179,8 @@
         <h6 class="text-muted"><i class="fas fa-history me-1"></i>Recent Queries</h6>
         <div class="list-group list-group-flush">
             {% for q in recent_queries %}
-            <button type="button" class="list-group-item list-group-item-action recent-query-btn small py-2">
+            <button type="button" class="list-group-item list-group-item-action recent-query-btn small py-2"
+                    data-query="{{ q.query_text }}">
                 {{ q.query_text|truncatewords:20 }}
                 <span class="text-muted float-end">{{ q.asked_at|date:"M d" }}</span>
             </button>
@@ -269,10 +277,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const feedbackMsg = document.getElementById('feedbackMsg');
 
     let currentQueryId = null;
+    let lastQuestion = '';
+    let lastAnswer = '';
+    let lastSourceTitles = [];
 
     function doSearch() {
         const query = queryInput.value.trim();
         if (!query) return;
+        lastQuestion = query;
 
         const recentSection = document.getElementById('recentMemoriesSection');
         if (recentSection) recentSection.style.display = 'none';
@@ -303,6 +315,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             currentQueryId = data.query_id;
             answerText.textContent = data.answer || 'No answer generated.';
+            lastAnswer = data.answer || '';
+            lastSourceTitles = (data.source_details || []).map(s => s.title);
 
             const conf = (data.confidence || 'Low');
             confidenceBadge.textContent = conf + ' confidence';
@@ -355,10 +369,26 @@ document.addEventListener('DOMContentLoaded', function() {
     feedbackUp.addEventListener('click', () => sendFeedback(true));
     feedbackDown.addEventListener('click', () => sendFeedback(false));
 
-    // Recent query click
+    // Continue in Ask Spectra — hand off the Q+A and sources for a deeper dive.
+    const continueSpectraBtn = document.getElementById('continueSpectraBtn');
+    if (continueSpectraBtn) {
+        continueSpectraBtn.addEventListener('click', function() {
+            if (!lastAnswer) return;
+            let prompt = "I'm reviewing this from our Organizational Memory and want to dig deeper.\n\n";
+            prompt += "Question I asked: " + lastQuestion + "\n\n";
+            prompt += "Answer I got: " + lastAnswer + "\n\n";
+            if (lastSourceTitles.length) {
+                prompt += "Source memories: " + lastSourceTitles.join('; ') + "\n\n";
+            }
+            prompt += "Help me explore the context and follow-up questions around this.";
+            window.location.href = "{% url 'ai_assistant:chat' %}?q=" + encodeURIComponent(prompt);
+        });
+    }
+
+    // Recent query click — use the exact stored query (not parsed display text).
     document.querySelectorAll('.recent-query-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            queryInput.value = this.textContent.trim().replace(/\s+\w+ \d+$/, '');
+            queryInput.value = this.dataset.query || '';
             doSearch();
         });
     });
@@ -536,16 +566,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 logError.classList.remove('d-none');
                 return;
             }
-            // Derive a concise title from the first line / first 80 chars.
-            const firstLine = text.split('\n')[0].trim();
-            const title = (firstLine.length > 80 ? firstLine.slice(0, 80) : firstLine) || text.slice(0, 80);
 
             const nodeId = nodeIdField.value;
             const url = nodeId
                 ? `/memory/${nodeId}/edit/`
                 : `/boards/${boardSelect.value}/knowledge/add/`;
+            // Title is omitted — the server derives a clean, word-boundary title
+            // from the full text so the search box never gets a broken fragment.
             const payload = {
-                title: title,
+                title: '',
                 content: text,
                 node_type: typeField.value,
                 tags: '',

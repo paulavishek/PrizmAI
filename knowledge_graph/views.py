@@ -50,6 +50,31 @@ MANUAL_NODE_TYPES = [
 ALLOWED_MANUAL_TYPES = {t[0] for t in MANUAL_NODE_TYPES} | {'manual_log'}
 
 
+def _derive_title(content, limit=120):
+    """Produce a clean, human-readable title from free-text content.
+
+    Breaks on the first sentence when reasonable, otherwise cuts at a word
+    boundary (never mid-word) and appends an ellipsis. Used when a memory is
+    logged with only a 'what happened' field and no explicit title.
+    """
+    import re as _re
+    text = (content or '').strip()
+    if not text:
+        return ''
+    base = (text.split('\n', 1)[0].strip()) or text
+    # Prefer the first sentence if it's a sensible length.
+    m = _re.match(r'^(.*?[.!?])(\s|$)', base)
+    if m and 20 <= len(m.group(1)) <= limit + 20:
+        return m.group(1).strip()[:200]
+    if len(base) <= limit:
+        return base[:200]
+    cut = base[:limit]
+    last_space = cut.rfind(' ')
+    if last_space > limit // 2:
+        cut = cut[:last_space]
+    return cut.rstrip() + '…'
+
+
 def _can_manage_memory(request, node):
     """True if the user may edit/delete this manual memory.
 
@@ -177,8 +202,11 @@ def add_manual_memory(request, board_id):
     node_type = data.get('node_type', 'decision')
     tags_raw = (data.get('tags') or '').strip()
 
-    if not title or not content:
-        return JsonResponse({'error': 'Title and content are required.'}, status=400)
+    if not content:
+        return JsonResponse({'error': 'Please describe what happened.'}, status=400)
+    # Title is optional — derive a clean one from the content when omitted.
+    if not title:
+        title = _derive_title(content)
 
     if node_type not in ALLOWED_MANUAL_TYPES:
         node_type = 'decision'
@@ -255,8 +283,11 @@ def edit_manual_memory(request, node_id):
     node_type = data.get('node_type', node.node_type)
     tags_raw = (data.get('tags') or '').strip()
 
-    if not title or not content:
-        return JsonResponse({'error': 'Title and content are required.'}, status=400)
+    if not content:
+        return JsonResponse({'error': 'Please describe what happened.'}, status=400)
+    # Title is optional — derive a clean one from the content when omitted.
+    if not title:
+        title = _derive_title(content)
 
     if node_type not in ALLOWED_MANUAL_TYPES:
         node_type = 'decision'
