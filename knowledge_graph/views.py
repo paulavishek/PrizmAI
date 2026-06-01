@@ -100,6 +100,34 @@ def gap_analysis_system_prompt(node_type, description):
     )
 
 
+# When re-checking a memory after an edit, clear the "Gaps Noted" flag once
+# this many or fewer critical gaps remain — the entry is "good enough" even if
+# not every original question was answered.
+GAP_CLEAR_THRESHOLD = 2
+
+
+def gap_recheck_system_prompt(node_type, description):
+    """Build the prompt used to re-assess gaps after a memory is edited.
+
+    Unlike gap_analysis_system_prompt (which always asks for 3–5 questions),
+    this allows an empty result so a now-thorough memory can clear its flag.
+    """
+    return (
+        "You are reviewing a memory entry written by a project manager that has "
+        "just been edited to add more detail. Identify what CRITICAL context is "
+        "still missing. Do not answer questions. Do not make assumptions.\n\n"
+        f"Memory type: {node_type}\n"
+        f"Memory entry: {description}\n\n"
+        "List only genuinely critical questions whose answers are still missing "
+        "and would materially improve this memory for a teammate reading it "
+        "months from now (root cause, decision owner, impact, timeline, "
+        "follow-up actions, risks). If the entry is now thorough, return an "
+        "empty array. Return at most 5 questions.\n\n"
+        "Return ONLY a JSON array of question strings (which may be empty). No "
+        'preamble, no markdown. Example: ["Question one?"] or []'
+    )
+
+
 def parse_gap_questions(raw):
     """Parse Gemini's response into a list of question strings.
 
@@ -123,14 +151,18 @@ def parse_gap_questions(raw):
 def _can_manage_memory(request, node):
     """True if the user may edit/delete this manual memory.
 
-    Rule: never auto-captured (system) memories; then creator, or an
-    Owner/Org-Admin-level overseer (invite_board_member perm), or demo sandbox.
+    Rule: demo sandbox has no RBAC, so every board-attached memory (including
+    auto-captured ones) is manageable there. Outside demo: never auto-captured
+    (system) memories; then creator, or an Owner/Org-Admin-level overseer
+    (invite_board_member perm).
     """
-    if node.is_auto_captured or node.board is None:
+    if node.board is None:
         return False
     from kanban.permissions import is_demo_context
     if is_demo_context(request, board=node.board):
         return True
+    if node.is_auto_captured:
+        return False
     if node.created_by_id == request.user.id:
         return True
     return request.user.has_perm('prizmai.invite_board_member', node.board)
@@ -264,8 +296,7 @@ def add_manual_memory(request, board_id):
 
     # ── Spectra gap review (Part 1) ───────────────────────────────────────────
     # The client sends the questions Spectra raised plus the description length
-    # at the moment of review. If the user saw the questions but did NOT expand
-    # the entry by more than 30 characters, the gaps are still open.
+    # at the moment of review.
     gap_questions = data.get('gap_questions') or []
     if not isinstance(gap_questions, list):
         gap_questions = []
@@ -273,7 +304,22 @@ def add_manual_memory(request, board_id):
         review_desc_len = int(data.get('review_desc_len') or 0)
     except (ValueError, TypeError):
         review_desc_len = 0
-    has_gaps = bool(gap_questions) and (len(content) - review_desc_len) <= 30
+
+    if gap_questions:
+        # Author ran Spectra's review. Gaps remain open unless they then
+        # substantially expanded the entry (> 30 chars) in response.
+        expanded = (len(content) - review_desc_len) > 30
+        has_gaps = not expanded
+        gaps_analyzed = True
+        saved_questions = gap_questions if has_gaps else None
+    else:
+        # Saved without reviewing — treat as a thin, unreviewed record: flag it
+        # and leave gaps_analyzed=False so lazy analysis can fill in specific
+        # questions (real workspaces). In demo, the badge popover shows a generic
+        # prompt to open it and ask Spectra.
+        has_gaps = True
+        gaps_analyzed = False
+        saved_questions = None
 
     node = MemoryNode.objects.create(
         board=board,
@@ -286,9 +332,9 @@ def add_manual_memory(request, board_id):
         is_auto_captured=False,
         is_org_wide=is_org_wide,
         importance_score=0.6,
-        gap_questions=gap_questions or None,
+        gap_questions=saved_questions,
         has_gaps=has_gaps,
-        gaps_analyzed=True,
+        gaps_analyzed=gaps_analyzed,
     )
 
     try:
@@ -350,8 +396,11 @@ def edit_manual_memory(request, node_id):
     if not title:
         title = _derive_title(content)
 
+    # Preserve the node's existing type when the submitted one isn't a valid
+    # manual type (e.g. editing an auto-captured 'ai_recommendation' in demo) so
+    # editing never silently reclassifies a system memory.
     if node_type not in ALLOWED_MANUAL_TYPES:
-        node_type = 'decision'
+        node_type = node.node_type
 
     node.title = title[:200]
     node.content = content
@@ -362,10 +411,28 @@ def edit_manual_memory(request, node_id):
     if request.user.has_perm('prizmai.invite_board_member', node.board):
         node.is_org_wide = bool(data.get('is_org_wide'))
 
-    # Editing a memory addresses its gaps (constraint #7): the user has now had
-    # the chance to add the missing context, so clear the "Gaps Noted" flag.
-    node.has_gaps = False
+    # Re-assess gaps against the edited content. Editing is the user's chance to
+    # fill in missing context, so re-run Spectra: clear the flag once few gaps
+    # remain (GAP_CLEAR_THRESHOLD), otherwise keep it flagged with the updated
+    # questions. On any AI failure, fall back to clearing the flag.
     node.gaps_analyzed = True
+    try:
+        from ai_assistant.utils.ai_router import AIRouter
+        resp = AIRouter().complete(
+            prompt='Generate the JSON array of remaining critical gaps now.',
+            user=request.user,
+            system_prompt=gap_recheck_system_prompt(node.node_type, content),
+            complexity='simple',
+        )
+        remaining = parse_gap_questions(resp.get('text', ''))
+    except Exception as exc:
+        logger.warning(f"Gap re-check on edit failed for node {node.pk}: {exc}")
+        remaining = []
+    if len(remaining) > GAP_CLEAR_THRESHOLD:
+        node.has_gaps = True
+        node.gap_questions = remaining
+    else:
+        node.has_gaps = False
     node.save()
 
     try:
@@ -750,50 +817,64 @@ def organizational_memory_search(request):
     )
 
     from ai_assistant.utils.ai_router import AIRouter, AIProviderError
-    start_time = time.time()
+    import hashlib
 
-    router = AIRouter()
-    try:
-        response = router.complete(
-            prompt=user_prompt,
-            user=request.user,
-            system_prompt=system_prompt,
-            complexity='complex',
-        )
-    except AIProviderError as exc:
-        logger.error(f"Organizational memory search AI call failed: {exc}")
-        return JsonResponse(
-            {'error': 'The AI service is temporarily unavailable. Please try again in a moment.'},
-            status=503,
-        )
-    elapsed_ms = int((time.time() - start_time) * 1000)
-    raw_content = response.get('text', '')
-    tokens = response.get('tokens_used', 0)
-
-    track_ai_request(
-        user=request.user,
-        feature='organizational_memory',
-        request_type='search',
-        ai_model=response.get('model', 'gemini'),
-        tokens_used=tokens,
-        response_time_ms=elapsed_ms,
+    # Cache the synthesized answer per user+query for an hour. Opening a recent
+    # memory re-runs this search; without a cache that re-hits Gemini and burns
+    # quota every click. The short TTL bounds staleness if new memories arrive,
+    # and also makes repeated identical questions answer consistently.
+    cache_key = 'orgmem_search:%s:%s' % (
+        request.user.id,
+        hashlib.md5(query_text.strip().lower().encode('utf-8')).hexdigest(),
     )
+    result = cache.get(cache_key)
 
-    try:
-        cleaned = raw_content.strip()
-        if cleaned.startswith('```'):
-            cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
-        if cleaned.endswith('```'):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-        result = json.loads(cleaned)
-    except (json.JSONDecodeError, IndexError):
-        result = {
-            'answer': raw_content or 'Unable to process your question. Please try rephrasing.',
-            'confidence': 'Low',
-            'source_node_ids': [],
-            'no_data_found': False,
-        }
+    if result is None:
+        start_time = time.time()
+        router = AIRouter()
+        try:
+            response = router.complete(
+                prompt=user_prompt,
+                user=request.user,
+                system_prompt=system_prompt,
+                complexity='complex',
+            )
+        except AIProviderError as exc:
+            logger.error(f"Organizational memory search AI call failed: {exc}")
+            return JsonResponse(
+                {'error': 'The AI service is temporarily unavailable. Please try again in a moment.'},
+                status=503,
+            )
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        raw_content = response.get('text', '')
+        tokens = response.get('tokens_used', 0)
+
+        track_ai_request(
+            user=request.user,
+            feature='organizational_memory',
+            request_type='search',
+            ai_model=response.get('model', 'gemini'),
+            tokens_used=tokens,
+            response_time_ms=elapsed_ms,
+        )
+
+        try:
+            cleaned = raw_content.strip()
+            if cleaned.startswith('```'):
+                cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
+            if cleaned.endswith('```'):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            result = json.loads(cleaned)
+        except (json.JSONDecodeError, IndexError):
+            result = {
+                'answer': raw_content or 'Unable to process your question. Please try rephrasing.',
+                'confidence': 'Low',
+                'source_node_ids': [],
+                'no_data_found': False,
+            }
+
+        cache.set(cache_key, result, 3600)
 
     from django.utils import timezone as tz
     today = tz.now().date()

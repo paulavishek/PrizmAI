@@ -251,6 +251,13 @@
                     <input type="hidden" id="gapQuestionsField" value="">
                     <input type="hidden" id="gapReviewDescLen" value="">
                 </div>
+                <!-- Gap questions shown when expanding a flagged memory (edit) -->
+                <div class="mb-3" id="editGapPanel" style="display:none;">
+                    <div class="alert alert-warning py-2 px-3 mb-0">
+                        <small class="fw-semibold d-block mb-1"><i class="fas fa-triangle-exclamation me-1"></i>Spectra flagged these gaps — add what you can above:</small>
+                        <ol class="small mb-0 ps-3" id="editGapItems"></ol>
+                    </div>
+                </div>
                 <div class="mb-3">
                     <label for="memoryType" class="form-label">Type</label>
                     <select id="memoryType" class="form-select">
@@ -413,10 +420,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // labelled sections separated by blank lines so it renders as readable
             // paragraphs in the chat rather than one collapsed wall of text.
             const lines = [];
-            lines.push("This is a brief entry from our Organizational Memory");
-            lines.push("— a high-level log, not a complete record.");
-            lines.push("The deeper details below are most likely NOT yet");
-            lines.push("documented in PrizmAI.");
+            lines.push("This is a brief entry from our Organizational Memory — a high-level log, not a complete record. The deeper details below are most likely NOT yet documented in PrizmAI.");
             lines.push("");
             lines.push("What was asked: " + lastQuestion);
             lines.push("");
@@ -426,13 +430,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 lines.push("Source memories: " + lastSourceTitles.join("; "));
                 lines.push("");
             }
-            lines.push("Help me strengthen this memory. Rather than assuming");
-            lines.push("the answers already exist in our system, identify the");
-            lines.push("key Knowledge Gaps — the specific details our team");
-            lines.push("should add to make this record robust (e.g. root cause,");
-            lines.push("owner, impact, follow-up actions) — and flag any");
-            lines.push("critical blind spots worth investigating. Present them");
-            lines.push("as 'Recommended details to log'.");
+            lines.push("Help me strengthen this memory. Rather than assuming the answers already exist in our system, identify the key Knowledge Gaps — the specific details our team should add to make this record robust (e.g. root cause, owner, impact, follow-up actions) — and flag any critical blind spots worth investigating. Present them as 'Recommended details to log'.");
+            lines.push("");
+            lines.push("End by reminding me that once I have these details I can add them back to the memory by opening its 'Gaps Noted' badge and clicking 'Expand this memory'.");
             const prompt = lines.join("\n");
 
             // Build a clean, human-readable session name from the original question.
@@ -474,17 +474,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ── "Gaps Noted" badges + popovers (Part 3C) ───────────────────────────────
     function buildGapPopoverContent(badge) {
-        let questions = [];
-        try {
-            const el = document.getElementById(badge.dataset.gapTarget);
-            if (el) questions = JSON.parse(el.textContent) || [];
-        } catch (e) { questions = []; }
+        const questions = gapQuestionsForBadge(badge);
         let html = '<div class="small" style="max-width:280px;">';
         html += '<div class="fw-semibold mb-1"><i class="fas fa-wand-magic-sparkles me-1 text-primary"></i>Spectra identified missing context</div>';
         if (questions.length) {
             html += '<ol class="ps-3 mb-2">';
             questions.forEach(q => { html += '<li>' + escapeHtml(q) + '</li>'; });
             html += '</ol>';
+        } else {
+            html += '<div class="mb-2">This memory was saved without a completeness review. Open it and ask Spectra what\'s missing to make it more useful.</div>';
         }
         html += '<div class="text-muted fst-italic mb-2" style="font-size:0.72rem;">Adding this context makes this memory more useful for future searches.</div>';
         if (badge.dataset.manageable === '1') {
@@ -526,6 +524,7 @@ document.addEventListener('DOMContentLoaded', function() {
             content: badge.dataset.content,
             nodeType: badge.dataset.nodeType,
             orgWide: badge.dataset.orgWide,
+            gapQuestions: gapQuestionsForBadge(badge),
         });
     });
 
@@ -651,12 +650,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const spectraGapsItems = document.getElementById('spectraGapsItems');
     const gapQuestionsField = document.getElementById('gapQuestionsField');
     const gapReviewDescLen = document.getElementById('gapReviewDescLen');
+    const editGapPanel = document.getElementById('editGapPanel');
+    const editGapItems = document.getElementById('editGapItems');
     let gapQuestions = [];
 
     function escapeHtml(s) {
         const d = document.createElement('div');
         d.textContent = (s == null) ? '' : String(s);
         return d.innerHTML;
+    }
+
+    // Read the stored gap questions for a badge (from its json_script element).
+    function gapQuestionsForBadge(badge) {
+        if (!badge) return [];
+        try {
+            const el = document.getElementById(badge.dataset.gapTarget);
+            return el ? (JSON.parse(el.textContent) || []) : [];
+        } catch (e) { return []; }
+    }
+
+    // Show/hide the read-only "gaps to address" panel inside the edit modal.
+    function renderEditGapPanel(questions) {
+        if (!editGapPanel || !editGapItems) return;
+        editGapItems.innerHTML = '';
+        if (questions && questions.length) {
+            questions.forEach(q => {
+                const li = document.createElement('li');
+                li.textContent = q;
+                editGapItems.appendChild(li);
+            });
+            editGapPanel.style.display = '';
+        } else {
+            editGapPanel.style.display = 'none';
+        }
     }
 
     // Reset the gap-review UI whenever the modal opens. Button is visible only
@@ -668,6 +694,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (spectraGapsItems) spectraGapsItems.innerHTML = '';
         if (spectraGapsList) spectraGapsList.style.display = 'none';
         if (spectraGapsLoading) spectraGapsLoading.style.display = 'none';
+        renderEditGapPanel([]);
+        // Drop any type options injected for a non-manual (auto) memory.
+        if (typeField) typeField.querySelectorAll('option.injected-type-opt').forEach(o => o.remove());
         if (askSpectraGapsBtn && whatField) {
             askSpectraGapsBtn.style.display = (whatField.value.trim().length >= 20) ? '' : 'none';
         }
@@ -742,10 +771,21 @@ document.addEventListener('DOMContentLoaded', function() {
         boardSelect.value = d.boardId;
         boardSelect.disabled = true;
         whatField.value = d.content || '';
-        typeField.value = d.nodeType || 'decision';
         if (orgWideField) orgWideField.checked = d.orgWide === '1';
         logError.classList.add('d-none');
         resetGapReviewUI();
+        // Select the node's type, injecting an option for non-manual (auto)
+        // types so editing them in demo never reclassifies the memory.
+        if (d.nodeType && !Array.from(typeField.options).some(o => o.value === d.nodeType)) {
+            const opt = document.createElement('option');
+            opt.value = d.nodeType;
+            opt.className = 'injected-type-opt';
+            opt.textContent = d.nodeType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            typeField.appendChild(opt);
+        }
+        typeField.value = d.nodeType || 'decision';
+        // Show the gaps Spectra flagged so the user knows what to add.
+        renderEditGapPanel(d.gapQuestions || []);
         getLogModal().show();
     }
 
@@ -756,6 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
             content: card.dataset.content,
             nodeType: card.dataset.nodeType,
             orgWide: card.dataset.orgWide,
+            gapQuestions: gapQuestionsForBadge(card.querySelector('.gap-badge')),
         });
     }
 

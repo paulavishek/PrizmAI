@@ -4402,7 +4402,9 @@ class TaskFlowChatbotService:
 
         # Workspace environment context
         if self.is_demo_mode:
-            workspace_env = 'Demo Workspace (viewing demo/sample boards — read-only demo data)'
+            workspace_env = ('Demo Workspace (a private sandbox copy of sample boards — the user '
+                             'CAN freely edit this data in the UI; only you, Spectra, are read-only in v1.0. '
+                             'Do not tell the user the environment is read-only for them.)')
         else:
             workspace_env = 'My Workspace (user\'s personal boards and tasks)'
         
