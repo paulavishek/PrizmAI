@@ -243,3 +243,50 @@ def check_budget_thresholds():
 
     logger.info(f"check_budget_thresholds: captured {created} budget alerts.")
     return {'status': 'success', 'budget_alerts_captured': created}
+
+
+# ── Task 4: Analyze Memory Gaps (Spectra Gap Analysis) ──────────────────────
+
+@shared_task(name='knowledge_graph.analyze_memory_gaps')
+def analyze_memory_gaps(memory_node_id):
+    """
+    Lazily review a single memory node for missing context using Gemini.
+    Dispatched (at most 5 per /memory/ page load) for memories that have not
+    been analysed yet — especially thin auto-captured ones. Never retries and
+    never crashes the worker.
+    """
+    from knowledge_graph.models import MemoryNode
+    from knowledge_graph.views import gap_analysis_system_prompt, parse_gap_questions
+
+    try:
+        node = MemoryNode.objects.filter(pk=memory_node_id).first()
+        if node is None or node.gaps_analyzed:
+            return {'status': 'skipped', 'reason': 'missing_or_already_analyzed'}
+
+        from ai_assistant.utils.ai_router import AIRouter
+        response = AIRouter().complete(
+            prompt='Generate the JSON array of questions now.',
+            user=None,  # Celery background task — no user context
+            system_prompt=gap_analysis_system_prompt(node.node_type, node.content),
+            complexity='simple',
+        )
+        questions = parse_gap_questions(response.get('text', ''))
+
+        if questions:
+            node.gap_questions = questions
+            node.has_gaps = True
+        else:
+            node.has_gaps = False
+        node.gaps_analyzed = True
+        node.save(update_fields=['gap_questions', 'has_gaps', 'gaps_analyzed'])
+        return {'status': 'success', 'has_gaps': node.has_gaps, 'node_id': node.pk}
+    except Exception as exc:
+        # Never crash the worker; mark analysed so we don't retry in a loop.
+        logger.warning(f"analyze_memory_gaps failed for node {memory_node_id}: {exc}")
+        try:
+            MemoryNode.objects.filter(pk=memory_node_id).update(
+                gaps_analyzed=True, has_gaps=False
+            )
+        except Exception:
+            pass
+        return {'status': 'error', 'node_id': memory_node_id}

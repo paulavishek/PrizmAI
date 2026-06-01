@@ -6,6 +6,7 @@ urlpatterns = [
     path('boards/<int:board_id>/knowledge/', views.board_knowledge, name='board_knowledge'),
     path('boards/<int:board_id>/knowledge/add/', views.add_manual_memory, name='add_manual_memory'),
     path('memory/<int:node_id>/edit/', views.edit_manual_memory, name='edit_manual_memory'),
+    path('memory/review-gaps/', views.review_memory_gaps, name='review_memory_gaps'),
     path('memory/<int:node_id>/delete/', views.delete_manual_memory, name='delete_manual_memory'),
     path('boards/<int:board_id>/deja-vu/', views.deja_vu_check, name='deja_vu_check'),
     # Global organizational memory

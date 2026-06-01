@@ -92,6 +92,7 @@ class Command(BaseCommand):
         manual_nodes = self._seed_manual_entries(existing_titles=existing_titles)
         auto_nodes = self._seed_auto_captured_entries(existing_titles=existing_titles)
         self._seed_memory_connections(manual_nodes, auto_nodes)
+        self._seed_gap_flags()
 
         total_manual = len(manual_nodes)
         total_auto = len(auto_nodes)
@@ -839,3 +840,56 @@ class Command(BaseCommand):
                 f'"{conn.from_node.title[:35]}..." -> "{conn.to_node.title[:35]}..." '
                 f'({status})'
             )
+
+    # =========================================================================
+    # SPECTRA GAP ANALYSIS PRE-SEEDING (Part 4)
+    # =========================================================================
+
+    def _seed_gap_flags(self):
+        """Pre-flag 3 prominent demo memories with realistic gap_questions so
+        the first demo visitor sees "Gaps Noted" badges working immediately,
+        without waiting for the lazy Celery analysis.
+
+        Chosen for visibility: two prominent manual decisions (appear in Browse
+        All, manageable so "Expand this memory" works) and one recent
+        auto-captured negotiation event (appears on the dashboard recent grid,
+        demonstrating that thin system memories are flagged too).
+        """
+        self.stdout.write(self.style.NOTICE('\n Pre-seeding Spectra gap flags...'))
+
+        gap_seed = {
+            'Switched from REST to GraphQL for client API': [
+                'What measurable performance improvement did GraphQL deliver versus the REST over-fetching baseline?',
+                'Who owned the GraphQL migration, and how was the two junior developers’ ramp-up handled?',
+                'Which endpoints or screens were migrated first, and what was the rollout timeline?',
+                'What is the rollback plan if GraphQL introduces production issues?',
+                'How will long-term query performance and N+1 risks be monitored after the switch?',
+            ],
+            'JWT chosen for authentication over session cookies': [
+                'What specific threat or requirement drove choosing JWT over server-side sessions?',
+                'Who approved the 15-minute expiry and refresh-token design?',
+                'How are token revocation and compromised-token scenarios actually handled in practice?',
+                'What is the impact on the mobile PWA if the refresh-token flow fails?',
+                'How will authentication edge cases (concurrent sessions, token refresh) be tested?',
+            ],
+            'Negotiation triggered for "Sprint 3 Core Delivery"': [
+                'What is the root cause of the velocity shortfall against the 3.0 tasks/week target?',
+                'Who is the decision owner for choosing between the three scope options?',
+                'By when must the renegotiation decision be made to avoid impacting the deadline?',
+                'What is the downstream impact if the Notification Service is deferred to v2?',
+                'How will the chosen option’s success be measured after it is applied?',
+            ],
+        }
+
+        for title, questions in gap_seed.items():
+            updated = MemoryNode.objects.filter(
+                board=self.sd_board, title=title
+            ).update(
+                gap_questions=questions,
+                has_gaps=True,
+                gaps_analyzed=True,
+            )
+            if updated:
+                self.stdout.write(f'    Flagged gaps on: {title[:55]} ({updated} node(s))')
+            else:
+                self.stdout.write(self.style.WARNING(f'    [skip] Memory not found: {title[:55]}'))
