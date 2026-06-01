@@ -22,6 +22,50 @@ def _get_user_boards(user):
     return get_user_boards(user).values_list('id', flat=True)
 
 
+def _accessible_memory_qs(user):
+    """MemoryNodes the user may see: those on boards they can access, plus any
+    org-wide memories within their own organization.
+
+    Org-wide scoping goes through board → workspace → organization so it never
+    leaks across tenants.
+    """
+    board_ids = _get_user_boards(user)
+    visibility = Q(board_id__in=board_ids)
+    org_id = getattr(getattr(user, 'profile', None), 'organization_id', None)
+    if org_id:
+        visibility |= Q(is_org_wide=True, board__workspace__organization_id=org_id)
+    return MemoryNode.objects.filter(visibility).distinct()
+
+
+# Manual node types a user may pick when logging a memory (value, label).
+MANUAL_NODE_TYPES = [
+    ('decision', 'Decision'),
+    ('lesson', 'Lesson Learned'),
+    ('risk_event', 'Risk Event'),
+    ('milestone', 'Milestone'),
+    ('note', 'Note'),
+]
+# Types accepted by the create/edit endpoints. Includes 'manual_log' for
+# backward compatibility with the existing board-knowledge modal.
+ALLOWED_MANUAL_TYPES = {t[0] for t in MANUAL_NODE_TYPES} | {'manual_log'}
+
+
+def _can_manage_memory(request, node):
+    """True if the user may edit/delete this manual memory.
+
+    Rule: never auto-captured (system) memories; then creator, or an
+    Owner/Org-Admin-level overseer (invite_board_member perm), or demo sandbox.
+    """
+    if node.is_auto_captured or node.board is None:
+        return False
+    from kanban.permissions import is_demo_context
+    if is_demo_context(request, board=node.board):
+        return True
+    if node.created_by_id == request.user.id:
+        return True
+    return request.user.has_perm('prizmai.invite_board_member', node.board)
+
+
 # ── View 1: Board Knowledge Tab ─────────────────────────────────────────────
 
 @login_required
@@ -63,6 +107,8 @@ def board_knowledge(request, board_id):
                 if node.created_by else None
             ),
             'is_auto_captured': node.is_auto_captured,
+            'is_org_wide': node.is_org_wide,
+            'manageable': _can_manage_memory(request, node),
             'importance_score': round(node.importance_score, 2),
         }
 
@@ -102,6 +148,8 @@ def board_knowledge(request, board_id):
         'total_count': nodes.count(),
         'nodes_data': nodes_data,
         'node_connections_data': node_connections_map,
+        'manual_node_types': MANUAL_NODE_TYPES,
+        'can_mark_org_wide': request.user.has_perm('prizmai.invite_board_member', board),
     }
     return render(request, 'knowledge_graph/board_knowledge.html', context)
 
@@ -132,8 +180,12 @@ def add_manual_memory(request, board_id):
     if not title or not content:
         return JsonResponse({'error': 'Title and content are required.'}, status=400)
 
-    if node_type not in ('decision', 'manual_log'):
+    if node_type not in ALLOWED_MANUAL_TYPES:
         node_type = 'decision'
+
+    # Org-wide visibility is a privileged act — only Owners/Org Admins may set it.
+    is_org_wide = bool(data.get('is_org_wide')) and \
+        request.user.has_perm('prizmai.invite_board_member', board)
 
     tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
 
@@ -146,6 +198,7 @@ def add_manual_memory(request, board_id):
         tags=tags,
         created_by=request.user,
         is_auto_captured=False,
+        is_org_wide=is_org_wide,
         importance_score=0.6,
     )
 
@@ -179,22 +232,129 @@ def add_manual_memory(request, board_id):
     })
 
 
+# ── View 2b: Edit Manual Memory ─────────────────────────────────────────────
+
+@login_required
+@require_POST
+@demo_write_guard
+def edit_manual_memory(request, node_id):
+    """Edit a manually-logged memory. Creator or Owner/Org-Admin only;
+    never auto-captured (system) memories."""
+    node = get_object_or_404(MemoryNode, id=node_id)
+
+    if not _can_manage_memory(request, node):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    title = (data.get('title') or '').strip()
+    content = (data.get('content') or '').strip()
+    node_type = data.get('node_type', node.node_type)
+    tags_raw = (data.get('tags') or '').strip()
+
+    if not title or not content:
+        return JsonResponse({'error': 'Title and content are required.'}, status=400)
+
+    if node_type not in ALLOWED_MANUAL_TYPES:
+        node_type = 'decision'
+
+    node.title = title[:200]
+    node.content = content
+    node.node_type = node_type
+    node.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+
+    # Org-wide visibility is privileged — only Owners/Org Admins may change it.
+    if request.user.has_perm('prizmai.invite_board_member', node.board):
+        node.is_org_wide = bool(data.get('is_org_wide'))
+    node.save()
+
+    try:
+        from kanban.audit_utils import log_audit
+        log_audit(
+            action_type='memory.updated',
+            user=request.user,
+            request=request,
+            object_type='MemoryNode',
+            object_id=node.pk,
+            object_repr=node.title[:80],
+            message=f"Manual memory node updated: {node.title[:80]}",
+            additional_data={'board_id': node.board_id, 'node_type': node.node_type},
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'status': 'success',
+        'node': {
+            'id': node.pk,
+            'title': node.title,
+            'content': node.content,
+            'node_type': node.node_type,
+            'node_type_display': node.get_node_type_display(),
+            'tags': node.tags,
+            'is_org_wide': node.is_org_wide,
+            'created_at': node.created_at.strftime('%b %d, %Y'),
+            'created_by': (
+                node.created_by.get_full_name() or node.created_by.username
+                if node.created_by else None
+            ),
+        }
+    })
+
+
+# ── View 2c: Delete Manual Memory ───────────────────────────────────────────
+
+@login_required
+@require_POST
+@demo_write_guard
+def delete_manual_memory(request, node_id):
+    """Delete a manually-logged memory. Creator or Owner/Org-Admin only;
+    never auto-captured (system) memories."""
+    node = get_object_or_404(MemoryNode, id=node_id)
+
+    if not _can_manage_memory(request, node):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    title = node.title
+    board_id = node.board_id
+
+    try:
+        from kanban.audit_utils import log_audit
+        log_audit(
+            action_type='memory.deleted',
+            user=request.user,
+            request=request,
+            object_type='MemoryNode',
+            object_id=node.pk,
+            object_repr=title[:80],
+            message=f"Manual memory node deleted: {title[:80]}",
+            additional_data={'board_id': board_id, 'node_type': node.node_type},
+        )
+    except Exception:
+        pass
+
+    node.delete()
+    return JsonResponse({'status': 'success'})
+
+
 # ── View 3: Organizational Memory Page ──────────────────────────────────────
 
 @login_required
 def organizational_memory(request):
     """Organizational Memory page — the global search interface."""
     board_ids = _get_user_boards(request.user)
+    accessible = _accessible_memory_qs(request.user)
 
-    total_nodes = MemoryNode.objects.filter(
-        board_id__in=board_ids
-    ).count()
+    total_nodes = accessible.count()
 
     boards_count = Board.objects.filter(id__in=board_ids).count()
 
-    oldest = MemoryNode.objects.filter(
-        board_id__in=board_ids
-    ).order_by('created_at').values_list('created_at', flat=True).first()
+    oldest = accessible.order_by('created_at').values_list(
+        'created_at', flat=True
+    ).first()
 
     recent_queries = (
         OrganizationalMemoryQuery.objects.filter(
@@ -206,8 +366,7 @@ def organizational_memory(request):
     # Fetch more than 5 then deduplicate by title so repeated auto-captured
     # memories with identical titles don't fill all slots.
     _raw_nodes = (
-        MemoryNode.objects
-        .filter(board_id__in=board_ids)
+        accessible
         .select_related('board', 'created_by')
         .order_by('-created_at')[:30]
     )
@@ -216,9 +375,22 @@ def organizational_memory(request):
     for _n in _raw_nodes:
         if _n.title not in _seen_titles:
             _seen_titles.add(_n.title)
+            # Flag whether the current user may edit/delete this memory.
+            _n.manageable = _can_manage_memory(request, _n)
             recent_nodes.append(_n)
             if len(recent_nodes) >= 5:
                 break
+
+    # Boards the user can log a memory against (edit access), plus whether they
+    # may mark any of them organization-wide (Owner/Org Admin level).
+    editable_boards = [
+        b for b in Board.objects.filter(id__in=board_ids).order_by('name')
+        if request.user.has_perm('prizmai.edit_board', b)
+    ]
+    can_mark_org_wide = any(
+        request.user.has_perm('prizmai.invite_board_member', b)
+        for b in editable_boards
+    )
 
     context = {
         'total_nodes': total_nodes,
@@ -226,6 +398,9 @@ def organizational_memory(request):
         'oldest_memory_date': oldest,
         'recent_queries': recent_queries,
         'recent_nodes': recent_nodes,
+        'editable_boards': editable_boards,
+        'manual_node_types': MANUAL_NODE_TYPES,
+        'can_mark_org_wide': can_mark_org_wide,
     }
     try:
         from ai_assistant.utils.ai_router import AIRouter
@@ -243,11 +418,7 @@ def organizational_memory(request):
 def memory_browse(request):
     """AJAX: return HTML partial for the browse-memories offcanvas panel."""
     board_ids = _get_user_boards(request.user)
-    base_qs = (
-        MemoryNode.objects
-        .filter(board_id__in=board_ids)
-        .select_related('board')
-    )
+    base_qs = _accessible_memory_qs(request.user).select_related('board')
 
     sort = request.GET.get('sort', 'newest')
     project_id = request.GET.get('project', '').strip()
@@ -317,12 +488,11 @@ def organizational_memory_search(request):
     if not has_quota:
         return JsonResponse({'error': 'AI quota exceeded. Try again later.'}, status=429)
 
-    board_ids = _get_user_boards(request.user)
+    accessible = _accessible_memory_qs(request.user)
 
     # Step 1: Always include the top 80 nodes by importance score.
     top_nodes = list(
-        MemoryNode.objects
-        .filter(board_id__in=board_ids)
+        accessible
         .select_related('board')
         .order_by('-importance_score', '-created_at')[:80]
     )
@@ -340,8 +510,7 @@ def organizational_memory_search(request):
         for kw in raw_keywords:
             kw_q |= DQ(title__icontains=kw) | DQ(content__icontains=kw)
         extra_nodes = list(
-            MemoryNode.objects
-            .filter(board_id__in=board_ids)
+            accessible
             .filter(kw_q)
             .exclude(pk__in=top_ids)
             .select_related('board')

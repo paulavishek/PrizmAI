@@ -35,7 +35,10 @@
         <div class="row align-items-center">
             <div class="col-md-7">
                 <h2 class="mb-1"><i class="fas fa-wand-magic-sparkles me-2"></i>Organizational Memory {% feature_help "org_memory" %}</h2>
-                <p class="mb-0 opacity-75">Ask anything about your organization's project history — decisions, lessons, outcomes, and risks.</p>
+                <p class="mb-2 opacity-75">Ask anything about your organization's project history — decisions, lessons, outcomes, and risks.</p>
+                <button type="button" class="btn btn-light btn-sm fw-semibold" id="logMemoryBtn">
+                    <i class="fas fa-plus me-1"></i> Log a Memory
+                </button>
             </div>
             <div class="col-md-5">
                 <div class="row text-center">
@@ -97,11 +100,24 @@
         <div class="row g-3">
             {% for node in recent_nodes %}
             <div class="col-md-6">
-                <div class="card h-100 recent-memory-card" style="cursor:pointer;" data-title="{{ node.title }}">
+                <div class="card h-100 recent-memory-card" style="cursor:pointer;"
+                     data-title="{{ node.title }}"
+                     {% if node.manageable %}data-node-id="{{ node.pk }}"
+                     data-node-type="{{ node.node_type }}"
+                     data-content="{{ node.content }}"
+                     data-org-wide="{{ node.is_org_wide|yesno:'1,0' }}"
+                     data-board-id="{{ node.board_id }}"{% endif %}>
                     <div class="card-body py-2 px-3">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <span class="badge bg-secondary" style="font-size:0.65rem;">{{ node.get_node_type_display }}</span>
+                            {% if node.is_org_wide %}<span class="badge bg-info text-dark" style="font-size:0.6rem;" title="Visible to everyone in your organization"><i class="fas fa-globe me-1"></i>Org-wide</span>{% endif %}
                             <small class="text-muted ms-auto">{{ node.created_at|date:"M d" }}</small>
+                            {% if node.manageable %}
+                            <span class="memory-card-actions ms-1">
+                                <i class="fas fa-pen text-muted memory-edit-btn" title="Edit" style="font-size:0.72rem;cursor:pointer;"></i>
+                                <i class="fas fa-trash text-muted memory-delete-btn ms-2" title="Delete" style="font-size:0.72rem;cursor:pointer;"></i>
+                            </span>
+                            {% endif %}
                         </div>
                         <div class="fw-semibold small mb-1">{{ node.title|truncatechars:60 }}</div>
                         <div class="text-muted" style="font-size:0.78rem;">{{ node.content|truncatechars:100 }}</div>
@@ -173,6 +189,66 @@
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body" id="browsePanelBody" style="overflow-y:auto;"></div>
+</div>
+
+<!-- Log a Memory Modal -->
+<div class="modal fade" id="logMemoryModal" tabindex="-1" aria-labelledby="logMemoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logMemoryModalLabel"><i class="fas fa-plus-circle me-2"></i>Log a Memory</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if editable_boards %}
+                <input type="hidden" id="memoryNodeId" value="">
+                <div class="mb-3">
+                    <label for="memoryBoard" class="form-label">Which board does this relate to? <span class="text-danger">*</span></label>
+                    <select id="memoryBoard" class="form-select">
+                        {% for b in editable_boards %}
+                        <option value="{{ b.id }}">{{ b.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryWhat" class="form-label">What happened? <span class="text-danger">*</span></label>
+                    <textarea id="memoryWhat" class="form-control" rows="4" maxlength="2000"
+                              placeholder="Plain English — e.g. Vendor warned their API will be deprecated in Q3, so we should plan a migration."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryType" class="form-label">Type</label>
+                    <select id="memoryType" class="form-select">
+                        {% for value, label in manual_node_types %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% if can_mark_org_wide %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="memoryOrgWide">
+                    <label class="form-check-label" for="memoryOrgWide">
+                        Make this organization-wide
+                        <small class="text-muted d-block">Visible to everyone in your organization, not just members of this board.</small>
+                    </label>
+                </div>
+                {% endif %}
+                <div id="logMemoryError" class="alert alert-danger d-none"></div>
+                {% else %}
+                <p class="text-muted mb-0">
+                    <i class="fas fa-circle-info me-1"></i>You need edit access to a board before you can log a memory.
+                </p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                {% if editable_boards %}
+                <button type="button" class="btn btn-primary" id="saveLogMemoryBtn">
+                    <i class="fas fa-save me-1"></i> Save
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 
 {% endblock %}
@@ -405,6 +481,131 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const browseAllBtn = document.getElementById('browseAllBtn');
     if (browseAllBtn) browseAllBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
+
+    // ── Log a Memory (create / edit / delete) ──────────────────────────────────
+    const logMemoryModalEl = document.getElementById('logMemoryModal');
+    const logMemoryBtn = document.getElementById('logMemoryBtn');
+    const saveLogMemoryBtn = document.getElementById('saveLogMemoryBtn');
+    const boardSelect = document.getElementById('memoryBoard');
+    const whatField = document.getElementById('memoryWhat');
+    const typeField = document.getElementById('memoryType');
+    const orgWideField = document.getElementById('memoryOrgWide');
+    const logError = document.getElementById('logMemoryError');
+    const nodeIdField = document.getElementById('memoryNodeId');
+    const modalLabel = document.getElementById('logMemoryModalLabel');
+
+    function getLogModal() {
+        if (!logMemoryModalEl) return null;
+        return bootstrap.Modal.getInstance(logMemoryModalEl) || new bootstrap.Modal(logMemoryModalEl);
+    }
+
+    function openCreateMemory() {
+        if (!boardSelect) { getLogModal() && getLogModal().show(); return; }  // no editable boards
+        nodeIdField.value = '';
+        modalLabel.innerHTML = '<i class="fas fa-plus-circle me-2"></i>Log a Memory';
+        boardSelect.disabled = false;
+        boardSelect.selectedIndex = 0;
+        whatField.value = '';
+        typeField.selectedIndex = 0;
+        if (orgWideField) orgWideField.checked = false;
+        logError.classList.add('d-none');
+        getLogModal().show();
+    }
+
+    function openEditMemory(card) {
+        if (!boardSelect) return;
+        nodeIdField.value = card.dataset.nodeId;
+        modalLabel.innerHTML = '<i class="fas fa-pen me-2"></i>Edit Memory';
+        // Board can't be changed on edit — pin it to the node's board.
+        boardSelect.value = card.dataset.boardId;
+        boardSelect.disabled = true;
+        whatField.value = card.dataset.content || '';
+        typeField.value = card.dataset.nodeType || 'decision';
+        if (orgWideField) orgWideField.checked = card.dataset.orgWide === '1';
+        logError.classList.add('d-none');
+        getLogModal().show();
+    }
+
+    if (logMemoryBtn) logMemoryBtn.addEventListener('click', openCreateMemory);
+
+    if (saveLogMemoryBtn) {
+        saveLogMemoryBtn.addEventListener('click', function() {
+            const text = (whatField.value || '').trim();
+            if (!text) {
+                logError.textContent = 'Please describe what happened.';
+                logError.classList.remove('d-none');
+                return;
+            }
+            // Derive a concise title from the first line / first 80 chars.
+            const firstLine = text.split('\n')[0].trim();
+            const title = (firstLine.length > 80 ? firstLine.slice(0, 80) : firstLine) || text.slice(0, 80);
+
+            const nodeId = nodeIdField.value;
+            const url = nodeId
+                ? `/memory/${nodeId}/edit/`
+                : `/boards/${boardSelect.value}/knowledge/add/`;
+            const payload = {
+                title: title,
+                content: text,
+                node_type: typeField.value,
+                tags: '',
+                is_org_wide: orgWideField ? orgWideField.checked : false
+            };
+
+            saveLogMemoryBtn.disabled = true;
+            saveLogMemoryBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving…';
+            logError.classList.add('d-none');
+
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || data.error) {
+                    logError.textContent = data.error || 'Could not save. Please try again.';
+                    logError.classList.remove('d-none');
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => {
+                logError.textContent = 'Network error. Please try again.';
+                logError.classList.remove('d-none');
+            })
+            .finally(() => {
+                saveLogMemoryBtn.disabled = false;
+                saveLogMemoryBtn.innerHTML = '<i class="fas fa-save me-1"></i> Save';
+            });
+        });
+    }
+
+    // Edit / delete icons on manageable recent-memory cards.
+    document.querySelectorAll('.memory-edit-btn').forEach(icon => {
+        icon.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openEditMemory(this.closest('.recent-memory-card'));
+        });
+    });
+    document.querySelectorAll('.memory-delete-btn').forEach(icon => {
+        icon.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const card = this.closest('.recent-memory-card');
+            const nodeId = card.dataset.nodeId;
+            if (!nodeId || !confirm('Delete this memory? This permanently removes it from organizational memory.')) return;
+            fetch(`/memory/${nodeId}/delete/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (ok && !data.error) { location.reload(); }
+                else { alert(data.error || 'Could not delete. Please try again.'); }
+            })
+            .catch(() => alert('Network error. Please try again.'));
+        });
+    });
 });
 </script>
 {% endblock %}

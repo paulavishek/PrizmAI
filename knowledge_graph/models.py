@@ -15,6 +15,7 @@ class MemoryNode(models.Model):
         ('milestone', 'Milestone Reached'),
         ('ai_recommendation', 'AI Recommendation'),
         ('manual_log', 'Manual Decision Log'),
+        ('note', 'Note'),
     ]
 
     board = models.ForeignKey(
@@ -35,6 +36,11 @@ class MemoryNode(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     is_auto_captured = models.BooleanField(default=True)
+    is_org_wide = models.BooleanField(
+        default=False,
+        help_text="If True, visible to everyone in the organization, not just board members. "
+                  "Only Owners/Org Admins can set this.",
+    )
     source_object_type = models.CharField(max_length=50, blank=True, default='')
     source_object_id = models.IntegerField(null=True, blank=True)
     importance_score = models.FloatField(default=0.5)
