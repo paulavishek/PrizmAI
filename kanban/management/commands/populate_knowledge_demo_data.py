@@ -846,14 +846,15 @@ class Command(BaseCommand):
     # =========================================================================
 
     def _seed_gap_flags(self):
-        """Pre-flag 3 prominent demo memories with realistic gap_questions so
-        the first demo visitor sees "Gaps Noted" badges working immediately,
-        without waiting for the lazy Celery analysis.
+        """Pre-flag 6 prominent demo memories with realistic gap_questions (and
+        gap_questions_original, so the anchored completeness bar works) so the
+        first demo visitor sees "Gaps Noted" badges working immediately, without
+        waiting for the lazy Celery analysis (which is skipped in demo).
 
-        Chosen for visibility: two prominent manual decisions (appear in Browse
-        All, manageable so "Expand this memory" works) and one recent
-        auto-captured negotiation event (appears on the dashboard recent grid,
-        demonstrating that thin system memories are flagged too).
+        Chosen for a spread across memory types — manual decisions, an
+        auto-captured negotiation, a missed-deadline risk event, and a resolved
+        conflict — so the demo shows gaps surfacing on every kind of memory while
+        the majority (richly seeded) stay badge-free. All hard-coded: no API cost.
         """
         self.stdout.write(self.style.NOTICE('\n Pre-seeding Spectra gap flags...'))
 
@@ -879,6 +880,24 @@ class Command(BaseCommand):
                 'What is the downstream impact if the Notification Service is deferred to v2?',
                 'How will the chosen option’s success be measured after it is applied?',
             ],
+            'Missed deadline: User Registration Flow': [
+                'What is the root cause of the User Registration Flow slipping its deadline?',
+                'Who owns the recovery plan, and what is the new committed date?',
+                'What is the downstream impact on dependent tasks (e.g. social login, onboarding)?',
+                'Were any early warning signs missed that should trigger an alert sooner next time?',
+            ],
+            'Notification service built in-house instead of using a third-party': [
+                'Who made the build-vs-buy decision, and which stakeholders signed off?',
+                'What were the projected cost and maintenance trade-offs versus a third-party service?',
+                'Which third-party options were evaluated and why were they rejected?',
+                'What is the long-term ownership and on-call plan for the in-house service?',
+            ],
+            'Conflict resolved: ownership of Database Schema & Migrations task': [
+                'What was the root cause of the ownership conflict?',
+                'Who is the final accountable owner now, and what was the agreed split of responsibilities?',
+                'What follow-up actions or process changes prevent this conflict from recurring?',
+                'What was the impact on the migration timeline while the conflict was open?',
+            ],
         }
 
         for title, questions in gap_seed.items():
@@ -886,6 +905,7 @@ class Command(BaseCommand):
                 board=self.sd_board, title=title
             ).update(
                 gap_questions=questions,
+                gap_questions_original=questions,
                 has_gaps=True,
                 gaps_analyzed=True,
             )

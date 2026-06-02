@@ -175,11 +175,14 @@
                     </small>
                 </div>
                 <hr class="my-3">
-                <div class="d-flex align-items-center flex-wrap gap-2">
-                    <small class="text-muted"><i class="fas fa-comments me-1 opacity-50"></i>Want to dig deeper into this?</small>
+                <div id="digDeeperGaps" class="align-items-center flex-wrap gap-2" style="display:none;">
+                    <small class="text-muted"><i class="fas fa-comments me-1 opacity-50"></i>Want to dig deeper into the missing components of this memory?</small>
                     <button class="btn btn-sm btn-outline-primary" id="continueSpectraBtn">
-                        <i class="fas fa-robot me-1"></i>Continue in Ask Spectra
+                        <i class="fas fa-robot me-1"></i>Ask Spectra
                     </button>
+                </div>
+                <div id="memoryCompleteNote" class="text-success small" style="display:none;">
+                    <i class="fas fa-circle-check me-1"></i>This memory looks complete — no gaps flagged.
                 </div>
             </div>
         </div>
@@ -309,6 +312,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const answerText = document.getElementById('answerText');
     const confidenceBadge = document.getElementById('confidenceBadge');
     const sourcesContainer = document.getElementById('sourcesContainer');
+    const digDeeperGaps = document.getElementById('digDeeperGaps');
+    const memoryCompleteNote = document.getElementById('memoryCompleteNote');
     const feedbackUp = document.getElementById('feedbackUp');
     const feedbackDown = document.getElementById('feedbackDown');
     const feedbackMsg = document.getElementById('feedbackMsg');
@@ -375,6 +380,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
             sourcesContainer.innerHTML = srcHtml;
+
+            // Only offer the gap-finding handoff when a source memory still has
+            // gaps; otherwise reassure the user the memory looks complete. Set
+            // 'flex' explicitly (not '') — the row must NOT carry the d-flex
+            // class, whose !important would defeat an inline display:none.
+            const sources = data.source_details || [];
+            const haveMemory = sources.length > 0 && !data.no_data_found;
+            const anyGaps = sources.some(s => s.has_gaps);
+            digDeeperGaps.style.display = (haveMemory && anyGaps) ? 'flex' : 'none';
+            memoryCompleteNote.style.display = (haveMemory && !anyGaps) ? 'block' : 'none';
+
             resultDiv.style.display = 'block';
         })
         .catch(() => {
