@@ -116,6 +116,8 @@
                             <span class="badge bg-warning text-dark gap-badge" style="font-size:0.6rem;cursor:pointer;" tabindex="0"
                                   data-gap-target="{{ gapid }}"
                                   data-manageable="{{ node.manageable|yesno:'1,0' }}"
+                                  data-gap-original-count="{{ node.gap_questions_original|length }}"
+                                  data-gap-rounds="{{ node.gap_enrichment_count }}"
                                   {% if node.manageable %}data-node-id="{{ node.pk }}"
                                   data-node-type="{{ node.node_type }}"
                                   data-content="{{ node.content }}"
@@ -475,8 +477,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // ── "Gaps Noted" badges + popovers (Part 3C) ───────────────────────────────
     function buildGapPopoverContent(badge) {
         const questions = gapQuestionsForBadge(badge);
+        const originalCount = parseInt(badge.dataset.gapOriginalCount, 10) || 0;
+        const rounds = parseInt(badge.dataset.gapRounds, 10) || 0;
         let html = '<div class="small" style="max-width:280px;">';
         html += '<div class="fw-semibold mb-1"><i class="fas fa-wand-magic-sparkles me-1 text-primary"></i>Spectra identified missing context</div>';
+
+        // Anchored progress indicator: answered = original checklist - remaining.
+        // Computed purely client-side from data attributes (no extra AI call).
+        if (originalCount > 0) {
+            const answered = Math.max(0, originalCount - questions.length);
+            const pct = Math.round((answered / originalCount) * 100);
+            html += '<div class="mb-1" style="font-size:0.72rem;">Gap completeness: <strong>' +
+                    answered + ' of ' + originalCount + '</strong> questions answered</div>';
+            html += '<div class="progress mb-2" style="height:5px;"><div class="progress-bar bg-success" ' +
+                    'role="progressbar" style="width:' + pct + '%;" aria-valuenow="' + pct +
+                    '" aria-valuemin="0" aria-valuemax="100"></div></div>';
+        }
+
+        // Encouragement once the user has started filling gaps but a few remain.
+        if (rounds >= 1 && questions.length) {
+            html += '<div class="text-success mb-1" style="font-size:0.72rem;">' +
+                    '<i class="fas fa-circle-check me-1"></i>Good progress — just a few details remaining.</div>';
+        }
+
         if (questions.length) {
             html += '<ol class="ps-3 mb-2">';
             questions.forEach(q => { html += '<li>' + escapeHtml(q) + '</li>'; });
