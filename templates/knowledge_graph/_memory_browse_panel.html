@@ -54,6 +54,8 @@
             <span class="badge bg-warning text-dark gap-badge" style="font-size:0.6rem;cursor:pointer;" tabindex="0"
                   data-gap-target="{{ gapid }}"
                   data-manageable="{{ node.manageable|yesno:'1,0' }}"
+                  data-gap-original-count="{{ node.gap_questions_original|length }}"
+                  data-gap-rounds="{{ node.gap_enrichment_count }}"
                   {% if node.manageable %}data-node-id="{{ node.pk }}"
                   data-node-type="{{ node.node_type }}"
                   data-content="{{ node.content }}"

@@ -57,6 +57,11 @@ class MemoryNode(models.Model):
     # GAP_ENRICHMENT_CAP rounds the flag clears automatically (see
     # knowledge_graph.views.edit_manual_memory) — this terminates the loop.
     gap_enrichment_count = models.IntegerField(default=0)
+    # The canonical gap checklist, frozen the first time gaps are detected. On
+    # later edits we only mark which of THESE remain unanswered (anchored
+    # progressive tracking) instead of generating fresh questions, and compute a
+    # completeness score from len(original) - len(gap_questions remaining).
+    gap_questions_original = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']

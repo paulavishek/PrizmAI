@@ -142,6 +142,36 @@ def gap_recheck_system_prompt(node_type, description):
     )
 
 
+def gap_progress_system_prompt(node_type, description, original_questions):
+    """Re-check prompt for ANCHORED progressive gap tracking.
+
+    Unlike gap_recheck_system_prompt (which finds gaps freely), this hands Gemini
+    a FIXED checklist of the originally-identified questions and asks which of
+    THOSE are still unanswered by the current text. It must not invent or
+    rephrase questions — it returns a verbatim subset of the provided list.
+    """
+    numbered = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(original_questions))
+    return (
+        "You are checking a project-management memory entry against a FIXED "
+        "checklist of questions that were previously identified as missing "
+        "context. The memory has just been edited. Decide which checklist "
+        "questions are now answered by the text and which are still "
+        "unanswered.\n\n"
+        f"Memory type: {node_type}\n"
+        f"Memory entry: {description}\n\n"
+        "Checklist (do NOT add to it, do NOT rephrase it, do NOT invent new "
+        "questions):\n"
+        f"{numbered}\n\n"
+        "Return ONLY the checklist questions that are still NOT answered by the "
+        "memory entry, copied VERBATIM from the list above, as a JSON array of "
+        "strings. If every question is now answered, return an empty array. "
+        "Answer generously: if the entry gives a reasonable answer to a "
+        "question, treat it as answered.\n\n"
+        "Return ONLY the JSON array. No preamble, no markdown. Example: "
+        '["Question two?"] or []'
+    )
+
+
 def parse_gap_questions(raw):
     """Parse Gemini's response into a list of question strings.
 
@@ -347,6 +377,7 @@ def add_manual_memory(request, board_id):
         is_org_wide=is_org_wide,
         importance_score=0.6,
         gap_questions=saved_questions,
+        gap_questions_original=saved_questions,
         has_gaps=has_gaps,
         gaps_analyzed=gaps_analyzed,
     )
@@ -426,37 +457,65 @@ def edit_manual_memory(request, node_id):
     if request.user.has_perm('prizmai.invite_board_member', node.board):
         node.is_org_wide = bool(data.get('is_org_wide'))
 
-    # Re-assess gaps against the edited content. Editing is the user's chance to
-    # fill in missing context, so re-run Spectra: clear the flag once few gaps
-    # remain (GAP_CLEAR_THRESHOLD), otherwise keep it flagged with the updated
-    # questions. On any AI failure, fall back to clearing the flag.
+    # Re-assess gaps against the edited content (anchored progressive tracking).
+    # Editing is the user's chance to fill in missing context, so re-check which
+    # of the ORIGINAL gap questions are still unanswered — never invent new ones.
+    # On any AI failure, fall back to clearing the flag.
     node.gaps_analyzed = True
+
+    # Backfill the canonical checklist for memories flagged before anchored
+    # tracking existed: adopt the current remaining questions as the original.
+    if not node.gap_questions_original and node.gap_questions:
+        node.gap_questions_original = node.gap_questions
 
     # Count this edit as a round of enrichment only if the memory was flagged.
     was_flagged = node.has_gaps
     if was_flagged:
         node.gap_enrichment_count = (node.gap_enrichment_count or 0) + 1
 
+    original = node.gap_questions_original or []
+
     if was_flagged and node.gap_enrichment_count >= GAP_ENRICHMENT_CAP:
         # Hard cap reached: clear the flag without another Gemini round-trip.
         # The prompt can always find a deeper question, so the cap — not the AI —
-        # is what actually terminates the loop for the user.
+        # is the final backstop that terminates the loop for the user.
         node.has_gaps = False
         node.gap_questions = None
     else:
         try:
             from ai_assistant.utils.ai_router import AIRouter
+            if original:
+                # Anchored: which of the FIXED original questions remain unanswered.
+                system_prompt = gap_progress_system_prompt(node.node_type, content, original)
+            else:
+                # No anchored checklist yet (e.g. saved-without-review memory not
+                # yet lazily analysed). Find gaps freely and adopt the result as
+                # the canonical checklist for future edits.
+                system_prompt = gap_recheck_system_prompt(node.node_type, content)
             resp = AIRouter().complete(
-                prompt='Generate the JSON array of remaining critical gaps now.',
+                prompt='Return the JSON array of remaining gap questions now.',
                 user=request.user,
-                system_prompt=gap_recheck_system_prompt(node.node_type, content),
+                system_prompt=system_prompt,
                 complexity='simple',
             )
             remaining = parse_gap_questions(resp.get('text', ''))
         except Exception as exc:
             logger.warning(f"Gap re-check on edit failed for node {node.pk}: {exc}")
             remaining = []
-        if len(remaining) > GAP_CLEAR_THRESHOLD:
+
+        if original:
+            # Defensive: keep only real checklist items so Gemini can't smuggle
+            # in new questions; the checklist can only shrink.
+            original_set = set(original)
+            remaining = [q for q in remaining if q in original_set]
+        elif remaining:
+            # First-time anchor: freeze whatever was found as the checklist.
+            node.gap_questions_original = remaining
+
+        # Clear when the checklist is complete (remaining empty), OR few enough
+        # remain that the entry is "good enough" (GAP_CLEAR_THRESHOLD safety net
+        # against a single stubborn question Gemini keeps returning).
+        if remaining and len(remaining) > GAP_CLEAR_THRESHOLD:
             node.has_gaps = True
             node.gap_questions = remaining
         else:
@@ -540,9 +599,21 @@ def delete_manual_memory(request, node_id):
 def review_memory_gaps(request):
     """Ask Spectra what context is missing from a draft memory entry.
 
-    Pre-save, frontend-only review (no DB writes happen here). Returns a JSON
-    array of 3–5 questions, or an empty array on any failure (silent graceful
-    fallback — never surfaces an error to the user)."""
+    This backs the "Ask Spectra what's missing" button and is intentionally
+    DIFFERENT from the re-check that runs on save (edit_manual_memory):
+
+    - Here (preview): a pre-save, frontend-only review. No DB writes, and it does
+      NOT touch has_gaps. It surfaces what's currently missing using
+      gap_analysis_system_prompt (sufficiency rule → 0–5 questions), so it can
+      keep listing items even when the entry is close to good enough.
+    - On save (commit): edit_manual_memory re-checks the ANCHORED original
+      checklist (gap_progress_system_prompt) and decides has_gaps using
+      GAP_CLEAR_THRESHOLD + GAP_ENRICHMENT_CAP. That is why the badge can clear on
+      save even though this preview still shows a question or two — the preview
+      informs, the save commits.
+
+    Returns a JSON array of questions (possibly empty), or [] on any failure
+    (silent graceful fallback — never surfaces an error to the user)."""
     try:
         data = json.loads(request.body)
         description = (data.get('description') or '').strip()

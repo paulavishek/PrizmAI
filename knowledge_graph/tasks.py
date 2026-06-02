@@ -275,10 +275,16 @@ def analyze_memory_gaps(memory_node_id):
         if questions:
             node.gap_questions = questions
             node.has_gaps = True
+            # Freeze the canonical checklist the first time gaps are detected;
+            # later edits only mark which of these remain (anchored tracking).
+            if not node.gap_questions_original:
+                node.gap_questions_original = questions
         else:
             node.has_gaps = False
         node.gaps_analyzed = True
-        node.save(update_fields=['gap_questions', 'has_gaps', 'gaps_analyzed'])
+        node.save(update_fields=[
+            'gap_questions', 'gap_questions_original', 'has_gaps', 'gaps_analyzed',
+        ])
         return {'status': 'success', 'has_gaps': node.has_gaps, 'node_id': node.pk}
     except Exception as exc:
         # Never crash the worker; mark analysed so we don't retry in a loop.
