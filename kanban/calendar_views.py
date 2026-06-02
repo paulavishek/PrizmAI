@@ -167,11 +167,27 @@ def _event_workspace_scope(user):
 def unified_calendar(request):
     boards = _user_boards(request.user)
 
-    # Build a list of board dicts for the JS board-selector in the "create task" modal
+    # Build a list of board dicts for the JS board-selector in the "create task"
+    # modal — and the per-board member ids so the Teammates filter can be scoped
+    # to whichever board the user has selected (the chips filter the calendar to a
+    # single board; the teammate list should follow).
+    from collections import defaultdict
+    board_member_map = defaultdict(set)
+    for bid, uid in User.objects.filter(
+        board_memberships__board__in=boards
+    ).values_list('board_memberships__board_id', 'id'):
+        board_member_map[bid].add(uid)
+
     boards_data = []
     for b in boards:
         columns = list(b.columns.order_by('position').values('id', 'name'))
-        boards_data.append({'id': b.id, 'name': b.name, 'columns': columns})
+        members = board_member_map[b.id]
+        if b.created_by_id:  # owner is always a member of their own board
+            members = members | {b.created_by_id}
+        boards_data.append({
+            'id': b.id, 'name': b.name, 'columns': columns,
+            'members': sorted(members),
+        })
 
     # Gather all board members across user's boards for participant typeahead
     participant_qs = User.objects.filter(
