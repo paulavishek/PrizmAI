@@ -70,6 +70,12 @@ LEAD = DEMO_PERSONAS['lead']
 FRONTEND = DEMO_PERSONAS['frontend']
 DEVOPS = DEMO_PERSONAS['devops']
 
+# Shared password for all demo personas — single source of truth.  Both the
+# seeder (create_demo_organization) and the one-click "Login as <persona>"
+# flow (accounts.views.quick_demo_login) must use this exact value; a mismatch
+# here is what previously caused "Demo user not found or credentials invalid".
+DEMO_PASSWORD = 'DemoUser@2026'
+
 # Tuples for ``__in`` filters and membership checks.
 DEMO_USERNAMES = tuple(p['username'] for p in DEMO_PERSONAS.values())
 DEMO_EMAILS = tuple(p['email'] for p in DEMO_PERSONAS.values())

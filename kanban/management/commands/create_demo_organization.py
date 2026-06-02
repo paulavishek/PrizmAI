@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from accounts.models import Organization, UserProfile
 from accounts.demo_personas import (
-    DEMO_PERSONAS, DEMO_EMAILS, DEMO_USERNAMES,
+    DEMO_PERSONAS, DEMO_EMAILS, DEMO_USERNAMES, DEMO_PASSWORD,
     LEGACY_DEMO_USERNAMES, LEGACY_DEMO_EMAILS,
 )
 from kanban.models import Board, Column, BoardMembership
@@ -174,7 +174,7 @@ class Command(BaseCommand):
             )
             
             if created:
-                user.set_password('DemoUser@2026')
+                user.set_password(DEMO_PASSWORD)
                 user.save()
                 self.stdout.write(self.style.SUCCESS(f'  [OK] Created: {user.get_full_name()} ({user.email})'))
             else:
@@ -184,7 +184,7 @@ class Command(BaseCommand):
                 # blank first_name used to render as "Unknown".
                 user.first_name = persona_data['first_name']
                 user.last_name = persona_data['last_name']
-                user.set_password('DemoUser@2026')
+                user.set_password(DEMO_PASSWORD)
                 user.save()
                 self.stdout.write(self.style.WARNING(f'  ! Already exists: {user.get_full_name()} - password reset'))
 
