@@ -276,17 +276,17 @@ class AutomationRule(models.Model):
             ('conflict_detected',         'Conflict detected'),
             ('discovery_idea_scored',     'Discovery idea AI-scored'),
             ('discovery_idea_submitted',  'Discovery idea submitted'),
-            ('immunity_score_dropped',    'Immunity score dropped'),
-            ('hospice_risk_triggered',    'Hospice risk threshold reached'),
-            ('scope_creep_detected',      'Scope creep detected'),
-            ('prediction_confidence_dropped', 'Prediction confidence dropped'),
-            ('retrospective_finalized',   'Retrospective finalized'),
+            # Deferred — no receiver wired yet; hidden from the builder until
+            # implemented (see automation audit, June 2026):
+            #   immunity_score_dropped, hospice_risk_triggered,
+            #   scope_creep_detected, prediction_confidence_dropped,
+            #   retrospective_finalized
         ]),
         ('Communications', [
             ('comment_added',             'Comment added to a task'),
             ('mention_received',          'Assignee was @-mentioned'),
             ('attachment_added',          'Attachment added to a task'),
-            ('task_thread_message',       'Task thread message posted'),
+            # Deferred — task_thread_message has no receiver yet; hidden.
         ]),
         ('Scheduled', [
             ('scheduled_daily',           'Every day at a set time'),
@@ -403,16 +403,14 @@ class AutomationRule(models.Model):
         ('conflict_detected',         'Conflict detected'),
         ('discovery_idea_scored',     'Discovery idea AI-scored'),
         ('discovery_idea_submitted',  'Discovery idea submitted'),
-        ('immunity_score_dropped',    'Immunity score dropped'),
-        ('hospice_risk_triggered',    'Hospice risk threshold reached'),
-        ('scope_creep_detected',      'Scope creep detected'),
-        ('prediction_confidence_dropped', 'Prediction confidence dropped'),
-        ('retrospective_finalized',   'Retrospective finalized'),
+        # Deferred triggers (no receiver wired) are intentionally omitted from
+        # the selectable choices: immunity_score_dropped, hospice_risk_triggered,
+        # scope_creep_detected, prediction_confidence_dropped,
+        # retrospective_finalized, task_thread_message.
         # ── Communications ─────────────────────────────────────
         ('comment_added',             'Comment added to a task'),
         ('mention_received',          'Assignee was @-mentioned'),
         ('attachment_added',          'Attachment added to a task'),
-        ('task_thread_message',       'Task thread message posted'),
         # ── Schedule-based ─────────────────────────────────────
         ('scheduled_daily',           'Every day at a set time'),
         ('scheduled_weekly',          'Every week on a set day'),
