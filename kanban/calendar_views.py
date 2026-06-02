@@ -120,6 +120,26 @@ def _assignee_color(user_id):
     return _ASSIGNEE_PALETTE[user_id % len(_ASSIGNEE_PALETTE)]
 
 
+# Characters that are safe in JSON but break (or escape) an inline <script>:
+#   <, >, &  → a title like "</script>" would terminate the tag and dump the
+#             rest of the script onto the page (also a stored-XSS vector).
+#   U+2028/U+2029 → line separators, historically invalid in JS string literals.
+# Mirrors Django's own ``json_script`` escaping so user-supplied board/task names
+# can be embedded with ``|safe`` without breaking the page.
+_JSON_SCRIPT_ESCAPES = {
+    ord('<'): '\\u003C',
+    ord('>'): '\\u003E',
+    ord('&'): '\\u0026',
+    0x2028: '\\u2028',
+    0x2029: '\\u2029',
+}
+
+
+def _json_for_script(obj):
+    """``json.dumps`` an object, escaped for safe embedding inside a <script> tag."""
+    return json.dumps(obj).translate(_JSON_SCRIPT_ESCAPES)
+
+
 # ---------------------------------------------------------------------------
 # Main calendar page
 # ---------------------------------------------------------------------------
@@ -203,15 +223,15 @@ def unified_calendar(request):
 
     context = {
         'boards': boards,
-        'active_board_ids_json': json.dumps(active_board_ids),
-        'boards_json': json.dumps(boards_data),
-        'participants_json': json.dumps(participants_data),
-        'teammates_json': json.dumps(teammates_data),
+        'active_board_ids_json': _json_for_script(active_board_ids),
+        'boards_json': _json_for_script(boards_data),
+        'participants_json': _json_for_script(participants_data),
+        'teammates_json': _json_for_script(teammates_data),
         'total_tasks': total_tasks,
         'overdue_count': overdue_count,
         'events_this_month': events_this_month,
         'current_month': now.strftime('%B %Y'),
-        'all_tasks_json': json.dumps(_all_tasks),
+        'all_tasks_json': _json_for_script(_all_tasks),
     }
     return render(request, 'kanban/unified_calendar.html', context)
 
