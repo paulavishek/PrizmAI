@@ -1009,6 +1009,7 @@ def organizational_memory_search(request):
                 'board_name': n.board.name if n.board else 'N/A',
                 'date': n.created_at.strftime('%b %d, %Y'),
                 'node_type': n.get_node_type_display(),
+                'has_gaps': n.has_gaps,
             })
 
     try:
