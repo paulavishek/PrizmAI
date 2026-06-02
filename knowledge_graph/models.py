@@ -52,6 +52,11 @@ class MemoryNode(models.Model):
     gap_questions = models.JSONField(null=True, blank=True)
     has_gaps = models.BooleanField(default=False)
     gaps_analyzed = models.BooleanField(default=False)
+    # How many times the user has edited this memory in response to a "Gaps
+    # Noted" flag. The gap prompt can always surface a deeper question, so after
+    # GAP_ENRICHMENT_CAP rounds the flag clears automatically (see
+    # knowledge_graph.views.edit_manual_memory) — this terminates the loop.
+    gap_enrichment_count = models.IntegerField(default=0)
 
     class Meta:
         ordering = ['-created_at']

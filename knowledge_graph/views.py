@@ -82,21 +82,27 @@ def gap_analysis_system_prompt(node_type, description):
     (knowledge_graph.tasks.analyze_memory_gaps) so both ask Gemini the same way.
     """
     return (
-        "You are reviewing a brief memory entry written by a project "
-        "manager. Your job is to identify what critical context is missing. "
-        "Do not answer questions. Do not make assumptions. Do not add "
-        "generic advice.\n\n"
+        "You are reviewing a memory entry written by a project manager. First "
+        "decide whether it is already useful enough for a teammate reading it "
+        "months from now; only if it is not, identify the critical context that "
+        "is missing. Do not answer questions. Do not make assumptions. Do not "
+        "add generic advice.\n\n"
         f"Memory type: {node_type}\n"
         f"Memory entry: {description}\n\n"
-        "Generate exactly 3 to 5 specific questions whose answers would "
-        "make this memory significantly more useful to a team member "
-        "reading it months from now. Focus on: root cause, decision owner, "
-        "impact, timeline, follow-up actions, and risks. Be specific to "
-        "what was written — do not ask generic project management questions "
-        "that could apply to any situation.\n\n"
-        "Return ONLY a JSON array of question strings. No preamble, no "
-        "explanation, no markdown. Example format:\n"
-        '["Question one?", "Question two?", "Question three?"]'
+        "Sufficiency rule: if the entry already contains a clear description of "
+        "WHAT happened, WHO was involved, and at least ONE outcome or follow-up "
+        "action, it is good enough — return an empty array, regardless of what "
+        "additional detail could theoretically be added. Only flag gaps for "
+        "genuinely missing critical information (root cause, decision owner, "
+        "impact, timeline, follow-up actions, risks) — never for deeper "
+        "elaboration on information that is already present.\n\n"
+        "When the entry is NOT sufficient, return up to 5 specific questions, "
+        "each targeting information that is actually absent. Be specific to what "
+        "was written — do not ask generic project-management questions that "
+        "could apply to any situation.\n\n"
+        "Return ONLY a JSON array of question strings (which may be empty). No "
+        "preamble, no explanation, no markdown. Example:\n"
+        '["Question one?", "Question two?"] or []'
     )
 
 
@@ -104,6 +110,12 @@ def gap_analysis_system_prompt(node_type, description):
 # this many or fewer critical gaps remain — the entry is "good enough" even if
 # not every original question was answered.
 GAP_CLEAR_THRESHOLD = 2
+
+# Hard cap on enrichment rounds. The gap prompt can always invent a deeper
+# follow-up question, so a purely AI-driven loop never terminates. After this
+# many user edits of an already-flagged memory we clear the flag regardless of
+# what Spectra still asks — two rounds of enrichment is enough.
+GAP_ENRICHMENT_CAP = 2
 
 
 def gap_recheck_system_prompt(node_type, description):
@@ -113,16 +125,18 @@ def gap_recheck_system_prompt(node_type, description):
     this allows an empty result so a now-thorough memory can clear its flag.
     """
     return (
-        "You are reviewing a memory entry written by a project manager that has "
-        "just been edited to add more detail. Identify what CRITICAL context is "
-        "still missing. Do not answer questions. Do not make assumptions.\n\n"
+        "You are reviewing a memory entry that a project manager has just edited "
+        "to add more detail. Decide whether it is now good enough. Do not answer "
+        "questions. Do not make assumptions.\n\n"
         f"Memory type: {node_type}\n"
         f"Memory entry: {description}\n\n"
-        "List only genuinely critical questions whose answers are still missing "
-        "and would materially improve this memory for a teammate reading it "
-        "months from now (root cause, decision owner, impact, timeline, "
-        "follow-up actions, risks). If the entry is now thorough, return an "
-        "empty array. Return at most 5 questions.\n\n"
+        "Sufficiency rule: if the entry now contains a clear description of WHAT "
+        "happened, WHO was involved, and at least ONE outcome or follow-up "
+        "action, return an empty array — regardless of what further detail could "
+        "be added. Only list genuinely critical information that is still ABSENT "
+        "(root cause, decision owner, impact, timeline, follow-up actions, "
+        "risks); never ask for deeper elaboration on information already "
+        "present. Return at most 5 questions.\n\n"
         "Return ONLY a JSON array of question strings (which may be empty). No "
         'preamble, no markdown. Example: ["Question one?"] or []'
     )
@@ -149,20 +163,20 @@ def parse_gap_questions(raw):
 
 
 def _can_manage_memory(request, node):
-    """True if the user may edit/delete this manual memory.
+    """True if the user may edit/delete this memory.
 
-    Rule: demo sandbox has no RBAC, so every board-attached memory (including
-    auto-captured ones) is manageable there. Outside demo: never auto-captured
-    (system) memories; then creator, or an Owner/Org-Admin-level overseer
-    (invite_board_member perm).
+    Rule: demo sandbox has no RBAC, so every board-attached memory is manageable
+    there. Outside demo: the creator, or an Owner/Org-Admin-level overseer
+    (invite_board_member perm). Auto-captured (system) memories have no creator,
+    so they fall through to the overseer check — this lets an Owner/Org-Admin
+    enrich a flagged auto-captured memory through the "Gaps Noted -> Expand this
+    memory" loop, which is the common case in a real workspace.
     """
     if node.board is None:
         return False
     from kanban.permissions import is_demo_context
     if is_demo_context(request, board=node.board):
         return True
-    if node.is_auto_captured:
-        return False
     if node.created_by_id == request.user.id:
         return True
     return request.user.has_perm('prizmai.invite_board_member', node.board)
@@ -373,8 +387,9 @@ def add_manual_memory(request, board_id):
 @require_POST
 @demo_write_guard
 def edit_manual_memory(request, node_id):
-    """Edit a manually-logged memory. Creator or Owner/Org-Admin only;
-    never auto-captured (system) memories."""
+    """Edit a logged memory. Creator or Owner/Org-Admin only. Auto-captured
+    (system) memories are editable by an Owner/Org-Admin so they can enrich a
+    flagged memory via the "Gaps Noted -> Expand this memory" loop."""
     node = get_object_or_404(MemoryNode, id=node_id)
 
     if not _can_manage_memory(request, node):
@@ -416,23 +431,37 @@ def edit_manual_memory(request, node_id):
     # remain (GAP_CLEAR_THRESHOLD), otherwise keep it flagged with the updated
     # questions. On any AI failure, fall back to clearing the flag.
     node.gaps_analyzed = True
-    try:
-        from ai_assistant.utils.ai_router import AIRouter
-        resp = AIRouter().complete(
-            prompt='Generate the JSON array of remaining critical gaps now.',
-            user=request.user,
-            system_prompt=gap_recheck_system_prompt(node.node_type, content),
-            complexity='simple',
-        )
-        remaining = parse_gap_questions(resp.get('text', ''))
-    except Exception as exc:
-        logger.warning(f"Gap re-check on edit failed for node {node.pk}: {exc}")
-        remaining = []
-    if len(remaining) > GAP_CLEAR_THRESHOLD:
-        node.has_gaps = True
-        node.gap_questions = remaining
-    else:
+
+    # Count this edit as a round of enrichment only if the memory was flagged.
+    was_flagged = node.has_gaps
+    if was_flagged:
+        node.gap_enrichment_count = (node.gap_enrichment_count or 0) + 1
+
+    if was_flagged and node.gap_enrichment_count >= GAP_ENRICHMENT_CAP:
+        # Hard cap reached: clear the flag without another Gemini round-trip.
+        # The prompt can always find a deeper question, so the cap — not the AI —
+        # is what actually terminates the loop for the user.
         node.has_gaps = False
+        node.gap_questions = None
+    else:
+        try:
+            from ai_assistant.utils.ai_router import AIRouter
+            resp = AIRouter().complete(
+                prompt='Generate the JSON array of remaining critical gaps now.',
+                user=request.user,
+                system_prompt=gap_recheck_system_prompt(node.node_type, content),
+                complexity='simple',
+            )
+            remaining = parse_gap_questions(resp.get('text', ''))
+        except Exception as exc:
+            logger.warning(f"Gap re-check on edit failed for node {node.pk}: {exc}")
+            remaining = []
+        if len(remaining) > GAP_CLEAR_THRESHOLD:
+            node.has_gaps = True
+            node.gap_questions = remaining
+        else:
+            node.has_gaps = False
+            node.gap_questions = None
     node.save()
 
     try:
