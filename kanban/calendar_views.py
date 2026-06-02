@@ -166,8 +166,17 @@ def unified_calendar(request):
     ).select_related('column__board').order_by('column__board__name', 'title'):
         _all_tasks.append({'id': _t.id, 'title': _t.title, 'board_name': _t.column.board.name})
 
+    # Optional pre-filter: ?board=<id> scopes the calendar to a single board
+    # (used by each board's "Calendar" tab so it lands here pre-scoped).
+    active_board_ids = []
+    _board_param = request.GET.get('board')
+    if _board_param and _board_param.isdigit():
+        if boards.filter(id=int(_board_param)).exists():
+            active_board_ids = [_board_param]
+
     context = {
         'boards': boards,
+        'active_board_ids_json': json.dumps(active_board_ids),
         'boards_json': json.dumps(boards_data),
         'participants_json': json.dumps(participants_data),
         'teammates_json': json.dumps(teammates_data),
@@ -225,10 +234,12 @@ def unified_calendar_events_api(request):
         Q(created_by=request.user) |
         # Events I'm invited to, team-visible only
         Q(participants=request.user, visibility='team') |
-        # Teammate OOO / busy blocks / team events that they chose to share
+        # Teammate events shared as team-visible.  A team-visible MEETING shows
+        # other teammates a sanitized "busy" block (see title sanitization below)
+        # so the "Team can see I'm busy" promise holds for the default event type.
         Q(
             created_by__in=board_member_ids,
-            event_type__in=['out_of_office', 'busy_block', 'team_event'],
+            event_type__in=['out_of_office', 'busy_block', 'team_event', 'meeting'],
             visibility='team',
         )
     ).select_related('board', 'linked_task', 'created_by').prefetch_related('participants').distinct()
@@ -350,6 +361,9 @@ def unified_calendar_events_api(request):
                     if linked_task_title
                     else f"{owner_name} — busy"
                 )
+            elif ev.event_type == 'meeting':
+                # "Team can see I'm busy" — show the block, hide the reason (title).
+                fc_title = f"{owner_name} — busy"
             else:  # team_event — show actual title
                 fc_title = ev.title
 
@@ -714,6 +728,38 @@ def calendar_get_board_columns(request, board_id):
 # CalendarEvent detail & delete
 # ---------------------------------------------------------------------------
 
+def _calendar_back_url(request, event):
+    """Resolve where the "Back to Calendar" link should point.
+
+    The same event detail page is reachable from both the unified "My Calendar"
+    (/calendar/) and a board calendar (/boards/<id>/calendar/).  A board-linked
+    event must not always bounce back to the board calendar — it should return
+    the user to whichever calendar they came from.  Resolution order:
+
+      1. Explicit ?from= marker ('unified' or 'board') set on the originating link.
+      2. The HTTP referer, if it points at one of our calendar pages.
+      3. Fallback: board calendar when board-linked, otherwise unified.
+    """
+    origin = request.GET.get('from')
+    if origin == 'unified':
+        return '/calendar/'
+    if origin == 'board' and event.board_id:
+        return f'/boards/{event.board_id}/calendar/'
+
+    referer = request.META.get('HTTP_REFERER', '')
+    if referer:
+        from urllib.parse import urlparse
+        path = urlparse(referer).path
+        if path == '/calendar/':
+            return '/calendar/'
+        if path.startswith('/boards/') and path.endswith('/calendar/'):
+            return path
+
+    if event.board_id:
+        return f'/boards/{event.board_id}/calendar/'
+    return '/calendar/'
+
+
 @login_required
 def calendar_event_detail(request, event_id):
     """Simple detail/edit page for a CalendarEvent."""
@@ -736,11 +782,8 @@ def calendar_event_detail(request, event_id):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You don't have access to this event.")
 
-    # Determine back URL — if event belongs to a board, go to that board's calendar
-    if event.board_id:
-        back_url = f'/boards/{event.board_id}/calendar/'
-    else:
-        back_url = '/calendar/'
+    # Determine back URL — respect where the user actually came from
+    back_url = _calendar_back_url(request, event)
 
     # Pre-compute display dates using explicit timezone conversion (bypasses
     # Django's thread-local which is unreliable under Daphne/ASGI).
@@ -755,11 +798,31 @@ def calendar_event_detail(request, event_id):
         event_start_display = event.start_datetime.astimezone(_srv_tz)
         event_end_display   = event.end_datetime.astimezone(_srv_tz)
 
+    # If the viewer is neither the creator nor a participant, they are only here
+    # via "Team can see I'm busy" visibility — show a sanitized busy/OOO block so
+    # the reason (title, notes, location, participants) is not leaked.  Team
+    # events are intentionally fully shared, so they are never sanitized.
+    is_mine = event.created_by_id == request.user.id
+    is_participant = event.participants.filter(id=request.user.id).exists()
+    sanitized = (not is_mine) and (not is_participant) and event.event_type != 'team_event'
+    owner_name = event.created_by.get_full_name() or event.created_by.username
+    if sanitized:
+        display_title = (
+            f"{owner_name} — Out of Office"
+            if event.event_type == 'out_of_office'
+            else f"{owner_name} — busy"
+        )
+    else:
+        display_title = event.title
+
     context = {
         'event': event,
         'back_url': back_url,
+        'back_origin': 'unified' if back_url == '/calendar/' else 'board',
         'event_start_display': event_start_display,
         'event_end_display': event_end_display,
+        'sanitized': sanitized,
+        'display_title': display_title,
     }
     return render(request, 'kanban/calendar_event_detail.html', context)
 
@@ -770,11 +833,8 @@ def calendar_event_edit(request, event_id):
     """Edit a CalendarEvent (creator only)."""
     event = get_object_or_404(CalendarEvent, id=event_id, created_by=request.user)
 
-    # Determine back URL
-    if event.board_id:
-        back_url = f'/boards/{event.board_id}/calendar/'
-    else:
-        back_url = '/calendar/'
+    # Determine back URL — respect where the user came from
+    back_url = _calendar_back_url(request, event)
 
     # Build participants list (board members if board-linked, otherwise all users the creator shares boards with)
     if event.board:
@@ -825,11 +885,16 @@ def calendar_event_edit(request, event_id):
         else:
             event.participants.clear()
 
-        return redirect('calendar_event_detail', event_id=event.id)
+        from django.urls import reverse
+        detail_url = reverse('calendar_event_detail', args=[event.id])
+        if back_url == '/calendar/':
+            detail_url += '?from=unified'
+        return redirect(detail_url)
 
     context = {
         'event': event,
         'back_url': back_url,
+        'back_origin': 'unified' if back_url == '/calendar/' else 'board',
         'participant_choices': participant_qs,
         'current_participant_ids': list(event.participants.values_list('id', flat=True)),
     }

@@ -3710,189 +3710,21 @@ def gantt_chart(request, board_id):
 
 
 @login_required
-@login_required
 def board_calendar(request, board_id):
-    """
-    Calendar view: shows all tasks with due dates laid out by month/week.
-    Tasks with no due date are listed in a separate 'unscheduled' section.
-    Each task is colour-coded by assignee (not by priority) so a PM can
-    visually distinguish who owns what at a glance.
+    """Board calendar — unified with "My Calendar".
+
+    The board-scoped calendar used to be a separate page (calendar_view.html)
+    with a different filter UI, which caused confusion against the unified
+    cross-board calendar.  To give a single, consistent calendar experience
+    (the three-filter "My Calendar"), this now redirects to the unified
+    calendar pre-filtered to this board.
     """
     board = get_object_or_404(Board, id=board_id)
 
     if not request.user.has_perm('prizmai.view_board', board):
         raise Http404
 
-    # ---------------------------------------------------------------------------
-    # Assignee colour palette — distinct from priority colours
-    # (priority: #dc3545 red, #fd7e14 orange, #0d6efd blue, #198754 green)
-    # ---------------------------------------------------------------------------
-    _ASSIGNEE_PALETTE = [
-        '#7c3aed',  # violet
-        '#db2777',  # hot pink
-        '#0891b2',  # teal
-        '#ca8a04',  # golden yellow
-        '#c026d3',  # fuchsia
-        '#0f766e',  # dark teal
-        '#b45309',  # amber brown
-        '#4338ca',  # indigo
-        '#be185d',  # deep rose
-        '#0369a1',  # steel blue
-    ]
-    _UNASSIGNED_COLOR = '#9ca3af'  # neutral grey for tasks with no assignee
-
-    def _assignee_color(uid):
-        if uid is None:
-            return _UNASSIGNED_COLOR
-        return _ASSIGNEE_PALETTE[uid % len(_ASSIGNEE_PALETTE)]
-
-    # Fetch all tasks that have a due date, ordered by due date
-    tasks_with_dates = (
-        Task.objects
-        .filter(column__board=board, item_type='task', due_date__isnull=False)
-        .select_related('column', 'assigned_to')
-        .order_by('due_date')
-    )
-
-    tasks_without_dates = (
-        Task.objects
-        .filter(column__board=board, item_type='task', due_date__isnull=True)
-        .select_related('column', 'assigned_to')
-        .order_by('column__position', 'position')
-    )
-
-    # Build a serialisable list of events for FullCalendar — colour = assignee
-    import json as _json
-
-    # Collect all board members and map user_id → color (for the legend)
-    from django.db.models import Q as _CalQ
-    _CalUser = User
-    _mem_qs = _CalUser.objects.filter(
-        _CalQ(board_memberships__board=board) | _CalQ(created_boards=board)
-    ).distinct().order_by('username')
-
-    _mem_data = []
-    for u in _mem_qs:
-        _mem_data.append({
-            'id': u.id,
-            'username': u.username,
-            'display': u.get_full_name() or u.username,
-            'color': _assignee_color(u.id),
-        })
-
-    # uid → color map for fast event lookup
-    _color_map = {m['id']: m['color'] for m in _mem_data}
-
-    from datetime import timedelta as _td
-
-    events = []
-    for t in tasks_with_dates:
-        due = t.due_date
-        due_date_obj = due.date() if hasattr(due, 'date') else due
-        due_str = due_date_obj.isoformat()
-
-        # Multi-day bar: use start_date if available, else fall back to due_date
-        if t.start_date:
-            start_str = t.start_date.isoformat()
-        else:
-            start_str = due_str
-
-        # FullCalendar uses exclusive end date — add 1 day
-        end_str = (due_date_obj + _td(days=1)).isoformat()
-
-        assignee_id = t.assigned_to_id
-        color = _color_map.get(assignee_id, _UNASSIGNED_COLOR)
-        assignee_display = None
-        if t.assigned_to:
-            assignee_display = t.assigned_to.get_full_name() or t.assigned_to.username
-
-        events.append({
-            'id': t.id,
-            'title': t.title,
-            'start': start_str,
-            'end': end_str,
-            'url': f'/tasks/{t.id}/',
-            'color': color,
-            'extendedProps': {
-                'source': 'task',
-                'column': t.column.name,
-                'priority': t.get_priority_display(),
-                'progress': t.progress,
-                'assignee': assignee_display,
-                'assignee_id': assignee_id,
-                'due_date_str': due_str,
-                'start_date_str': t.start_date.isoformat() if t.start_date else None,
-            }
-        })
-
-    # -----------------------------------------------------------------------
-    # Calendar events (meetings, OOO, busy blocks, team events) for this board
-    # -----------------------------------------------------------------------
-    from django.db.models import Q as _CalQ2
-    cal_events = (
-        CalendarEvent.objects
-        .filter(board=board)
-        .filter(
-            _CalQ2(created_by=request.user) |
-            _CalQ2(participants=request.user) |
-            _CalQ2(visibility='team')
-        )
-        .distinct()
-        .select_related('board', 'created_by', 'linked_task')
-        .prefetch_related('participants')
-    )
-
-    for ce in cal_events:
-        if ce.is_all_day:
-            fc_start = ce.start_datetime.strftime('%Y-%m-%d')
-            fc_end = (ce.end_datetime + _td(days=1)).strftime('%Y-%m-%d')
-        else:
-            fc_start = ce.start_datetime.isoformat()
-            fc_end = ce.end_datetime.isoformat()
-
-        events.append({
-            'id': f'event-{ce.id}',
-            'title': ce.title,
-            'start': fc_start,
-            'end': fc_end,
-            'allDay': ce.is_all_day,
-            'url': f'/calendar/events/{ce.id}/',
-            'color': ce.get_event_type_color(),
-            'extendedProps': {
-                'source': 'event',
-                'layer': 'event',
-                'event_id': ce.id,
-                'event_type': ce.get_event_type_display(),
-                'event_type_key': ce.event_type,
-                'visibility': ce.visibility,
-                'is_mine': ce.created_by_id == request.user.id,
-                'description': ce.description or '',
-                'location': ce.location or '',
-                'board': board.name,
-                'participants': [u.username for u in ce.participants.all()],
-                'participant_ids': [u.id for u in ce.participants.all()],
-                'created_by': ce.created_by.username,
-                'created_by_id': ce.created_by_id,
-                'linked_task_title': ce.linked_task.title if ce.linked_task else None,
-                'linked_task_id': ce.linked_task_id,
-            },
-        })
-
-    _col_data = list(board.columns.order_by('position').values('id', 'name'))
-
-    context = {
-        'board': board,
-        'tasks_without_dates': tasks_without_dates,
-        'events_json': _json.dumps(events),
-        'total_tasks': tasks_with_dates.count() + tasks_without_dates.count(),
-        'scheduled_count': tasks_with_dates.count(),
-        'unscheduled_count': tasks_without_dates.count(),
-        'columns_json': _json.dumps(_col_data),
-        'members_json': _json.dumps(_mem_data),
-        'members_with_colors_json': _json.dumps(_mem_data),
-        'participants_json': _json.dumps([m for m in _mem_data if m['id'] != request.user.id]),
-    }
-    return render(request, 'kanban/calendar_view.html', context)
+    return redirect(f"{reverse('unified_calendar')}?board={board.id}")
 
 
 @login_required
