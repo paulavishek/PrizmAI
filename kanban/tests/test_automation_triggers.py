@@ -284,3 +284,160 @@ class IdleTriggerConfigValidationTest(TestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class ReentrancyGuardTest(TestCase):
+    """X-07, X-09, T-39: a rule's own side effects must not re-trigger
+    automation. Without the guard these loop until RecursionError."""
+
+    def test_comment_added_post_comment_fires_exactly_once(self):
+        """T-39 / X-09: comment_added → post_comment posts ONE echo, not a storm."""
+        from kanban.models import Comment
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='echo_user')
+        rule = _make_rule(
+            board, user, 'comment_added',
+            actions=[{'type': 'post_comment', 'target': None, 'message': 'Echo!'}],
+        )
+
+        Comment.objects.create(task=task, user=user, content='hello')
+
+        # Original + exactly one automated echo.
+        self.assertEqual(Comment.objects.filter(task=task).count(), 2)
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=rule).count(), 1,
+            'comment_added must fire once, not recurse on its own echo',
+        )
+
+    def test_task_created_add_subtask_no_explosion(self):
+        """X-07: task_created → add_subtask creates ONE subtask, not N²/∞."""
+        from kanban.models import Task
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='sub_user')
+        rule = _make_rule(
+            board, user, 'task_created',
+            actions=[{'type': 'add_subtask', 'target': None,
+                      'message': 'Investigate {task_title}'}],
+        )
+
+        parent = Task.objects.create(column=col, title='Parent', created_by=user)
+
+        subtasks = Task.objects.filter(parent_task=parent)
+        self.assertEqual(subtasks.count(), 1, 'exactly one subtask, no explosion')
+        # The rule fired once (on the parent); the subtask did not re-fire it.
+        self.assertEqual(AutomationLog.objects.filter(rule=rule).count(), 1)
+
+
+class ActionOutcomeSemanticsTest(TestCase):
+    """E-05, E-06, E-07, A-11: the audit-log outcome matches the plan's
+    'Should happen' (Failed vs Skipped vs Success)."""
+
+    def _outcome_for(self, action, username, task_kwargs=None):
+        from kanban.models import Task
+        from kanban.automation_models import AutomationLog
+        user, board, col, task = _make_board_with_task(
+            username=username, task_kwargs=task_kwargs,
+        )
+        _make_rule(board, user, 'task_created', actions=[action])
+        new_task = Task.objects.create(
+            column=col, title='Trigger', created_by=user, **(task_kwargs or {}),
+        )
+        return AutomationLog.objects.filter(task_affected=new_task).latest('triggered_at')
+
+    def test_invalid_priority_is_failed(self):
+        log = self._outcome_for(
+            {'type': 'set_priority', 'target': 'blue'}, 'badprio_user',
+        )
+        self.assertEqual(log.outcome, 'failed')
+        self.assertIn('blue', log.error_detail.lower())
+
+    def test_missing_column_is_skipped(self):
+        log = self._outcome_for(
+            {'type': 'move_to_column', 'target': 'Nonexistent'}, 'badcol_user',
+        )
+        self.assertEqual(log.outcome, 'skipped')
+
+    def test_missing_label_is_skipped(self):
+        log = self._outcome_for(
+            {'type': 'add_label', 'target': 'Nonexistent'}, 'badlabel_user',
+        )
+        self.assertEqual(log.outcome, 'skipped')
+
+    def test_assign_default_no_assignee_is_skipped(self):
+        # target omitted → defaults to 'task_assignee'; task has no assignee.
+        log = self._outcome_for(
+            {'type': 'assign_to_user', 'target': ''}, 'noassign_user',
+        )
+        self.assertEqual(log.outcome, 'skipped')
+
+
+class PredictionConfidenceConditionTest(TestCase):
+    """C-33: a fractional threshold (0.5) must evaluate, not silently fail."""
+
+    def test_fractional_threshold_matches_low_confidence(self):
+        from kanban.automation_conditions import evaluate, TriggerTarget
+
+        user, board, col, low = _make_board_with_task(
+            username='conf_low', task_kwargs={'prediction_confidence': 0.3},
+        )
+        high = type(low).objects.create(
+            column=col, title='High conf', created_by=user,
+            prediction_confidence=0.9,
+        )
+
+        def conf_target(t):
+            return TriggerTarget(target_board=board, target_task=t, source=t,
+                                 source_type='task')
+
+        self.assertTrue(evaluate('prediction_confidence', 'lte', '0.5', conf_target(low)))
+        self.assertFalse(evaluate('prediction_confidence', 'lte', '0.5', conf_target(high)))
+
+
+class DependencyOverdueSweepTest(TestCase):
+    """T-25: a blocked task fires when its blocking dependency is overdue."""
+
+    def test_sweep_fires_on_blocked_task(self):
+        from datetime import timedelta
+        from kanban.models import Task
+        from kanban.automation_models import AutomationLog
+        from kanban.tasks.automation_tasks import run_dependency_overdue_automations
+
+        user, board, col, blocker = _make_board_with_task(username='dep_user')
+        # Blocker is overdue (due yesterday, not complete).
+        blocker.due_date = timezone.now() - timedelta(days=1)
+        blocker.progress = 50
+        blocker.save()
+
+        blocked = Task.objects.create(column=col, title='Blocked A', created_by=user)
+        blocked.dependencies.add(blocker)
+
+        rule = _make_rule(board, user, 'dependency_overdue')
+        run_dependency_overdue_automations()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=blocked)
+        self.assertEqual(logs.count(), 1)
+
+
+class TaskCompletedDedupeTest(TestCase):
+    """T-02: completing → un-completing → re-completing the same day fires once."""
+
+    def test_recomplete_same_day_does_not_refire(self):
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(
+            username='complete_user', task_kwargs={'progress': 50},
+        )
+        rule = _make_rule(board, user, 'task_completed')
+
+        task.progress = 100
+        task.save()
+
+        task.progress = 50
+        task.save()
+        task.progress = 100
+        task.save()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 1, 'task_completed must dedupe per calendar day')

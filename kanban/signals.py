@@ -19,6 +19,39 @@ from kanban.automation_actions import _ActionNoOp, _ActionSkip  # re-exported
 # Custom-field change handlers — registered for their side effects.
 from kanban import custom_field_signals as _cfs  # noqa: F401
 
+import threading
+from contextlib import contextmanager
+
+# ── Automation re-entrancy guard ─────────────────────────────────────────────
+# Actions can call .create()/.save() (e.g. add_subtask creates a Task,
+# post_comment creates a Comment, add_label/flag_for_review touch the m2m
+# through-table). Those writes re-emit the very signals that fire automation
+# rules, so without a guard a "task_created → add_subtask" rule explodes
+# exponentially and a "comment_added → post_comment" rule recurses until
+# RecursionError. Every automation receiver checks _in_automation() at entry and
+# returns early; the rule runners set the flag while executing actions. Net
+# effect: a rule's own side effects never re-trigger automation (self-induced
+# events are filtered). Field-change chains via .update() already don't cascade,
+# so this only tightens an existing boundary.
+_automation_state = threading.local()
+
+
+def _in_automation():
+    """True while an automation rule's actions are executing on this thread."""
+    return getattr(_automation_state, 'active', False)
+
+
+@contextmanager
+def _automation_guard():
+    """Mark the current thread as 'inside automation' for the duration of the
+    block so nested model writes don't re-trigger automation receivers."""
+    previous = getattr(_automation_state, 'active', False)
+    _automation_state.active = True
+    try:
+        yield
+    finally:
+        _automation_state.active = previous
+
 # Pre-save field snapshot — populated by track_field_changes() below and
 # consumed in Phase 1b by triggers that fire on "X changed to Y".
 TRACKED_FIELDS = (
@@ -152,6 +185,10 @@ def run_board_automations(sender, instance, created, **kwargs):
     Fire active automation rules after a task is saved.
     Queries both legacy BoardAutomation and new AutomationRule models.
     """
+    # Re-entrancy guard: a Task created/saved by another rule's action (e.g.
+    # add_subtask) must not re-trigger automation rules.
+    if _in_automation():
+        return
     from django.utils import timezone as tz
     try:
         from kanban.automation_models import BoardAutomation, AutomationRule, AutomationLog
@@ -174,7 +211,8 @@ def run_board_automations(sender, instance, created, **kwargs):
             fired = _check_trigger(rule, instance, created, column_changed,
                                    priority_changed, just_completed, assignment_changed, now)
             if fired:
-                _apply_automation_action(instance, rule)
+                with _automation_guard():
+                    _apply_automation_action(instance, rule)
                 rule.run_count += 1
                 rule.last_run_at = now
                 BoardAutomation.objects.filter(pk=rule.pk).update(
@@ -238,12 +276,14 @@ def run_board_automations(sender, instance, created, **kwargs):
                 )
             elif rule.rule_definition:
                 # ── Legacy canvas block tree ─────────────────────
-                _execute_rule_tree(rule.rule_definition, instance, rule, actions_taken, errors)
+                with _automation_guard():
+                    _execute_rule_tree(rule.rule_definition, instance, rule, actions_taken, errors)
                 outcome = 'failed' if errors else 'success'
             else:
                 # ── Legacy single action (very old rules) ────────
                 try:
-                    _apply_automation_action(instance, rule)
+                    with _automation_guard():
+                        _apply_automation_action(instance, rule)
                     actions_taken.append(f"{rule.action_type}: {rule.action_value}")
                 except Exception as e:
                     errors.append(str(e))
@@ -325,6 +365,20 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
         return True
 
     elif trigger_type == 'task_completed' and just_completed:
+        # Per-day dedupe: bouncing a task 100 → 50 → 100 in the same calendar day
+        # should fire the rule at most once (matches the overdue sweep's guard and
+        # the spam-guard the test plan expects for T-02).
+        try:
+            from kanban.automation_models import AutomationLog
+            if AutomationLog.objects.filter(
+                rule_id=rule.pk,
+                task_affected_id=task.pk,
+                trigger_event='task_completed',
+                triggered_at__date=now.date(),
+            ).exists():
+                return False
+        except Exception:
+            pass
         return True
 
     # ── task_priority_changed (new name) or priority_changed (old name) ──
@@ -526,19 +580,22 @@ def _execute_flat_rule(rule, task, actions_taken, errors):
 
     had_error = False
     skip_reasons = []
-    for action in branch_actions:
-        try:
-            _execute_action_flat(action, task, rule)
-            actions_taken.append(f"{action.get('type')}")
-        except _ActionNoOp as warn:
-            skip_reasons.append(f"{action.get('type')}: {warn}")
-        except _ActionSkip as skip:
-            # Action declared requires=X but the trigger's target couldn't
-            # satisfy it. Record as a skip with the structured reason.
-            skip_reasons.append(f"{action.get('type')}: {skip}")
-        except Exception as exc:
-            errors.append(f"{action.get('type')} failed: {exc}")
-            had_error = True
+    # Guard: actions that create/save models (add_subtask, post_comment, …) must
+    # not re-trigger automation receivers. See _automation_guard at module top.
+    with _automation_guard():
+        for action in branch_actions:
+            try:
+                _execute_action_flat(action, task, rule)
+                actions_taken.append(f"{action.get('type')}")
+            except _ActionNoOp as warn:
+                skip_reasons.append(f"{action.get('type')}: {warn}")
+            except _ActionSkip as skip:
+                # Action declared requires=X but the trigger's target couldn't
+                # satisfy it. Record as a skip with the structured reason.
+                skip_reasons.append(f"{action.get('type')}: {skip}")
+            except Exception as exc:
+                errors.append(f"{action.get('type')} failed: {exc}")
+                had_error = True
 
     if had_error:
         return 'failed', ''
@@ -1718,6 +1775,11 @@ def run_task_label_added_automations(sender, instance, action, pk_set, **kwargs)
     if action != 'post_add' or not pk_set:
         return
 
+    # Re-entrancy guard: labels attached by another rule's action (add_label,
+    # flag_for_review) must not re-trigger task_label_added rules.
+    if _in_automation():
+        return
+
     try:
         from kanban.models import Task as TaskModel, TaskLabel
         from kanban.automation_models import AutomationRule, AutomationLog
@@ -1807,6 +1869,8 @@ def run_checklist_automations(sender, instance, created, **kwargs):
     every item on the parent task is now is_completed=True). Delegates rule
     execution to the same path used by Task automations.
     """
+    if _in_automation():
+        return
     try:
         from kanban.models import ChecklistItem
         from kanban.automation_models import AutomationRule, AutomationLog
@@ -1889,6 +1953,10 @@ def _run_source_rules(trigger_type, source_obj, board, target_task=None,
     object so action handlers (e.g., acknowledge_coach_suggestion) can act on
     it directly.
     """
+    # Re-entrancy guard: covers all source receivers (coach/conflict/discovery/
+    # comment/attachment). A comment posted by an action must not re-enter here.
+    if _in_automation():
+        return
     try:
         from kanban.automation_models import AutomationRule, AutomationLog
         from kanban.automation_conditions import TriggerTarget
@@ -1937,19 +2005,20 @@ def _run_source_rules(trigger_type, source_obj, board, target_task=None,
                 branch_actions = []
                 outcome, skip_reason = 'skipped', 'Condition not met'
 
-            for action in branch_actions:
-                try:
-                    _aa.execute(action, target, rule)
-                    actions_taken.append(action.get('type'))
-                except _ActionNoOp as warn:
-                    skip_reason = (skip_reason + '; ' if skip_reason else '') + \
-                                  f"{action.get('type')}: {warn}"
-                except _ActionSkip as skip:
-                    skip_reason = (skip_reason + '; ' if skip_reason else '') + \
-                                  f"{action.get('type')}: {skip}"
-                except Exception as exc:
-                    errors.append(f"{action.get('type')} failed: {exc}")
-                    outcome = 'failed'
+            with _automation_guard():
+                for action in branch_actions:
+                    try:
+                        _aa.execute(action, target, rule)
+                        actions_taken.append(action.get('type'))
+                    except _ActionNoOp as warn:
+                        skip_reason = (skip_reason + '; ' if skip_reason else '') + \
+                                      f"{action.get('type')}: {warn}"
+                    except _ActionSkip as skip:
+                        skip_reason = (skip_reason + '; ' if skip_reason else '') + \
+                                      f"{action.get('type')}: {skip}"
+                    except Exception as exc:
+                        errors.append(f"{action.get('type')} failed: {exc}")
+                        outcome = 'failed'
 
             if not actions_taken and not errors and not skip_reason:
                 outcome = 'success'

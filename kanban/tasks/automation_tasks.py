@@ -585,6 +585,7 @@ def _run_scheduled_task_scan(trigger_type, task_queryset_for_rule_fn):
             )
             continue
 
+        fired_for_rule = 0
         for task in tasks:
             # Per-day dedupe so a single idle/predicted task doesn't accumulate
             # multiple log rows across hourly Celery sweeps.
@@ -595,6 +596,7 @@ def _run_scheduled_task_scan(trigger_type, task_queryset_for_rule_fn):
             ).exists():
                 continue
 
+            fired_for_rule += 1
             actions_taken = []
             errors = []
             outcome, skip_reason = 'success', ''
@@ -633,10 +635,11 @@ def _run_scheduled_task_scan(trigger_type, task_queryset_for_rule_fn):
                 )
             fired_total += 1
 
-        if hasattr(tasks, 'exists') and tasks.exists():
-            count = tasks.count()
+        # Count only the tasks that actually fired this sweep (exclude per-day
+        # dedupe skips) so the rule card's "Fired N times" stays accurate.
+        if fired_for_rule:
             AutomationRule.objects.filter(pk=rule.pk).update(
-                run_count=rule.run_count + count,
+                run_count=rule.run_count + fired_for_rule,
                 last_run_at=now,
             )
 
@@ -694,3 +697,26 @@ def run_predicted_late_automations():
         ).exclude(progress=100)
 
     return _run_scheduled_task_scan('predicted_late', qs)
+
+
+@shared_task(name='kanban.run_dependency_overdue_automations')
+def run_dependency_overdue_automations():
+    """Phase 3: fires dependency_overdue rules — tasks that have at least one
+    blocking dependency which is itself overdue (due date passed, progress < 100).
+
+    The post_save signal can't evaluate this cleanly (it only sees the saved
+    task, not its blockers' state over time), so it's swept here like the other
+    relationship/time-based triggers. Fires on the *blocked* task so a
+    "notify me / flag for review" rule lands where the user is waiting.
+    """
+    from kanban.models import Task
+
+    def qs(rule, now):
+        today = now.date()
+        return Task.objects.filter(
+            column__board=rule.board,
+            dependencies__due_date__lt=today,
+            dependencies__progress__lt=100,
+        ).exclude(progress=100).distinct()
+
+    return _run_scheduled_task_scan('dependency_overdue', qs)

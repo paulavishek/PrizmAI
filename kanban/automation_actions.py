@@ -273,8 +273,11 @@ def _act_set_priority(target, rule, action):
     from kanban.models import Task as TaskModel
     task = target.target_task
     prio = _resolve_target(action).lower()
-    if prio in _VALID_PRIORITIES:
-        TaskModel.objects.filter(pk=task.pk).update(priority=prio)
+    # An invalid value is a configuration error, not a no-op — surface it as a
+    # failure in the audit log (mirrors set_risk_level / set_workload_impact).
+    if prio not in _VALID_PRIORITIES:
+        raise ValueError(f"set_priority: invalid priority '{prio}'")
+    TaskModel.objects.filter(pk=task.pk).update(priority=prio)
 
 
 @register_action('add_label', requires='task')
@@ -283,10 +286,12 @@ def _act_add_label(target, rule, action):
     task = target.target_task
     board = target.target_board
     name = _resolve_target(action)
-    if board and name:
-        label = TaskLabel.objects.filter(board=board, name__iexact=name).first()
-        if label:
-            task.labels.add(label)
+    if not name:
+        raise _ActionNoOp('no label name configured')
+    label = TaskLabel.objects.filter(board=board, name__iexact=name).first() if board else None
+    if not label:
+        raise _ActionNoOp(f"no label named '{name}' on this board")
+    task.labels.add(label)
 
 
 @register_action('remove_label', requires='task')
@@ -295,10 +300,12 @@ def _act_remove_label(target, rule, action):
     task = target.target_task
     board = target.target_board
     name = _resolve_target(action)
-    if board and name:
-        label = TaskLabel.objects.filter(board=board, name__iexact=name).first()
-        if label:
-            task.labels.remove(label)
+    if not name:
+        raise _ActionNoOp('no label name configured')
+    label = TaskLabel.objects.filter(board=board, name__iexact=name).first() if board else None
+    if not label:
+        raise _ActionNoOp(f"no label named '{name}' on this board")
+    task.labels.remove(label)
 
 
 @register_action('assign_to_user', requires='task')
@@ -311,7 +318,12 @@ def _act_assign_to_user(target, rule, action):
     target_lower = target_value.lower()
 
     if target_lower == 'task_assignee':
-        return  # already assigned — no-op
+        # "Assign to task assignee" is the legacy default when no target was
+        # picked. If the task already has one this is a genuine no-op (success);
+        # if it doesn't, there's nothing to assign — report a skip.
+        if task.assigned_to_id:
+            return
+        raise _ActionNoOp('task has no assignee to assign to')
     if target_lower == 'rule_creator':
         if rule.created_by:
             TaskModel.objects.filter(pk=task.pk).update(assigned_to=rule.created_by)
@@ -335,14 +347,16 @@ def _act_move_to_column(target, rule, action):
     task = target.target_task
     board = target.target_board
     name = _resolve_target(action)
-    if board and name:
-        col = Column.objects.filter(board=board, name__icontains=name).exclude(
-            pk=task.column_id
-        ).order_by('position').first()
-        if col:
-            TaskModel.objects.filter(pk=task.pk).update(column=col)
-        else:
-            raise ValueError(f"move_to_column: no column matching '{name}' found on board")
+    if not name:
+        raise _ActionNoOp('no target column configured')
+    col = Column.objects.filter(board=board, name__icontains=name).exclude(
+        pk=task.column_id
+    ).order_by('position').first() if board else None
+    if not col:
+        # A missing/deleted/renamed column is an expected, non-error condition —
+        # the plan expects this to read as Skipped, not Failed (E-06, X-05).
+        raise _ActionNoOp(f"no column matching '{name}' on this board")
+    TaskModel.objects.filter(pk=task.pk).update(column=col)
 
 
 @register_action('set_due_date', requires='task')

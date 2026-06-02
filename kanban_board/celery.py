@@ -73,6 +73,11 @@ app.conf.beat_schedule = {
         'task': 'kanban.run_predicted_late_automations',
         'schedule': crontab(hour=1, minute=5),  # Daily at 01:05
     },
+    # Dependency-overdue automations - hourly sweep, offset from other automations
+    'dependency-overdue-automations': {
+        'task': 'kanban.run_dependency_overdue_automations',
+        'schedule': crontab(minute=50),  # Every hour at :50
+    },
     # Daily executive briefing - 08:00 IST (CELERY_TIMEZONE = 'Asia/Kolkata')
     'daily-executive-briefing': {
         'task': 'kanban.ai_summary.generate_daily_executive_briefing',

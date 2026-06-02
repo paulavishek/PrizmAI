@@ -418,15 +418,18 @@ def _cond_risk_level(target, operator, value):
 
 @register_condition('risk_score', requires='task')
 def _cond_risk_score(target, operator, value):
+    # NB: Task.risk_score is an IntegerField validated 1–9 (Likelihood × Impact).
+    # Parse the threshold as float so an integer-string ("6") works and a
+    # fractional value degrades gracefully instead of raising on int("0.7").
     task = target.target_task
     score = task.risk_score or 0
     try:
-        cmp_int = int(value or 0)
+        cmp_f = float(value or 0)
     except (TypeError, ValueError):
         return False
-    if operator == 'gte':    return score >= cmp_int
-    if operator == 'lte':    return score <= cmp_int
-    if operator == 'equals': return score == cmp_int
+    if operator == 'gte':    return score >= cmp_f
+    if operator == 'lte':    return score <= cmp_f
+    if operator == 'equals': return score == cmp_f
     return False
 
 
@@ -452,16 +455,20 @@ def _cond_predicted_completion(target, operator, value):
 
 @register_condition('prediction_confidence', requires='task')
 def _cond_prediction_confidence(target, operator, value):
+    # Task.prediction_confidence is a FloatField (0.0–1.0). The threshold must be
+    # parsed as float — int("0.5") raises, which previously made this condition
+    # return False for *every* task (C-33). Accept the threshold as either a
+    # fraction (0.5) or a percentage (50) and normalise both to the 0–1 scale.
     task = target.target_task
     pc = task.prediction_confidence or 0
     try:
-        cmp_int = int(value or 0)
+        cmp_f = float(value)
     except (TypeError, ValueError):
         return False
-    # Stored as 0-1.0 in the model? Normalize either way: if value < 2, treat as fraction.
-    pc_pct = pc * 100 if pc <= 1 else pc
-    if operator == 'gte': return pc_pct >= cmp_int
-    if operator == 'lte': return pc_pct <= cmp_int
+    pc_frac = pc / 100 if pc > 1 else pc
+    cmp_frac = cmp_f / 100 if cmp_f > 1 else cmp_f
+    if operator == 'gte': return pc_frac >= cmp_frac
+    if operator == 'lte': return pc_frac <= cmp_frac
     return False
 
 
@@ -500,14 +507,16 @@ def _cond_lss_classification(target, operator, value):
 
 @register_condition('ai_risk_score', requires='task')
 def _cond_ai_risk_score(target, operator, value):
+    # Task.ai_risk_score is an IntegerField validated 0–100. Float-parse the
+    # threshold so "80" works and a fractional value won't raise on int("0.8").
     task = target.target_task
     score = task.ai_risk_score or 0
     try:
-        cmp_int = int(value or 0)
+        cmp_f = float(value or 0)
     except (TypeError, ValueError):
         return False
-    if operator == 'gte': return score >= cmp_int
-    if operator == 'lte': return score <= cmp_int
+    if operator == 'gte': return score >= cmp_f
+    if operator == 'lte': return score <= cmp_f
     return False
 
 
