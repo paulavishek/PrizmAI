@@ -43,6 +43,33 @@ def _user_boards(user):
     return get_user_boards(user).order_by('name')
 
 
+def _teammate_boards(user, base_boards):
+    """Boards whose membership decides who the user shares "Team can see I'm busy"
+    visibility with.
+
+    In a real workspace this is just the boards the user owns/belongs to
+    (``base_boards``).  In DEMO mode every user — the real prospect *and* each
+    demo persona — owns a *separate* sandbox copy of the same template board, and
+    ``get_user_boards()`` only returns boards the user OWNS.  That makes the
+    teammate relationship asymmetric: a persona is a member of the real user's
+    sandbox board but never counts the real user as a teammate, so the real
+    user's team-visible blocks never reach the persona.  To keep the promise
+    symmetric we widen to every sandbox board the user is a *member* of, not just
+    the ones they own.  Real users still never see other real users (a real user
+    is not a member of another real user's sandbox board); only the shared
+    persona accounts gain visibility into active demo prospects' busy blocks,
+    which is demo-only data.
+    """
+    profile = getattr(user, 'profile', None)
+    if getattr(profile, 'is_viewing_demo', False):
+        from kanban.models import Board
+        return Board.objects.filter(
+            Q(owner=user) | Q(memberships__user=user),
+            is_sandbox_copy=True,
+        ).distinct()
+    return base_boards
+
+
 def _create_notification(recipient, sender, notification_type, text, action_url=None):
     """Safely create a messaging.Notification, swallowing any import/save errors."""
     try:
@@ -222,10 +249,20 @@ def unified_calendar_events_api(request):
         due_date__isnull=False,
     ).select_related('column', 'column__board', 'assigned_to').distinct()
 
-    # Collect board member IDs (not including self) for teammate-status event query
+    # Collect board member IDs (not including self) for the teammate-status event
+    # query — these are the people whose team-visible "busy" blocks the viewer is
+    # allowed to see.
+    #
+    # In a real workspace, teammates = members of the boards the viewer owns or
+    # belongs to (the `boards` queryset already reflects this).
+    #
+    # In DEMO mode this is widened to keep the "Team can see I'm busy" promise
+    # symmetric across separate sandbox copies — see _teammate_boards().
+    teammate_boards = _teammate_boards(request.user, boards)
+
     board_member_ids = list(
         User.objects.filter(
-            Q(board_memberships__board__in=boards) | Q(created_boards__in=boards)
+            Q(board_memberships__board__in=teammate_boards) | Q(created_boards__in=teammate_boards)
         ).exclude(id=request.user.id).values_list('id', flat=True)
     )
 
@@ -367,7 +404,12 @@ def unified_calendar_events_api(request):
             else:  # team_event — show actual title
                 fc_title = ev.title
 
-        participant_names = [p.username for p in ev.participants.all()]
+        # A sanitized "busy"/OOO block (teammate_status) must not leak the reason
+        # in the JSON payload either — the title is already redacted above, so
+        # blank out notes, location and participants for non-team_event blocks.
+        # (team_event is intentionally fully shared.)
+        sanitized = (layer == 'teammate_status') and ev.event_type != 'team_event'
+        participant_names = [] if sanitized else [p.username for p in ev.participants.all()]
         events.append({
             'id': f'event-{ev.id}',
             'title': fc_title,
@@ -384,8 +426,8 @@ def unified_calendar_events_api(request):
                 'event_type_key': ev.event_type,
                 'visibility': ev.visibility,
                 'is_mine': is_mine,
-                'description': ev.description or '',
-                'location': ev.location or '',
+                'description': '' if sanitized else (ev.description or ''),
+                'location': '' if sanitized else (ev.location or ''),
                 'board': ev.board.name if ev.board else '',
                 'participants': participant_names,
                 'created_by': ev.created_by.username,
@@ -773,8 +815,12 @@ def calendar_event_detail(request, event_id):
         event.participants.filter(id=request.user.id).exists()
     )
     if not can_view and event.visibility == 'team':
-        # Board members may view team-shared OOO/busy/team events
-        shared_boards = _user_boards(request.user).filter(
+        # Board members may view team-shared OOO/busy/team events.  Use the same
+        # demo-aware teammate scope as the calendar feed so a block that is
+        # visible on the grid is also openable (and vice-versa).
+        shared_boards = _teammate_boards(
+            request.user, _user_boards(request.user)
+        ).filter(
             Q(created_by=event.created_by) | Q(memberships__user=event.created_by)
         )
         can_view = shared_boards.exists()
