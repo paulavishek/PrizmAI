@@ -97,20 +97,20 @@ def quick_demo_login(request, username):
     Allows one-click login from the dashboard.
     Saves the real user's username in session so they can switch back.
     """
-    # Only allow login for demo users
-    demo_users = ['priya.sharma', 'marcus.chen', 'elena.vasquez']
-    
-    if username not in demo_users:
+    # Only allow login for demo users (single source of truth)
+    from accounts.demo_personas import DEMO_USERNAMES, DEMO_PASSWORD
+
+    if username not in DEMO_USERNAMES:
         messages.error(request, 'Invalid demo user.')
         return redirect('login')
-    
+
     # Remember the real user before switching to demo
     real_username = None
-    if request.user.is_authenticated and request.user.username not in demo_users:
+    if request.user.is_authenticated and request.user.username not in DEMO_USERNAMES:
         real_username = request.user.username
 
     # Authenticate with the known demo password
-    user = authenticate(request=request, username=username, password='demo123')
+    user = authenticate(request=request, username=username, password=DEMO_PASSWORD)
     
     if user is not None:
         login(request, user)
