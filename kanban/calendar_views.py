@@ -140,6 +140,25 @@ def _json_for_script(obj):
     return json.dumps(obj).translate(_JSON_SCRIPT_ESCAPES)
 
 
+def _event_workspace_scope(user):
+    """A ``Q`` limiting CalendarEvents to the user's current workspace mode.
+
+    CalendarEvent has no workspace field, so the only reliable anchor is the
+    event's board: demo events live on sandbox (or template) boards, real events
+    on real boards.  Without this, the "my own events" visibility clause
+    (``created_by=user``) would surface a user's *demo* events in their real
+    workspace and vice-versa.  Board-less events have no workspace anchor, so
+    they are treated as personal/real and never shown inside demo mode.
+    """
+    profile = getattr(user, 'profile', None)
+    if getattr(profile, 'is_viewing_demo', False):
+        return Q(board__is_sandbox_copy=True) | Q(board__is_official_demo_board=True)
+    return (
+        Q(board__isnull=True) |
+        Q(board__is_sandbox_copy=False, board__is_official_demo_board=False)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main calendar page
 # ---------------------------------------------------------------------------
@@ -204,7 +223,7 @@ def unified_calendar(request):
     events_this_month = CalendarEvent.objects.filter(
         Q(created_by=request.user) | Q(participants=request.user),
         start_datetime__range=(month_start, month_end),
-    ).distinct().count()
+    ).filter(_event_workspace_scope(request.user)).distinct().count()
 
     # Build a flat task list for the "linked task" dropdown in the event form
     _all_tasks = []
@@ -300,6 +319,11 @@ def unified_calendar_events_api(request):
             visibility='team',
         )
     ).select_related('board', 'linked_task', 'created_by').prefetch_related('participants').distinct()
+
+    # Demo / real workspace isolation — task scoping already separates the two
+    # via `boards`, but events bypassed that (they're matched by created_by /
+    # participant / teammate, not board).  See _event_workspace_scope().
+    event_qs = event_qs.filter(_event_workspace_scope(request.user))
 
     if start_str and end_str:
         try:
