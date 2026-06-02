@@ -810,22 +810,43 @@ document.addEventListener('DOMContentLoaded', function () {
     const tmDropdownLabel   = document.getElementById('teammate-dropdown-label');
 
     function updateTeammateDropdownLabel() {
-        if (!tmDropdownLabel) return;
-        const total   = teammatesData.length + 1;  // +1 for Unassigned
-        const visible = total - hiddenTeammateIds.size;
-        tmDropdownLabel.textContent = hiddenTeammateIds.size === 0
+        if (!tmDropdownLabel || !tmDropdownMenu) return;
+        // Count against the teammates *currently rendered* — the list is scoped to
+        // the selected board, so totals change as you switch boards.
+        const checks  = tmDropdownMenu.querySelectorAll('.tm-check');
+        const total   = checks.length;
+        let   visible = 0;
+        checks.forEach(c => { if (c.checked) visible++; });
+        tmDropdownLabel.textContent = (visible === total)
             ? 'All visible'
             : `${visible} of ${total} visible`;
     }
 
-    if (teammatesData.length > 0 && tmDropdownWrapper) {
+    // Teammates shown in the filter follow the selected board: all teammates when
+    // "All Boards" is active, otherwise only members of the selected board(s).
+    function visibleTeammates() {
+        if (activeBoardIds.length === 0) return teammatesData;
+        const allowed = new Set();
+        activeBoardIds.forEach(function(bid) {
+            const b = boardsData.find(x => String(x.id) === String(bid));
+            if (b && b.members) b.members.forEach(id => allowed.add(id));
+        });
+        return teammatesData.filter(t => allowed.has(t.id));
+    }
+
+    function buildTeammateDropdown() {
+        if (!tmDropdownWrapper || !tmDropdownMenu) return;
+        if (teammatesData.length === 0) { tmDropdownWrapper.style.display = 'none'; return; }
         tmDropdownWrapper.style.display = '';
-        teammatesData.forEach(function(t) {
+        tmDropdownMenu.innerHTML = '';
+
+        visibleTeammates().forEach(function(t) {
             const li = document.createElement('li');
             li.innerHTML =
                 `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
                         style="cursor:pointer; font-size:0.82rem; user-select:none;">
-                    <input type="checkbox" class="tm-check" data-teammate-id="${t.id}" checked
+                    <input type="checkbox" class="tm-check" data-teammate-id="${t.id}"
+                           ${hiddenTeammateIds.has(t.id) ? '' : 'checked'}
                            style="accent-color:${t.color}; width:14px; height:14px; flex-shrink:0;">
                     <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
                                  background:${t.color};flex-shrink:0;"></span>
@@ -839,7 +860,8 @@ document.addEventListener('DOMContentLoaded', function () {
         liUnassigned.innerHTML =
             `<label class="dropdown-item d-flex align-items-center gap-2 py-1"
                     style="cursor:pointer; font-size:0.82rem; user-select:none;">
-                <input type="checkbox" class="tm-check" data-teammate-id="-1" checked
+                <input type="checkbox" class="tm-check" data-teammate-id="-1"
+                       ${hiddenTeammateIds.has(-1) ? '' : 'checked'}
                        style="accent-color:#9ca3af; width:14px; height:14px; flex-shrink:0;">
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
                              background:#9ca3af;flex-shrink:0;"></span>
@@ -847,6 +869,10 @@ document.addEventListener('DOMContentLoaded', function () {
             </label>`;
         tmDropdownMenu.appendChild(liUnassigned);
 
+        updateTeammateDropdownLabel();
+    }
+
+    if (tmDropdownMenu) {
         tmDropdownMenu.addEventListener('change', function(e) {
             const cb = e.target.closest('.tm-check');
             if (!cb) return;
@@ -856,9 +882,9 @@ document.addEventListener('DOMContentLoaded', function () {
             updateTeammateDropdownLabel();
             calendar.refetchEvents();
         });
-
-        updateTeammateDropdownLabel();
     }
+
+    buildTeammateDropdown();
 
     // Close popup on outside click
     document.addEventListener('click', function (e) {
@@ -920,12 +946,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
             updateBoardChipUI();
+            buildTeammateDropdown();   // teammate list follows the selected board
             calendar.refetchEvents();
         });
     });
 
     // Reflect any server-side pre-filter (?board=<id>) in the chip UI on load.
     updateBoardChipUI();
+    buildTeammateDropdown();   // scope teammate list to any ?board= pre-filter
 
     // ================================================================
     //  CREATE TASK FLOW (redirects to full Kanban task creation form)
