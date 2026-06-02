@@ -1098,13 +1098,6 @@ class TaskFlowChatbotService:
         ]
         return any(kw in prompt.lower() for kw in stakeholder_keywords)
     
-    def _is_resource_query(self, prompt):
-        """Detect if query is about resource management"""
-        resource_keywords = [
-            'resource', 'capacity', 'workload', 'forecast', 'availability',
-            'team capacity', 'allocation', 'demand', 'utilization'
-        ]
-        return any(kw in prompt.lower() for kw in resource_keywords)
     
     def _is_lean_query(self, prompt):
         """Detect if query is about Lean Six Sigma"""
@@ -1134,298 +1127,8 @@ class TaskFlowChatbotService:
         ]
         return any(kw in prompt.lower() for kw in projection_keywords)
     
-    def _is_organization_query(self, prompt):
-        """Detect if query is about organizations"""
-        org_keywords = [
-            'organization', 'organizations', 'org', 'company', 'companies',
-            'client', 'clients', 'departments', 'teams', 'divisions'
-        ]
-        return any(kw in prompt.lower() for kw in org_keywords)
     
-    def _is_user_info_query(self, prompt):
-        """Detect if query is asking about users/team members (not the current user's tasks)"""
-        prompt_lower = prompt.lower()
-        
-        # First, check if this is a self-referential query (me/my/I) - those go to user_task_query
-        self_referential_keywords = [
-            'my task', 'my tasks', 'assigned to me', 'tasks for me',
-            'to me', 'for me', 'my work', 'my deadline', 'my overdue',
-            'i have', 'i need', 'do i have', 'am i', 'what do i', 'what should i',
-            'show me my', 'tell me my', 'give me my', 'list my'
-        ]
-        
-        # If it's about "me", don't trigger user info query
-        if any(kw in prompt_lower for kw in self_referential_keywords):
-            return False
-        
-        user_keywords = [
-            'user', 'users', 'member', 'members', 'team member', 'team members',
-            'who is', 'who has', 'who are', 'who works', 'who should', 'who can',
-            'person', 'people', 'assignee', 'developer', 'developers', 'colleague',
-            'coworker', 'teammate', 'teammates', 'staff', 'employee',
-            'alex', 'sam', 'jordan',  # Common demo user names
-            'demo user', 'demo users', 'real user', 'real users',
-            'tasks for', 'workload for', 'deadline for', 'overdue for',
-            'assigned to alex', 'assigned to sam', 'assigned to jordan',
-            'assign to', 'should i assign', 'team skill', 'team skills',
-            'skill', 'skills', 'skill gap', 'skill gaps', 'proficiency',
-            'expertise', 'competency', 'competencies', 'capabilities',
-            'workload', 'current workload', 'team workload'
-        ]
-        return any(kw in prompt_lower for kw in user_keywords)
     
-    def _get_user_info_context(self, prompt):
-        """
-        Get comprehensive user/team member information.
-        Distinguishes between demo users and real users.
-        Handles questions like:
-        - "How many users are there?"
-        - "Who has overdue tasks?"
-        - "What tasks are assigned to Alex?"
-        - "Show me Sam's workload"
-        - "Which user has the most tasks?"
-        """
-        try:
-            if not self._is_user_info_query(prompt):
-                return None
-            
-            from django.contrib.auth import get_user_model
-            from django.utils import timezone
-            from datetime import timedelta
-            
-            User = get_user_model()
-            
-            # Get user's boards
-            user_boards = self._get_user_boards()
-            if not user_boards.exists():
-                return "You don't have access to any boards yet."
-            
-            # Get all users associated with these boards - collect IDs first to avoid query issues
-            user_ids = set()
-            for board in user_boards:
-                if board.created_by_id:
-                    user_ids.add(board.created_by_id)
-                for member in User.objects.filter(board_memberships__board=board):
-                    user_ids.add(member.id)
-            
-            all_users = list(User.objects.filter(id__in=user_ids).select_related('profile'))
-            
-            # Separate demo users from real users
-            DEMO_EMAIL_DOMAIN = '@demo.prizmai.local'
-            demo_users = []
-            real_users = []
-            
-            for user in all_users:
-                if user.email and DEMO_EMAIL_DOMAIN in user.email.lower():
-                    demo_users.append(user)
-                else:
-                    real_users.append(user)
-            
-            today = timezone.now().date()
-            tomorrow = today + timedelta(days=1)
-            next_week = today + timedelta(days=7)
-            
-            context = f"""**User & Team Member Information:**
-
-**Summary:**
-- **Total Users:** {len(all_users)}
-- **Demo Users:** {len(demo_users)} (sample users for demonstration)
-- **Real Users:** {len(real_users)} (registered users)
-
-"""
-            
-            # ── VDF-backed per-user stats (board-scoped when possible) ──
-            from ai_assistant.utils.spectra_data_fetchers import (
-                fetch_assignee_workload, fetch_board_tasks, DONE_COLUMN_NAMES,
-            )
-
-            # Pre-compute board-scoped workload when a board is active
-            _board_workload = {}  # username → workload dict
-            if self.board:
-                raw_workload = fetch_assignee_workload(self.board)
-                # Re-key by username for lookup
-                for _display, wl_data in raw_workload.items():
-                    if wl_data.get('username'):
-                        _board_workload[wl_data['username']] = wl_data
-
-            def get_user_stats(user):
-                """Get detailed stats using VDF data when board is set."""
-                username = user.username
-
-                if self.board and username in _board_workload:
-                    wl = _board_workload[username]
-                    user_task_dicts = fetch_board_tasks(
-                        self.board,
-                        filters={'assigned_to_username': username, 'item_type': 'task'},
-                    )
-                else:
-                    # Fallback: cross-board stats when no board is active
-                    user_task_dicts = []
-                    for b in user_boards:
-                        user_task_dicts.extend(
-                            fetch_board_tasks(b, filters={'assigned_to_username': username, 'item_type': 'task'})
-                        )
-
-                total_tasks = len(user_task_dicts)
-                completed_tasks = sum(1 for t in user_task_dicts if t['is_complete'])
-                in_progress = sum(
-                    1 for t in user_task_dicts
-                    if not t['is_complete'] and t['column_name'].lower() not in DONE_COLUMN_NAMES
-                    and t['progress'] > 0
-                )
-                not_started = sum(
-                    1 for t in user_task_dicts
-                    if not t['is_complete'] and t['progress'] == 0
-                    and t['column_name'].lower() not in DONE_COLUMN_NAMES
-                )
-
-                overdue_list = [t for t in user_task_dicts if t['is_overdue']]
-                overdue_count = len(overdue_list)
-                # sort by due_date ascending, keep first 5
-                overdue_list.sort(key=lambda t: t['due_date_date'] or today)
-
-                due_soon_list = [
-                    t for t in user_task_dicts
-                    if not t['is_complete'] and t['due_date_date']
-                    and today <= t['due_date_date'] <= next_week
-                ]
-                due_soon_count = len(due_soon_list)
-                due_soon_list.sort(key=lambda t: t['due_date_date'] or today)
-
-                high_priority_count = sum(
-                    1 for t in user_task_dicts
-                    if t['priority_value'] in ('high', 'urgent', 'critical')
-                )
-                recent_updated = sum(
-                    1 for t in user_task_dicts
-                    if t.get('updated_at') and t['updated_at'] >= timezone.now() - timedelta(days=7)
-                )
-
-                # Expose ALL task titles + column so Spectra never guesses
-                all_task_details = [
-                    f"\"{t['title']}\" [{t['column_name']}] (P:{t['priority_label']}, {t['progress']}%)"
-                    for t in user_task_dicts
-                ]
-
-                return {
-                    'total': total_tasks,
-                    'completed': completed_tasks,
-                    'in_progress': in_progress,
-                    'not_started': not_started,
-                    'overdue_count': overdue_count,
-                    'overdue_list': overdue_list,
-                    'due_soon_count': due_soon_count,
-                    'due_soon_list': due_soon_list,
-                    'high_priority_count': high_priority_count,
-                    'recent_updated': recent_updated,
-                    'all_task_details': all_task_details,
-                }
-            
-            # Demo Users Section
-            if demo_users:
-                context += "---\n**🎭 Demo Users (Sample Data for Demonstration):**\n\n"
-                for user in demo_users:
-                    display_name = user.get_full_name() or user.username
-                    stats = get_user_stats(user)
-                    
-                    context += f"**{display_name}** ({user.email})\n"
-                    context += f"  • Total Tasks: {stats['total']}\n"
-                    context += f"  • Completed: {stats['completed']} | In Progress: {stats['in_progress']} | Not Started: {stats['not_started']}\n"
-                    
-                    if stats['all_task_details']:
-                        context += f"  • 📋 All assigned tasks:\n"
-                        for detail in stats['all_task_details']:
-                            context += f"      - {detail}\n"
-                    
-                    if stats['overdue_count'] > 0:
-                        context += f"  • ⚠️ Overdue Tasks: {stats['overdue_count']}\n"
-                        for task in stats['overdue_list'][:5]:
-                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
-                    
-                    if stats['due_soon_count'] > 0:
-                        context += f"  • 📅 Due Soon (next 7 days): {stats['due_soon_count']}\n"
-                        for task in stats['due_soon_list'][:5]:
-                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
-                    
-                    if stats['high_priority_count'] > 0:
-                        context += f"  • 🔴 High Priority Tasks: {stats['high_priority_count']}\n"
-                    
-                    context += "\n"
-            
-            # Real Users Section
-            if real_users:
-                context += "---\n**👤 Real Users (Registered Accounts):**\n\n"
-                for user in real_users:
-                    display_name = user.get_full_name() or user.username
-                    stats = get_user_stats(user)
-                    
-                    context += f"**{display_name}** ({user.email})\n"
-                    context += f"  • Total Tasks: {stats['total']}\n"
-                    context += f"  • Completed: {stats['completed']} | In Progress: {stats['in_progress']} | Not Started: {stats['not_started']}\n"
-                    
-                    if stats['all_task_details']:
-                        context += f"  • 📋 All assigned tasks:\n"
-                        for detail in stats['all_task_details']:
-                            context += f"      - {detail}\n"
-                    
-                    if stats['overdue_count'] > 0:
-                        context += f"  • ⚠️ Overdue Tasks: {stats['overdue_count']}\n"
-                        for task in stats['overdue_list'][:5]:
-                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
-                    
-                    if stats['due_soon_count'] > 0:
-                        context += f"  • 📅 Due Soon (next 7 days): {stats['due_soon_count']}\n"
-                        for task in stats['due_soon_list'][:5]:
-                            context += f"      - \"{task['title']}\" (due: {task['due_date_date']})\n"
-                    
-                    if stats['high_priority_count'] > 0:
-                        context += f"  • 🔴 High Priority Tasks: {stats['high_priority_count']}\n"
-                    
-                    context += "\n"
-            
-            # Team workload summary
-            context += "---\n**📊 Team Workload Summary:**\n"
-            all_user_stats = []
-            for user in all_users:
-                display_name = user.get_full_name() or user.username
-                is_demo = user.email and DEMO_EMAIL_DOMAIN in user.email.lower()
-                stats = get_user_stats(user)
-                all_user_stats.append({
-                    'name': display_name,
-                    'is_demo': is_demo,
-                    'stats': stats
-                })
-            
-            # Sort by total tasks
-            all_user_stats.sort(key=lambda x: x['stats']['total'], reverse=True)
-            
-            context += "\n| User | Type | Total | Completed | Overdue | Due Soon |\n"
-            context += "|------|------|-------|-----------|---------|----------|\n"
-            for u in all_user_stats:
-                user_type = "Demo" if u['is_demo'] else "Real"
-                context += f"| {u['name']} | {user_type} | {u['stats']['total']} | {u['stats']['completed']} | {u['stats']['overdue_count']} | {u['stats']['due_soon_count']} |\n"
-            
-            # Add skill information for team members
-            context += "\n---\n**🛠️ Team Skills & Proficiencies:**\n"
-            try:
-                from accounts.models import UserProfile
-                for user in all_users:
-                    try:
-                        profile = UserProfile.objects.get(user=user)
-                        if profile.skills and isinstance(profile.skills, list) and len(profile.skills) > 0:
-                            display_name = user.get_full_name() or user.username
-                            skill_strs = [f"{s.get('name', 'Unknown')} ({s.get('level', 'N/A')})" for s in profile.skills]
-                            context += f"  • **{display_name}**: {', '.join(skill_strs)}\n"
-                    except UserProfile.DoesNotExist:
-                        pass
-            except Exception as e:
-                logger.debug(f"Could not load skill data for user info: {e}")
-            
-            return context
-            
-        except Exception as e:
-            logger.error(f"Error getting user info context: {e}", exc_info=True)
-            return f"Error retrieving user information: {str(e)}"
     
     def _is_critical_task_query(self, prompt):
         """Detect if query is about critical or high-priority tasks"""
@@ -1446,33 +1149,6 @@ class TaskFlowChatbotService:
         ]
         return any(kw in prompt.lower() for kw in mitigation_keywords)
     
-    def _is_user_task_query(self, prompt):
-        """Detect if query is asking for tasks assigned to the current user (me/my/I)"""
-        prompt_lower = prompt.lower()
-        
-        # Keywords that indicate the user is asking about themselves
-        user_task_keywords = [
-            'my task', 'my tasks', 'assigned to me', 'tasks for me',
-            'what am i working on', 'my work', 'my assignments',
-            'tasks i have', 'tasks i need', 'my todo', 'my deadline',
-            'my overdue', 'my pending', 'my workload', 'my progress',
-            'i have', 'i need', 'i am working', 'i\'m working',
-            'do i have', 'am i assigned', 'what do i', 'what should i',
-            'show me my', 'list my', 'give me my', 'tell me my',
-            'how many tasks do i', 'how many tasks have i',
-            'tasks assigned to me', 'assigned tasks to me',
-            'been assigned to me', 'have been assigned to me'
-        ]
-        
-        # Also check for patterns like "to me" at the end of task-related queries
-        if ' to me' in prompt_lower and any(kw in prompt_lower for kw in ['task', 'assign', 'deadline', 'overdue']):
-            return True
-        
-        # Check for "for me" in task context
-        if ' for me' in prompt_lower and any(kw in prompt_lower for kw in ['task', 'work', 'deadline', 'overdue']):
-            return True
-            
-        return any(kw in prompt_lower for kw in user_task_keywords)
     
     def _is_incomplete_task_query(self, prompt):
         """Detect if query is asking for incomplete/in-progress tasks"""
@@ -1528,70 +1204,6 @@ class TaskFlowChatbotService:
             return True
         return False
     
-    def _get_user_tasks_context(self, prompt):
-        """
-        Get tasks assigned to the current user
-        Handles questions like: "Show tasks assigned to me", "My tasks", etc.
-        
-        ALWAYS retrieves actual user tasks instead of asking for user identity
-        """
-        try:
-            if not self._is_user_task_query(prompt):
-                return None
-            
-            # Get user's boards
-            user_boards = self._get_user_boards()
-            if not user_boards.exists():
-                return "You don't have access to any boards yet."
-            
-            # Get tasks assigned to current user
-            user_tasks = Task.objects.filter(
-                column__board__in=user_boards,
-                assigned_to=self.user,
-                item_type='task'
-            ).select_related('column', 'column__board').order_by('column__name', '-priority')
-            
-            if not user_tasks.exists():
-                return f"No tasks currently assigned to you ({self.user.get_full_name() or self.user.username})."
-            
-            context = f"**Tasks Assigned to You ({self.user.get_full_name() or self.user.username}):**\n\n"
-            context += f"**Total Tasks:** {user_tasks.count()}\n\n"
-            
-            # Group by status
-            by_status = {}
-            for task in user_tasks:
-                status = task.column.name if task.column else 'Unknown'
-                if status not in by_status:
-                    by_status[status] = []
-                by_status[status].append(task)
-            
-            for status, tasks in by_status.items():
-                context += f"**{status} ({len(tasks)}):**\n"
-                for task in tasks[:10]:  # Limit to 10 per status
-                    context += f"  • {task.title}\n"
-                    context += f"    - Board: {task.column.board.name if task.column else 'Unknown'}\n"
-                    context += f"    - Priority: {task.get_priority_display()}\n"
-                    context += f"    - Progress: {task.progress}%\n"
-                    
-                    if hasattr(task, 'due_date') and task.due_date:
-                        from django.utils import timezone
-                        # Handle both datetime and date objects
-                        due_date = task.due_date
-                        if hasattr(due_date, 'date'):
-                            due_date = due_date.date()
-                        today = timezone.now().date()
-                        if due_date < today:
-                            context += f"    - Due: {due_date} ⚠️ OVERDUE\n"
-                        else:
-                            context += f"    - Due: {due_date}\n"
-                    
-                    context += "\n"
-            
-            return context
-        
-        except Exception as e:
-            logger.error(f"Error getting user tasks context: {e}", exc_info=True)
-            return f"Error retrieving your tasks: {str(e)}"
     
     def _get_incomplete_tasks_context(self, prompt):
         """
@@ -2129,96 +1741,6 @@ class TaskFlowChatbotService:
                 is_official_demo_board=True
             ).distinct()
     
-    def _get_organization_context(self, prompt):
-        """
-        Get organization information for org-related queries
-        Handles questions like: "How many organizations?", "List organizations", etc.
-        
-        ALWAYS retrieves and returns actual organization data instead of asking questions
-        """
-        try:
-            if not self._is_organization_query(prompt):
-                return None
-            
-            # Import Organization model
-            from accounts.models import Organization, UserProfile
-            
-            context = "**Organization Information:**\n\n"
-            
-            # Get ALL organizations the user has access to
-            # Priority order:
-            # 1. Organizations where user is a member (via UserProfile)
-            # 2. Organizations where user is the creator
-            # 3. Organizations accessible through boards
-            
-            # Get user's profile organization first
-            user_org = None
-            try:
-                if hasattr(self.user, 'profile') and self.user.profile.organization:
-                    user_org = self.user.profile.organization
-            except Exception:
-                pass
-            
-            # Query organizations: user created OR user's profile belongs to
-            if user_org:
-                orgs = Organization.objects.filter(
-                    Q(id=user_org.id) | Q(created_by=self.user)
-                ).distinct()
-            else:
-                orgs = Organization.objects.filter(created_by=self.user).distinct()
-            
-            # If no direct membership, try to get from boards
-            if not orgs.exists():
-                user_boards = self._get_user_boards()
-                if user_boards.exists():
-                    orgs = Organization.objects.filter(boards__in=user_boards).distinct()
-            
-            if not orgs.exists():
-                context += "**You currently have no organizations.**\n"
-                context += "You can create a new organization or join an existing one.\n"
-                return context
-            
-            # Build comprehensive organization data
-            context += f"**Total Organizations:** {orgs.count()}\n\n"
-            
-            for org in orgs:
-                # Get user-accessible boards in this org (RBAC-scoped)
-                user_boards_in_org = self._get_user_boards(organization=org)
-
-                # Only show counts the user can legitimately see:
-                # board count → user's own accessible boards (not org-wide total)
-                # member count → members on those accessible boards only
-                accessible_board_count = user_boards_in_org.count()
-
-                from django.contrib.auth import get_user_model
-                User_model = get_user_model()
-                accessible_member_ids = set(
-                    User_model.objects.filter(
-                        board_memberships__board__in=user_boards_in_org
-                    ).values_list('id', flat=True)
-                )
-                accessible_members_count = len(accessible_member_ids)
-                
-                context += f"**{org.name}**\n"
-                if org.domain:
-                    context += f"  - Domain: {org.domain}\n"
-                context += f"  - Your Boards: {accessible_board_count}\n"
-                context += f"  - Team Members (on your boards): {accessible_members_count}\n"
-                context += f"  - Created: {org.created_at.strftime('%Y-%m-%d')}\n"
-                context += f"  - Created by: {org.created_by.get_full_name() or org.created_by.username}\n"
-                
-                # List board names if manageable
-                if accessible_board_count > 0 and accessible_board_count <= 5:
-                    board_names = [b.name for b in user_boards_in_org]
-                    context += f"  - Board Names: {', '.join(board_names)}\n"
-                
-                context += "\n"
-            
-            return context
-        
-        except Exception as e:
-            logger.error(f"Error getting organization context: {e}", exc_info=True)
-            return f"Error retrieving organization data: {str(e)}"
     
     def _get_critical_tasks_context(self, prompt):
         """
@@ -2559,80 +2081,6 @@ class TaskFlowChatbotService:
             logger.error(f"Error getting stakeholder context: {e}")
             return None
     
-    def _get_resource_context(self, prompt):
-        """
-        Get resource management and forecasting data
-        Includes capacity alerts, demand forecasts, workload recommendations
-        """
-        if not HAS_RESOURCE_MODELS:
-            return None
-        
-        try:
-            if not self._is_resource_query(prompt):
-                return None
-            
-            # Get user's boards
-            user_boards = self._get_user_boards()
-            if not user_boards.exists():
-                return None
-            
-            context = "**Resource Management & Forecasting:**\n\n"
-            
-            # Get capacity alerts
-            try:
-                alerts = TeamCapacityAlert.objects.filter(
-                    board__in=user_boards,
-                    is_resolved=False
-                ).select_related('board', 'team_member').order_by('-created_at')[:10]
-                
-                if alerts.exists():
-                    context += f"**Team Capacity Alerts ({len(alerts)}):**\n"
-                    for alert in alerts:
-                        context += f"  - {alert.team_member.get_full_name() if hasattr(alert, 'team_member') else 'Team'}: "
-                        context += f"{alert.alert_message if hasattr(alert, 'alert_message') else 'Capacity alert'}\n"
-                    context += "\n"
-            except Exception:
-                pass
-            
-            # Get demand forecasts
-            try:
-                forecasts = ResourceDemandForecast.objects.filter(
-                    board__in=user_boards
-                ).order_by('-forecast_date')[:10]
-                
-                if forecasts.exists():
-                    context += f"**Resource Demand Forecasts ({len(forecasts)}):**\n"
-                    for forecast in forecasts:
-                        context += f"  - Period: {forecast.forecast_date if hasattr(forecast, 'forecast_date') else 'Unknown'}\n"
-                        if hasattr(forecast, 'expected_resource_requirement'):
-                            context += f"    Resources Needed: {forecast.expected_resource_requirement}\n"
-                        if hasattr(forecast, 'confidence_level'):
-                            context += f"    Confidence: {forecast.confidence_level}%\n"
-                    context += "\n"
-            except Exception:
-                pass
-            
-            # Get workload recommendations
-            try:
-                recommendations = WorkloadDistributionRecommendation.objects.filter(
-                    board__in=user_boards
-                ).order_by('-created_at')[:5]
-                
-                if recommendations.exists():
-                    context += f"**Workload Recommendations ({len(recommendations)}):**\n"
-                    for rec in recommendations:
-                        if hasattr(rec, 'recommendation_text'):
-                            context += f"  - {rec.recommendation_text}\n"
-                        if hasattr(rec, 'expected_impact'):
-                            context += f"    Impact: {rec.expected_impact}\n"
-            except Exception:
-                pass
-            
-            return context if "**Resource" in context else None
-        
-        except Exception as e:
-            logger.error(f"Error getting resource context: {e}")
-            return None
     
     def _get_lean_context(self, prompt):
         """
@@ -4457,13 +3905,14 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
    - When creating boards or tasks, they stay in the current environment — demo artifacts don't leak into My Workspace and vice versa.
 5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" — you already know the user is {user_name} and the board context
 6. **LEVERAGE WIKI & MEETINGS**: When wiki pages or meeting notes are provided, reference them directly and quote relevant sections
-7. **DATE AWARENESS**: Always compare task due dates against today's date ({current_date}). Proactively flag overdue tasks (due date before today) and approaching deadlines (due within 7 days). If a task is overdue, ALWAYS highlight it with a warning, even if not explicitly asked.
+7. **DATE AWARENESS**: Always compare task due dates against today's date ({current_date}). Proactively flag overdue tasks (due date before today) and approaching deadlines (due within 7 days). If a task is overdue, ALWAYS highlight it with a warning, even if not explicitly asked. When the user asks what is "due in the next 7 days" / "due soon" / "due this week", answer ONLY from the pre-filtered "**Due in next 7 days**" list in the Board Tasks context. NEVER scan the full task roster and list items that are due weeks or months from now as "due soon" — that is a factual error. If that pre-filtered list shows "(none)", state plainly that nothing is due in the next 7 days.
 8. **CROSS-REFERENCE DATA**: When answering resource allocation or task assignment questions, combine multiple data sources:
    - Check team members' current workloads (task counts)
    - Check skill proficiency levels (if available in context)
    - Check task priorities and deadlines
    - Provide a synthesized recommendation, not just raw data
-9. **FILTER COMPLETED WORK**: When listing risks, blockers, or actionable items, exclude tasks that are already "Done" or "Closed" unless specifically asked about completed work. Completed tasks are not risks.
+9. **FILTER COMPLETED WORK**: When listing risks, blockers, or actionable items, exclude tasks that are already "Done" or "Closed" unless specifically asked about completed work. This applies equally to high-priority lists, at-risk lists, and "due soon" lists — never present a Done/Closed task as high-priority, at-risk, or upcoming. Completed tasks are not risks.
+9b. **PRIORITY TERMS ARE LITERAL**: "High priority" means tasks whose priority is exactly **High**. Do NOT silently fold in Urgent tasks. Only include Urgent tasks when the user explicitly asks for "critical", "top", "most important", or "urgent" work — and when you do, list them under a clearly separate "Urgent" heading, never merged into the High list. Never relabel or upgrade a task's stated priority.
 10. **CONCISE & ACTIONABLE**: Keep responses focused. Avoid generic productivity advice or filler content. Every sentence should add value.
 11. **NEVER HALLUCINATE OR FABRICATE DATA**: ONLY use user names, task names, team members, skills, requirements, stakeholders, and numbers that are explicitly present in the "Available Context Data" section below. If the context data does not contain the info needed (team member info, workload data, skill data, requirement details, stakeholder details, etc.), you MUST say so clearly (e.g., "I don't have requirements data available for this board"). NEVER invent or guess user names, task counts, requirement IDs, stakeholder names, immunity scores, or any other facts. If you cannot answer a question from the provided context, name the specific data that is missing and STOP — do not fill the gap with training data or generic best-practice content.
 
@@ -4630,6 +4079,31 @@ When answering questions about organizational goals, missions, or strategies, us
             provider_tags = ctx_registry.get_all_tags()
             matched_providers = route_query(prompt, provider_tags)
 
+            # When an active board is present and the user asks about tasks,
+            # priorities, due dates, overdue items, or who is assigned what, the
+            # 'Board Tasks' provider is the canonical, VDF-backed source. It
+            # carries the full task roster AND the pre-filtered "due in next 7
+            # days" list. Force-include it so the router's 5-provider cap can
+            # never starve a basic task question — that starvation was the
+            # failure mode where Spectra dumped far-future tasks as "due soon"
+            # or mixed Done tasks into "high priority".
+            if self.board is not None:
+                q_low = prompt.lower()
+                task_signal = any(kw in q_low for kw in (
+                    'task', 'due', 'overdue', 'priority', 'assign',
+                    'unassigned', 'workload', 'who has', 'who is',
+                    'column', 'progress', 'milestone', 'backlog', 'sprint',
+                    'this week', 'next 7 days', 'deadline', 'capacity',
+                ))
+                if (
+                    task_signal
+                    and 'Board Tasks' in provider_tags
+                    and 'Board Tasks' not in matched_providers
+                ):
+                    matched_providers.insert(0, 'Board Tasks')
+                    from ai_assistant.utils.context_router import MAX_DETAIL_PROVIDERS
+                    matched_providers = matched_providers[:MAX_DETAIL_PROVIDERS]
+
             # When there's no active board, the user is asking a cross-board
             # / dashboard question ("how am I doing across all my boards?").
             # The aggregate + hierarchy providers are the only ones that
@@ -4654,18 +4128,21 @@ When answering questions about organizational goals, missions, or strategies, us
                     logger.debug('Added detailed context from providers: %s',
                                  matched_providers)
 
-            # ── Legacy context builders (kept for specialised features) ────
-            # These handle niche queries the providers don't cover yet
-            # (user info, meetings, organization, lean, web search).
+            # ── Legacy context builders ────────────────────────────────────
+            # Kept ONLY for features that have NO provider equivalent:
+            #   - Meetings  -> MeetingNotes model (wiki_provider does not read it)
+            #   - Lean Six Sigma -> lss_classification (no provider)
+            # The workload / user-info / organization / resource builders were
+            # REMOVED (May 2026). They duplicated VDF-backed providers
+            # (Board Tasks, Analytics, Resource Leveling, Cross-Board Aggregate)
+            # and emitted contradictory per-member numbers, which made Spectra
+            # answer the same question two different ways. The provider registry
+            # is now the single source of truth for those.
+            # See docs/spectra_connectivity_audit.md.
             is_search_query = self._is_search_query(prompt)
             is_strategic_query = self._is_strategic_query(prompt)
-            is_wiki_query = self._is_wiki_query(prompt)
             is_meeting_query = self._is_meeting_query(prompt)
-            is_organization_query = self._is_organization_query(prompt)
-            is_user_info_query = self._is_user_info_query(prompt)
-            is_user_task_query = self._is_user_task_query(prompt)
             is_lean_query = self._is_lean_query(prompt)
-            is_resource_query = self._is_resource_query(prompt)
 
             if is_meeting_query:
                 meeting_context = self._get_meeting_context(prompt)
@@ -4673,35 +4150,11 @@ When answering questions about organizational goals, missions, or strategies, us
                     context_parts.append(meeting_context)
                     logger.debug("Added meeting context (legacy)")
 
-            if is_organization_query:
-                org_context = self._get_organization_context(prompt)
-                if org_context:
-                    context_parts.append(org_context)
-                    logger.debug("Added organization context (legacy)")
-
-            if is_user_info_query:
-                user_info_context = self._get_user_info_context(prompt)
-                if user_info_context:
-                    context_parts.append(user_info_context)
-                    logger.debug("Added user info context (legacy)")
-
-            if is_user_task_query:
-                user_tasks_context = self._get_user_tasks_context(prompt)
-                if user_tasks_context:
-                    context_parts.append(user_tasks_context)
-                    logger.debug("Added user tasks context (legacy)")
-
             if is_lean_query:
                 lean_context = self._get_lean_context(prompt)
                 if lean_context:
                     context_parts.append(lean_context)
                     logger.debug("Added lean context (legacy)")
-
-            if is_resource_query:
-                resource_context = self._get_resource_context(prompt)
-                if resource_context:
-                    context_parts.append(resource_context)
-                    logger.debug("Added resource context (legacy)")
 
             # Knowledge base context
             kb_context = self.get_knowledge_base_context(prompt)
