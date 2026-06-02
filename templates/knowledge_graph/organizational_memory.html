@@ -420,7 +420,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // labelled sections separated by blank lines so it renders as readable
             // paragraphs in the chat rather than one collapsed wall of text.
             const lines = [];
-            lines.push("This is a brief entry from our Organizational Memory — a high-level log, not a complete record. The deeper details below are most likely NOT yet documented in PrizmAI.");
+            lines.push("Do not summarise the board, its tasks, or its overall status. Respond only about the single Organizational Memory entry below — it is a high-level log, not a complete record, and the deeper details are most likely NOT yet documented in PrizmAI.");
             lines.push("");
             lines.push("What was asked: " + lastQuestion);
             lines.push("");
@@ -430,9 +430,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 lines.push("Source memories: " + lastSourceTitles.join("; "));
                 lines.push("");
             }
-            lines.push("Help me strengthen this memory. Rather than assuming the answers already exist in our system, identify the key Knowledge Gaps — the specific details our team should add to make this record robust (e.g. root cause, owner, impact, follow-up actions) — and flag any critical blind spots worth investigating. Present them as 'Recommended details to log'.");
+            lines.push("Go straight to strengthening this memory — skip any board summary. Rather than assuming the answers already exist in our system, identify the key Knowledge Gaps — the specific details our team should add to make this record robust (e.g. root cause, owner, impact, follow-up actions) — and flag any critical blind spots worth investigating. Present them as 'Recommended details to log'.");
             lines.push("");
-            lines.push("End by reminding me that once I have these details I can add them back to the memory by opening its 'Gaps Noted' badge and clicking 'Expand this memory'.");
+            lines.push("Close your reply by noting that once these details are gathered they can be added to the memory by opening its 'Gaps Noted' badge and clicking 'Expand this memory'.");
             const prompt = lines.join("\n");
 
             // Build a clean, human-readable session name from the original question.
