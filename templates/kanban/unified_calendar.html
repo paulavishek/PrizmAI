@@ -417,7 +417,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const CREATE_EVENT_URL = '{% url "calendar_create_event" %}';
 
     // ---- Board filter state ----
-    let activeBoardIds = [];  // empty = all
+    // Pre-filtered when arriving from a board's "Calendar" tab (?board=<id>).
+    let activeBoardIds = {{ active_board_ids_json|safe }};  // empty = all
     const DEFAULT_SUBTITLE = 'All tasks & events across your boards \u2014 {{ current_month }}';
     const CURRENT_MONTH = '{{ current_month }}';
 
@@ -611,7 +612,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div><strong>Type:</strong> ${p.event_type}</div>
                     ${p.linked_task_title ? `<div><strong>Working on:</strong> ${p.linked_task_title}</div>` : ''}
                 `;
-                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
+                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/?from=unified`;
                 document.getElementById('detail-open-link').style.display = '';
             } else {
                 // My own events (or events I'm invited to) — full detail
@@ -633,7 +634,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         ? `<div><strong>Participants:</strong> ${participants}</div>` : ''}
                     ${privBadge}
                 `;
-                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
+                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/?from=unified`;
                 document.getElementById('detail-open-link').style.display = '';
             }
             document.getElementById('detail-body').innerHTML = body;
@@ -922,6 +923,9 @@ document.addEventListener('DOMContentLoaded', function () {
             calendar.refetchEvents();
         });
     });
+
+    // Reflect any server-side pre-filter (?board=<id>) in the chip UI on load.
+    updateBoardChipUI();
 
     // ================================================================
     //  CREATE TASK FLOW (redirects to full Kanban task creation form)

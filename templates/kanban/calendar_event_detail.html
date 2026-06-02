@@ -1,14 +1,14 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ event.title }} — Calendar Event{% endblock %}
+{% block title %}{{ display_title|default:event.title }} — Calendar Event{% endblock %}
 
 {% block content %}
 <div class="container py-4" style="max-width:700px;">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ back_url }}">Calendar</a></li>
-            <li class="breadcrumb-item active">{{ event.title }}</li>
+            <li class="breadcrumb-item active">{{ display_title|default:event.title }}</li>
         </ol>
     </nav>
 
@@ -22,10 +22,13 @@
         <div class="card-header d-flex justify-content-between align-items-center"
              style="background:{{ event.get_event_type_color }}10; border-left:4px solid {{ event.get_event_type_color }};">
             <div>
-                <h5 class="mb-0">{{ event.title }}</h5>
+                <h5 class="mb-0">{{ display_title|default:event.title }}</h5>
                 <span class="badge mt-1" style="background:{{ event.get_event_type_color }};">
                     {{ event.get_event_type_display }}
                 </span>
+                {% if sanitized %}
+                <span class="badge bg-secondary ms-1" title="You can see this teammate is blocked, but not the details.">Busy — details hidden</span>
+                {% endif %}
                 {% if event.visibility == 'private' %}
                 <span class="badge bg-secondary ms-1">🔒 Private</span>
                 {% endif %}
@@ -35,7 +38,7 @@
             </div>
             {% if event.created_by == request.user %}
             <div class="d-flex gap-2">
-                <a href="{% url 'calendar_event_edit' event.id %}" class="btn btn-outline-primary btn-sm">
+                <a href="{% url 'calendar_event_edit' event.id %}{% if back_origin == 'unified' %}?from=unified{% endif %}" class="btn btn-outline-primary btn-sm">
                     <i class="fas fa-edit"></i>
                 </a>
                 <button class="btn btn-outline-danger btn-sm" id="btn-delete-event"
@@ -68,7 +71,7 @@
                             {% endif %}
                         </td>
                     </tr>
-                    {% if event.location %}
+                    {% if event.location and not sanitized %}
                     <tr>
                         <th>Location</th>
                         <td>{{ event.location }}</td>
@@ -82,7 +85,7 @@
                         <th>Visibility</th>
                         <td>{{ event.get_visibility_display }}</td>
                     </tr>
-                    {% if event.linked_task %}
+                    {% if event.linked_task and not sanitized %}
                     <tr>
                         <th>Linked Task</th>
                         <td>
@@ -92,7 +95,7 @@
                         </td>
                     </tr>
                     {% endif %}
-                    {% if not event.is_solo_type %}
+                    {% if not event.is_solo_type and not sanitized %}
                     {% with participants=event.participants.all %}
                     <tr>
                         <th>Participants</th>
@@ -109,7 +112,7 @@
                     </tr>
                     {% endwith %}
                     {% endif %}
-                    {% if event.description %}
+                    {% if event.description and not sanitized %}
                     <tr>
                         <th>Notes</th>
                         <td>{{ event.description|linebreaksbr }}</td>
