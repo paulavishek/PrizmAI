@@ -894,9 +894,17 @@ const UnifiedRuleBuilder = (() => {
   function _actionRowHtml(action, idx, branch) {
     const actionType = action.type || '';
     const ACTIONS_WITH_NO_TARGET = ['close_task', 'post_comment'];
-    const ACTIONS_WITH_MESSAGE = ['send_notification', 'post_comment'];
+    const ACTIONS_WITH_MESSAGE = ['send_notification', 'post_comment', 'create_wiki_page'];
     const showTarget = !!actionType && !ACTIONS_WITH_NO_TARGET.includes(actionType);
     const showMessage = ACTIONS_WITH_MESSAGE.includes(actionType);
+
+    // Per-action copy for the message field so the label matches its purpose.
+    const MESSAGE_COPY = {
+      create_wiki_page: { label: 'Page content (optional):', ph: 'Body of the new wiki page. Supports {task_title}.' },
+      post_comment:     { label: 'Comment (optional):',      ph: 'e.g. Auto-flagged: {task_title} needs review.' },
+    };
+    const msgCopy = MESSAGE_COPY[actionType] ||
+      { label: 'Message (optional):', ph: 'e.g. Task {task_title} is overdue.' };
 
     const actionOptions = _renderGroupedOptions(ACTION_GROUPS, actionType);
 
@@ -916,11 +924,11 @@ const UnifiedRuleBuilder = (() => {
 
     const messageHtml = showMessage ? `
       <div class="mt-2 ps-1">
-        <label class="form-label small text-muted">Message (optional):</label>
+        <label class="form-label small text-muted">${msgCopy.label}</label>
         <textarea class="form-control form-control-sm" rows="2"
           id="rbActionMsg_${branch}_${idx}"
-          placeholder="e.g. Task {task_title} is overdue."
-          aria-label="Notification message">${_esc(action.message || '')}</textarea>
+          placeholder="${_esc(msgCopy.ph)}"
+          aria-label="Action message">${_esc(action.message || '')}</textarea>
       </div>
     ` : '';
 
@@ -999,9 +1007,19 @@ const UnifiedRuleBuilder = (() => {
         id="rbActionTarget_${branch}_${idx}" min="0.5" step="0.5" style="width:90px"
         value="${target || 1}" aria-label="Hours"> <span class="small">hours</span>`;
     }
+    // Action-specific hints so free-text targets explain what to type.
+    const TARGET_PLACEHOLDERS = {
+      create_wiki_page:        'New page title',
+      link_wiki_page:          'Existing page slug',
+      append_to_description:   'Text to append',
+      auto_check_checklist:    'Checklist item text',
+      promote_discovery_idea:  'Idea title',
+      assign_subtasks_to:      'Username',
+    };
+    const placeholder = TARGET_PLACEHOLDERS[actionType] || 'Value';
     return `<input type="text" class="form-control form-control-sm"
       id="rbActionTarget_${branch}_${idx}" style="max-width:180px"
-      value="${_esc(target)}" aria-label="Target value">`;
+      placeholder="${_esc(placeholder)}" value="${_esc(target)}" aria-label="Target value">`;
   }
 
   function _bindActionRow(idx, branch) {
@@ -1183,7 +1201,18 @@ const UnifiedRuleBuilder = (() => {
       count_gte:'count ≥', count_lte:'count ≤',
     };
     const op = opMap[c.operator] || c.operator;
-    let val = c.value !== null && c.value !== undefined && c.value !== '' ? ` ${c.value}` : '';
+    let displayVal = c.value;
+    // Assignee/created_by store the member ID as the value but should read as a
+    // username in the preview (mirrors how _formatActionText resolves targets).
+    if ((c.attribute === 'assignee' || c.attribute === 'created_by') &&
+        c.value != null && c.value !== '' && c.value !== 'none') {
+      const numId = parseInt(c.value, 10);
+      const member = !isNaN(numId) && boardData.members.find(m => m.id === numId);
+      if (member) displayVal = member.username;
+    } else if (c.value === 'none') {
+      displayVal = 'unassigned';
+    }
+    let val = displayVal !== null && displayVal !== undefined && displayVal !== '' ? ` ${displayVal}` : '';
     if (c.operator === 'within_days' && val) val = `${val} days`;
     return `${attr} ${op}${val}`;
   }

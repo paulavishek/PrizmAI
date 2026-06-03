@@ -251,12 +251,21 @@ def run_board_automations(sender, instance, created, **kwargs):
             # still fires the rule normally.
             try:
                 from datetime import timedelta as _td
-                if AutomationLog.objects.filter(
+                db_guard = AutomationLog.objects.filter(
                     rule_id=rule.pk,
                     task_affected_id=instance.pk,
                     trigger_event=rule.trigger_type,
                     triggered_at__gte=now - _td(seconds=3),
-                ).exists():
+                )
+                # task_assigned owns an assignee-aware per-day guard in
+                # _check_trigger. Scope this 3s net to the same assignee so a
+                # genuine reassignment to a different user within the window
+                # still fires instead of being swallowed as a "duplicate".
+                if rule.trigger_type == 'task_assigned':
+                    db_guard = db_guard.filter(
+                        execution_detail__assignee_id=instance.assigned_to_id,
+                    )
+                if db_guard.exists():
                     fired_this_request.add(rule.pk)
                     continue
             except Exception:
@@ -312,6 +321,10 @@ def run_board_automations(sender, instance, created, **kwargs):
                         'conditions_evaluated': len(rule.conditions),
                         'actions_count': len(rule.actions),
                         'branch': 'then' if outcome != 'skipped' else 'skipped',
+                        # Recorded so the task_assigned per-day dedupe in
+                        # _check_trigger can distinguish a redundant re-save
+                        # from a genuine re-assignment to a different user.
+                        'assignee_id': instance.assigned_to_id,
                     },
                 )
             except Exception:
@@ -388,6 +401,25 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
             return True
 
     elif trigger_type == 'task_assigned' and assignment_changed and task.assigned_to:
+        # Per-(task, assignee, day) dedupe. A single assignment can trigger two
+        # task.save() calls in close succession (e.g. the update view followed by
+        # update_task_prediction(), sometimes across two requests), and the
+        # in-memory + 3s-window guards in run_board_automations can miss the
+        # second when the saves interleave before the first AutomationLog commits.
+        # Keying the dedupe on the assignee makes a genuine *re*-assignment to a
+        # different user still fire, while a redundant re-save does not.
+        try:
+            from kanban.automation_models import AutomationLog
+            if AutomationLog.objects.filter(
+                rule_id=rule.pk,
+                task_affected_id=task.pk,
+                trigger_event='task_assigned',
+                triggered_at__date=now.date(),
+                execution_detail__assignee_id=task.assigned_to_id,
+            ).exists():
+                return False
+        except Exception:
+            pass
         return True
 
     # ── task_completion_threshold (new name) or task_completion_reached (old) ──
