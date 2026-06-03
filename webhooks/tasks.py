@@ -8,9 +8,11 @@ import hmac
 import hashlib
 import json
 from datetime import timedelta
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from celery import shared_task
 from webhooks.models import Webhook, WebhookDelivery
+from webhooks.security import validate_webhook_target
 
 
 def _is_slack_webhook(url):
@@ -93,24 +95,42 @@ def deliver_webhook(self, delivery_id, is_retry=False):
         if webhook.custom_headers:
             headers.update(webhook.custom_headers)
 
+        # Serialise the payload exactly once so the bytes we sign are the bytes
+        # we send (avoids any divergence from requests' own JSON serialisation).
+        payload_str = json.dumps(payload)
+        payload_bytes = payload_str.encode('utf-8')
+
         # Add HMAC signature if secret is set
         if webhook.secret:
-            payload_str = json.dumps(payload)
             signature = hmac.new(
                 webhook.secret.encode('utf-8'),
-                payload_str.encode('utf-8'),
+                payload_bytes,
                 hashlib.sha256
             ).hexdigest()
             headers['X-Webhook-Signature'] = f'sha256={signature}'
+
+        # SSRF guard: refuse to deliver to internal/private targets. Re-checked
+        # here (after DNS resolution) as the authoritative enforcement point.
+        # A blocked target is a permanent config error, so it is not retried.
+        try:
+            validate_webhook_target(webhook.url)
+        except ValidationError as exc:
+            delivery.status = 'failed'
+            delivery.error_message = ('Blocked target: ' + '; '.join(exc.messages))[:500]
+            delivery.save()
+            if not is_retry:
+                webhook.increment_delivery_stats(success=False)
+            return {'error': 'blocked_target'}
 
         # Attempt delivery
         start_time = time.time()
         try:
             response = requests.post(
                 webhook.url,
-                json=payload,
+                data=payload_bytes,
                 headers=headers,
-                timeout=webhook.timeout_seconds
+                timeout=webhook.timeout_seconds,
+                allow_redirects=False,
             )
 
             response_time_ms = int((time.time() - start_time) * 1000)

@@ -356,6 +356,69 @@ class APIErrorHandlingTests(APITestCase):
         # API can return 403 (Forbidden) or 404 (Not Found) for unauthorized access
         # 404 is actually more secure as it doesn't reveal if resource exists
         self.assertIn(response.status_code, [
-            status.HTTP_403_FORBIDDEN, 
+            status.HTTP_403_FORBIDDEN,
             status.HTTP_404_NOT_FOUND
         ])
+
+
+class APITokenScopeTests(APITestCase):
+    """Token-auth regression tests for ScopePermission (C1 + C2)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='tokenuser', email='token@example.com', password='testpass123'
+        )
+        self.org = Organization.objects.create(
+            name='Token Org', domain='token.org', created_by=self.user
+        )
+        UserProfile.objects.create(user=self.user, organization=self.org)
+        self.board = Board.objects.create(
+            name='Token Board', organization=self.org, created_by=self.user
+        )
+        self.column = Column.objects.create(name='To Do', board=self.board, position=0)
+        self.task = Task.objects.create(
+            title='Token Task', column=self.column, created_by=self.user
+        )
+        self.client = APIClient()
+
+    def _auth(self, scopes):
+        from api.models import APIToken
+        token = APIToken.objects.create(user=self.user, name='test-token', scopes=scopes)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.token}')
+        return token
+
+    def test_detail_get_does_not_500_under_token_auth(self):
+        """C1: detail routes must resolve object perms, not raise AttributeError."""
+        self._auth(['*'])
+        response = self.client.get(f'/api/v1/tasks/{self.task.id}/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_detail_patch_with_full_scope(self):
+        """C1: PATCH on a detail route works (previously 500)."""
+        self._auth(['*'])
+        response = self.client.patch(
+            f'/api/v1/tasks/{self.task.id}/', {'title': 'Renamed'}, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_read_only_scope_blocks_write(self):
+        """C2: a tasks.read-only token cannot create tasks."""
+        self._auth(['tasks.read'])
+        response = self.client.post(
+            '/api/v1/tasks/', {'title': 'New', 'column': self.column.id}, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_read_only_scope_allows_read(self):
+        """C2: a tasks.read token can still list tasks."""
+        self._auth(['tasks.read'])
+        response = self.client.get('/api/v1/tasks/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_write_scope_allows_write(self):
+        """C2: a token with tasks.write can create tasks."""
+        self._auth(['tasks.read', 'tasks.write'])
+        response = self.client.post(
+            '/api/v1/tasks/', {'title': 'New', 'column': self.column.id}, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)

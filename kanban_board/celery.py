@@ -168,6 +168,13 @@ app.conf.beat_schedule = {
         'task': 'analytics.tasks.generate_daily_analytics_report',
         'schedule': crontab(hour=5, minute=0),
     },
+    # --- Webhook Maintenance ---
+    # Purge webhook delivery logs older than 30 days (daily at 4:15 AM) so the
+    # WebhookDelivery table doesn't grow unbounded.
+    'cleanup-old-webhook-deliveries': {
+        'task': 'webhooks.tasks.cleanup_old_deliveries',
+        'schedule': crontab(hour=4, minute=15),
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

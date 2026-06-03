@@ -150,7 +150,7 @@ class BoardSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'organization', 'organization_name',
             'created_at', 'created_by', 'created_by_user', 'columns',
-            'member_count', 'task_count', 'members'
+            'member_count', 'task_count'
         ]
         read_only_fields = ['id', 'created_at', 'created_by']
     

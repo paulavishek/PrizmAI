@@ -7,7 +7,7 @@ These endpoints follow Zapier's polling trigger requirements:
 - Ordered by id DESC (newest first) so Zapier can detect new items
 
 Authentication: same API token as the rest of PrizmAI's REST API.
-Send token in the Authorization header:  Authorization: Token <your_token>
+Send token in the Authorization header:  Authorization: Bearer <your_token>
 
 NOTE: This integration is currently private/internal for testing.
 When PrizmAI is deployed on a public server, this app definition can be
