@@ -540,3 +540,142 @@ class WebhookSSRFTests(TestCase):
         with override_settings(WEBHOOK_ALLOW_PRIVATE_TARGETS=True):
             # No exception for a private host once the override is on.
             validate_webhook_target('http://10.0.0.5/hook')
+
+
+from django.test import override_settings
+
+
+class WebhookProviderPayloadTests(TestCase):
+    """Per-provider payload formatting (webhooks/tasks.py)."""
+
+    def _data(self):
+        return {
+            'title': 'Ship v2',
+            'board': {'id': 1, 'name': 'Roadmap'},
+            'to_column': {'id': 9, 'name': 'Done'},
+        }
+
+    def test_slack_and_googlechat_use_text(self):
+        from webhooks.tasks import _build_provider_payload
+        for provider in ('slack', 'googlechat'):
+            payload = _build_provider_payload(provider, 'task.completed', self._data())
+            self.assertIn('text', payload)
+            self.assertIn('Ship v2', payload['text'])
+
+    def test_discord_uses_content_not_text(self):
+        from webhooks.tasks import _build_provider_payload
+        payload = _build_provider_payload('discord', 'task.completed', self._data())
+        self.assertIn('content', payload)
+        self.assertNotIn('text', payload)
+
+    def test_teams_messagecard_shape(self):
+        from webhooks.tasks import _build_provider_payload
+        payload = _build_provider_payload('teams', 'task.created', self._data())
+        self.assertEqual(payload['@type'], 'MessageCard')
+        self.assertIn('text', payload)
+
+    def test_github_repository_dispatch(self):
+        from webhooks.tasks import _build_provider_payload
+        payload = _build_provider_payload(
+            'github', 'task.completed', self._data(), {'event_type': 'my_event'}
+        )
+        self.assertEqual(payload['event_type'], 'my_event')
+        self.assertEqual(payload['client_payload']['event'], 'task.completed')
+        self.assertEqual(payload['client_payload']['data'], self._data())
+
+    def test_github_default_event_type(self):
+        from webhooks.tasks import _build_provider_payload
+        payload = _build_provider_payload('github', 'task.completed', self._data())
+        self.assertEqual(payload['event_type'], 'prizmai_event')
+
+    def test_pagerduty_events_v2(self):
+        from webhooks.tasks import _build_provider_payload
+        payload = _build_provider_payload(
+            'pagerduty', 'task.moved', self._data(), {'routing_key': 'R123'}
+        )
+        self.assertEqual(payload['routing_key'], 'R123')
+        self.assertEqual(payload['event_action'], 'trigger')
+        self.assertIn('summary', payload['payload'])
+
+    def test_generic_providers_fall_back_to_envelope(self):
+        from webhooks.tasks import _build_provider_payload
+        for provider in ('zapier', 'make', 'n8n', 'powerautomate', 'gitlab', 'custom', 'generic'):
+            self.assertIsNone(
+                _build_provider_payload(provider, 'task.created', self._data()),
+                msg=f'{provider} should use the standard envelope',
+            )
+
+
+class WebhookProviderResolutionTests(TestCase):
+    """_resolve_provider: explicit field wins, else URL host sniff, else generic."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('provuser', 'prov@example.com', 'pass12345')
+        self.org = Organization.objects.create(
+            name='Prov Org', domain='prov.org', created_by=self.user
+        )
+        self.board = Board.objects.create(
+            name='Prov Board', organization=self.org, created_by=self.user
+        )
+
+    def _wh(self, url, provider=''):
+        return Webhook(name='w', url=url, board=self.board, created_by=self.user, provider=provider)
+
+    def test_explicit_provider_wins_over_url(self):
+        from webhooks.tasks import _resolve_provider
+        wh = self._wh('https://example.com/x', provider='discord')
+        self.assertEqual(_resolve_provider(wh), 'discord')
+
+    def test_slack_url_autodetected_when_provider_blank(self):
+        from webhooks.tasks import _resolve_provider
+        wh = self._wh('https://hooks.slack.com/services/T/B/X')
+        self.assertEqual(_resolve_provider(wh), 'slack')
+
+    def test_unknown_host_is_generic(self):
+        from webhooks.tasks import _resolve_provider
+        wh = self._wh('https://example.com/hook')
+        self.assertEqual(_resolve_provider(wh), 'generic')
+
+
+@override_settings(WEBHOOK_ALLOW_PRIVATE_TARGETS=True)
+class WebhookFormJSONFieldTests(TestCase):
+    """custom_headers / provider_config JSON validation in WebhookForm.
+
+    WEBHOOK_ALLOW_PRIVATE_TARGETS skips the SSRF DNS lookup so these stay hermetic.
+    """
+
+    def _form(self, **overrides):
+        from webhooks.forms import WebhookForm
+        data = {
+            'name': 'Test', 'url': 'https://example.com/hook',
+            'events': ['task.created'], 'timeout_seconds': 10,
+            'max_retries': 3, 'retry_delay_seconds': 60,
+        }
+        data.update(overrides)
+        return WebhookForm(data=data)
+
+    def test_valid_headers_parsed_to_dict(self):
+        form = self._form(custom_headers='{"Authorization": "Bearer x"}')
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['custom_headers'], {'Authorization': 'Bearer x'})
+
+    def test_invalid_json_rejected(self):
+        form = self._form(custom_headers='{not json}')
+        self.assertFalse(form.is_valid())
+        self.assertIn('custom_headers', form.errors)
+
+    def test_non_object_json_rejected(self):
+        form = self._form(provider_config='[1, 2, 3]')
+        self.assertFalse(form.is_valid())
+        self.assertIn('provider_config', form.errors)
+
+    def test_non_string_header_value_rejected(self):
+        form = self._form(custom_headers='{"X-Count": 123}')
+        self.assertFalse(form.is_valid())
+        self.assertIn('custom_headers', form.errors)
+
+    def test_empty_fields_default_to_empty_dict(self):
+        form = self._form()
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['custom_headers'], {})
+        self.assertEqual(form.cleaned_data['provider_config'], {})

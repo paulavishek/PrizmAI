@@ -102,7 +102,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 ### Integrations & Platform
 
 - **RESTful API** — Token-authenticated REST API for third-party integrations and mobile clients
-- **Webhook Integration** — Event-driven automation with external applications; one-click quick-setup presets for Slack, MS Teams, Google Chat, Discord, and Zapier
+- **Webhook Integration** — Event-driven outbound webhooks with one-click quick-setup presets grouped by category: **Chat** (Slack, MS Teams, Google Chat, Discord), **Automation** (Zapier, Make, n8n, Power Automate), and **DevOps** (GitHub, GitLab, PagerDuty), plus Custom. Payloads are auto-formatted per platform, with HMAC-SHA256 signing, custom headers, retries, live delivery logs, and an SSRF guard. See [External Integrations](#external-integrations)
 - **GitHub Webhook Receiver** — Automatically moves tasks to "In Review" when a GitHub pull request mentions a task ID (e.g., `SD-101`) in its title or description. Per-board configuration with HMAC-SHA256 secret verification. See [External Integrations](#external-integrations)
 - **Zapier Integration** — Native Zapier REST polling endpoints (New Task, Task Completed, Task Assigned triggers; Create Task and Update Status actions); ships with a ready-to-publish Zapier CLI app in `zapier-app/`. See [External Integrations](#external-integrations)
 - **Google Calendar Sync** — OAuth 2.0-based two-way sync; tasks assigned to you with a due date automatically appear in Google Calendar and update whenever the due date changes. Master toggle in Profile Settings. See [External Integrations](#external-integrations)
@@ -748,6 +748,42 @@ Three quick-reply options map the answer to a preset and save it immediately, wi
 
 ## External Integrations
 
+### Outbound Webhooks & Integration Presets
+
+PrizmAI can POST board events (task created / updated / completed / moved / assigned, comments, and board updates) to any external URL. One-click presets pre-fill the setup **and** format the payload for each platform, so integrations work without manual JSON mapping.
+
+**Setup**
+
+1. Open a board → **Webhooks → Create**.
+2. Pick a Quick-setup preset (grouped into Chat / Automation / DevOps, plus Custom), paste the destination URL, and choose the events to send.
+3. Use the **Test** button to fire a sample delivery and watch the result. The webhook detail page shows a live delivery log (status, HTTP code, latency, retries, error message).
+
+**Presets & payload formatting**
+
+| Category | Providers | Payload sent |
+|----------|-----------|--------------|
+| Chat | Slack, Google Chat | `{ "text": ... }` |
+| Chat | Discord | `{ "content": ... }` |
+| Chat | MS Teams | MessageCard JSON (classic Office 365 connector) |
+| Automation | Zapier, Make, n8n, Power Automate | Standard envelope `{ event, timestamp, delivery_id, data }` |
+| DevOps | GitHub | `repository_dispatch` → `{ event_type, client_payload }` |
+| DevOps | PagerDuty | Events API v2 → `{ routing_key, event_action, payload }` |
+| DevOps | GitLab, Custom | Standard envelope |
+
+The provider is auto-detected from the URL host (or set explicitly by the preset), so existing Slack webhooks keep working unchanged. MS Teams workspaces on the newer Power Automate "Workflows" connectors should use the **Power Automate** preset.
+
+**Auth & security**
+
+- **Custom Headers** (JSON) — attach auth tokens, e.g. GitHub `Authorization: Bearer <PAT>` or GitLab `PRIVATE-TOKEN`.
+- **Provider Config** (JSON) — extra body fields a provider needs, e.g. PagerDuty `routing_key`, GitHub `event_type`.
+- **HMAC-SHA256 signing** via an optional secret, sent as the `X-Webhook-Signature` header (signed over the exact bytes delivered).
+- **SSRF guard** — targets must use `http(s)` and resolve to public addresses; loopback / private / link-local / cloud-metadata IPs are rejected and redirects are not followed. Self-hosted LAN setups can opt out with `WEBHOOK_ALLOW_PRIVATE_TARGETS = True`.
+- Webhooks auto-disable after 10 consecutive failures; delivery logs are pruned daily after 30 days.
+
+> **Note:** GitLab's native pipeline-trigger API is form-encoded, so the GitLab preset sends the standard JSON envelope (with header auth) rather than a GitLab-specific body — point it at a JSON-accepting receiver.
+
+---
+
 ### GitHub Webhook Receiver
 
 PrizmAI can receive GitHub webhook events and automatically move tasks to an "In Review" column when a pull request mentions a task ID.
@@ -770,7 +806,7 @@ PrizmAI can receive GitHub webhook events and automatically move tasks to an "In
 
 PrizmAI ships a full Zapier integration: Django REST polling endpoints on the server side and a self-contained Zapier CLI app in the `zapier-app/` directory.
 
-**Zapier REST endpoints** (all require an API token in `Authorization: Token <key>`)
+**Zapier REST endpoints** (all require an API token in `Authorization: Bearer <key>`)
 
 | Method | Path | Purpose |
 |--------|------|---------|

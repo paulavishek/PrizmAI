@@ -127,7 +127,22 @@ class Webhook(models.Model):
         blank=True,
         help_text="Custom HTTP headers to include in webhook requests"
     )
-    
+
+    # Provider / preset
+    provider = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Integration preset this webhook targets (slack, discord, teams, github, "
+                  "pagerduty, ...). Blank = auto-detect from the URL host."
+    )
+    provider_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Provider-specific config the payload body needs but the URL/headers can't carry "
+                  "(e.g. PagerDuty routing_key, GitHub event_type)."
+    )
+
     class Meta:
         ordering = ['-created_at']
         indexes = [

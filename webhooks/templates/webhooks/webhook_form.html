@@ -23,11 +23,15 @@
                         </div>
                         {% endif %}
 
+                        {{ form.provider }}
+
                         {% if not webhook %}
-                        {# Quick-setup preset panel — only shown on Create, not Edit #}
+                        {# Quick-setup preset panel — only shown on Create, not Edit. Grouped to stay scannable. #}
                         <div class="mb-4">
                             <p class="form-label mb-2 fw-semibold">Quick setup</p>
-                            <div class="d-flex gap-2 flex-wrap">
+
+                            <p class="text-muted small text-uppercase mb-1" style="letter-spacing:.05em;">Chat</p>
+                            <div class="d-flex gap-2 flex-wrap mb-2">
                                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('slack')">
                                     <i class="bi bi-slack me-1"></i> Slack
                                 </button>
@@ -40,13 +44,43 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('discord')">
                                     <i class="bi bi-discord me-1"></i> Discord
                                 </button>
+                            </div>
+
+                            <p class="text-muted small text-uppercase mb-1" style="letter-spacing:.05em;">Automation</p>
+                            <div class="d-flex gap-2 flex-wrap mb-2">
                                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('zapier')">
                                     <i class="bi bi-lightning me-1"></i> Zapier
                                 </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('make')">
+                                    <i class="bi bi-diagram-3 me-1"></i> Make
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('n8n')">
+                                    <i class="bi bi-share me-1"></i> n8n
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('powerautomate')">
+                                    <i class="bi bi-microsoft me-1"></i> Power Automate
+                                </button>
+                            </div>
+
+                            <p class="text-muted small text-uppercase mb-1" style="letter-spacing:.05em;">DevOps &amp; Incident</p>
+                            <div class="d-flex gap-2 flex-wrap mb-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('github')">
+                                    <i class="bi bi-github me-1"></i> GitHub
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('gitlab')">
+                                    <i class="bi bi-git me-1"></i> GitLab
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('pagerduty')">
+                                    <i class="bi bi-bell me-1"></i> PagerDuty
+                                </button>
+                            </div>
+
+                            <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyPreset('custom')">
                                     <i class="bi bi-gear me-1"></i> Custom
                                 </button>
                             </div>
+
                             <div id="preset-guide" class="mt-3" style="display:none;"></div>
                         </div>
                         <hr class="mb-4">
@@ -119,7 +153,7 @@
                                 <p class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.05em;">Board &amp; Comment Events</p>
                                 {% for widget in form.events %}
                                     {% with val=widget.data.value %}
-                                    {% if val == "comment.added" or val == "board.updated" or val == "board.member_added" or val == "board.member_removed" %}
+                                    {% if val == "comment.added" or val == "board.updated" %}
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" name="{{ form.events.html_name }}"
                                                id="id_events_b_{{ forloop.counter0 }}" value="{{ val }}"
@@ -186,7 +220,29 @@
                             {% endif %}
                             <small class="form-text text-muted">{{ form.secret.help_text }}</small>
                         </div>
-                        
+
+                        <div class="mb-3">
+                            <label for="{{ form.custom_headers.id_for_label }}" class="form-label">
+                                Custom Headers (Optional)
+                            </label>
+                            {{ form.custom_headers }}
+                            {% if form.custom_headers.errors %}
+                            <div class="text-danger">{{ form.custom_headers.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.custom_headers.help_text }}</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.provider_config.id_for_label }}" class="form-label">
+                                Provider Config (Optional)
+                            </label>
+                            {{ form.provider_config }}
+                            {% if form.provider_config.errors %}
+                            <div class="text-danger">{{ form.provider_config.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.provider_config.help_text }}</small>
+                        </div>
+
                         <div class="d-flex justify-content-between">
                             <a href="{% url 'webhooks:webhook_list' board.id %}" class="btn-prizm-cancel">Cancel</a>
                             <button type="submit" class="btn btn-primary">{% if webhook %}Update{% else %}Create{% endif %} Webhook</button>
@@ -253,6 +309,7 @@
 <script>
 const PRESETS = {
     slack: {
+        provider: 'slack',
         name: 'Slack Notifications',
         events: ['task.completed', 'task.assigned'],
         guide: `
@@ -267,6 +324,7 @@ const PRESETS = {
             </div>`
     },
     teams: {
+        provider: 'teams',
         name: 'MS Teams Notifications',
         events: ['task.created', 'board.updated'],
         guide: `
@@ -281,6 +339,7 @@ const PRESETS = {
             </div>`
     },
     googlechat: {
+        provider: 'googlechat',
         name: 'Google Chat Notifications',
         events: ['task.completed', 'task.assigned'],
         guide: `
@@ -296,6 +355,7 @@ const PRESETS = {
             </div>`
     },
     discord: {
+        provider: 'discord',
         name: 'Discord Notifications',
         events: ['task.completed', 'task.created'],
         guide: `
@@ -311,8 +371,9 @@ const PRESETS = {
             </div>`
     },
     zapier: {
+        provider: 'zapier',
         name: 'Zapier Integration',
-        events: ['task.created', 'task.updated', 'task.deleted', 'task.completed', 'task.assigned', 'task.moved', 'comment.added', 'board.updated', 'board.member_added', 'board.member_removed'],
+        events: ['task.created', 'task.updated', 'task.deleted', 'task.completed', 'task.assigned', 'task.moved', 'comment.added', 'board.updated'],
         guide: `
             <div class="alert alert-secondary py-3">
                 <p class="fw-semibold mb-2"><i class="bi bi-lightning me-1"></i> How to get your Zapier Catch Hook URL</p>
@@ -325,7 +386,101 @@ const PRESETS = {
                 <p class="mb-0 text-muted small">Tip: PrizmAI also has a native Zapier integration with pre-built triggers and actions — ask your admin about the API token setup.</p>
             </div>`
     },
+    make: {
+        provider: 'make',
+        name: 'Make Scenario',
+        events: ['task.created', 'task.updated', 'task.deleted', 'task.completed', 'task.assigned', 'task.moved', 'comment.added', 'board.updated'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-diagram-3 me-1"></i> How to get your Make webhook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>In <a href="https://www.make.com" target="_blank" rel="noopener noreferrer">Make</a>, create a scenario and add the <strong>Webhooks &gt; Custom webhook</strong> module as the trigger.</li>
+                    <li>Click <strong>Add</strong>, name the webhook, then copy the generated address.</li>
+                    <li>Paste it in the Webhook URL field below. Make receives the full PrizmAI JSON envelope and you can map any field downstream.</li>
+                </ol>
+                <p class="mb-0 text-muted small">All events are pre-selected — filter inside Make using the <code>event</code> field.</p>
+            </div>`
+    },
+    n8n: {
+        provider: 'n8n',
+        name: 'n8n Workflow',
+        events: ['task.created', 'task.updated', 'task.deleted', 'task.completed', 'task.assigned', 'task.moved', 'comment.added', 'board.updated'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-share me-1"></i> How to get your n8n webhook URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>In <a href="https://n8n.io" target="_blank" rel="noopener noreferrer">n8n</a>, add a <strong>Webhook</strong> node as the workflow trigger and set the method to <strong>POST</strong>.</li>
+                    <li>Copy the <strong>Production URL</strong> from the node (activate the workflow to enable it).</li>
+                    <li>Paste it in the Webhook URL field below. n8n receives the full PrizmAI JSON envelope.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Self-hosted/cloud both work. If your n8n is on a private network, this URL must be publicly reachable.</p>
+            </div>`
+    },
+    powerautomate: {
+        provider: 'powerautomate',
+        name: 'Power Automate Flow',
+        events: ['task.created', 'task.updated', 'task.completed', 'task.assigned', 'board.updated'],
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-microsoft me-1"></i> How to get your Power Automate URL</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>In <a href="https://make.powerautomate.com" target="_blank" rel="noopener noreferrer">Power Automate</a>, create an <strong>Instant cloud flow</strong>.</li>
+                    <li>Choose the trigger <strong>When a HTTP request is received</strong>.</li>
+                    <li>Save the flow, then copy the generated <strong>HTTP POST URL</strong> and paste it below.</li>
+                </ol>
+                <p class="mb-0 text-muted small">The flow receives the standard PrizmAI JSON envelope; parse it with a "Parse JSON" action.</p>
+            </div>`
+    },
+    github: {
+        provider: 'github',
+        name: 'GitHub repository_dispatch',
+        events: ['task.completed', 'task.moved'],
+        headers: { 'Authorization': 'Bearer <your_PAT>', 'Accept': 'application/vnd.github+json' },
+        config: { 'event_type': 'prizmai_event' },
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-github me-1"></i> Trigger a GitHub workflow (repository_dispatch)</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Set the URL to <code>https://api.github.com/repos/&lt;owner&gt;/&lt;repo&gt;/dispatches</code>.</li>
+                    <li>Create a fine-grained <strong>Personal Access Token</strong> with <em>Contents: read &amp; write</em> and put it in the pre-filled <strong>Custom Headers</strong> below (replace <code>&lt;your_PAT&gt;</code>).</li>
+                    <li>In your workflow YAML, listen with <code>on: repository_dispatch: types: [prizmai_event]</code> (rename via Provider Config).</li>
+                </ol>
+                <p class="mb-0 text-muted small">PrizmAI sends <code>{ "event_type", "client_payload": { event, data } }</code>.</p>
+            </div>`
+    },
+    gitlab: {
+        provider: 'gitlab',
+        name: 'GitLab Integration',
+        events: ['task.completed', 'task.moved'],
+        headers: { 'PRIVATE-TOKEN': '<your_token>' },
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-git me-1"></i> Send events to GitLab</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Point the URL at a GitLab endpoint that accepts a JSON POST body (e.g. a webhook receiver, or a CI pipeline triggered via a thin proxy).</li>
+                    <li>Add your access token in the pre-filled <strong>Custom Headers</strong> below (<code>PRIVATE-TOKEN</code>).</li>
+                </ol>
+                <p class="mb-0 text-muted small">Note: GitLab's native <em>pipeline trigger</em> API expects form-encoded params, so PrizmAI sends the standard JSON envelope here rather than a GitLab-specific body.</p>
+            </div>`
+    },
+    pagerduty: {
+        provider: 'pagerduty',
+        name: 'PagerDuty Alert',
+        events: ['task.moved'],
+        config: { 'routing_key': '<integration_routing_key>' },
+        guide: `
+            <div class="alert alert-secondary py-3">
+                <p class="fw-semibold mb-2"><i class="bi bi-bell me-1"></i> Raise PagerDuty incidents (Events API v2)</p>
+                <ol class="mb-2 ps-3 small">
+                    <li>Set the URL to <code>https://events.pagerduty.com/v2/enqueue</code>.</li>
+                    <li>In PagerDuty, add an <strong>Events API v2</strong> integration to a service and copy its <strong>Integration Key</strong>.</li>
+                    <li>Paste that key as <code>routing_key</code> in the pre-filled <strong>Provider Config</strong> below.</li>
+                </ol>
+                <p class="mb-0 text-muted small">Each matching event triggers an incident with action <code>trigger</code> and severity <code>warning</code>.</p>
+            </div>`
+    },
     custom: {
+        provider: 'custom',
         name: '',
         events: [],
         guide: `
@@ -344,6 +499,20 @@ function applyPreset(key) {
     const nameField = document.getElementById('{{ form.name.id_for_label }}');
     if (nameField && nameField.value.trim() === '' && preset.name) {
         nameField.value = preset.name;
+    }
+
+    // Record the chosen provider so deliveries get formatted for that platform
+    const providerField = document.getElementById('{{ form.provider.id_for_label }}');
+    if (providerField) providerField.value = preset.provider || '';
+
+    // Pre-fill header / config templates (only when the field is still empty)
+    const headersField = document.getElementById('{{ form.custom_headers.id_for_label }}');
+    if (headersField && headersField.value.trim() === '' && preset.headers) {
+        headersField.value = JSON.stringify(preset.headers, null, 2);
+    }
+    const configField = document.getElementById('{{ form.provider_config.id_for_label }}');
+    if (configField && configField.value.trim() === '' && preset.config) {
+        configField.value = JSON.stringify(preset.config, null, 2);
     }
 
     // Focus the URL field
