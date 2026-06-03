@@ -3,12 +3,15 @@ Forms for Webhook Management
 """
 from django import forms
 from webhooks.models import Webhook
+from webhooks.security import validate_webhook_target
 
 
 class WebhookForm(forms.ModelForm):
     """Form for creating/editing webhooks"""
     required_css_class = 'required'
-    
+
+    # Only events that have a signal handler are offered (board.member_added /
+    # board.member_removed have no handler and would never fire).
     EVENT_CHOICES = [
         ('task.created', 'Task Created'),
         ('task.updated', 'Task Updated'),
@@ -18,8 +21,6 @@ class WebhookForm(forms.ModelForm):
         ('task.moved', 'Task Moved'),
         ('comment.added', 'Comment Added'),
         ('board.updated', 'Board Updated'),
-        ('board.member_added', 'Board Member Added'),
-        ('board.member_removed', 'Board Member Removed'),
     ]
     
     events = forms.MultipleChoiceField(
@@ -57,6 +58,15 @@ class WebhookForm(forms.ModelForm):
         if not events:
             raise forms.ValidationError("Please select at least one event type")
         return list(events)
+
+    def clean_url(self):
+        """Reject SSRF-prone targets (internal/private addresses, bad schemes)."""
+        url = self.cleaned_data.get('url')
+        if url:
+            # validate_webhook_target raises django ValidationError, which
+            # ModelForm surfaces as a field error.
+            validate_webhook_target(url)
+        return url
 
 
 class WebhookTestForm(forms.Form):

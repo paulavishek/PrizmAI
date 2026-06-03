@@ -506,6 +506,37 @@ class WebhookSecurityTests(TestCase):
             board=self.board,
             created_by=self.user
         )
-        
+
         with self.assertRaises(ValidationError):
             webhook.full_clean()
+
+
+class WebhookSSRFTests(TestCase):
+    """Test the SSRF guard for outgoing webhook targets (M1)."""
+
+    def test_internal_and_bad_scheme_targets_blocked(self):
+        from django.core.exceptions import ValidationError
+        from webhooks.security import validate_webhook_target
+
+        blocked = [
+            'http://127.0.0.1/hook',            # loopback
+            'http://localhost:8000/hook',        # loopback by name
+            'http://169.254.169.254/latest/',    # link-local (cloud metadata)
+            'http://10.0.0.5/hook',              # private
+            'http://192.168.1.10/hook',          # private
+            'ftp://example.com/hook',            # disallowed scheme
+            'file:///etc/passwd',                # disallowed scheme
+        ]
+        for url in blocked:
+            with self.subTest(url=url):
+                with self.assertRaises(ValidationError):
+                    validate_webhook_target(url)
+
+    def test_private_target_allowed_when_setting_enabled(self):
+        """Self-hosted LAN setups can opt in via WEBHOOK_ALLOW_PRIVATE_TARGETS."""
+        from django.test import override_settings
+        from webhooks.security import validate_webhook_target
+
+        with override_settings(WEBHOOK_ALLOW_PRIVATE_TARGETS=True):
+            # No exception for a private host once the override is on.
+            validate_webhook_target('http://10.0.0.5/hook')

@@ -29,7 +29,7 @@ def verify_signature(body: bytes, header_sig: str) -> tuple[bool, str]:
     if not SECRET:
         return True, "skipped (no secret configured)"
     if not header_sig:
-        return False, "missing X-PrizmAI-Signature header"
+        return False, "missing X-Webhook-Signature header"
     try:
         mac = hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
         expected = f"sha256={mac}"
@@ -47,7 +47,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length)
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
-        sig_header = self.headers.get("X-PrizmAI-Signature", "")
+        sig_header = self.headers.get("X-Webhook-Signature", "")
         sig_ok, sig_msg = verify_signature(body, sig_header)
 
         try:

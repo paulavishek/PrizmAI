@@ -13,6 +13,9 @@ class Webhook(models.Model):
     Webhook subscription for board events
     Allows external services to receive real-time notifications
     """
+    # Only events with a matching signal handler in webhooks/signals.py are
+    # listed. board.member_added / board.member_removed have no handler and
+    # would never fire, so they are intentionally omitted.
     EVENT_CHOICES = [
         ('task.created', 'Task Created'),
         ('task.updated', 'Task Updated'),
@@ -22,8 +25,6 @@ class Webhook(models.Model):
         ('task.moved', 'Task Moved to Different Column'),
         ('comment.added', 'Comment Added'),
         ('board.updated', 'Board Updated'),
-        ('board.member_added', 'Board Member Added'),
-        ('board.member_removed', 'Board Member Removed'),
     ]
     
     STATUS_CHOICES = [
