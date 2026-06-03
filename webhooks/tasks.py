@@ -8,6 +8,7 @@ import hmac
 import hashlib
 import json
 from datetime import timedelta
+from urllib.parse import urlparse
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from celery import shared_task
@@ -15,37 +16,112 @@ from webhooks.models import Webhook, WebhookDelivery
 from webhooks.security import validate_webhook_target
 
 
-def _is_slack_webhook(url):
-    """Return True if the URL is a Slack Incoming Webhook."""
-    return 'hooks.slack.com' in url
+# Host substring -> provider name, used when a webhook has no explicit provider set.
+_HOST_PROVIDER_MAP = (
+    ('hooks.slack.com', 'slack'),
+    ('discord.com', 'discord'),
+    ('discordapp.com', 'discord'),
+    ('chat.googleapis.com', 'googlechat'),
+    ('webhook.office.com', 'teams'),
+    ('api.github.com', 'github'),
+    ('events.pagerduty.com', 'pagerduty'),
+)
 
 
-def _build_slack_payload(event_type, data):
+def _resolve_provider(webhook):
+    """Explicit webhook.provider wins; otherwise sniff the URL host; else 'generic'."""
+    provider = (getattr(webhook, 'provider', '') or '').strip().lower()
+    if provider:
+        return provider
+    host = (urlparse(webhook.url).hostname or '').lower()
+    for needle, name in _HOST_PROVIDER_MAP:
+        if needle in host:
+            return name
+    return 'generic'
+
+
+def _build_message_text(event_type, data, bold='*'):
     """
-    Convert a PrizmAI webhook event into a Slack-compatible {"text": "..."} payload.
-    Slack Incoming Webhooks require a top-level "text" key.
+    Build a human-readable one-line message for chat providers.
+    `bold` is the markdown emphasis marker for the target platform
+    ('*' for Slack/Google Chat, '**' for Discord/Teams, '' for plain text).
     """
+    def b(s):
+        return f'{bold}{s}{bold}' if s else ''
+
     title = data.get('title', '')
     board_name = ''
     if isinstance(data.get('board'), dict):
         board_name = data['board'].get('name', '')
+    on_board = f' on board {b(board_name)}' if board_name else ''
+    in_board = f' in board {b(board_name)}' if board_name else ''
+    to_col = ''
+    if isinstance(data.get('to_column'), dict):
+        to_col = f' → {b(data["to_column"].get("name", ""))}'
 
-    EVENT_MESSAGES = {
-        'test.event': '🔔 PrizmAI test — your Slack integration is working!',
-        'task.created': f'📋 Task created: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
-        'task.updated': f'✏️ Task updated: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
-        'task.deleted': f'🗑️ Task deleted: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
-        'task.completed': f'✅ Task completed: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
-        'task.assigned': f'👤 Task assigned: *{title}*' + (f' on board *{board_name}*' if board_name else ''),
-        'task.moved': f'🔀 Task moved: *{title}*' + (
-            f' → *{data.get("to_column", {}).get("name", "")}*' if isinstance(data.get("to_column"), dict) else ''
-        ) + (f' on board *{board_name}*' if board_name else ''),
-        'comment.added': f'💬 Comment added on: *{title}*' + (f' in board *{board_name}*' if board_name else ''),
-        'board.updated': f'📌 Board updated: *{board_name}*' if board_name else '📌 Board updated',
+    messages = {
+        'test.event': '🔔 PrizmAI test — your integration is working!',
+        'task.created': f'📋 Task created: {b(title)}{on_board}',
+        'task.updated': f'✏️ Task updated: {b(title)}{on_board}',
+        'task.deleted': f'🗑️ Task deleted: {b(title)}{on_board}',
+        'task.completed': f'✅ Task completed: {b(title)}{on_board}',
+        'task.assigned': f'👤 Task assigned: {b(title)}{on_board}',
+        'task.moved': f'🔀 Task moved: {b(title)}{to_col}{on_board}',
+        'comment.added': f'💬 Comment added on: {b(title)}{in_board}',
+        'board.updated': f'📌 Board updated: {b(board_name)}' if board_name else '📌 Board updated',
     }
+    return messages.get(event_type, f'🔔 PrizmAI event: {event_type}')
 
-    text = EVENT_MESSAGES.get(event_type, f'🔔 PrizmAI event: {event_type}')
-    return {'text': text}
+
+def _build_provider_payload(provider, event_type, data, cfg=None):
+    """
+    Return the provider-specific JSON body for a webhook, or None to fall back to
+    the standard PrizmAI envelope ({event, timestamp, delivery_id, data}).
+
+    cfg is webhook.provider_config (dict) for providers whose body needs extra
+    fields the URL/headers can't carry.
+    """
+    cfg = cfg or {}
+
+    if provider in ('slack', 'googlechat'):
+        # Both require a top-level "text" key; both use *single-asterisk* emphasis.
+        return {'text': _build_message_text(event_type, data, bold='*')}
+
+    if provider == 'discord':
+        # Discord requires "content" (or embeds); rejects a body with neither.
+        return {'content': _build_message_text(event_type, data, bold='**')}
+
+    if provider == 'teams':
+        # Classic Office 365 connector MessageCard.
+        return {
+            '@type': 'MessageCard',
+            '@context': 'http://schema.org/extensions',
+            'summary': 'PrizmAI notification',
+            'themeColor': '0076D7',
+            'text': _build_message_text(event_type, data, bold='**'),
+        }
+
+    if provider == 'github':
+        # repository_dispatch: PAT supplied via custom_headers (Authorization).
+        return {
+            'event_type': cfg.get('event_type') or 'prizmai_event',
+            'client_payload': {'event': event_type, 'data': data},
+        }
+
+    if provider == 'pagerduty':
+        # Events API v2 — routing_key comes from provider_config.
+        return {
+            'routing_key': cfg.get('routing_key', ''),
+            'event_action': 'trigger',
+            'payload': {
+                'summary': _build_message_text(event_type, data, bold=''),
+                'source': 'PrizmAI',
+                'severity': 'warning',
+            },
+        }
+
+    # zapier / make / n8n / powerautomate / gitlab / custom / generic -> standard envelope.
+    return None
 
 
 @shared_task(bind=True, max_retries=3)
@@ -72,9 +148,14 @@ def deliver_webhook(self, delivery_id, is_retry=False):
         return {'error': 'Webhook inactive'}
 
     try:
-        # Prepare payload — use Slack-compatible format for Slack Incoming Webhooks
-        if _is_slack_webhook(webhook.url):
-            payload = _build_slack_payload(delivery.event_type, delivery.payload)
+        # Prepare payload — format it for the target provider when we have a
+        # dedicated builder; otherwise send the standard PrizmAI envelope.
+        provider = _resolve_provider(webhook)
+        formatted = _build_provider_payload(
+            provider, delivery.event_type, delivery.payload, webhook.provider_config
+        )
+        if formatted is not None:
+            payload = formatted
         else:
             payload = {
                 'event': delivery.event_type,
