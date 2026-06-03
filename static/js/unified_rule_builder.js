@@ -905,6 +905,15 @@ const UnifiedRuleBuilder = (() => {
       <span id="rbActionTargetWrap_${branch}_${idx}">${_actionTargetHtml(action, idx, branch)}</span>
     ` : '';
 
+    const demoHintHtml = (
+      actionType === 'send_notification' &&
+      (boardData.is_official_demo_board || boardData.is_sandbox_copy)
+    ) ? `
+      <div class="small text-muted mt-1 ps-1">
+        <i class="fas fa-info-circle me-1"></i>
+        On demo boards, notifications are redirected to you so the test stays self-contained.
+      </div>` : '';
+
     const messageHtml = showMessage ? `
       <div class="mt-2 ps-1">
         <label class="form-label small text-muted">Message (optional):</label>
@@ -930,6 +939,7 @@ const UnifiedRuleBuilder = (() => {
             <i class="fas fa-times"></i>
           </button>
         </div>
+        ${demoHintHtml}
         ${messageHtml}
       </div>`;
   }
@@ -956,22 +966,11 @@ const UnifiedRuleBuilder = (() => {
       const memberOpts = boardData.members.map(m =>
         `<option value="${m.id}" ${target == m.id ? 'selected':''}>${_esc(m.username)}</option>`
       ).join('');
-      const demoHint = (
-        actionType === 'send_notification'
-        && (boardData.is_official_demo_board || boardData.is_sandbox_copy)
-      ) ? `
-        <div class="small text-muted mt-1" style="max-width:320px">
-          <i class="fas fa-info-circle me-1"></i>
-          On demo boards, notifications are redirected to you so the test stays self-contained.
-        </div>` : '';
-      return `<span class="d-inline-flex flex-column">
-        <select class="form-select form-select-sm" style="max-width:180px"
-          id="rbActionTarget_${branch}_${idx}" aria-label="Notification target">
-          ${opts}
-          <optgroup label="Specific member">${memberOpts}</optgroup>
-        </select>
-        ${demoHint}
-      </span>`;
+      return `<select class="form-select form-select-sm" style="max-width:180px"
+        id="rbActionTarget_${branch}_${idx}" aria-label="Notification target">
+        ${opts}
+        <optgroup label="Specific member">${memberOpts}</optgroup>
+      </select>`;
     }
     if (actionType === 'move_to_column') {
       return `<select class="form-select form-select-sm" style="max-width:180px"
