@@ -95,6 +95,50 @@ class DuplicateFirePreventionTest(TestCase):
         logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
         self.assertEqual(logs.count(), 1)
 
+    def test_assigned_fires_once_even_if_task_saved_twice(self):
+        """A single assignment that triggers two task.save() calls (e.g. the
+        update view followed by update_task_prediction) must log exactly one
+        task_assigned fire, not a duplicate."""
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='assign_user')
+        assignee = User.objects.create_user(
+            username='assignee_a', password='x', email='a@example.com',
+        )
+        rule = _make_rule(board, user, 'task_assigned')
+
+        task.assigned_to = assignee
+        task.save()
+        task.save()  # downstream re-save on the same instance
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 1, 'task_assigned should fire exactly once')
+
+    def test_assigned_refires_when_reassigned_to_different_user(self):
+        """The per-day dedupe is keyed on the assignee, so handing the task to a
+        genuinely different person on the same day must fire again. A real
+        reassignment arrives in a later request — model that by re-fetching the
+        Task so the in-memory per-instance guard starts fresh, exactly as it
+        would across two HTTP requests."""
+        from kanban.automation_models import AutomationLog
+        from kanban.models import Task
+
+        user, board, col, task = _make_board_with_task(username='reassign_user')
+        a = User.objects.create_user(username='user_a', password='x', email='a2@example.com')
+        b = User.objects.create_user(username='user_b', password='x', email='b2@example.com')
+        rule = _make_rule(board, user, 'task_assigned')
+
+        task.assigned_to = a
+        task.save()
+
+        # Second request: fresh instance, new assignee.
+        task = Task.objects.get(pk=task.pk)
+        task.assigned_to = b
+        task.save()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 2, 'reassignment to a new user should fire again')
+
     def test_completion_threshold_does_not_refire_above_threshold(self):
         """T-15: once progress crosses the threshold, subsequent bumps above
         the threshold must NOT re-fire the rule."""

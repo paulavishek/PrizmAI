@@ -275,6 +275,26 @@ def _resolve_target(action):
     return target
 
 
+def _resolve_board_organization(board):
+    """Resolve the Organization a board's wiki/knowledge content belongs to.
+
+    A board's own ``organization`` FK is often null for demo/sandbox/workspace
+    boards, even though its wiki pages live under an org. Mirror the resolution
+    the Wiki UI uses (workspace org → owner's profile org) so automation-created
+    pages land in the same org users see, instead of silently no-opping.
+    """
+    org = getattr(board, 'organization', None)
+    if org:
+        return org
+    workspace = getattr(board, 'workspace', None)
+    org = getattr(workspace, 'organization', None) if workspace else None
+    if org:
+        return org
+    owner = getattr(board, 'owner', None)
+    profile = getattr(owner, 'profile', None) if owner else None
+    return getattr(profile, 'organization', None) if profile else None
+
+
 _VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
 
 
@@ -1171,7 +1191,7 @@ def _act_create_wiki_page(target, rule, action):
     content = action.get('message') or ''
     if target.target_task:
         content = _substitute_vars(content, target.target_task)
-    org = getattr(board, 'organization', None)
+    org = _resolve_board_organization(board)
     if not org:
         raise _ActionNoOp('board has no organization')
     try:
