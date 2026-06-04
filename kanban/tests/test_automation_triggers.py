@@ -485,3 +485,240 @@ class TaskCompletedDedupeTest(TestCase):
 
         logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
         self.assertEqual(logs.count(), 1, 'task_completed must dedupe per calendar day')
+
+
+class MilestoneReachedTest(TestCase):
+    """BUG-01: milestone_reached was dead because it required just_completed,
+    which is False for tasks created at 100% or typed Milestone while at 100%."""
+
+    def test_milestone_created_at_100_fires(self):
+        from kanban.models import Task
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, _seed = _make_board_with_task(username='ms_created')
+        rule = _make_rule(board, user, 'milestone_reached')
+
+        Task.objects.create(
+            column=col, title='Release', created_by=user,
+            item_type='milestone', progress=100,
+        )
+
+        logs = AutomationLog.objects.filter(rule=rule)
+        self.assertEqual(logs.count(), 1, 'milestone created at 100% should fire once')
+
+    def test_existing_complete_task_typed_milestone_fires(self):
+        """An existing task already at 100% that is switched to Milestone fires."""
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(
+            username='ms_typed', task_kwargs={'progress': 100},
+        )
+        rule = _make_rule(board, user, 'milestone_reached')
+
+        task.item_type = 'milestone'
+        task.save()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 1)
+
+    def test_progress_crossing_to_100_on_milestone_fires_once(self):
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(
+            username='ms_cross',
+            task_kwargs={'item_type': 'milestone', 'progress': 50},
+        )
+        rule = _make_rule(board, user, 'milestone_reached')
+
+        task.progress = 100
+        task.save()
+        task.save()  # downstream re-save must not double-fire
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 1)
+
+    def test_non_milestone_does_not_fire(self):
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(
+            username='ms_none', task_kwargs={'progress': 50},
+        )
+        rule = _make_rule(board, user, 'milestone_reached')
+
+        task.progress = 100  # plain task → not a milestone
+        task.save()
+
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=rule).count(), 0,
+            'a non-milestone task reaching 100% must not fire milestone_reached',
+        )
+
+
+class ScheduleStatusTransitionTest(TestCase):
+    """BUG-05: schedule_status_changed must fire only when the computed badge
+    actually transitions, not on every progress/due_date save."""
+
+    def test_fires_on_real_transition(self):
+        import datetime
+        from kanban.automation_models import AutomationLog
+
+        # Due yesterday + progress < 100 → 'late'. Start on-track then drop the
+        # due date into the past to transition on_track → late.
+        user, board, col, task = _make_board_with_task(
+            username='sched_real',
+            task_kwargs={
+                'progress': 50,
+                'due_date': timezone.now() + datetime.timedelta(days=30),
+            },
+        )
+        rule = _make_rule(board, user, 'schedule_status_changed')
+
+        task.due_date = timezone.now() - datetime.timedelta(days=1)
+        task.save()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 1)
+
+    def test_no_fire_when_status_unchanged(self):
+        import datetime
+        from kanban.automation_models import AutomationLog
+
+        # Far-future due date: bumping progress 20 → 40 keeps the badge on_track.
+        user, board, col, task = _make_board_with_task(
+            username='sched_noop',
+            task_kwargs={
+                'progress': 20,
+                'due_date': timezone.now() + datetime.timedelta(days=60),
+            },
+        )
+        rule = _make_rule(board, user, 'schedule_status_changed')
+
+        task.progress = 40
+        task.save()
+
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=rule).count(), 0,
+            'schedule_status_changed must not fire when the badge is unchanged',
+        )
+
+
+class DueDateChangeTest(TestCase):
+    """BUG-04: re-saving a task without touching the due date must not fire
+    task_due_date_changed (form re-submits all fields)."""
+
+    def test_no_fire_when_due_date_untouched(self):
+        import datetime
+        from kanban.automation_models import AutomationLog
+
+        due = timezone.now() + datetime.timedelta(days=10)
+        user, board, col, task = _make_board_with_task(
+            username='due_noop',
+            task_kwargs={'progress': 30, 'due_date': due},
+        )
+        rule = _make_rule(board, user, 'task_due_date_changed')
+
+        # Change a different field; due_date stays the same instant.
+        task.progress = 40
+        task.save()
+
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=rule).count(), 0,
+            'task_due_date_changed must not fire when due_date is unchanged',
+        )
+
+    def test_fires_when_due_date_changes(self):
+        import datetime
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(
+            username='due_real',
+            task_kwargs={
+                'progress': 30,
+                'due_date': timezone.now() + datetime.timedelta(days=10),
+            },
+        )
+        rule = _make_rule(board, user, 'task_due_date_changed')
+
+        task.due_date = timezone.now() + datetime.timedelta(days=20)
+        task.save()
+
+        self.assertEqual(AutomationLog.objects.filter(rule=rule).count(), 1)
+
+
+class DerivedSaveSilenceTest(TestCase):
+    """BUG-06/02: derived/read-path saves (prediction refresh) must not run
+    user automation rules."""
+
+    def test_prediction_refresh_does_not_fire_rules(self):
+        import datetime
+        from kanban.automation_models import AutomationLog
+        from kanban.utils.task_prediction import update_task_prediction
+
+        user, board, col, task = _make_board_with_task(
+            username='pred_silent',
+            task_kwargs={
+                'progress': 40,
+                'start_date': (timezone.now() - datetime.timedelta(days=5)).date(),
+                'due_date': timezone.now() + datetime.timedelta(days=10),
+            },
+        )
+        # Rules that would otherwise fire on the prediction save's field writes.
+        sched = _make_rule(board, user, 'schedule_status_changed')
+        due = _make_rule(board, user, 'task_due_date_changed')
+
+        update_task_prediction(task)
+
+        self.assertEqual(
+            AutomationLog.objects.filter(rule__in=[sched, due]).count(), 0,
+            'a prediction refresh must not fire any automation rule',
+        )
+
+    def test_automation_silent_suppresses_rules(self):
+        from kanban.automation_models import AutomationLog
+        from kanban.signals import automation_silent
+
+        user, board, col, task = _make_board_with_task(
+            username='silent_ctx', task_kwargs={'priority': 'medium'},
+        )
+        rule = _make_rule(
+            board, user, 'task_priority_changed',
+            trigger_config={'priority': 'urgent'},
+        )
+
+        with automation_silent():
+            task.priority = 'urgent'
+            task.save()
+
+        self.assertEqual(AutomationLog.objects.filter(rule=rule).count(), 0)
+
+
+class ComputeProgressStatusTest(TestCase):
+    """Unit tests for the extracted pure status computation (BUG-05 support)."""
+
+    def test_none_without_due_date(self):
+        from kanban.models import Task
+        self.assertIsNone(Task.compute_progress_status(50, None, None))
+
+    def test_complete_is_on_track(self):
+        import datetime
+        from kanban.models import Task
+        past = timezone.now() - datetime.timedelta(days=1)
+        self.assertEqual(Task.compute_progress_status(100, past, None), 'on_track')
+
+    def test_overdue_incomplete_is_late(self):
+        import datetime
+        from kanban.models import Task
+        past = timezone.now() - datetime.timedelta(days=1)
+        self.assertEqual(Task.compute_progress_status(50, past, None), 'late')
+
+    def test_due_soon_low_progress_is_at_risk(self):
+        import datetime
+        from kanban.models import Task
+        soon = timezone.now() + datetime.timedelta(days=2)
+        self.assertEqual(Task.compute_progress_status(10, soon, None), 'at_risk')
+
+    def test_far_future_is_on_track(self):
+        import datetime
+        from kanban.models import Task
+        far = timezone.now() + datetime.timedelta(days=60)
+        self.assertEqual(Task.compute_progress_status(20, far, None), 'on_track')
