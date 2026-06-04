@@ -72,6 +72,9 @@ venv.bak/
 
 # Project specific
 sent_emails/
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
 node_modules/
 *.bak
 *~

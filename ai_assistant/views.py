@@ -652,6 +652,26 @@ def upload_attachment(request):
             'error': f'File exceeds the 10 MB limit ({uploaded_file.size // (1024*1024)} MB).'
         }, status=400)
 
+    # Validate file content by magic bytes (signature), not just extension.
+    # Guards against a renamed binary (e.g. malware.exe -> malware.pdf) slipping
+    # through the extension check above. Uses only the stdlib (no new deps).
+    header = uploaded_file.read(8)
+    uploaded_file.seek(0)  # rewind so the file saves intact below
+    FILE_SIGNATURES = {
+        'pdf': (b'%PDF',),                                # PDF documents
+        'docx': (b'PK\x03\x04',),                         # DOCX is a ZIP container
+        'doc': (b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1',),    # legacy OLE2 compound file
+    }
+    expected_sigs = FILE_SIGNATURES.get(ext)
+    # 'txt' has no reliable signature, so it passes on extension + size alone.
+    if expected_sigs and not any(header.startswith(sig) for sig in expected_sigs):
+        return JsonResponse({
+            'error': (
+                f'File content does not match its ".{ext}" extension. '
+                'The file may be corrupted or renamed.'
+            )
+        }, status=400)
+
     # Save the file record first (Django saves the file to disk on create)
     attachment = AIAssistantAttachment.objects.create(
         session=session,

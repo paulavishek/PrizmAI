@@ -615,6 +615,15 @@ def review_memory_gaps(request):
     Returns a JSON array of questions (possibly empty), or [] on any failure
     (silent graceful fallback — never surfaces an error to the user)."""
     try:
+        # Check AI quota
+        from api.ai_usage_utils import check_ai_quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+
         data = json.loads(request.body)
         description = (data.get('description') or '').strip()
         node_type = (data.get('node_type') or 'note').strip()
