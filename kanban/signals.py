@@ -52,6 +52,27 @@ def _automation_guard():
     finally:
         _automation_state.active = previous
 
+
+@contextmanager
+def automation_silent():
+    """Public context manager for *system / derived* writes that must NOT run
+    user-facing automation rules.
+
+    Use it to wrap saves that aren't a direct expression of user intent —
+    prediction refreshes, read-path recomputations, background housekeeping —
+    so they don't spam the automation engine (e.g. ``schedule_status_changed``
+    firing because a GET request recomputed a prediction). It shares the same
+    thread flag as ``_automation_guard`` (``run_board_automations`` early-returns
+    when ``_in_automation()`` is true); the separate public name documents the
+    *why* at the call site.
+
+        from kanban.signals import automation_silent
+        with automation_silent():
+            task.save()  # prediction fields only — no rules fire
+    """
+    with _automation_guard():
+        yield
+
 # Pre-save field snapshot — populated by track_field_changes() below and
 # consumed in Phase 1b by triggers that fire on "X changed to Y".
 TRACKED_FIELDS = (
@@ -66,7 +87,14 @@ TRACKED_FIELDS = (
     'due_date',
     'start_date',
     'description',
+    'item_type',
 )
+
+# Datetime fields whose equality must be compared at minute granularity, with
+# naive/aware values normalised. The task form re-submits every field on save,
+# so a raw ``!=`` on these picks up tz/microsecond/round-trip noise and records
+# a phantom change — firing e.g. task_due_date_changed when only progress moved.
+_DATETIME_FIELDS = ('due_date',)
 
 
 @receiver(pre_save, sender=Task)
@@ -174,9 +202,31 @@ def track_field_changes(sender, instance, **kwargs):
     for field in TRACKED_FIELDS:
         old_val = getattr(old, field, None)
         new_val = getattr(instance, field, None)
-        if old_val != new_val:
-            changes[field] = (old_val, new_val)
+        if field in _DATETIME_FIELDS:
+            if _datetime_equal(old_val, new_val):
+                continue
+        elif old_val == new_val:
+            continue
+        changes[field] = (old_val, new_val)
     instance._field_changes = changes
+
+
+def _datetime_equal(a, b):
+    """Compare two datetimes as 'the same instant to the minute', treating
+    naive and aware values as equivalent. Returns True when they should NOT be
+    counted as a change. Guards task_due_date_changed against phantom changes
+    from the form re-saving an untouched due_date (BUG-04)."""
+    if a is None or b is None:
+        return a is b or a == b
+    from django.utils import timezone as _tz
+    try:
+        if _tz.is_naive(a):
+            a = _tz.make_aware(a)
+        if _tz.is_naive(b):
+            b = _tz.make_aware(b)
+        return a.replace(second=0, microsecond=0) == b.replace(second=0, microsecond=0)
+    except Exception:
+        return a == b
 
 
 @receiver(post_save, sender=Task)
@@ -511,13 +561,17 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
             return False
 
     elif trigger_type == 'schedule_status_changed':
-        # progress_status is a computed property; recompute old vs new from the
-        # progress/due_date snapshot, falling back to the property for current.
+        # progress_status is a computed badge (late/at_risk/on_track/None). Fire
+        # only when that badge actually *transitions*, not on every progress or
+        # due_date save — otherwise it fires on almost every edit (BUG-05).
         changes = getattr(task, '_field_changes', {}) or {}
         if 'progress' not in changes and 'due_date' not in changes:
             return False
-        # Conservative: fire whenever progress or due_date changed.
-        return True
+        old_progress = changes['progress'][0] if 'progress' in changes else task.progress
+        old_due = changes['due_date'][0] if 'due_date' in changes else task.due_date
+        old_status = task.compute_progress_status(old_progress, old_due, task.start_date)
+        new_status = task.compute_progress_status(task.progress, task.due_date, task.start_date)
+        return old_status != new_status
 
     elif trigger_type == 'predicted_late':
         # Periodic check — not fired on save.
@@ -557,8 +611,39 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
     elif trigger_type == 'checklist_item_added':
         return False  # see ChecklistItem post_save receiver
 
-    elif trigger_type == 'milestone_reached' and just_completed:
-        return (task.item_type or '').lower() == 'milestone'
+    elif trigger_type == 'milestone_reached':
+        # A milestone "is reached" when a Milestone-type task hits 100%. The old
+        # code gated solely on ``just_completed``, which is always False for a
+        # task *created* at 100% and for an existing 100% task whose item_type is
+        # only now switched to Milestone — so the trigger never fired (BUG-01).
+        # Fire whenever the task is a milestone, sits at 100%, and reached that
+        # state on THIS save by any path.
+        if (task.item_type or '').lower() != 'milestone':
+            return False
+        if (task.progress or 0) < 100:
+            return False
+        changes = getattr(task, '_field_changes', {}) or {}
+        reached_now = (
+            just_completed                                  # progress crossed to 100
+            or (created and (task.progress or 0) >= 100)    # created already complete
+            or 'item_type' in changes                       # newly typed as milestone
+            or 'progress' in changes                        # progress edited to/at 100
+        )
+        if not reached_now:
+            return False
+        # Per-day dedupe (mirrors task_completed) so bouncing progress doesn't spam.
+        try:
+            from kanban.automation_models import AutomationLog
+            if AutomationLog.objects.filter(
+                rule_id=rule.pk,
+                task_affected_id=task.pk,
+                trigger_event='milestone_reached',
+                triggered_at__date=now.date(),
+            ).exists():
+                return False
+        except Exception:
+            pass
+        return True
 
     elif trigger_type == 'parent_status_changed' and column_changed and task.parent_task_id is None:
         # Fires on the PARENT task's column change. Rules on this trigger

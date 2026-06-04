@@ -1447,6 +1447,56 @@ class Task(models.Model):
             return 0
         return int((progress['completed'] / progress['total']) * 100)
 
+    @staticmethod
+    def compute_progress_status(progress, due_date, start_date, now=None):
+        """Pure computation of the schedule-status badge from raw field values.
+
+        Kept free of ``self`` so the automation engine can compute the *old*
+        status from a pre-save snapshot and compare it to the new one (see
+        ``schedule_status_changed`` in kanban/signals.py) — the trigger must only
+        fire when the badge actually transitions, not on every field save.
+
+        Returns 'late' | 'at_risk' | 'on_track' | None. See ``progress_status``
+        for the rule description.
+        """
+        if not due_date:
+            return None
+        progress = progress or 0
+        if progress >= 100:
+            return 'on_track'
+
+        if now is None:
+            now = timezone.now()
+        # Normalise due_date to an aware datetime
+        due = due_date
+        if timezone.is_naive(due):
+            due = timezone.make_aware(due)
+
+        if due < now:
+            return 'late'
+
+        # At-risk calculation
+        if start_date:
+            # Convert start_date (date) to aware datetime at midday
+            import datetime as _dt
+            start_dt = timezone.make_aware(
+                _dt.datetime.combine(start_date, _dt.time(12, 0))
+            )
+            total_seconds = (due - start_dt).total_seconds()
+            if total_seconds > 0:
+                elapsed_seconds = (now - start_dt).total_seconds()
+                if elapsed_seconds > 0:
+                    expected_pct = min((elapsed_seconds / total_seconds) * 100, 100)
+                    if (expected_pct - progress) > 15:
+                        return 'at_risk'
+        else:
+            # Fallback: warn if due within 3 days and progress is below 80 %
+            days_remaining = (due - now).total_seconds() / 86400
+            if days_remaining <= 3 and progress < 80:
+                return 'at_risk'
+
+        return 'on_track'
+
     @property
     def progress_status(self):
         """
@@ -1468,41 +1518,9 @@ class Task(models.Model):
         4. If no start_date but due in ≤ 3 days and progress < 80 → 'at_risk'
         5. Otherwise → 'on_track'
         """
-        if not self.due_date:
-            return None
-        if self.progress >= 100:
-            return 'on_track'
-
-        now = timezone.now()
-        # Normalise due_date to an aware datetime
-        due = self.due_date
-        if timezone.is_naive(due):
-            due = timezone.make_aware(due)
-
-        if due < now:
-            return 'late'
-
-        # At-risk calculation
-        if self.start_date:
-            # Convert start_date (date) to aware datetime at midnight
-            import datetime as _dt
-            start_dt = timezone.make_aware(
-                _dt.datetime.combine(self.start_date, _dt.time(12, 0))
-            )
-            total_seconds = (due - start_dt).total_seconds()
-            if total_seconds > 0:
-                elapsed_seconds = (now - start_dt).total_seconds()
-                if elapsed_seconds > 0:
-                    expected_pct = min((elapsed_seconds / total_seconds) * 100, 100)
-                    if (expected_pct - self.progress) > 15:
-                        return 'at_risk'
-        else:
-            # Fallback: warn if due within 3 days and progress is below 80 %
-            days_remaining = (due - now).total_seconds() / 86400
-            if days_remaining <= 3 and self.progress < 80:
-                return 'at_risk'
-
-        return 'on_track'
+        return self.compute_progress_status(
+            self.progress, self.due_date, self.start_date
+        )
 
     def duration_days(self):
         """Calculate task duration in days"""

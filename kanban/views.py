@@ -4626,9 +4626,19 @@ def update_task_progress(request, task_id):
             
             data = json.loads(request.body)
             direction = data.get('direction')
-            
-            # Update progress based on direction
-            if direction == 'increase':
+
+            # Two ways to set progress:
+            #  • 'value' — an absolute 0-100 target. The +/- buttons debounce
+            #    clicks on the client and send the final value once, so ten
+            #    clicks = one save = one automation run (BUG-03/07).
+            #  • 'direction' — legacy single-step increase/decrease (kept for
+            #    any caller that hasn't moved to the debounced path).
+            if 'value' in data:
+                try:
+                    task.progress = max(0, min(100, int(data['value'])))
+                except (TypeError, ValueError):
+                    return JsonResponse({'error': 'Invalid value parameter'}, status=400)
+            elif direction == 'increase':
                 # Ensure we don't go above 100%
                 task.progress = min(100, task.progress + 10)
             elif direction == 'decrease':
@@ -4636,7 +4646,7 @@ def update_task_progress(request, task_id):
                 task.progress = max(0, task.progress - 10)
             else:
                 return JsonResponse({'error': 'Invalid direction parameter'}, status=400)
-            
+
             # Save the updated task
             task.save()
             

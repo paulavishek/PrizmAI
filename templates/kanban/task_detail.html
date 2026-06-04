@@ -2697,19 +2697,44 @@
         // Initial calculation
         updateLaborCostPreview();
         
-        // Set up increase progress buttons
+        // Progress +/- buttons: update the bar locally on each click and save
+        // only the FINAL value once the user stops clicking (debounced). This
+        // means ten clicks = one save = one automation run instead of ten
+        // (BUG-03). The bar is driven by the server response so it can't snap
+        // back (BUG-07).
+        const _progressBarEl = document.querySelector('.progress-bar');
+        if (_progressBarEl) {
+            // Single source of truth for the in-flight value while clicking.
+            window._pendingProgress = parseInt(_progressBarEl.getAttribute('aria-valuenow'), 10) || 0;
+        }
+        let _progressSaveTimer = null;
+
+        function stepProgress(delta) {
+            let v = (typeof window._pendingProgress === 'number') ? window._pendingProgress : 0;
+            v = Math.max(0, Math.min(100, v + delta));
+            window._pendingProgress = v;
+            renderProgress(v, progressColorClass(v));   // optimistic local update
+            return v;
+        }
+
+        function scheduleProgressSave(taskId) {
+            if (_progressSaveTimer) clearTimeout(_progressSaveTimer);
+            _progressSaveTimer = setTimeout(() => {
+                updateTaskProgress(taskId, window._pendingProgress);
+            }, 600);
+        }
+
         document.querySelectorAll('.increase-progress').forEach(btn => {
             btn.addEventListener('click', function() {
-                const taskId = this.dataset.taskId;
-                updateTaskProgress(taskId, 'increase');
+                stepProgress(10);
+                scheduleProgressSave(this.dataset.taskId);
             });
         });
-        
-        // Set up decrease progress buttons
+
         document.querySelectorAll('.decrease-progress').forEach(btn => {
             btn.addEventListener('click', function() {
-                const taskId = this.dataset.taskId;
-                updateTaskProgress(taskId, 'decrease');
+                stepProgress(-10);
+                scheduleProgressSave(this.dataset.taskId);
             });
         });
 
@@ -2855,7 +2880,34 @@
         }
     });
     
-    function updateTaskProgress(taskId, direction) {
+    // Mirror of the server's get_progress_color_class so the optimistic local
+    // update matches what the backend will return.
+    function progressColorClass(progress) {
+        if (progress < 30) return 'bg-danger';
+        if (progress < 70) return 'bg-warning';
+        return 'bg-success';
+    }
+
+    // Paint the progress bar + label. Used both for the optimistic local update
+    // while clicking and for the authoritative server response.
+    function renderProgress(progress, colorClass) {
+        const progressBar = document.querySelector('.progress-bar');
+        const progressText = document.getElementById('progress-value');
+        if (progressBar) {
+            progressBar.classList.remove('bg-danger', 'bg-warning', 'bg-success');
+            progressBar.classList.add(colorClass || progressColorClass(progress));
+            progressBar.style.width = `${progress}%`;
+            progressBar.setAttribute('aria-valuenow', progress);
+        }
+        if (progressText) {
+            progressText.textContent = `${progress}% complete`;
+        }
+    }
+
+    // Saves an ABSOLUTE progress value (0-100) in a single request. Called once
+    // per debounce window by the +/- buttons, so the automation engine sees one
+    // task_progress_changed event per user intent (BUG-03/07).
+    function updateTaskProgress(taskId, value) {
         // Get the CSRF token
         function getCookie(name) {
             let cookieValue = null;
@@ -2871,7 +2923,7 @@
             }
             return cookieValue;
         }
-        
+
         // Send AJAX request to update progress
         fetch(`/tasks/${taskId}/update-progress/`, {
             method: 'POST',
@@ -2881,27 +2933,17 @@
                 'X-CSRFToken': getCookie('csrftoken')
             },
             body: JSON.stringify({
-                direction: direction
+                value: value
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Update the progress bar
-                const progressBar = document.querySelector('.progress-bar');
-                const progressText = document.getElementById('progress-value');
-                
-                if (progressBar && progressText) {
-                    // Remove existing color classes
-                    progressBar.classList.remove('bg-danger', 'bg-warning', 'bg-success');
-                    // Add new color class
-                    progressBar.classList.add(data.colorClass);
-                    // Update width
-                    progressBar.style.width = `${data.progress}%`;
-                    // Update text
-                    progressText.textContent = `${data.progress}% complete`;
-                }
-                
+                // Render from the authoritative server value so the bar can't
+                // snap back to a stale value.
+                window._pendingProgress = data.progress;
+                renderProgress(data.progress, data.colorClass);
+
                 // Add a new timeline item for the progress update
                 const timeline = document.querySelector('.timeline');
                 if (timeline) {

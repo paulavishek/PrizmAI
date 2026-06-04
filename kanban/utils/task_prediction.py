@@ -527,17 +527,23 @@ def update_task_prediction(task):
         dict: Prediction result or None
     """
     
+    # Prediction fields are *derived*, not user intent. Saving them must never
+    # run automation rules — otherwise refreshing a prediction (including on a
+    # GET page load) spuriously fires triggers like schedule_status_changed.
+    from kanban.signals import automation_silent
+
     if task.progress == 100:
         # Clear predictions for completed tasks
         task.predicted_completion_date = None
         task.prediction_confidence = None
         task.prediction_metadata = {}
         task.last_prediction_update = None
-        task.save()
+        with automation_silent():
+            task.save()
         return None
-    
+
     prediction = predict_task_completion_date(task)
-    
+
     if prediction:
         task.predicted_completion_date = prediction['predicted_date']
         task.prediction_confidence = prediction['confidence']
@@ -552,7 +558,8 @@ def update_task_prediction(task):
             'prediction_method': prediction['prediction_method']
         }
         task.last_prediction_update = timezone.now()
-        task.save()
+        with automation_silent():
+            task.save()
         
         logger.info(
             f"Updated prediction for task {task.id}: "
