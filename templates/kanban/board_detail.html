@@ -1101,11 +1101,14 @@
                     </div>
 
                     {# -- Inline status dropdown (hidden by default) -- #}
+                    {% comment %}All columns are rendered; the option matching the card's CURRENT column
+                       is filtered out live when the flyout opens (see openPickerFlyout), so the
+                       list stays correct after a drag-and-drop move (which doesn't reload).{% endcomment %}
                     <div class="inline-status-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
-                        {% for col in columns %}{% if col.id != task.column.id %}
+                        {% for col in columns %}
                         <button class="inline-pick-option"
                                 data-column-id="{{ col.id }}">{{ col.name }}</button>
-                        {% endif %}{% endfor %}
+                        {% endfor %}
                     </div>
 
                     {# -- Inline assignee picker (hidden by default) -- #}
@@ -1392,666 +1395,6 @@
     </div>
 </div>
 
-{% block extra_js %}
-<script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
-<script>
-    // Lightweight toast helper (showToast not provided globally by kanban.js)
-    function showToast(message, type) {
-        const bg = type === 'success' ? '#198754' : type === 'danger' ? '#dc3545' : '#0d6efd';
-        const toast = document.createElement('div');
-        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.2);transition:opacity .4s';
-        toast.style.backgroundColor = bg;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3500);
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        // Apply label colors
-        document.querySelectorAll('.task-label').forEach(label => {
-            label.style.backgroundColor = label.dataset.color;
-        });
-
-        // Progress bar widths are already set server-side via inline styles.
-        // Only re-apply for bars that somehow lost their width (e.g. dynamic content).
-        document.querySelectorAll('.progress-bar[data-progress], .card-progress-fill[data-progress]').forEach(el => {
-            if (!el.style.width) {
-                el.style.width = el.dataset.progress + '%';
-            }
-        });
-        
-        // -- Quick-view drawer open / close --
-        const drawer    = document.getElementById('task-drawer');
-        const backdrop  = document.getElementById('drawer-backdrop');
-
-        window.openDrawer = function() {
-            drawer.classList.add('open');
-            backdrop.classList.add('open');
-            document.body.style.overflow = 'hidden';
-        };
-        window.closeDrawer = function() {
-            // Guard against losing staged (unsaved) drawer edits.
-            if (window._qvConfirmDiscard && !window._qvConfirmDiscard()) return;
-            if (window._qvClearStaged) window._qvClearStaged();
-            drawer.classList.remove('open');
-            backdrop.classList.remove('open');
-            document.body.style.overflow = '';
-        };
-        backdrop.addEventListener('click', closeDrawer);
-
-        // HTMX: after drawer content loads, slide it open
-        document.body.addEventListener('htmx:afterSwap', function(e) {
-            if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
-                openDrawer();
-            }
-        });
-
-        // ------------------------------------------------------
-        // Quick-view drawer field handlers (event delegation)
-        // ------------------------------------------------------
-        // ONE change handler + ONE click handler on the
-        // persistent #task-drawer-body container.  Uses plain
-        // fetch (not htmx.ajax) for drawer reload to avoid
-        // HTMX request deduplication / queueing issues.
-        (function() {
-            const drawerBody = document.getElementById('task-drawer-body');
-            if (!drawerBody) return;
-
-            // Idempotency guard. The quick-view drawer (#task-drawer-body) lives
-            // in base.html and is shared across every page; this initializer must
-            // attach the change/click delegates EXACTLY ONCE. If the board
-            // <script> is ever evaluated twice, a second binding would make every
-            // drawer mutation run its handler twice — two POSTs per user action
-            // (the BUG-02 / BUG-05 "fires exactly twice" root cause: one assignee
-            // change produced two POST /update-assignee/ in the server log). The
-            // flag is stored on the element so it survives even if this IIFE runs
-            // again on the same DOM.
-            if (drawerBody.dataset.qvHandlersBound === '1') return;
-            drawerBody.dataset.qvHandlersBound = '1';
-
-            // In-flight lock: even with a single binding, drop a duplicate
-            // submission for the same (task, endpoint) while one is still pending,
-            // so a stray double event can never reach the server twice.
-            const _qvInFlight = new Set();
-            function qvOnce(key, run) {
-                if (_qvInFlight.has(key)) return Promise.resolve(null);
-                _qvInFlight.add(key);
-                return Promise.resolve(run()).finally(function() {
-                    _qvInFlight.delete(key);
-                });
-            }
-
-            function drawerCsrf() {
-                return drawerBody.querySelector('[name=csrfmiddlewaretoken]')?.value
-                    || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-            }
-            function drawerTaskId() {
-                const el = drawerBody.querySelector('[data-task-id]');
-                return el ? el.dataset.taskId : null;
-            }
-            function reloadDrawer() {
-                const tid = drawerTaskId();
-                if (!tid) return;
-                fetch('/tasks/' + tid + '/quick-view/', {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(function(r) { return r.text(); })
-                .then(function(html) { drawerBody.innerHTML = html; })
-                .catch(function() { /* silent */ });
-            }
-            function updateColumnBadge(colEl) {
-                if (!colEl) return;
-                var cnt = colEl.querySelectorAll('.kanban-task-v2').length;
-                var badge = colEl.querySelector('.column-task-count-badge');
-                if (badge) badge.textContent = cnt;
-            }
-
-            // -- Update the kanban card on the board using data from the API --
-            function refreshCard(cardData) {
-                if (!cardData || !cardData.id) return;
-                var card = document.getElementById('task-' + cardData.id);
-                if (!card) return;
-
-                // Task ID display
-                var taskIdEl = card.querySelector('.card-task-id');
-                if (taskIdEl && cardData.task_id_display) {
-                    taskIdEl.textContent = cardData.task_id_display;
-                }
-
-                // Priority ? border-left color
-                var prio = cardData.priority;
-                var borderColor = '#6c757d'; // default (low)
-                if (prio === 'high' || prio === 'urgent') borderColor = '#dc3545';
-                else if (prio === 'medium') borderColor = '#f59e0b';
-                card.style.borderLeftColor = borderColor;
-
-                // Progress ? bottom strip
-                var fill = card.querySelector('.card-progress-fill');
-                if (fill) {
-                    fill.style.width = cardData.progress + '%';
-                    fill.className = 'card-progress-fill';
-                    if (cardData.progress === 100) fill.classList.add('bg-success');
-                    else if (cardData.progress < 30) fill.classList.add('bg-danger');
-                    else if (cardData.progress < 70) fill.classList.add('bg-warning');
-                    else fill.classList.add('bg-success');
-                }
-                // Done-card class
-                if (cardData.progress === 100) card.classList.add('done-card');
-                else card.classList.remove('done-card');
-
-                // Due date
-                var dueBadge = card.querySelector('.card-due');
-                if (cardData.due_date) {
-                    if (dueBadge) {
-                        dueBadge.innerHTML = '<i class="far fa-calendar-alt"></i> ' + cardData.due_date
-                            + (cardData.is_overdue ? ' <i class="fas fa-exclamation-triangle ms-1"></i>' : '');
-                        dueBadge.classList.toggle('overdue', cardData.is_overdue);
-                    } else {
-                        // Create due badge if it didn't exist before
-                        var metaLeft = card.querySelector('.card-meta-row .d-flex');
-                        if (metaLeft) {
-                            var sp = document.createElement('span');
-                            sp.className = 'card-due' + (cardData.is_overdue ? ' overdue' : '');
-                            sp.innerHTML = '<i class="far fa-calendar-alt"></i> ' + cardData.due_date
-                                + (cardData.is_overdue ? ' <i class="fas fa-exclamation-triangle ms-1"></i>' : '');
-                            metaLeft.prepend(sp);
-                        }
-                    }
-                } else if (dueBadge) {
-                    dueBadge.remove();
-                }
-
-                // Assignee avatar
-                var avatar = card.querySelector('.card-avatar');
-                if (cardData.assignee_name) {
-                    if (!avatar) {
-                        // Create avatar element
-                        var metaRow = card.querySelector('.card-meta-row');
-                        if (metaRow) {
-                            avatar = document.createElement('span');
-                            avatar.className = 'card-avatar';
-                            metaRow.appendChild(avatar);
-                        }
-                    }
-                    if (avatar) {
-                        avatar.title = cardData.assignee_name;
-                        if (cardData.assignee_avatar_url) {
-                            avatar.innerHTML = '<img src="' + cardData.assignee_avatar_url + '" alt="' + cardData.assignee_name + '">';
-                        } else {
-                            avatar.textContent = cardData.assignee_initials;
-                        }
-                    }
-                } else if (avatar) {
-                    avatar.remove();
-                }
-            }
-
-            // ── Staged-edit model ────────────────────────────────────────────
-            // Drawer fields do NOT write to the DB on change. Each edit is staged
-            // locally and committed only when the user clicks Save, which posts
-            // all changed fields in ONE request -> one task.save() -> the
-            // automation engine fires every applicable trigger from the combined
-            // before/after diff. This makes firing predictable (a burst of +/-
-            // clicks = one save = one trigger) and removes debounce guesswork.
-            var _qvStaged = {};   // field -> value, only fields the user changed
-            function qvSaveBtn()   { return drawerBody.querySelector('.qv-save-btn'); }
-            function qvDirtyFlag()  { return drawerBody.querySelector('.qv-dirty-flag'); }
-            function qvIsDirty()    { return Object.keys(_qvStaged).length > 0; }
-            function qvSyncFooter() {
-                var dirty = qvIsDirty();
-                var btn = qvSaveBtn();   if (btn)  btn.disabled = !dirty;
-                var flag = qvDirtyFlag(); if (flag) flag.style.display = dirty ? '' : 'none';
-            }
-            function qvStage(field, value) { _qvStaged[field] = value; qvSyncFooter(); }
-            function qvClearStaged()        { _qvStaged = {}; qvSyncFooter(); }
-
-            // -- CHANGE handler: stage edits, never POST --
-            drawerBody.addEventListener('change', function(e) {
-                var t = e.target;
-                if (t.matches('.qv-status-select'))   { qvStage('column_id',   t.value); return; }
-                if (t.matches('.qv-assignee-select')) { qvStage('assignee_id', t.value); return; }
-                if (t.matches('.qv-due-date'))        { qvStage('due_date',    t.value); return; }
-                if (t.matches('.qv-priority-select')) { qvStage('priority',    t.value); return; }
-                if (t.matches('.qv-progress-input'))  {
-                    var v = Math.max(0, Math.min(100, parseInt(t.value, 10) || 0));
-                    t.value = v;
-                    qvRenderProgress(v);
-                    qvStage('progress', v);
-                    return;
-                }
-            });
-
-            // -- Progress +/- buttons: adjust the STAGED value locally only --
-            // No network per click. Save (below) commits the final value once.
-            function qvCurrentProgress() {
-                if ('progress' in _qvStaged) return _qvStaged.progress;
-                var num = drawerBody.querySelector('.qv-progress-input');
-                if (num && num.value !== '') {
-                    return Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
-                }
-                var bar = drawerBody.querySelector('.progress-bar');
-                return bar ? (parseInt(bar.getAttribute('data-progress'), 10) || 0) : 0;
-            }
-            function qvRenderProgress(val) {
-                var bar = drawerBody.querySelector('.progress-bar');
-                if (bar) {
-                    bar.style.width = val + '%';
-                    bar.className = 'progress-bar ' + (
-                        val === 100 ? 'bg-success' : val < 30 ? 'bg-danger'
-                        : val < 70 ? 'bg-warning' : 'bg-success');
-                    bar.setAttribute('data-progress', val);
-                }
-                var num = drawerBody.querySelector('.qv-progress-input');
-                if (num) num.value = val;
-            }
-            drawerBody.addEventListener('click', function(e) {
-                var btn = e.target.closest('.qv-progress-btn');
-                if (!btn) return;
-                var step = btn.dataset.direction === 'increase' ? 10 : -10;
-                var v = Math.max(0, Math.min(100, qvCurrentProgress() + step));
-                qvRenderProgress(v);          // optimistic local update only
-                qvStage('progress', v);
-            });
-
-            // -- SAVE: commit all staged fields in ONE request --
-            function qvSave() {
-                if (!qvIsDirty()) return;
-                var taskId = drawerTaskId();
-                if (!taskId) return;
-                var url    = '/tasks/' + taskId + '/update-fields/';
-                var staged = _qvStaged;       // snapshot for this request
-                qvOnce(url, function() {
-                    var fd = new FormData();
-                    Object.keys(staged).forEach(function(k) { fd.append(k, staged[k]); });
-                    var btn = qvSaveBtn(); if (btn) btn.disabled = true;
-                    return fetch(url, {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': drawerCsrf() },
-                        body: fd,
-                    })
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data && data.error) { alert(data.error); qvSyncFooter(); return; }
-                        if (data && data.card) refreshCard(data.card);
-                        // Move the card on the board if the column (status) changed.
-                        if (data && data.new_column_id) {
-                            var card    = document.getElementById('task-' + taskId);
-                            var newList = document.querySelector(
-                                '.kanban-column-tasks[data-column-id="' + data.new_column_id + '"]');
-                            if (card && newList) {
-                                var oldCol = card.closest('.kanban-column');
-                                newList.prepend(card);
-                                updateColumnBadge(oldCol);
-                                updateColumnBadge(newList.closest('.kanban-column'));
-                            }
-                        }
-                        qvClearStaged();
-                        reloadDrawer();   // refresh predictions/badges from saved state
-                    })
-                    .catch(function() { qvSyncFooter(); });
-                });
-            }
-            // Save button + "Open full detail" (abandons staged edits) clicks.
-            drawerBody.addEventListener('click', function(e) {
-                if (e.target.closest('.qv-save-btn')) { e.preventDefault(); qvSave(); return; }
-                var openFull = e.target.closest('.qv-open-full');
-                if (openFull && !qvConfirmDiscard()) { e.preventDefault(); }
-            });
-
-            // -- Unsaved-changes guard --
-            function qvConfirmDiscard() {
-                return !qvIsDirty() ||
-                    window.confirm('You have unsaved changes in this task. Discard them?');
-            }
-            // A fresh task loaded into the drawer (HTMX swap) starts clean.
-            document.body.addEventListener('htmx:afterSwap', function(e) {
-                if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
-                    _qvStaged = {};
-                }
-            });
-            // Opening another card while dirty: confirm before the HTMX request.
-            document.body.addEventListener('htmx:beforeRequest', function(e) {
-                var elt = e.detail && e.detail.elt;
-                if (elt && elt.classList && elt.classList.contains('kanban-task-v2')) {
-                    if (!qvConfirmDiscard()) { e.preventDefault(); }
-                    else { _qvStaged = {}; }
-                }
-            });
-            // Let closeDrawer()/backdrop consult the guard before closing.
-            window._qvConfirmDiscard = qvConfirmDiscard;
-            window._qvClearStaged    = function() { _qvStaged = {}; qvSyncFooter(); };
-        })();
-
-        // -- Inline status picker (card hover bar) --
-        // Attach directly to buttons (not document delegation) because
-        // the parent .card-hover-actions div uses stopPropagation to
-        // prevent card-level HTMX click from firing.
-        function getCsrfToken() {
-            return document.querySelector('[name=csrfmiddlewaretoken]')?.value
-                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-        }
-        // -- Flyout portal: single fixed div on <body> for all card pickers --
-        const flyout = document.getElementById('inline-picker-flyout');
-        let flyoutTaskId = null;
-        let flyoutType = null;
-
-        function closeFlyout() {
-            flyout.classList.add('d-none');
-            flyout.innerHTML = '';
-            flyoutTaskId = null;
-            flyoutType = null;
-        }
-
-        function openPickerFlyout(btn, type) {
-            const card   = btn.closest('.kanban-task-v2');
-            const taskId = btn.dataset.taskId;
-
-            // Toggle off if same picker is already open
-            if (!flyout.classList.contains('d-none') && flyoutTaskId === taskId && flyoutType === type) {
-                closeFlyout();
-                return;
-            }
-            closeFlyout();
-            flyoutTaskId = taskId;
-            flyoutType   = type;
-
-            // Clone options from the hidden per-card data source
-            const srcPicker = card.querySelector(
-                type === 'status' ? '.inline-status-picker' : '.inline-assignee-picker'
-            );
-            flyout.innerHTML = srcPicker.innerHTML;
-
-            // Position: measure height first, then place above or below the button row
-            const cardRect = card.getBoundingClientRect();
-            const btnRect  = btn.getBoundingClientRect();
-            flyout.style.width = cardRect.width + 'px';
-            flyout.style.top   = '-9999px';
-            flyout.style.left  = '-9999px';
-            flyout.classList.remove('d-none');
-            const flyoutH = flyout.offsetHeight;
-
-            flyout.style.left = cardRect.left + 'px';
-            if (btnRect.top >= flyoutH + 8) {
-                // Enough space above � open upward
-                flyout.style.top = (btnRect.top - flyoutH - 4) + 'px';
-            } else {
-                // Not enough space above � open downward
-                flyout.style.top = (btnRect.bottom + 4) + 'px';
-            }
-        }
-
-        // Delegate option clicks on the flyout
-        flyout.addEventListener('click', function(e) {
-            const opt = e.target.closest('.inline-pick-option');
-            if (!opt) return;
-            e.stopPropagation();
-            const fd = new FormData();
-            if (flyoutType === 'status') {
-                fd.append('column_id', opt.dataset.columnId);
-                fetch(`/tasks/${flyoutTaskId}/update-status/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCsrfToken() },
-                    body: fd,
-                }).then(r => r.json()).then(() => location.reload());
-            } else {
-                fd.append('assignee_id', opt.dataset.assigneeId);
-                fetch(`/tasks/${flyoutTaskId}/update-assignee/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCsrfToken() },
-                    body: fd,
-                }).then(r => r.json()).then(() => location.reload());
-            }
-            closeFlyout();
-        });
-
-        document.querySelectorAll('.status-change-btn').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                openPickerFlyout(this, 'status');
-            });
-        });
-
-        document.querySelectorAll('.assignee-change-btn').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                openPickerFlyout(this, 'assignee');
-            });
-        });
-
-        // -- Close flyout on click outside --
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('#inline-picker-flyout, .status-change-btn, .assignee-change-btn')) {
-                closeFlyout();
-            }
-        });
-
-        // -- Set WIP Limit modal handler --
-        (function() {
-            const wipModal = document.getElementById('wipLimitModal');
-            const wipInput = document.getElementById('wipLimitInput');
-            const wipSaveBtn = document.getElementById('wipLimitSaveBtn');
-            let _wipColumnId = null;
-
-            // When modal is about to open, populate the current WIP value
-            wipModal.addEventListener('show.bs.modal', function(e) {
-                const trigger = e.relatedTarget;
-                if (trigger && trigger.classList.contains('set-wip-btn')) {
-                    _wipColumnId = trigger.dataset.columnId;
-                    wipInput.value = trigger.dataset.wip || '';
-                }
-            });
-
-            // Focus input when modal is fully open
-            wipModal.addEventListener('shown.bs.modal', function() {
-                wipInput.focus();
-                wipInput.select();
-            });
-
-            // Allow pressing Enter to save
-            wipInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') wipSaveBtn.click();
-            });
-
-            // Save handler
-            wipSaveBtn.addEventListener('click', function() {
-                if (!_wipColumnId) return;
-                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
-                                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-                const fd = new FormData();
-                fd.append('wip_limit', wipInput.value.trim());
-                bootstrap.Modal.getInstance(wipModal).hide();
-                fetch(`/columns/${_wipColumnId}/update-wip/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken },
-                    body: fd,
-                })
-                .then(r => r.json())
-                .then(() => location.reload())
-                .catch(() => location.reload());
-            });
-        })();
-
-        // -- Collapse Column handler (MOVED to standalone script below) --
-        // -- Column Color Picker handler (MOVED to standalone script below) --
-        
-        // Set up column delete functionality
-        const deleteColumnBtns = document.querySelectorAll('.delete-column-btn');
-        deleteColumnBtns.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const columnId = this.dataset.columnId;
-                const columnName = this.dataset.columnName;
-                const deleteForm = document.getElementById('deleteColumnForm');
-                
-                deleteForm.action = `/columns/${columnId}/delete/`;
-                document.getElementById('deleteColumnName').textContent = columnName;
-                
-                // Count tasks currently in this column
-                const columnEl = document.getElementById('column-' + columnId);
-                const taskCount = columnEl
-                    ? columnEl.querySelectorAll('.kanban-task-v2').length
-                    : 0;
-                document.getElementById('deleteColumnTaskCount').textContent = taskCount;
-            });
-        });
-        
-        // Set up column edit functionality
-        const editColumnBtns = document.querySelectorAll('.edit-column-btn');
-        editColumnBtns.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const columnId = this.dataset.columnId;
-                const columnName = this.dataset.columnName;
-                const editForm = document.getElementById('editColumnForm');
-                const editColumnNameInput = document.getElementById('editColumnName');
-                
-                editForm.action = `/columns/${columnId}/update/`;
-                editColumnNameInput.value = columnName;
-            });
-        });
-          // Set up task delete functionality
-        const deleteTaskBtns = document.querySelectorAll('.delete-task-btn');
-        deleteTaskBtns.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const taskId = this.dataset.taskId;
-                const taskTitle = this.dataset.taskTitle;
-                const deleteForm = document.getElementById('deleteTaskForm');
-                const deleteTaskTitleSpan = document.getElementById('deleteTaskTitle');
-                
-                deleteForm.action = `/tasks/${taskId}/delete/`;
-                deleteTaskTitleSpan.textContent = taskTitle;
-            });
-        });
-          // Handle task deletion completion
-        const deleteTaskForm = document.getElementById('deleteTaskForm');
-        if (deleteTaskForm) {
-            deleteTaskForm.addEventListener('submit', function() {
-                // Update column scrolling after task deletion (page will refresh)
-                // No need to dispatch event as page will reload
-                setTimeout(() => {
-                    if (typeof updateColumnScrolling === 'function') {
-                        updateColumnScrolling();
-                    }
-                }, 100); // Shorter delay since page will refresh
-            });
-        }    });
-    
-    // Make updateColumnScrolling globally accessible
-    window.updateColumnScrolling = function() {
-        // Call the actual function from kanban.js if it exists
-        if (typeof window.kanbanUpdateColumnScrolling === 'function') {
-            window.kanbanUpdateColumnScrolling();
-        }
-    };
-    
-    // Quick risk view function for task cards
-    window.quickRiskView = function(taskId, taskTitle) {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.innerHTML = `
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i>Quick Risk View</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <h6><strong>${taskTitle}</strong></h6>
-                        <p class="text-muted mt-3">Click below to see the full AI risk analysis with detailed explanations:</p>
-                        <ul class="list-unstyled">
-                            <li><i class="bi bi-check2 text-success me-2"></i>Contributing factors breakdown</li>
-                            <li><i class="bi bi-check2 text-success me-2"></i>AI confidence scores</li>
-                            <li><i class="bi bi-check2 text-success me-2"></i>Impact analysis</li>
-                            <li><i class="bi bi-check2 text-success me-2"></i>Model assumptions & limitations</li>
-                        </ul>
-                        <div class="alert alert-info mb-0">
-                            <small><i class="bi bi-lightbulb me-2"></i><strong>Explainable AI:</strong> See exactly why this risk score was assigned.</small>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <a href="/tasks/${taskId}/" class="btn btn-primary">
-                            <i class="bi bi-eye me-2"></i>View Full Analysis
-                        </a>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        const bsModal = new bootstrap.Modal(modal);
-        bsModal.show();
-        modal.addEventListener('hidden.bs.modal', () => modal.remove());
-    };
-    
-    </script>
-
-<!-- Collapse Column & Color Picker — standalone script with document-level delegation -->
-<script>
-(function() {
-    function getCSRF() {
-        var el = document.querySelector('[name=csrfmiddlewaretoken]');
-        if (el) return el.value;
-        var m = document.cookie.match(/csrftoken=([^;]+)/);
-        return m ? m[1] : '';
-    }
-
-    // -- Column Color Picker (direct handlers on each button) --
-    document.querySelectorAll('.column-color-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-
-            var colId = btn.dataset.columnId;
-            var color = btn.dataset.color;
-            var fd = new FormData();
-            fd.append('color', color);
-            fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-            fetch('/columns/' + colId + '/update-color/', {
-                method: 'POST',
-                body: fd
-            })
-            .then(function(r) {
-                if (!r.ok) { console.error('Color update HTTP error:', r.status); return null; }
-                return r.json();
-            })
-            .then(function(data) {
-                if (data && data.success) {
-                    var header = document.querySelector('#column-' + colId + ' .kanban-column-header');
-                    if (header) {
-                        header.className = header.className.replace(/kanban-column-header--\w+/g, '');
-                        header.classList.add('kanban-column-header--' + color);
-                    }
-                    // Update selected ring
-                    var parent = btn.closest('.d-flex.gap-1');
-                    if (parent) {
-                        parent.querySelectorAll('.column-color-btn').forEach(function(b) {
-                            b.classList.remove('border-dark', 'border-2');
-                        });
-                        btn.classList.add('border-dark', 'border-2');
-                    }
-                }
-            })
-            .catch(function(err) { console.error('Color update failed:', err); });
-        });
-    });
-})();
-</script>
-
-<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
-
-<!-- D�j� Vu Banner Script -->
-<script>
-(function() {
-    fetch("{% url 'deja_vu_check' board.id %}")
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.results && data.results.length > 0) {
-                var summary = data.results.map(function(r) { return r.title; }).join(', ');
-                document.getElementById('dejaVuSummary').textContent = summary;
-                document.getElementById('dejaVuBanner').style.display = 'block';
-            }
-        })
-        .catch(function() {});
-})();
-</script>
-{% endblock %}
 
 <!-- -- AI Tools Slide-Out Panel -- -->
 <div class="offcanvas offcanvas-end" id="aiToolsPanel" tabindex="-1" aria-labelledby="aiToolsPanelLabel" data-bs-scroll="true" data-bs-backdrop="false">
@@ -2643,3 +1986,677 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endif %}
 
 {% endblock content %}
+{% block extra_js %}
+<script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
+<script>
+    // Lightweight toast helper (showToast not provided globally by kanban.js)
+    function showToast(message, type) {
+        const bg = type === 'success' ? '#198754' : type === 'danger' ? '#dc3545' : '#0d6efd';
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.2);transition:opacity .4s';
+        toast.style.backgroundColor = bg;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3500);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Apply label colors
+        document.querySelectorAll('.task-label').forEach(label => {
+            label.style.backgroundColor = label.dataset.color;
+        });
+
+        // Progress bar widths are already set server-side via inline styles.
+        // Only re-apply for bars that somehow lost their width (e.g. dynamic content).
+        document.querySelectorAll('.progress-bar[data-progress], .card-progress-fill[data-progress]').forEach(el => {
+            if (!el.style.width) {
+                el.style.width = el.dataset.progress + '%';
+            }
+        });
+        
+        // -- Quick-view drawer open / close --
+        const drawer    = document.getElementById('task-drawer');
+        const backdrop  = document.getElementById('drawer-backdrop');
+
+        window.openDrawer = function() {
+            drawer.classList.add('open');
+            backdrop.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        };
+        window.closeDrawer = function() {
+            // Guard against losing staged (unsaved) drawer edits.
+            if (window._qvConfirmDiscard && !window._qvConfirmDiscard()) return;
+            if (window._qvClearStaged) window._qvClearStaged();
+            drawer.classList.remove('open');
+            backdrop.classList.remove('open');
+            document.body.style.overflow = '';
+        };
+        backdrop.addEventListener('click', closeDrawer);
+
+        // HTMX: after drawer content loads, slide it open
+        document.body.addEventListener('htmx:afterSwap', function(e) {
+            if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+                openDrawer();
+            }
+        });
+
+        // ------------------------------------------------------
+        // Quick-view drawer field handlers (event delegation)
+        // ------------------------------------------------------
+        // ONE change handler + ONE click handler on the
+        // persistent #task-drawer-body container.  Uses plain
+        // fetch (not htmx.ajax) for drawer reload to avoid
+        // HTMX request deduplication / queueing issues.
+        (function() {
+            const drawerBody = document.getElementById('task-drawer-body');
+            if (!drawerBody) return;
+
+            // Idempotency guard. The quick-view drawer (#task-drawer-body) lives
+            // in base.html and is shared across every page; this initializer must
+            // attach the change/click delegates EXACTLY ONCE. If the board
+            // <script> is ever evaluated twice, a second binding would make every
+            // drawer mutation run its handler twice — two POSTs per user action
+            // (the BUG-02 / BUG-05 "fires exactly twice" root cause: one assignee
+            // change produced two POST /update-assignee/ in the server log). The
+            // flag is stored on the element so it survives even if this IIFE runs
+            // again on the same DOM.
+            if (drawerBody.dataset.qvHandlersBound === '1') return;
+            drawerBody.dataset.qvHandlersBound = '1';
+
+            // In-flight lock: even with a single binding, drop a duplicate
+            // submission for the same (task, endpoint) while one is still pending,
+            // so a stray double event can never reach the server twice.
+            const _qvInFlight = new Set();
+            function qvOnce(key, run) {
+                if (_qvInFlight.has(key)) return Promise.resolve(null);
+                _qvInFlight.add(key);
+                return Promise.resolve(run()).finally(function() {
+                    _qvInFlight.delete(key);
+                });
+            }
+
+            function drawerCsrf() {
+                return drawerBody.querySelector('[name=csrfmiddlewaretoken]')?.value
+                    || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+            }
+            function drawerTaskId() {
+                const el = drawerBody.querySelector('[data-task-id]');
+                return el ? el.dataset.taskId : null;
+            }
+            function reloadDrawer() {
+                const tid = drawerTaskId();
+                if (!tid) return;
+                fetch('/tasks/' + tid + '/quick-view/', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.text(); })
+                .then(function(html) { drawerBody.innerHTML = html; })
+                .catch(function() { /* silent */ });
+            }
+            function updateColumnBadge(colEl) {
+                if (!colEl) return;
+                var cnt = colEl.querySelectorAll('.kanban-task-v2').length;
+                var badge = colEl.querySelector('.column-task-count-badge');
+                if (badge) badge.textContent = cnt;
+            }
+
+            // -- Update the kanban card on the board using data from the API --
+            function refreshCard(cardData) {
+                if (!cardData || !cardData.id) return;
+                var card = document.getElementById('task-' + cardData.id);
+                if (!card) return;
+
+                // Task ID display
+                var taskIdEl = card.querySelector('.card-task-id');
+                if (taskIdEl && cardData.task_id_display) {
+                    taskIdEl.textContent = cardData.task_id_display;
+                }
+
+                // Priority ? border-left color
+                var prio = cardData.priority;
+                var borderColor = '#6c757d'; // default (low)
+                if (prio === 'high' || prio === 'urgent') borderColor = '#dc3545';
+                else if (prio === 'medium') borderColor = '#f59e0b';
+                card.style.borderLeftColor = borderColor;
+
+                // Progress ? bottom strip
+                var fill = card.querySelector('.card-progress-fill');
+                if (fill) {
+                    fill.style.width = cardData.progress + '%';
+                    fill.className = 'card-progress-fill';
+                    if (cardData.progress === 100) fill.classList.add('bg-success');
+                    else if (cardData.progress < 30) fill.classList.add('bg-danger');
+                    else if (cardData.progress < 70) fill.classList.add('bg-warning');
+                    else fill.classList.add('bg-success');
+                }
+                // Done-card class
+                if (cardData.progress === 100) card.classList.add('done-card');
+                else card.classList.remove('done-card');
+
+                // Due date
+                var dueBadge = card.querySelector('.card-due');
+                if (cardData.due_date) {
+                    if (dueBadge) {
+                        dueBadge.innerHTML = '<i class="far fa-calendar-alt"></i> ' + cardData.due_date
+                            + (cardData.is_overdue ? ' <i class="fas fa-exclamation-triangle ms-1"></i>' : '');
+                        dueBadge.classList.toggle('overdue', cardData.is_overdue);
+                    } else {
+                        // Create due badge if it didn't exist before
+                        var metaLeft = card.querySelector('.card-meta-row .d-flex');
+                        if (metaLeft) {
+                            var sp = document.createElement('span');
+                            sp.className = 'card-due' + (cardData.is_overdue ? ' overdue' : '');
+                            sp.innerHTML = '<i class="far fa-calendar-alt"></i> ' + cardData.due_date
+                                + (cardData.is_overdue ? ' <i class="fas fa-exclamation-triangle ms-1"></i>' : '');
+                            metaLeft.prepend(sp);
+                        }
+                    }
+                } else if (dueBadge) {
+                    dueBadge.remove();
+                }
+
+                // Assignee avatar
+                var avatar = card.querySelector('.card-avatar');
+                if (cardData.assignee_name) {
+                    if (!avatar) {
+                        // Create avatar element
+                        var metaRow = card.querySelector('.card-meta-row');
+                        if (metaRow) {
+                            avatar = document.createElement('span');
+                            avatar.className = 'card-avatar';
+                            metaRow.appendChild(avatar);
+                        }
+                    }
+                    if (avatar) {
+                        avatar.title = cardData.assignee_name;
+                        if (cardData.assignee_avatar_url) {
+                            avatar.innerHTML = '<img src="' + cardData.assignee_avatar_url + '" alt="' + cardData.assignee_name + '">';
+                        } else {
+                            avatar.textContent = cardData.assignee_initials;
+                        }
+                    }
+                } else if (avatar) {
+                    avatar.remove();
+                }
+            }
+
+            // ── Staged-edit model ────────────────────────────────────────────
+            // Drawer fields do NOT write to the DB on change. Each edit is staged
+            // locally and committed only when the user clicks Save, which posts
+            // all changed fields in ONE request -> one task.save() -> the
+            // automation engine fires every applicable trigger from the combined
+            // before/after diff. This makes firing predictable (a burst of +/-
+            // clicks = one save = one trigger) and removes debounce guesswork.
+            var _qvStaged = {};   // field -> value, only fields the user changed
+            function qvSaveBtn()   { return drawerBody.querySelector('.qv-save-btn'); }
+            function qvDirtyFlag()  { return drawerBody.querySelector('.qv-dirty-flag'); }
+            function qvIsDirty()    { return Object.keys(_qvStaged).length > 0; }
+            function qvSyncFooter() {
+                var dirty = qvIsDirty();
+                var btn = qvSaveBtn();   if (btn)  btn.disabled = !dirty;
+                var flag = qvDirtyFlag(); if (flag) flag.style.display = dirty ? '' : 'none';
+            }
+            function qvStage(field, value) { _qvStaged[field] = value; qvSyncFooter(); }
+            function qvClearStaged()        { _qvStaged = {}; qvSyncFooter(); }
+
+            // -- CHANGE handler: stage edits, never POST --
+            drawerBody.addEventListener('change', function(e) {
+                var t = e.target;
+                if (t.matches('.qv-status-select'))   { qvStage('column_id',   t.value); return; }
+                if (t.matches('.qv-assignee-select')) { qvStage('assignee_id', t.value); return; }
+                if (t.matches('.qv-due-date'))        { qvStage('due_date',    t.value); return; }
+                if (t.matches('.qv-priority-select')) { qvStage('priority',    t.value); return; }
+                if (t.matches('.qv-progress-input'))  {
+                    var v = Math.max(0, Math.min(100, parseInt(t.value, 10) || 0));
+                    t.value = v;
+                    qvRenderProgress(v);
+                    qvStage('progress', v);
+                    return;
+                }
+            });
+
+            // -- Progress +/- buttons: adjust the STAGED value locally only --
+            // No network per click. Save (below) commits the final value once.
+            function qvCurrentProgress() {
+                if ('progress' in _qvStaged) return _qvStaged.progress;
+                var num = drawerBody.querySelector('.qv-progress-input');
+                if (num && num.value !== '') {
+                    return Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
+                }
+                var bar = drawerBody.querySelector('.progress-bar');
+                return bar ? (parseInt(bar.getAttribute('data-progress'), 10) || 0) : 0;
+            }
+            function qvRenderProgress(val) {
+                var bar = drawerBody.querySelector('.progress-bar');
+                if (bar) {
+                    bar.style.width = val + '%';
+                    bar.className = 'progress-bar ' + (
+                        val === 100 ? 'bg-success' : val < 30 ? 'bg-danger'
+                        : val < 70 ? 'bg-warning' : 'bg-success');
+                    bar.setAttribute('data-progress', val);
+                }
+                var num = drawerBody.querySelector('.qv-progress-input');
+                if (num) num.value = val;
+            }
+            drawerBody.addEventListener('click', function(e) {
+                var btn = e.target.closest('.qv-progress-btn');
+                if (!btn) return;
+                var step = btn.dataset.direction === 'increase' ? 10 : -10;
+                var v = Math.max(0, Math.min(100, qvCurrentProgress() + step));
+                qvRenderProgress(v);          // optimistic local update only
+                qvStage('progress', v);
+            });
+
+            // -- SAVE: commit all staged fields in ONE request --
+            function qvSave() {
+                if (!qvIsDirty()) return;
+                var taskId = drawerTaskId();
+                if (!taskId) return;
+                var url    = '/tasks/' + taskId + '/update-fields/';
+                var staged = _qvStaged;       // snapshot for this request
+                qvOnce(url, function() {
+                    var fd = new FormData();
+                    Object.keys(staged).forEach(function(k) { fd.append(k, staged[k]); });
+                    var btn = qvSaveBtn(); if (btn) btn.disabled = true;
+                    return fetch(url, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': drawerCsrf() },
+                        body: fd,
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data && data.error) { alert(data.error); qvSyncFooter(); return; }
+                        if (data && data.card) refreshCard(data.card);
+                        // Move the card on the board if the column (status) changed.
+                        if (data && data.new_column_id) {
+                            var card    = document.getElementById('task-' + taskId);
+                            var newList = document.querySelector(
+                                '.kanban-column-tasks[data-column-id="' + data.new_column_id + '"]');
+                            if (card && newList) {
+                                var oldCol = card.closest('.kanban-column');
+                                newList.prepend(card);
+                                updateColumnBadge(oldCol);
+                                updateColumnBadge(newList.closest('.kanban-column'));
+                            }
+                        }
+                        qvClearStaged();
+                        reloadDrawer();   // refresh predictions/badges from saved state
+                    })
+                    .catch(function() { qvSyncFooter(); });
+                });
+            }
+            // Save button + "Open full detail" (abandons staged edits) clicks.
+            drawerBody.addEventListener('click', function(e) {
+                if (e.target.closest('.qv-save-btn')) { e.preventDefault(); qvSave(); return; }
+                var openFull = e.target.closest('.qv-open-full');
+                if (openFull && !qvConfirmDiscard()) { e.preventDefault(); }
+            });
+
+            // -- Unsaved-changes guard --
+            function qvConfirmDiscard() {
+                return !qvIsDirty() ||
+                    window.confirm('You have unsaved changes in this task. Discard them?');
+            }
+            // A fresh task loaded into the drawer (HTMX swap) starts clean.
+            document.body.addEventListener('htmx:afterSwap', function(e) {
+                if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+                    _qvStaged = {};
+                }
+            });
+            // Opening another card while dirty: confirm before the HTMX request.
+            document.body.addEventListener('htmx:beforeRequest', function(e) {
+                var elt = e.detail && e.detail.elt;
+                if (elt && elt.classList && elt.classList.contains('kanban-task-v2')) {
+                    if (!qvConfirmDiscard()) { e.preventDefault(); }
+                    else { _qvStaged = {}; }
+                }
+            });
+            // Let closeDrawer()/backdrop consult the guard before closing.
+            window._qvConfirmDiscard = qvConfirmDiscard;
+            window._qvClearStaged    = function() { _qvStaged = {}; qvSyncFooter(); };
+        })();
+
+        // -- Inline status picker (card hover bar) --
+        // Attach directly to buttons (not document delegation) because
+        // the parent .card-hover-actions div uses stopPropagation to
+        // prevent card-level HTMX click from firing.
+        function getCsrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+        }
+        // -- Flyout portal: single fixed div on <body> for all card pickers --
+        const flyout = document.getElementById('inline-picker-flyout');
+        let flyoutTaskId = null;
+        let flyoutType = null;
+
+        function closeFlyout() {
+            flyout.classList.add('d-none');
+            flyout.innerHTML = '';
+            flyoutTaskId = null;
+            flyoutType = null;
+        }
+
+        function openPickerFlyout(btn, type) {
+            const card   = btn.closest('.kanban-task-v2');
+            const taskId = btn.dataset.taskId;
+
+            // Toggle off if same picker is already open
+            if (!flyout.classList.contains('d-none') && flyoutTaskId === taskId && flyoutType === type) {
+                closeFlyout();
+                return;
+            }
+            closeFlyout();
+            flyoutTaskId = taskId;
+            flyoutType   = type;
+
+            // Clone options from the hidden per-card data source
+            const srcPicker = card.querySelector(
+                type === 'status' ? '.inline-status-picker' : '.inline-assignee-picker'
+            );
+            flyout.innerHTML = srcPicker.innerHTML;
+
+            // For status: drop the option matching the card's CURRENT column.
+            // Read the column live from the DOM so this stays correct after a
+            // drag-and-drop move (which relocates the card without reloading).
+            if (type === 'status') {
+                const currentCol = card.closest('[data-column-id]');
+                const currentColId = currentCol ? currentCol.dataset.columnId : null;
+                if (currentColId) {
+                    const selfOpt = flyout.querySelector(
+                        `.inline-pick-option[data-column-id="${currentColId}"]`
+                    );
+                    if (selfOpt) selfOpt.remove();
+                }
+            }
+
+            // Position: measure height first, then place above or below the button row
+            const cardRect = card.getBoundingClientRect();
+            const btnRect  = btn.getBoundingClientRect();
+            flyout.style.width = cardRect.width + 'px';
+            flyout.style.top   = '-9999px';
+            flyout.style.left  = '-9999px';
+            flyout.classList.remove('d-none');
+            const flyoutH = flyout.offsetHeight;
+
+            flyout.style.left = cardRect.left + 'px';
+            if (btnRect.top >= flyoutH + 8) {
+                // Enough space above � open upward
+                flyout.style.top = (btnRect.top - flyoutH - 4) + 'px';
+            } else {
+                // Not enough space above � open downward
+                flyout.style.top = (btnRect.bottom + 4) + 'px';
+            }
+        }
+
+        // Delegate option clicks on the flyout
+        flyout.addEventListener('click', function(e) {
+            const opt = e.target.closest('.inline-pick-option');
+            if (!opt) return;
+            e.stopPropagation();
+            const fd = new FormData();
+            if (flyoutType === 'status') {
+                fd.append('column_id', opt.dataset.columnId);
+                fetch(`/tasks/${flyoutTaskId}/update-status/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+            } else {
+                fd.append('assignee_id', opt.dataset.assigneeId);
+                fetch(`/tasks/${flyoutTaskId}/update-assignee/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+            }
+            closeFlyout();
+        });
+
+        document.querySelectorAll('.status-change-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                openPickerFlyout(this, 'status');
+            });
+        });
+
+        document.querySelectorAll('.assignee-change-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                openPickerFlyout(this, 'assignee');
+            });
+        });
+
+        // -- Close flyout on click outside --
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#inline-picker-flyout, .status-change-btn, .assignee-change-btn')) {
+                closeFlyout();
+            }
+        });
+
+        // -- Set WIP Limit modal handler --
+        (function() {
+            const wipModal = document.getElementById('wipLimitModal');
+            const wipInput = document.getElementById('wipLimitInput');
+            const wipSaveBtn = document.getElementById('wipLimitSaveBtn');
+            let _wipColumnId = null;
+
+            // When modal is about to open, populate the current WIP value
+            wipModal.addEventListener('show.bs.modal', function(e) {
+                const trigger = e.relatedTarget;
+                if (trigger && trigger.classList.contains('set-wip-btn')) {
+                    _wipColumnId = trigger.dataset.columnId;
+                    wipInput.value = trigger.dataset.wip || '';
+                }
+            });
+
+            // Focus input when modal is fully open
+            wipModal.addEventListener('shown.bs.modal', function() {
+                wipInput.focus();
+                wipInput.select();
+            });
+
+            // Allow pressing Enter to save
+            wipInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') wipSaveBtn.click();
+            });
+
+            // Save handler
+            wipSaveBtn.addEventListener('click', function() {
+                if (!_wipColumnId) return;
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+                const fd = new FormData();
+                fd.append('wip_limit', wipInput.value.trim());
+                bootstrap.Modal.getInstance(wipModal).hide();
+                fetch(`/columns/${_wipColumnId}/update-wip/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: fd,
+                })
+                .then(r => r.json())
+                .then(() => location.reload())
+                .catch(() => location.reload());
+            });
+        })();
+
+        // -- Collapse Column handler (MOVED to standalone script below) --
+        // -- Column Color Picker handler (MOVED to standalone script below) --
+        
+        // Set up column delete functionality
+        const deleteColumnBtns = document.querySelectorAll('.delete-column-btn');
+        deleteColumnBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const columnId = this.dataset.columnId;
+                const columnName = this.dataset.columnName;
+                const deleteForm = document.getElementById('deleteColumnForm');
+                
+                deleteForm.action = `/columns/${columnId}/delete/`;
+                document.getElementById('deleteColumnName').textContent = columnName;
+                
+                // Count tasks currently in this column
+                const columnEl = document.getElementById('column-' + columnId);
+                const taskCount = columnEl
+                    ? columnEl.querySelectorAll('.kanban-task-v2').length
+                    : 0;
+                document.getElementById('deleteColumnTaskCount').textContent = taskCount;
+            });
+        });
+        
+        // Set up column edit functionality
+        const editColumnBtns = document.querySelectorAll('.edit-column-btn');
+        editColumnBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const columnId = this.dataset.columnId;
+                const columnName = this.dataset.columnName;
+                const editForm = document.getElementById('editColumnForm');
+                const editColumnNameInput = document.getElementById('editColumnName');
+                
+                editForm.action = `/columns/${columnId}/update/`;
+                editColumnNameInput.value = columnName;
+            });
+        });
+          // Set up task delete functionality
+        const deleteTaskBtns = document.querySelectorAll('.delete-task-btn');
+        deleteTaskBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const taskId = this.dataset.taskId;
+                const taskTitle = this.dataset.taskTitle;
+                const deleteForm = document.getElementById('deleteTaskForm');
+                const deleteTaskTitleSpan = document.getElementById('deleteTaskTitle');
+                
+                deleteForm.action = `/tasks/${taskId}/delete/`;
+                deleteTaskTitleSpan.textContent = taskTitle;
+            });
+        });
+          // Handle task deletion completion
+        const deleteTaskForm = document.getElementById('deleteTaskForm');
+        if (deleteTaskForm) {
+            deleteTaskForm.addEventListener('submit', function() {
+                // Update column scrolling after task deletion (page will refresh)
+                // No need to dispatch event as page will reload
+                setTimeout(() => {
+                    if (typeof updateColumnScrolling === 'function') {
+                        updateColumnScrolling();
+                    }
+                }, 100); // Shorter delay since page will refresh
+            });
+        }    });
+    
+    // Make updateColumnScrolling globally accessible
+    window.updateColumnScrolling = function() {
+        // Call the actual function from kanban.js if it exists
+        if (typeof window.kanbanUpdateColumnScrolling === 'function') {
+            window.kanbanUpdateColumnScrolling();
+        }
+    };
+    
+    // Quick risk view function for task cards
+    window.quickRiskView = function(taskId, taskTitle) {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i>Quick Risk View</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6><strong>${taskTitle}</strong></h6>
+                        <p class="text-muted mt-3">Click below to see the full AI risk analysis with detailed explanations:</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check2 text-success me-2"></i>Contributing factors breakdown</li>
+                            <li><i class="bi bi-check2 text-success me-2"></i>AI confidence scores</li>
+                            <li><i class="bi bi-check2 text-success me-2"></i>Impact analysis</li>
+                            <li><i class="bi bi-check2 text-success me-2"></i>Model assumptions & limitations</li>
+                        </ul>
+                        <div class="alert alert-info mb-0">
+                            <small><i class="bi bi-lightbulb me-2"></i><strong>Explainable AI:</strong> See exactly why this risk score was assigned.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <a href="/tasks/${taskId}/" class="btn btn-primary">
+                            <i class="bi bi-eye me-2"></i>View Full Analysis
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    };
+    
+    </script>
+
+<!-- Collapse Column & Color Picker — standalone script with document-level delegation -->
+<script>
+(function() {
+    function getCSRF() {
+        var el = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (el) return el.value;
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    // -- Column Color Picker (direct handlers on each button) --
+    document.querySelectorAll('.column-color-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+
+            var colId = btn.dataset.columnId;
+            var color = btn.dataset.color;
+            var fd = new FormData();
+            fd.append('color', color);
+            fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            fetch('/columns/' + colId + '/update-color/', {
+                method: 'POST',
+                body: fd
+            })
+            .then(function(r) {
+                if (!r.ok) { console.error('Color update HTTP error:', r.status); return null; }
+                return r.json();
+            })
+            .then(function(data) {
+                if (data && data.success) {
+                    var header = document.querySelector('#column-' + colId + ' .kanban-column-header');
+                    if (header) {
+                        header.className = header.className.replace(/kanban-column-header--\w+/g, '');
+                        header.classList.add('kanban-column-header--' + color);
+                    }
+                    // Update selected ring
+                    var parent = btn.closest('.d-flex.gap-1');
+                    if (parent) {
+                        parent.querySelectorAll('.column-color-btn').forEach(function(b) {
+                            b.classList.remove('border-dark', 'border-2');
+                        });
+                        btn.classList.add('border-dark', 'border-2');
+                    }
+                }
+            })
+            .catch(function(err) { console.error('Color update failed:', err); });
+        });
+    });
+})();
+</script>
+
+<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
+
+<!-- D�j� Vu Banner Script -->
+<script>
+(function() {
+    fetch("{% url 'deja_vu_check' board.id %}")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.results && data.results.length > 0) {
+                var summary = data.results.map(function(r) { return r.title; }).join(', ');
+                document.getElementById('dejaVuSummary').textContent = summary;
+                document.getElementById('dejaVuBanner').style.display = 'block';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
+{% endblock %}
