@@ -96,6 +96,14 @@ TRACKED_FIELDS = (
 # a phantom change — firing e.g. task_due_date_changed when only progress moved.
 _DATETIME_FIELDS = ('due_date',)
 
+# Width (seconds) of the time bucket in AutomationLog.dedupe_key. Two emissions
+# of the same (rule, task, trigger, assignee) within one bucket collapse to a
+# single rule run via the unique constraint — this is what makes the engine
+# resilient to a concurrent frontend double-submit. Kept small so a deliberate
+# repeat of the same action a few seconds later still fires; mirrors the intent
+# of the existing 3s fast-path guard below.
+_DEDUPE_WINDOW_SECONDS = 3
+
 
 @receiver(pre_save, sender=Task)
 def track_task_assignment_change(sender, instance, **kwargs):
@@ -323,6 +331,48 @@ def run_board_automations(sender, instance, created, **kwargs):
 
             fired_this_request.add(rule.pk)
 
+            # ── Idempotent claim (race-proof backstop) ───────────────
+            # Reserve this emission via the AutomationLog.dedupe_key unique
+            # constraint BEFORE running any actions. Two *concurrent* duplicate
+            # requests — e.g. a frontend double-submit that POSTs the same
+            # change twice in the same instant — both reach this point because
+            # neither has committed its log row yet, so the in-memory and 3s
+            # checks above don't catch them. The unique INSERT lets exactly one
+            # win; the loser skips entirely (no action, no duplicate log). The
+            # key includes trigger_event, so EVERY trigger dedupes
+            # independently — task_assigned, task_progress_changed,
+            # schedule_status_changed, and the rest; the assignee, so a genuine
+            # reassignment to a different user still fires; and a short time
+            # bucket, so a deliberate repeat seconds later still fires.
+            bucket = int(now.timestamp()) // _DEDUPE_WINDOW_SECONDS
+            dedupe_key = (
+                f"{rule.pk}:{instance.pk}:{rule.trigger_type}:"
+                f"{instance.assigned_to_id or ''}:{bucket}"
+            )
+            claim_log = None
+            try:
+                claim_log, claim_created = AutomationLog.objects.get_or_create(
+                    dedupe_key=dedupe_key,
+                    defaults={
+                        'rule': rule,
+                        'rule_name_snapshot': rule.name,
+                        'board': board,
+                        'trigger_event': rule.trigger_type,
+                        'task_affected': instance,
+                        'task_title_snapshot': instance.title or '',
+                        'outcome': 'success',
+                        'execution_detail': {'assignee_id': instance.assigned_to_id},
+                    },
+                )
+                if not claim_created:
+                    # A concurrent/duplicate emission already claimed this
+                    # action this bucket — skip without running actions again.
+                    continue
+            except Exception:
+                # Never let a dedupe hiccup drop a legitimate rule run: fall
+                # back to firing and logging the old (unclaimed) way.
+                claim_log = None
+
             actions_taken = []
             errors = []
             outcome = 'success'
@@ -354,29 +404,36 @@ def run_board_automations(sender, instance, created, **kwargs):
                 last_execution_result=outcome,
             )
 
+            log_fields = {
+                'rule': rule,
+                'rule_name_snapshot': rule.name,
+                'board': board,
+                'trigger_event': rule.trigger_type,
+                'task_affected': instance,
+                'task_title_snapshot': instance.title or '',
+                'actions_summary': '; '.join(actions_taken) if actions_taken else 'No actions',
+                'outcome': outcome,
+                'skip_reason': skip_reason,
+                'error_detail': '; '.join(errors) if errors else '',
+                'execution_detail': {
+                    'trigger_type': rule.trigger_type,
+                    'conditions_evaluated': len(rule.conditions),
+                    'actions_count': len(rule.actions),
+                    'branch': 'then' if outcome != 'skipped' else 'skipped',
+                    # Recorded so the task_assigned per-day dedupe in
+                    # _check_trigger can distinguish a redundant re-save
+                    # from a genuine re-assignment to a different user.
+                    'assignee_id': instance.assigned_to_id,
+                },
+            }
             try:
-                AutomationLog.objects.create(
-                    rule=rule,
-                    rule_name_snapshot=rule.name,
-                    board=board,
-                    trigger_event=rule.trigger_type,
-                    task_affected=instance,
-                    task_title_snapshot=instance.title or '',
-                    actions_summary='; '.join(actions_taken) if actions_taken else 'No actions',
-                    outcome=outcome,
-                    skip_reason=skip_reason,
-                    error_detail='; '.join(errors) if errors else '',
-                    execution_detail={
-                        'trigger_type': rule.trigger_type,
-                        'conditions_evaluated': len(rule.conditions),
-                        'actions_count': len(rule.actions),
-                        'branch': 'then' if outcome != 'skipped' else 'skipped',
-                        # Recorded so the task_assigned per-day dedupe in
-                        # _check_trigger can distinguish a redundant re-save
-                        # from a genuine re-assignment to a different user.
-                        'assignee_id': instance.assigned_to_id,
-                    },
-                )
+                if claim_log is not None:
+                    # Finalize the row we already claimed with the real result.
+                    for _field, _value in log_fields.items():
+                        setattr(claim_log, _field, _value)
+                    claim_log.save()
+                else:
+                    AutomationLog.objects.create(dedupe_key=dedupe_key, **log_fields)
             except Exception:
                 import logging
                 logging.getLogger(__name__).exception("Failed to write AutomationLog")
