@@ -1454,6 +1454,30 @@
             const drawerBody = document.getElementById('task-drawer-body');
             if (!drawerBody) return;
 
+            // Idempotency guard. The quick-view drawer (#task-drawer-body) lives
+            // in base.html and is shared across every page; this initializer must
+            // attach the change/click delegates EXACTLY ONCE. If the board
+            // <script> is ever evaluated twice, a second binding would make every
+            // drawer mutation run its handler twice — two POSTs per user action
+            // (the BUG-02 / BUG-05 "fires exactly twice" root cause: one assignee
+            // change produced two POST /update-assignee/ in the server log). The
+            // flag is stored on the element so it survives even if this IIFE runs
+            // again on the same DOM.
+            if (drawerBody.dataset.qvHandlersBound === '1') return;
+            drawerBody.dataset.qvHandlersBound = '1';
+
+            // In-flight lock: even with a single binding, drop a duplicate
+            // submission for the same (task, endpoint) while one is still pending,
+            // so a stray double event can never reach the server twice.
+            const _qvInFlight = new Set();
+            function qvOnce(key, run) {
+                if (_qvInFlight.has(key)) return Promise.resolve(null);
+                _qvInFlight.add(key);
+                return Promise.resolve(run()).finally(function() {
+                    _qvInFlight.delete(key);
+                });
+            }
+
             function drawerCsrf() {
                 return drawerBody.querySelector('[name=csrfmiddlewaretoken]')?.value
                     || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -1559,20 +1583,23 @@
                 }
             }
 
-            // Helper: POST FormData, refresh card + drawer
+            // Helper: POST FormData, refresh card + drawer. Guarded by the
+            // in-flight lock so the same mutation can't be sent twice at once.
             function postAndReload(url, fd) {
-                return fetch(url, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': drawerCsrf() },
-                    body: fd,
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.card) refreshCard(data.card);
-                    reloadDrawer();
-                    return data;
-                })
-                .catch(function() { reloadDrawer(); });
+                return qvOnce(url, function() {
+                    return fetch(url, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': drawerCsrf() },
+                        body: fd,
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.card) refreshCard(data.card);
+                        reloadDrawer();
+                        return data;
+                    })
+                    .catch(function() { reloadDrawer(); });
+                });
             }
 
             // -- Single CHANGE handler (covers all selects & inputs) --
@@ -1585,29 +1612,31 @@
                     var newColumnId = target.value;
                     var fd = new FormData();
                     fd.append('column_id', newColumnId);
-                    fetch('/tasks/' + taskId + '/update-status/', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': drawerCsrf() },
-                        body: fd,
-                    })
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data.card) refreshCard(data.card);
-                        if (data.success !== false) {
-                            var card    = document.getElementById('task-' + taskId);
-                            var newList = document.querySelector(
-                                '.kanban-column-tasks[data-column-id="' + newColumnId + '"]');
-                            if (card && newList) {
-                                var oldCol = card.closest('.kanban-column');
-                                newList.prepend(card);
-                                var newCol = newList.closest('.kanban-column');
-                                updateColumnBadge(oldCol);
-                                updateColumnBadge(newCol);
+                    qvOnce('/tasks/' + taskId + '/update-status/', function() {
+                        return fetch('/tasks/' + taskId + '/update-status/', {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': drawerCsrf() },
+                            body: fd,
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.card) refreshCard(data.card);
+                            if (data.success !== false) {
+                                var card    = document.getElementById('task-' + taskId);
+                                var newList = document.querySelector(
+                                    '.kanban-column-tasks[data-column-id="' + newColumnId + '"]');
+                                if (card && newList) {
+                                    var oldCol = card.closest('.kanban-column');
+                                    newList.prepend(card);
+                                    var newCol = newList.closest('.kanban-column');
+                                    updateColumnBadge(oldCol);
+                                    updateColumnBadge(newCol);
+                                }
                             }
-                        }
-                        reloadDrawer();
-                    })
-                    .catch(function() { reloadDrawer(); });
+                            reloadDrawer();
+                        })
+                        .catch(function() { reloadDrawer(); });
+                    });
                     return;
                 }
 
@@ -1646,27 +1675,62 @@
                 }
             });
 
-            // -- Single CLICK handler (progress +/- buttons) --
+            // -- Progress +/- buttons (debounced) --
+            // Accumulate clicks locally and save the FINAL absolute value once,
+            // 600ms after the user stops clicking, so ten clicks = one save = one
+            // automation run instead of ten (BUG-03). Sends an absolute 'value'
+            // (not per-click 'direction'); the bar renders from the server
+            // response so it can't snap back (BUG-07).
+            let _qvProgValue = null;
+            let _qvProgTimer = null;
+            function qvCurrentProgress() {
+                var num = drawerBody.querySelector('.qv-progress-input');
+                if (num && num.value !== '') {
+                    return Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
+                }
+                var bar = drawerBody.querySelector('.progress-bar');
+                return bar ? (parseInt(bar.getAttribute('data-progress'), 10) || 0) : 0;
+            }
+            function qvRenderProgress(val) {
+                var bar = drawerBody.querySelector('.progress-bar');
+                if (bar) {
+                    bar.style.width = val + '%';
+                    bar.className = 'progress-bar ' + (
+                        val === 100 ? 'bg-success' : val < 30 ? 'bg-danger'
+                        : val < 70 ? 'bg-warning' : 'bg-success');
+                    bar.setAttribute('data-progress', val);
+                }
+                var num = drawerBody.querySelector('.qv-progress-input');
+                if (num) num.value = val;
+            }
             drawerBody.addEventListener('click', function(e) {
                 var btn = e.target.closest('.qv-progress-btn');
                 if (!btn) return;
-                var direction = btn.dataset.direction;
-                var taskId    = btn.dataset.taskId;
-                fetch('/tasks/' + taskId + '/update-progress/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': drawerCsrf(),
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify({ direction: direction }),
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.card) refreshCard(data.card);
-                    reloadDrawer();
-                })
-                .catch(function() { reloadDrawer(); });
+                var taskId = btn.dataset.taskId;
+                var step   = btn.dataset.direction === 'increase' ? 10 : -10;
+                if (_qvProgValue === null) _qvProgValue = qvCurrentProgress();
+                _qvProgValue = Math.max(0, Math.min(100, _qvProgValue + step));
+                qvRenderProgress(_qvProgValue);   // optimistic local update
+                if (_qvProgTimer) clearTimeout(_qvProgTimer);
+                _qvProgTimer = setTimeout(function() {
+                    var val = _qvProgValue;
+                    _qvProgValue = null;
+                    fetch('/tasks/' + taskId + '/update-progress/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': drawerCsrf(),
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ value: val }),
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.card) refreshCard(data.card);
+                        reloadDrawer();
+                    })
+                    .catch(function() { reloadDrawer(); });
+                }, 600);
             });
         })();
 

@@ -692,6 +692,85 @@ class DerivedSaveSilenceTest(TestCase):
         self.assertEqual(AutomationLog.objects.filter(rule=rule).count(), 0)
 
 
+class ConcurrentDuplicateEmitTest(TestCase):
+    """BUG-02/05 production case: the frontend can double-submit a single user
+    action as two near-simultaneous requests (two task.save() on different
+    instances). Those slip past the per-instance in-memory guard and can race
+    past the 3s window guard. The AutomationLog.dedupe_key unique constraint is
+    the race-proof backstop that collapses them to a single rule run."""
+
+    def test_fire_stamps_dedupe_key(self):
+        """Every rule run records a non-null dedupe_key built from
+        (rule, task, trigger, assignee, time-bucket) so the constraint can
+        arbitrate a concurrent duplicate. Covers all triggers uniformly,
+        including schedule_status_changed, since the key embeds trigger_event."""
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='ddk_stamp')
+        assignee = User.objects.create_user(
+            username='ddk_assignee', password='x', email='ddk@example.com',
+        )
+        rule = _make_rule(board, user, 'task_assigned')
+
+        task.assigned_to = assignee
+        task.save()
+
+        log = AutomationLog.objects.get(rule=rule, task_affected=task)
+        self.assertTrue(log.dedupe_key, 'a fire must stamp a dedupe_key')
+        self.assertTrue(
+            log.dedupe_key.startswith(f'{rule.pk}:{task.pk}:task_assigned:'),
+            f'unexpected dedupe_key format: {log.dedupe_key}',
+        )
+
+    def test_duplicate_dedupe_key_rejected_by_db(self):
+        """Two log rows with the same dedupe_key cannot coexist — this is what
+        prevents a concurrent duplicate emission from firing a rule twice even
+        when both requests pass the in-memory and 3s checks."""
+        from django.db import IntegrityError, transaction
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='ddk_unique')
+        assignee = User.objects.create_user(
+            username='ddk_unique_a', password='x', email='u@example.com',
+        )
+        rule = _make_rule(board, user, 'task_assigned')
+
+        task.assigned_to = assignee
+        task.save()
+        existing = AutomationLog.objects.get(rule=rule, task_affected=task)
+        self.assertTrue(existing.dedupe_key)
+
+        # A second emission claiming the same key must be rejected at the DB.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AutomationLog.objects.create(
+                    rule=rule, board=board, trigger_event='task_assigned',
+                    task_affected=task, outcome='success',
+                    dedupe_key=existing.dedupe_key,
+                )
+
+    def test_multiple_null_dedupe_keys_allowed(self):
+        """The unique constraint is partial (only non-null keys), so legacy /
+        fallback rows with a null dedupe_key never collide."""
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='ddk_nulls')
+        rule = _make_rule(board, user, 'task_created')
+
+        AutomationLog.objects.create(
+            rule=rule, board=board, trigger_event='task_created',
+            task_affected=task, outcome='success', dedupe_key=None,
+        )
+        AutomationLog.objects.create(
+            rule=rule, board=board, trigger_event='task_created',
+            task_affected=task, outcome='success', dedupe_key=None,
+        )
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=rule, dedupe_key__isnull=True).count(),
+            2,
+        )
+
+
 class ComputeProgressStatusTest(TestCase):
     """Unit tests for the extracted pure status computation (BUG-05 support)."""
 

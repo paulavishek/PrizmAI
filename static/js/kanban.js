@@ -1354,25 +1354,70 @@ function initCharts() {
 }
 
 // Task progress handling
+//
+// The +/- buttons accumulate clicks locally and save the FINAL absolute value
+// once, 600ms after the user stops clicking. Ten clicks therefore = one save =
+// one automation run, instead of ten per-click saves (BUG-03). The bar updates
+// optimistically and then re-renders from the authoritative server value so it
+// can't snap back (BUG-07). The previous per-click 'direction' POST fired the
+// task_progress_changed automation on every increment.
+const _progPending = {};   // taskId -> pending absolute value
+const _progTimers  = {};   // taskId -> debounce timeout id
+
 function setupTaskProgress() {
-    // Set up increase progress buttons
     document.querySelectorAll('.increase-progress').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const taskId = this.dataset.taskId;
-            updateTaskProgress(taskId, 'increase');
-        });
+        if (btn.dataset.progressBound === '1') return;   // bind exactly once
+        btn.dataset.progressBound = '1';
+        btn.addEventListener('click', function() { stepTaskProgress(this.dataset.taskId, 10); });
     });
-    
-    // Set up decrease progress buttons
     document.querySelectorAll('.decrease-progress').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const taskId = this.dataset.taskId;
-            updateTaskProgress(taskId, 'decrease');
-        });
+        if (btn.dataset.progressBound === '1') return;
+        btn.dataset.progressBound = '1';
+        btn.addEventListener('click', function() { stepTaskProgress(this.dataset.taskId, -10); });
     });
 }
 
-function updateTaskProgress(taskId, direction) {
+function _currentTaskProgress(taskId) {
+    if (taskId in _progPending) return _progPending[taskId];
+    const task = document.getElementById(`task-${taskId}`);
+    const bar = task ? task.querySelector('.progress-bar') : null;
+    if (!bar) return 0;
+    const raw = bar.getAttribute('data-progress') || bar.getAttribute('aria-valuenow');
+    return Math.max(0, Math.min(100, parseInt(raw, 10) || 0));
+}
+
+function _renderTaskProgress(taskId, value, colorClass) {
+    const task = document.getElementById(`task-${taskId}`);
+    if (!task) return;
+    const bar = task.querySelector('.progress-bar');
+    if (bar) {
+        bar.style.width = `${value}%`;
+        bar.setAttribute('data-progress', value);
+        bar.setAttribute('aria-valuenow', value);
+        if (colorClass) {
+            bar.classList.remove('bg-danger', 'bg-warning', 'bg-success');
+            bar.classList.add(colorClass);
+        }
+    }
+    const txt = task.querySelector('.task-progress-container small');
+    if (txt) txt.textContent = `${value}% complete`;
+}
+
+function stepTaskProgress(taskId, delta) {
+    let v = _currentTaskProgress(taskId);
+    v = Math.max(0, Math.min(100, v + delta));
+    _progPending[taskId] = v;
+    _renderTaskProgress(taskId, v);   // optimistic
+    if (_progTimers[taskId]) clearTimeout(_progTimers[taskId]);
+    _progTimers[taskId] = setTimeout(function() {
+        const val = _progPending[taskId];
+        delete _progPending[taskId];
+        delete _progTimers[taskId];
+        updateTaskProgress(taskId, val);
+    }, 600);
+}
+
+function updateTaskProgress(taskId, value) {
     fetch(`/tasks/${taskId}/update-progress/`, {
         method: 'POST',
         headers: {
@@ -1381,29 +1426,14 @@ function updateTaskProgress(taskId, direction) {
             'X-CSRFToken': getCookie('csrftoken')
         },
         body: JSON.stringify({
-            direction: direction
+            value: value
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Update the progress bar
-            const task = document.getElementById(`task-${taskId}`);
-            if (task) {
-                const progressBar = task.querySelector('.progress-bar');
-                const progressText = task.querySelector('.task-progress-container small');
-                
-                if (progressBar && progressText) {
-                    // Remove existing color classes
-                    progressBar.classList.remove('bg-danger', 'bg-warning', 'bg-success');
-                    // Add new color class
-                    progressBar.classList.add(data.colorClass);
-                    // Update width
-                    progressBar.style.width = `${data.progress}%`;
-                    // Update text
-                    progressText.textContent = `${data.progress}% complete`;
-                }
-            }
+            // Render from the authoritative server value so the bar can't snap back.
+            _renderTaskProgress(taskId, data.progress, data.colorClass);
         } else {
             console.error('Error updating task progress:', data.error);
         }

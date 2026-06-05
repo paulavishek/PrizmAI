@@ -644,11 +644,28 @@ class AutomationLog(models.Model):
     error_detail = models.TextField(blank=True)
     execution_detail = models.JSONField(default=dict)
 
+    # Idempotency key for one logical rule emission. Formatted as
+    # "<rule_id>:<task_id>:<trigger_event>:<assignee_id>:<time_bucket>" by the
+    # signal runner (kanban/signals.py). The unique constraint below lets two
+    # *concurrent* duplicate emissions — e.g. a frontend double-submit that
+    # sends the same POST twice in the same instant — collapse to a single rule
+    # run: both pass the in-memory and short-window checks because neither has
+    # committed its log yet, but only one INSERT can win the constraint. Null
+    # for legacy rows and for any fire where the key could not be computed.
+    dedupe_key = models.CharField(max_length=200, null=True, blank=True)
+
     class Meta:
         ordering = ['-triggered_at']
         indexes = [
             models.Index(fields=['board', 'triggered_at']),
             models.Index(fields=['rule', 'triggered_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['dedupe_key'],
+                condition=models.Q(dedupe_key__isnull=False),
+                name='uniq_automationlog_dedupe_key',
+            ),
         ]
 
     def __str__(self):
