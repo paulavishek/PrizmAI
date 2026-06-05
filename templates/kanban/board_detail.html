@@ -1430,6 +1430,9 @@
             document.body.style.overflow = 'hidden';
         };
         window.closeDrawer = function() {
+            // Guard against losing staged (unsaved) drawer edits.
+            if (window._qvConfirmDiscard && !window._qvConfirmDiscard()) return;
+            if (window._qvClearStaged) window._qvClearStaged();
             drawer.classList.remove('open');
             backdrop.classList.remove('open');
             document.body.style.overflow = '';
@@ -1583,110 +1586,45 @@
                 }
             }
 
-            // Helper: POST FormData, refresh card + drawer. Guarded by the
-            // in-flight lock so the same mutation can't be sent twice at once.
-            function postAndReload(url, fd) {
-                return qvOnce(url, function() {
-                    return fetch(url, {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': drawerCsrf() },
-                        body: fd,
-                    })
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data.card) refreshCard(data.card);
-                        reloadDrawer();
-                        return data;
-                    })
-                    .catch(function() { reloadDrawer(); });
-                });
+            // ── Staged-edit model ────────────────────────────────────────────
+            // Drawer fields do NOT write to the DB on change. Each edit is staged
+            // locally and committed only when the user clicks Save, which posts
+            // all changed fields in ONE request -> one task.save() -> the
+            // automation engine fires every applicable trigger from the combined
+            // before/after diff. This makes firing predictable (a burst of +/-
+            // clicks = one save = one trigger) and removes debounce guesswork.
+            var _qvStaged = {};   // field -> value, only fields the user changed
+            function qvSaveBtn()   { return drawerBody.querySelector('.qv-save-btn'); }
+            function qvDirtyFlag()  { return drawerBody.querySelector('.qv-dirty-flag'); }
+            function qvIsDirty()    { return Object.keys(_qvStaged).length > 0; }
+            function qvSyncFooter() {
+                var dirty = qvIsDirty();
+                var btn = qvSaveBtn();   if (btn)  btn.disabled = !dirty;
+                var flag = qvDirtyFlag(); if (flag) flag.style.display = dirty ? '' : 'none';
             }
+            function qvStage(field, value) { _qvStaged[field] = value; qvSyncFooter(); }
+            function qvClearStaged()        { _qvStaged = {}; qvSyncFooter(); }
 
-            // -- Single CHANGE handler (covers all selects & inputs) --
+            // -- CHANGE handler: stage edits, never POST --
             drawerBody.addEventListener('change', function(e) {
-                var target = e.target;
-
-                // Status
-                if (target.matches('.qv-status-select')) {
-                    var taskId      = target.dataset.taskId;
-                    var newColumnId = target.value;
-                    var fd = new FormData();
-                    fd.append('column_id', newColumnId);
-                    qvOnce('/tasks/' + taskId + '/update-status/', function() {
-                        return fetch('/tasks/' + taskId + '/update-status/', {
-                            method: 'POST',
-                            headers: { 'X-CSRFToken': drawerCsrf() },
-                            body: fd,
-                        })
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            if (data.card) refreshCard(data.card);
-                            if (data.success !== false) {
-                                var card    = document.getElementById('task-' + taskId);
-                                var newList = document.querySelector(
-                                    '.kanban-column-tasks[data-column-id="' + newColumnId + '"]');
-                                if (card && newList) {
-                                    var oldCol = card.closest('.kanban-column');
-                                    newList.prepend(card);
-                                    var newCol = newList.closest('.kanban-column');
-                                    updateColumnBadge(oldCol);
-                                    updateColumnBadge(newCol);
-                                }
-                            }
-                            reloadDrawer();
-                        })
-                        .catch(function() { reloadDrawer(); });
-                    });
-                    return;
-                }
-
-                // Assignee
-                if (target.matches('.qv-assignee-select')) {
-                    var fd = new FormData();
-                    fd.append('assignee_id', target.value);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-assignee/', fd);
-                    return;
-                }
-
-                // Due date
-                if (target.matches('.qv-due-date')) {
-                    var fd = new FormData();
-                    fd.append('due_date', target.value);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
-                    return;
-                }
-
-                // Priority
-                if (target.matches('.qv-priority-select')) {
-                    var fd = new FormData();
-                    fd.append('priority', target.value);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
-                    return;
-                }
-
-                // Progress (number input)
-                if (target.matches('.qv-progress-input')) {
-                    var val = Math.max(0, Math.min(100, parseInt(target.value, 10) || 0));
-                    target.value = val;
-                    var fd = new FormData();
-                    fd.append('progress', val);
-                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
+                var t = e.target;
+                if (t.matches('.qv-status-select'))   { qvStage('column_id',   t.value); return; }
+                if (t.matches('.qv-assignee-select')) { qvStage('assignee_id', t.value); return; }
+                if (t.matches('.qv-due-date'))        { qvStage('due_date',    t.value); return; }
+                if (t.matches('.qv-priority-select')) { qvStage('priority',    t.value); return; }
+                if (t.matches('.qv-progress-input'))  {
+                    var v = Math.max(0, Math.min(100, parseInt(t.value, 10) || 0));
+                    t.value = v;
+                    qvRenderProgress(v);
+                    qvStage('progress', v);
                     return;
                 }
             });
 
-            // -- Progress +/- buttons (debounced) --
-            // Accumulate clicks locally and save the FINAL absolute value once,
-            // 800ms after the user stops clicking, so a burst of clicks = one
-            // save = one automation run instead of one-per-click (BUG-03). Sends
-            // an absolute 'value' (not per-click 'direction'); the bar renders
-            // from the server response so it can't snap back (BUG-07). We do NOT
-            // reloadDrawer() per save here — that re-fetched the whole drawer on
-            // every click and could reset the optimistic value mid-burst; the
-            // card + bar are updated in place from the response instead.
-            let _qvProgValue = null;
-            let _qvProgTimer = null;
+            // -- Progress +/- buttons: adjust the STAGED value locally only --
+            // No network per click. Save (below) commits the final value once.
             function qvCurrentProgress() {
+                if ('progress' in _qvStaged) return _qvStaged.progress;
                 var num = drawerBody.querySelector('.qv-progress-input');
                 if (num && num.value !== '') {
                     return Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
@@ -1709,34 +1647,79 @@
             drawerBody.addEventListener('click', function(e) {
                 var btn = e.target.closest('.qv-progress-btn');
                 if (!btn) return;
-                var taskId = btn.dataset.taskId;
-                var step   = btn.dataset.direction === 'increase' ? 10 : -10;
-                if (_qvProgValue === null) _qvProgValue = qvCurrentProgress();
-                _qvProgValue = Math.max(0, Math.min(100, _qvProgValue + step));
-                qvRenderProgress(_qvProgValue);   // optimistic local update
-                if (_qvProgTimer) clearTimeout(_qvProgTimer);
-                _qvProgTimer = setTimeout(function() {
-                    var val = _qvProgValue;
-                    _qvProgValue = null;
-                    fetch('/tasks/' + taskId + '/update-progress/', {
+                var step = btn.dataset.direction === 'increase' ? 10 : -10;
+                var v = Math.max(0, Math.min(100, qvCurrentProgress() + step));
+                qvRenderProgress(v);          // optimistic local update only
+                qvStage('progress', v);
+            });
+
+            // -- SAVE: commit all staged fields in ONE request --
+            function qvSave() {
+                if (!qvIsDirty()) return;
+                var taskId = drawerTaskId();
+                if (!taskId) return;
+                var url    = '/tasks/' + taskId + '/update-fields/';
+                var staged = _qvStaged;       // snapshot for this request
+                qvOnce(url, function() {
+                    var fd = new FormData();
+                    Object.keys(staged).forEach(function(k) { fd.append(k, staged[k]); });
+                    var btn = qvSaveBtn(); if (btn) btn.disabled = true;
+                    return fetch(url, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': drawerCsrf(),
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: JSON.stringify({ value: val }),
+                        headers: { 'X-CSRFToken': drawerCsrf() },
+                        body: fd,
                     })
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data.card) refreshCard(data.card);
-                        if (data && typeof data.progress === 'number') {
-                            qvRenderProgress(data.progress);   // authoritative value
+                        if (data && data.error) { alert(data.error); qvSyncFooter(); return; }
+                        if (data && data.card) refreshCard(data.card);
+                        // Move the card on the board if the column (status) changed.
+                        if (data && data.new_column_id) {
+                            var card    = document.getElementById('task-' + taskId);
+                            var newList = document.querySelector(
+                                '.kanban-column-tasks[data-column-id="' + data.new_column_id + '"]');
+                            if (card && newList) {
+                                var oldCol = card.closest('.kanban-column');
+                                newList.prepend(card);
+                                updateColumnBadge(oldCol);
+                                updateColumnBadge(newList.closest('.kanban-column'));
+                            }
                         }
+                        qvClearStaged();
+                        reloadDrawer();   // refresh predictions/badges from saved state
                     })
-                    .catch(function() { reloadDrawer(); });
-                }, 800);
+                    .catch(function() { qvSyncFooter(); });
+                });
+            }
+            // Save button + "Open full detail" (abandons staged edits) clicks.
+            drawerBody.addEventListener('click', function(e) {
+                if (e.target.closest('.qv-save-btn')) { e.preventDefault(); qvSave(); return; }
+                var openFull = e.target.closest('.qv-open-full');
+                if (openFull && !qvConfirmDiscard()) { e.preventDefault(); }
             });
+
+            // -- Unsaved-changes guard --
+            function qvConfirmDiscard() {
+                return !qvIsDirty() ||
+                    window.confirm('You have unsaved changes in this task. Discard them?');
+            }
+            // A fresh task loaded into the drawer (HTMX swap) starts clean.
+            document.body.addEventListener('htmx:afterSwap', function(e) {
+                if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+                    _qvStaged = {};
+                }
+            });
+            // Opening another card while dirty: confirm before the HTMX request.
+            document.body.addEventListener('htmx:beforeRequest', function(e) {
+                var elt = e.detail && e.detail.elt;
+                if (elt && elt.classList && elt.classList.contains('kanban-task-v2')) {
+                    if (!qvConfirmDiscard()) { e.preventDefault(); }
+                    else { _qvStaged = {}; }
+                }
+            });
+            // Let closeDrawer()/backdrop consult the guard before closing.
+            window._qvConfirmDiscard = qvConfirmDiscard;
+            window._qvClearStaged    = function() { _qvStaged = {}; qvSyncFooter(); };
         })();
 
         // -- Inline status picker (card hover bar) --

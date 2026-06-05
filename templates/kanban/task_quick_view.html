@@ -173,10 +173,32 @@
         </div>
         {% endif %}
     </div>
+
+    {# ── Save footer ── #}
+    {# Edits in this drawer are STAGED locally and only written when Save is
+       clicked — nothing hits the DB per keystroke/click. A single Save posts
+       all changed fields at once (one task.save → the automation engine fires
+       every applicable trigger from the combined diff). #}
+    <div class="qv-footer" data-task-id="{{ task.id }}">
+        <span class="qv-dirty-flag" style="display:none;">
+            <i class="fas fa-circle"></i> Unsaved changes
+        </span>
+        <button type="button" class="btn btn-sm btn-primary qv-save-btn" disabled>
+            <i class="fas fa-check me-1"></i> Save
+        </button>
+    </div>
 </div>
 
 <style>
 .qv-drawer { display:flex; flex-direction:column; height:100%; }
+.qv-footer {
+    display:flex; align-items:center; justify-content:flex-end; gap:12px;
+    padding:12px 20px; border-top:1px solid var(--border-color,#dee2e6);
+    position:sticky; bottom:0; background:var(--card-bg,#fff); z-index:2;
+}
+.qv-dirty-flag { font-size:.74rem; font-weight:600; color:#f59e0b; }
+.qv-dirty-flag i { font-size:.5rem; vertical-align:middle; margin-right:3px; }
+.qv-save-btn:disabled { opacity:.5; cursor:default; }
 .qv-header {
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:16px 20px; border-bottom:1px solid var(--border-color,#dee2e6);

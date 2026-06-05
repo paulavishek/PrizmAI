@@ -841,6 +841,46 @@ class MultipleRulesSameTriggerTest(TestCase):
         )
 
 
+class MultiFieldSaveTest(TestCase):
+    """The quick-view 'Save' button posts every staged edit as ONE task.save().
+    Trigger evaluation diffs each field independently, so a single save that
+    changed several fields must fire EVERY applicable trigger — not just one."""
+
+    def test_one_save_fires_assigned_and_priority_and_progress(self):
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(
+            username='multifield', task_kwargs={'priority': 'low', 'progress': 20},
+        )
+        assignee = User.objects.create_user(
+            username='mf_assignee', password='x', email='mf@example.com',
+        )
+        r_assign = _make_rule(board, user, 'task_assigned')                       # T-03
+        r_prio = _make_rule(                                                      # T-07
+            board, user, 'task_priority_changed', trigger_config={'priority': 'urgent'},
+        )
+        r_prog = _make_rule(board, user, 'task_progress_changed')                 # T-08
+
+        # One save, three field changes — exactly what the Save button sends.
+        task.assigned_to = assignee
+        task.priority = 'urgent'
+        task.progress = 60
+        task.save()
+
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=r_assign).count(), 1,
+            'task_assigned must fire from the combined save',
+        )
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=r_prio).count(), 1,
+            'task_priority_changed must fire from the same save',
+        )
+        self.assertEqual(
+            AutomationLog.objects.filter(rule=r_prog).count(), 1,
+            'task_progress_changed must fire from the same save',
+        )
+
+
 class ComputeProgressStatusTest(TestCase):
     """Unit tests for the extracted pure status computation (BUG-05 support)."""
 
