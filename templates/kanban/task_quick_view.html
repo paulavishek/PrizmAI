@@ -175,10 +175,10 @@
     </div>
 
     {# ── Save footer ── #}
-    {# Edits in this drawer are STAGED locally and only written when Save is
+    {% comment %}Edits in this drawer are STAGED locally and only written when Save is
        clicked — nothing hits the DB per keystroke/click. A single Save posts
        all changed fields at once (one task.save → the automation engine fires
-       every applicable trigger from the combined diff). #}
+       every applicable trigger from the combined diff).{% endcomment %}
     <div class="qv-footer" data-task-id="{{ task.id }}">
         <span class="qv-dirty-flag" style="display:none;">
             <i class="fas fa-circle"></i> Unsaved changes
