@@ -1720,15 +1720,23 @@ class Task(models.Model):
         """Calculate team member's velocity factor based on historical data"""
         if not self.assigned_to:
             return 1.0
-        
+
+        # Workspace is the tenant-isolation key (Board.organization is legacy/nullable).
+        # Without scoping, this would pull the user's completed tasks across every
+        # workspace they appear in. No workspace => no reliable peer set.
+        ws = self.column.board.workspace
+        if ws is None:
+            return 1.0
+
         from django.db.models import Avg
-        
-        # Get completed tasks by this user with similar complexity
+
+        # Get completed tasks by this user with similar complexity (within workspace)
         completed_tasks = Task.objects.filter(
             assigned_to=self.assigned_to,
             progress=100,
             actual_duration_days__isnull=False,
-            complexity_score__range=(max(1, self.complexity_score - 2), 
+            column__board__workspace=ws,
+            complexity_score__range=(max(1, self.complexity_score - 2),
                                     min(10, self.complexity_score + 2))
         ).exclude(id=self.id)
         
