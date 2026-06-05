@@ -2763,123 +2763,6 @@ def task_detail(request, task_id):
     from wiki.models import WikiLink
     wiki_links = WikiLink.objects.filter(task=task).select_related('wiki_page')
     
-    # Get task completion prediction if available
-    prediction_data = None
-    # Skip for Epics: the single-task completion forecast isn't shown for an
-    # Epic (it's a child-task rollup), so computing it would waste DB queries
-    # and persist a misleading predicted_completion_date onto the Epic row.
-    # NOTE: this is a local statistical estimate, not an AI/LLM call — guarding
-    # it saves DB/CPU work, not API tokens.
-    if task.progress < 100 and not task.is_epic:
-        from kanban.utils.task_prediction import predict_task_completion_date
-        from kanban.utils.task_prediction import update_task_prediction
-        
-        # Auto-generate prediction if task has start date but no prediction yet
-        if task.start_date and not task.predicted_completion_date:
-            try:
-                prediction = update_task_prediction(task)
-                if prediction:
-                    # Format the prediction for template use
-                    is_likely_late = False
-                    if task.due_date:
-                        is_likely_late = prediction['predicted_date'] > task.due_date
-                    
-                    prediction_data = {
-                        'predicted_date': prediction['predicted_date'],
-                        'confidence': prediction['confidence'],
-                        'confidence_percentage': int(prediction['confidence'] * 100),
-                        'confidence_interval_days': prediction['confidence_interval_days'],
-                        'based_on_tasks': prediction['based_on_tasks'],
-                        'displayed_tasks': prediction.get('displayed_tasks', len(prediction.get('similar_tasks', []))),
-                        'similar_tasks': prediction.get('similar_tasks', []),
-                        'factors': prediction['factors'],
-                        'early_date': prediction['early_date'],
-                        'late_date': prediction['late_date'],
-                        'prediction_method': prediction['prediction_method'],
-                        'is_likely_late': is_likely_late
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to generate initial prediction for task {task.id}: {e}")
-
-        # Check if prediction is stale (older than 24 hours) and update if needed
-        elif task.predicted_completion_date and (
-            not task.last_prediction_update or
-            (timezone.now() - task.last_prediction_update > timedelta(hours=24))
-        ):
-            try:
-                prediction = update_task_prediction(task)
-                if prediction:
-                    # Format the prediction for template use
-                    is_likely_late = False
-                    if task.due_date:
-                        is_likely_late = prediction['predicted_date'] > task.due_date
-
-                    prediction_data = {
-                        'predicted_date': prediction['predicted_date'],
-                        'confidence': prediction['confidence'],
-                        'confidence_percentage': int(prediction['confidence'] * 100),
-                        'confidence_interval_days': prediction['confidence_interval_days'],
-                        'based_on_tasks': prediction['based_on_tasks'],
-                        'displayed_tasks': prediction.get('displayed_tasks', len(prediction.get('similar_tasks', []))),
-                        'similar_tasks': prediction.get('similar_tasks', []),
-                        'factors': prediction['factors'],
-                        'early_date': prediction['early_date'],
-                        'late_date': prediction['late_date'],
-                        'prediction_method': prediction['prediction_method'],
-                        'is_likely_late': is_likely_late
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to update prediction for task {task.id}: {e}")
-        
-        # Use existing prediction
-        if not prediction_data and task.predicted_completion_date:
-            is_likely_late = False
-            if task.due_date:
-                is_likely_late = task.predicted_completion_date > task.due_date
-            
-            # Parse early/late dates from metadata (may be ISO strings or missing)
-            raw_early = task.prediction_metadata.get('early_date')
-            raw_late = task.prediction_metadata.get('late_date')
-            from dateutil.parser import parse as parse_dt
-            try:
-                early_date = parse_dt(raw_early) if isinstance(raw_early, str) else raw_early
-            except Exception:
-                early_date = None
-            try:
-                late_date = parse_dt(raw_late) if isinstance(raw_late, str) else raw_late
-            except Exception:
-                late_date = None
-
-            # Ensure minimum 3-day spread for meaningful range display
-            predicted = task.predicted_completion_date
-            if early_date and late_date:
-                if hasattr(early_date, 'date'):
-                    spread = (late_date - early_date).total_seconds() / 86400
-                else:
-                    spread = 0
-                if spread < 3:
-                    half_pad = timedelta(days=(3 - spread) / 2)
-                    early_date = early_date - half_pad
-                    late_date = late_date + half_pad
-            else:
-                early_date = predicted - timedelta(days=2)
-                late_date = predicted + timedelta(days=3)
-
-            _stored_similar = task.prediction_metadata.get('similar_tasks', [])
-            prediction_data = {
-                'predicted_date': predicted,
-                'confidence': task.prediction_confidence,
-                'confidence_percentage': int(task.prediction_confidence * 100),
-                'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
-                'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
-                'displayed_tasks': task.prediction_metadata.get('displayed_tasks', len(_stored_similar)),
-                'similar_tasks': _stored_similar,
-                'factors': task.prediction_metadata.get('factors', {}),
-                'early_date': early_date,
-                'late_date': late_date,
-                'prediction_method': task.prediction_metadata.get('prediction_method', 'unknown'),
-                'is_likely_late': is_likely_late
-            }
     
     # Get total time logged on this task
     from kanban.budget_models import TimeEntry
@@ -2916,7 +2799,6 @@ def task_detail(request, task_id):
         'stakeholders': stakeholders,
         'board_stakeholders': board_stakeholders,
         'wiki_links': wiki_links,
-        'prediction': prediction_data,
         'total_time_logged': total_time_logged,
         'is_demo_mode': False,
         'is_demo_board': False,
@@ -4386,13 +4268,27 @@ def join_board(request, board_id):
         messages.error(request, 'You do not have access to this board.')
         return redirect('dashboard')
     
-    # Verify user belongs to the same organization as the board
-    if board.organization:
-        user_org = getattr(getattr(request.user, 'profile', None), 'organization', None)
-        if user_org != board.organization:
+    # Verify the board belongs to the user's active workspace — the real tenant
+    # boundary. board.organization is legacy/nullable, and the old org check was
+    # fail-OPEN (skipped entirely when board.organization was None, which is the
+    # common case), letting any user self-join any org-less board. Scope by
+    # workspace and fail CLOSED: no workspace match → no self-join. Board
+    # creators/owners are exempt (they already have access).
+    is_owner_or_creator = (
+        board.created_by_id == request.user.id
+        or (getattr(board, 'owner_id', None) and board.owner_id == request.user.id)
+    )
+    if not is_owner_or_creator:
+        profile = getattr(request.user, 'profile', None)
+        user_ws_id = getattr(getattr(profile, 'active_workspace', None), 'id', None)
+        if (
+            board.workspace_id is None
+            or user_ws_id is None
+            or board.workspace_id != user_ws_id
+        ):
             messages.error(request, 'You do not have access to this board.')
             return redirect('dashboard')
-    
+
     # Check if user is already a member
     from kanban.models import BoardMembership
     if BoardMembership.objects.filter(board=board, user=request.user).exists() or board.created_by == request.user:
@@ -6333,27 +6229,6 @@ def task_quick_view(request, task_id):
         and task.progress < 100
     )
 
-    # Prediction data (reuse pattern from task_detail)
-    prediction_data = None
-    if task.progress < 100:
-        # Auto-generate prediction if task has a start date but no stored prediction yet
-        if task.start_date and not task.predicted_completion_date:
-            try:
-                from kanban.utils.task_prediction import update_task_prediction
-                update_task_prediction(task)
-                task.refresh_from_db()
-            except Exception as e:
-                logger.warning(f"Failed to auto-generate prediction for task {task.id} in quick view: {e}")
-
-        if task.predicted_completion_date:
-            confidence_pct = int((task.prediction_confidence or 0) * 100)
-            based_on = (task.prediction_metadata or {}).get('based_on_tasks', 0)
-            prediction_data = {
-                'predicted_date': task.predicted_completion_date,
-                'confidence_percentage': confidence_pct,
-                'based_on_tasks': based_on,
-            }
-
     # Dependencies
     blocked_by = task.dependencies.all()
     blocking = Task.objects.filter(dependencies=task, item_type='task')
@@ -6374,7 +6249,6 @@ def task_quick_view(request, task_id):
         'board': board,
         'is_overdue': is_overdue,
         'is_at_risk': is_at_risk,
-        'prediction_data': prediction_data,
         'blocked_by': blocked_by,
         'blocking': blocking,
         'stakeholders': stakeholders,

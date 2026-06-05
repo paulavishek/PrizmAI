@@ -28,9 +28,8 @@ def get_user_board_role(user, board):
     if not user or not user.is_authenticated or not board:
         return None
 
-    # Superuser / OrgAdmin → always owner-level
-    from kanban.permissions import is_user_org_admin
-    if user.is_superuser or is_user_org_admin(user):
+    # Superuser → always owner-level
+    if user.is_superuser:
         return 'owner'
 
     # Board creator or explicit owner field
@@ -49,14 +48,21 @@ def get_user_board_role(user, board):
     if membership:
         return membership.role  # 'owner', 'member', or 'viewer'
 
-    # Same-org fallback (matches simple_access.can_access_board logic)
+    # Scoped OrgAdmin — must be an admin of *this board's* organization. This
+    # mirrors kanban.simple_access.can_access_board exactly. Note: org-admin is a
+    # GLOBAL user flag (org creator / is_admin / OrgAdmin group), so it must be
+    # gated on org match — otherwise every account-owner (who is admin of their
+    # own org) would get owner-level access to every other tenant's board. The
+    # `board.organization_id and ...` guard also makes null org fail closed.
+    from kanban.permissions import is_user_org_admin
     try:
         if (
             board.organization_id
             and hasattr(user, 'profile')
             and user.profile.organization_id == board.organization_id
+            and is_user_org_admin(user)
         ):
-            return 'member'
+            return 'owner'
     except Exception:
         pass
 
