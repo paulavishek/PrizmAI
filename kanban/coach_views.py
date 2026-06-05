@@ -510,7 +510,12 @@ def coaching_analytics(request, board_id):
     Analytics view for coaching effectiveness
     """
     board = get_object_or_404(Board, id=board_id)
-    
+
+    # RBAC: fail-closed board access check (was missing — any logged-in user
+    # could read another tenant's coaching analytics by enumerating board_id).
+    from kanban.simple_access import check_access_or_403
+    check_access_or_403(request.user, board)
+
     # Get date range (default: last 30 days)
     days = int(request.GET.get('days', 30))
     start_date = timezone.now() - timedelta(days=days)

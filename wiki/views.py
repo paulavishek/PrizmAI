@@ -64,11 +64,16 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
                 return Q(organization=org) | Q(organization__isnull=True)
             return Q()  # no demo org found
         else:
-            # Real mode: only show user's org content (never demo org)
+            # Real mode: STRICT per-org isolation. Previously this OR'd in
+            # Q(organization__isnull=True), which shared the entire null-org wiki
+            # pool (legacy/seed/demo pages) across every real tenant — a
+            # cross-tenant leak. Real user content is already tagged with the
+            # creator's org (see form_valid), so scope strictly to it and fail
+            # CLOSED when the user has no org (show nothing rather than the shared
+            # null pool).
             if org:
-                return Q(organization=org) | Q(organization__isnull=True)
-            # User has no org — show only org-less wiki pages
-            return Q(organization__isnull=True)
+                return Q(organization=org)
+            return Q(pk__in=[])
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
