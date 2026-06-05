@@ -6531,7 +6531,16 @@ def column_update_color(request, column_id):
 @login_required
 @require_http_methods(["POST"])
 def task_update_fields(request, task_id):
-    """Update priority, due_date, and/or progress from the quick-view drawer."""
+    """Batch-update quick-view drawer fields in a SINGLE task.save().
+
+    Accepts any of: column_id (status), assignee_id, priority, due_date,
+    progress. The drawer stages the user's edits and posts only the fields they
+    actually changed, then this applies them all and saves ONCE — so the
+    automation engine sees one event and its per-field before/after diff fires
+    *every* applicable trigger from that one save (e.g. changing both assignee
+    and priority fires task_assigned AND task_priority_changed). Only genuinely
+    changed values are applied, so no-op fields don't force phantom triggers.
+    """
     from datetime import datetime as _dt
     from django.utils import timezone as _tz
 
@@ -6543,19 +6552,54 @@ def task_update_fields(request, task_id):
         return JsonResponse({'error': 'Permission denied'}, status=403)
 
     changes = []
+    moved_column = None
+
+    # Status / column
+    if request.POST.get('column_id'):
+        new_column = get_object_or_404(Column, id=request.POST['column_id'], board=board)
+        if new_column.id != task.column_id:
+            task.column = new_column
+            col_lower = new_column.name.lower()
+            if 'done' in col_lower or 'complete' in col_lower:
+                task.progress = 100
+            changes.append(f"Status → {new_column.name}")
+            moved_column = new_column
+
+    # Assignee — '' means unassign. Mirror task_update_assignee's calendar handling.
+    if 'assignee_id' in request.POST:
+        assignee_id = request.POST['assignee_id']
+        if assignee_id:
+            user = get_object_or_404(User, id=assignee_id)
+            from kanban.simple_access import can_be_assigned_to_board
+            if not can_be_assigned_to_board(user, board):
+                return JsonResponse(
+                    {'error': 'That user is not a member of this board and cannot be assigned.'},
+                    status=400,
+                )
+            if task.assigned_to_id != user.id:
+                task._prev_calendar_event_id = task.google_calendar_event_id
+                task.assigned_to = user
+                task.google_calendar_event_id = None
+                changes.append(f"Assignee → {user.get_full_name() or user.username}")
+        elif task.assigned_to_id is not None:
+            task._prev_calendar_event_id = task.google_calendar_event_id
+            task.assigned_to = None
+            task.google_calendar_event_id = None
+            changes.append("Unassigned")
 
     if 'priority' in request.POST:
         valid = [c[0] for c in Task.PRIORITY_CHOICES]
         prio = request.POST['priority']
-        if prio in valid:
+        if prio in valid and prio != task.priority:
             task.priority = prio
             changes.append(f"Priority → {prio}")
 
     if 'due_date' in request.POST:
         raw = request.POST['due_date'].strip()
         if raw == '':
-            task.due_date = None
-            changes.append("Due date cleared")
+            if task.due_date is not None:
+                task.due_date = None
+                changes.append("Due date cleared")
         else:
             try:
                 nd = _dt.strptime(raw, '%Y-%m-%d').date()
@@ -6574,8 +6618,9 @@ def task_update_fields(request, task_id):
     if 'progress' in request.POST:
         try:
             val = max(0, min(100, int(request.POST['progress'])))
-            task.progress = val
-            changes.append(f"Progress → {val}%")
+            if val != task.progress:
+                task.progress = val
+                changes.append(f"Progress → {val}%")
         except (ValueError, TypeError):
             return JsonResponse({'error': 'Invalid progress value'}, status=400)
 
@@ -6587,7 +6632,12 @@ def task_update_fields(request, task_id):
             activity_type='updated',
             description='; '.join(changes),
         )
-    return JsonResponse({'success': True, 'card': _card_json(task)})
+
+    resp = {'success': True, 'card': _card_json(task), 'changes': changes}
+    if moved_column is not None:
+        resp['new_column_id'] = moved_column.id
+        resp['new_column_name'] = moved_column.name
+    return JsonResponse(resp)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
