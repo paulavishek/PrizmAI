@@ -771,6 +771,76 @@ class ConcurrentDuplicateEmitTest(TestCase):
         )
 
 
+class MultipleRulesSameTriggerTest(TestCase):
+    """When several rules watch the same trigger, one user action must produce
+    one audit row PER RULE — not fewer. Regression for the per-(task, assignee,
+    day) task_assigned guard that silently dropped any rule which had already
+    fired for that assignee earlier the same day (3 rules logged only 2)."""
+
+    def test_three_rules_each_fire_once(self):
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='multi_rule')
+        assignee = User.objects.create_user(
+            username='multi_assignee', password='x', email='m@example.com',
+        )
+        r1 = _make_rule(board, user, 'task_assigned')
+        r2 = _make_rule(board, user, 'task_assigned')
+        r3 = _make_rule(board, user, 'task_assigned')
+
+        task.assigned_to = assignee
+        task.save()
+
+        for r in (r1, r2, r3):
+            self.assertEqual(
+                AutomationLog.objects.filter(rule=r, task_affected=task).count(), 1,
+                f'rule {r.pk} should fire exactly once',
+            )
+        self.assertEqual(
+            AutomationLog.objects.filter(
+                task_affected=task, trigger_event='task_assigned',
+            ).count(),
+            3, '3 rules x 1 assignment must log 3 rows, not 2',
+        )
+
+    def test_reassign_same_assignee_later_same_day_fires_again(self):
+        """A rule that already fired for this (task, assignee) earlier today must
+        still fire on a later re-assignment to the same person. The old per-day
+        guard wrongly suppressed this; the 3s window + dedupe bucket only dedupe
+        the burst, not a deliberate re-assignment minutes/hours later."""
+        import datetime
+        from kanban.automation_models import AutomationLog
+
+        user, board, col, task = _make_board_with_task(username='reassign_day')
+        assignee = User.objects.create_user(
+            username='reassign_a', password='x', email='r@example.com',
+        )
+        rule = _make_rule(board, user, 'task_assigned')
+
+        # An earlier fire today for the same assignee, well outside the 3s window
+        # and the dedupe bucket.
+        old = AutomationLog.objects.create(
+            rule=rule, board=board, trigger_event='task_assigned',
+            task_affected=task, outcome='success',
+            execution_detail={'assignee_id': assignee.id},
+        )
+        AutomationLog.objects.filter(pk=old.pk).update(
+            triggered_at=timezone.now() - datetime.timedelta(hours=2),
+        )
+
+        task.assigned_to = assignee
+        task.save()
+
+        recent = AutomationLog.objects.filter(
+            rule=rule, task_affected=task, trigger_event='task_assigned',
+            triggered_at__gte=timezone.now() - datetime.timedelta(seconds=30),
+        )
+        self.assertEqual(
+            recent.count(), 1,
+            'a same-day re-assignment to the same person must fire again',
+        )
+
+
 class ComputeProgressStatusTest(TestCase):
     """Unit tests for the extracted pure status computation (BUG-05 support)."""
 

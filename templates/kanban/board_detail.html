@@ -1677,10 +1677,13 @@
 
             // -- Progress +/- buttons (debounced) --
             // Accumulate clicks locally and save the FINAL absolute value once,
-            // 600ms after the user stops clicking, so ten clicks = one save = one
-            // automation run instead of ten (BUG-03). Sends an absolute 'value'
-            // (not per-click 'direction'); the bar renders from the server
-            // response so it can't snap back (BUG-07).
+            // 800ms after the user stops clicking, so a burst of clicks = one
+            // save = one automation run instead of one-per-click (BUG-03). Sends
+            // an absolute 'value' (not per-click 'direction'); the bar renders
+            // from the server response so it can't snap back (BUG-07). We do NOT
+            // reloadDrawer() per save here — that re-fetched the whole drawer on
+            // every click and could reset the optimistic value mid-burst; the
+            // card + bar are updated in place from the response instead.
             let _qvProgValue = null;
             let _qvProgTimer = null;
             function qvCurrentProgress() {
@@ -1727,10 +1730,12 @@
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.card) refreshCard(data.card);
-                        reloadDrawer();
+                        if (data && typeof data.progress === 'number') {
+                            qvRenderProgress(data.progress);   // authoritative value
+                        }
                     })
                     .catch(function() { reloadDrawer(); });
-                }, 600);
+                }, 800);
             });
         })();
 
