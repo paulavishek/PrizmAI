@@ -92,31 +92,6 @@
             </div>
         </div>
 
-        {% if prediction_data %}
-        {# AI Predicted Completion #}
-        <div class="qv-section">
-            <div class="qv-section-header"><i class="fas fa-robot me-1 text-info"></i> AI predicted completion</div>
-            <div class="qv-prediction-box">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <strong style="font-size:.9rem;">{{ prediction_data.predicted_date|date:"M d, Y" }}</strong>
-                    <span class="badge bg-info text-dark" style="font-size:.7rem;">{{ prediction_data.confidence_percentage }}% conf.</span>
-                </div>
-                <div class="text-muted" style="font-size:.72rem;">
-                    Based on {{ prediction_data.based_on_tasks }} similar task{{ prediction_data.based_on_tasks|pluralize }} · org-wide data
-                </div>
-                {% if is_at_risk %}
-                <div class="mt-1" style="font-size:.72rem;color:#f59e0b;">
-                    <i class="fas fa-exclamation-triangle"></i> Predicted before due date — currently on track
-                </div>
-                {% elif is_overdue %}
-                <div class="mt-1" style="font-size:.72rem;color:#dc3545;">
-                    <i class="fas fa-exclamation-triangle"></i> Task is overdue
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
-
         {# Dependencies #}
         {% if blocked_by or blocking %}
         <div class="qv-section">
@@ -212,7 +187,6 @@
 .qv-value { font-size:.85rem; }
 .qv-section { margin-top:18px; padding-top:14px; border-top:1px solid var(--border-color,#eee); }
 .qv-section-header { font-size:.78rem; font-weight:700; margin-bottom:8px; color:var(--text-primary); }
-.qv-prediction-box { background:var(--bg-tertiary,#f8f9fa); border-radius:8px; padding:10px 14px; border-left:3px solid #0ea5e9; }
 .qv-dep-item { font-size:.82rem; padding:3px 0; }
 .qv-dep-item a { color:var(--link-color,#0d6efd); text-decoration:none; }
 .qv-dep-item a:hover { text-decoration:underline; }

@@ -154,14 +154,23 @@ def _get_historical_statistics(task):
         actual_duration_days__isnull=False,
         actual_duration_days__gt=0
     )
-    
-    # Priority 1: Same assignee, similar complexity and priority
+
+    # Workspace is the real tenant-isolation key. Board.organization is a legacy,
+    # nullable field (MVP simplification) that is None on demo/seed boards, so
+    # scoping by it bleeds history across unrelated workspaces. Scope the
+    # cross-board tiers (1 and 3) by workspace instead.
+    workspace = task.column.board.workspace
+
+    # Priority 1: Same assignee, similar complexity and priority (within workspace).
+    # Skip when the board has no workspace — filtering by workspace=None would
+    # re-create the same cross-board bleed across orphaned legacy boards.
     same_assignee_tasks = None
-    if task.assigned_to:
+    if task.assigned_to and workspace is not None:
         same_assignee_tasks = Task.objects.filter(
             query,
             assigned_to=task.assigned_to,
             priority=task.priority,
+            column__board__workspace=workspace,
             complexity_score__range=(
                 max(1, task.complexity_score - 2),
                 min(10, task.complexity_score + 2)
@@ -242,22 +251,27 @@ def _get_historical_statistics(task):
             'similar_tasks': similar_tasks_list
         }
     
-    # Priority 3: Organization-wide with same complexity
+    # Priority 3: Workspace-wide with same complexity. Scoped by workspace (not the
+    # nullable Board.organization) so history stays within the current tenant.
+    # Skipped when the board has no workspace (see note above).
+    if workspace is None:
+        return None
+
     org_tasks = Task.objects.filter(
         query,
-        column__board__organization=task.column.board.organization,
+        column__board__workspace=workspace,
         complexity_score__range=(
             max(1, task.complexity_score - 2),
             min(10, task.complexity_score + 2)
         )
     ).exclude(id=task.id)
-    
+
     stats = org_tasks.aggregate(
         avg=Avg('actual_duration_days'),
         std=StdDev('actual_duration_days'),
         count=Count('id')
     )
-    
+
     if stats['count'] >= 2:
         # Get similar tasks and format completed_at for JSON serialization
         similar_tasks_list = []
