@@ -128,6 +128,10 @@ MIDDLEWARE = [
     # Demo session management - Must be after SessionMiddleware
     'kanban.middleware.demo_session.DemoSessionMiddleware',
     'kanban.middleware.demo_session.DemoAnalyticsMiddleware',
+    # Tenant isolation backstop — enforce view_board on every board/task/column
+    # scoped view. Must come AFTER WorkspaceMiddleware + demo session so
+    # is_demo_context() can read request.workspace / demo flags.
+    'kanban.middleware.board_access.BoardAccessEnforcementMiddleware',
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
