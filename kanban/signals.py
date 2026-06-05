@@ -420,9 +420,9 @@ def run_board_automations(sender, instance, created, **kwargs):
                     'conditions_evaluated': len(rule.conditions),
                     'actions_count': len(rule.actions),
                     'branch': 'then' if outcome != 'skipped' else 'skipped',
-                    # Recorded so the task_assigned per-day dedupe in
-                    # _check_trigger can distinguish a redundant re-save
-                    # from a genuine re-assignment to a different user.
+                    # Recorded so the assignee-scoped 3s guard above (and the
+                    # dedupe_key) can tell a redundant re-save of the same
+                    # assignment from a genuine re-assignment to a different user.
                     'assignee_id': instance.assigned_to_id,
                 },
             }
@@ -508,25 +508,16 @@ def _check_trigger(rule, task, created, column_changed, priority_changed,
             return True
 
     elif trigger_type == 'task_assigned' and assignment_changed and task.assigned_to:
-        # Per-(task, assignee, day) dedupe. A single assignment can trigger two
-        # task.save() calls in close succession (e.g. the update view followed by
-        # update_task_prediction(), sometimes across two requests), and the
-        # in-memory + 3s-window guards in run_board_automations can miss the
-        # second when the saves interleave before the first AutomationLog commits.
-        # Keying the dedupe on the assignee makes a genuine *re*-assignment to a
-        # different user still fire, while a redundant re-save does not.
-        try:
-            from kanban.automation_models import AutomationLog
-            if AutomationLog.objects.filter(
-                rule_id=rule.pk,
-                task_affected_id=task.pk,
-                trigger_event='task_assigned',
-                triggered_at__date=now.date(),
-                execution_detail__assignee_id=task.assigned_to_id,
-            ).exists():
-                return False
-        except Exception:
-            pass
+        # Fire on every genuine assignment change (old != new assignee, enforced
+        # by the assignment_changed pre_save flag). The "single assignment ->
+        # 2 task.save()" burst is now collapsed by the AutomationLog.dedupe_key
+        # unique constraint + 3s-window guard in run_board_automations (both
+        # assignee-scoped), so we no longer need a per-(task, assignee, DAY)
+        # block here. That per-day block was both redundant (it raced and let
+        # concurrent duplicates through anyway) and wrong: it suppressed a
+        # legitimate re-assignment to the same person later the same day, and —
+        # when several rules watch task_assigned — it silently dropped any rule
+        # that had already fired for that assignee today (3 rules logged only 2).
         return True
 
     # ── task_completion_threshold (new name) or task_completion_reached (old) ──

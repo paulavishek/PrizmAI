@@ -1414,7 +1414,7 @@ function stepTaskProgress(taskId, delta) {
         delete _progPending[taskId];
         delete _progTimers[taskId];
         updateTaskProgress(taskId, val);
-    }, 600);
+    }, 800);
 }
 
 function updateTaskProgress(taskId, value) {
