@@ -449,8 +449,11 @@ class DependencyOverdueSweepTest(TestCase):
         from kanban.tasks.automation_tasks import run_dependency_overdue_automations
 
         user, board, col, blocker = _make_board_with_task(username='dep_user')
-        # Blocker is overdue (due yesterday, not complete).
-        blocker.due_date = timezone.now() - timedelta(days=1)
+        # Blocker is overdue (not complete). Use 2 days ago, not 1: the sweep
+        # compares due_date__lt=today (date-truncated in the active timezone),
+        # so a ~24h-ago timestamp straddles the local midnight boundary and made
+        # this test flaky between ~00:00–05:30 IST. 2 days is unambiguously past.
+        blocker.due_date = timezone.now() - timedelta(days=2)
         blocker.progress = 50
         blocker.save()
 
