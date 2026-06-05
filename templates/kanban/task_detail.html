@@ -2738,6 +2738,20 @@
             });
         });
 
+        // If the user edits the form's progress number field directly, mirror it
+        // onto the widget bar so the two controls never disagree. The form Save
+        // button persists this value; no AJAX call is needed here.
+        const _formProgressInput = document.getElementById('id_progress');
+        if (_formProgressInput) {
+            _formProgressInput.addEventListener('input', function() {
+                let v = parseInt(this.value, 10);
+                if (isNaN(v)) return;
+                v = Math.max(0, Math.min(100, v));
+                window._pendingProgress = v;
+                renderProgress(v, progressColorClass(v));
+            });
+        }
+
         // Add Comment button — validate non-empty then submit the inner comment form
         const addCommentBtn = document.getElementById('addCommentBtn');
         if (addCommentBtn) {
@@ -2901,6 +2915,14 @@
         }
         if (progressText) {
             progressText.textContent = `${progress}% complete`;
+        }
+        // Keep the main edit form's hidden/visible progress field in sync. Without
+        // this the +/- widget only AJAX-saves the value, while clicking the form's
+        // "Save Changes" button re-POSTs the stale page-load value and reverts the
+        // progress back to its original state (the reported bug).
+        const formProgressInput = document.getElementById('id_progress');
+        if (formProgressInput) {
+            formProgressInput.value = progress;
         }
     }
 
