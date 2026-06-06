@@ -111,6 +111,13 @@
     </script>
 </head>
 <body data-demo-mode="{% if is_viewing_demo %}true{% else %}false{% endif %}" data-user-timezone="{{ user_timezone }}" data-display-mode="{{ user_display_mode }}">
+    <!-- Display Mode Anti-Flicker (body): the <head> script can only mark <html>,
+         but accessibility.css keys off body.colorblind-mode. Set the body class
+         before first paint so accessibility/dark styles apply without a flash.
+         display-mode.js re-applies this idempotently on load. -->
+    <script>(function(){var b=document.body,m=b.getAttribute('data-display-mode');
+        if(m==='accessibility')b.classList.add('colorblind-mode');
+        else if(m==='dark')b.classList.add('dark-mode');})();</script>
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
