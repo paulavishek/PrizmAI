@@ -968,3 +968,41 @@ class ComputeProgressStatusTest(TestCase):
         from kanban.models import Task
         far = timezone.now() + datetime.timedelta(days=60)
         self.assertEqual(Task.compute_progress_status(20, far, None), 'on_track')
+
+
+class ScheduledRuleCronWiringTest(TestCase):
+    """T-43/44/45: a scheduled rule must encode its day restriction into the
+    linked PeriodicTask's crontab. The builder sends weekly as a weekday *name*
+    ('Saturday') and monthly as an int under 'day_of_month'; the setup helper
+    originally read only int(config['day']), so weekly/monthly silently kept
+    day_of_week/day_of_month '*' and fired every day.
+    """
+
+    def _setup(self, trigger_type, trigger_config):
+        from kanban.automation_views import _setup_scheduled_rule
+        user, board, col, _ = _make_board_with_task(username=f'sched_{trigger_type}')
+        rule = _make_rule(board, user, trigger_type, trigger_config=trigger_config)
+        _setup_scheduled_rule(rule, trigger_type, trigger_config)
+        rule.refresh_from_db()
+        return rule.periodic_task.crontab
+
+    def test_daily_runs_every_day(self):
+        c = self._setup('scheduled_daily', {'time': '09:00'})
+        self.assertEqual((c.hour, c.minute), ('9', '0'))
+        self.assertEqual(c.day_of_week, '*')
+        self.assertEqual(c.day_of_month, '*')
+
+    def test_weekly_name_maps_to_cron_day_of_week(self):
+        # Saturday -> cron 6 (Sun=0..Sat=6); day_of_month stays '*'.
+        c = self._setup('scheduled_weekly', {'day': 'Saturday', 'time': '13:00'})
+        self.assertEqual(c.day_of_week, '6')
+        self.assertEqual(c.day_of_month, '*')
+
+    def test_weekly_sunday_maps_to_zero(self):
+        c = self._setup('scheduled_weekly', {'day': 'Sunday', 'time': '08:00'})
+        self.assertEqual(c.day_of_week, '0')
+
+    def test_monthly_day_of_month_key_is_honored(self):
+        c = self._setup('scheduled_monthly', {'day_of_month': 6, 'time': '10:00'})
+        self.assertEqual(c.day_of_month, '6')
+        self.assertEqual(c.day_of_week, '*')
