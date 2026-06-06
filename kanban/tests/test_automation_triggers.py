@@ -467,6 +467,60 @@ class DependencyOverdueSweepTest(TestCase):
         self.assertEqual(logs.count(), 1)
 
 
+class IdleSweepConfigKeyTest(TestCase):
+    """T-13: the idle sweep must honor the builder's ``idle_days`` config.
+
+    The rule builder (and its server-side validation) persist the interval as
+    ``trigger_config['idle_days']``, but the sweep originally read ``'days'`` and
+    silently fell back to a 7-day default — so the configured N was ignored.
+    """
+
+    def _make_idle_task(self, username, idle_for_days):
+        from datetime import timedelta
+        from kanban.models import Task
+
+        user, board, col, task = _make_board_with_task(
+            username=username, task_kwargs={'progress': 50},
+        )
+        # auto_now stamps updated_at on save; .update() bypasses it so we can
+        # backdate the task's last activity deterministically.
+        Task.objects.filter(pk=task.pk).update(
+            updated_at=timezone.now() - timedelta(days=idle_for_days),
+        )
+        return user, board, col, task
+
+    def test_idle_days_one_fires_for_two_day_old_task(self):
+        """idle_days=1 + a 2-day-stale task must fire (regressed when the sweep
+        used the wrong key and defaulted to 7 days)."""
+        from kanban.automation_models import AutomationLog
+        from kanban.tasks.automation_tasks import run_idle_task_automations
+
+        user, board, col, task = self._make_idle_task('idle_user_fire', idle_for_days=2)
+        rule = _make_rule(board, user, 'task_idle', trigger_config={'idle_days': 1})
+
+        run_idle_task_automations()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(
+            logs.count(), 1,
+            'idle sweep must honor idle_days=1, not fall back to the 7-day default',
+        )
+
+    def test_idle_days_ten_does_not_fire_for_two_day_old_task(self):
+        """idle_days=10 + a 2-day-stale task must stay silent — proves the sweep
+        reads the configured value rather than always firing."""
+        from kanban.automation_models import AutomationLog
+        from kanban.tasks.automation_tasks import run_idle_task_automations
+
+        user, board, col, task = self._make_idle_task('idle_user_quiet', idle_for_days=2)
+        rule = _make_rule(board, user, 'task_idle', trigger_config={'idle_days': 10})
+
+        run_idle_task_automations()
+
+        logs = AutomationLog.objects.filter(rule=rule, task_affected=task)
+        self.assertEqual(logs.count(), 0)
+
+
 class TaskCompletedDedupeTest(TestCase):
     """T-02: completing → un-completing → re-completing the same day fires once."""
 
