@@ -16,6 +16,7 @@ from django.shortcuts import redirect, get_object_or_404
 from django.contrib import messages
 
 from kanban.models import Board
+from kanban.simple_access import check_access_or_403
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ def commitment_redirect(request, board_id, **kwargs):
     Dashboard where project confidence is now displayed.
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     messages.info(
         request,
         'Commitment Protocols have been integrated into the Triple Constraint '

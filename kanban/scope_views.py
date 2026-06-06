@@ -23,6 +23,7 @@ from kanban.utils.scope_analysis import (
     refresh_active_alerts,
 )
 from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ def scope_dashboard(request, board_id):
     Shows baseline status, current scope, trends, alerts, and allows management
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get current scope status
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None
@@ -134,6 +136,7 @@ def set_scope_baseline(request, board_id):
       - 'reset'  : Clear the baseline entirely (kept for backwards-compat)
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
 
     # De-flag any existing baseline snapshot
     existing_baseline = ScopeChangeSnapshot.objects.filter(
@@ -273,7 +276,8 @@ def create_scope_snapshot(request, board_id):
     Useful for milestone tracking or periodic reviews
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     snapshot_type = request.POST.get('snapshot_type', 'manual')
     notes = request.POST.get('notes', '')
     run_ai_analysis = request.POST.get('ai_analysis', 'false') == 'true'
@@ -330,8 +334,9 @@ def scope_snapshot_detail(request, board_id, snapshot_id):
     View detailed information about a specific scope snapshot
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     snapshot = get_object_or_404(ScopeChangeSnapshot, id=snapshot_id, board=board)
-    
+
     # Get comparison with baseline
     comparison = None
     if snapshot.baseline_snapshot:
@@ -361,8 +366,9 @@ def acknowledge_scope_alert(request, board_id, alert_id):
     Acknowledge a scope creep alert
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
+
     alert.acknowledge(request.user)
     messages.success(request, 'Alert acknowledged.')
     
@@ -380,8 +386,9 @@ def resolve_scope_alert(request, board_id, alert_id):
     Resolve a scope creep alert with optional notes
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
+
     notes = request.POST.get('notes', '')
     alert.resolve(request.user, notes=notes)
     messages.success(request, 'Alert resolved.')
@@ -400,8 +407,9 @@ def dismiss_scope_alert(request, board_id, alert_id):
     Dismiss a scope creep alert (mark as not applicable)
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
+
     alert.status = 'dismissed'
     alert.resolved_at = timezone.now()
     alert.resolved_by = request.user
@@ -425,7 +433,8 @@ def run_scope_analysis(request, board_id):
     Creates a new snapshot with AI-powered insights
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     # Check if baseline exists
     if not board.baseline_task_count:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -516,10 +525,11 @@ def scope_api_metrics(request, board_id):
     API endpoint for scope metrics - used for dashboard widgets
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get current status
     scope_status = board.get_current_scope_status()
-    
+
     # Get active alerts count
     active_alerts_count = ScopeCreepAlert.objects.filter(
         board=board,
@@ -551,7 +561,8 @@ def scope_comparison(request, board_id):
     Compare two scope snapshots side by side
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     snapshot1_id = request.GET.get('snapshot1')
     snapshot2_id = request.GET.get('snapshot2')
     

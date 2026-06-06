@@ -534,9 +534,11 @@ def board_discovery_link(request, board_id):
     """
     from kanban.discovery_models import IdeaPromotion
     from kanban.models import Board
+    from kanban.simple_access import check_access_or_403
     from django.urls import reverse
 
     board = get_object_or_404(Board, pk=board_id)
+    check_access_or_403(request.user, board)
     promotions = IdeaPromotion.objects.filter(board=board).select_related('idea')
     data = [
         {

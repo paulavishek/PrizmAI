@@ -536,8 +536,9 @@ def organization_members(request):
             'can_manage': False,
         })
 
-    # Permission: only org creator or admin can manage invites
-    can_manage = (org.created_by == request.user or profile.is_admin)
+    # Permission: org creator, UI-promoted admin, or OrgAdmin group member.
+    from kanban.permissions import is_user_org_admin
+    can_manage = is_user_org_admin(request.user)
 
     # Handle invitation POST
     if request.method == 'POST' and can_manage:
@@ -714,7 +715,8 @@ def remove_member(request, profile_id):
     if not org:
         return redirect('dashboard')
 
-    can_manage = (org.created_by == request.user or profile.is_admin)
+    from kanban.permissions import is_user_org_admin
+    can_manage = is_user_org_admin(request.user)
     if not can_manage:
         messages.error(request, "You don't have permission to remove members.")
         return redirect('organization_members')

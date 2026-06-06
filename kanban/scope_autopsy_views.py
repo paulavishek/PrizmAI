@@ -25,6 +25,7 @@ from kanban.scope_autopsy_models import ScopeAutopsyReport, TaskScopeReason
 from kanban.utils.scope_autopsy import calculate_baseline, has_scope_change_history
 from kanban.audit_utils import log_audit
 from api.ai_usage_utils import check_ai_quota, require_ai_quota
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def scope_autopsy_dashboard(request, board_id):
     Plus an intermediate state D (Generating) handled client-side via polling.
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
 
     has_changes = has_scope_change_history(board)
     baseline = calculate_baseline(board)
@@ -199,6 +201,7 @@ def scope_autopsy_dashboard(request, board_id):
 def run_scope_autopsy(request, board_id):
     """Trigger a new Scope Autopsy Celery task."""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
 
     if not has_scope_change_history(board):
         return JsonResponse({
@@ -255,6 +258,7 @@ def scope_autopsy_status(request, report_id):
     """Return the current status of a report (for polling)."""
     from datetime import timedelta
     report = get_object_or_404(ScopeAutopsyReport, id=report_id)
+    check_access_or_403(request.user, report.board)
 
     # Auto-expire reports stuck in 'generating' for over 5 minutes
     if (
@@ -306,6 +310,7 @@ def scope_autopsy_export(request, report_id):
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 
     report = get_object_or_404(ScopeAutopsyReport, id=report_id)
+    check_access_or_403(request.user, report.board)
     if report.status != 'complete':
         return JsonResponse({'error': 'Report is not complete.'}, status=400)
 
@@ -581,6 +586,7 @@ def save_scope_reason(request, task_id):
     """Record why a task was added to the project scope after creation."""
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
+    check_modify_or_403(request.user, board)
 
     try:
         data = json.loads(request.body)

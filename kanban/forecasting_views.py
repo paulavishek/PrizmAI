@@ -17,6 +17,7 @@ from kanban.models import (
     WorkloadDistributionRecommendation, Task
 )
 from kanban.utils.forecasting_service import DemandForecastingService, WorkloadAnalyzer
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 
 
 @login_required
@@ -25,7 +26,8 @@ def forecast_dashboard(request, board_id):
     Main forecast dashboard showing team capacity, workload, and alerts
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Generate fresh forecasts if needed
     service = DemandForecastingService()
     forecast_data = service.generate_team_forecast(board, days_ahead=21)
@@ -63,12 +65,13 @@ def generate_forecast(request, board_id):
     Generate forecasts for the board
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     service = DemandForecastingService()
-    
+
     try:
         forecast_data = service.generate_team_forecast(board, days_ahead=21)
-        
+
         return JsonResponse({
             'success': True,
             'message': f"Generated forecasts for {len(forecast_data['forecasts'])} team members",
@@ -94,7 +97,8 @@ def workload_recommendations(request, board_id):
     Display workload distribution recommendations
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     service = DemandForecastingService()
     recommendations = service.generate_workload_distribution_recommendations(board, period_days=21)
     
@@ -116,7 +120,8 @@ def capacity_alerts(request, board_id):
     Display all capacity alerts for the board
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get all alerts
     alerts = TeamCapacityAlert.objects.filter(board=board).order_by('-created_at')
     
@@ -144,8 +149,9 @@ def acknowledge_alert(request, board_id, alert_id):
     Acknowledge a capacity alert
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(TeamCapacityAlert, id=alert_id, board=board)
-    
+
     if request.method == 'POST':
         alert.status = 'acknowledged'
         alert.acknowledged_by = request.user
@@ -167,8 +173,9 @@ def resolve_alert(request, board_id, alert_id):
     Mark a capacity alert as resolved
     """
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     alert = get_object_or_404(TeamCapacityAlert, id=alert_id, board=board)
-    
+
     if request.method == 'POST':
         alert.status = 'resolved'
         alert.resolved_at = timezone.now()
@@ -189,9 +196,11 @@ def recommendation_detail(request, board_id, rec_id):
     View details of a workload recommendation and accept/reject it
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     recommendation = get_object_or_404(WorkloadDistributionRecommendation, id=rec_id, board=board)
-    
+
     if request.method == 'POST':
+        check_modify_or_403(request.user, board)
         action = request.POST.get('action')
         
         if action == 'accept':
@@ -266,7 +275,8 @@ def team_capacity_chart(request, board_id):
     API endpoint for team capacity visualization
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get latest forecasts
     forecasts = ResourceDemandForecast.objects.filter(board=board).order_by('-forecast_date')[:20]
     
@@ -287,8 +297,9 @@ def task_assignment_suggestion(request, board_id, task_id):
     Get suggested assignee for a task based on capacity
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     task = get_object_or_404(Task, id=task_id, column__board=board)
-    
+
     # Find optimal assignee
     optimal_assignee = WorkloadAnalyzer.find_optimal_assignee(task, board, exclude_user=task.assigned_to)
     
