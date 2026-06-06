@@ -26,8 +26,16 @@ SESSION_INVITE_KEY = 'pending_board_invite_token'
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _can_manage_invites(user, board):
-    """Return True if user may send/revoke invites for this board."""
-    return board.created_by == user or getattr(getattr(user, 'profile', None), 'is_admin', False)
+    """Return True if user may send/revoke invites and change roles for this board.
+
+    Delegates to the canonical ``prizmai.invite_board_member`` rule so the check
+    honours the board Owner role (BoardMembership role='owner'), record/ancestor
+    ownership, and Org Admins — not just the literal board creator.  The previous
+    ``board.created_by == user or profile.is_admin`` check denied legitimate
+    board Owners and missed Org Admins promoted via the OrgAdmin group / org
+    creator path.
+    """
+    return user.has_perm('prizmai.invite_board_member', board)
 
 
 def _send_invitation_email(request, invitation):

@@ -22,6 +22,7 @@ from kanban.models import Board, Task
 from kanban.premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from kanban.audit_utils import log_audit
 from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -250,6 +251,7 @@ def premortem_dashboard(request, board_id):
     Main Pre-Mortem page. Shows locked / unlocked / results state.
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     readiness = board_premortem_ready(board)
     latest = board.pre_mortems.first()  # ordered by -created_at
 
@@ -411,6 +413,7 @@ def acknowledge_scenario(request, premortem_id, scenario_index):
     Mark a Pre-Mortem scenario as addressed / acknowledged.
     """
     analysis = get_object_or_404(PreMortemAnalysis, id=premortem_id)
+    check_modify_or_403(request.user, analysis.board)
 
     if scenario_index < 0 or scenario_index > 4:
         return JsonResponse({'success': False, 'error': 'Invalid scenario index.'}, status=400)
@@ -465,6 +468,7 @@ def get_latest_premortem(request, board_id):
     Return the most recent Pre-Mortem analysis for a board as JSON.
     """
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     latest = board.pre_mortems.first()
 
     if not latest:

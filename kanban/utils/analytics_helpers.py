@@ -836,20 +836,27 @@ def get_boards_for_record(record, record_type):
     """
     Return a queryset of all Board objects linked to a Goal, Mission, or Strategy
     by traversing the hierarchy downward.
+
+    Results are additionally scoped to the record's own workspace (when set) so a
+    portfolio aggregation can never pull in a board from a different workspace —
+    defence-in-depth against demo/real bleed-through.
     """
     from kanban.models import Board
 
     if record_type == 'goal':
-        return Board.objects.filter(
-            strategy__mission__organization_goal=record
-        )
+        qs = Board.objects.filter(strategy__mission__organization_goal=record)
     elif record_type == 'mission':
-        return Board.objects.filter(
-            strategy__mission=record
-        )
+        qs = Board.objects.filter(strategy__mission=record)
     elif record_type == 'strategy':
-        return Board.objects.filter(strategy=record)
-    return Board.objects.none()
+        qs = Board.objects.filter(strategy=record)
+    else:
+        return Board.objects.none()
+
+    # Scope to the record's workspace when it has one (legacy records may not).
+    workspace_id = getattr(record, 'workspace_id', None)
+    if workspace_id is not None:
+        qs = qs.filter(workspace_id=workspace_id)
+    return qs
 
 
 def get_portfolio_analytics(record, record_type):

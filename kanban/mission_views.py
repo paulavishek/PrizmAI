@@ -26,6 +26,7 @@ from kanban.favorite_views import is_user_favorite as _is_fav
 from kanban.permissions import is_demo_context, can_user_create_goals, can_user_create_missions, is_user_org_admin
 
 from kanban.utils.demo_protection import get_user_boards
+from kanban.utils.analytics_helpers import get_boards_for_record
 
 from .models import (
     OrganizationGoal, Mission, Strategy, Board, Task,
@@ -319,17 +320,17 @@ def goal_detail(request, goal_id):
     from kanban.utils.demo_protection import get_user_missions
     all_missions = get_user_missions(request.user).exclude(organization_goal=goal).order_by('name')
 
-    # --- Board IDs under this goal ---
-    goal_board_ids = list(Board.objects.filter(
-        strategy__mission__organization_goal=goal
-    ).values_list('id', flat=True))
+    # --- Board IDs under this goal (workspace-scoped) ---
+    goal_board_ids = list(
+        get_boards_for_record(goal, 'goal').values_list('id', flat=True)
+    )
 
     # --- Health score (0-100) ---
     health_score, completion_pct, total_tasks, done_tasks = _compute_health_score(goal_board_ids)
 
     # --- Per-mission health (light version for mission cards) ---
     for m in linked_missions:
-        m_bids = list(Board.objects.filter(strategy__mission=m).values_list('id', flat=True))
+        m_bids = list(get_boards_for_record(m, 'mission').values_list('id', flat=True))
         m_health, m_pct, m_total, m_done = _compute_health_score(m_bids)
         m.health_score = m_health
         m.health_pct = m_pct
@@ -698,9 +699,9 @@ def mission_detail(request, mission_id):
         or is_user_org_admin(request.user)
     )
     if _is_admin_or_owner or _is_demo_mission:
-        user_accessible_board_ids = set(Board.objects.filter(
-            strategy__mission=mission
-        ).values_list('id', flat=True))
+        user_accessible_board_ids = set(
+            get_boards_for_record(mission, 'mission').values_list('id', flat=True)
+        )
 
     strategies = mission.strategies.all().annotate(
         board_count=Count('boards', distinct=True)

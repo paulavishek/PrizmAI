@@ -301,12 +301,24 @@ def check_access_or_403(user, board):
 def check_management_or_403(user, board):
     """
     Check management permission and raise PermissionDenied if not granted.
-    
+
     Usage:
         check_management_or_403(request.user, board)
     """
     if not can_manage_board(user, board):
         raise PermissionDenied("Only board owner can perform this action.")
+
+
+def check_modify_or_403(user, board):
+    """
+    Check content-modification permission and raise PermissionDenied if not
+    granted.  Members/owners pass; viewers (read-only) are rejected.
+
+    Usage:
+        check_modify_or_403(request.user, board)
+    """
+    if not can_modify_board_content(user, board):
+        raise PermissionDenied("You don't have permission to modify this board.")
 
 
 def get_accessible_boards(user, organization=None):

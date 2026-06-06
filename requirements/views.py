@@ -38,15 +38,14 @@ def _get_board_and_check_access(request, board_id, require_edit=False):
         board.organization and board.organization.is_demo
     )
     if not is_demo:
-        if not membership and board.created_by != request.user:
-            from django.http import HttpResponseForbidden
+        # Use the canonical RBAC rules. (BoardMembership.role is a CharField,
+        # so the previous getattr(role, 'name') viewer check never fired — it
+        # silently let viewers write. has_perm handles owner/member/viewer,
+        # board creators, ancestor owners and scoped org admins correctly.)
+        if not request.user.has_perm('prizmai.view_board', board):
             return None, None
-        if require_edit:
-            role = getattr(membership, 'role', None)
-            role_name = getattr(role, 'name', '') if role else ''
-            if role_name.lower() == 'viewer':
-                from django.http import HttpResponseForbidden
-                return None, None
+        if require_edit and not request.user.has_perm('prizmai.edit_board', board):
+            return None, None
 
     return board, membership
 

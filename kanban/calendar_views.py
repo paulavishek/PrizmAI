@@ -528,6 +528,11 @@ def calendar_create_task(request):
     if not board:
         return JsonResponse({'success': False, 'error': 'Board not found or access denied.'}, status=404)
 
+    # Creating a task mutates board content — viewers are read-only.
+    from kanban.simple_access import can_modify_board_content
+    if not can_modify_board_content(request.user, board):
+        return JsonResponse({'success': False, 'error': 'You do not have permission to create tasks on this board.'}, status=403)
+
     # Determine column
     column_id = data.get('column_id')
     if column_id:

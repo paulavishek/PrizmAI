@@ -35,8 +35,8 @@ def scheduled_automation_create(request, board_id):
     """Validate and create a new ScheduledAutomation + its PeriodicTask."""
     board = get_object_or_404(Board, id=board_id)
 
-    if not can_access_board(request.user, board):
-        messages.error(request, 'You do not have access to this board.')
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, 'You do not have permission to modify automations on this board.')
         return redirect('automations_list', board_id=board_id)
 
     # --- Gather form data ---
@@ -154,8 +154,8 @@ def scheduled_automation_create(request, board_id):
 def scheduled_automation_toggle(request, board_id, automation_id):
     """Toggle is_active on a ScheduledAutomation and its PeriodicTask."""
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
-        messages.error(request, 'You do not have access to this board.')
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, 'You do not have permission to modify automations on this board.')
         return redirect('automations_list', board_id=board_id)
 
     sa = get_object_or_404(ScheduledAutomation, id=automation_id, board=board)
@@ -177,8 +177,8 @@ def scheduled_automation_toggle(request, board_id, automation_id):
 def scheduled_automation_delete(request, board_id, automation_id):
     """Delete a ScheduledAutomation and its linked PeriodicTask."""
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
-        messages.error(request, 'You do not have access to this board.')
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, 'You do not have permission to modify automations on this board.')
         return redirect('automations_list', board_id=board_id)
 
     sa = get_object_or_404(ScheduledAutomation, id=automation_id, board=board)

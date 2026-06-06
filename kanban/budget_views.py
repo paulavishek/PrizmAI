@@ -30,6 +30,7 @@ from kanban.budget_forms import (
     ProjectROIForm, BudgetRecommendationActionForm
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.simple_access import check_access_or_403
 
 logger = logging.getLogger(__name__)
 
@@ -922,6 +923,7 @@ def my_timesheet(request, board_id=None):
     # Get user's tasks (or demo user's tasks in MVP mode)
     if board_id:
         board = get_object_or_404(Board, id=board_id)
+        check_access_or_403(request.user, board)
         tasks = Task.objects.filter(
             column__board=board,
             assigned_to=display_user
@@ -1072,6 +1074,7 @@ def _resolve_time_scope(request, board_id=None):
     board = None
     if board_id:
         board = get_object_or_404(Board, id=board_id)
+        check_access_or_403(request.user, board)
         boards = boards.filter(id=board_id)
 
     display_user = request.user

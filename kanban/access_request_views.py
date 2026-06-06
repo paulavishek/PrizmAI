@@ -15,12 +15,28 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.http import require_http_methods, require_POST
 
 from kanban.permissions import is_user_org_admin
+from kanban.simple_access import can_manage_board
 
 from kanban.models import Board, BoardMembership
 from kanban.access_request_models import AccessRequest
 from kanban.decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
+
+
+def _can_review(user, access_request):
+    """Whether ``user`` may approve/deny ``access_request``.
+
+    Authorised iff the user is the request's designated board owner OR can
+    manage the request's board.  ``can_manage_board`` scopes the OrgAdmin /
+    superuser path to the board's *own* organization, so an admin of a
+    different tenant can never approve a request on someone else's board
+    (the previous ``is_user_org_admin(user)`` check was tenant-wide).
+    """
+    return (
+        user == access_request.owner
+        or can_manage_board(user, access_request.board)
+    )
 
 
 # ============================================================================
@@ -150,13 +166,8 @@ def review_access_request(request, request_id):
         id=request_id,
     )
 
-    # Only the board owner (or OrgAdmin/superuser) can review
-    is_authorized = (
-        request.user == access_request.owner
-        or request.user.is_superuser
-        or is_user_org_admin(request.user)
-    )
-    if not is_authorized:
+    # Only the board owner / a manager of this board's org can review
+    if not _can_review(request.user, access_request):
         return JsonResponse({'error': 'Not authorized'}, status=403)
 
     if request.method == 'GET':
@@ -234,12 +245,7 @@ def api_approve_access_request(request, request_id):
         id=request_id,
     )
 
-    is_authorized = (
-        request.user == access_request.owner
-        or request.user.is_superuser
-        or is_user_org_admin(request.user)
-    )
-    if not is_authorized:
+    if not _can_review(request.user, access_request):
         return JsonResponse({'error': 'Not authorized'}, status=403)
 
     if access_request.status != 'pending':
@@ -279,12 +285,7 @@ def api_deny_access_request(request, request_id):
         id=request_id,
     )
 
-    is_authorized = (
-        request.user == access_request.owner
-        or request.user.is_superuser
-        or is_user_org_admin(request.user)
-    )
-    if not is_authorized:
+    if not _can_review(request.user, access_request):
         return JsonResponse({'error': 'Not authorized'}, status=403)
 
     if access_request.status != 'pending':

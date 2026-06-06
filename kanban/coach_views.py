@@ -27,6 +27,7 @@ from kanban.utils.coaching_rules import CoachingRuleEngine
 from kanban.utils.ai_coach_service import AICoachService
 from kanban.utils.feedback_learning import FeedbackLearningSystem
 from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,8 @@ def coach_dashboard(request, board_id):
     Main coaching dashboard showing suggestions and insights
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get active suggestions — ordered by semantic severity (critical→high→medium→low→info)
     severity_order = Case(
         When(severity='critical', then=0),
@@ -99,7 +101,8 @@ def suggestion_detail(request, suggestion_id):
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
     board = suggestion.board
-    
+    check_access_or_403(request.user, board)
+
     # Get related feedback
     feedback_entries = suggestion.feedback_entries.all()
     
@@ -122,7 +125,8 @@ def generate_suggestions(request, board_id):
     from api.ai_usage_utils import check_ai_quota
     
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     # Check if user can use AI features
     can_use_ai = True
     has_quota, _, _ = check_ai_quota(request.user)
@@ -274,7 +278,8 @@ def acknowledge_suggestion(request, suggestion_id):
     Mark a suggestion as acknowledged
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
-    
+    check_modify_or_403(request.user, suggestion.board)
+
     try:
         suggestion.acknowledge(request.user)
         
@@ -299,7 +304,8 @@ def dismiss_suggestion(request, suggestion_id):
     Dismiss a suggestion
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
-    
+    check_modify_or_403(request.user, suggestion.board)
+
     try:
         suggestion.dismiss()
         
@@ -335,7 +341,8 @@ def submit_feedback(request, suggestion_id):
     Submit detailed feedback on a suggestion
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
-    
+    check_modify_or_403(request.user, suggestion.board)
+
     try:
         # Accept both form POST and JSON data
         if request.content_type == 'application/json':
@@ -403,7 +410,8 @@ def ask_coach(request, board_id):
     import time
     
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     if request.method == 'POST':
         # Check AI quota before processing
         has_quota, quota, remaining = check_ai_quota(request.user)
@@ -580,7 +588,8 @@ def get_suggestions_api(request, board_id):
     API endpoint to get coaching suggestions
     """
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     # Get filter parameters
     status = request.GET.get('status', 'active')
     severity = request.GET.get('severity')

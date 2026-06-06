@@ -52,8 +52,21 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',')
 
+# CSRF trusted origins — required by Django 4+ for HTTPS POSTs from the
+# production domain(s). Set CSRF_TRUSTED_ORIGINS env to a comma-separated list
+# of full origins, e.g. "https://app.example.com,https://www.example.com".
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
+
 # Security settings for production
 if not DEBUG:
+    # Behind a TLS-terminating proxy/load balancer (GCP Cloud Run / App Engine /
+    # GKE ingress all set X-Forwarded-Proto). Without this, request.is_secure()
+    # is False behind the LB, so SECURE_SSL_REDIRECT loops infinitely and secure
+    # cookies are never set. Safe here because the managed LB overwrites the
+    # header (clients cannot spoof it).
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

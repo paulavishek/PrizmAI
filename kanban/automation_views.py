@@ -381,7 +381,7 @@ def rule_create(request, board_id):
     - Legacy canvas format: {name, rule_definition}  (kept for backward compat)
     """
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
+    if not request.user.has_perm('prizmai.edit_board', board):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     try:
@@ -472,7 +472,7 @@ def rule_update(request, board_id, rule_id):
     - Legacy canvas format: {name, rule_definition}
     """
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
+    if not request.user.has_perm('prizmai.edit_board', board):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
@@ -554,7 +554,7 @@ def rule_detail(request, board_id, rule_id):
 def rule_duplicate(request, board_id, rule_id):
     """Duplicate a rule, appending ' (copy)' to the name. Returns the new rule as JSON."""
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
+    if not request.user.has_perm('prizmai.edit_board', board):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     source = get_object_or_404(AutomationRule, id=rule_id, board=board)
@@ -627,7 +627,7 @@ def rule_builder_data(request, board_id):
 def rule_delete(request, board_id, rule_id):
     """Delete an AutomationRule."""
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
+    if not request.user.has_perm('prizmai.edit_board', board):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
@@ -946,6 +946,12 @@ def scheduled_rule_create_form(request, board_id):
 def scheduled_rule_toggle(request, board_id, rule_id):
     """Toggle a scheduled AutomationRule."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board edit permission
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify automations on this board.")
+        return redirect('automations_list', board_id=board_id)
+
     rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
     rule.is_active = not rule.is_active
     rule.save(update_fields=['is_active'])
@@ -962,6 +968,12 @@ def scheduled_rule_toggle(request, board_id, rule_id):
 def scheduled_rule_delete(request, board_id, rule_id):
     """Delete a scheduled AutomationRule."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: check board edit permission
+    if not request.user.has_perm('prizmai.edit_board', board):
+        messages.error(request, "You don't have permission to modify automations on this board.")
+        return redirect('automations_list', board_id=board_id)
+
     rule = get_object_or_404(AutomationRule, id=rule_id, board=board)
     name = rule.name
     _cleanup_scheduled_rule(rule)

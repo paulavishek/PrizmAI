@@ -2410,7 +2410,8 @@ def create_epic_with_children(request):
 
         # Convert existing task or create new epic
         if task_id:
-            epic_task = get_object_or_404(Task, id=task_id)
+            # Scope to the validated board so a task on another board can't be flipped
+            epic_task = get_object_or_404(Task, id=task_id, column__board=board)
             epic_task.item_type = 'epic'
             epic_task.save(update_fields=['item_type'])
         else:
@@ -3049,8 +3050,9 @@ def set_parent_task_api(request, task_id):
             # Remove parent
             task.parent_task = None
         else:
-            parent_task = get_object_or_404(Task, id=parent_id)
-            
+            # Scope parent to the same board — no cross-board linkage
+            parent_task = get_object_or_404(Task, id=parent_id, column__board=task.column.board)
+
             # Check for circular dependency
             if task.has_circular_dependency(parent_task):
                 return JsonResponse({
@@ -3094,8 +3096,9 @@ def add_related_task_api(request, task_id):
         if not related_id:
             return JsonResponse({'error': 'No related task ID provided'}, status=400)
         
-        related_task = get_object_or_404(Task, id=related_id)
-        
+        # Scope related task to the same board — no cross-board linkage
+        related_task = get_object_or_404(Task, id=related_id, column__board=task.column.board)
+
         if task.id == related_task.id:
             return JsonResponse({'error': 'Cannot relate a task to itself'}, status=400)
         
@@ -3967,9 +3970,9 @@ def suggest_task_priority_api(request):
                     return JsonResponse({'error': 'board_id required when task has no column'}, status=400)
                 board = get_object_or_404(Board, pk=board_id)
             
-            # Simple authentication check only
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
+            # RBAC: user must have view permission on the board
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
         else:
             # Create temporary task object for prediction
             board_id = data.get('board_id')
@@ -3978,9 +3981,9 @@ def suggest_task_priority_api(request):
             
             board = get_object_or_404(Board, pk=board_id)
             
-            # Simple authentication check only
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
+            # RBAC: user must have view permission on the board
+            if not request.user.has_perm('prizmai.view_board', board):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
             
             # Create temporary task (not saved to DB)
             # Convert string values to appropriate types
@@ -5377,16 +5380,23 @@ def summary_status_api(request, level, obj_id):
             from kanban.models import Board
             obj = get_object_or_404(Board, id=obj_id)
             lock_key = f'board_ai_lock_{obj_id}'
+            view_perm = 'prizmai.view_board'
         elif level == 'strategy':
             from kanban.models import Strategy
             obj = get_object_or_404(Strategy, id=obj_id)
             lock_key = f'strategy_ai_lock_{obj_id}'
+            view_perm = 'prizmai.view_strategy'
         elif level == 'mission':
             from kanban.models import Mission
             obj = get_object_or_404(Mission, id=obj_id)
             lock_key = f'mission_ai_lock_{obj_id}'
+            view_perm = 'prizmai.view_mission'
         else:
             return JsonResponse({'error': 'Invalid level. Use board, strategy, or mission.'}, status=400)
+
+        # RBAC: must be able to view the object whose summary is being polled
+        if not request.user.has_perm(view_perm, obj):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
 
         queued = bool(ai_cache.get(lock_key))
 
@@ -5652,6 +5662,10 @@ def classify_board_api(request, board_id):
     """Classify a board's project type using Gemini. Does NOT auto-confirm."""
     board = get_object_or_404(Board, id=board_id)
 
+    # RBAC: classification writes project_type onto the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
     result = classify_board_project_type(board)
     if result is None:
         return JsonResponse({'success': False, 'error': 'Classification failed. Please try again.'}, status=500)
@@ -5675,6 +5689,10 @@ def classify_board_api(request, board_id):
 def confirm_board_type_api(request, board_id):
     """Confirm or manually set a board's project type."""
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: confirming the type writes to the board
+    if not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
     try:
         data = json.loads(request.body)
@@ -5711,23 +5729,43 @@ def confirm_board_type_api(request, board_id):
     })
 
 
+def _resolve_strategic_record(record_type, record_id):
+    """Resolve a strategic record by type and return (record, view_perm, edit_perm).
+
+    Returns (None, None, None) when ``record_type`` is invalid so callers can
+    return a 400.  Raises Http404 (via get_object_or_404) when the id is unknown.
+    Centralises the type→model/permission mapping shared by the portfolio and
+    proxy-metric endpoints so the RBAC gate stays consistent across them.
+    """
+    from kanban.models import OrganizationGoal, Mission, Strategy
+
+    mapping = {
+        'goal': (OrganizationGoal, 'prizmai.view_goal', 'prizmai.edit_goal'),
+        'mission': (Mission, 'prizmai.view_mission', 'prizmai.edit_mission'),
+        'strategy': (Strategy, 'prizmai.view_strategy', 'prizmai.edit_strategy'),
+    }
+    entry = mapping.get(record_type)
+    if not entry:
+        return None, None, None
+    model_cls, view_perm, edit_perm = entry
+    record = get_object_or_404(model_cls, id=record_id)
+    return record, view_perm, edit_perm
+
+
 @login_required
 @require_http_methods(["GET"])
 def portfolio_analytics_api(request, record_type, record_id):
     """Return aggregated analytics grouped by project type for a Goal/Mission/Strategy."""
-    from kanban.models import OrganizationGoal, Mission, Strategy
     from kanban.utils.analytics_helpers import get_portfolio_analytics
 
-    model_map = {
-        'goal': OrganizationGoal,
-        'mission': Mission,
-        'strategy': Strategy,
-    }
-    model_cls = model_map.get(record_type)
-    if not model_cls:
+    record, view_perm, _ = _resolve_strategic_record(record_type, record_id)
+    if record is None:
         return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
 
-    record = get_object_or_404(model_cls, id=record_id)
+    # RBAC: user must be able to view this strategic record
+    if not request.user.has_perm(view_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
     result = get_portfolio_analytics(record, record_type)
 
     # Serialise for JSON (convert any non-serialisable values)
@@ -5751,6 +5789,10 @@ def generate_board_narrative_api(request, board_id):
     from kanban.utils.analytics_helpers import get_promoted_metrics
 
     board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have view permission on the board (mirrors board summary)
+    if not request.user.has_perm('prizmai.view_board', board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
     metrics = get_promoted_metrics(board)
     narrative = generate_board_analytics_narrative(board, metrics)
@@ -5779,19 +5821,16 @@ def generate_board_narrative_api(request, board_id):
 @require_ai_quota('portfolio_narrative', 'generate')
 def generate_portfolio_narrative_api(request, record_type, record_id):
     """Generate a portfolio-level narrative for a Goal/Mission/Strategy."""
-    from kanban.models import OrganizationGoal, Mission, Strategy
     from kanban.utils.analytics_helpers import get_portfolio_analytics
 
-    model_map = {
-        'goal': OrganizationGoal,
-        'mission': Mission,
-        'strategy': Strategy,
-    }
-    model_cls = model_map.get(record_type)
-    if not model_cls:
+    record, _, edit_perm = _resolve_strategic_record(record_type, record_id)
+    if record is None:
         return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
 
-    record = get_object_or_404(model_cls, id=record_id)
+    # RBAC: regenerating the narrative writes to the record — require edit access
+    if not request.user.has_perm(edit_perm, record):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
     portfolio = get_portfolio_analytics(record, record_type)
 
     narrative = generate_portfolio_analytics_narrative(record, record_type, portfolio['groups'])
@@ -5824,6 +5863,11 @@ def generate_proxy_metrics_api(request, goal_id):
     from kanban.models import OrganizationGoal, GoalProxyMetric
 
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    # RBAC: regenerating proxy metrics deletes & recreates them — require edit access
+    if not request.user.has_perm('prizmai.edit_goal', goal):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
     metrics = generate_proxy_metrics(goal)
     if metrics is None:
         return JsonResponse({'success': False, 'error': 'Proxy metric generation failed.'}, status=500)
@@ -5859,6 +5903,11 @@ def update_proxy_metric_value_api(request, goal_id, metric_id):
     from kanban.models import GoalProxyMetric
 
     metric = get_object_or_404(GoalProxyMetric, id=metric_id, goal_id=goal_id)
+
+    # RBAC: must be able to view the goal (blocks cross-goal IDOR; descendant
+    # board members may report KPI values).
+    if not request.user.has_perm('prizmai.view_goal', metric.goal):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
     try:
         data = json.loads(request.body)

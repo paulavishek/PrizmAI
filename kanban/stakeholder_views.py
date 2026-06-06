@@ -27,10 +27,16 @@ from .stakeholder_forms import (
 from .stakeholder_utils import recalculate_stakeholder_metrics
 
 
-def check_board_access(user, board_id):
-    """Helper function to check if user has access to board"""
+def check_board_access(user, board_id, require_edit=False):
+    """Helper to check board access. Returns the board, or None if denied.
+
+    When ``require_edit`` is True the user must also have edit rights, so
+    read-only viewers cannot create/update/delete stakeholder data.
+    """
     board = get_object_or_404(Board, id=board_id)
     if not user.has_perm('prizmai.view_board', board):
+        return None
+    if require_edit and not user.has_perm('prizmai.edit_board', board):
         return None
     return board
 
@@ -93,7 +99,7 @@ def stakeholder_list(request, board_id):
 @login_required
 def stakeholder_create(request, board_id):
     """Create a new stakeholder for a board"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -160,7 +166,7 @@ def stakeholder_detail(request, board_id, pk):
 @login_required
 def stakeholder_update(request, board_id, pk):
     """Update stakeholder information"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -188,7 +194,7 @@ def stakeholder_update(request, board_id, pk):
 @login_required
 def stakeholder_delete(request, board_id, pk):
     """Delete a stakeholder"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -211,7 +217,7 @@ def stakeholder_delete(request, board_id, pk):
 @login_required
 def engagement_record_create(request, board_id, stakeholder_id):
     """Record a stakeholder engagement event"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -249,7 +255,7 @@ def engagement_record_create(request, board_id, stakeholder_id):
 @login_required
 def engagement_record_update(request, board_id, stakeholder_id, record_id):
     """Edit an existing engagement record"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -283,7 +289,7 @@ def engagement_record_update(request, board_id, stakeholder_id, record_id):
 @login_required
 def engagement_record_delete(request, board_id, stakeholder_id, record_id):
     """Delete an engagement record"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -342,7 +348,7 @@ def task_stakeholder_involvement(request, board_id, task_id):
 @require_http_methods(["POST"])
 def add_task_stakeholder(request, board_id, task_id):
     """Add a stakeholder to a task"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         return JsonResponse({'error': 'Access denied'}, status=403)
     
@@ -503,7 +509,7 @@ def stakeholder_api_data(request, board_id):
 @login_required
 def edit_task_stakeholder(request, board_id, task_id, involvement_id):
     """Edit stakeholder involvement in a task"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         messages.error(request, 'Access denied to this board')
         return redirect('dashboard')
@@ -537,7 +543,7 @@ def edit_task_stakeholder(request, board_id, task_id, involvement_id):
 @require_http_methods(["POST"])
 def remove_task_stakeholder(request, board_id, task_id, involvement_id):
     """Remove a stakeholder from a task"""
-    board = check_board_access(request.user, board_id)
+    board = check_board_access(request.user, board_id, require_edit=True)
     if not board:
         return JsonResponse({'error': 'Access denied'}, status=403)
     

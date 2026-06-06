@@ -23,6 +23,7 @@ from api.v1.serializers import (
     OrganizationSerializer, APITokenSerializer
 )
 from api.v1.authentication import APITokenAuthentication, ScopePermission
+from kanban.simple_access import can_modify_board_content, can_manage_board
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -30,6 +31,26 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+
+class BoardWritePermission(permissions.BasePermission):
+    """Object-level: read for anyone the queryset already scoped in; writes
+    require content-modify rights (PUT/PATCH) or management (DELETE). Blocks a
+    board *viewer* from mutating via a write-scoped token."""
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.method == 'DELETE':
+            return can_manage_board(request.user, obj)
+        return can_modify_board_content(request.user, obj)
+
+
+class TaskWritePermission(permissions.BasePermission):
+    """Object-level write gate for tasks — viewers are read-only."""
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return can_modify_board_content(request.user, obj.column.board)
 
 
 class BoardViewSet(viewsets.ModelViewSet):
@@ -43,8 +64,8 @@ class BoardViewSet(viewsets.ModelViewSet):
     serializer_class = BoardSerializer
     pagination_class = StandardResultsSetPagination
     authentication_classes = [APITokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated, ScopePermission]
-    
+    permission_classes = [permissions.IsAuthenticated, ScopePermission, BoardWritePermission]
+
     def get_queryset(self):
         """Return boards accessible to the authenticated user"""
         user = self.request.user
@@ -110,8 +131,17 @@ class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
     pagination_class = StandardResultsSetPagination
     authentication_classes = [APITokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated, ScopePermission]
-    
+    permission_classes = [permissions.IsAuthenticated, ScopePermission, TaskWritePermission]
+
+    def perform_create(self, serializer):
+        """Block task creation on boards where the user can't modify content."""
+        from rest_framework.exceptions import PermissionDenied
+        column = serializer.validated_data.get('column')
+        board = getattr(column, 'board', None) if column else None
+        if board is not None and not can_modify_board_content(self.request.user, board):
+            raise PermissionDenied("You do not have permission to create tasks on this board.")
+        serializer.save()
+
     def get_queryset(self):
         """Return tasks accessible to the authenticated user"""
         user = self.request.user

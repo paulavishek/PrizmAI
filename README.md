@@ -90,6 +90,8 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### Security & Compliance
 
+- **Role-Based Access Control** — Four roles (Org Admin / Owner / Member / Viewer) enforced per board through a single canonical permission rule, a board-access enforcement middleware backstop, and object-level checks on the REST API. See [Role-Based Access Control](#role-based-access-control-rbac)
+- **Multi-Tenant Isolation** — Every data query is scoped to the user's workspace; cross-workspace and cross-organisation access is blocked at the server level (not just hidden in the UI). See [Workspace data isolation](#how-access-works)
 - **OAuth 2.0** — Google login via django-allauth
 - **Brute-Force Protection** — Account lockout on repeated failed authentication attempts (django-axes)
 - **XSS & CSRF Protection** — HTML sanitization (bleach) and token validation
@@ -98,6 +100,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Audit Logging** — Complete audit trail of sensitive operations with IP tracking
 - **Secure File Uploads** — MIME type validation and malicious content detection
 - **AI Usage Monitoring** — Track and manage AI feature consumption with configurable quota limits
+- **Production-Hardened Settings** — HSTS, secure cookies, SSL redirect, and clickjacking/MIME-sniffing protections auto-enabled outside `DEBUG`. See [Deployment & Production Security](#deployment--production-security)
 
 ### Integrations & Platform
 
@@ -621,6 +624,16 @@ Every board in PrizmAI has four possible roles. Think of it like a set of keys t
 - **Budget and AI analysis are restricted.** The Budget Dashboard, ROI tracking, and AI budget recommendations are visible only to Owners and Org Admins, keeping financial data private from the wider team.
 - **Workspace data isolation is enforced.** Board dropdowns and linking actions (such as linking a board to a Strategy) are always scoped to boards the user can access — cross-workspace or cross-organisation board access is blocked at the server level.
 
+### Defense in depth — how access is enforced
+
+Access control is enforced in **layers**, so a single forgotten check in one view cannot expose another tenant's data:
+
+- **One canonical permission rule.** All board access flows through a single rule (`prizmai.view_board` / `edit_board` / `delete_board`, defined with [django-rules](https://github.com/dfunckt/django-rules)). The same predicate decides access everywhere — the main board page, every sub-dashboard, and the API — so behaviour is consistent and auditable.
+- **A board-access enforcement middleware.** A request-level backstop checks `view_board` on **every** URL scoped to a board, task, or column before the view runs. Even if a brand-new board sub-view forgets its own check, the middleware blocks anyone who couldn't open the board's main page from reaching it. (It mirrors the main board page's check exactly, and bypasses only the demo workspace and the deliberately public board-join flow.)
+- **Per-endpoint object checks.** Strategic records (Goals, Missions, Strategies), portfolio analytics, AI summaries, proxy metrics, access-request approvals, and similar endpoints — which are keyed by their own IDs rather than a board ID — each verify the caller's permission on the specific object, with org-scoped admin checks so an admin of one organisation can never act on another's records.
+- **Read vs. write are distinct.** Viewers are strictly read-only: every content-mutating path (tasks, automations, scope/budget/forecasting actions, stakeholders, requirements, calendar task creation) requires modify rights, not just view access.
+- **The REST API enforces the same model.** Token-scoped endpoints filter every queryset to the caller's accessible boards and apply object-level write permissions, so an API token cannot read or modify anything its owner couldn't in the UI.
+
 ### Inviting people to a board
 
 From any board, click **Members** in the board navigation → **Invite Member**, choose a role, and send the invitation. The invited person receives a link to join. Owners and Org Admins can also remove members or change their role at any time. The Member management page is itself permission-protected — only users who have access to the board can reach it.
@@ -1106,10 +1119,51 @@ python manage.py cache_management --action=test
 - **Content Security Policy** — Enforced via django-csp headers
 - **Secure File Uploads** — MIME type validation and malicious content detection
 - **Authentication Enforcement** — All routes require login via `@login_required`
+- **Layered Access Control** — Per-board RBAC enforced by a canonical permission rule, a request-level board-access middleware backstop, per-object checks on ID-keyed endpoints, and object-level REST API permissions. See [Role-Based Access Control](#role-based-access-control-rbac)
+- **Multi-Tenant Isolation** — All board/task/strategic queries are workspace-scoped; cross-workspace and cross-organisation access is denied server-side
 - **Audit Logging** — Complete audit trail of sensitive operations with IP tracking
 - **HTTPS Enforcement** — HSTS support for encrypted data in transit
 
 **→ [Security Policy](SECURITY.md)**
+
+---
+
+## Deployment & Production Security
+
+PrizmAI ships with production-safe defaults that activate automatically whenever `DEBUG` is off. Set the environment variables below before deploying (e.g. to Google Cloud Run, App Engine, or GKE).
+
+### Required environment variables
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `SECRET_KEY` | Django signing key. **The app refuses to start in production if this is unset** (a dev-only fallback is used only when `DEBUG=True`). | `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
+| `DEBUG` | Must be `False` in production. Leaving it unset defaults to `False`. | `False` |
+| `ALLOWED_HOSTS` | Comma-separated hostnames Django will serve. | `app.example.com,www.example.com` |
+| `CSRF_TRUSTED_ORIGINS` | Comma-separated **full origins** (scheme + host). Required by Django 4+ for HTTPS form/POST submissions from your domain — without it, valid POSTs are rejected with a 403. | `https://app.example.com` |
+
+Also set `DATABASE_URL`, the AI provider keys, and `AI_KEY_ENCRYPTION_KEY` (for BYOK) as documented in [Multi-Provider AI](#multi-provider-ai--implementation-status).
+
+### Automatic hardening when `DEBUG=False`
+
+When `DEBUG` is off, the following are enabled in `settings.py` with no extra configuration:
+
+- `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` — force HTTPS and secure cookies
+- `SECURE_HSTS_SECONDS` (1 year), `SECURE_HSTS_INCLUDE_SUBDOMAINS`, `SECURE_HSTS_PRELOAD` — HSTS
+- `SECURE_CONTENT_TYPE_NOSNIFF`, `SECURE_BROWSER_XSS_FILTER`, `X_FRAME_OPTIONS = 'DENY'` — MIME-sniffing, XSS, and clickjacking protection
+- `SECURE_PROXY_SSL_HEADER` (`X-Forwarded-Proto`) — **required when running behind a TLS-terminating load balancer** (the default on Cloud Run / App Engine / GKE ingress). Without it, `SECURE_SSL_REDIRECT` causes an infinite redirect loop and secure cookies are never set. The managed load balancer overwrites this header, so clients cannot spoof it.
+
+### Pre-launch checklist
+
+```bash
+# Surface any remaining production warnings:
+python manage.py check --deploy
+
+# Apply migrations and collect static assets:
+python manage.py migrate
+python manage.py collectstatic --noinput
+```
+
+Verify `python manage.py check --deploy` reports no warnings once the production environment variables are set.
 
 ---
 
