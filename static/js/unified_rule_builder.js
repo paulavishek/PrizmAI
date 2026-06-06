@@ -406,6 +406,7 @@ const UnifiedRuleBuilder = (() => {
       });
 
     } else if (tt === 'due_date_approaching') {
+      if (!cfg.days) cfg.days = 2;
       container.innerHTML = `
         <div class="mt-2 d-flex align-items-center gap-2">
           <label class="form-label small mb-0">Within</label>
@@ -419,6 +420,8 @@ const UnifiedRuleBuilder = (() => {
       });
 
     } else if (tt === 'scheduled_daily') {
+      // Seed the displayed default into state so leaving it untouched still saves.
+      if (!cfg.time) cfg.time = '09:00';
       container.innerHTML = `
         <div class="mt-2 d-flex align-items-center gap-2">
           <label class="form-label small mb-0">At</label>
@@ -432,6 +435,9 @@ const UnifiedRuleBuilder = (() => {
 
     } else if (tt === 'scheduled_weekly') {
       const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      // Seed the displayed defaults into state so leaving them untouched still saves.
+      if (!cfg.day) cfg.day = days[0];
+      if (!cfg.time) cfg.time = '09:00';
       container.innerHTML = `
         <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
           <label class="form-label small mb-0">On</label>
@@ -477,6 +483,7 @@ const UnifiedRuleBuilder = (() => {
       });
 
     } else if (tt === 'task_idle') {
+      if (!cfg.idle_days) cfg.idle_days = 7;
       container.innerHTML = `
         <div class="mt-2 d-flex align-items-center gap-2">
           <label class="form-label small mb-0">Idle for</label>
@@ -507,6 +514,9 @@ const UnifiedRuleBuilder = (() => {
       });
 
     } else if (tt === 'scheduled_monthly') {
+      // Seed the displayed defaults into state so leaving them untouched still saves.
+      if (!cfg.day_of_month) cfg.day_of_month = 1;
+      if (!cfg.time) cfg.time = '09:00';
       container.innerHTML = `
         <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
           <label class="form-label small mb-0">On day</label>
