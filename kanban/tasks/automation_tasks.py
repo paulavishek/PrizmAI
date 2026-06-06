@@ -653,8 +653,11 @@ def run_idle_task_automations():
     from kanban.models import Task
 
     def qs(rule, now):
+        # The rule builder persists the interval as ``idle_days`` (see
+        # automation_views validation); accept ``days`` too for back-compat.
+        cfg = rule.trigger_config or {}
         try:
-            days = int(rule.trigger_config.get('days', 7))
+            days = int(cfg.get('idle_days', cfg.get('days', 7)))
         except (TypeError, ValueError):
             days = 7
         cutoff = now - timezone.timedelta(days=days)
