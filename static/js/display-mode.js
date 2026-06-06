@@ -298,8 +298,13 @@
     };
 
     window.PrizmDisplayMode  = API;
-    // Backward-compat alias so any existing code calling window.AccessibilityMode still works
+    // Backward-compat aliases so existing code keeps working:
+    //   window.AccessibilityMode   — earlier refactor alias
+    //   window.PrizmAccessibility  — name the chart code (board_analytics.js,
+    //     kanban.js, meeting_transcript_extraction.js, wiki_ai_assistant.js)
+    //     gates on; previously provided by the now-removed accessibility-toggle.js
     window.AccessibilityMode = API;
+    window.PrizmAccessibility = API;
 
     // ── Boot ──────────────────────────────────────────────────────────────────
 

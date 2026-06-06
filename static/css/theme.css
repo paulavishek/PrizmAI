@@ -506,8 +506,6 @@ body::-webkit-scrollbar-thumb:hover {
     font-weight: bold;
 }
 
-/* Accessibility mode — ensure class-based overrides from accessibility.css
-   still apply when prizm-accessibility-mode is set on <html> */
-html.prizm-accessibility-mode body {
-    /* Re-assert colorblind-mode inheritance for selectors that target body */
-}
+/* Accessibility mode is activated via body.colorblind-mode (set pre-paint by the
+   anti-flicker script in base.html and maintained by display-mode.js). The
+   overrides live in accessibility.css. */
