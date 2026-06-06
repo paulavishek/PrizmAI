@@ -34,17 +34,18 @@ class WorkspaceIsolationTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         # ── Demo infrastructure ──
+        cls.demo_creator = User.objects.create_user('demo_creator', password='x')
         cls.demo_org = Organization.objects.create(
-            name='Demo Org', is_demo=True,
+            name='Demo Org', is_demo=True, created_by=cls.demo_creator,
         )
         cls.demo_ws = Workspace.objects.create(
             name='Demo Workspace', organization=cls.demo_org,
-            is_demo=True, is_active=True,
+            is_demo=True, is_active=True, created_by=cls.demo_creator,
         )
         cls.demo_goal = OrganizationGoal.objects.create(
             name='Demo Goal', organization=cls.demo_org,
             workspace=cls.demo_ws, is_demo=True, is_seed_demo_data=True,
-            created_by=User.objects.create_user('demo_creator', password='x'),
+            created_by=cls.demo_creator,
         )
         cls.demo_mission = Mission.objects.create(
             name='Demo Mission', organization_goal=cls.demo_goal,
@@ -104,7 +105,7 @@ class WorkspaceIsolationTestCase(TestCase):
         Task.objects.create(title='Sandbox Task', column=col, created_by=cls.user)
 
         # ── User profile ──
-        cls.profile = UserProfile.objects.get(user=cls.user)
+        cls.profile, _ = UserProfile.objects.get_or_create(user=cls.user)
         cls.profile.organization = cls.real_org
         cls.profile.active_workspace = cls.real_ws
         cls.profile.is_viewing_demo = False
@@ -140,6 +141,42 @@ class WorkspaceIsolationTestCase(TestCase):
 
         assert 'Sandbox Board' in board_names
         assert 'Real Board' not in board_names
+
+    def test_demo_mode_includes_user_created_demo_board(self):
+        """A board the user creates *inside the demo workspace* (not a sandbox
+        copy) must appear in demo mode alongside the demo/sandbox boards — but a
+        board in their real workspace must still be excluded."""
+        demo_made = Board.objects.create(
+            name='Demo Test Board', workspace=self.demo_ws,
+            owner=self.user, created_by=self.user,
+        )
+        BoardMembership.objects.create(
+            board=demo_made, user=self.user, role='owner',
+        )
+
+        self.profile.is_viewing_demo = True
+        self.profile.active_workspace = self.demo_ws
+        self.profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
+
+        names = set(get_user_boards(self.user).values_list('name', flat=True))
+        assert 'Demo Test Board' in names   # user-created demo board now visible
+        assert 'Sandbox Board' in names     # sandbox copy still visible
+        assert 'Real Board' not in names    # real-workspace board stays isolated
+
+    def test_real_mode_excludes_demo_created_board(self):
+        """The same demo-workspace board must NOT leak into the user's real
+        workspace view."""
+        Board.objects.create(
+            name='Demo Test Board', workspace=self.demo_ws,
+            owner=self.user, created_by=self.user,
+        )
+        self.profile.is_viewing_demo = False
+        self.profile.active_workspace = self.real_ws
+        self.profile.save(update_fields=['is_viewing_demo', 'active_workspace'])
+
+        names = set(get_user_boards(self.user).values_list('name', flat=True))
+        assert 'Demo Test Board' not in names
+        assert 'Real Board' in names
 
     # ──────────────────────────────────────────────────────────────
     # Mission isolation
