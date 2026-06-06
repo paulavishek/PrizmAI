@@ -88,12 +88,25 @@ def get_user_boards(user):
     active_ws = getattr(profile, 'active_workspace', None)
 
     if is_demo:
-        sandbox_boards = Board.objects.filter(
-            owner=user,
-            is_sandbox_copy=True,
-        ).distinct()
-        if sandbox_boards.exists():
-            return sandbox_boards
+        # The user's sandbox copies (the cloned demo boards) ...
+        sandbox_q = Q(owner=user, is_sandbox_copy=True)
+        if active_ws:
+            # ... plus any board the user created/joined *inside this demo
+            # workspace* (e.g. a board they made in the demo). Scoping the extra
+            # clause to active_ws keeps the demo isolated from the user's real
+            # workspaces — a real-workspace board is neither a sandbox copy nor
+            # in active_ws, so it never leaks in.
+            demo_boards = Board.objects.filter(
+                sandbox_q
+                | (
+                    Q(workspace=active_ws)
+                    & (Q(owner=user) | Q(created_by=user) | Q(memberships__user=user))
+                )
+            ).distinct()
+        else:
+            demo_boards = Board.objects.filter(sandbox_q).distinct()
+        if demo_boards.exists():
+            return demo_boards
         # Fallback: official demo boards (read-only)
         return Board.objects.filter(is_official_demo_board=True).distinct()
 
