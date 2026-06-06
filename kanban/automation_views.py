@@ -981,6 +981,30 @@ SCHEDULE_TYPE_MAP = {
 }
 
 
+_WEEKDAY_TO_CRON = {
+    'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+    'thursday': 4, 'friday': 5, 'saturday': 6,
+}
+
+
+def _weekday_to_cron(raw):
+    """Map a weekly 'day' value to a cron day_of_week number (Sun=0..Sat=6).
+
+    Accepts a weekday name ('Saturday', case-insensitive) as sent by the rule
+    builder, or an int already in cron form (back-compat). Returns None if it
+    can't be resolved, so the caller leaves scheduled_day untouched.
+    """
+    if isinstance(raw, str):
+        key = raw.strip().lower()
+        if key in _WEEKDAY_TO_CRON:
+            return _WEEKDAY_TO_CRON[key]
+    try:
+        n = int(raw)
+    except (ValueError, TypeError):
+        return None
+    return n if 0 <= n <= 6 else None
+
+
 def _setup_scheduled_rule(rule, trigger_type, trigger_config):
     """Configure schedule fields and create PeriodicTask for a scheduled rule."""
     import datetime as dt
@@ -999,10 +1023,18 @@ def _setup_scheduled_rule(rule, trigger_type, trigger_config):
         except ValueError:
             pass
 
-    day = trigger_config.get('day')
-    if day is not None:
+    # Resolve the day restriction into the cron value create_periodic_task_for_rule
+    # expects in rule.scheduled_day. The builder sends weekly as a weekday *name*
+    # ('Saturday') under 'day', and monthly as an int under 'day_of_month' — so the
+    # old int(trigger_config['day']) silently dropped both, leaving dow/dom='*' and
+    # making weekly/monthly rules fire every day.
+    if schedule_type == 'weekly':
+        raw = trigger_config.get('day')
+        rule.scheduled_day = _weekday_to_cron(raw)
+    elif schedule_type == 'monthly':
+        raw = trigger_config.get('day_of_month', trigger_config.get('day'))
         try:
-            rule.scheduled_day = int(day)
+            rule.scheduled_day = int(raw)
         except (ValueError, TypeError):
             pass
 
