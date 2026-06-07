@@ -973,7 +973,7 @@ def _act_apply_stress_test_vaccine(target, rule, action):
     """Mark the most recent stress-test vaccine for this board as applied.
     No-op when no stress-test data is available."""
     try:
-        from kanban.stress_test_models import StressTestVaccine
+        from kanban.stress_test_models import Vaccine as StressTestVaccine
     except Exception:
         raise _ActionNoOp('stress test module not available')
     latest = StressTestVaccine.objects.filter(
@@ -1021,7 +1021,8 @@ def _act_generate_status_report(target, rule, action):
     audience = (_resolve_target(action) or 'team').lower()
     SavedBrief.objects.create(
         board=target.target_board,
-        created_by=rule.created_by,
+        user=rule.created_by,
+        name='Automated status report',
         audience=audience,
         purpose='status',
         mode='narrative',
@@ -1046,18 +1047,18 @@ def _act_add_stakeholder_engagement(target, rule, action):
     notes = action.get('message') or f'Logged by automation "{rule.name}"'
     if target.target_task:
         notes = _substitute_vars(notes, target.target_task)
+    if not rule.created_by:
+        raise ValueError('add_stakeholder_engagement: rule has no creator')
     created = 0
     for sh in stakeholders:
-        try:
-            StakeholderEngagementRecord.objects.create(
-                stakeholder=sh,
-                interaction_type='automated',
-                notes=notes,
-                logged_by=rule.created_by,
-            )
-            created += 1
-        except Exception:
-            continue
+        StakeholderEngagementRecord.objects.create(
+            stakeholder=sh,
+            description=notes,
+            created_by=rule.created_by,
+            communication_channel='other',
+            notes=notes,
+        )
+        created += 1
     if created == 0:
         raise _ActionNoOp('no active stakeholders on this board')
 
