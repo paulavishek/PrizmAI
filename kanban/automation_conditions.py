@@ -357,8 +357,11 @@ def _cond_has_comments(target, operator, value):
 @register_condition('has_attachments', requires='task')
 def _cond_has_attachments(target, operator, value):
     task = target.target_task
+    # TaskFile is attached via related_name='file_attachments' (not the default
+    # 'taskfile_set'), so the old reverse-accessor names silently counted 0 and
+    # this condition could never be True. Fixed in Tier 1 (BUG-1B-01).
     try:
-        count = task.files.count() if hasattr(task, 'files') else task.taskfile_set.count()
+        count = task.file_attachments.count()
     except Exception:
         count = 0
     if operator == 'is_true':  return count > 0
@@ -834,7 +837,9 @@ def _cond_board_immunity_score(target, operator, value):
     ).order_by('-id').first()
     if not latest:
         return False
-    score = getattr(latest, 'overall_score', 0) or 0
+    # ImmunityScore's composite field is `overall`, not `overall_score` — the old
+    # name read nothing and made this condition compare against 0 (BUG-1C-02).
+    score = getattr(latest, 'overall', 0) or 0
     try:
         cmp_int = int(value or 0)
     except (TypeError, ValueError):
@@ -869,14 +874,18 @@ def _cond_board_velocity_trend(target, operator, value):
         from kanban.burndown_models import TeamVelocitySnapshot
     except Exception:
         return False
+    # TeamVelocitySnapshot has no `snapshot_date`/`velocity_value` fields — it
+    # orders by `period_end` and measures velocity as `story_points_completed`.
+    # The old names raised FieldError/AttributeError (swallowed by the dispatcher),
+    # so this condition was always False (BUG-1C-03).
     snapshots = TeamVelocitySnapshot.objects.filter(
         board=target.target_board,
-    ).order_by('-snapshot_date')[:3]
+    ).order_by('-period_end')[:3]
     snapshots = list(snapshots)
     if len(snapshots) < 2:
         return False
-    latest = snapshots[0].velocity_value or 0
-    prior = snapshots[-1].velocity_value or 0
+    latest = float(snapshots[0].story_points_completed or 0)
+    prior = float(snapshots[-1].story_points_completed or 0)
     if latest > prior * 1.10:
         trend = 'improving'
     elif latest < prior * 0.90:
