@@ -437,6 +437,7 @@ def _act_post_comment(target, rule, action):
 
 @register_action('log_time_entry', requires='task')
 def _act_log_time_entry(target, rule, action):
+    from django.utils import timezone as tz
     from kanban.budget_models import TimeEntry
     task = target.target_task
     value = _resolve_target(action)
@@ -454,6 +455,7 @@ def _act_log_time_entry(target, rule, action):
         task=task,
         user=user,
         hours_spent=hours,
+        work_date=tz.now().date(),
         description=f'Auto-logged by automation "{rule.name}"',
     )
 
@@ -1198,9 +1200,10 @@ def _act_link_wiki_page(target, rule, action):
 def _act_create_wiki_page(target, rule, action):
     """Create a new WikiPage on the board's organization."""
     try:
-        from wiki.models import WikiPage
+        from wiki.models import WikiPage, WikiCategory
     except Exception:
         raise _ActionNoOp('wiki module not available')
+    from django.utils.text import slugify
     board = target.target_board
     title = (_resolve_target(action) or '').strip()
     if not title:
@@ -1212,11 +1215,20 @@ def _act_create_wiki_page(target, rule, action):
     if not org:
         raise _ActionNoOp('board has no organization')
     try:
+        # WikiPage requires a category and updated_by — land automation-created
+        # pages in a dedicated "Automation" category for the org.
+        category, _ = WikiCategory.objects.get_or_create(
+            organization=org, slug='automation',
+            defaults={'name': 'Automation'},
+        )
         WikiPage.objects.create(
             organization=org,
+            category=category,
             title=title[:200],
+            slug=slugify(title)[:50] or 'automation-page',
             content=content,
             created_by=rule.created_by,
+            updated_by=rule.created_by,
         )
     except Exception as exc:
         raise ValueError(f"create_wiki_page: {exc}")
