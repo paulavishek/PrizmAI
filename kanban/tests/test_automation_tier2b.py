@@ -45,12 +45,13 @@ class Tier2bHierarchyWorkloadActionsTest(TestCase):
         self.bob = User.objects.create_user(
             username='t2b_bob', password='x', email='t2b_bob@example.com')
 
-        # Profiles + skills (assign_to_best_skill_match). get_or_create in case a
-        # post_save signal already created the profile.
+        # Profiles + skills (assign_to_best_skill_match). Use the production dict
+        # form {'name','level'} so the test guards against name-only matching.
         for user, skills in (
             (self.tester, []),
-            (self.alice, ['Python', 'Django']),
-            (self.bob, ['CSS']),
+            (self.alice, [{'name': 'Python', 'level': 'Expert'},
+                          {'name': 'Django', 'level': 'Expert'}]),
+            (self.bob, [{'name': 'CSS', 'level': 'Intermediate'}]),
         ):
             profile, _ = UserProfile.objects.get_or_create(user=user)
             profile.skills = skills
@@ -266,7 +267,11 @@ class Tier2bHierarchyWorkloadActionsTest(TestCase):
         self.assertEqual(float(TaskCost.objects.get(task=task).estimated_cost), 5000.0)
 
     def test_b12_assign_to_best_skill_match(self):
-        task = self._task(title='Needs Python', required_skills=['Python'])
+        # Dict form with a DIFFERENT level than alice's profile ('Intermediate'
+        # vs 'Expert') — must still match on name. This is the case that the
+        # old stringified-dict comparison silently failed.
+        task = self._task(title='Needs Python',
+                          required_skills=[{'name': 'Python', 'level': 'Intermediate'}])
         rule = self._make_rule('TIER2B-B12: Assign best skill match',
                                [{'type': 'assign_to_best_skill_match'}])
         self._fire(task, self.bob)  # change assignee off tester so the trigger fires
