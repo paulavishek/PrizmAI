@@ -235,11 +235,14 @@ class ConditionValueValidationTest(TestCase):
     requires a value but value is blank."""
 
     def setUp(self):
-        from kanban.models import Board, Column
+        from kanban.models import Board, BoardMembership, Column
         self.user = User.objects.create_user(
             username='val_user', password='x', email='val@example.com',
         )
         self.board = Board.objects.create(name='Val Board', created_by=self.user)
+        # edit_board (required by the rule-create view) is granted via
+        # BoardMembership role, not created_by — give the tester owner access.
+        BoardMembership.objects.create(board=self.board, user=self.user, role='owner')
         Column.objects.create(board=self.board, name='To Do', position=0)
         from django.test import Client
         self.client = Client()
@@ -299,11 +302,14 @@ class IdleTriggerConfigValidationTest(TestCase):
     """Phase 2.5: task_idle rule must require idle_days config."""
 
     def setUp(self):
-        from kanban.models import Board
+        from kanban.models import Board, BoardMembership
         self.user = User.objects.create_user(
             username='idle_user', password='x', email='idle@example.com',
         )
         self.board = Board.objects.create(name='Idle Board', created_by=self.user)
+        # edit_board (required by the rule-create view) is granted via
+        # BoardMembership role, not created_by — give the tester owner access.
+        BoardMembership.objects.create(board=self.board, user=self.user, role='owner')
         from django.test import Client
         self.client = Client()
         self.client.force_login(self.user)
