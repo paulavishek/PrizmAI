@@ -798,6 +798,22 @@ def _act_set_estimated_cost(target, rule, action):
     TaskCost.objects.filter(pk=cost.pk).update(estimated_cost=cost_val)
 
 
+def _skill_names(skills):
+    """Normalise a skills list to a set of lowercase skill names.
+
+    Both ``task.required_skills`` and ``UserProfile.skills`` are stored as lists
+    of dicts (``{'name': 'Python', 'level': 'Expert'}``) in real data, but
+    add_required_skill can also append plain strings. Match on the name only so
+    'Python'/Expert and 'Python'/Intermediate compare equal.
+    """
+    names = set()
+    for s in skills or []:
+        name = s.get('name') if isinstance(s, dict) else s
+        if name:
+            names.add(str(name).lower())
+    return names
+
+
 @register_action('assign_to_best_skill_match', requires='task')
 def _act_assign_to_best_skill_match(target, rule, action):
     """Assign to the board member whose UserProfile.skills overlap most with
@@ -808,7 +824,7 @@ def _act_assign_to_best_skill_match(target, rule, action):
     from kanban.models import Task as TaskModel
     task = target.target_task
     board = target.target_board
-    required = {str(s).lower() for s in (task.required_skills or [])}
+    required = _skill_names(task.required_skills)
     if not required or not board:
         raise _ActionNoOp('no required_skills or board to match against')
 
@@ -819,7 +835,7 @@ def _act_assign_to_best_skill_match(target, rule, action):
         profile_skills = []
         if hasattr(m, 'profile') and getattr(m.profile, 'skills', None):
             profile_skills = m.profile.skills if isinstance(m.profile.skills, list) else []
-        overlap = len(required & {str(s).lower() for s in profile_skills})
+        overlap = len(required & _skill_names(profile_skills))
         if overlap > best_score:
             best_score = overlap
             best_user = m
