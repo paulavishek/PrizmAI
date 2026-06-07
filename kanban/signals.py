@@ -377,10 +377,11 @@ def run_board_automations(sender, instance, created, **kwargs):
             errors = []
             outcome = 'success'
             skip_reason = ''
+            branch = 'then'
 
             if rule.actions:
                 # ── New unified flat format ──────────────────────
-                outcome, skip_reason = _execute_flat_rule(
+                outcome, skip_reason, branch = _execute_flat_rule(
                     rule, instance, actions_taken, errors,
                 )
             elif rule.rule_definition:
@@ -419,7 +420,7 @@ def run_board_automations(sender, instance, created, **kwargs):
                     'trigger_type': rule.trigger_type,
                     'conditions_evaluated': len(rule.conditions),
                     'actions_count': len(rule.actions),
-                    'branch': 'then' if outcome != 'skipped' else 'skipped',
+                    'branch': branch,
                     # Recorded so the assignee-scoped 3s guard above (and the
                     # dedupe_key) can tell a redundant re-save of the same
                     # assignment from a genuine re-assignment to a different user.
@@ -722,7 +723,10 @@ def _execute_flat_rule(rule, task, actions_taken, errors):
     """
     Execute a rule stored in the new unified flat format
     (rule.conditions / rule.actions / rule.otherwise_actions).
-    Returns (outcome, skip_reason) where outcome is 'success'/'skipped'/'failed'.
+    Returns (outcome, skip_reason, branch) where outcome is
+    'success'/'skipped'/'failed' and branch is 'then'/'otherwise'/'skipped' — the
+    actual branch taken, so the audit log can distinguish a fired OTHERWISE branch
+    from a fired THEN branch (NOTE-1D-01).
     """
     # Evaluate conditions
     if rule.conditions:
@@ -741,7 +745,7 @@ def _execute_flat_rule(rule, task, actions_taken, errors):
         branch_actions = rule.otherwise_actions
         branch = 'otherwise'
     else:
-        return 'skipped', 'Condition not met'
+        return 'skipped', 'Condition not met', 'skipped'
 
     had_error = False
     skip_reasons = []
@@ -763,10 +767,10 @@ def _execute_flat_rule(rule, task, actions_taken, errors):
                 had_error = True
 
     if had_error:
-        return 'failed', ''
+        return 'failed', '', branch
     if not actions_taken and skip_reasons:
-        return 'skipped', '; '.join(skip_reasons)[:100]
-    return 'success', ''
+        return 'skipped', '; '.join(skip_reasons)[:100], branch
+    return 'success', '', branch
 
 
 def _build_target(task):
@@ -1988,7 +1992,7 @@ def run_task_label_added_automations(sender, instance, action, pk_set, **kwargs)
                 outcome, skip_reason = 'success', ''
                 try:
                     if rule.actions:
-                        outcome, skip_reason = _execute_flat_rule(
+                        outcome, skip_reason, _branch = _execute_flat_rule(
                             rule, task, actions_taken, errors,
                         )
                 except Exception as exc:
@@ -2068,7 +2072,7 @@ def run_checklist_automations(sender, instance, created, **kwargs):
                 outcome, skip_reason = 'success', ''
                 try:
                     if rule.actions:
-                        outcome, skip_reason = _execute_flat_rule(
+                        outcome, skip_reason, _branch = _execute_flat_rule(
                             rule, task, actions_taken, errors,
                         )
                 except Exception as exc:

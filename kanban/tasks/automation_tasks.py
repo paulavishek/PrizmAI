@@ -71,7 +71,7 @@ def run_due_date_approaching_automations():
             errors = []
             try:
                 if rule.actions:
-                    outcome, skip_reason = _execute_flat_rule(rule, task, actions_taken, errors)
+                    outcome, skip_reason, _branch = _execute_flat_rule(rule, task, actions_taken, errors)
                 else:
                     _apply_automation_action(task, rule)
                     actions_taken.append(f"{rule.action_type}: {rule.action_value}")
@@ -163,7 +163,7 @@ def run_overdue_task_automations():
             errors = []
             try:
                 if rule.actions:
-                    outcome, skip_reason = _execute_flat_rule(rule, task, actions_taken, errors)
+                    outcome, skip_reason, _branch = _execute_flat_rule(rule, task, actions_taken, errors)
                 else:
                     _apply_automation_action(task, rule)
                     actions_taken.append(f"{rule.action_type}: {rule.action_value}")
@@ -458,7 +458,7 @@ def run_automation_rule(rule_id):
 
             if rule.actions:
                 # New unified flat format
-                outcome, skip_reason = _execute_flat_rule(
+                outcome, skip_reason, _branch = _execute_flat_rule(
                     rule, task, actions_taken, errors,
                 )
             elif rule.rule_definition:
@@ -602,7 +602,7 @@ def _run_scheduled_task_scan(trigger_type, task_queryset_for_rule_fn):
             outcome, skip_reason = 'success', ''
             try:
                 if rule.actions:
-                    outcome, skip_reason = _execute_flat_rule(
+                    outcome, skip_reason, _branch = _execute_flat_rule(
                         rule, task, actions_taken, errors,
                     )
                 else:
