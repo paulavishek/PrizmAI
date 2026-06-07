@@ -15,12 +15,14 @@ from .settings import *  # noqa: F401, F403
 # =============================================================================
 # AUTHENTICATION BACKENDS FOR TESTING
 # =============================================================================
-# Use only the ModelBackend for testing to avoid Axes requiring request objects
-# This is safe for testing because we're not testing brute force protection here
-
+# Drop only the Axes backend for testing (it requires request objects). The
+# django-rules ObjectPermissionBackend MUST stay — without it, has_perm() for
+# object-level permissions like 'prizmai.edit_board' returns False for everyone,
+# so any rules-guarded view 403s under tests.
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
+    'rules.permissions.ObjectPermissionBackend',
 ]
 
 # =============================================================================
@@ -70,10 +72,16 @@ EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 # =============================================================================
 # CACHES FOR TESTING
 # =============================================================================
+# Mirror every cache alias the app uses (settings.py defines default, ai_cache,
+# session_cache, analytics_cache, local — several backed by Redis in prod) as an
+# isolated in-memory cache, so code that does caches['session_cache'] etc. works
+# under tests instead of raising InvalidCacheBackendError.
 CACHES = {
-    'default': {
+    alias: {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': f'test-{alias}',
     }
+    for alias in ('default', 'ai_cache', 'session_cache', 'analytics_cache', 'local')
 }
 
 # =============================================================================
