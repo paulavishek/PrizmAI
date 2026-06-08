@@ -54,12 +54,13 @@
        Uses Bootstrap card classes + PrizmAI CSS variables for theming.
        ================================================================ */
     .demo-welcome-panel {
-        border-radius: 0.75rem;
+        border-radius: var(--card-radius, 0.75rem);
         margin-bottom: 1rem;
         overflow: hidden;
         transition: box-shadow 0.3s ease;
-        border: 0.5px solid var(--bs-border-color, #dee2e6);
-        background: var(--bs-body-bg, #fff);
+        border: var(--card-border, 0.5px solid #dee2e6);
+        background: var(--card-bg-surface, #fff);
+        box-shadow: var(--card-shadow, 0 1px 3px rgba(0,0,0,0.06));
     }
 
     .demo-welcome-header {
@@ -163,14 +164,16 @@
     }
 
     .demo-cred-card {
-        border-radius: 0.6rem;
+        border-radius: var(--card-radius-sm, 0.6rem);
         padding: 1rem;
-        border: 1px solid var(--bs-border-color, #dee2e6);
-        transition: box-shadow 0.2s ease;
+        border: var(--card-border, 1px solid #dee2e6);
+        background: var(--card-bg-surface, #fff);
+        transition: box-shadow 0.2s ease, transform 0.2s ease;
     }
 
     .demo-cred-card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        box-shadow: var(--card-shadow-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
+        transform: translateY(-3px);
     }
 
     .demo-cred-card .cred-header {
@@ -193,9 +196,10 @@
         flex-shrink: 0;
     }
 
-    .cred-avatar.avatar-ps { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .cred-avatar.avatar-mc { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); }
-    .cred-avatar.avatar-ev { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    /* Persona colors aligned to mockup: Priya=purple, Marcus=green, Elena=amber */
+    .cred-avatar.avatar-ps { background: var(--persona-purple, linear-gradient(135deg, #6c5ce7 0%, #8e7bf0 100%)); }
+    .cred-avatar.avatar-mc { background: var(--persona-green,  linear-gradient(135deg, #10b981 0%, #34d399 100%)); }
+    .cred-avatar.avatar-ev { background: var(--persona-amber,  linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)); }
 
     .demo-cred-card .cred-name {
         font-weight: 700;
@@ -676,13 +680,15 @@
        ZONE 1 — KPI COMMAND STRIP
        ================================================================ */
     .kpi-card {
-        border-radius: 12px;
-        border: 1px solid #e3e6f0;
+        border-radius: var(--card-radius-sm, 12px);
+        border: var(--card-border, 1px solid #e3e6f0);
+        background: var(--card-bg-surface, #fff);
+        box-shadow: var(--card-shadow, none);
         transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
     .kpi-card:hover {
         transform: translateY(-4px);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.10) !important;
+        box-shadow: var(--card-shadow-hover, 0 8px 24px rgba(0,0,0,0.10)) !important;
     }
     .kpi-icon-wrap {
         width: 52px;
@@ -710,6 +716,14 @@
         font-size: 0.78rem;
         color: var(--text-secondary);
         margin-top: 1px;
+    }
+
+    /* My Tasks row hover — theme-aware (replaces hardcoded #f1f4f8 inline hover) */
+    .dash-task-row {
+        transition: background 0.15s ease;
+    }
+    .dash-task-row:hover {
+        background: var(--bg-tertiary, #f1f4f8);
     }
 
     /* ================================================================
@@ -1089,6 +1103,65 @@
     /* Filtered-out cards */
     .hn-card.hn-hidden { display: none !important; }
 
+    /* ── Dark-mode overrides for Hierarchy Navigator (light-mode look unchanged) ── */
+    [data-bs-theme="dark"] .hn-tabs { background: rgba(255,255,255,0.03); }
+    [data-bs-theme="dark"] .hn-tabs .nav-link:hover { background: rgba(255,255,255,0.06); }
+    [data-bs-theme="dark"] .hn-count { background: #3a3d4d; color: #c3c6d4; }
+    /* Goal/mission/strategy/board cards: distinct surface + strong border so they
+       stand apart from the dark page; keep the colored left accent bar. */
+    [data-bs-theme="dark"] .hn-item {
+        border: 1.5px solid rgba(255,255,255,0.26);
+        background: var(--card-bg-surface, #2a2d3a) !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    }
+    [data-bs-theme="dark"] .hn-item:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.55); }
+    [data-bs-theme="dark"] .hn-item--goal     { border-left: 4px solid #f59e0b; }
+    [data-bs-theme="dark"] .hn-item--mission  { border-left: 4px solid #3b82f6; }
+    [data-bs-theme="dark"] .hn-item--strategy { border-left: 4px solid #10b981; }
+    [data-bs-theme="dark"] .hn-item--board    { border-left: 4px solid #8b5cf6; }
+    [data-bs-theme="dark"] .hn-preview-slot { border-top-color: rgba(255,255,255,0.12); }
+
+    /* ── Dark-mode overrides for Performance Analytics inner cards (issue: light
+       header strips + low-contrast text in dark). Inline header bg has no
+       !important, so a scoped !important rule wins. ── */
+    [data-bs-theme="dark"] #analyticsZone3 .card {
+        background: var(--card-bg-surface, #2a2d3a) !important;
+        border: 1px solid rgba(255,255,255,0.14) !important;
+    }
+    [data-bs-theme="dark"] #analyticsZone3 .card .card-header {
+        background: rgba(255,255,255,0.05) !important;
+        border-bottom: 1px solid rgba(255,255,255,0.10) !important;
+    }
+    [data-bs-theme="dark"] #analyticsZone3 .card-header span,
+    [data-bs-theme="dark"] #analyticsZone3 .card-header .small,
+    [data-bs-theme="dark"] #analyticsZone3 .card-header .fw-semibold { color: #e8e9f3 !important; }
+    [data-bs-theme="dark"] #analyticsZone3 .badge.bg-light { background: #3a3d4d !important; color: #c3c6d4 !important; }
+    /* Risk Heatmap axis/row labels (inline color:#495057) */
+    [data-bs-theme="dark"] #analyticsZone3 [style*="color:#495057"] { color: #c7ccdd !important; }
+    /* Scope-creep tinted headline box: inline light bg → subtle dark so themed text reads */
+    [data-bs-theme="dark"] #analyticsZone3 [style*="#f0fdf4"],
+    [data-bs-theme="dark"] #analyticsZone3 [style*="#fffbeb"],
+    [data-bs-theme="dark"] #analyticsZone3 [style*="#fef2f2"] { background: rgba(255,255,255,0.06) !important; }
+
+    /* ── Dark-mode: AI Briefing inner cards behave like Goal cards (dark surface,
+       prominent border) and faded body text becomes legible. ── */
+    [data-bs-theme="dark"] .briefing-item {
+        background: var(--card-bg-surface, #2a2d3a) !important;
+        border: 1px solid rgba(255,255,255,0.14) !important;
+    }
+    [data-bs-theme="dark"] #daily-briefing-card [style*="color:#374151"] { color: #cfd3e3 !important; }
+    [data-bs-theme="dark"] #daily-briefing-card [style*="color:#1e3a8a"] { color: #bcd0ff !important; }
+    [data-bs-theme="dark"] #daily-briefing-card [style*="color:#1e40af"] { color: #bcd0ff !important; }
+    [data-bs-theme="dark"] #daily-briefing-card .briefing-action-footer { color: #bcd0ff !important; }
+
+    /* ── Dark-mode: Hierarchy Navigator title (inline #334155) + Goals active count badge ── */
+    [data-bs-theme="dark"] #hierarchy-navigator .card-header h6 { color: #e8e9f3 !important; }
+    [data-bs-theme="dark"] .hn-tabs .nav-link.active .hn-count {
+        background: rgba(255,255,255,0.18) !important;
+        color: #fff !important;
+        opacity: 1 !important;
+    }
+
     /* ================================================================
        STEP 8 — DESIGN POLISH  (typography hierarchy + card consistency)
        ================================================================ */
@@ -1391,7 +1464,7 @@
 <!-- ============================================================ -->
 <div class="row mb-2" id="decision-center-widget">
     <div class="col-12">
-        <div class="card shadow-sm border-0" style="border-left: 4px solid #6366f1 !important;">
+        <div class="card prizm-surface border-0" style="border-left: 4px solid #6366f1 !important;">
             <div class="card-body py-2 px-3">
                 <div class="d-flex align-items-center gap-3 flex-wrap">
                     <!-- Title — always visible -->
@@ -1475,44 +1548,19 @@
 </div>
 <!-- /KPI Strip -->
 
-<!-- ── PrizmDiscovery Widget ─────────────────────────────────────── -->
-{% if discovery_enabled %}
-<div class="card mb-3" style="border-radius:10px; border:1px solid var(--border-color, #e5e7eb);">
-    <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-lightbulb text-warning"></i>
-            <span style="font-weight:600; font-size:0.9rem;">Discovery</span>
-        </div>
-        {% if discovery_ideas_to_score == 0 and discovery_ideas_to_promote == 0 %}
-        <span class="text-muted" style="font-size:0.82rem;">
-            No ideas pending —
-            <a href="{% url 'idea_create' %}" class="text-decoration-none">submit a new idea →</a>
-        </span>
-        {% else %}
-        <div class="d-flex gap-2 flex-wrap align-items-center">
-            {% if discovery_ideas_to_score > 0 %}
-            <a href="{% url 'discovery_dashboard' %}?stage=new" class="badge text-decoration-none"
-               style="background:#fef3c7; color:#92400e; font-size:0.78rem; padding:4px 8px; border-radius:20px;">
-                <i class="fas fa-robot me-1"></i>{{ discovery_ideas_to_score }} to score
-            </a>
-            {% endif %}
-            {% if discovery_ideas_to_promote > 0 %}
-            <a href="{% url 'discovery_dashboard' %}?stage=approved" class="badge text-decoration-none"
-               style="background:#dcfce7; color:#166534; font-size:0.78rem; padding:4px 8px; border-radius:20px;">
-                <i class="fas fa-arrow-up me-1"></i>{{ discovery_ideas_to_promote }} to promote
-            </a>
-            {% endif %}
-        </div>
-        {% endif %}
-        <a href="{% url 'discovery_dashboard' %}" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.78rem;">Open Inbox</a>
-    </div>
-    {% if daily_briefing.workspace_is_new and discovery_ideas_to_score > 0 %}
-    <div class="px-3 pb-2" style="margin-top:-4px;">
-        <span class="text-muted" style="font-size:0.75rem;">
-            <i class="fas fa-robot me-1"></i>Spectra suggested these {{ discovery_ideas_to_score }} starter idea{{ discovery_ideas_to_score|pluralize }} from your goal — score them to prioritise, or ignore for now.
+<!-- ── PrizmDiscovery Widget ─────────────────────────────────────────
+     Removed from the dashboard to declutter: the "to score" count now shows
+     as a badge on the sidebar Discovery item (sidebar_discovery_to_score,
+     via kanban.context_processors.discovery_count). Open Discovery from the
+     left nav to score/promote ideas. -->
+{% if daily_briefing.workspace_is_new and discovery_ideas_to_score > 0 %}
+<div class="card prizm-surface mb-3">
+    <div class="card-body py-2 px-3">
+        <span class="text-muted" style="font-size:0.8rem;">
+            <i class="fas fa-robot me-1 text-warning"></i>Spectra suggested {{ discovery_ideas_to_score }} starter idea{{ discovery_ideas_to_score|pluralize }} from your goal —
+            <a href="{% url 'discovery_dashboard' %}?stage=new" class="text-decoration-none">score them in Discovery →</a>
         </span>
     </div>
-    {% endif %}
 </div>
 {% endif %}
 <!-- /Discovery Widget -->
@@ -1645,7 +1693,7 @@
     <div class="col-lg-7 col-md-12">
 
         <!-- Board Cards Grid -->
-        <div class="card shadow-sm h-100" id="board-cards-section">
+        <div class="card prizm-surface h-100" id="board-cards-section">
             <div class="card-header py-2 d-flex align-items-center justify-content-between">
                 <h6 class="m-0 fw-bold text-primary">
                     <i class="fas fa-columns me-2"></i>My Boards
@@ -1725,7 +1773,7 @@
     <!-- RIGHT COLUMN: My Tasks                                   -->
     <!-- ======================================================== -->
     <div class="col-lg-5 col-md-12">
-        <div class="card shadow h-100">
+        <div class="card prizm-surface h-100">
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <div class="d-flex align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary me-2">
@@ -1747,9 +1795,8 @@
                 {% if my_tasks %}
                 <ul class="list-group list-group-flush">
                     {% for task in my_tasks %}
-                    <li class="list-group-item px-0 py-0" style="list-style:none; border-bottom: 1px solid #e9ecef;">
-                        <a href="{% url 'task_detail' task.id %}" class="d-block px-3 py-3 text-decoration-none text-reset"
-                           style="transition: background 0.15s;" onmouseover="this.style.background='#f1f4f8'" onmouseout="this.style.background=''">
+                    <li class="list-group-item px-0 py-0" style="list-style:none; border-bottom: 1px solid var(--border-color, #e9ecef);">
+                        <a href="{% url 'task_detail' task.id %}" class="d-block px-3 py-3 text-decoration-none text-reset dash-task-row">
                             <div class="d-flex justify-content-between align-items-start mb-1">
                                 <div class="d-flex align-items-center gap-2 min-w-0">
                                     <span class="text-muted flex-shrink-0" style="font-size:0.72rem; font-family:monospace;">{{ task.column.board.get_task_prefix }}-{{ task.id }}</span>
@@ -1808,7 +1855,7 @@
 <!-- ROW 3: AI BRIEFING (full width, collapsed by default)       -->
 <!-- ============================================================ -->
 {% if daily_briefing.has_content %}
-<div class="card shadow-sm mb-3" id="daily-briefing-card">
+<div class="card prizm-surface mb-3" id="daily-briefing-card">
     <div class="card-body p-3">
         {% if daily_briefing.workspace_is_new %}
         <div class="d-flex align-items-center gap-2">
@@ -1894,7 +1941,7 @@
 <!-- ============================================================ -->
 <!-- ROW 4: HIERARCHY NAVIGATOR — Tabbed Goal / Mission / Strategy / Board -->
 <!-- ============================================================ -->
-<div class="card shadow mb-4" id="hierarchy-navigator">
+<div class="card prizm-surface mb-4" id="hierarchy-navigator">
     <div class="card-header py-2">
         <h6 class="m-0 fw-bold" style="color:#334155;">
             <i class="fas fa-sitemap me-2" style="color:#6366f1;"></i>Hierarchy Navigator
@@ -2409,7 +2456,7 @@
 <!-- ============================================================ -->
 <!-- ZONE 3: PERFORMANCE ANALYTICS (collapsed by default)        -->
 <!-- ============================================================ -->
-<div class="card shadow-sm mb-4">
+<div class="card prizm-surface mb-4">
     <div class="card-header py-2 d-flex align-items-center justify-content-between"
          role="button" data-bs-toggle="collapse" data-bs-target="#analyticsZone3" aria-expanded="false">
         <div>
@@ -2763,7 +2810,7 @@
 {% if standalone_boards %}
 <div class="row">
     <div class="col-12">
-        <div class="card shadow mb-4">
+        <div class="card prizm-surface mb-4">
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <h6 class="m-0 font-weight-bold text-secondary">
                     <i class="fas fa-clipboard-list me-2"></i>Standalone Boards
@@ -4172,12 +4219,22 @@
         var chartData;
         try { chartData = JSON.parse(el.textContent); } catch(e) { return; }
 
+        // Theme-aware chart colors — read the active theme at init time so axis
+        // text, gridlines and legends are legible in both light and dark mode.
+        var _isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
         var COLORS = {
             done:     'rgba(28, 200, 138, 0.85)',
-            remaining:'rgba(78, 115, 223, 0.3)',
+            remaining: _isDark ? 'rgba(120, 145, 230, 0.40)' : 'rgba(78, 115, 223, 0.3)',
             highRisk: 'rgba(231, 74, 59, 0.75)',
-            gridLine: 'rgba(0,0,0,0.05)',
+            gridLine: _isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)',
+            axis:     _isDark ? '#c7ccdd' : '#444',
+            axisTitle:_isDark ? '#e8e9f3' : '#333',
         };
+        // Default text color (legend labels, tooltips fallback) follows the theme.
+        if (typeof Chart !== 'undefined') {
+            Chart.defaults.color = COLORS.axis;
+            Chart.defaults.borderColor = COLORS.gridLine;
+        }
 
         // --- Mission grouped bar chart (completion % + high-risk count) ---
         var mCanvas = document.getElementById('missionChart');
@@ -4225,20 +4282,20 @@
                         tooltip: { mode: 'index', intersect: false },
                     },
                     scales: {
-                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, maxRotation: 30, color: '#444' } },
+                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, maxRotation: 30, color: COLORS.axis } },
                         yPct: {
                             type: 'linear', position: 'left',
                             min: 0, max: 100,
                             grid: { color: COLORS.gridLine },
-                            ticks: { font: { size: 11, weight: '600' }, color: '#444', callback: function(v){ return v + '%'; } },
-                            title: { display: true, text: 'Done %', font: { size: 11, weight: '700' }, color: '#333' },
+                            ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, callback: function(v){ return v + '%'; } },
+                            title: { display: true, text: 'Done %', font: { size: 11, weight: '700' }, color: COLORS.axisTitle },
                         },
                         yRisk: {
                             type: 'linear', position: 'right',
                             min: 0,
                             grid: { drawOnChartArea: false },
-                            ticks: { font: { size: 11, weight: '600' }, color: '#444', precision: 0 },
-                            title: { display: true, text: 'High Risk', font: { size: 11, weight: '700' }, color: '#333' },
+                            ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, precision: 0 },
+                            title: { display: true, text: 'High Risk', font: { size: 11, weight: '700' }, color: COLORS.axisTitle },
                         },
                     },
                 },
@@ -4292,8 +4349,8 @@
                         tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + ctx.parsed.x + '%'; } } },
                     },
                     scales: {
-                        x: { stacked: true, min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444', callback: function(v){ return v + '%'; } } },
-                        y: { stacked: true, grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#444' } },
+                        x: { stacked: true, min: 0, max: 100, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, callback: function(v){ return v + '%'; } } },
+                        y: { stacked: true, grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis } },
                     },
                 },
             });
@@ -4328,8 +4385,8 @@
                         tooltip: { callbacks: { label: function(ctx){ return ctx.parsed.y + ' tasks'; } } },
                     },
                     scales: {
-                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444' } },
-                        y: { min: 0, max: maxVal > 0 ? undefined : 10, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: '#444', stepSize: 1 } },
+                        x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis } },
+                        y: { min: 0, max: maxVal > 0 ? undefined : 10, grid: { color: COLORS.gridLine }, ticks: { font: { size: 11, weight: '600' }, color: COLORS.axis, stepSize: 1 } },
                     },
                 },
             });

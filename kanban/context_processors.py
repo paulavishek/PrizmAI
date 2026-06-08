@@ -290,6 +290,24 @@ def conflict_count(request):
         return {'active_conflict_count': 0}
 
 
+def discovery_count(request):
+    """Expose the Discovery 'ideas to score' count to the global sidebar badge.
+
+    Mirrors the dashboard's own count (kanban.views._get_discovery_widget_counts)
+    so the number shown next to the sidebar Discovery item matches the feature.
+    Returns 0 when unauthenticated, feature-disabled, or on any error.
+    """
+    if not request.user.is_authenticated:
+        return {'sidebar_discovery_to_score': 0}
+    try:
+        from kanban.views import _get_discovery_widget_counts
+        organization = getattr(getattr(request.user, 'profile', None), 'organization', None)
+        counts = _get_discovery_widget_counts(request.user, organization)
+        return {'sidebar_discovery_to_score': counts.get('discovery_ideas_to_score', 0)}
+    except Exception:
+        return {'sidebar_discovery_to_score': 0}
+
+
 def user_favorites(request):
     """
     Add user's favorites to template context for sidebar rendering.

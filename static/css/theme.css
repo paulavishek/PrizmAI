@@ -489,8 +489,10 @@ body::-webkit-scrollbar-thumb:hover {
     padding: 0.5rem 0.75rem;
     border-radius: 5px;
     border: none;
-    background-color: var(--bg-secondary, transparent);
-    color: var(--navbar-text, #fff);
+    background-color: transparent;
+    /* Use theme text color, not --navbar-text (which is white in light mode and
+       made the icon invisible on the light topbar). */
+    color: var(--text-primary, #212529);
     cursor: pointer;
     transition: opacity 0.2s ease;
     font-size: 1rem;

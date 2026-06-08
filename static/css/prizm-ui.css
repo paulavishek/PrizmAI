@@ -1,0 +1,278 @@
+/* ============================================================
+   PrizmAI Shared UI Layer  —  prizm-ui.css
+   Reusable modern card / avatar / progress / stat components.
+
+   Goals:
+   - One consistent, sleek card language to replace stock Bootstrap chrome.
+   - Token-driven so light / dark / accessibility modes all keep working.
+   - Dark mode is toggled via  <html data-bs-theme="dark">  (see base.html),
+     NOT body.dark-mode — so every dark override below keys on
+     [data-bs-theme="dark"]. Do not switch to body.dark-mode.
+   ============================================================ */
+
+:root {
+    /* ── Elevation / radius / spacing ──────────────────────────── */
+    --card-radius:        14px;
+    --card-radius-sm:     10px;
+    --card-radius-lg:     18px;
+    --card-border:        1px solid rgba(15, 23, 42, 0.10);
+    --card-bg-surface:    #ffffff;
+    --card-shadow:        0 1px 2px rgba(15, 23, 42, 0.05),
+                          0 6px 18px rgba(15, 23, 42, 0.08);
+    --card-shadow-hover:  0 2px 6px rgba(15, 23, 42, 0.08),
+                          0 14px 32px rgba(15, 23, 42, 0.14);
+    --card-padding:       1.25rem;
+
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+
+    /* ── Brand accent ramp (reuses existing signature gradient) ── */
+    --prizm-accent:        #667eea;
+    --prizm-accent-2:      #764ba2;
+    --prizm-accent-grad:   linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --prizm-accent-soft:   rgba(102, 126, 234, 0.12);
+
+    /* ── Persona avatar colors (demo cards) ────────────────────── */
+    --persona-purple: linear-gradient(135deg, #6c5ce7 0%, #8e7bf0 100%);
+    --persona-green:  linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --persona-amber:  linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+
+    /* ── Section chrome ────────────────────────────────────────── */
+    --chip-bg:        rgba(102, 126, 234, 0.10);
+    --chip-text:      #4c5480;
+    --track-bg:       #eef0f6;
+}
+
+[data-bs-theme="dark"] {
+    /* Stronger border so cards read as distinct surfaces against the dark page */
+    --card-border:        1px solid rgba(255, 255, 255, 0.16);
+    --card-bg-surface:    #2a2d3a;
+    --card-shadow:        0 1px 2px rgba(0, 0, 0, 0.4),
+                          0 6px 20px rgba(0, 0, 0, 0.45);
+    --card-shadow-hover:  0 2px 6px rgba(0, 0, 0, 0.5),
+                          0 16px 36px rgba(0, 0, 0, 0.6);
+    --prizm-accent-soft:  rgba(123, 147, 245, 0.18);
+    --chip-bg:            rgba(123, 147, 245, 0.18);
+    --chip-text:          #c3c6d4;
+    --track-bg:           #3a3a3a;
+}
+
+/* ============================================================
+   .prizm-card  —  the reusable modern surface
+   Default hover = shadow only (NO transform), so chart tooltips
+   and dropdowns inside a card are never trapped in a new stacking
+   context. Opt into lift with .prizm-card--lift on simple cards.
+   ============================================================ */
+.prizm-card {
+    background: var(--card-bg-surface);
+    border: var(--card-border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: var(--card-padding);
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.prizm-card:hover {
+    box-shadow: var(--card-shadow-hover);
+}
+
+/* Opt-in lift — ONLY for cards with no charts/dropdowns inside. */
+.prizm-card--lift:hover {
+    transform: translateY(-3px);
+}
+
+.prizm-card--flush { padding: 0; }
+.prizm-card--tight { padding: 0.875rem 1rem; }
+
+/* ── .prizm-surface ────────────────────────────────────────────
+   Add to an EXISTING Bootstrap .card to give it the modern token
+   chrome (radius/border/shadow) WITHOUT changing its internal
+   .card-header/.card-body layout. No transform — safe on cards
+   that contain charts or dropdowns. */
+.prizm-surface {
+    border: var(--card-border) !important;
+    border-radius: var(--card-radius) !important;
+    box-shadow: var(--card-shadow) !important;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+}
+.prizm-surface:hover { box-shadow: var(--card-shadow-hover) !important; }
+.prizm-surface > .card-header {
+    background: transparent;
+    border-bottom: var(--card-border);
+}
+
+/* Feature / accent card (e.g. AI Briefing) — no transform on hover. */
+.prizm-card--feature {
+    background: linear-gradient(135deg, #2b2f4a 0%, #1f2336 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e8e9f3;
+}
+.prizm-card--feature .prizm-section-title,
+.prizm-card--feature .prizm-card__header { color: #ffffff; }
+
+/* ── Card header / section titles ──────────────────────────── */
+.prizm-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.prizm-section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-lg, 1.0625rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    margin: 0;
+}
+.prizm-section-title i { color: var(--prizm-accent); font-size: 0.95em; }
+
+/* Count / status chip next to a title */
+.prizm-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--chip-text);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* ============================================================
+   .prizm-avatar  —  color-coded persona / user avatar
+   ============================================================ */
+.prizm-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+    background: var(--prizm-accent-grad);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+}
+.prizm-avatar--sm { width: 30px; height: 30px; font-size: 0.78rem; }
+.prizm-avatar--lg { width: 52px; height: 52px; font-size: 1.15rem; }
+
+.prizm-avatar--purple { background: var(--persona-purple); }
+.prizm-avatar--green  { background: var(--persona-green); }
+.prizm-avatar--amber  { background: var(--persona-amber); }
+
+/* ============================================================
+   .prizm-progress  —  thin rounded progress bar
+   ============================================================ */
+.prizm-progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--track-bg);
+    overflow: hidden;
+}
+.prizm-progress__fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--prizm-accent-grad);
+    transition: width 0.4s ease;
+}
+.prizm-progress--thin { height: 4px; }
+
+/* Semantic fill colors for risk/health states */
+.prizm-progress__fill--green  { background: linear-gradient(135deg, #10b981, #34d399); }
+.prizm-progress__fill--amber  { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+.prizm-progress__fill--red    { background: linear-gradient(135deg, #ef4444, #f87171); }
+
+/* ============================================================
+   .prizm-stat  —  compact KPI tile
+   ============================================================ */
+.prizm-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--card-radius-sm);
+    background: var(--card-bg-surface);
+    border: var(--card-border);
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+a.prizm-stat, .prizm-stat[role="button"], .prizm-stat--clickable { cursor: pointer; }
+.prizm-stat--clickable:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-2px); }
+
+.prizm-stat__value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+.prizm-stat__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.prizm-stat__meta { font-size: 0.78rem; color: var(--text-secondary); }
+
+/* Accent variants for stat values */
+.prizm-stat__value--green { color: #10b981; }
+.prizm-stat__value--amber { color: #f59e0b; }
+.prizm-stat__value--red   { color: #ef4444; }
+
+/* ============================================================
+   Small shared helpers
+   ============================================================ */
+.prizm-skill-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: var(--prizm-accent-soft);
+    color: var(--chip-text);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+/* Item row (e.g. standalone boards) */
+.prizm-item-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0.75rem 1rem;
+    border-radius: var(--card-radius-sm);
+    border: var(--card-border);
+    background: var(--card-bg-surface);
+    transition: box-shadow 0.18s ease;
+}
+.prizm-item-row:hover { box-shadow: var(--card-shadow-hover); }
+.prizm-item-row__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--card-radius-sm);
+    background: var(--prizm-accent-soft);
+    color: var(--prizm-accent);
+    flex-shrink: 0;
+}
