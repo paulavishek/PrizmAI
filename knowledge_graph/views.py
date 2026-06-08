@@ -1141,6 +1141,24 @@ def deja_vu_check(request, board_id):
         return JsonResponse(result)
 
     board_ids = _get_user_boards(request.user)
+
+    # Exclude the current board AND its same-name "twins" — boards with the same
+    # name that share this board's owner or workspace (e.g. an accidental duplicate
+    # or a per-user sandbox copy). Otherwise a board would match its own duplicate
+    # and Déjà Vu would surface the project against itself.
+    twin_filter = Q()
+    if board.owner_id:
+        twin_filter |= Q(owner_id=board.owner_id)
+    if board.workspace_id:
+        twin_filter |= Q(workspace_id=board.workspace_id)
+    exclude_board_ids = {board_id}
+    if twin_filter:
+        exclude_board_ids.update(
+            Board.objects.filter(name__iexact=board.name)
+            .filter(twin_filter)
+            .values_list('id', flat=True)
+        )
+
     past_nodes = (
         MemoryNode.objects
         .filter(
@@ -1148,7 +1166,7 @@ def deja_vu_check(request, board_id):
             node_type__in=['outcome', 'lesson', 'risk_event', 'scope_change'],
             importance_score__gte=0.6,
         )
-        .exclude(board_id=board_id)
+        .exclude(board_id__in=exclude_board_ids)
         .select_related('board')
         .order_by('-importance_score', '-created_at')[:50]
     )

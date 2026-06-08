@@ -40,42 +40,9 @@ FEATURE_GUIDES = [
             '</p>'
         ),
     },
-    {
-        'feature_key': 'knowledge_graph',
-        'feature_name': 'Knowledge Graph - Project Memory',
-        'order': 20,
-        'brief_description': (
-            'An interconnected memory of your project\'s decisions, risk '
-            'events, lessons learned, conflicts, scope changes, and '
-            'milestones. AI discovers causal links between events and '
-            'surfaces relevant past patterns when similar situations '
-            'arise - preserving organizational memory across projects.'
-        ),
-        'detailed_description': (
-            '<h6>What gets captured</h6>'
-            '<p>The Knowledge Graph automatically records significant '
-            'events as memory nodes: decisions made, lessons learned, '
-            'risk events, conflict resolutions, scope changes, and '
-            'milestones. Each node is scored by importance so the most '
-            'critical memories surface first.</p>'
-            '<h6>How connections work</h6>'
-            '<p>AI discovers causal links between events - for example, '
-            'a scope change that <em>led to</em> a deadline slip, or a '
-            'risk mitigation that <em>prevented</em> a budget overrun. '
-            'Connection types include: Caused, Similar To, Led To, '
-            'Prevented, and Repeated From.</p>'
-            '<h6>Manual memories</h6>'
-            '<p>You can also add your own entries - decisions, lessons, '
-            'or important observations - using the <strong>Add Decision / '
-            'Lesson</strong> button. These are indexed alongside '
-            'auto-captured events.</p>'
-            '<p class="text-muted small mt-2">'
-            'Tip: Use the Organizational Memory search to ask questions '
-            'across all projects - e.g., "What happened last time we '
-            'tried to migrate the database?"'
-            '</p>'
-        ),
-    },
+    # NOTE: The 'knowledge_graph' guide was removed — the Project Knowledge page
+    # now ships an inline, graphical "How does it work?" guide (see
+    # templates/knowledge_graph/board_knowledge.html) instead of the text popover.
     {
         'feature_key': 'org_memory',
         'feature_name': 'Organizational Memory',

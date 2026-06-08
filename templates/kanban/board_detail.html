@@ -260,7 +260,7 @@
         display: none !important;
     }
 
-    /* ---- Redesigned Card (v2 � 110px compact) ---- */
+    /* ---- Redesigned Card (v2 — 110px compact) ---- */
     .kanban-task-v2 {
         position: relative;
         background: var(--card-bg);
@@ -284,7 +284,7 @@
     .card-inner { display: flex; flex-direction: column; gap: 4px; }
     .card-task-id { font-size: .7rem; font-weight: 600; color: #888780; letter-spacing: .02em; line-height: 1; }
 
-    /* Title � 2-line clamp */
+    /* Title — 2-line clamp */
     .card-task-title {
         font-weight: 600;
         font-size: .82rem;
@@ -438,7 +438,7 @@
     .inline-pick-option:hover { background: var(--bg-tertiary); }
     .inline-pick-option.active { font-weight: 700; color: #0d6efd; }
 
-    /* ---- Column header � WIP badges ---- */
+    /* ---- Column header — WIP badges ---- */
     .wip-badge {
         display: inline-flex;
         align-items: center;
@@ -457,7 +457,7 @@
         background-color: #fef3c7 !important;
     }
 
-    /* ---- Quick-View Drawer � styles now in base.html ---- */
+    /* ---- Quick-View Drawer — styles now in base.html ---- */
 
     /* Task Search Bar Styling */
     #taskSearchCard {
@@ -583,7 +583,7 @@
 {% endblock %}
 
 {% block content %}
-<!-- Hierarchy breadcrumb � shows Mission ? Strategy ? Board chain when available -->
+<!-- Hierarchy breadcrumb — shows Mission ? Strategy ? Board chain when available -->
 {% if board.strategy %}
 <nav aria-label="breadcrumb" class="mb-2">
     <ol class="breadcrumb small mb-0">
@@ -604,9 +604,9 @@
 
 <!-- Demo Mode Banner removed — single-tier personal sandbox uses the unified banner in base.html -->
 
-<!-- D�j� Vu Banner (Knowledge Graph) � compact -->
+<!-- Déjà Vu Banner (Knowledge Graph) — compact -->
 <div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-2 py-2" role="alert" style="display:none; font-size:.9rem;">
-    <i class="fas fa-lightbulb me-1"></i><strong>D�j� Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
+    <i class="fas fa-lightbulb me-1"></i><strong>Déjà Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
     <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View &rarr;</a>
     <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close" style="padding:.5rem;"></button>
 </div>
@@ -693,7 +693,6 @@
                 {% if can_edit_board %}
                 <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
                 {% endif %}
-                <li><a class="dropdown-item" href="{% url 'board_knowledge' board.id %}"><i class="fas fa-brain me-2 text-purple"></i>Knowledge Base</a></li>
                 <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json"><i class="fas fa-file-export me-2 text-secondary"></i>Export JSON</a></li>
@@ -1033,7 +1032,7 @@
             </div>
         </div>
 
-        {# -- Task Cards (redesigned � compact, 110px) -- #}
+        {# -- Task Cards (redesigned — compact, 110px) -- #}
         <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
             {% for task in tasks %}
                 {% if task.column.id == column.id %}
@@ -1150,7 +1149,7 @@
     </div>
 </div>
 
-{# ------- Quick-View Drawer (Tier 1) � HTML now in base.html ------- #}
+{# ------- Quick-View Drawer (Tier 1) — HTML now in base.html ------- #}
 <!-- Wiki Links moved to Board Menu → Link Wiki Pages (3-dot menu) -->
 
 <!-- Set WIP Limit Modal -->
@@ -1551,6 +1550,10 @@
                         <span class="tile-label">PrizmBrief <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
+                    <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}" title="Your project's interconnected memory: decisions, lessons, risks & milestones">
+                        <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-brain"></i></span>
+                        <span class="tile-label">Knowledge Base</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -2380,10 +2383,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             flyout.style.left = cardRect.left + 'px';
             if (btnRect.top >= flyoutH + 8) {
-                // Enough space above � open upward
+                // Enough space above — open upward
                 flyout.style.top = (btnRect.top - flyoutH - 4) + 'px';
             } else {
-                // Not enough space above � open downward
+                // Not enough space above — open downward
                 flyout.style.top = (btnRect.bottom + 4) + 'px';
             }
         }
@@ -2644,7 +2647,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 
-<!-- D�j� Vu Banner Script -->
+<!-- Déjà Vu Banner Script -->
 <script>
 (function() {
     fetch("{% url 'deja_vu_check' board.id %}")
