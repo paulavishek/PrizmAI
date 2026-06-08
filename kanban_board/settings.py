@@ -173,6 +173,7 @@ TEMPLATES = [
                 'kanban_board.context_processors.user_preferences',
                 'kanban_board.context_processors.user_timezone',
                 'kanban.context_processors.conflict_count',
+                'kanban.context_processors.discovery_count',  # Sidebar Discovery badge
                 'kanban.context_processors.demo_context',  # Demo mode context
                 'kanban.context_processors.user_favorites',  # My Favorites sidebar
                 'kanban.context_processors.preset_features',  # Workspace preset feature flags

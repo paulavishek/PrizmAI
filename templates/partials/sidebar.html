@@ -202,6 +202,9 @@
                    title="Discovery">
                     <i class="fas fa-lightbulb sidebar-nav-icon"></i>
                     <span class="sidebar-label">Discovery</span>
+                    {% if sidebar_discovery_to_score %}
+                    <span class="sidebar-badge sidebar-badge-warning" title="{{ sidebar_discovery_to_score }} idea{{ sidebar_discovery_to_score|pluralize }} to score">{{ sidebar_discovery_to_score }}</span>
+                    {% endif %}
                 </a>
             </li>
             {% endif %}
