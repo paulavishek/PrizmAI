@@ -62,35 +62,40 @@ class Command(BaseCommand):
             return
         self.stdout.write(self.style.SUCCESS(f'[OK] Found board: {self.sd_board.name} (ID: {self.sd_board.pk})'))
 
-        # Get demo users
-        self.alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
-        self.sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
-        self.jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
+        # Get demo users (current personas — see accounts/demo_personas.py).
+        # Variable names match the actual persona display names so the seeded
+        # author of each memory is obvious when reading this file.
+        self.priya = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        self.marcus = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        self.elena = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
 
-        if not self.alex:
+        if not self.priya:
             # Fallback to any demo user
-            self.alex = User.objects.filter(profile__is_demo_account=True).first()
-        if not self.sam:
-            self.sam = self.alex
-        if not self.jordan:
-            self.jordan = self.alex
+            self.priya = User.objects.filter(profile__is_demo_account=True).first()
+        if not self.marcus:
+            self.marcus = self.priya
+        if not self.elena:
+            self.elena = self.priya
 
-        self.stdout.write(f'   Demo users: {self.alex}, {self.sam}, {self.jordan}')
+        self.stdout.write(f'   Demo users: {self.priya}, {self.marcus}, {self.elena}')
 
-        # Optionally reset
-        if options.get('reset'):
-            deleted, _ = MemoryNode.objects.filter(board=self.sd_board).delete()
-            self.stdout.write(self.style.WARNING(f'   Deleted {deleted} existing knowledge nodes'))
-
-        # Idempotency guard: skip seeding manual entries that already exist so
-        # re-running populate_all_demo_data never creates duplicates.
-        existing_titles = set(
-            MemoryNode.objects.filter(board=self.sd_board).values_list('title', flat=True)
-        )
+        # Clear-and-replace: this command fully owns the Software Development demo
+        # board's knowledge graph, so we always wipe its nodes before reseeding.
+        # MemoryConnection rows cascade-delete with their nodes (on_delete=CASCADE),
+        # so deleting nodes is sufficient. This guarantees a pristine, duplicate-free
+        # state on every reseed / Reset Demo, regardless of prior title or persona
+        # edits. (The legacy exact-title idempotency guard could not recognise
+        # renamed entries — e.g. a dash-style change — and left stale duplicates,
+        # including ones authored by retired demo personas.)
+        deleted, _ = MemoryNode.objects.filter(board=self.sd_board).delete()
+        if deleted:
+            self.stdout.write(self.style.WARNING(
+                f'   Cleared {deleted} existing knowledge rows (nodes + connections)'
+            ))
 
         # Seed the data
-        manual_nodes = self._seed_manual_entries(existing_titles=existing_titles)
-        auto_nodes = self._seed_auto_captured_entries(existing_titles=existing_titles)
+        manual_nodes = self._seed_manual_entries()
+        auto_nodes = self._seed_auto_captured_entries()
         self._seed_memory_connections(manual_nodes, auto_nodes)
         self._seed_gap_flags()
 
@@ -105,11 +110,9 @@ class Command(BaseCommand):
     # MANUAL ENTRIES (Decision Log & Lessons - left panel)
     # =========================================================================
 
-    def _seed_manual_entries(self, existing_titles=None):
+    def _seed_manual_entries(self):
         """Create 10 Decisions + 10 Lessons/Notes as manual (user-authored) entries."""
         self.stdout.write(self.style.NOTICE('\n Seeding manual Decision & Lesson entries...'))
-        if existing_titles is None:
-            existing_titles = set()
 
         # Spread created_at times realistically across the last 3 months
         def past(days):
@@ -128,7 +131,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['architecture', 'api', 'graphql', 'performance'],
                 'importance_score': 0.90,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(85),
             },
             {
@@ -142,7 +145,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['database', 'postgresql', 'architecture'],
                 'importance_score': 0.88,
-                'created_by': self.jordan,
+                'created_by': self.elena,
                 'created_at': past(80),
             },
             {
@@ -155,7 +158,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['authentication', 'security', 'jwt'],
                 'importance_score': 0.87,
-                'created_by': self.jordan,
+                'created_by': self.elena,
                 'created_at': past(75),
             },
             {
@@ -169,7 +172,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['redis', 'real-time', 'architecture', 'websockets'],
                 'importance_score': 0.83,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(70),
             },
             {
@@ -183,7 +186,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['api', 'rate-limiting', 'security', 'performance'],
                 'importance_score': 0.80,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(60),
             },
             {
@@ -197,7 +200,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['file-upload', 'storage', 's3', 'scope'],
                 'importance_score': 0.78,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(55),
             },
             {
@@ -210,7 +213,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['notifications', 'build-vs-buy', 'cost'],
                 'importance_score': 0.75,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(50),
             },
             {
@@ -224,7 +227,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['documentation', 'mkdocs', 'tooling'],
                 'importance_score': 0.72,
-                'created_by': self.jordan,
+                'created_by': self.elena,
                 'created_at': past(45),
             },
             {
@@ -238,7 +241,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['testing', 'ci-cd', 'developer-experience'],
                 'importance_score': 0.78,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(40),
             },
             {
@@ -252,7 +255,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['caching', 'redis', 'standards', 'performance'],
                 'importance_score': 0.76,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(35),
             },
         ]
@@ -269,7 +272,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['estimation', 'migrations', 'lessons-learned'],
                 'importance_score': 0.70,
-                'created_by': self.jordan,
+                'created_by': self.elena,
                 'created_at': past(78),
             },
             {
@@ -283,7 +286,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['authentication', 'estimation', 'edge-cases'],
                 'importance_score': 0.68,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(73),
             },
             {
@@ -297,7 +300,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['real-time', 'websockets', 'load-testing', 'process'],
                 'importance_score': 0.72,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(68),
             },
             {
@@ -312,7 +315,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['notifications', 'ux', 'user-feedback'],
                 'importance_score': 0.65,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(48),
             },
             {
@@ -327,7 +330,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['documentation', 'api', 'process', 'best-practice'],
                 'importance_score': 0.63,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(58),
             },
             {
@@ -342,7 +345,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['security', 'file-upload', 'validation', 'lessons-learned'],
                 'importance_score': 0.75,
-                'created_by': self.jordan,
+                'created_by': self.elena,
                 'created_at': past(53),
             },
             {
@@ -357,7 +360,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['caching', 'security', 'permissions', 'bug'],
                 'importance_score': 0.73,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(33),
             },
             {
@@ -372,7 +375,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['technical-debt', 'process', 'lean', 'sprint-planning'],
                 'importance_score': 0.62,
-                'created_by': self.alex,
+                'created_by': self.priya,
                 'created_at': past(28),
             },
             {
@@ -387,7 +390,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['testing', 'integration-tests', 'data-integrity', 'roi'],
                 'importance_score': 0.74,
-                'created_by': self.jordan,
+                'created_by': self.elena,
                 'created_at': past(38),
             },
             {
@@ -402,7 +405,7 @@ class Command(BaseCommand):
                 ),
                 'tags': ['process', 'standup', 'kanban', 'team-efficiency'],
                 'importance_score': 0.58,
-                'created_by': self.sam,
+                'created_by': self.marcus,
                 'created_at': past(20),
             },
         ]
@@ -412,13 +415,6 @@ class Command(BaseCommand):
         for entry in decisions:
             created_at = entry.pop('created_at')
             title = entry.pop('title')
-            if title in existing_titles:
-                node = MemoryNode.objects.filter(
-                    board=self.sd_board, node_type='decision', title=title
-                ).order_by('pk').first()
-                nodes.append(node)
-                self.stdout.write(f'   Decision (existing): {title[:60]}')
-                continue
             node = MemoryNode.objects.create(
                 board=self.sd_board,
                 node_type='decision',
@@ -428,20 +424,12 @@ class Command(BaseCommand):
             )
             MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
             node.refresh_from_db()
-            existing_titles.add(title)
             nodes.append(node)
             self.stdout.write(f'   Decision: {title[:60]}')
 
         for entry in lessons:
             created_at = entry.pop('created_at')
             title = entry.pop('title')
-            if title in existing_titles:
-                node = MemoryNode.objects.filter(
-                    board=self.sd_board, node_type='manual_log', title=title
-                ).order_by('pk').first()
-                nodes.append(node)
-                self.stdout.write(f'   Lesson (existing): {title[:60]}')
-                continue
             node = MemoryNode.objects.create(
                 board=self.sd_board,
                 node_type='manual_log',
@@ -451,7 +439,6 @@ class Command(BaseCommand):
             )
             MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
             node.refresh_from_db()
-            existing_titles.add(title)
             nodes.append(node)
             self.stdout.write(f'   Lesson: {title[:60]}')
 
@@ -461,11 +448,9 @@ class Command(BaseCommand):
     # AUTO-CAPTURED ENTRIES (Auto-Captured Memories  - right panel)
     # =========================================================================
 
-    def _seed_auto_captured_entries(self, existing_titles=None):
+    def _seed_auto_captured_entries(self):
         """Create 9 system-generated auto-captured MemoryNode entries."""
         self.stdout.write(self.style.NOTICE('\n Seeding auto-captured memory entries...'))
-        if existing_titles is None:
-            existing_titles = set()
 
         def past(days):
             return timezone.now() - timedelta(days=days)
@@ -672,13 +657,6 @@ class Command(BaseCommand):
             created_at = entry.pop('created_at')
             node_type = entry.pop('node_type')
             title = entry.pop('title')
-            if title in existing_titles:
-                node = MemoryNode.objects.filter(
-                    board=self.sd_board, node_type=node_type, title=title
-                ).order_by('pk').first()
-                nodes.append(node)
-                self.stdout.write(f'   {node.get_node_type_display()} (existing): {title[:60]}')
-                continue
             node = MemoryNode.objects.create(
                 board=self.sd_board,
                 node_type=node_type,
@@ -689,7 +667,6 @@ class Command(BaseCommand):
             )
             MemoryNode.objects.filter(pk=node.pk).update(created_at=created_at)
             node.refresh_from_db()
-            existing_titles.add(title)
             nodes.append(node)
             self.stdout.write(f'   {node.get_node_type_display()}: {title[:60]}')
 

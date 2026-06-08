@@ -45,8 +45,16 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="mb-1"><i class="fas fa-wand-magic-sparkles me-2 text-primary"></i>Project Knowledge {% feature_help "knowledge_graph" %}</h2>
-            <p class="text-muted mb-0">{{ board.name }} &mdash; {{ total_count }} memor{{ total_count|pluralize:"y,ies" }} captured</p>
+            <h2 class="mb-1"><i class="fas fa-wand-magic-sparkles me-2 text-primary"></i>Project Knowledge</h2>
+            <p class="text-muted mb-0">
+                {{ board.name }} &mdash; {{ total_count }} memor{{ total_count|pluralize:"y,ies" }} captured
+                <button class="btn btn-link btn-sm p-0 ms-2 align-baseline text-decoration-none" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#kgHowItWorks"
+                        aria-expanded="false" aria-controls="kgHowItWorks">
+                    <i class="fas fa-circle-question me-1"></i><span id="kgGuideToggleLabel">How does it work?</span>
+                    <i class="fas fa-chevron-down ms-1 kg-guide-chevron" style="font-size:0.7rem; transition: transform 0.2s;"></i>
+                </button>
+            </p>
         </div>
         <div>
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary me-2">
@@ -55,6 +63,112 @@
             <button class="btn btn-primary" id="addMemoryOpenBtn" data-bs-toggle="modal" data-bs-target="#addMemoryModal">
                 <i class="fas fa-plus me-1"></i> Add Memory
             </button>
+        </div>
+    </div>
+
+    <!-- How does it work? — graphical guide -->
+    <div class="collapse mb-4" id="kgHowItWorks">
+        <div class="card border shadow-sm">
+            <div class="card-body p-4">
+                <div class="row g-4">
+
+                    <!-- What gets captured -->
+                    <div class="col-12">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-database fa-2x text-primary"></i>
+                            </div>
+                            <div>
+                                <h6 class="fw-bold mb-1">What gets captured</h6>
+                                <p class="small text-body-secondary mb-2">
+                                    The Knowledge Graph is your project's living memory. Significant
+                                    events are recorded as <strong>memory nodes</strong> &mdash; each
+                                    scored by importance so the most critical surface first.
+                                </p>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis border border-primary-subtle">Decisions</span>
+                                    <span class="badge rounded-pill bg-success-subtle text-success-emphasis border border-success-subtle">Lessons Learned</span>
+                                    <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis border border-danger-subtle">Risk Events</span>
+                                    <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle">Scope Changes</span>
+                                    <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle">Milestones</span>
+                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">Conflict Resolutions</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- How connections work -->
+                    <div class="col-12">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="flex-shrink-0 text-center" style="width:42px;">
+                                <i class="fas fa-diagram-project fa-2x text-success"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="fw-bold mb-1">How connections work</h6>
+                                <p class="small text-body-secondary mb-3">
+                                    AI discovers <em>causal</em> links between events &mdash; for example,
+                                    a scope change that <em>led to</em> a deadline slip, or a risk
+                                    mitigation that <em>prevented</em> a budget overrun.
+                                </p>
+
+                                <!-- Mini causal flow diagram -->
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle p-2">
+                                        <i class="fas fa-arrows-left-right-to-line me-1"></i>Scope Change
+                                    </span>
+                                    <span class="text-success small fw-semibold">
+                                        led&nbsp;to <i class="fas fa-arrow-right-long ms-1"></i>
+                                    </span>
+                                    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle p-2">
+                                        <i class="fas fa-triangle-exclamation me-1"></i>Deadline Slip
+                                    </span>
+                                    <span class="text-success small fw-semibold">
+                                        prevented&nbsp;by <i class="fas fa-arrow-right-long ms-1"></i>
+                                    </span>
+                                    <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle p-2">
+                                        <i class="fas fa-shield-halved me-1"></i>Earlier Decision
+                                    </span>
+                                </div>
+
+                                <p class="small text-body-secondary mb-1">Connection types:</p>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <span class="badge rounded-pill bg-light text-dark border"><i class="fas fa-bolt me-1 text-danger"></i>Caused</span>
+                                    <span class="badge rounded-pill bg-light text-dark border"><i class="fas fa-clone me-1 text-secondary"></i>Similar To</span>
+                                    <span class="badge rounded-pill bg-light text-dark border"><i class="fas fa-arrow-right-long me-1 text-success"></i>Led To</span>
+                                    <span class="badge rounded-pill bg-light text-dark border"><i class="fas fa-shield-halved me-1 text-primary"></i>Prevented</span>
+                                    <span class="badge rounded-pill bg-light text-dark border"><i class="fas fa-clock-rotate-left me-1 text-info"></i>Repeated From</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- Auto-captured vs Manual -->
+                    <div class="col-md-6">
+                        <div class="p-3 rounded h-100 bg-success-subtle border-start border-success border-3">
+                            <h6 class="fw-semibold mb-1"><i class="fas fa-robot me-2 text-success"></i>Auto-Captured</h6>
+                            <p class="small text-body-secondary mb-0">
+                                System events &mdash; missed deadlines, scope creep, resolved conflicts,
+                                milestones &mdash; are recorded automatically, with no effort from you.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 rounded h-100 bg-primary-subtle border-start border-primary border-3">
+                            <h6 class="fw-semibold mb-1"><i class="fas fa-gavel me-2 text-primary"></i>Manual Memories</h6>
+                            <p class="small text-body-secondary mb-0">
+                                Add your own decisions, lessons, or observations with the
+                                <strong>Add Memory</strong> button. They are indexed alongside
+                                auto-captured events and searchable across projects.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
         </div>
     </div>
 
@@ -252,6 +366,21 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
+    // ── "How does it work?" guide toggle (chevron + label) ─────────────────
+    const kgGuide = document.getElementById('kgHowItWorks');
+    if (kgGuide) {
+        const kgChevron = document.querySelector('.kg-guide-chevron');
+        const kgLabel = document.getElementById('kgGuideToggleLabel');
+        kgGuide.addEventListener('shown.bs.collapse', function() {
+            if (kgChevron) kgChevron.style.transform = 'rotate(180deg)';
+            if (kgLabel) kgLabel.textContent = 'Hide';
+        });
+        kgGuide.addEventListener('hidden.bs.collapse', function() {
+            if (kgChevron) kgChevron.style.transform = 'rotate(0deg)';
+            if (kgLabel) kgLabel.textContent = 'How does it work?';
+        });
+    }
+
     // ── Node Detail Modal ──────────────────────────────────────────────────
     const nodesData = JSON.parse(document.getElementById('kgNodesData').textContent);
     const connectionsData = JSON.parse(document.getElementById('kgConnectionsData').textContent);
@@ -373,6 +502,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const addModalEl = document.getElementById('addMemoryModal');
     const detailModalEl = document.getElementById('nodeDetailModal');
 
+    // Make the Details placeholder match the selected memory type so the prompt
+    // is relevant (the generic "Why was this decision made?" only fits decisions).
+    const nodeTypeSelect = document.getElementById('memoryNodeType');
+    const contentField = document.getElementById('memoryContent');
+    const CONTENT_PLACEHOLDERS = {
+        decision:   'Why was this decision made? What was the context and the trade-offs?',
+        lesson:     'What did we learn? What would you do differently next time?',
+        risk_event: 'What is the risk? What is the potential impact, and any mitigation?',
+        milestone:  'What was achieved? Why does this milestone matter for the project?',
+        note:       'Capture the observation or context worth remembering.',
+    };
+    function updateContentPlaceholder() {
+        const ph = CONTENT_PLACEHOLDERS[nodeTypeSelect.value];
+        if (ph) contentField.placeholder = ph;
+    }
+    if (nodeTypeSelect) {
+        nodeTypeSelect.addEventListener('change', updateContentPlaceholder);
+        updateContentPlaceholder();
+    }
+
     // Reset to create-mode whenever the "Add Memory" button opens the modal.
     const addOpenBtn = document.getElementById('addMemoryOpenBtn');
     if (addOpenBtn) {
@@ -384,6 +533,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('memoryContent').value = '';
             document.getElementById('memoryTags').value = '';
             if (orgWideField) orgWideField.checked = false;
+            updateContentPlaceholder();
             errDiv.classList.add('d-none');
         });
     }
@@ -446,6 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
         editIdField.value = nodeId;
         document.getElementById('addMemoryModalLabel').innerHTML = '<i class="fas fa-pen me-2"></i>Edit Memory';
         document.getElementById('memoryNodeType').value = node.node_type;
+        updateContentPlaceholder();
         document.getElementById('memoryTitle').value = node.title;
         document.getElementById('memoryContent').value = node.content;
         document.getElementById('memoryTags').value = (node.tags || []).join(', ');

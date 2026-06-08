@@ -2073,12 +2073,10 @@ def board_list(request):
     except EmptyPage:
         due_soon_tasks = due_soon_tasks_paginator.page(due_soon_tasks_paginator.num_pages)
 
-    # For board_list, we only display boards, creation is handled by create_board view
-    form = BoardForm()
-
+    # For board_list, we only display boards; creation is handled by the
+    # create_board view/page (the legacy create-board modal was removed).
     return render(request, 'kanban/board_list.html', {
         'boards': boards,
-        'form': form,
         'task_count': task_count,
         'completed_count': completed_count,
         'completion_rate': completion_rate,
@@ -2121,9 +2119,42 @@ def create_board(request):
         except KanbanStrategy.DoesNotExist:
             selected_strategy = None
 
+    # All strategies for the optional "Link to Strategy" dropdown (only when no
+    # strategy pre-selected). Computed up-front so the duplicate-name warning
+    # branch below can re-render the form without recomputing.
+    all_strategies = []
+    if not selected_strategy:
+        from kanban.models import Strategy as _Strategy
+        all_strategies = list(
+            _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+            .values('id', 'name', 'mission__name', 'mission_id')
+        )
+
+    active_workspace = getattr(request, 'workspace', None)
+
     if request.method == 'POST':
         form = BoardForm(request.POST)
         if form.is_valid():
+            # Soft duplicate-title guard: if this user already owns a board with
+            # the same name in the same workspace, warn once and let them confirm.
+            # This prevents accidental dupes (which double-count tasks and pollute
+            # cross-board features like Déjà Vu) without hard-blocking legitimately
+            # similar names. Bypassed when the user re-submits with confirm_duplicate.
+            new_name = form.cleaned_data.get('name', '')
+            if request.POST.get('confirm_duplicate') != '1':
+                dup_qs = Board.objects.filter(
+                    owner=request.user, name__iexact=new_name,
+                )
+                if active_workspace is not None:
+                    dup_qs = dup_qs.filter(workspace=active_workspace)
+                if dup_qs.exists():
+                    return render(request, 'kanban/create_board.html', {
+                        'form': form,
+                        'selected_strategy': selected_strategy,
+                        'all_strategies': all_strategies,
+                        'duplicate_warning_name': new_name,
+                    })
+
             board = form.save(commit=False)
             # MVP Mode: organization can be None
             board.organization = organization
@@ -2225,15 +2256,6 @@ def create_board(request):
             return redirect('board_detail', board_id=board.id)
     else:
         form = BoardForm()
-    
-    # All strategies for the optional "Link to Strategy" dropdown (only when no strategy pre-selected)
-    all_strategies = []
-    if not selected_strategy:
-        from kanban.models import Strategy as _Strategy
-        all_strategies = list(
-            _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
-            .values('id', 'name', 'mission__name', 'mission_id')
-        )
 
     return render(request, 'kanban/create_board.html', {
         'form': form,
