@@ -1550,6 +1550,26 @@ def reset_demo_data(request):
             except Exception:
                 pass
 
+            # Self-healing: strip any stale membership the real user holds on the
+            # OFFICIAL demo template board(s). Demo users are meant to see only
+            # their private sandbox copy — a leftover membership on the template
+            # (e.g. from an account that originally seeded the board, pre-sandbox)
+            # makes every "all boards I belong to" feature double-count (boards,
+            # messages, calendar, cemetery, time). The reset otherwise never
+            # touches official-board membership, so such a row survives every
+            # reset. The three demo personas legitimately belong to the template
+            # and must be preserved.
+            try:
+                from kanban.models import BoardMembership
+                BoardMembership.objects.filter(
+                    board__is_official_demo_board=True,
+                    user=request.user,
+                ).exclude(
+                    user__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
+                ).delete()
+            except Exception:
+                pass
+
             # Clean SET_NULL FK models before board deletion (they'd be orphaned)
             user_board_ids = list(user_boards.values_list('id', flat=True))
             user_task_ids_on_own_boards = list(
@@ -1695,6 +1715,31 @@ def reset_demo_data(request):
                     BranchDivergenceLog.objects.filter(branch_id__in=demo_branch_ids).delete()
                     BranchSnapshot.objects.filter(branch_id__in=demo_branch_ids).delete()
                 ShadowBranch.objects.filter(board__in=demo_boards).delete()
+            except Exception:
+                pass
+
+            # Automation rules & logs on official demo boards.
+            # The pristine demo seeds NO automation rules (populate_automation_
+            # demo_data only seeds checklist/subtask/dependency content), so any
+            # AutomationRule on an official template board is user-created
+            # exploration — e.g. rules built while testing triggers/conditions/
+            # actions. The reset otherwise never touches automation, so these
+            # rules (and their logs) persist across every reset and keep the
+            # template polluted. Clearing all of them restores the original
+            # (rule-free) state. NB: rules on the user's OWN sandbox boards are
+            # already removed when those boards are deleted in STEP 2 (board FK
+            # is CASCADE); logs must be deleted explicitly here because
+            # AutomationLog.rule is SET_NULL (deleting a rule leaves the log).
+            try:
+                from kanban.automation_models import (
+                    AutomationRule, AutomationLog, ScheduledAutomation,
+                )
+                AutomationLog.objects.filter(board__in=demo_boards).delete()
+                try:
+                    ScheduledAutomation.objects.filter(board__in=demo_boards).delete()
+                except Exception:
+                    pass
+                AutomationRule.objects.filter(board__in=demo_boards).delete()
             except Exception:
                 pass
 
