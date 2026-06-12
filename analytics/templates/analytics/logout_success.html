@@ -53,20 +53,6 @@
         box-shadow: 0 5px 20px rgba(0,0,0,0.05);
     }
     
-    .engagement-badge {
-        display: inline-block;
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        margin-left: 10px;
-    }
-    
-    .badge-very_high { background: #10b981; color: white; }
-    .badge-high { background: #3b82f6; color: white; }
-    .badge-medium { background: #f59e0b; color: white; }
-    .badge-low { background: #6b7280; color: white; }
-    
     .star-rating {
         display: flex;
         gap: 8px;
@@ -163,13 +149,6 @@
                 {% else %}
                     Thanks for checking out Pri<span class="stylish-z">z</span>mAI!
                 {% endif %}
-                <span class="engagement-badge badge-{{ engagement_level }}">
-                    {% if engagement_level == 'very_high' %}Power User
-                    {% elif engagement_level == 'high' %}Deep Dive
-                    {% elif engagement_level == 'medium' %}Good Exploration
-                    {% else %}Quick Visit
-                    {% endif %}
-                </span>
             </p>
         </div>
         
