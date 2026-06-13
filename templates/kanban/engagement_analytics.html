@@ -64,6 +64,7 @@
                 <div class="card-body">
                     <h3 class="card-title">{{ avg_satisfaction|floatformat:1 }}/5</h3>
                     <p class="card-text text-muted">Avg Satisfaction Rating</p>
+                    <small class="text-muted d-block">Last {{ days }} days</small>
                     <small class="text-muted">
                         {% if avg_satisfaction >= 4 %}
                             <span class="text-success"><i class="bi bi-emoji-smile"></i> Excellent</span>

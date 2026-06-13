@@ -176,7 +176,14 @@ def stakeholder_update(request, board_id, pk):
     if request.method == 'POST':
         form = ProjectStakeholderForm(request.POST, instance=stakeholder)
         if form.is_valid():
-            form.save()
+            stakeholder = form.save()
+            # If a metrics snapshot already exists, refresh it so the stored
+            # engagement gap / health score don't go stale after the
+            # stakeholder's engagement levels are edited. Skipped when no
+            # snapshot exists, to avoid creating an empty (0) one for a
+            # stakeholder that has never had an engagement recorded.
+            if getattr(stakeholder, 'metrics', None):
+                recalculate_stakeholder_metrics(stakeholder)
             messages.success(request, 'Stakeholder updated successfully!')
             return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder.pk)
     else:
@@ -410,7 +417,13 @@ def engagement_metrics_dashboard(request, board_id):
     # Engagement summary
     total_stakeholders = stakeholders.count()
     total_engagements = sum(s['total_engagements'] for s in stakeholder_metrics)
-    avg_satisfaction_all = sum(s['avg_satisfaction'] for s in stakeholder_metrics) / len(stakeholder_metrics) if stakeholder_metrics else 0
+    # All-time board average over RATED records only (matches detail/analytics
+    # methodology). Averaging per-stakeholder means counted unrated
+    # stakeholders as 0, badly skewing the figure downward.
+    board_avg = StakeholderEngagementRecord.objects.filter(
+        stakeholder__board=board, satisfaction_rating__isnull=False
+    ).aggregate(Avg('satisfaction_rating'))['satisfaction_rating__avg']
+    avg_satisfaction_all = round(board_avg, 2) if board_avg else 0
     
     # Quadrant distribution
     quadrant_dist = {}
@@ -489,8 +502,12 @@ def stakeholder_api_data(request, board_id):
             'role': stakeholder.role,
             'influence': stakeholder.get_influence_value(),
             'interest': stakeholder.get_interest_value(),
+            'influence_display': stakeholder.get_influence_level_display(),
+            'interest_display': stakeholder.get_interest_level_display(),
             'current_engagement': stakeholder.get_engagement_level_value(),
             'desired_engagement': stakeholder.get_desired_engagement_level_value(),
+            'current_engagement_display': stakeholder.get_current_engagement_display(),
+            'desired_engagement_display': stakeholder.get_desired_engagement_display(),
             'quadrant': stakeholder.get_quadrant(),
             'engagement_gap': stakeholder.get_engagement_gap(),
         })

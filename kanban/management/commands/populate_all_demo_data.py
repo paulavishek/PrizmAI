@@ -1396,15 +1396,18 @@ class Command(BaseCommand):
     # Stakeholders
     # ------------------------------------------------------------------
     def _create_stakeholders(self, tasks_by_code):
+        # Influence/interest spread so stakeholders span multiple Power/Interest
+        # quadrants (Manage Closely / Keep Satisfied / Keep Informed) rather than
+        # all collapsing into "Manage Closely".
         defs = [
             ('Sarah Mitchell', 'Product Director', 'sarah.mitchell@demo.prizmai.local',
-             'high', 'high', 'collaborate', 'empower'),
-            ('David Park', 'CTO', 'david.park@demo.prizmai.local',
-             'high', 'medium', 'consult', 'inform'),
-            ('Rachel Torres', 'QA Lead', 'rachel.torres@demo.prizmai.local',
-             'medium', 'high', 'involve', 'collaborate'),
+             'high', 'high', 'collaborate', 'empower'),    # Manage Closely
             ('James Okonkwo', 'Security Officer', 'james.okonkwo@demo.prizmai.local',
-             'high', 'medium', 'consult', 'consult'),
+             'high', 'high', 'consult', 'consult'),        # Manage Closely
+            ('David Park', 'CTO', 'david.park@demo.prizmai.local',
+             'high', 'low', 'consult', 'inform'),          # Keep Satisfied
+            ('Rachel Torres', 'QA Lead', 'rachel.torres@demo.prizmai.local',
+             'low', 'high', 'involve', 'collaborate'),     # Keep Informed
         ]
         stakeholders = {}
         for name, role, email, infl, intr, cur, des in defs:
