@@ -1587,7 +1587,7 @@ def trigger_branch_recalculation_on_membership_added(sender, instance, created, 
         )
 
 
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, pre_delete
 
 @receiver(post_delete, sender='kanban.BoardMembership')
 def trigger_branch_recalculation_on_membership_deleted(sender, instance, **kwargs):
@@ -1695,6 +1695,36 @@ def auto_assign_column_color(sender, instance, **kwargs):
             break
 
 
+# ── Board-deletion guard ────────────────────────────────────────────────────
+# Deleting a Board cascades to its Tasks, and each Task delete fires
+# record_project_signal_on_task_delete (below), which inserts a fresh
+# ProjectSignal referencing the board.  Those rows are born *during* the cascade,
+# after Django's collector has already chosen what to delete, so at COMMIT they
+# point at a board that no longer exists → "FOREIGN KEY constraint failed".
+# We track boards currently being deleted in a thread-local set (populated in
+# pre_delete, which Django fires for ALL instances before any row is removed) and
+# skip signal creation for them.
+_board_delete_state = threading.local()
+
+
+def _boards_being_deleted():
+    ids = getattr(_board_delete_state, 'ids', None)
+    if ids is None:
+        ids = set()
+        _board_delete_state.ids = ids
+    return ids
+
+
+@receiver(pre_delete, sender='kanban.Board')
+def _mark_board_deleting(sender, instance, **kwargs):
+    _boards_being_deleted().add(instance.pk)
+
+
+@receiver(post_delete, sender='kanban.Board')
+def _unmark_board_deleting(sender, instance, **kwargs):
+    _boards_being_deleted().discard(instance.pk)
+
+
 @receiver(post_delete, sender='kanban.Task')
 def record_project_signal_on_task_delete(sender, instance, **kwargs):
     """
@@ -1703,6 +1733,11 @@ def record_project_signal_on_task_delete(sender, instance, **kwargs):
     try:
         board = instance.column.board if instance.column_id else None
         if board is None:
+            return
+
+        # Skip when the board itself is being deleted — recording a signal here
+        # would orphan it and break the cascade's COMMIT (FK constraint failure).
+        if board.pk in _boards_being_deleted():
             return
 
         from kanban.project_confidence_service import ProjectConfidenceService
