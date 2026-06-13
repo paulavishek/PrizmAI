@@ -119,14 +119,20 @@
                             <span class="badge bg-light text-dark">{{ stakeholder.get_desired_engagement_display|title }}</span>
                         </dd>
                         
-                        <dt class="col-sm-7">Engagement Gap:</dt>
+                        <dt class="col-sm-7">
+                            Engagement Gap:
+                            <i class="bi bi-info-circle"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="Desired minus current engagement level. 0 = on target (good); positive = under-engaged, increase engagement; negative = over-engaged, currently engaging more than needed."></i>
+                        </dt>
                         <dd class="col-sm-5">
                             {% if engagement_gap > 0 %}
-                            <span class="badge bg-danger">+{{ engagement_gap }}</span>
+                            <span class="badge bg-warning text-dark">+{{ engagement_gap }} &uarr; Engage more</span>
                             {% elif engagement_gap < 0 %}
-                            <span class="badge bg-success">{{ engagement_gap }}</span>
+                            <span class="badge bg-info text-dark">{{ engagement_gap }} &darr; Over-engaged</span>
                             {% else %}
-                            <span class="badge bg-light text-dark">No Gap</span>
+                            <span class="badge bg-success">Aligned &check;</span>
                             {% endif %}
                         </dd>
                     </dl>

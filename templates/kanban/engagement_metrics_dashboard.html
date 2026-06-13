@@ -46,6 +46,7 @@
                 <div class="card-body">
                     <h3 class="card-title">{{ avg_satisfaction_all|floatformat:1 }}/5</h3>
                     <p class="card-text text-muted">Avg Satisfaction</p>
+                    <small class="text-muted">All-time, board-wide</small>
                 </div>
             </div>
         </div>
@@ -64,10 +65,13 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header bg-light">
-                    <h5 class="m-0">Power/Interest Quadrant Distribution</h5>
+                    <h5 class="m-0">Power/Interest Matrix</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="quadrantChart"></canvas>
+                    <div class="small text-muted mt-2 text-center">
+                        Each circle is a stakeholder, placed by influence &amp; interest. Hover for details.
+                    </div>
                 </div>
             </div>
         </div>
@@ -140,20 +144,30 @@
                                     </td>
                                     <td>
                                         {% if metric.engagement_gap > 0 %}
-                                        <span class="badge bg-danger">+{{ metric.engagement_gap }}</span>
+                                        <span class="badge bg-warning text-dark">+{{ metric.engagement_gap }} &uarr;</span>
                                         {% elif metric.engagement_gap < 0 %}
-                                        <span class="badge bg-success">{{ metric.engagement_gap }}</span>
+                                        <span class="badge bg-info text-dark">{{ metric.engagement_gap }} &darr;</span>
                                         {% else %}
-                                        <span class="badge bg-light text-dark">0</span>
+                                        <span class="badge bg-success">Aligned</span>
                                         {% endif %}
                                     </td>
                                     <td>
+                                        {% if metric.tasks_involved > 0 %}
                                         <span class="badge bg-primary">{{ metric.tasks_involved }}</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">0</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
+                    </div>
+                    <div class="small text-muted mt-2">
+                        <strong>Gap</strong> = desired &minus; current engagement level &middot;
+                        <span class="badge bg-success">Aligned</span> on target &middot;
+                        <span class="badge bg-warning text-dark">+N &uarr;</span> under-engaged, increase engagement &middot;
+                        <span class="badge bg-info text-dark">&minus;N &darr;</span> over-engaged
                     </div>
                 </div>
             </div>
@@ -170,30 +184,137 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('{% url "stakeholder:stakeholder_api_data" board.id %}')
         .then(response => response.json())
         .then(data => {
-            // Create Quadrant Chart
+            // Create Power/Interest Matrix (scatter grid)
+            const QUADRANT_COLORS = {
+                'Manage Closely': '#dc3545',
+                'Keep Satisfied': '#ffc107',
+                'Keep Informed': '#0dcaf0',
+                'Monitor': '#6c757d',
+            };
+            const LEVEL_LABELS = {1: 'Low', 2: 'Medium', 3: 'High'};
+
+            const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+            const axisColor = isDark ? '#adb5bd' : '#495057';
+            const dividerColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)';
+            const labelColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.28)';
+            const pointBorder = isDark ? '#212529' : '#ffffff';
+            const quadrantAlpha = '22';  // hex alpha for the shaded regions
+
+            // The model treats Medium/High (value >= 2) as the "high" half, so the
+            // quadrant divider sits between Low(1) and Medium(2), i.e. at 1.5.
+            const DIV = 1.5;
+            const quadrantBackground = {
+                id: 'quadrantBackground',
+                beforeDatasetsDraw(chart) {
+                    const {ctx, chartArea, scales} = chart;
+                    if (!chartArea) return;
+                    const xMid = scales.x.getPixelForValue(DIV);
+                    const yMid = scales.y.getPixelForValue(DIV);
+                    const {left, right, top, bottom} = chartArea;
+                    const fill = (x1, y1, x2, y2, color) => {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+                    };
+                    // x = interest, y = influence (y axis grows upward)
+                    fill(xMid, top, right, yMid, QUADRANT_COLORS['Manage Closely'] + quadrantAlpha);
+                    fill(left, top, xMid, yMid, QUADRANT_COLORS['Keep Satisfied'] + quadrantAlpha);
+                    fill(xMid, yMid, right, bottom, QUADRANT_COLORS['Keep Informed'] + quadrantAlpha);
+                    fill(left, yMid, xMid, bottom, QUADRANT_COLORS['Monitor'] + quadrantAlpha);
+                    // divider lines
+                    ctx.save();
+                    ctx.strokeStyle = dividerColor;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(xMid, top); ctx.lineTo(xMid, bottom);
+                    ctx.moveTo(left, yMid); ctx.lineTo(right, yMid);
+                    ctx.stroke();
+                    // quadrant labels
+                    ctx.fillStyle = labelColor;
+                    ctx.font = '600 12px sans-serif';
+                    ctx.textBaseline = 'top';
+                    ctx.textAlign = 'right'; ctx.fillText('Manage Closely', right - 8, top + 6);
+                    ctx.textAlign = 'left';  ctx.fillText('Keep Satisfied', left + 8, top + 6);
+                    ctx.textAlign = 'right'; ctx.fillText('Keep Informed', right - 8, bottom - 18);
+                    ctx.textAlign = 'left';  ctx.fillText('Monitor', left + 8, bottom - 18);
+                    ctx.restore();
+                }
+            };
+
+            // Spread stakeholders that share the exact same (influence, interest)
+            // cell so overlapping circles stay visible.
+            const groups = {};
+            data.stakeholders.forEach(s => {
+                const key = s.influence + ',' + s.interest;
+                (groups[key] = groups[key] || []).push(s);
+            });
+            const points = [];
+            Object.values(groups).forEach(group => {
+                const n = group.length;
+                group.forEach((s, i) => {
+                    let dx = 0, dy = 0;
+                    if (n > 1) {
+                        const angle = (2 * Math.PI * i) / n;
+                        dx = Math.cos(angle) * 0.13;
+                        dy = Math.sin(angle) * 0.13;
+                    }
+                    points.push({x: s.interest + dx, y: s.influence + dy, sh: s});
+                });
+            });
+
             const quadrantCtx = document.getElementById('quadrantChart').getContext('2d');
             new Chart(quadrantCtx, {
-                type: 'doughnut',
+                type: 'scatter',
                 data: {
-                    labels: Object.keys(data.quadrant_dist),
                     datasets: [{
-                        data: Object.values(data.quadrant_dist),
-                        backgroundColor: [
-                            '#dc3545',  // Manage Closely - red
-                            '#ffc107',  // Keep Satisfied - yellow
-                            '#0dcaf0',  // Keep Informed - cyan
-                            '#6c757d'   // Monitor - gray
-                        ]
+                        data: points,
+                        pointRadius: 9,
+                        pointHoverRadius: 11,
+                        backgroundColor: points.map(p => QUADRANT_COLORS[p.sh.quadrant] || '#6c757d'),
+                        borderColor: pointBorder,
+                        borderWidth: 2,
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.2,
+                    scales: {
+                        x: {
+                            title: {display: true, text: 'Interest →', color: axisColor},
+                            min: 0.5, max: 3.5,
+                            grid: {display: false},
+                            ticks: {stepSize: 0.5, color: axisColor,
+                                    callback: v => LEVEL_LABELS[v] || ''},
+                        },
+                        y: {
+                            title: {display: true, text: 'Influence →', color: axisColor},
+                            min: 0.5, max: 3.5,
+                            grid: {display: false},
+                            ticks: {stepSize: 0.5, color: axisColor,
+                                    callback: v => LEVEL_LABELS[v] || ''},
+                        }
+                    },
                     plugins: {
-                        legend: {
-                            position: 'bottom'
+                        legend: {display: false},
+                        tooltip: {
+                            displayColors: false,
+                            callbacks: {
+                                title: items => items[0].raw.sh.name,
+                                label: () => '',
+                                afterBody: items => {
+                                    const s = items[0].raw.sh;
+                                    return [
+                                        s.role || '',
+                                        'Influence: ' + s.influence_display + '  •  Interest: ' + s.interest_display,
+                                        'Engagement: ' + s.current_engagement_display + ' → ' + s.desired_engagement_display,
+                                        'Quadrant: ' + s.quadrant,
+                                    ];
+                                }
+                            }
                         }
                     }
-                }
+                },
+                plugins: [quadrantBackground]
             });
             
             // Create Engagement Distribution Chart
