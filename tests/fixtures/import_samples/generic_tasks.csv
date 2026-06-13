@@ -1,0 +1,6 @@
+Title,Description,Status,Priority,Assignee,Labels,Due Date
+Plan sprint goals,Define objectives for the upcoming sprint,To Do,High,testuser1,planning,2026-07-02
+Refactor auth module,Clean up the authentication service,In Progress,Medium,jane@example.com,"backend,tech-debt",2026-07-08
+Write unit tests,Cover the new reporting endpoints,In Progress,Low,testuser1,testing,2026-07-12
+Release v2.1,Cut and publish the 2.1 release,Done,High,,release,2026-06-11
+Collect user feedback,Survey beta users about the new UI,To Do,Medium,paul.biotech10@gmail.com,"research,ux",

@@ -4785,7 +4785,24 @@ def import_board(request):
             error_msg = '; '.join(result.errors) if result.errors else 'Unknown import error'
             messages.error(request, f"Import failed: {error_msg}")
             return redirect('board_list')
-        
+
+        # Resolve the board name: an explicit name from the dialog always wins;
+        # otherwise, when the adapter only produced a generic placeholder
+        # (e.g. "Imported from CSV"), fall back to the uploaded file's name.
+        # Adapters that extract a real title (Trello/Jira/Monday) are left intact.
+        custom_name = (request.POST.get('board_name') or '').strip()
+        if custom_name:
+            result.board_data['name'] = custom_name[:100]
+        else:
+            current_name = (result.board_data.get('name') or '').strip()
+            if not current_name or current_name.lower().startswith('imported'):
+                import os as _os
+                import re as _re
+                stem = _os.path.splitext(filename)[0]
+                pretty = _re.sub(r'[._\-]+', ' ', stem).strip()
+                if pretty:
+                    result.board_data['name'] = pretty.title()[:100]
+
         # Create the board and its contents from the import result
         new_board = _create_board_from_import_result(
             result, 

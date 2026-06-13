@@ -212,7 +212,13 @@
                         <input type="file" class="form-control" id="import_file" name="import_file" accept=".json,.csv,.tsv,.xlsx,.xls" required>
                         <div class="form-text">Upload a file exported from another project management tool.</div>
                     </div>
-                    
+
+                    <div class="mb-3">
+                        <label for="board_name" class="form-label">Board Name <span class="text-muted">(optional)</span></label>
+                        <input type="text" class="form-control" id="board_name" name="board_name" maxlength="100" placeholder="Defaults to the file name">
+                        <div class="form-text">Leave blank to name the board after the uploaded file.</div>
+                    </div>
+
                     {% if is_viewing_demo %}
                     <div class="alert alert-warning py-2 mb-3">
                         <i class="fas fa-info-circle me-1"></i>
