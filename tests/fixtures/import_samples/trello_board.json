@@ -1,0 +1,106 @@
+{
+  "id": "5f9a1b2c3d4e5f6a7b8c9d0e",
+  "name": "Marketing Launch (Trello)",
+  "desc": "Q3 product launch board exported from Trello for import testing.",
+  "url": "https://trello.com/b/abc12345/marketing-launch",
+  "closed": false,
+  "idOrganization": "org_987654",
+  "prefs": {
+    "permissionLevel": "private",
+    "background": "blue"
+  },
+  "lists": [
+    { "id": "list_todo", "name": "To Do", "pos": 16384, "closed": false },
+    { "id": "list_doing", "name": "In Progress", "pos": 32768, "closed": false },
+    { "id": "list_done", "name": "Done", "pos": 49152, "closed": false },
+    { "id": "list_archived", "name": "Archived Ideas", "pos": 65536, "closed": true }
+  ],
+  "labels": [
+    { "id": "lbl_high", "name": "High", "color": "red" },
+    { "id": "lbl_design", "name": "Design", "color": "purple" },
+    { "id": "lbl_content", "name": "Content", "color": "green" }
+  ],
+  "members": [
+    { "id": "mem_self", "username": "testuser1", "fullName": "Test User", "avatarUrl": "https://trello.com/avatar/self.png" }
+  ],
+  "checklists": [
+    {
+      "id": "chk_1",
+      "idCard": "card_landing",
+      "name": "Launch checklist",
+      "checkItems": [
+        { "id": "ci_1", "name": "Draft copy", "state": "complete", "pos": 1 },
+        { "id": "ci_2", "name": "Approve copy", "state": "complete", "pos": 2 },
+        { "id": "ci_3", "name": "Publish page", "state": "incomplete", "pos": 3 },
+        { "id": "ci_4", "name": "QA on mobile", "state": "incomplete", "pos": 4 }
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "id": "card_landing",
+      "name": "Build landing page",
+      "desc": "Create the main campaign landing page.",
+      "idList": "list_doing",
+      "idBoard": "5f9a1b2c3d4e5f6a7b8c9d0e",
+      "idShort": 1,
+      "pos": 16384,
+      "due": "2026-07-15T17:00:00.000Z",
+      "start": "2026-06-20T09:00:00.000Z",
+      "idLabels": ["lbl_high", "lbl_design"],
+      "idMembers": ["mem_self"],
+      "closed": false
+    },
+    {
+      "id": "card_brief",
+      "name": "Write campaign brief",
+      "desc": "One-page brief outlining goals and audience.",
+      "idList": "list_todo",
+      "idBoard": "5f9a1b2c3d4e5f6a7b8c9d0e",
+      "idShort": 2,
+      "pos": 16384,
+      "due": null,
+      "idLabels": ["lbl_content"],
+      "idMembers": [],
+      "closed": false
+    },
+    {
+      "id": "card_long",
+      "name": "Coordinate the cross-functional go-to-market launch readiness review covering legal sign-off, pricing approval, sales enablement collateral, support runbooks, localization for all twelve target markets, and the final executive demo dry-run before public announcement day",
+      "desc": "Intentionally long title to verify 200-character truncation behavior on import.",
+      "idList": "list_todo",
+      "idBoard": "5f9a1b2c3d4e5f6a7b8c9d0e",
+      "idShort": 3,
+      "pos": 32768,
+      "idLabels": [],
+      "idMembers": ["mem_self"],
+      "closed": false
+    },
+    {
+      "id": "card_press",
+      "name": "Send press release",
+      "desc": "Distribute to media list.",
+      "idList": "list_done",
+      "idBoard": "5f9a1b2c3d4e5f6a7b8c9d0e",
+      "idShort": 4,
+      "pos": 16384,
+      "due": "2026-06-10T12:00:00.000Z",
+      "idLabels": ["lbl_content"],
+      "idMembers": [],
+      "closed": false
+    },
+    {
+      "id": "card_archived",
+      "name": "Old idea that was shelved",
+      "desc": "Belongs to an archived card and should be skipped.",
+      "idList": "list_todo",
+      "idBoard": "5f9a1b2c3d4e5f6a7b8c9d0e",
+      "idShort": 5,
+      "pos": 49152,
+      "idLabels": [],
+      "idMembers": [],
+      "closed": true
+    }
+  ],
+  "actions": []
+}
