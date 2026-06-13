@@ -395,12 +395,15 @@ class Command(BaseCommand):
     # Labels
     # ------------------------------------------------------------------
     def _create_labels(self, board):
-        """Create the 13 board labels (idempotent) and return a name -> obj map."""
+        """Create the board's regular labels (idempotent) and return a name -> obj map.
+
+        Lean Six Sigma labels are intentionally NOT seeded: LSS is an
+        operations/manufacturing methodology unfamiliar to most software teams.
+        Users who want them can opt in via the "Add Lean Six Sigma labels"
+        button on the label manager. Task seeding uses an `if ln in labels`
+        guard, so any leftover 'Value-Added' references simply go untagged.
+        """
         defs = [
-            # Lean Six Sigma
-            ('Value-Added', '#22c55e', 'lean'),
-            ('Necessary NVA', '#f59e0b', 'lean'),
-            ('Waste/Eliminate', '#ef4444', 'lean'),
             # Technical
             ('Backend', '#6366f1', 'regular'),
             ('Frontend', '#06b6d4', 'regular'),
