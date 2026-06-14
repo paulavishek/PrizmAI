@@ -1324,9 +1324,21 @@ def dashboard(request):
         ws_board_count = sum(len(si.get('boards', [])) for mi in mission_tree for si in mi.get('strategies', []))
         ws_goal_name = next((ge['goal'].name for ge in goal_tree if ge.get('goal')), None)
 
+    # Derive a categorical pulse status for the collapsed-bar pill (no such field
+    # exists on the briefing; mirror the action_type cascade using counts already
+    # in scope). 3 tiers map to the app's schedule_status vocabulary.
+    if overdue_count > 0:
+        briefing_pulse_status = 'off_track'
+    elif total_high_risk > 0:
+        briefing_pulse_status = 'at_risk'
+    else:
+        briefing_pulse_status = 'on_track'
+
     daily_briefing = {
         'pulse':          briefing_pulse,
+        'pulse_status':   briefing_pulse_status,
         'risk':           briefing_risk,
+        'risk_count':     len(briefing_top_risks),
         'top_risk':       briefing_top_risk,
         'top_risks':      briefing_top_risks,
         'action':         briefing_action,
