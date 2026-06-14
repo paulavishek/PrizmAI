@@ -32,6 +32,20 @@ AUTHENTICATION_BACKENDS = [
 AXES_ENABLED = False
 
 # =============================================================================
+# BYOK ENCRYPTION KEY FOR TESTING
+# =============================================================================
+# A fixed, throwaway Fernet key so BYOK encryption/decryption tests work without
+# depending on the developer's .env. This is NOT a production secret — it exists
+# only to exercise the Fernet round-trip in AIRouter._encrypt_key/_decrypt_key.
+AI_KEY_ENCRYPTION_KEY = '-WiWzmB1OcCFAIrVdDpBd39LbDWQOvQ9-4BoztHTgsU='
+
+# Deterministic platform keys so _resolve_provider tests can assert which key the
+# router selected without relying on whatever is (or isn't) set in the real env.
+GEMINI_API_KEY = 'test-gemini-platform-key'
+OPENAI_API_KEY = 'test-openai-platform-key'
+ANTHROPIC_API_KEY = 'test-anthropic-platform-key'
+
+# =============================================================================
 # CELERY CONFIGURATION FOR TESTING
 # =============================================================================
 # Use synchronous task execution for tests (no Redis required)

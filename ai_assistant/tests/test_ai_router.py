@@ -138,10 +138,11 @@ class TestCallOpenAI(SimpleTestCase):
         mock_cls.assert_called_once_with(api_key="sk-mykey")
 
     def test_model_read_from_settings(self):
-        """The model passed to the API comes from settings.OPENAI_MODEL."""
+        """The model passed to the API comes from settings (simple tier by default)."""
         _, mock_client, _ = self._run()
         call_kwargs = mock_client.chat.completions.create.call_args
-        self.assertEqual(call_kwargs.kwargs["model"], "gpt-4o")
+        # _run() uses the default complexity='simple' → OPENAI_MODEL_SIMPLE.
+        self.assertEqual(call_kwargs.kwargs["model"], "gpt-4o-mini")
 
     def test_no_system_no_history_messages_only_user(self):
         """Without system_prompt or history, messages list has only the user prompt."""
@@ -327,7 +328,8 @@ class TestCallAnthropic(SimpleTestCase):
         """model and max_tokens are read from settings."""
         _, mock_client, _ = self._run()
         kwargs = mock_client.messages.create.call_args.kwargs
-        self.assertEqual(kwargs["model"], "claude-sonnet-4-6")
+        # _run() uses the default complexity='simple' → ANTHROPIC_MODEL_SIMPLE.
+        self.assertEqual(kwargs["model"], "claude-haiku-4-5")
         self.assertEqual(kwargs["max_tokens"], 2048)
 
     def test_system_prompt_passed_as_top_level_param(self):
@@ -537,7 +539,9 @@ class TestCompleteRouting(SimpleTestCase):
             prompt="Summarise", system_prompt="Be brief.",
             conversation_history=history,
         )
-        mock_call.assert_called_once_with("Summarise", "sk-special", "Be brief.", history)
+        mock_call.assert_called_once_with(
+            "Summarise", "sk-special", "Be brief.", history, 'simple', model_override=None
+        )
 
     # --- Normalised response -------------------------------------------------
 
