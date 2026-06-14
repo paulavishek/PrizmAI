@@ -935,6 +935,7 @@
 .dc-badge-danger  { background: rgba(239,68,68,0.1);  color: #dc2626; }
 .dc-badge-info    { background: rgba(14,165,233,0.1); color: #0284c7; }
 .dc-badge-success { background: rgba(34,197,94,0.1);  color: #16a34a; }
+.dc-badge-warning { background: rgba(245,158,11,0.12); color: #b45309; }
 .dc-loading-skeleton {
     display: inline-flex;
     gap: 12px;
