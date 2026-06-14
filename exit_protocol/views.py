@@ -774,7 +774,10 @@ def resurrect_project(request, entry_id):
     if entry.is_resurrected:
         return HttpResponseBadRequest("This project has already been resurrected.")
 
-    # 1. Create new Board
+    # 1. Create new Board — inherit tenant placement (workspace + legacy org)
+    # from the source board so the resurrected board lands in the same workspace
+    # the user resurrected it from (workspace is the real tenant key; see
+    # check_access_or_403 above, which already confirmed access to entry.board).
     new_board = Board.objects.create(
         name=f"{entry.project_name} — Resurrected",
         description=(
@@ -782,7 +785,8 @@ def resurrect_project(request, entry_id):
             f"Original cause of death: {entry.get_cause_of_death_display()}."
         ),
         created_by=request.user,
-        organization=user_org,
+        organization=entry.board.organization,
+        workspace=entry.board.workspace,
     )
     # Add creator as member
     BoardMembership.objects.get_or_create(board=new_board, user=request.user, defaults={'role': 'member'})

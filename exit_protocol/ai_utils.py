@@ -52,14 +52,15 @@ def _call_gemini(user, prompt, task_complexity, feature_name, board_id=None, tem
         content = response.get('text', '')
 
         elapsed_ms = int((time.time() - start_time) * 1000)
-        tokens = response.get('tokens', 0)
+        # AIRouter.complete() returns 'tokens_used' and 'model' (not 'tokens'/'model_used').
+        tokens = response.get('tokens_used', 0)
 
         track_ai_request(
             user=user,
             feature=feature_name,
             request_type='exit_protocol',
             board_id=board_id,
-            ai_model='gemini',
+            ai_model=response.get('model', 'gemini'),
             success=True,
             tokens_used=tokens,
             response_time_ms=elapsed_ms,
