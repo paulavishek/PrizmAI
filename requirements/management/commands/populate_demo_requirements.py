@@ -2,11 +2,13 @@
 Management command to populate demo requirements data.
 Creates categories and requirements linked to existing demo board tasks and org goals.
 """
+from datetime import date
+
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from accounts.demo_personas import DEMO_PERSONAS
+from accounts.demo_personas import DEMO_PERSONAS, LEGACY_DEMO_USERNAMES
 
 User = get_user_model()
 
@@ -15,7 +17,7 @@ class Command(BaseCommand):
     help = 'Populate demo board with requirement analysis data'
 
     def handle(self, *args, **options):
-        from kanban.models import Board, Task, OrganizationGoal
+        from kanban.models import Board, Task, OrganizationGoal, Mission, Strategy
         from requirements.models import (
             RequirementCategory, Requirement,
         )
@@ -30,21 +32,21 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('Demo board not found. Skipping requirements demo data.'))
             return
 
-        # Get demo users
-        alex = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
-        sam = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
-        jordan = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
-        if not alex:
+        # Get demo users (resolved via stable persona keys, not hard-coded
+        # usernames — the actual people behind these keys change on swaps).
+        lead = User.objects.filter(username=DEMO_PERSONAS['lead']['username']).first()
+        frontend = User.objects.filter(username=DEMO_PERSONAS['frontend']['username']).first()
+        devops = User.objects.filter(username=DEMO_PERSONAS['devops']['username']).first()
+        if not lead:
             self.stdout.write(self.style.WARNING('Demo users not found. Skipping.'))
             return
 
-        creator = alex
-        reviewer = sam or alex
+        creator = lead
+        reviewer = frontend or lead
 
-        # Clean existing demo requirements
-        Requirement.objects.filter(board=demo_board).delete()
-        RequirementCategory.objects.filter(board=demo_board).delete()
-
+        # NOTE: requirements/categories are upserted (get_or_create keyed on
+        # board+title / board+name) rather than deleted-and-recreated, so the
+        # command is safely re-runnable and never spawns duplicate records.
         self.stdout.write('Creating demo requirements data...')
 
         # ── Categories ───────────────────────────────────────────────────
@@ -62,27 +64,184 @@ class Command(BaseCommand):
         )
 
         # ── Goals (org-scoped, reusable across boards) ───────────────────
+        # Keyed on name only so the command is safely re-runnable and so it
+        # adopts any pre-existing (manually created) Goal of the same name
+        # instead of creating a duplicate. On adoption we also update the
+        # seed fields so an existing record (e.g. a manually created Asia
+        # goal) gets the correct demo flags / metric rather than staying stale.
         demo_org = demo_board.organization
-        goal_mvp, _ = OrganizationGoal.objects.get_or_create(
-            name='Deliver a Secure, High-Performance MVP by Q3',
-            organization=demo_org,
-            defaults=dict(created_by=creator, status='active', is_demo=True, is_seed_demo_data=True),
+
+        def _upsert_goal(name, *, create_only=None, **fields):
+            """Create or adopt a Goal keyed on name.
+
+            ``fields`` are kept in sync on every run. ``create_only`` fields are
+            written only when the record is first created, so a pre-existing
+            record's manually-edited values (e.g. the Asia goal's description and
+            target date) are preserved on re-runs.
+
+            ``created_by`` is set on creation and is re-assigned to the current
+            demo lead ONLY when the existing owner is missing or a legacy /
+            inactive demo persona (e.g. the retired ``alex_chen_demo``) — a live
+            user's ownership is never overwritten.
+            """
+            create_only = create_only or {}
+            goal, created = OrganizationGoal.objects.get_or_create(
+                name=name,
+                defaults={**fields, **create_only, 'created_by': creator},
+            )
+            if created:
+                return goal
+
+            for attr, value in fields.items():
+                setattr(goal, attr, value)
+            update = list(fields.keys())
+            owner = goal.created_by
+            if (owner is None or not owner.is_active
+                    or owner.username in LEGACY_DEMO_USERNAMES):
+                goal.created_by = creator
+                update.append('created_by')
+            if update:
+                goal.save(update_fields=update)
+            return goal
+
+        goal_mvp = _upsert_goal(
+            'Deliver a Secure, High-Performance MVP by Q3',
+            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
+            target_metric='Core workflows complete, p95 API latency < 200ms',
+            target_date=date(2026, 9, 30),
+            description=(
+                'Ship a production-ready MVP that is secure by default and fast '
+                'under load. Success means the core task and collaboration '
+                'workflows are complete, p95 API latency stays under 200ms, and a '
+                'security review passes before the Q3 launch.'
+            ),
         )
-        goal_security, _ = OrganizationGoal.objects.get_or_create(
-            name='Achieve Enterprise-Grade Security and Compliance',
-            organization=demo_org,
-            defaults=dict(created_by=creator, status='active', is_demo=True, is_seed_demo_data=True),
+        goal_security = _upsert_goal(
+            'Achieve Enterprise-Grade Security and Compliance',
+            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
+            target_metric='Encryption at rest, WCAG 2.1 AA, 90%+ test coverage gate',
+            target_date=date(2026, 12, 31),
+            description=(
+                'Reach an enterprise-grade security and compliance posture. '
+                'Success means sensitive data is encrypted at rest, rate limiting '
+                'and abuse protections are in place, accessibility meets WCAG 2.1 '
+                'AA, and the automated test pipeline gates every release.'
+            ),
         )
-        goal_ux, _ = OrganizationGoal.objects.get_or_create(
-            name='Deliver a Fast, Reliable User Experience',
-            organization=demo_org,
-            defaults=dict(created_by=creator, status='active', is_demo=True, is_seed_demo_data=True),
+        goal_ux = _upsert_goal(
+            'Deliver a Fast, Reliable User Experience',
+            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
+            target_metric='Real-time updates < 2s, sub-200ms key interactions',
+            target_date=date(2026, 9, 30),
+            description=(
+                'Deliver a fast, reliable experience that users trust. Success '
+                'means responsive real-time updates, sub-200ms key interactions, '
+                'full mobile support, and a polished drag-and-drop interface.'
+            ),
         )
-        goal_scale, _ = OrganizationGoal.objects.get_or_create(
-            name='Scale Platform for Global Adoption',
-            organization=demo_org,
-            defaults=dict(created_by=creator, status='active', is_demo=True, is_seed_demo_data=True),
+        goal_scale = _upsert_goal(
+            'Scale Platform for Global Adoption',
+            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
+            target_metric='Multi-region rollout, full i18n coverage',
+            target_date=date(2027, 6, 30),
+            description=(
+                'Prepare the platform for global adoption. Success means full '
+                'internationalization (multi-language and locale support) and '
+                'infrastructure that scales reliably across regions.'
+            ),
         )
+        # 5th Goal — may already exist as a manually created record. Adopt it and
+        # sync the seed-owned fields, but preserve its manually-authored
+        # description and target date (create_only) so we don't clobber them.
+        goal_asia = _upsert_goal(
+            'Increase Market Share in Asia by 15%',
+            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
+            target_metric='16% market share increase in Asia-Pacific',
+            create_only=dict(
+                target_date=date(2027, 12, 31),
+                description=(
+                    'Capture an additional 15% market share across the '
+                    'Asia-Pacific region within 24 months by launching localized, '
+                    'AI-driven product experiences and building regional '
+                    'go-to-market partnerships.'
+                ),
+            ),
+        )
+
+        # ── Missions & Strategies (Goal → Mission → Strategy hierarchy) ──
+        # Clean any existing seeded strategic hierarchy for these goals so
+        # re-runs don't accumulate duplicates. Strategies cascade-delete with
+        # their Mission, so deleting seeded Missions is sufficient.
+        all_goals = [goal_mvp, goal_security, goal_ux, goal_scale, goal_asia]
+        Mission.objects.filter(
+            organization_goal__in=all_goals, is_seed_demo_data=True,
+        ).delete()
+
+        # name -> Strategy, used later to attach requirements.
+        strategies = {}
+
+        def _build(goal, missions_spec):
+            for mission_name, strategy_names in missions_spec:
+                mission = Mission.objects.create(
+                    name=mission_name,
+                    status='active',
+                    organization_goal=goal,
+                    created_by=creator,
+                    is_demo=True,
+                    is_seed_demo_data=True,
+                )
+                for strategy_name in strategy_names:
+                    strategies[strategy_name] = Strategy.objects.create(
+                        name=strategy_name,
+                        status='active',
+                        mission=mission,
+                        created_by=creator,
+                        is_seed_demo_data=True,
+                    )
+
+        _build(goal_mvp, [
+            ('Core Feature Delivery', ['Authentication & Data Layer', 'Communication & Storage']),
+            ('User Readiness', ['Onboarding & Adoption']),
+        ])
+        _build(goal_security, [
+            ('Security Hardening', ['Data Protection Implementation']),
+            ('Compliance & Quality', ['Accessibility & Audit Readiness']),
+        ])
+        _build(goal_ux, [
+            ('Performance Optimization', ['Backend Speed & Reliability']),
+            ('UI/UX Quality', ['Interface Excellence']),
+        ])
+        _build(goal_scale, [
+            ('Internationalization', ['Language & Locale Support']),
+            ('Infrastructure Scaling', ['Cloud Readiness & Reliability']),
+        ])
+        _build(goal_asia, [
+            ('Market Expansion', ['Regional Campaign Execution', 'Competitive Positioning']),
+            ('Partnership Development', ['Channel Partner Onboarding', 'Integration Ecosystem Growth']),
+        ])
+        self.stdout.write(self.style.SUCCESS(
+            f'Created {Mission.objects.filter(organization_goal__in=all_goals, is_seed_demo_data=True).count()} missions '
+            f'and {len(strategies)} strategies across 5 goals.'
+        ))
+
+        # ── Complete the hierarchy: link the demo board to one Strategy ───
+        # Board.strategy is a single FK, so a board belongs to exactly ONE
+        # strategy. We link only the TEMPLATE board (#1); the dashboard
+        # Hierarchy Navigator maps it to each demo user's sandbox copy via
+        # `cloned_from`, so sandbox boards must NOT be linked (doing so would
+        # inflate the strategy's board count by one per sandbox).
+        #
+        # The "Software Development" board's tasks (auth, OAuth, file upload,
+        # dashboard) map to Core Feature Delivery → Deliver a Secure,
+        # High-Performance MVP by Q3, so that Goal gets the fully-realised
+        # Goal → Mission → Strategy → Board → Task hierarchy.
+        board_strategy = strategies.get('Authentication & Data Layer')
+        if board_strategy and demo_board.strategy_id != board_strategy.id:
+            demo_board.strategy = board_strategy
+            demo_board.save(update_fields=['strategy'])
+        self.stdout.write(self.style.SUCCESS(
+            f'Linked demo board #{demo_board.pk} to strategy "{board_strategy.name}".'
+        ))
 
         # ── Grab existing demo tasks for linking ─────────────────────────
         demo_tasks = list(Task.objects.filter(column__board=demo_board).order_by('id')[:20])
@@ -197,23 +356,36 @@ class Command(BaseCommand):
         ]
 
         created_count = 0
-        for i, data in enumerate(requirements_data):
-            req = Requirement.objects.create(
+        for data in requirements_data:
+            # Keyed on board+title so re-runs reuse the existing record.
+            req, _ = Requirement.objects.get_or_create(
                 board=demo_board,
                 title=data['title'],
-                description=data['description'],
-                type=data['type'],
-                priority=data['priority'],
-                status=data['status'],
-                category=data['category'],
-                acceptance_criteria=data['acceptance_criteria'],
-                created_by=creator,
-                assigned_reviewer=reviewer if data['status'] != 'draft' else None,
+                defaults=dict(
+                    description=data['description'],
+                    type=data['type'],
+                    priority=data['priority'],
+                    status=data['status'],
+                    category=data['category'],
+                    acceptance_criteria=data['acceptance_criteria'],
+                    created_by=creator,
+                    assigned_reviewer=reviewer if data['status'] != 'draft' else None,
+                ),
             )
-            # Link tasks
-            for idx in data.get('task_indices', []):
-                if idx < len(demo_tasks):
-                    req.linked_tasks.add(demo_tasks[idx])
+            # Keep mutable fields in sync on re-runs (created_by is preserved).
+            req.description = data['description']
+            req.type = data['type']
+            req.priority = data['priority']
+            req.status = data['status']
+            req.category = data['category']
+            req.acceptance_criteria = data['acceptance_criteria']
+            req.assigned_reviewer = reviewer if data['status'] != 'draft' else None
+            req.save()
+            # Link tasks (idempotent)
+            req.linked_tasks.set([
+                demo_tasks[idx] for idx in data.get('task_indices', [])
+                if idx < len(demo_tasks)
+            ])
             created_count += 1
 
         self.stdout.write(self.style.SUCCESS(
@@ -254,6 +426,48 @@ class Command(BaseCommand):
                     req.linked_goals.add(goal)
         self.stdout.write(self.style.SUCCESS('Linked demo requirements to 4 goals.'))
 
+        # ── Link requirements to strategies (Strategy ← Requirement) ─────
+        strategy_links = [
+            ('Authentication & Data Layer', [
+                'User Authentication & Authorization',
+                'Task CRUD Operations',
+                'Data Export (CSV/PDF)',
+            ]),
+            ('Communication & Storage', [
+                'Email Notification System',
+                'File Upload Support',
+            ]),
+            ('Data Protection Implementation', [
+                'Data Encryption at Rest',
+                'Rate Limiting & DDoS Protection',
+            ]),
+            ('Accessibility & Audit Readiness', [
+                'WCAG 2.1 AA Compliance',
+                'Automated Testing Pipeline',
+            ]),
+            ('Backend Speed & Reliability', [
+                'API Response Time < 200ms',
+                'Real-time Dashboard Updates',
+            ]),
+            ('Interface Excellence', [
+                'Mobile Responsive Design',
+                'Drag-and-Drop Board Interface',
+                'Search Functionality',
+            ]),
+            ('Language & Locale Support', [
+                'Multi-language Support (i18n)',
+            ]),
+        ]
+        for strategy_name, titles in strategy_links:
+            strategy = strategies.get(strategy_name)
+            if not strategy:
+                continue
+            for title in titles:
+                req = created_reqs.get(title)
+                if req:
+                    req.linked_strategies.add(strategy)
+        self.stdout.write(self.style.SUCCESS('Linked demo requirements to strategies.'))
+
         # ── Populate sandbox copies of this board ────────────────────────
         sandbox_boards = Board.objects.filter(
             is_sandbox_copy=True,
@@ -263,52 +477,70 @@ class Command(BaseCommand):
             self._populate_sandbox(sb, demo_board, creator, reviewer)
 
     def _populate_sandbox(self, sandbox_board, template_board, creator, reviewer):
-        """Copy requirements data from template board to a sandbox copy."""
+        """Copy requirements data from template board to a sandbox copy.
+
+        IMPORTANT: sandbox-copy requirements are deliberately NOT linked to the
+        shared org-scoped Goals / Strategies. Those objects are singletons
+        shared across every demo user's sandbox, and the Goal/Strategy detail
+        views aggregate ``linked_requirements`` across all boards with no
+        workspace filter — so linking each sandbox copy would inflate a Goal's
+        requirement count by Nx (one extra per sandbox board). Only the
+        canonical template-board requirements carry goal/strategy links.
+        """
         from kanban.models import Task
         from requirements.models import (
             RequirementCategory, Requirement,
         )
 
-        # Clean existing
-        Requirement.objects.filter(board=sandbox_board).delete()
-        RequirementCategory.objects.filter(board=sandbox_board).delete()
-
         # Build task mapping: template task title -> sandbox task
         sandbox_tasks = {t.title: t for t in Task.objects.filter(column__board=sandbox_board)}
 
-        # Copy categories
+        # Copy categories (idempotent, keyed on board+name)
         cat_map = {}
         for cat in RequirementCategory.objects.filter(board=template_board):
-            new_cat = RequirementCategory.objects.create(
+            new_cat, _ = RequirementCategory.objects.get_or_create(
                 board=sandbox_board,
                 name=cat.name,
-                description=cat.description,
+                defaults={'description': cat.description},
             )
             cat_map[cat.pk] = new_cat
 
-        # Copy requirements with relationships
+        # Copy requirements (idempotent, keyed on board+title)
         for req in Requirement.objects.filter(board=template_board).prefetch_related(
-            'linked_goals', 'linked_tasks',
+            'linked_tasks',
         ):
-            new_req = Requirement.objects.create(
+            new_req, _ = Requirement.objects.get_or_create(
                 board=sandbox_board,
                 title=req.title,
-                description=req.description,
-                type=req.type,
-                priority=req.priority,
-                status=req.status,
-                category=cat_map.get(req.category_id),
-                acceptance_criteria=req.acceptance_criteria,
-                created_by=creator,
-                assigned_reviewer=reviewer if req.status != 'draft' else None,
+                defaults=dict(
+                    description=req.description,
+                    type=req.type,
+                    priority=req.priority,
+                    status=req.status,
+                    category=cat_map.get(req.category_id),
+                    acceptance_criteria=req.acceptance_criteria,
+                    created_by=creator,
+                    assigned_reviewer=reviewer if req.status != 'draft' else None,
+                ),
             )
-            # Goals are org-scoped - share same objects
-            new_req.linked_goals.set(req.linked_goals.all())
-            # Map tasks by title
-            for old_task in req.linked_tasks.all():
-                sb_task = sandbox_tasks.get(old_task.title)
-                if sb_task:
-                    new_req.linked_tasks.add(sb_task)
+            # Keep mutable fields in sync on re-runs.
+            new_req.description = req.description
+            new_req.type = req.type
+            new_req.priority = req.priority
+            new_req.status = req.status
+            new_req.category = cat_map.get(req.category_id)
+            new_req.acceptance_criteria = req.acceptance_criteria
+            new_req.assigned_reviewer = reviewer if req.status != 'draft' else None
+            new_req.save()
+            # Sandbox copies must NOT roll up into the shared goals/strategies.
+            # Clear so re-running self-heals rows linked by older command versions.
+            new_req.linked_goals.clear()
+            new_req.linked_strategies.clear()
+            # Map tasks by title (idempotent)
+            new_req.linked_tasks.set([
+                sb_task for old_task in req.linked_tasks.all()
+                if (sb_task := sandbox_tasks.get(old_task.title))
+            ])
 
         count = Requirement.objects.filter(board=sandbox_board).count()
         self.stdout.write(self.style.SUCCESS(
