@@ -195,6 +195,8 @@ def _auto_register():
         # ── May 2026: Conflicts + Shadow Board coverage gaps ──
         conflicts_provider,
         shadow_board_provider,
+        # ── June 2026: Feature-guide / onboarding advisor ──
+        help_provider,
     )
 
 
