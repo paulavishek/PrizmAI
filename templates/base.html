@@ -317,6 +317,15 @@
                     </ul>
                 </div>
                 {% if is_viewing_demo %}
+                <div class="demo-info-dropdown" id="demoInfoDropdown">
+                    <button type="button" id="demo-info-btn" class="tws-btn" onclick="toggleDemoInfo(event)" title="Demo workspace info"
+                            style="border:1px solid #6366f1;color:#6366f1;background:transparent;font-weight:600;font-size:0.78rem;">
+                        <i class="fas fa-info-circle me-1"></i>Demo Info
+                    </button>
+                    {% include 'demo/partials/demo_info_dropdown.html' %}
+                </div>
+                {% endif %}
+                {% if is_viewing_demo %}
                 <button type="button" id="reset-demo-btn" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
                         style="border:1.5px solid #d97706 !important;background:transparent !important;color:#d97706 !important;font-weight:600 !important;">
                     <i class="fas fa-redo me-1"></i>Reset Demo
@@ -951,6 +960,28 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(function() {});
     };
+
+    // Demo Info navbar dropdown: toggle on click, close on outside click / Escape.
+    window.toggleDemoInfo = function(e) {
+        if (e) { e.stopPropagation(); }
+        var panel = document.getElementById('demoInfoPanel');
+        if (panel) { panel.classList.toggle('show'); }
+    };
+
+    document.addEventListener('click', function(e) {
+        var dropdown = document.getElementById('demoInfoDropdown');
+        var panel = document.getElementById('demoInfoPanel');
+        if (panel && dropdown && !dropdown.contains(e.target)) {
+            panel.classList.remove('show');
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var panel = document.getElementById('demoInfoPanel');
+            if (panel) { panel.classList.remove('show'); }
+        }
+    });
 })();
 </script>
 {% endif %}

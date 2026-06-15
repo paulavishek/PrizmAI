@@ -50,6 +50,18 @@ def demo_context(request):
             try:
                 profile = request.user.profile
                 context['is_viewing_demo'] = getattr(profile, 'is_viewing_demo', False)
+                # Demo Info navbar dropdown: the user's primary sandbox board for
+                # the "Open board" link (mirrors the lookup in views.dashboard).
+                if context['is_viewing_demo']:
+                    from kanban.models import Board
+                    context['demo_board'] = (
+                        Board.objects.filter(
+                            owner=request.user, is_sandbox_copy=True
+                        ).order_by('-created_at').first()
+                        or Board.objects.filter(
+                            is_official_demo_board=True
+                        ).first()
+                    )
                 # Workspace context for the workspace switcher dropdown
                 active_ws = getattr(profile, 'active_workspace', None)
                 context['active_workspace'] = active_ws
