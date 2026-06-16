@@ -6,6 +6,7 @@ from datetime import date
 
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.demo_personas import DEMO_PERSONAS, LEGACY_DEMO_USERNAMES
@@ -104,84 +105,62 @@ class Command(BaseCommand):
                 goal.save(update_fields=update)
             return goal
 
-        goal_mvp = _upsert_goal(
-            'Deliver a Secure, High-Performance MVP by Q3',
+        # Single consolidated Goal — one clean strategic story for the demo
+        # dashboard (replaces the former 5-goal sprawl). Keyed on name so the
+        # command adopts any pre-existing record instead of duplicating it.
+        goal_v1 = _upsert_goal(
+            'Deliver PrizmAI v1.0 — Enterprise-Ready Launch',
             organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
-            target_metric='Core workflows complete, p95 API latency < 200ms',
-            target_date=date(2026, 9, 30),
-            description=(
-                'Ship a production-ready MVP that is secure by default and fast '
-                'under load. Success means the core task and collaboration '
-                'workflows are complete, p95 API latency stays under 200ms, and a '
-                'security review passes before the Q3 launch.'
-            ),
-        )
-        goal_security = _upsert_goal(
-            'Achieve Enterprise-Grade Security and Compliance',
-            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
-            target_metric='Encryption at rest, WCAG 2.1 AA, 90%+ test coverage gate',
+            target_metric='Feature-complete, secure, performant, launch-ready',
             target_date=date(2026, 12, 31),
             description=(
-                'Reach an enterprise-grade security and compliance posture. '
-                'Success means sensitive data is encrypted at rest, rate limiting '
-                'and abuse protections are in place, accessibility meets WCAG 2.1 '
-                'AA, and the automated test pipeline gates every release.'
-            ),
-        )
-        goal_ux = _upsert_goal(
-            'Deliver a Fast, Reliable User Experience',
-            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
-            target_metric='Real-time updates < 2s, sub-200ms key interactions',
-            target_date=date(2026, 9, 30),
-            description=(
-                'Deliver a fast, reliable experience that users trust. Success '
-                'means responsive real-time updates, sub-200ms key interactions, '
-                'full mobile support, and a polished drag-and-drop interface.'
-            ),
-        )
-        goal_scale = _upsert_goal(
-            'Scale Platform for Global Adoption',
-            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
-            target_metric='Multi-region rollout, full i18n coverage',
-            target_date=date(2027, 6, 30),
-            description=(
-                'Prepare the platform for global adoption. Success means full '
-                'internationalization (multi-language and locale support) and '
-                'infrastructure that scales reliably across regions.'
-            ),
-        )
-        # 5th Goal — may already exist as a manually created record. Adopt it and
-        # sync the seed-owned fields, but preserve its manually-authored
-        # description and target date (create_only) so we don't clobber them.
-        goal_asia = _upsert_goal(
-            'Increase Market Share in Asia by 15%',
-            organization=demo_org, status='active', is_demo=True, is_seed_demo_data=True,
-            target_metric='16% market share increase in Asia-Pacific',
-            create_only=dict(
-                target_date=date(2027, 12, 31),
-                description=(
-                    'Capture an additional 15% market share across the '
-                    'Asia-Pacific region within 24 months by launching localized, '
-                    'AI-driven product experiences and building regional '
-                    'go-to-market partnerships.'
-                ),
+                'Bring PrizmAI to an enterprise-ready v1.0 launch: a complete, '
+                'secure, and reliable product that customers can adopt with '
+                'confidence. Success means the core feature set is delivered, the '
+                'platform meets enterprise bars for security, performance and '
+                'accessibility, and the product is polished and localized for '
+                'go-to-market across regions.'
             ),
         )
 
-        # ── Missions & Strategies (Goal → Mission → Strategy hierarchy) ──
-        # Clean any existing seeded strategic hierarchy for these goals so
-        # re-runs don't accumulate duplicates. Strategies cascade-delete with
-        # their Mission, so deleting seeded Missions is sufficient.
-        all_goals = [goal_mvp, goal_security, goal_ux, goal_scale, goal_asia]
-        Mission.objects.filter(
-            organization_goal__in=all_goals, is_seed_demo_data=True,
+        # ── Mission & Strategy (Goal → Mission → Strategy hierarchy) ─────
+        # A deliberate 1-Goal → 1-Mission → 1-Strategy → 1-Board spine: with a
+        # single richly-seeded board, this is the only shape where the dashboard
+        # rollup charts ("Mission Completion & Risk", "Strategy Progress") have
+        # zero empty bars. Richness lives in the board's depth, not hierarchy
+        # breadth. Adding boards later is what would justify more strategies.
+        all_goals = [goal_v1]
+        missions_spec = [
+            ('Core Product & Feature Delivery', ['Authentication & Data Layer']),
+        ]
+        mission_names = [name for name, _ in missions_spec]
+
+        # Every demo mission name we have ever seeded — used so a re-run from a
+        # DB built by an earlier (3-mission / 13-strategy) version of this
+        # command cleanly removes the now-dropped missions during the collapse.
+        KNOWN_DEMO_MISSION_NAMES = mission_names + [
+            'Platform Reliability, Security & Performance',
+            'Market Readiness & User Experience',
+        ]
+
+        # Clean any existing seeded strategic hierarchy so re-runs don't
+        # accumulate duplicates. Strategies cascade-delete with their Mission.
+        # We delete EVERY seeded Mission under this Goal, plus any seeded Mission
+        # that has become detached from its Goal (organization_goal=NULL — e.g.
+        # via the "Change Goal → None (unlinked)" UI action, since the FK is
+        # on_delete=SET_NULL) whose name we recognise. A purely goal-scoped or
+        # purely name-scoped filter would each miss a case and leave a duplicate
+        # or stale Mission after the next reset.
+        Mission.objects.filter(is_seed_demo_data=True).filter(
+            Q(organization_goal__in=all_goals)
+            | Q(organization_goal__isnull=True, name__in=KNOWN_DEMO_MISSION_NAMES)
         ).delete()
 
         # name -> Strategy, used later to attach requirements.
         strategies = {}
 
-        def _build(goal, missions_spec):
-            for mission_name, strategy_names in missions_spec:
+        def _build(goal, spec):
+            for mission_name, strategy_names in spec:
                 mission = Mission.objects.create(
                     name=mission_name,
                     status='active',
@@ -199,29 +178,10 @@ class Command(BaseCommand):
                         is_seed_demo_data=True,
                     )
 
-        _build(goal_mvp, [
-            ('Core Feature Delivery', ['Authentication & Data Layer', 'Communication & Storage']),
-            ('User Readiness', ['Onboarding & Adoption']),
-        ])
-        _build(goal_security, [
-            ('Security Hardening', ['Data Protection Implementation']),
-            ('Compliance & Quality', ['Accessibility & Audit Readiness']),
-        ])
-        _build(goal_ux, [
-            ('Performance Optimization', ['Backend Speed & Reliability']),
-            ('UI/UX Quality', ['Interface Excellence']),
-        ])
-        _build(goal_scale, [
-            ('Internationalization', ['Language & Locale Support']),
-            ('Infrastructure Scaling', ['Cloud Readiness & Reliability']),
-        ])
-        _build(goal_asia, [
-            ('Market Expansion', ['Regional Campaign Execution', 'Competitive Positioning']),
-            ('Partnership Development', ['Channel Partner Onboarding', 'Integration Ecosystem Growth']),
-        ])
+        _build(goal_v1, missions_spec)
         self.stdout.write(self.style.SUCCESS(
             f'Created {Mission.objects.filter(organization_goal__in=all_goals, is_seed_demo_data=True).count()} missions '
-            f'and {len(strategies)} strategies across 5 goals.'
+            f'and {len(strategies)} strategies under 1 goal.'
         ))
 
         # ── Complete the hierarchy: link the demo board to one Strategy ───
@@ -392,81 +352,29 @@ class Command(BaseCommand):
             f'Created {created_count} requirements, 3 categories for demo board.'
         ))
 
-        # ── Link goals to requirements by title ──────────────────────────
+        # ── Link the single consolidated Goal to every demo requirement ──
+        # Template-board requirements only — sandbox copies are deliberately
+        # left unlinked (see _populate_sandbox) to avoid inflating the Goal's
+        # requirement count.
         created_reqs = {req.title: req for req in Requirement.objects.filter(board=demo_board)}
-        goal_links = [
-            (goal_mvp, [
-                'User Authentication & Authorization',
-                'Task CRUD Operations',
-                'Data Export (CSV/PDF)',
-                'Email Notification System',
-                'File Upload Support',
-            ]),
-            (goal_security, [
-                'Data Encryption at Rest',
-                'Rate Limiting & DDoS Protection',
-                'WCAG 2.1 AA Compliance',
-                'Automated Testing Pipeline',
-            ]),
-            (goal_ux, [
-                'API Response Time < 200ms',
-                'Real-time Dashboard Updates',
-                'Mobile Responsive Design',
-                'Drag-and-Drop Board Interface',
-                'Search Functionality',
-            ]),
-            (goal_scale, [
-                'Multi-language Support (i18n)',
-            ]),
-        ]
-        for goal, titles in goal_links:
-            for title in titles:
-                req = created_reqs.get(title)
-                if req:
-                    req.linked_goals.add(goal)
-        self.stdout.write(self.style.SUCCESS('Linked demo requirements to 4 goals.'))
+        for req in created_reqs.values():
+            req.linked_goals.add(goal_v1)
+        self.stdout.write(self.style.SUCCESS(
+            f'Linked {len(created_reqs)} demo requirements to the consolidated goal.'
+        ))
 
-        # ── Link requirements to strategies (Strategy ← Requirement) ─────
-        strategy_links = [
-            ('Authentication & Data Layer', [
-                'User Authentication & Authorization',
-                'Task CRUD Operations',
-                'Data Export (CSV/PDF)',
-            ]),
-            ('Communication & Storage', [
-                'Email Notification System',
-                'File Upload Support',
-            ]),
-            ('Data Protection Implementation', [
-                'Data Encryption at Rest',
-                'Rate Limiting & DDoS Protection',
-            ]),
-            ('Accessibility & Audit Readiness', [
-                'WCAG 2.1 AA Compliance',
-                'Automated Testing Pipeline',
-            ]),
-            ('Backend Speed & Reliability', [
-                'API Response Time < 200ms',
-                'Real-time Dashboard Updates',
-            ]),
-            ('Interface Excellence', [
-                'Mobile Responsive Design',
-                'Drag-and-Drop Board Interface',
-                'Search Functionality',
-            ]),
-            ('Language & Locale Support', [
-                'Multi-language Support (i18n)',
-            ]),
-        ]
-        for strategy_name, titles in strategy_links:
-            strategy = strategies.get(strategy_name)
-            if not strategy:
-                continue
-            for title in titles:
-                req = created_reqs.get(title)
-                if req:
-                    req.linked_strategies.add(strategy)
-        self.stdout.write(self.style.SUCCESS('Linked demo requirements to strategies.'))
+        # ── Link every requirement to the single Strategy ────────────────
+        # With one Strategy in the hierarchy, all template-board requirements
+        # roll up under it (no requirement is left strategy-less, and the
+        # Strategy detail page shows the full set). `.set(...)` makes this
+        # idempotent and self-heals rows that pointed at now-deleted strategies.
+        the_strategy = strategies.get('Authentication & Data Layer')
+        if the_strategy:
+            for req in created_reqs.values():
+                req.linked_strategies.set([the_strategy])
+        self.stdout.write(self.style.SUCCESS(
+            f'Linked {len(created_reqs)} demo requirements to the single strategy.'
+        ))
 
         # ── Populate sandbox copies of this board ────────────────────────
         sandbox_boards = Board.objects.filter(
