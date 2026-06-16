@@ -422,10 +422,52 @@
     /* ================================================================
        DAILY AI BRIEFING CARD
        ================================================================ */
-    #daily-briefing-card {
+    /* Unified Focus Today command-center card */
+    #focus-briefing-card {
         border-radius: 12px;
-        background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);
     }
+    /* Compact decision-item rows in the Focus Today widget */
+    .cmd-item {
+        padding: 0.35rem 0.4rem;
+        border-radius: 6px;
+        transition: background 0.12s ease;
+    }
+    .cmd-item:not(.cmd-item-static):hover {
+        background: rgba(99, 102, 241, 0.07);
+    }
+    .cmd-item-static { cursor: default; }
+    [data-bs-theme="dark"] .cmd-item:not(.cmd-item-static):hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    [data-bs-theme="dark"] .cmd-item span[style*="color:#1e293b"] { color: #e8e9f3 !important; }
+
+    /* Prominent AI Briefing band + action-plan button */
+    .ai-briefing-row {
+        background: linear-gradient(135deg, rgba(79,70,229,0.06) 0%, rgba(79,70,229,0.02) 100%);
+        border: 1px solid rgba(79,70,229,0.16);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+    }
+    .ai-briefing-bot { font-size: 1rem; margin-top: 2px; }
+    .ai-action-plan-btn {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: #fff;
+        font-weight: 600;
+        white-space: nowrap;
+        border: none;
+        box-shadow: 0 2px 8px rgba(79,70,229,0.25);
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .ai-action-plan-btn:hover {
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+    }
+    [data-bs-theme="dark"] .ai-briefing-row {
+        background: rgba(99,102,241,0.10);
+        border-color: rgba(129,140,248,0.30);
+    }
+    [data-bs-theme="dark"] .ai-briefing-row p { color: #cfd3e3 !important; }
     .briefing-item {
         background: white;
         border-radius: 8px;
@@ -803,10 +845,7 @@
         background: var(--card-bg-surface, #2a2d3a) !important;
         border: 1px solid rgba(255,255,255,0.14) !important;
     }
-    [data-bs-theme="dark"] #daily-briefing-card [style*="color:#374151"] { color: #cfd3e3 !important; }
-    [data-bs-theme="dark"] #daily-briefing-card [style*="color:#1e3a8a"] { color: #bcd0ff !important; }
-    [data-bs-theme="dark"] #daily-briefing-card [style*="color:#1e40af"] { color: #bcd0ff !important; }
-    [data-bs-theme="dark"] #daily-briefing-card .briefing-action-footer { color: #bcd0ff !important; }
+    [data-bs-theme="dark"] #focus-briefing-card [style*="color:#374151"] { color: #cfd3e3 !important; }
 
     /* ── Dark-mode: Hierarchy Navigator title (inline #334155) + Goals active count badge ── */
     [data-bs-theme="dark"] #hierarchy-navigator .card-header h6 { color: #e8e9f3 !important; }
@@ -884,11 +923,6 @@
     .ai-summary-text ul { padding-left: 1.2em; margin-bottom: 0; }
     .ai-summary-text li { margin-bottom: 0.2em; font-size: 0.83rem; }
 
-    /* -- Daily briefing card visual separator -- */
-    #daily-briefing-card .briefing-item + .briefing-item {
-        border-left: 1px solid rgba(0,0,0,0.07);
-        padding-left: 1rem;
-    }
 
     /* ── Hierarchy Navigator: enhanced card text sizes ── */
     #hierarchy-navigator .hn-item .card-body h6 { font-size: 1.05rem !important; line-height: 1.3; }
@@ -950,187 +984,83 @@
 {# Demo onboarding info now lives in the navbar "Demo Info" dropdown (see templates/demo/partials/demo_info_dropdown.html) #}
 
 <!-- ============================================================ -->
-<!-- TOP SUMMARY ROW: Focus Today (left) + AI Briefing (right)   -->
+<!-- UNIFIED "FOCUS TODAY" MORNING COMMAND CENTER                 -->
+<!-- AI Briefing headline (situation) + top decision items        -->
+<!-- (action) in one always-populated card. Full /decision-center -->
+<!-- page is the expanded version of this same content.           -->
 <!-- ============================================================ -->
-<div class="row g-2 mb-3 align-items-stretch">
-  <!-- Focus Today -->
-  <div class="col-lg-7 d-flex" id="decision-center-widget">
-        <div class="card prizm-surface border-0 h-100 w-100" style="border-left: 4px solid #6366f1 !important;">
-            <div class="card-body py-2 px-3 d-flex align-items-center">
-                <div class="d-flex align-items-center gap-3 flex-wrap w-100">
-                    <!-- Title — always visible -->
-                    <h6 class="mb-0 fw-bold flex-shrink-0">
-                        <i class="fas fa-bolt text-warning me-1"></i> Focus Today
-                    </h6>
-                    <!-- Badges rendered server-side to prevent flash -->
-                    {% if dc_total_count > 0 %}
-                    <div id="dc-widget-content" class="dc-widget-badges" style="display:flex;">
-                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
-                            <i class="fas fa-circle-exclamation me-1"></i>
-                            <span id="dc-action-count">{{ dc_action_count }}</span>&nbsp;Action Required
-                        </span>
-                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <span id="dc-awareness-count">{{ dc_awareness_count }}</span>&nbsp;Awareness
-                        </span>
-                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
-                            <i class="fas fa-bolt me-1"></i>
-                            <span id="dc-quickwin-count">{{ dc_quickwin_count }}</span>&nbsp;Quick Wins
-                        </span>
-                        <span id="dc-widget-headline" style="display:none;"></span>
-                    </div>
-                    <div id="dc-widget-empty" class="flex-fill" style="display:none;">
-                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
-                    </div>
-                    {% else %}
-                    <div id="dc-widget-content" class="dc-widget-badges" style="display:none;">
-                        <span class="dc-badge dc-badge-danger" id="dc-action-badge">
-                            <i class="fas fa-circle-exclamation me-1"></i>
-                            <span id="dc-action-count">0</span>&nbsp;Action Required
-                        </span>
-                        <span class="dc-badge dc-badge-info" id="dc-awareness-badge">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <span id="dc-awareness-count">0</span>&nbsp;Awareness
-                        </span>
-                        <span class="dc-badge dc-badge-success" id="dc-quickwin-badge">
-                            <i class="fas fa-bolt me-1"></i>
-                            <span id="dc-quickwin-count">0</span>&nbsp;Quick Wins
-                        </span>
-                        <span id="dc-widget-headline" style="display:none;"></span>
-                    </div>
-                    <div id="dc-widget-empty" class="flex-fill">
-                        <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
-                    </div>
-                    {% endif %}
-                    <!-- Hidden loading skeleton (only shown if JS refresh needed) -->
-                    <div id="dc-widget-loading" class="dc-loading-skeleton" style="display:none;"></div>
-                    <!-- Open Full View -->
-                    <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary ms-auto flex-shrink-0">
-                        Open Full View <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
-                </div>
-            </div>
-        </div>
-  </div>
-  <!-- /Focus Today -->
+<div class="card prizm-surface border-0 mb-3" id="focus-briefing-card" style="border-left: 4px solid #6366f1 !important;">
+    <div class="card-body p-3" id="decision-center-widget">
 
-  <!-- AI Briefing — collapsed summary bar; detail breaks out full-width below the row -->
-  {% if daily_briefing.has_content %}
-  <div class="col-lg-5 d-flex">
-    <div class="card prizm-surface border-0 mb-0 h-100 w-100" id="daily-briefing-card" style="border-left: 4px solid #0e9f6e !important;">
-        <div class="card-body p-3 d-flex align-items-center w-100">
-        <div class="w-100">
-        {% if daily_briefing.workspace_is_new %}
-        <div class="d-flex align-items-center gap-2">
-            <i class="fas fa-robot" style="color:#0e9f6e;"></i>
-            <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
+        {# ── Header: title + action-count pill ── #}
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <h6 class="mb-0 fw-bold">
+                <i class="fas fa-bolt text-warning me-1"></i> Focus Today
+            </h6>
+            {% if dc_action_count %}
+            <span class="dc-badge dc-badge-danger flex-shrink-0" style="padding:3px 11px; font-size:0.76rem;">
+                <span id="dc-action-count">{{ dc_action_count }}</span>&nbsp;action{{ dc_action_count|pluralize }}
+            </span>
+            {% endif %}
         </div>
-        <p class="mt-2 mb-0 small" style="color:#374151;">
+
+        {% if daily_briefing.workspace_is_new %}
+        {# ── New-workspace welcome variant ── #}
+        <p class="mb-0 small" style="color:#374151;">
+            <i class="fas fa-robot me-1" style="color:#0e9f6e;"></i>
             {% if daily_briefing.ws_goal_name %}Your <strong>{{ daily_briefing.ws_goal_name }}</strong> workspace is ready — {% else %}Your workspace is ready — {% endif %}
             {% if daily_briefing.ws_board_count %}Spectra built {{ daily_briefing.ws_mission_count }} mission{{ daily_briefing.ws_mission_count|pluralize }}, {{ daily_briefing.ws_board_count }} board{{ daily_briefing.ws_board_count|pluralize }} and {{ daily_briefing.ws_total_tasks }} starter task{{ daily_briefing.ws_total_tasks|pluralize }}. Open a board and move your first task forward to get started.{% else %}Open a board and move your first task forward to get started.{% endif %}
         </p>
         {% else %}
-        <!-- Collapsed summary bar: status pills instead of a truncated narrative -->
-        <div class="d-flex align-items-center justify-content-between w-100" role="button"
-             data-bs-toggle="collapse" data-bs-target="#briefingDetail"
-             aria-expanded="false" aria-controls="briefingDetail" style="cursor:pointer;">
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="d-inline-flex align-items-center gap-2 flex-shrink-0">
-                    <i class="fas fa-robot" style="color:#0e9f6e;"></i>
-                    <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
-                </span>
-                {% if daily_briefing.pulse_status == 'off_track' %}
-                <span class="dc-badge dc-badge-danger" style="padding:4px 12px; font-size:0.78rem;">🔴 Off Track</span>
-                {% elif daily_briefing.pulse_status == 'at_risk' %}
-                <span class="dc-badge dc-badge-warning" style="padding:4px 12px; font-size:0.78rem;">🟡 At Risk</span>
-                {% else %}
-                <span class="dc-badge dc-badge-success" style="padding:4px 12px; font-size:0.78rem;">🟢 On Track</span>
-                {% endif %}
-                {% if daily_briefing.risk_count %}
-                <span class="dc-badge dc-badge-warning" style="padding:4px 12px; font-size:0.78rem;">⚠️ {{ daily_briefing.risk_count }} High Risk{{ daily_briefing.risk_count|pluralize }}</span>
-                {% endif %}
-                {% if daily_briefing.action %}
-                <span class="dc-badge dc-badge-info" style="padding:4px 12px; font-size:0.78rem;">💡 1 Action Recommended</span>
-                {% endif %}
-            </div>
-            <i class="fas fa-chevron-down text-muted ms-2 flex-shrink-0" style="font-size:0.7rem; transition:transform 0.2s;" id="briefingChevron"></i>
+
+        {# ── AI Briefing headline (situation) + AI Action Plan button on one row ── #}
+        {% if dc_headline %}
+        <div class="ai-briefing-row d-flex align-items-start justify-content-between gap-3 mb-2">
+            <p class="mb-0 d-flex align-items-start gap-2" style="color:#374151; line-height:1.5;">
+                {% if daily_briefing.pulse_status == 'off_track' %}<i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#dc2626;"></i>
+                {% elif daily_briefing.pulse_status == 'at_risk' %}<i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#d97706;"></i>
+                {% else %}<i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#16a34a;"></i>{% endif %}
+                <span style="font-size:0.86rem;"><strong style="color:#4f46e5;">AI Briefing:</strong> {{ dc_headline }}</span>
+            </p>
+            {% if daily_briefing.action_plan %}
+            <button type="button" class="btn btn-sm ai-action-plan-btn flex-shrink-0" data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal">
+                <i class="fas fa-wand-magic-sparkles me-1"></i> View AI Action Plan
+            </button>
+            {% endif %}
         </div>
         {% endif %}
-        </div>
-        </div>
-    </div>
-  </div>
-  {% endif %}
-  <!-- /AI Briefing column -->
-</div>
-<!-- /Top Summary Row -->
 
-<!-- ============================================================ -->
-<!-- AI BRIEFING DETAIL — full-width breakout panel below the row -->
-<!-- (collapse target lives here, outside the narrow column, so   -->
-<!--  the 3 cards keep full width when expanded)                  -->
-<!-- ============================================================ -->
-{% if daily_briefing.has_content and not daily_briefing.workspace_is_new %}
-<div class="collapse mb-3" id="briefingDetail">
-    <div class="card prizm-surface">
-        <div class="card-body p-3">
-            <div class="row g-2">
-                {% if daily_briefing.pulse %}
-                <div class="col-md-4">
-                    <div class="briefing-item">
-                        <span class="briefing-tag briefing-pulse">🟢 Overall Pulse</span>
-                        <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.pulse }}</p>
-                    </div>
-                </div>
-                {% endif %}
-                {% if daily_briefing.risk %}
-                <div class="col-md-4">
-                    <div class="briefing-item briefing-item-risk">
-                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Items{% if daily_briefing.top_risks %} ({{ daily_briefing.top_risks|length }}){% endif %}</span>
-                        {% if daily_briefing.top_risks %}
-                        <div class="mt-2 d-flex flex-column gap-2">
-                            {% for risk_item in daily_briefing.top_risks %}
-                            <a href="{% url 'task_detail' risk_item.task.id %}"
-                               class="d-flex align-items-start gap-2 text-decoration-none"
-                               title="View task: {{ risk_item.task.title }}">
-                                {% if risk_item.risk_level == 'critical' %}
-                                    <span class="badge bg-danger flex-shrink-0" style="font-size:0.7rem; margin-top:2px;">Critical</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark flex-shrink-0" style="font-size:0.7rem; margin-top:2px;">High</span>
-                                {% endif %}
-                                <div>
-                                    <span class="d-block fw-semibold" style="font-size:0.8rem; color:#1e3a8a; line-height:1.3;">{{ risk_item.task.title|truncatechars:42 }}</span>
-                                    <span class="text-muted" style="font-size:0.74rem;">
-                                        <i class="fas fa-calendar-alt me-1"></i>{{ risk_item.due_label }}{% if risk_item.board_name %} · {{ risk_item.board_name|truncatechars:18 }}{% endif %}
-                                    </span>
-                                </div>
-                            </a>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if daily_briefing.action %}
-                <div class="col-md-4">
-                    <div class="briefing-item briefing-item-clickable"
-                         data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal"
-                         role="button" tabindex="0"
-                         aria-label="View AI recommended actions">
-                        <span class="briefing-tag briefing-action">💡 Recommended Action</span>
-                        <p class="mb-0 small mt-2 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
-                        <div class="briefing-action-footer">
-                            View details <i class="fas fa-arrow-right ms-1"></i>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
+        {# ── Body: top decision items — the real mixed queue rows ── #}
+        <div class="d-flex flex-column">
+            {% for item in dc_top_items %}
+            <a class="cmd-item d-flex align-items-baseline gap-2 text-decoration-none{% if not item.widget_url %} cmd-item-static{% endif %}"
+               {% if item.widget_url %}href="{{ item.widget_url }}"{% endif %}
+               title="{{ item.suggested_action|default:item.title }}">
+                <span class="dc-badge flex-shrink-0 {% if item.priority_level == 'action_required' %}dc-badge-danger{% elif item.priority_level == 'quick_win' %}dc-badge-success{% else %}dc-badge-info{% endif %}" style="padding:2px 9px; font-size:0.7rem;">
+                    {{ item.widget_label }}
+                </span>
+                <span class="flex-fill" style="min-width:0; line-height:1.4;">
+                    <span style="font-size:0.84rem; color:#1e293b; font-weight:500;">{{ item.title }}</span>
+                    {% if item.description %}<span class="text-muted" style="font-size:0.78rem;"> — {{ item.description|truncatechars:100 }}</span>{% endif %}
+                </span>
+                <span class="text-muted flex-shrink-0" style="font-size:0.72rem; white-space:nowrap;">~{{ item.estimated_minutes }}m</span>
+            </a>
+            {% empty %}
+            <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
+            {% endfor %}
         </div>
+
+        {# ── Footer: open the full Decision Center ── #}
+        <div class="mt-2 pt-2" style="border-top:1px solid #eef0f5;">
+            <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary">
+                Open Decision Center{% if dc_action_count %} (<span id="dc-action-count-2">{{ dc_action_count }}</span> Action{{ dc_action_count|pluralize }} Required){% endif %} <i class="fas fa-arrow-right ms-1"></i>
+            </a>
+        </div>
+        {% endif %}{# /not workspace_is_new #}
+
     </div>
 </div>
-{% endif %}
-<!-- /AI Briefing -->
+<!-- /Focus Today Command Center -->
 
 <!-- ============================================================ -->
 <!-- ZONE 1: COMPACT KPI STRIP                                   -->
@@ -3050,25 +2980,17 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // ── Decision Center widget refresh (updates server-rendered counts) ──
+        // ── Focus Today widget: keep the action count fresh (rows are server-rendered) ──
         (function loadDCWidget() {
             fetch("{% url 'decision_center:decision_center_widget' %}")
                 .then(r => r.json())
                 .then(data => {
-                    document.getElementById('dc-widget-loading').style.display = 'none';
-                    if (data.total_count === 0) {
-                        document.getElementById('dc-widget-content').style.display = 'none';
-                        document.getElementById('dc-widget-empty').style.display = '';
-                    } else {
-                        document.getElementById('dc-widget-empty').style.display = 'none';
-                        document.getElementById('dc-widget-content').style.display = 'flex';
-                        document.getElementById('dc-action-count').textContent = data.action_required_count;
-                        document.getElementById('dc-awareness-count').textContent = data.awareness_count;
-                        document.getElementById('dc-quickwin-count').textContent = data.quick_win_count;
-                        if (data.headline) {
-                            document.getElementById('dc-widget-headline').textContent = '"' + data.headline + '"';
-                        }
-                    }
+                    // Update both places the action count appears; null-guard each.
+                    var n = data.action_required_count;
+                    ['dc-action-count', 'dc-action-count-2'].forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) el.textContent = n;
+                    });
                 })
                 .catch(function() {
                     // On error, keep server-rendered state as-is
@@ -4006,18 +3928,6 @@
                     _chartsInitialised = true;
                     initMetricsCharts();
                 }
-            });
-        }
-
-        // Rotate the AI Briefing chevron when its detail panel expands/collapses
-        var briefingEl = document.getElementById('briefingDetail');
-        var briefingChevron = document.getElementById('briefingChevron');
-        if (briefingEl && briefingChevron) {
-            briefingEl.addEventListener('shown.bs.collapse', function () {
-                briefingChevron.style.transform = 'rotate(180deg)';
-            });
-            briefingEl.addEventListener('hidden.bs.collapse', function () {
-                briefingChevron.style.transform = 'rotate(0deg)';
             });
         }
 
