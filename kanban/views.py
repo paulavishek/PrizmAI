@@ -835,6 +835,7 @@ def dashboard(request):
             item_type='task',
             risk_level__in=['high', 'critical'],
         )
+        .exclude(progress=100)  # Only active (incomplete) tasks — a done task isn't a risk
         .select_related('column__board', 'assigned_to')
         .annotate(
             risk_sort=Case(
@@ -1440,19 +1441,19 @@ def dashboard(request):
     _dc_effective_demo = demo_mode or '_demo' in request.user.username
     _dc_cache_key = f"dc_widget_{request.user.id}_{'demo' if _dc_effective_demo else 'real'}"
     _dc_cached = cache.get(_dc_cache_key)
+    _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
+    _dc_pending = (
+        DecisionItem.objects.filter(
+            created_for=request.user, status='pending', board__in=boards,
+        ) | DecisionItem.objects.filter(
+            created_for=request.user, status='pending', board__isnull=True,
+        )
+    ).distinct()
     if _dc_cached:
         dc_action_count = _dc_cached.get('action_required_count', 0)
         dc_awareness_count = _dc_cached.get('awareness_count', 0)
         dc_quickwin_count = _dc_cached.get('quick_win_count', 0)
     else:
-        _dc_pending = (
-            DecisionItem.objects.filter(
-                created_for=request.user, status='pending', board__in=boards,
-            ) | DecisionItem.objects.filter(
-                created_for=request.user, status='pending', board__isnull=True,
-            )
-        ).distinct()
-        _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
         dc_action_count = _dc_pending.filter(priority_level='action_required').count()
         dc_awareness_count = (
             _dc_pending.filter(priority_level='awareness').count()
@@ -1463,6 +1464,61 @@ def dashboard(request):
             if _dc_settings.show_quick_wins else 0
         )
     dc_total_count = dc_action_count + dc_awareness_count + dc_quickwin_count
+
+    # ── Unified "Focus Today" widget: top 3 decision items + editorial headline ──
+    # Body rows are the real mixed queue (overdue / conflict / quick win); the
+    # full /decision-center/ page is the expanded version of this same content.
+    _dc_allowed_levels = ['action_required']
+    if _dc_settings.show_awareness_items:
+        _dc_allowed_levels.append('awareness')
+    if _dc_settings.show_quick_wins:
+        _dc_allowed_levels.append('quick_win')
+    dc_top_items = list(
+        _dc_pending
+        .filter(priority_level__in=_dc_allowed_levels)
+        .select_related('board')
+        .order_by('priority_level', '-created_at')[:3]  # action_required sorts first
+    )
+
+    # Per-item deep link (to the feature's own page, not just the board) + a short,
+    # human-friendly badge label. Attached as plain attributes for the template.
+    _DC_SHORT_LABELS = {
+        'conflict': 'Conflict',
+        'premortem_risk': 'High Risk',
+        'overdue_task': 'Overdue',
+        'overallocated': 'Overallocated',
+        'scope_change': 'Scope Change',
+        'deadline_approaching': 'Deadline',
+        'budget_threshold': 'Budget',
+        'unassigned_task': 'Unassigned',
+        'stale_task': 'Stale',
+        'memory_captured': 'Memory',
+    }
+
+    def _dc_item_url(_item):
+        try:
+            if _item.item_type == 'conflict' and _item.source_object_id:
+                return reverse('conflict_detail', args=[_item.source_object_id])
+            if _item.item_type == 'conflict':
+                return reverse('conflict_dashboard')
+            if _item.item_type == 'premortem_risk' and _item.board_id:
+                return reverse('premortem_dashboard', args=[_item.board_id])
+            if _item.board_id:
+                return reverse('board_detail', args=[_item.board_id])
+        except Exception:
+            pass
+        return reverse('decision_center:decision_center')
+
+    for _item in dc_top_items:
+        _item.widget_url = _dc_item_url(_item)
+        _item.widget_label = _DC_SHORT_LABELS.get(_item.item_type, _item.get_item_type_display())
+
+    # Editorial headline = today's Decision Center briefing (Gemini); fall back to pulse.
+    dc_headline = (
+        DecisionCenterBriefing.objects
+        .filter(user=request.user, generated_at__date=timezone.localdate())
+        .values_list('headline', flat=True).first()
+    ) or briefing_pulse
 
     # Demo welcome panel: pass the user's primary sandbox board for links
     demo_board = None
@@ -1528,6 +1584,8 @@ def dashboard(request):
         'dc_awareness_count': dc_awareness_count,
         'dc_quickwin_count': dc_quickwin_count,
         'dc_total_count': dc_total_count,
+        'dc_top_items': dc_top_items,
+        'dc_headline': dc_headline,
         # PrizmDiscovery widget counts (only if feature is enabled)
         **_get_discovery_widget_counts(request.user, organization),
         })
