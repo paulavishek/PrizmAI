@@ -1,0 +1,16 @@
+# Ground Truth — Board 63 (Core AI Protocol Development)
+
+- Board name: Core AI Protocol Development
+- Created: 2026-04-07 13:45:26.729764+00:00
+- Total items (task+milestone rows): 5
+- Total tasks (item_type=task): 5
+- Milestones (item_type=milestone): 0
+- Columns (ordered): ['To Do', 'Design Review', 'Prototyping', 'Unit Testing', 'Done']
+- Tasks per column: {'Unit Testing': 1, 'Done': 1, 'To Do': 3}
+- Priority distribution: {'low': 3, 'medium': 2}
+- HIGH priority task titles: []
+- Overdue tasks (due<now, not Done): 4 -> ['Draft initial multi-agent protocol specification (v0.1)', 'Develop proof-of-concept agent interaction module', 'Conduct internal review of protocol design', 'Urgent task']
+- Done column tasks: 1 -> ['Research existing multi-agent communication patterns']
+- Tasks assigned to testuser1: 4 -> ['Draft initial multi-agent protocol specification (v0.1)', 'Research existing multi-agent communication patterns', 'Develop proof-of-concept agent interaction module', 'Conduct internal review of protocol design']
+- Memberships: [('testuser3', 'viewer'), ('testuser2', 'member'), ('testuser1', 'owner')]
+- Label usage: {'test': 1}

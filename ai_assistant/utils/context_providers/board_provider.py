@@ -87,6 +87,9 @@ class BoardContextProvider(BaseContextProvider):
         total = len(tasks)
 
         ctx = f'**📋 Board: {board.name}**\n'
+        created = getattr(board, 'created_at', None)
+        if created:
+            ctx += f'Created: {created.strftime("%Y-%m-%d")}\n'
         if board.description:
             ctx += f'Description: {board.description[:200]}\n'
 
@@ -156,6 +159,17 @@ class BoardContextProvider(BaseContextProvider):
         else:
             for t in sorted(due_soon, key=lambda x: x['due_date_date']):
                 ctx += f'  • {t["title"]} — due {t["due_date_date"]} — {t["assigned_to_display"]}\n'
+
+        # Task dependencies / blocking relationships. Stated explicitly (even
+        # when empty) so "which tasks are blocking?" never falls back to a
+        # canned refusal for lack of context.
+        blocking = [t for t in tasks if t.get('dependency_titles')]
+        ctx += '\n**Task Dependencies / Blocking:**\n'
+        if not blocking:
+            ctx += '  No task dependencies are defined on this board (no tasks are blocking others).\n'
+        else:
+            for t in blocking:
+                ctx += f'  • "{t["title"]}" depends on: {", ".join(t["dependency_titles"][:5])}\n'
 
         # Milestones
         if milestones:

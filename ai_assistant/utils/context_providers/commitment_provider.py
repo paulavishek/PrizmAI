@@ -34,6 +34,10 @@ class CommitmentContextProvider(BaseContextProvider):
         'bet', 'bets', 'prediction', 'delivery confidence',
         'signal', 'negotiation', 'credibility', 'at risk',
         'commitment protocol', 'will we deliver',
+        # "project confidence score" maps to commitment confidence — surface
+        # this data for those phrasings too. (Triple Constraint's per-dimension
+        # scope/cost/time breakdown is a separate feature, not this provider.)
+        'confidence score', 'project confidence',
     ]
 
     def _get_summary_impl(self, board, user, is_demo_mode=False):
