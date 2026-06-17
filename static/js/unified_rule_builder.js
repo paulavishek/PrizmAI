@@ -30,130 +30,55 @@ const UnifiedRuleBuilder = (() => {
   // Communications / Scheduled). The render code flattens these for label
   // lookup but the template renders <optgroup> blocks from the groups.
 
+  // Lean MVP set — must stay in sync with AutomationRule.TRIGGER_GROUPS in
+  // kanban/automation_models.py. The trigger <select> itself is rendered
+  // server-side from the model groups; this map is the client-side label
+  // lookup for rule summaries. Hidden trigger types are intentionally omitted.
   const TRIGGER_GROUPS = {
     'Task State': {
       task_created:              'Task is created',
       task_completed:            'Task is completed',
       task_assigned:             'Task is assigned',
-      task_unassigned:           'Task is unassigned',
       task_moved_to_column:      'Task is moved to a column',
-      task_status_changed:       'Task status (column) changed',
       task_priority_changed:     'Task priority changes',
-      task_progress_changed:     'Task progress changed',
-      task_description_updated:  'Task description updated',
       task_due_date_changed:     'Task due date changed',
-      task_label_added:          'Task label added',
     },
     'Time & Activity': {
-      task_overdue:              'Task becomes overdue',
-      task_idle:                 'Task is idle (no updates for N days)',
-      task_start_date_reached:   'Task start date reached',
       task_completion_threshold: 'Completion threshold reached',
+      task_overdue:              'Task becomes overdue',
       due_date_approaching:      'Due date is approaching',
-    },
-    'AI & Risk': {
-      risk_level_changed:        'Risk level changed',
-      risk_level_critical:       'Risk level becomes critical',
-      predicted_late:            'Predicted to miss due date',
-      schedule_status_changed:   'Schedule status changed',
-      complexity_increased:      'Complexity increased',
-    },
-    'Hierarchy & Dependencies': {
-      subtask_completed:         'A subtask completed',
-      all_subtasks_completed:    'All subtasks completed',
-      dependency_completed:      'A blocking dependency completed',
-      dependency_overdue:        'A blocking dependency became overdue',
-      checklist_completed:       'Checklist fully completed',
-      checklist_item_added:      'Checklist item added',
-      milestone_reached:         'Milestone reached',
-      parent_status_changed:     'Parent task status changed',
-    },
-    'AI Tools & Platform': {
-      coach_suggestion_created:  'AI Coach suggestion created',
-      conflict_detected:         'Conflict detected',
-      discovery_idea_scored:     'Discovery idea AI-scored',
-      discovery_idea_submitted:  'Discovery idea submitted',
-      immunity_score_dropped:    'Immunity score dropped',
-      hospice_risk_triggered:    'Hospice risk threshold reached',
-      scope_creep_detected:      'Scope creep detected',
-      prediction_confidence_dropped: 'Prediction confidence dropped',
-      retrospective_finalized:   'Retrospective finalized',
-    },
-    'Communications': {
-      comment_added:             'Comment added to a task',
-      mention_received:          'Assignee was @-mentioned',
-      attachment_added:          'Attachment added to a task',
-      task_thread_message:       'Task thread message posted',
+      task_idle:                 'Task is idle (no updates for N days)',
     },
     'Scheduled': {
       scheduled_daily:           'Every day at a set time',
       scheduled_weekly:          'Every week on a set day',
-      scheduled_monthly:         'Every month on a set date',
     },
   };
 
+  // Lean MVP set — must stay in sync with AutomationRule.ACTION_GROUPS in
+  // kanban/automation_models.py. Unlike the trigger select, the action <select>
+  // is rendered client-side from THIS map (see _renderGroupedOptions), so any
+  // action omitted here is not selectable. Hidden action types are intentionally
+  // excluded; their handlers remain registered server-side.
   const ACTION_GROUPS = {
     'Task State': {
       set_priority:             'Set priority',
       set_progress:             'Set progress %',
-      set_description:          'Set description',
-      append_to_description:    'Append to description',
       add_label:                'Add label',
       remove_label:             'Remove label',
       assign_to_user:           'Assign to user',
       clear_assignee:           'Clear assignee',
       move_to_column:           'Move to column',
       set_due_date:             'Set due date',
-      set_start_date:           'Set start date',
-      clear_due_date:           'Clear due date',
       close_task:               'Close task',
     },
     'AI & Risk': {
-      set_risk_level:           'Set risk level',
-      request_ai_analysis:      'Request AI analysis',
       flag_for_review:          'Flag for review',
-      add_risk_indicator:       'Add risk indicator',
-      add_mitigation_strategy:  'Add mitigation strategy',
     },
-    'Hierarchy & Dependencies': {
-      cascade_due_date:         'Cascade due date to subtasks',
-      cascade_priority:         'Cascade priority to subtasks',
-      assign_subtasks_to:       'Assign all subtasks',
-      complete_parent_if_all_subtasks_done: 'Complete parent if all subtasks done',
-      notify_blocked_tasks:     'Notify tasks blocked by this one',
-      auto_check_checklist:     'Auto-check a checklist item',
-      add_checklist_item:       'Add a checklist item',
-      add_subtask:              'Add a subtask',
-    },
-    'Resources & Workload': {
-      set_workload_impact:      'Set workload impact',
-      set_estimated_hours:      'Set estimated hours',
-      set_estimated_cost:       'Set estimated cost',
-      assign_to_best_skill_match: 'Assign to best skill match',
-      assign_to_lightest_workload: 'Assign to lightest workload',
-      add_required_skill:       'Add required skill',
-      escalate_to_owner:        'Escalate to board owner',
-    },
-    'AI Tools & Platform': {
-      acknowledge_coach_suggestion: 'Acknowledge coach suggestion',
-      resolve_conflict:         'Mark conflict resolved',
-      promote_discovery_idea:   'Promote discovery idea to task',
-      apply_stress_test_vaccine: 'Apply stress-test vaccine',
-      create_memory_node:       'Create memory-graph node',
-      generate_status_report:   'Generate PrizmBrief status report',
-      add_stakeholder_engagement: 'Log stakeholder engagement',
-    },
-    'Communications & Memory': {
+    'Communications': {
       send_notification:        'Send notification',
-      notify_stakeholders:      'Notify all stakeholders',
-      mention_users_in_comment: 'Mention users in a comment',
-      start_task_thread:        'Start a task thread',
-      link_wiki_page:           'Link an existing wiki page',
-      create_wiki_page:         'Create a new wiki page',
-      capture_decision:         'Capture decision as memory node',
-      capture_lesson:           'Capture lesson as memory node',
       post_comment:             'Post a comment',
-      log_time_entry:           'Log time entry',
+      mention_users_in_comment: 'Mention users in a comment',
     },
   };
 

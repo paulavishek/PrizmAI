@@ -252,7 +252,7 @@ class ConditionValueValidationTest(TestCase):
         import json
         payload = {
             'name': 'Bad rule',
-            'trigger_type': 'task_description_updated',
+            'trigger_type': 'task_created',
             'trigger_config': {},
             'condition_logic': 'AND',
             'conditions': [
@@ -278,7 +278,7 @@ class ConditionValueValidationTest(TestCase):
         import json
         payload = {
             'name': 'Good rule',
-            'trigger_type': 'task_description_updated',
+            'trigger_type': 'task_created',
             'trigger_config': {},
             'condition_logic': 'AND',
             'conditions': [
@@ -1012,3 +1012,75 @@ class ScheduledRuleCronWiringTest(TestCase):
         c = self._setup('scheduled_monthly', {'day_of_month': 6, 'time': '10:00'})
         self.assertEqual(c.day_of_month, '6')
         self.assertEqual(c.day_of_week, '*')
+
+
+class TemplateUseCopiesLogicTest(TestCase):
+    """Regression: applying a template must copy its actions / conditions /
+    trigger_config into the new rule — not just the trigger_type.
+
+    The built-in templates store their logic in the flat fields
+    (rule_definition is None), so the old view — which copied only
+    trigger_type and rule_definition — created rules with an EMPTY actions
+    list. That was the user-visible 'selecting a template does nothing' bug.
+    """
+
+    def setUp(self):
+        from kanban.models import Board, BoardMembership, Column
+        from django.test import Client
+        self.user = User.objects.create_user(
+            username='tpl_user', password='x', email='tpl@example.com',
+        )
+        self.board = Board.objects.create(name='Tpl Board', created_by=self.user)
+        BoardMembership.objects.create(board=self.board, user=self.user, role='owner')
+        Column.objects.create(board=self.board, name='To Do', position=0)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _use(self, template):
+        return self.client.post(
+            f'/boards/{self.board.id}/automations/templates/{template.id}/use/'
+        )
+
+    def test_actions_are_copied_from_template(self):
+        from kanban.automation_models import AutomationTemplate, AutomationRule
+        tpl = AutomationTemplate.objects.create(
+            name='Welcome comment on task creation',
+            description='Posts a welcome comment when a task is created.',
+            category='notifications',
+            trigger_type='task_created',
+            trigger_config={},
+            condition_logic='AND',
+            conditions=[],
+            actions=[{'type': 'post_comment', 'target': None, 'message': 'Welcome!'}],
+            rule_definition=None,
+            is_builtin=True,
+        )
+        resp = self._use(tpl)
+        self.assertIn(resp.status_code, (200, 302))
+        rule = AutomationRule.objects.get(board=self.board, name=tpl.name)
+        self.assertTrue(rule.actions, 'rule from template must have actions')
+        self.assertEqual(rule.actions, tpl.actions)
+        self.assertEqual(rule.trigger_type, 'task_created')
+
+    def test_conditions_and_trigger_config_are_copied(self):
+        from kanban.automation_models import AutomationTemplate, AutomationRule
+        tpl = AutomationTemplate.objects.create(
+            name='Auto-close when all sub-tasks done',
+            description='Closes the task when all subtasks are complete.',
+            category='task_management',
+            trigger_type='task_completion_threshold',
+            trigger_config={'threshold': 100},
+            condition_logic='AND',
+            conditions=[
+                {'attribute': 'all_subtasks_done', 'operator': 'is_true', 'value': None},
+            ],
+            actions=[{'type': 'close_task', 'target': None, 'message': None}],
+            rule_definition=None,
+            is_builtin=True,
+        )
+        resp = self._use(tpl)
+        self.assertIn(resp.status_code, (200, 302))
+        rule = AutomationRule.objects.get(board=self.board, name=tpl.name)
+        self.assertEqual(rule.trigger_config, {'threshold': 100})
+        self.assertEqual(rule.conditions, tpl.conditions)
+        self.assertEqual(rule.actions, tpl.actions)

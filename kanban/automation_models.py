@@ -233,249 +233,152 @@ class AutomationRule(models.Model):
     # ── trigger groups (seven-group UI taxonomy) ───────────────
     # Each entry: (group_name, [(value, label), ...])
     # The template iterates this to render <optgroup> blocks.
+    # ── Lean MVP scope (first release) ─────────────────────────
+    # The builder exposes only the small, everyday set below — every trigger
+    # here fires reliably (via Task post_save, the m2m receiver, or a Celery
+    # task). The rest of the catalog is hidden from the UI but its signal /
+    # handler code is intentionally retained, so any of these can be re-enabled
+    # later simply by re-adding the (value, label) entry here and in
+    # TRIGGER_CHOICES (and the JS map in unified_rule_builder.js). Existing
+    # saved rules that reference a hidden trigger keep executing, because
+    # signals.py matches on the trigger_type string, not on this list.
+    #
+    # Hidden for v1 (still wired, just not selectable):
+    #   Task State:   task_unassigned, task_status_changed (dupes
+    #                 task_moved_to_column), task_progress_changed,
+    #                 task_description_updated, task_label_added
+    #   Time:         task_start_date_reached
+    #   AI & Risk:    risk_level_changed, risk_level_critical, predicted_late,
+    #                 schedule_status_changed, complexity_increased
+    #   Hierarchy:    subtask_completed, all_subtasks_completed,
+    #                 dependency_completed, dependency_overdue,
+    #                 checklist_completed, checklist_item_added,
+    #                 milestone_reached, parent_status_changed
+    #   Scheduled:    scheduled_monthly
+    # Hidden AND not yet wired (no receiver — never fired):
+    #   coach_suggestion_created, conflict_detected, discovery_idea_scored,
+    #   discovery_idea_submitted, comment_added, mention_received,
+    #   attachment_added, immunity_score_dropped, hospice_risk_triggered,
+    #   scope_creep_detected, prediction_confidence_dropped,
+    #   retrospective_finalized, task_thread_message
     TRIGGER_GROUPS = [
         ('Task State', [
             ('task_created',              'Task is created'),
             ('task_completed',            'Task is completed'),
             ('task_assigned',             'Task is assigned'),
-            ('task_unassigned',           'Task is unassigned'),
             ('task_moved_to_column',      'Task is moved to a column'),
-            ('task_status_changed',       'Task status (column) changed'),
             ('task_priority_changed',     'Task priority changes'),
-            ('task_progress_changed',     'Task progress changed'),
-            ('task_description_updated',  'Task description updated'),
             ('task_due_date_changed',     'Task due date changed'),
-            ('task_label_added',          'Task label added'),
         ]),
         ('Time & Activity', [
-            ('task_overdue',              'Task becomes overdue'),
-            ('task_idle',                 'Task is idle (no updates for N days)'),
-            ('task_start_date_reached',   'Task start date reached'),
             ('task_completion_threshold', 'Completion threshold reached'),
+            ('task_overdue',              'Task becomes overdue'),
             ('due_date_approaching',      'Due date is approaching'),
-        ]),
-        ('AI & Risk', [
-            ('risk_level_changed',        'Risk level changed'),
-            ('risk_level_critical',       'Risk level becomes critical'),
-            ('predicted_late',            'Predicted to miss due date'),
-            ('schedule_status_changed',   'Schedule status changed'),
-            ('complexity_increased',      'Complexity increased'),
-        ]),
-        ('Hierarchy & Dependencies', [
-            ('subtask_completed',         'A subtask completed'),
-            ('all_subtasks_completed',    'All subtasks completed'),
-            ('dependency_completed',      'A blocking dependency completed'),
-            ('dependency_overdue',        'A blocking dependency became overdue'),
-            ('checklist_completed',       'Checklist fully completed'),
-            ('checklist_item_added',      'Checklist item added'),
-            ('milestone_reached',         'Milestone reached'),
-            ('parent_status_changed',     'Parent task status changed'),
-        ]),
-        ('AI Tools & Platform', [
-            ('coach_suggestion_created',  'AI Coach suggestion created'),
-            ('conflict_detected',         'Conflict detected'),
-            ('discovery_idea_scored',     'Discovery idea AI-scored'),
-            ('discovery_idea_submitted',  'Discovery idea submitted'),
-            # Deferred — no receiver wired yet; hidden from the builder until
-            # implemented (see automation audit, June 2026):
-            #   immunity_score_dropped, hospice_risk_triggered,
-            #   scope_creep_detected, prediction_confidence_dropped,
-            #   retrospective_finalized
-        ]),
-        ('Communications', [
-            ('comment_added',             'Comment added to a task'),
-            ('mention_received',          'Assignee was @-mentioned'),
-            ('attachment_added',          'Attachment added to a task'),
-            # Deferred — task_thread_message has no receiver yet; hidden.
+            ('task_idle',                 'Task is idle (no updates for N days)'),
         ]),
         ('Scheduled', [
             ('scheduled_daily',           'Every day at a set time'),
             ('scheduled_weekly',          'Every week on a set day'),
-            ('scheduled_monthly',         'Every month on a set date'),
         ]),
     ]
 
+    # ── Lean MVP scope (first release) ─────────────────────────
+    # As with TRIGGER_GROUPS, only the everyday, dependency-free actions are
+    # exposed. The hidden actions' handlers remain registered in
+    # automation_actions.py (re-enable by re-adding the entry here and in
+    # ACTION_CHOICES + the JS map). The set below deliberately excludes every
+    # action that silently no-ops when an optional app is missing (wiki,
+    # stakeholder, memory-graph, stress-test, PrizmBrief) plus the advanced
+    # risk / hierarchy / resource / workload actions.
+    #
+    # Hidden for v1 (still wired, just not selectable):
+    #   Task State:   set_description, append_to_description, set_start_date,
+    #                 clear_due_date
+    #   AI & Risk:    set_risk_level, request_ai_analysis, add_risk_indicator,
+    #                 add_mitigation_strategy
+    #   Hierarchy:    cascade_due_date, cascade_priority, assign_subtasks_to,
+    #                 complete_parent_if_all_subtasks_done, notify_blocked_tasks,
+    #                 auto_check_checklist, add_checklist_item, add_subtask
+    #   Resources:    set_workload_impact, set_estimated_hours,
+    #                 set_estimated_cost, assign_to_best_skill_match,
+    #                 assign_to_lightest_workload, add_required_skill,
+    #                 escalate_to_owner
+    #   AI Tools:     acknowledge_coach_suggestion, resolve_conflict,
+    #                 promote_discovery_idea, apply_stress_test_vaccine,
+    #                 create_memory_node, generate_status_report,
+    #                 add_stakeholder_engagement
+    #   Comms/Memory: notify_stakeholders, start_task_thread, link_wiki_page,
+    #                 create_wiki_page, capture_decision, capture_lesson,
+    #                 log_time_entry
     ACTION_GROUPS = [
         ('Task State', [
             ('set_priority',             'Set priority'),
             ('set_progress',             'Set progress %'),
-            ('set_description',          'Set description'),
-            ('append_to_description',    'Append to description'),
             ('add_label',                'Add label'),
             ('remove_label',             'Remove label'),
             ('assign_to_user',           'Assign to user'),
             ('clear_assignee',           'Clear assignee'),
             ('move_to_column',           'Move to column'),
             ('set_due_date',             'Set due date'),
-            ('set_start_date',           'Set start date'),
-            ('clear_due_date',           'Clear due date'),
             ('close_task',               'Close task'),
         ]),
         ('AI & Risk', [
-            ('set_risk_level',           'Set risk level'),
-            ('request_ai_analysis',      'Request AI analysis'),
             ('flag_for_review',          'Flag for review'),
-            ('add_risk_indicator',       'Add risk indicator'),
-            ('add_mitigation_strategy',  'Add mitigation strategy'),
         ]),
-        ('Hierarchy & Dependencies', [
-            ('cascade_due_date',         'Cascade due date to subtasks'),
-            ('cascade_priority',         'Cascade priority to subtasks'),
-            ('assign_subtasks_to',       'Assign all subtasks'),
-            ('complete_parent_if_all_subtasks_done',
-                                          'Complete parent if all subtasks done'),
-            ('notify_blocked_tasks',     'Notify tasks blocked by this one'),
-            ('auto_check_checklist',     'Auto-check a checklist item'),
-            ('add_checklist_item',       'Add a checklist item'),
-            ('add_subtask',              'Add a subtask'),
-        ]),
-        ('Resources & Workload', [
-            ('set_workload_impact',      'Set workload impact'),
-            ('set_estimated_hours',      'Set estimated hours'),
-            ('set_estimated_cost',       'Set estimated cost'),
-            ('assign_to_best_skill_match', 'Assign to best skill match'),
-            ('assign_to_lightest_workload', 'Assign to lightest workload'),
-            ('add_required_skill',       'Add required skill'),
-            ('escalate_to_owner',        'Escalate to board owner'),
-        ]),
-        ('AI Tools & Platform', [
-            ('acknowledge_coach_suggestion', 'Acknowledge coach suggestion'),
-            ('resolve_conflict',         'Mark conflict resolved'),
-            ('promote_discovery_idea',   'Promote discovery idea to task'),
-            ('apply_stress_test_vaccine','Apply stress-test vaccine'),
-            ('create_memory_node',       'Create memory-graph node'),
-            ('generate_status_report',   'Generate PrizmBrief status report'),
-            ('add_stakeholder_engagement', 'Log stakeholder engagement'),
-        ]),
-        ('Communications & Memory', [
+        ('Communications', [
             ('send_notification',        'Send notification'),
-            ('notify_stakeholders',      'Notify all stakeholders'),
-            ('mention_users_in_comment', 'Mention users in a comment'),
-            ('start_task_thread',        'Start a task thread'),
-            ('link_wiki_page',           'Link an existing wiki page'),
-            ('create_wiki_page',         'Create a new wiki page'),
-            ('capture_decision',         'Capture decision as memory node'),
-            ('capture_lesson',           'Capture lesson as memory node'),
             ('post_comment',             'Post a comment'),
-            ('log_time_entry',           'Log time entry'),
+            ('mention_users_in_comment', 'Mention users in a comment'),
         ]),
     ]
 
     # ── trigger choices ────────────────────────────────────────
     # Grouped per the seven-group UI taxonomy. The Python order also drives
     # the order of options in templates that iterate the choices directly.
+    # Lean MVP selectable set — mirrors TRIGGER_GROUPS above. Keep this list and
+    # TRIGGER_GROUPS in sync. Hidden trigger types (see the comment on
+    # TRIGGER_GROUPS) are intentionally omitted here so the API rejects newly
+    # built rules that try to use them; their signal code is retained so any
+    # already-saved rule keeps firing and so a type can be re-enabled later.
     TRIGGER_CHOICES = [
         # ── Task State ─────────────────────────────────────────
         ('task_created',              'Task is created'),
         ('task_completed',            'Task is completed'),
         ('task_assigned',             'Task is assigned'),
-        ('task_unassigned',           'Task is unassigned'),
         ('task_moved_to_column',      'Task is moved to a column'),
-        ('task_status_changed',       'Task status (column) changed'),
         ('task_priority_changed',     'Task priority changes'),
-        ('task_progress_changed',     'Task progress changed'),
-        ('task_description_updated',  'Task description updated'),
         ('task_due_date_changed',     'Task due date changed'),
-        ('task_label_added',          'Task label added'),
         # ── Time & Activity ────────────────────────────────────
-        ('task_overdue',              'Task becomes overdue'),
-        ('task_idle',                 'Task is idle (no updates for N days)'),
-        ('task_start_date_reached',   'Task start date reached'),
         ('task_completion_threshold', 'Completion threshold reached'),
+        ('task_overdue',              'Task becomes overdue'),
         ('due_date_approaching',      'Due date is approaching'),
-        # ── AI & Risk ──────────────────────────────────────────
-        ('risk_level_changed',        'Risk level changed'),
-        ('risk_level_critical',       'Risk level becomes critical'),
-        ('predicted_late',            'Predicted to miss due date'),
-        ('schedule_status_changed',   'Schedule status changed (late/at-risk/on-track)'),
-        ('complexity_increased',      'Complexity increased'),
-        # ── Hierarchy & Dependencies ───────────────────────────
-        ('subtask_completed',         'A subtask completed'),
-        ('all_subtasks_completed',    'All subtasks completed'),
-        ('dependency_completed',      'A blocking dependency completed'),
-        ('dependency_overdue',        'A blocking dependency became overdue'),
-        ('checklist_completed',       'Checklist fully completed'),
-        ('checklist_item_added',      'Checklist item added'),
-        ('milestone_reached',         'Milestone reached'),
-        ('parent_status_changed',     'Parent task status changed'),
-        # ── AI Tools & Platform ────────────────────────────────
-        ('coach_suggestion_created',  'AI Coach suggestion created'),
-        ('conflict_detected',         'Conflict detected'),
-        ('discovery_idea_scored',     'Discovery idea AI-scored'),
-        ('discovery_idea_submitted',  'Discovery idea submitted'),
-        # Deferred triggers (no receiver wired) are intentionally omitted from
-        # the selectable choices: immunity_score_dropped, hospice_risk_triggered,
-        # scope_creep_detected, prediction_confidence_dropped,
-        # retrospective_finalized, task_thread_message.
-        # ── Communications ─────────────────────────────────────
-        ('comment_added',             'Comment added to a task'),
-        ('mention_received',          'Assignee was @-mentioned'),
-        ('attachment_added',          'Attachment added to a task'),
+        ('task_idle',                 'Task is idle (no updates for N days)'),
         # ── Schedule-based ─────────────────────────────────────
         ('scheduled_daily',           'Every day at a set time'),
         ('scheduled_weekly',          'Every week on a set day'),
-        ('scheduled_monthly',         'Every month on a set date'),
     ]
 
     # ── action choices ─────────────────────────────────────────
+    # Lean MVP selectable set — mirrors ACTION_GROUPS above. Hidden action types
+    # (see the comment on ACTION_GROUPS) are omitted here but their handlers stay
+    # registered in automation_actions.py for re-enablement / existing rules.
     ACTION_CHOICES = [
         # ── Task State ─────────────────────────────────────────
         ('set_priority',          'Set priority'),
         ('set_progress',          'Set progress %'),
-        ('set_description',       'Set description'),
-        ('append_to_description', 'Append to description'),
         ('add_label',             'Add label'),
         ('remove_label',          'Remove label'),
         ('assign_to_user',        'Assign to user'),
         ('clear_assignee',        'Clear assignee'),
         ('move_to_column',        'Move to column'),
         ('set_due_date',          'Set due date'),
-        ('set_start_date',        'Set start date'),
-        ('clear_due_date',        'Clear due date'),
         ('close_task',            'Close task'),
         # ── AI & Risk ──────────────────────────────────────────
-        ('set_risk_level',        'Set risk level'),
-        ('request_ai_analysis',   'Request AI analysis'),
         ('flag_for_review',       'Flag for review'),
-        ('add_risk_indicator',    'Add risk indicator'),
-        ('add_mitigation_strategy', 'Add mitigation strategy'),
-        # ── Hierarchy & Dependencies ───────────────────────────
-        ('cascade_due_date',      'Cascade due date to subtasks'),
-        ('cascade_priority',      'Cascade priority to subtasks'),
-        ('assign_subtasks_to',    'Assign all subtasks'),
-        ('complete_parent_if_all_subtasks_done',
-                                  'Complete parent if all subtasks done'),
-        ('notify_blocked_tasks',  'Notify tasks blocked by this one'),
-        ('auto_check_checklist',  'Auto-check a checklist item'),
-        ('add_checklist_item',    'Add a checklist item'),
-        ('add_subtask',           'Add a subtask'),
-        # ── Resource, Cost & Workload ──────────────────────────
-        ('set_workload_impact',   'Set workload impact'),
-        ('set_estimated_hours',   'Set estimated hours'),
-        ('set_estimated_cost',    'Set estimated cost'),
-        ('assign_to_best_skill_match', 'Assign to best skill match'),
-        ('assign_to_lightest_workload', 'Assign to lightest workload'),
-        ('add_required_skill',    'Add required skill'),
-        ('escalate_to_owner',     'Escalate to board owner'),
-        # ── AI Tools & Platform ────────────────────────────────
-        ('acknowledge_coach_suggestion', 'Acknowledge coach suggestion'),
-        ('resolve_conflict',      'Mark conflict resolved'),
-        ('promote_discovery_idea','Promote discovery idea to task'),
-        ('apply_stress_test_vaccine', 'Apply stress-test vaccine'),
-        ('create_memory_node',    'Create memory-graph node'),
-        ('generate_status_report','Generate PrizmBrief status report'),
-        ('add_stakeholder_engagement', 'Log stakeholder engagement'),
-        # ── Communications & Memory ────────────────────────────
+        # ── Communications ─────────────────────────────────────
         ('send_notification',     'Send notification'),
-        ('notify_stakeholders',   'Notify all stakeholders'),
-        ('mention_users_in_comment', 'Mention users in a comment'),
-        ('start_task_thread',     'Start a task thread'),
-        ('link_wiki_page',        'Link an existing wiki page'),
-        ('create_wiki_page',      'Create a new wiki page'),
-        ('capture_decision',      'Capture decision as memory node'),
-        ('capture_lesson',        'Capture lesson as memory node'),
         ('post_comment',          'Post a comment'),
-        ('log_time_entry',        'Log time entry'),
+        ('mention_users_in_comment', 'Mention users in a comment'),
     ]
 
     # ── core fields ────────────────────────────────────────────
