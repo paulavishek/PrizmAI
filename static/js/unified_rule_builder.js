@@ -791,8 +791,15 @@ const UnifiedRuleBuilder = (() => {
 
   function _actionRowHtml(action, idx, branch) {
     const actionType = action.type || '';
-    const ACTIONS_WITH_NO_TARGET = ['close_task', 'post_comment'];
-    const ACTIONS_WITH_MESSAGE = ['send_notification', 'post_comment', 'create_wiki_page'];
+    // These actions read `message` (or nothing) and ignore `target`, so the
+    // generic "to [Value]" box is meaningless for them — hide it.
+    const ACTIONS_WITH_NO_TARGET = [
+      'close_task', 'post_comment', 'flag_for_review', 'mention_users_in_comment',
+    ];
+    const ACTIONS_WITH_MESSAGE = [
+      'send_notification', 'post_comment', 'create_wiki_page',
+      'flag_for_review', 'mention_users_in_comment',
+    ];
     const showTarget = !!actionType && !ACTIONS_WITH_NO_TARGET.includes(actionType);
     const showMessage = ACTIONS_WITH_MESSAGE.includes(actionType);
 
@@ -800,6 +807,11 @@ const UnifiedRuleBuilder = (() => {
     const MESSAGE_COPY = {
       create_wiki_page: { label: 'Page content (optional):', ph: 'Body of the new wiki page. Supports {task_title}.' },
       post_comment:     { label: 'Comment (optional):',      ph: 'e.g. Auto-flagged: {task_title} needs review.' },
+      flag_for_review:  { label: 'Review note (optional):',  ph: 'e.g. {task_title} needs a second look.' },
+      mention_users_in_comment: {
+        label: 'Comment with @mentions (required):',
+        ph: 'e.g. @username please review {task_title}',
+      },
     };
     const msgCopy = MESSAGE_COPY[actionType] ||
       { label: 'Message (optional):', ph: 'e.g. Task {task_title} is overdue.' };
@@ -1160,6 +1172,10 @@ const UnifiedRuleBuilder = (() => {
     state.actions.forEach((a, i) => {
       if (!a.type)
         errors.push({ field: `rbActionType_then_${i}`, msg: 'Please select an action type.' });
+      // mention_users_in_comment posts a comment and fails at runtime without
+      // text — require the message so the rule can't be saved broken.
+      if (a.type === 'mention_users_in_comment' && !(a.message || '').trim())
+        errors.push({ field: `rbActionMsg_then_${i}`, msg: 'Add the comment text (with @mentions) for this action.' });
     });
 
     const NO_VALUE_OPS = ['is_empty','is_not_empty','is_true','is_false','is_overdue','is_past','is_today'];
