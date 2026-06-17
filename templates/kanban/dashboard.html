@@ -1039,9 +1039,9 @@
                 <span class="dc-badge flex-shrink-0 {% if item.priority_level == 'action_required' %}dc-badge-danger{% elif item.priority_level == 'quick_win' %}dc-badge-success{% else %}dc-badge-info{% endif %}" style="padding:2px 9px; font-size:0.7rem;">
                     {{ item.widget_label }}
                 </span>
-                <span class="flex-fill" style="min-width:0; line-height:1.4;">
+                <span class="flex-fill" style="min-width:0; line-height:1.4; overflow-wrap:anywhere;">
                     <span style="font-size:0.84rem; color:#1e293b; font-weight:500;">{{ item.title }}</span>
-                    {% if item.description %}<span class="text-muted" style="font-size:0.78rem;"> — {{ item.description|truncatechars:100 }}</span>{% endif %}
+                    {% if item.description %}<span class="text-muted" style="font-size:0.78rem;"> — {{ item.description }}</span>{% endif %}
                 </span>
                 <span class="text-muted flex-shrink-0" style="font-size:0.72rem; white-space:nowrap;">~{{ item.estimated_minutes }}m</span>
             </a>
