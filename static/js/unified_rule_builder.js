@@ -82,67 +82,30 @@ const UnifiedRuleBuilder = (() => {
     },
   };
 
+  // Lean MVP condition set — pairs with the trimmed trigger/action lists.
+  // The IF-attribute <select> is rendered client-side from THIS map, so any
+  // attribute omitted here is not selectable. The condition HANDLERS in
+  // kanban/automation_conditions.py are intentionally kept registered, so
+  // existing rules that reference a hidden attribute still evaluate, and an
+  // attribute can be re-exposed later just by re-adding it here. The advanced
+  // AI & Risk, Resources & Workload, and board-scoped AI Tools attribute
+  // groups (plus niche hierarchy/time/status fields) are hidden for v1.
   const ATTRIBUTE_GROUPS = {
     'Task State': {
       priority:           'Priority',
       assignee:           'Assignee',
-      created_by:         'Created by',
-      status:             'Status (column)',
       column:             'Column',
       label:              'Label',
       title:              'Title',
       description:        'Description',
       progress:           'Progress',
-      checklist_progress: 'Checklist progress',
-      has_comments:       'Has comments',
-      has_attachments:    'Has attachments',
     },
     'Time & Activity': {
       due_date:           'Due date',
-      start_date:         'Start date',
-      idle_days:          'Idle days',
-      time_in_column:     'Time in column',
       stale_high_priority:'Stale high-priority',
-    },
-    'AI & Risk': {
-      risk_level:         'Risk level',
-      risk_score:         'Risk score',
-      predicted_completion: 'Predicted completion',
-      prediction_confidence: 'Prediction confidence',
-      complexity_score:   'Complexity score',
-      schedule_status:    'Schedule status',
-      lss_classification: 'LSS classification',
-      ai_risk_score:      'AI risk score',
     },
     'Hierarchy & Dependencies': {
       all_subtasks_done:  'All subtasks done',
-      parent_status:      'Parent status',
-      subtask_count:      'Subtask count',
-      subtask_completion_pct: 'Subtask completion %',
-      has_dependencies:   'Has dependencies',
-      has_blocked_tasks:  'Has blocked tasks',
-      dependency_status:  'Dependency status',
-      item_type:          'Item type',
-      phase:              'Phase',
-      is_root_task:       'Is root task',
-    },
-    'Resources & Workload': {
-      workload_impact:    'Workload impact',
-      skill_match_score:  'Skill match score',
-      required_skills:    'Required skills',
-      collaboration_required: 'Collaboration required',
-      estimated_cost:     'Estimated cost',
-      estimated_hours:    'Estimated hours',
-      hours_logged:       'Hours logged',
-      cost_variance_pct:  'Cost variance %',
-      assignee_workload:  'Assignee workload',
-    },
-    'AI Tools & Platform': {
-      board_has_active_conflicts: 'Board has active conflicts',
-      board_immunity_score: 'Board immunity score',
-      board_scope_creep_pct: 'Board scope creep %',
-      board_velocity_trend: 'Board velocity trend',
-      board_predicted_overrun_days: 'Board predicted overrun (days)',
     },
   };
 
