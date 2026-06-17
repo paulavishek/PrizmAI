@@ -707,16 +707,24 @@ def template_use(request, board_id, template_id):
         name=template.name,
         defaults={
             'trigger_type': template.trigger_type,
+            # Copy the flat builder fields so the rule actually does something.
+            # Built-in templates store their logic here (rule_definition is None);
+            # omitting these created rules with no actions/conditions.
+            'trigger_config': template.trigger_config,
+            'condition_logic': template.condition_logic,
+            'conditions': template.conditions,
+            'actions': template.actions,
             'rule_definition': template.rule_definition,
             'is_active': True,
             'created_by': request.user,
         },
     )
     if created:
-        # Set up PeriodicTask for scheduled templates
+        # Set up PeriodicTask for scheduled templates. The schedule details live
+        # in the flat trigger_config (time / day / day_of_month), not in the
+        # legacy rule_definition (which is None for built-in templates).
         if trigger_type.startswith('scheduled_'):
-            config = template.rule_definition.get('config', {})
-            _setup_scheduled_rule(rule, trigger_type, config)
+            _setup_scheduled_rule(rule, trigger_type, template.trigger_config or {})
         messages.success(request, f'Rule "{template.name}" created from template!')
     else:
         messages.info(request, f'Rule "{template.name}" already exists on this board.')
