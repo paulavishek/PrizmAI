@@ -140,31 +140,56 @@
 </div>
 {% endif %}
 
-{# Link existing mission #}
+{# Move an existing mission under this goal #}
 {% if can_edit and all_missions %}
 <div class="card shadow-sm mb-3">
     <div class="card-header py-2">
-        <h6 class="mb-0"><i class="fas fa-link me-2"></i>Link Existing Mission</h6>
+        <h6 class="mb-0"><i class="fas fa-arrow-right-to-bracket me-2"></i>Move a Mission Under This Goal</h6>
     </div>
     <div class="card-body">
-        <form method="post" action="{% url 'link_mission_to_goal' goal.id %}" class="row g-2 align-items-end">
+        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-start" role="alert">
+            <i class="fas fa-info-circle me-2 mt-1"></i>
+            <span>Each Mission belongs to <strong>exactly one</strong> Goal. Choosing a mission
+            that's already under another Goal will <strong>move</strong> it here, not share it.</span>
+        </div>
+        <form method="post" action="{% url 'link_mission_to_goal' goal.id %}"
+              class="row g-2 align-items-end" onsubmit="return confirmMissionMove(this);">
             {% csrf_token %}
             <div class="col-md-8">
-                <select name="mission_id" class="form-select form-select-sm" required>
+                <select name="mission_id" id="missionMoveSelect" class="form-select form-select-sm" required>
                     <option value="">— Choose a mission —</option>
                     {% for m in all_missions %}
-                    <option value="{{ m.id }}">{{ m.name }}{% if m.organization_goal %} (linked to: {{ m.organization_goal.name }}){% endif %}</option>
+                    <option value="{{ m.id }}"
+                            data-mission-name="{{ m.name }}"
+                            data-current-goal="{% if m.organization_goal and m.organization_goal_id != goal.id %}{{ m.organization_goal.name }}{% endif %}">
+                        {{ m.name }}{% if m.organization_goal %} (currently under: {{ m.organization_goal.name }}){% endif %}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-4">
                 <button type="submit" class="btn btn-sm btn-primary w-100">
-                    <i class="fas fa-link me-1"></i>Link
+                    <i class="fas fa-arrow-right-to-bracket me-1"></i>Move Here
                 </button>
             </div>
         </form>
     </div>
 </div>
+<script>
+function confirmMissionMove(form) {
+    var sel = form.querySelector('#missionMoveSelect');
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) { return false; }
+    var current = opt.getAttribute('data-current-goal');
+    var name = opt.getAttribute('data-mission-name') || 'this mission';
+    if (current) {
+        return confirm('"' + name + '" is currently under "' + current + '".\n\n' +
+            'A Mission can belong to only one Goal, so linking it here will MOVE it ' +
+            'off "' + current + '". Continue?');
+    }
+    return true;
+}
+</script>
 {% endif %}
 
 {% if linked_requirements %}

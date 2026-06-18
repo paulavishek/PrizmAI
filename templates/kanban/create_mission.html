@@ -61,7 +61,7 @@
                             <option value="{{ goal.id }}" {% if post.organization_goal_id == goal.id|stringformat:"s" %}selected{% endif %}>{{ goal.name }}</option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">Attach this mission to an existing organizational goal.</div>
+                        <div class="form-text">Attach this mission to an existing organizational goal. A Mission belongs to one Goal &mdash; it can be moved later, but not shared across goals.</div>
                     </div>
                     {% endif %}
                     <div class="d-flex gap-2">

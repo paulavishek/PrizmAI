@@ -5827,8 +5827,11 @@ def generate_portfolio_narrative_api(request, record_type, record_id):
     if record is None:
         return JsonResponse({'success': False, 'error': 'Invalid record type'}, status=400)
 
-    # RBAC: regenerating the narrative writes to the record — require edit access
-    if not request.user.has_perm(edit_perm, record):
+    # RBAC: regenerating the narrative writes to the record — require edit access.
+    # Demo sandbox grants full edit access, so bypass there too (matches the
+    # other strategic endpoints and the can_edit gate the detail page renders).
+    from kanban.permissions import is_demo_context
+    if not (request.user.has_perm(edit_perm, record) or is_demo_context(request)):
         return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
     portfolio = get_portfolio_analytics(record, record_type)

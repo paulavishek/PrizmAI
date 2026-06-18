@@ -2210,6 +2210,24 @@ def _purge_existing_sandbox(user):
     except Exception:
         pass
 
+    # ── User-created Goals & Missions in the demo workspace ──
+    # Reset must clear strategic objects the user added in the sandbox; they
+    # live on the shared demo workspace (not on sandbox board copies), so the
+    # board-scoped cleanup above never touches them and they would otherwise
+    # accumulate across resets. Seeded demo goals (is_seed_demo_data=True,
+    # workspace=None) are excluded and preserved.
+    try:
+        from kanban.models import Mission, OrganizationGoal
+        if demo_ws:
+            Mission.objects.filter(
+                workspace=demo_ws, created_by=user, is_seed_demo_data=False,
+            ).delete()
+            OrganizationGoal.objects.filter(
+                workspace=demo_ws, created_by=user, is_seed_demo_data=False,
+            ).delete()
+    except Exception:
+        pass
+
     # ── DemoSandbox record ──
     try:
         sandbox = user.demo_sandbox
