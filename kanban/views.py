@@ -1442,6 +1442,17 @@ def dashboard(request):
     _dc_cache_key = f"dc_widget_{request.user.id}_{'demo' if _dc_effective_demo else 'real'}"
     _dc_cached = cache.get(_dc_cache_key)
     _dc_settings, _ = DecisionCenterSettings.objects.get_or_create(user=request.user)
+    # Wake any of this user's snoozed items whose timer has expired so they
+    # reappear in the Focus Today widget immediately — mirrors the full
+    # Decision Center page (decision_center_view) and the morning collection
+    # task, which otherwise would be the only places a snooze un-hides.
+    _woke = DecisionItem.objects.filter(
+        created_for=request.user, status='snoozed',
+        snoozed_until__lte=timezone.now(),
+    ).update(status='pending', snoozed_until=None)
+    if _woke:
+        cache.delete(_dc_cache_key)
+        _dc_cached = None
     _dc_pending = (
         DecisionItem.objects.filter(
             created_for=request.user, status='pending', board__in=boards,
@@ -1513,10 +1524,16 @@ def dashboard(request):
         _item.widget_url = _dc_item_url(_item)
         _item.widget_label = _DC_SHORT_LABELS.get(_item.item_type, _item.get_item_type_display())
 
-    # Editorial headline = today's Decision Center briefing (Gemini); fall back to pulse.
+    # Editorial headline = today's Decision Center briefing (Gemini); fall back to
+    # pulse. Scoped to the active workspace mode so the demo briefing never leaks
+    # into the real workspace (and vice-versa).
     dc_headline = (
         DecisionCenterBriefing.objects
-        .filter(user=request.user, generated_at__date=timezone.localdate())
+        .filter(
+            user=request.user,
+            generated_at__date=timezone.localdate(),
+            is_demo=_dc_effective_demo,
+        )
         .values_list('headline', flat=True).first()
     ) or briefing_pulse
 
