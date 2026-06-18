@@ -6355,9 +6355,22 @@ def generate_portfolio_analytics_narrative(record, record_type, groups_data):
     except Exception:
         pass
 
+    # Map raw metric keys to human-readable labels so the LLM doesn't echo
+    # internal keys like "blocked_count" (which it would misread as truly
+    # blocked tasks — it's actually a high-priority/at-risk attention signal).
+    try:
+        from kanban.utils.analytics_helpers import METRIC_CONFIG
+    except Exception:
+        METRIC_CONFIG = {}
+
+    def _metric_label(key):
+        return METRIC_CONFIG.get(key, {}).get('label', key.replace('_', ' ').title())
+
     groups_summary = ''
     for g in groups_data:
-        metrics_str = ', '.join(f'{k}: {v}' for k, v in g.get('metrics', {}).items())
+        metrics_str = ', '.join(
+            f'{_metric_label(k)}: {v}' for k, v in g.get('metrics', {}).items()
+        )
         groups_summary += f"  {g['label']} ({g['board_count']} boards): {metrics_str}\n"
 
     prompt = (

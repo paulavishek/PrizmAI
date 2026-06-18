@@ -458,6 +458,9 @@ def create_goal(request):
             created_by=request.user,
             owner=request.user,
             workspace=getattr(request, 'workspace', None),
+            # Stamp demo flag so goals created in the sandbox surface in the
+            # demo-scoped goal_list (which filters by is_demo, not workspace).
+            is_demo=is_demo_context(request),
         )
 
         # Auto-generate proxy metrics in background
@@ -590,9 +593,16 @@ def link_mission_to_goal(request, goal_id):
     if request.method == 'POST':
         mission_id = request.POST.get('mission_id')
         mission = get_object_or_404(Mission, id=mission_id)
+        prev_goal = mission.organization_goal
         mission.organization_goal = goal
         mission.save(update_fields=['organization_goal'])
-        messages.success(request, f'Mission "{mission.name}" linked to goal "{goal.name}".')
+        if prev_goal and prev_goal.id != goal.id:
+            messages.success(
+                request,
+                f'Mission "{mission.name}" moved from "{prev_goal.name}" to "{goal.name}".'
+            )
+        else:
+            messages.success(request, f'Mission "{mission.name}" linked to goal "{goal.name}".')
 
     return redirect('goal_detail', goal_id=goal.id)
 
@@ -838,13 +848,29 @@ def mission_detail(request, mission_id):
         'can_edit': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
         'can_delete': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
         'can_create_child': request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request),
-        # All goals for the "Link to Goal" sidebar widget — scoped to active workspace
-        'all_goals': OrganizationGoal.objects.filter(
-            workspace=getattr(request, 'workspace', None)
-        ).order_by('name') if getattr(request, 'workspace', None) else OrganizationGoal.objects.filter(
-            created_by=request.user, is_demo=False, is_seed_demo_data=False,
-        ).order_by('name'),
+        # All goals for the "Link to Goal" sidebar widget — scoped like goal_list
+        'all_goals': _goals_for_picker(request),
     })
+
+
+def _goals_for_picker(request):
+    """Goals to offer in the 'Link to Goal' picker, scoped like goal_list.
+
+    In the demo sandbox the goal_list shows goals by is_demo/is_seed flags
+    (the seeded demo goal has workspace=None), so a plain workspace= filter
+    would both hide the real demo goal and surface stale orphans. Mirror the
+    goal_list scoping so the picker matches what the Goals tab shows.
+    """
+    active_ws = getattr(request, 'workspace', None)
+    if active_ws and getattr(active_ws, 'is_demo', False):
+        return OrganizationGoal.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True)
+        ).order_by('name')
+    if active_ws:
+        return OrganizationGoal.objects.filter(workspace=active_ws).order_by('name')
+    return OrganizationGoal.objects.filter(
+        created_by=request.user, is_demo=False, is_seed_demo_data=False,
+    ).order_by('name')
 
 
 @login_required
@@ -867,13 +893,7 @@ def create_mission(request):
         messages.error(request, 'You do not have permission to create missions. Only Workspace Admins and Goal Owners can create missions.')
         return redirect('mission_list')
 
-    _active_ws = getattr(request, 'workspace', None)
-    if _active_ws:
-        all_goals = OrganizationGoal.objects.filter(workspace=_active_ws).order_by('name')
-    else:
-        all_goals = OrganizationGoal.objects.filter(
-            created_by=request.user, is_demo=False, is_seed_demo_data=False,
-        ).order_by('name')
+    all_goals = _goals_for_picker(request)
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -903,6 +923,9 @@ def create_mission(request):
             created_by=request.user,
             owner=request.user,
             workspace=getattr(request, 'workspace', None),
+            # Same demo-scoping fix as create_goal: mission_list filters the
+            # sandbox by is_demo, not workspace.
+            is_demo=is_demo_context(request),
         )
         messages.success(request, f'Mission "{mission.name}" created successfully!')
         return redirect('mission_detail', mission_id=mission.id)
@@ -1311,6 +1334,35 @@ def post_strategic_update(request, level, pk):
         author=request.user,
     )
 
+    # Notify followers of this Goal/Mission/Strategy that a new update was posted.
+    # Mirrors the edit-cascade notification path; followers subscribe precisely to
+    # hear about progress like this, so the Updates feed must not be silent.
+    try:
+        from messaging.models import Notification
+        follower_users = {
+            f.user for f in StrategicFollower.objects.filter(
+                content_type=ct, object_id=record.pk,
+            ).select_related('user')
+        }
+        recipients = follower_users - {request.user}
+        if recipients:
+            snippet = message if len(message) <= 120 else message[:117] + '…'
+            notification_text = (
+                f'New update on {level.capitalize()} "{record.name}": '
+                f'{update.get_status_display()} — {snippet}'
+            )
+            action_url = record.get_absolute_url()
+            for recipient in recipients:
+                Notification.objects.create(
+                    recipient=recipient,
+                    sender=request.user,
+                    notification_type='ACTIVITY',
+                    text=notification_text,
+                    action_url=action_url,
+                )
+    except Exception as e:
+        logger.warning("Failed to notify followers of strategic update: %s", e)
+
     count = StrategicUpdate.objects.filter(content_type=ct, object_id=record.pk).count()
 
     html = render_to_string('kanban/partials/_update_entry.html', {'u': update}, request=request)
@@ -1364,21 +1416,32 @@ def regenerate_summary(request, level, pk):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
 
-    try:
-        if level == 'goal':
-            from kanban.tasks.ai_summary_tasks import generate_goal_summary_task
-            generate_goal_summary_task.delay(pk)
-        elif level == 'mission':
-            from kanban.tasks.ai_summary_tasks import generate_mission_summary_task
-            generate_mission_summary_task.delay(pk)
-        elif level == 'strategy':
-            from kanban.tasks.ai_summary_tasks import generate_strategy_summary_task
-            generate_strategy_summary_task.delay(pk)
-    except Exception as e:
-        logger.warning("Failed to enqueue AI regeneration for %s %s: %s", level, pk, e)
-        return JsonResponse({'success': False, 'error': 'Failed to enqueue task.'}, status=500)
+    from kanban.tasks.ai_summary_tasks import (
+        generate_goal_summary_task,
+        generate_mission_summary_task,
+        generate_strategy_summary_task,
+    )
+    task = {
+        'goal': generate_goal_summary_task,
+        'mission': generate_mission_summary_task,
+        'strategy': generate_strategy_summary_task,
+    }[level]
 
-    return JsonResponse({'success': True})
+    # Run synchronously (.apply runs in-process, no broker needed) so the summary
+    # is produced even when no Celery worker is running — this is a deliberate,
+    # one-off button click and the AI call is fast. The async .delay() path is
+    # still used for the edit-cascade bulk regeneration in _handle_edit_cascade.
+    try:
+        result = task.apply(args=[pk])
+        summary = result.get(propagate=False)
+    except Exception as e:
+        logger.warning("AI regeneration failed for %s %s: %s", level, pk, e)
+        return JsonResponse({'success': False, 'error': 'Summary generation failed.'}, status=500)
+
+    if not summary:
+        return JsonResponse({'success': False, 'error': 'Summary generation returned no content.'}, status=500)
+
+    return JsonResponse({'success': True, 'summary': summary})
 
 
 # ---------------------------------------------------------------------------

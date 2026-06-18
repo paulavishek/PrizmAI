@@ -146,14 +146,16 @@ class Command(BaseCommand):
         # Clean any existing seeded strategic hierarchy so re-runs don't
         # accumulate duplicates. Strategies cascade-delete with their Mission.
         # We delete EVERY seeded Mission under this Goal, plus any seeded Mission
-        # that has become detached from its Goal (organization_goal=NULL — e.g.
-        # via the "Change Goal → None (unlinked)" UI action, since the FK is
-        # on_delete=SET_NULL) whose name we recognise. A purely goal-scoped or
-        # purely name-scoped filter would each miss a case and leave a duplicate
-        # or stale Mission after the next reset.
+        # we recognise by name that has DRIFTED off the demo goal — whether it
+        # was detached (organization_goal=NULL via the "Change Goal → None" UI
+        # action, since the FK is on_delete=SET_NULL) OR re-pointed at a
+        # different, non-seed goal (e.g. a user-created goal in the sandbox).
+        # The earlier NULL-only variant missed that re-pointed case, leaving a
+        # seeded mission stranded on the wrong goal so the real demo goal showed
+        # 0 missions and a re-seed produced a duplicate.
         Mission.objects.filter(is_seed_demo_data=True).filter(
             Q(organization_goal__in=all_goals)
-            | Q(organization_goal__isnull=True, name__in=KNOWN_DEMO_MISSION_NAMES)
+            | Q(name__in=KNOWN_DEMO_MISSION_NAMES)
         ).delete()
 
         # name -> Strategy, used later to attach requirements.

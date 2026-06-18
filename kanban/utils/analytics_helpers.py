@@ -32,10 +32,10 @@ METRIC_CONFIG = {
         'description': 'Tasks that are past their due date and not yet completed.',
     },
     'blocked_count': {
-        'label': 'Blocked / At-Risk',
-        'icon': 'fas fa-ban',
+        'label': 'High-Priority / At-Risk',
+        'icon': 'fas fa-exclamation-circle',
         'color': 'warning',
-        'description': 'Urgent tasks (any progress) or high-priority tasks with 0% progress that may need attention.',
+        'description': 'Urgent tasks (any progress) or high-priority tasks with 0% progress that may need attention. These are not necessarily blocked — there is no dependency/blocked state in the data.',
     },
     'completion_rate_by_column': {
         'label': 'Column Completion',
@@ -185,7 +185,9 @@ def get_promoted_metrics(board, raw=False):
         ).exclude(progress=100).count()
         metrics['overdue_count'] = overdue
 
-        # Blocked / high-risk count (all urgent tasks, plus high-priority with 0% progress)
+        # High-priority / at-risk count: urgent tasks, plus high-priority tasks
+        # with 0% progress. NOTE: this is a priority-based attention signal, NOT
+        # a true "blocked" state — the data has no dependency/blocked field.
         blocked_qs = tasks.filter(
             Q(priority='urgent') | Q(priority='high', progress=0)
         ).exclude(progress=100).select_related('column', 'assigned_to')
@@ -194,8 +196,9 @@ def get_promoted_metrics(board, raw=False):
             blocked_qs.values('id', 'title', 'priority', 'column__name', 'assigned_to__username')[:20]
         )
         explanations['blocked_count'] = (
-            f"Tasks that are urgent priority, or high priority with 0% progress. "
-            f"Found {blocked_qs.count()} task(s) that may need immediate attention."
+            f"High-priority / at-risk tasks: urgent priority, or high priority with 0% progress. "
+            f"Found {blocked_qs.count()} task(s) that may need attention "
+            f"(not necessarily blocked)."
         )
 
         # Task completion rate by column
