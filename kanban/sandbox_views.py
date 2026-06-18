@@ -2051,7 +2051,8 @@ def _purge_existing_sandbox(user):
     try:
         from decision_center.models import DecisionItem, DecisionCenterBriefing
         DecisionItem.objects.filter(created_for=user).delete()
-        DecisionCenterBriefing.objects.filter(user=user).delete()
+        # Only clear the demo briefing — the real-workspace briefing survives.
+        DecisionCenterBriefing.objects.filter(user=user, is_demo=True).delete()
     except Exception:
         pass
 

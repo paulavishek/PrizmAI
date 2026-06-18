@@ -1832,8 +1832,11 @@ def reset_demo_data(request):
 
                 # Delete all decision items for the current user
                 DecisionItem.objects.filter(created_for=request.user).delete()
-                # Delete briefings so they get regenerated fresh
-                DecisionCenterBriefing.objects.filter(user=request.user).delete()
+                # Delete only the *demo* briefings so they get regenerated fresh —
+                # the real-workspace briefing must survive a demo reset.
+                DecisionCenterBriefing.objects.filter(
+                    user=request.user, is_demo=True,
+                ).delete()
                 # Invalidate widget cache for both demo and real modes
                 dc_cache.delete(f'dc_widget_{request.user.id}_demo')
                 dc_cache.delete(f'dc_widget_{request.user.id}_real')

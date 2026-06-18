@@ -6,6 +6,7 @@ Celery tasks for the Decision Center.
 """
 import json
 import logging
+from collections import Counter
 from datetime import timedelta
 
 from celery import shared_task
@@ -448,11 +449,16 @@ def generate_briefing_for_user(user):
     Can be called synchronously after demo reset.
     """
     from decision_center.models import DecisionCenterBriefing, DecisionItem
+    from kanban.utils.demo_protection import user_is_demo
 
     today = timezone.localdate()
+    is_demo = user_is_demo(user)
 
-    # Delete any existing briefing for today so we regenerate fresh
-    DecisionCenterBriefing.objects.filter(user=user, generated_at__date=today).delete()
+    # Delete any existing briefing for today *in this workspace mode* so we
+    # regenerate fresh — without touching the other mode's briefing.
+    DecisionCenterBriefing.objects.filter(
+        user=user, generated_at__date=today, is_demo=is_demo,
+    ).delete()
 
     pending = DecisionItem.objects.filter(created_for=user, status='pending')
 
@@ -486,9 +492,11 @@ def generate_briefing_for_user(user):
         'awareness': len(awareness_items),
         'quick_win': len(quick_items),
     }
+    category_counts = Counter(pending.values_list('item_type', flat=True))
 
     headline, briefing_text, top_board = _generate_ai_briefing(
         action_items, awareness_items, quick_items, total_est,
+        category_counts=category_counts,
     )
 
     DecisionCenterBriefing.objects.create(
@@ -498,6 +506,7 @@ def generate_briefing_for_user(user):
         estimated_minutes=total_est,
         top_priority_board=top_board,
         item_counts=counts,
+        is_demo=is_demo,
     )
 
 
@@ -556,24 +565,27 @@ def generate_decision_briefing():
         .distinct()
     )
 
+    from kanban.utils.demo_protection import user_is_demo
+
     generated = 0
     for user_id in users_with_items:
-        # Skip if briefing already exists for today
-        if DecisionCenterBriefing.objects.filter(
-            user_id=user_id, generated_at__date=today,
-        ).exists():
-            continue
-
-        pending = DecisionItem.objects.filter(
-            created_for_id=user_id, status='pending',
-        )
-
         # Scope to demo or real boards — matching the view/widget logic
         try:
             user_obj = User.objects.get(pk=user_id)
             user_boards = _user_boards(user_obj)
         except User.DoesNotExist:
             continue
+        is_demo = user_is_demo(user_obj)
+
+        # Skip if a briefing already exists for today *in this workspace mode*
+        if DecisionCenterBriefing.objects.filter(
+            user_id=user_id, generated_at__date=today, is_demo=is_demo,
+        ).exists():
+            continue
+
+        pending = DecisionItem.objects.filter(
+            created_for_id=user_id, status='pending',
+        )
 
         pending = (
             pending.filter(board__in=user_boards)
@@ -602,10 +614,12 @@ def generate_decision_briefing():
             'awareness': len(awareness_items),
             'quick_win': len(quick_items),
         }
+        category_counts = Counter(pending.values_list('item_type', flat=True))
 
         # Attempt AI generation
         headline, briefing_text, top_board = _generate_ai_briefing(
             action_items, awareness_items, quick_items, total_est,
+            category_counts=category_counts,
         )
 
         DecisionCenterBriefing.objects.create(
@@ -615,6 +629,7 @@ def generate_decision_briefing():
             estimated_minutes=total_est,
             top_priority_board=top_board,
             item_counts=counts,
+            is_demo=is_demo,
         )
         generated += 1
 
@@ -622,11 +637,49 @@ def generate_decision_briefing():
     return {'generated': generated}
 
 
-def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est):
+# Human-readable plural labels for DecisionItem.item_type, used so the AI
+# briefing describes the queue with the correct category names instead of
+# guessing (e.g. calling a pile of resource conflicts "overdue items").
+_ITEM_TYPE_PLURAL = {
+    'conflict': 'resource conflicts',
+    'overdue_task': 'overdue tasks',
+    'stale_task': 'stale tasks',
+    'unassigned_task': 'unassigned tasks',
+    'premortem_risk': 'high-risk pre-mortem scenarios',
+    'overallocated': 'overallocated members',
+    'scope_change': 'scope changes',
+    'deadline_approaching': 'approaching deadlines',
+    'budget_threshold': 'budget alerts',
+    'memory_captured': 'captured memories',
+}
+
+
+def _format_composition(category_counts):
+    """Turn an {item_type: count} mapping into readable 'N <label>' lines."""
+    if not category_counts:
+        return []
+    out = []
+    for item_type, count in sorted(
+        category_counts.items(), key=lambda kv: kv[1], reverse=True
+    ):
+        if not count:
+            continue
+        label = _ITEM_TYPE_PLURAL.get(item_type, item_type.replace('_', ' '))
+        out.append(f"- {count} {label}")
+    return out
+
+
+def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est,
+                          category_counts=None):
     """
     Call Gemini for a natural-language briefing.
     Returns (headline, briefing_text, top_priority_board).
     Falls back to deterministic summary on failure.
+
+    ``category_counts`` is an optional {item_type: count} mapping describing the
+    real composition of the queue. Supplying it keeps the AI from inventing a
+    category label for the total count (e.g. describing 32 mixed items — mostly
+    conflicts — as "32 overdue items").
     """
     try:
         from ai_assistant.utils.ai_router import AIRouter
@@ -637,6 +690,14 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
 
         # Build prompt
         lines = []
+        composition = _format_composition(category_counts)
+        if composition:
+            lines.append(
+                "QUEUE COMPOSITION (exact counts — cite ONLY these categories "
+                "and numbers; do NOT relabel or merge them):"
+            )
+            lines.extend(composition)
+            lines.append("")
         if action_items:
             lines.append(f"ACTION REQUIRED ({len(action_items)} items):")
             for t in action_items[:10]:
@@ -661,7 +722,10 @@ def _generate_ai_briefing(action_items, awareness_items, quick_items, total_est)
         system_prompt = (
             "You are a calm, efficient chief of staff summarizing a project "
             "manager's morning decision queue. Be concise, prioritized, and "
-            "practical. Speak directly to the PM. No fluff. Return ONLY valid JSON."
+            "practical. Speak directly to the PM. No fluff. "
+            "Use ONLY the counts and category names given in QUEUE COMPOSITION; "
+            "never invent a number or call items 'overdue' unless they are "
+            "listed under overdue tasks. Return ONLY valid JSON."
         )
 
         result = router.complete(
@@ -812,10 +876,11 @@ def send_daily_digest_emails():
             pending.values_list('estimated_minutes', flat=True)
         )
 
-        # Today's AI briefing (if generated)
+        # Today's AI briefing (if generated). Digests are about real work, so
+        # never surface a demo-workspace briefing in the email.
         briefing = (
             DecisionCenterBriefing.objects
-            .filter(user=user, generated_at__date=today)
+            .filter(user=user, generated_at__date=today, is_demo=False)
             .first()
         )
 

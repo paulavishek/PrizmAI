@@ -63,6 +63,18 @@ def suppress_calendar_sync():
 
 # ── Centralised board queryset for demo / real workspace ─────────────────────
 
+def user_is_demo(user):
+    """Return True when the user is currently viewing the demo workspace.
+
+    Single source of truth for the demo-vs-real discriminator used to scope
+    per-user (non-board) data such as the Decision Center briefing, so a
+    briefing generated for the demo workspace never leaks into the real one
+    (and vice-versa).
+    """
+    profile = getattr(user, 'profile', None)
+    return bool(getattr(profile, 'is_viewing_demo', False))
+
+
 def get_user_boards(user):
     """Return a Board queryset scoped to the user's current workspace mode.
 

@@ -16,7 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .models import DecisionCenterBriefing, DecisionCenterSettings, DecisionItem
 from kanban.decorators import demo_write_guard
-from kanban.utils.demo_protection import get_user_boards
+from kanban.utils.demo_protection import get_user_boards, user_is_demo
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ def decision_center_view(request):
     today = timezone.localdate()
     briefing = (
         DecisionCenterBriefing.objects
-        .filter(user=user, generated_at__date=today)
+        .filter(user=user, generated_at__date=today, is_demo=user_is_demo(user))
         .first()
     )
 
@@ -247,7 +247,7 @@ def decision_center_widget_data(request):
     today = timezone.localdate()
     briefing = (
         DecisionCenterBriefing.objects
-        .filter(user=user, generated_at__date=today)
+        .filter(user=user, generated_at__date=today, is_demo=user_is_demo(user))
         .values_list('headline', flat=True)
         .first()
     )

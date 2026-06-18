@@ -120,6 +120,10 @@ class DecisionCenterBriefing(models.Model):
     estimated_minutes = models.PositiveSmallIntegerField(default=0)
     top_priority_board = models.CharField(max_length=200, blank=True)
     item_counts = models.JSONField(default=dict, blank=True)
+    # Workspace-mode discriminator: a briefing generated for the demo
+    # workspace must never surface in the real one (and vice-versa). Without
+    # this, the per-(user, date) record leaks across both modes.
+    is_demo = models.BooleanField(default=False, db_index=True)
 
     class Meta:
         ordering = ['-generated_at']
