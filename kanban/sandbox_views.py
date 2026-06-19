@@ -2342,9 +2342,11 @@ def reset_my_demo(request):
     """POST /demo/reset-mine/ — wipe user's sandbox and re-provision via Celery."""
     from kanban.models import DemoSandbox
 
-    _purge_existing_sandbox(request.user)
-
-    # Re-provision asynchronously (last_reset_at is set in the provisioning task)
+    # The purge runs INSIDE the provisioning task (is_reset=True), not here.
+    # Purging in the request thread while the Celery worker duplicates boards
+    # created two concurrent SQLite writers → an immediate "database is locked"
+    # error that left a half-provisioned sandbox. Keeping purge + provision in
+    # the same worker serializes them against SQLite's single writer.
     from kanban.tasks.sandbox_provisioning import provision_sandbox_task
     result = provision_sandbox_task.delay(request.user.id, is_reset=True)
 

@@ -61,6 +61,37 @@ def _send_provision_error(user_id, message):
         logger.warning('Failed to send provision error for user %s: %s', user_id, exc)
 
 
+def _duplicate_board_with_retry(template, user, attempts=4, base_delay=0.4):
+    """
+    Duplicate a demo board, retrying on transient SQLite "database is locked"
+    errors with exponential backoff.
+
+    Even with purge + provision now serialized in one worker, Celery Beat's
+    DatabaseScheduler or another request can still briefly hold the single
+    SQLite writer. A short bounded retry turns those transient locks into a
+    successful copy instead of a half-provisioned sandbox.
+    """
+    import time
+    from django.db import OperationalError
+    from kanban.sandbox_views import _duplicate_board
+
+    last_exc = None
+    for attempt in range(attempts):
+        try:
+            return _duplicate_board(template, user)
+        except OperationalError as exc:
+            if 'locked' not in str(exc).lower():
+                raise
+            last_exc = exc
+            if attempt < attempts - 1:
+                time.sleep(base_delay * (2 ** attempt))  # 0.4s, 0.8s, 1.6s
+                logger.warning(
+                    "Retrying board '%s' after DB lock (attempt %d/%d)",
+                    template.name, attempt + 2, attempts,
+                )
+    raise last_exc
+
+
 @shared_task(
     bind=True,
     name='kanban.sandbox_provisioning.provision_sandbox',
@@ -94,7 +125,27 @@ def provision_sandbox_task(self, user_id, is_reset=False):
 
     _send_provision_status(user_id, 'Preparing your private workspace…', 5)
 
-    # Check for existing sandbox
+    # On reset, purge the existing sandbox HERE (inside the worker) rather than
+    # in the request thread. Running the purge and the re-provision in the same
+    # worker serializes them against SQLite's single writer; doing the purge in
+    # the request thread while this task duplicates boards produces two
+    # concurrent writers → an immediate "database is locked" error that left a
+    # half-provisioned sandbox (fewer tasks, missing notifications). See the
+    # _duplicate_board failure path below.
+    if is_reset:
+        _send_provision_status(user_id, 'Clearing your previous demo data…', 8)
+        with allow_demo_writes():
+            _purge_existing_sandbox(user)
+        # Re-fetch the user so its cached reverse relations are dropped. The
+        # purge reads `user.demo_sandbox` (caching it on this instance) and then
+        # deletes the row — but Django keeps the stale object in the instance
+        # cache. Without this refresh, the existence check below would read the
+        # cached DemoSandbox, wrongly return 'exists', and skip re-provisioning
+        # (the "Reset Demo does nothing" bug).
+        user = User.objects.get(pk=user_id)
+
+    # Check for existing sandbox. On reset we've just purged it, so this only
+    # short-circuits for a non-reset call where a sandbox already exists.
     try:
         existing = user.demo_sandbox
         # Active sandbox already exists — just return it
@@ -129,20 +180,38 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     # NOT gate calendar sync.
     with allow_demo_writes(), suppress_calendar_sync():
         for idx, template in enumerate(template_boards):
+            pct = 15 + int((idx / total) * 70)  # 15% → 85%
+            _send_provision_status(
+                user_id,
+                f'Creating board {idx + 1} of {total}: {template.name}…',
+                pct,
+            )
             try:
-                pct = 15 + int((idx / total) * 70)  # 15% → 85%
-                _send_provision_status(
-                    user_id,
-                    f'Creating board {idx + 1} of {total}: {template.name}…',
-                    pct,
-                )
-                new_board = _duplicate_board(template, user)
+                new_board = _duplicate_board_with_retry(template, user)
                 new_boards.append(new_board)
             except Exception as e:
+                # A board failed to duplicate even after retries. Do NOT commit a
+                # partial sandbox — that is exactly the "fewer tasks / missing
+                # notifications" bug. Roll back what we copied and report failure
+                # so the user can retry on a clean slate.
                 logger.error(
-                    "Error duplicating board '%s' for %s: %s",
+                    "Error duplicating board '%s' for %s: %s — aborting reset to "
+                    "avoid a half-provisioned sandbox.",
                     template.name, user.username, e,
                 )
+                for partial in new_boards:
+                    try:
+                        partial.delete()
+                    except Exception:
+                        logger.warning(
+                            "Failed to roll back partial sandbox board %s", partial.id,
+                        )
+                _send_provision_error(
+                    user_id,
+                    'Reset hit a temporary database lock. Please click Reset Demo '
+                    'again.',
+                )
+                return {'status': 'error', 'message': 'Sandbox creation failed.'}
 
         if not new_boards:
             _send_provision_error(user_id, 'Sandbox creation failed — no boards duplicated.')
@@ -191,6 +260,29 @@ def provision_sandbox_task(self, user_id, is_reset=False):
                 refresh_single_board_dates(board.id)
     except Exception as e:
         logger.warning("Error refreshing sandbox board dates: %s", e)
+
+    # ── Essential work is done ────────────────────────────────────────────────
+    # The sandbox boards now exist with the correct columns, tasks, assignments
+    # and refreshed dates — everything the user actually looks at on the board
+    # they land on. Send the redirect NOW so Reset Demo feels instant, then
+    # finish the non-critical extras below while the user is already on their
+    # fresh workspace.
+    #
+    # Why this is safe: the extras (conflict pre-population, Decision Center
+    # counts, requirements/discovery/automation seeds, shadow-branch scores)
+    # only populate *secondary* feature pages, each already guards its own
+    # errors, and each self-heals on next visit. Running them after the redirect
+    # cannot fail the reset or roll back the sandbox. We deliberately stay in the
+    # SAME Celery task (rather than enqueueing a follow-up) so that on the single
+    # solo worker the extras run immediately in this slot instead of waiting
+    # behind other queued jobs.
+    redirect_url = '/dashboard/'
+    _send_provision_status(user_id, 'Your workspace is ready!', 100)
+    _send_provision_result(user_id, {
+        'status': 'created',
+        'boards_created': len(new_boards),
+        'redirect_url': redirect_url,
+    })
 
     # Pre-populate conflicts so the Conflict Dashboard isn't empty on first
     # visit (matches every other pre-populated demo feature). Only run for
@@ -292,13 +384,9 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not recalc shadow branches after sandbox provision: %s", e)
 
-    redirect_url = '/dashboard/'
-    _send_provision_status(user_id, 'Your workspace is ready!', 100)
-    _send_provision_result(user_id, {
-        'status': 'created',
-        'boards_created': len(new_boards),
-        'redirect_url': redirect_url,
-    })
+    # All background extras finished. The redirect was already sent above (right
+    # after the essential work), so here we just record the outcome for the
+    # Celery result backend — there is nothing left for the frontend to wait on.
     return {
         'status': 'created',
         'boards_created': len(new_boards),
