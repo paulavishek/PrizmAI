@@ -22,6 +22,7 @@
 
     <nav aria-label="breadcrumb" style="font-size:0.82rem;">
         <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="{% url 'discovery_dashboard' %}">Discovery</a></li>
             {% if action == 'edit' %}
             <li class="breadcrumb-item"><a href="{% url 'idea_detail' idea_id=idea.pk %}">{{ idea.title|truncatechars:40 }}</a></li>
