@@ -1830,6 +1830,89 @@ def _join_demo_org(user):
         profile.save(update_fields=['organization'])
 
 
+def _clone_discovery_ideas_for_user(user):
+    """Clone the canonical demo Discovery ideas into a private per-user set.
+
+    Discovery ideas are organization-scoped, but the demo sandbox isolates per
+    user (each demo user gets their own private board copies). To make Discovery
+    obey the same model, every demo user gets their own copy of the template
+    ideas (sandbox_owner=user); their scoring / approval / comments never touch
+    the shared template (sandbox_owner=None) or any other user's copies.
+
+    Idempotent: clears the user's existing clones first, so it can be called on
+    every (re-)provision and reset. Promotions are re-pointed at the user's own
+    sandbox board copy (and the matching cloned task) so the "promoted to board"
+    state is per-user too.
+    """
+    from accounts.models import Organization
+    from kanban.discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
+    from kanban.models import Board, Task
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+
+    # Clear existing clones for idempotency (reset re-clones from the template).
+    DiscoveryIdea.objects.filter(organization=demo_org, sandbox_owner=user).delete()
+
+    templates = DiscoveryIdea.objects.filter(
+        organization=demo_org, is_demo=True, sandbox_owner__isnull=True,
+    ).prefetch_related('comments')
+
+    for tpl in templates:
+        clone = DiscoveryIdea.objects.create(
+            organization=demo_org,
+            title=tpl.title,
+            description=tpl.description,
+            source=tpl.source,
+            stage=tpl.stage,
+            submitted_by=tpl.submitted_by,
+            ai_score_impact=tpl.ai_score_impact,
+            ai_score_effort=tpl.ai_score_effort,
+            ai_score_confidence=tpl.ai_score_confidence,
+            ai_score_recommendation=tpl.ai_score_recommendation,
+            ai_score_reasoning=tpl.ai_score_reasoning,
+            ai_scored_at=tpl.ai_scored_at,
+            promoted_at=tpl.promoted_at,
+            promoted_by=tpl.promoted_by,
+            is_demo=True,
+            sandbox_owner=user,
+        )
+        # Preserve the template's submission time (created_at is auto_now_add).
+        DiscoveryIdea.objects.filter(pk=clone.pk).update(created_at=tpl.created_at)
+
+        # Clone the comment thread, preserving author + timestamps.
+        for c in tpl.comments.all():
+            cc = IdeaComment.objects.create(idea=clone, author=c.author, content=c.content)
+            IdeaComment.objects.filter(pk=cc.pk).update(created_at=c.created_at)
+
+        # Clone the promotion, re-pointed at the user's own board copy + task.
+        tpl_promo = IdeaPromotion.objects.filter(idea=tpl).first()
+        if tpl_promo:
+            user_board = None
+            if tpl_promo.board_id:
+                user_board = Board.objects.filter(
+                    owner=user, is_sandbox_copy=True, cloned_from_id=tpl_promo.board_id,
+                ).first()
+            clone_promo = IdeaPromotion.objects.create(
+                idea=clone,
+                board=user_board or tpl_promo.board,
+                promoted_at=tpl_promo.promoted_at,
+                promoted_by=tpl_promo.promoted_by,
+            )
+            # A promoted task always carries the idea's title (see idea_promote
+            # and the seeder), and board cloning copies tasks by title — so find
+            # the matching task on the user's board copy by the idea title.
+            # Best-effort: if there's no match, the promotion just shows the
+            # board link without a task.
+            if user_board:
+                match = Task.objects.filter(
+                    column__board=user_board, title=clone.title,
+                ).first()
+                if match:
+                    clone_promo.tasks.add(match)
+
+
 def _leave_demo_org(user):
     """Remove the user from the demo organization, restoring their original org.
 
@@ -2228,23 +2311,17 @@ def _purge_existing_sandbox(user):
     except Exception:
         pass
 
-    # ── User-created Discovery ideas in the demo org ──
-    # Discovery ideas are organization-scoped (not board-scoped), and the
-    # create view stores them with is_demo=False, so neither the board cleanup
-    # nor the seeded-idea flag covers them — without this they survive every
-    # reset. Seeded demo ideas (is_demo=True) are preserved. Deleting an idea
-    # cascades its comments and promotion record (any task the promotion
-    # created on a sandbox board is removed with the board; tasks created on an
-    # official template board are cleaned by the template-task sweep above).
+    # ── User's private Discovery idea sandbox in the demo org ──
+    # Discovery ideas are organization-scoped, but the demo sandbox clones them
+    # per user (sandbox_owner=user) — both the cloned template ideas and any the
+    # user submitted during the demo. Delete the whole per-user set; the shared
+    # template (sandbox_owner=None) is untouched, and re-provisioning re-clones a
+    # fresh copy. Deleting an idea cascades its comments and promotion record.
     try:
-        from kanban.discovery_models import DiscoveryIdea, IdeaComment
+        from kanban.discovery_models import DiscoveryIdea
         if demo_org:
             DiscoveryIdea.objects.filter(
-                organization=demo_org, submitted_by=user, is_demo=False,
-            ).delete()
-            # Also remove the user's own comments left on seeded demo ideas.
-            IdeaComment.objects.filter(
-                idea__organization=demo_org, idea__is_demo=True, author=user,
+                organization=demo_org, sandbox_owner=user,
             ).delete()
     except Exception:
         pass

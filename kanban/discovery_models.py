@@ -111,6 +111,19 @@ class DiscoveryIdea(models.Model):
     # accidentally wiped by user actions during a demo session.
     is_demo = models.BooleanField(default=False)
 
+    # Sandbox isolation — Discovery ideas are organization-scoped, but the demo
+    # sandbox isolates per user (each demo user gets private board copies). To
+    # match that, demo ideas are cloned per user. None = canonical demo template
+    # or a real-org idea; set = a specific demo user's private sandbox copy.
+    sandbox_owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        db_index=True,
+        related_name='sandbox_discovery_ideas',
+        help_text="Owning demo user for sandbox-isolated copies; None for template/real ideas.",
+    )
+
     class Meta:
         app_label = 'kanban'
         ordering = ['-created_at']

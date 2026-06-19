@@ -34,10 +34,15 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR('No demo organisation found. Run create_demo_organization first.'))
             return
 
-        # Always reset: delete all existing demo ideas and recreate them fresh.
-        # This ensures stages and AI scores are restored to seed state even if
-        # a demo user approved, scored, or promoted an idea before resetting.
-        existing = DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True)
+        # Always reset: delete the canonical TEMPLATE ideas and recreate them
+        # fresh. This ensures stages and AI scores are restored to seed state.
+        # IMPORTANT: scope to the template only (sandbox_owner is NULL) — each
+        # demo user has their own private clones (sandbox_owner=user), and those
+        # must NOT be wiped when the shared template is re-seeded, or one user's
+        # reseed would clobber every other user's Discovery sandbox.
+        existing = DiscoveryIdea.objects.filter(
+            organization=demo_org, is_demo=True, sandbox_owner__isnull=True,
+        )
         if existing.exists():
             # Clear M2M and cascade-related records before bulk delete
             for idea in existing:
@@ -323,6 +328,12 @@ class Command(BaseCommand):
                     column=first_col,
                     created_by=alex,
                     position=Task.objects.filter(column=first_col).count(),
+                    # Mark as seed data: this task lives on the official demo
+                    # board and must be copied into each sandbox + survive the
+                    # purge's "user-created tasks on official boards" cleanup
+                    # (which only deletes is_seed_demo_data=False). Without this,
+                    # the lead persona's reset would delete the template task.
+                    is_seed_demo_data=True,
                 )
                 promotion7.tasks.add(pricing_task)
                 # Backdate so the ticket isn't stamped with the seeder run time.
@@ -372,7 +383,9 @@ class Command(BaseCommand):
         ):
             IdeaComment.objects.filter(pk=comment.pk).update(created_at=created)
 
-        count = DiscoveryIdea.objects.filter(organization=demo_org, is_demo=True).count()
+        count = DiscoveryIdea.objects.filter(
+            organization=demo_org, is_demo=True, sandbox_owner__isnull=True,
+        ).count()
         self.stdout.write(self.style.SUCCESS(
-            f'Created {count} Discovery demo ideas for "{demo_org.name}".'
+            f'Created {count} Discovery demo template ideas for "{demo_org.name}".'
         ))
