@@ -231,12 +231,17 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not seed requirements after sandbox provision: %s", e)
 
-    # Seed PrizmDiscovery demo ideas for the demo org (idempotent).
+    # Seed the canonical PrizmDiscovery template ideas (idempotent), then clone
+    # them into a private per-user set. Discovery ideas are org-scoped, so this
+    # per-user clone is what makes the feature obey the sandbox isolation model
+    # (each demo user sees and mutates only their own copies).
     try:
         from django.core.management import call_command
+        from kanban.sandbox_views import _clone_discovery_ideas_for_user
         call_command('populate_discovery_demo_data')
+        _clone_discovery_ideas_for_user(user)
     except Exception as e:
-        logger.warning("Could not seed Discovery demo ideas after sandbox provision: %s", e)
+        logger.warning("Could not seed/clone Discovery demo ideas after sandbox provision: %s", e)
 
     # Seed automation hierarchy demo data: checklist items, parent/subtask
     # groups, and blocking dependency pair needed for T-22–T-29 test scenarios.

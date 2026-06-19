@@ -104,6 +104,20 @@ def _is_viewer(user, org):
     return False
 
 
+def _demo_owner_filter(org, user):
+    """Extra ORM filter that isolates per-user demo idea clones.
+
+    Discovery ideas are organization-scoped, but in the demo org each user gets
+    their own cloned set (sandbox_owner=user) — mirroring the per-user board
+    copies. Scope every read/write to the current user's copies so nothing
+    bleeds between demo users. Real orgs have no sandbox_owner, so no extra
+    filter is applied there.
+    """
+    if getattr(org, 'is_demo', False):
+        return {'sandbox_owner': user}
+    return {}
+
+
 # ── Views ─────────────────────────────────────────────────────────────────────
 
 @login_required
@@ -118,18 +132,21 @@ def discovery_dashboard(request):
     if blocked:
         return blocked
 
+    owner_filter = _demo_owner_filter(org, request.user)
+
     stage_filter = request.GET.get('stage', 'all')
-    qs = DiscoveryIdea.objects.filter(organization=org).select_related(
+    qs = DiscoveryIdea.objects.filter(organization=org, **owner_filter).select_related(
         'submitted_by', 'promotion__board'
     )
     if stage_filter != 'all':
         qs = qs.filter(stage=stage_filter)
 
     ideas_to_score = DiscoveryIdea.objects.filter(
-        organization=org, stage__in=['new', 'under_review'], ai_score_impact__isnull=True
+        organization=org, stage__in=['new', 'under_review'], ai_score_impact__isnull=True,
+        **owner_filter,
     ).count()
     ideas_to_promote = DiscoveryIdea.objects.filter(
-        organization=org, stage='approved'
+        organization=org, stage='approved', **owner_filter,
     ).exclude(promotion__isnull=False).count()
 
     is_admin = _is_org_admin(request.user)
@@ -137,7 +154,9 @@ def discovery_dashboard(request):
 
     stage_counts = {}
     for s, _ in [('new', ''), ('under_review', ''), ('approved', ''), ('rejected', '')]:
-        stage_counts[s] = DiscoveryIdea.objects.filter(organization=org, stage=s).count()
+        stage_counts[s] = DiscoveryIdea.objects.filter(
+            organization=org, stage=s, **owner_filter,
+        ).count()
 
     return render(request, 'kanban/discovery_dashboard.html', {
         'ideas': qs,
@@ -161,7 +180,10 @@ def idea_detail(request, idea_id):
     if blocked:
         return blocked
 
-    idea = get_object_or_404(DiscoveryIdea, pk=idea_id, organization=org)
+    idea = get_object_or_404(
+        DiscoveryIdea, pk=idea_id, organization=org,
+        **_demo_owner_filter(org, request.user),
+    )
     comments = IdeaComment.objects.filter(idea=idea).select_related('author')
     promotion = getattr(idea, 'promotion', None)
 
@@ -229,6 +251,9 @@ def idea_create(request):
             source=source,
             stage='new',
             submitted_by=request.user,
+            # In demo mode, ideas the user submits belong to their private
+            # sandbox set so they don't leak to other demo users.
+            **_demo_owner_filter(org, request.user),
         )
         messages.success(request, f'Idea "{idea.title}" submitted to the Discovery inbox.')
         return redirect('idea_detail', idea_id=idea.pk)
@@ -251,7 +276,10 @@ def idea_edit(request, idea_id):
     if blocked:
         return blocked
 
-    idea = get_object_or_404(DiscoveryIdea, pk=idea_id, organization=org)
+    idea = get_object_or_404(
+        DiscoveryIdea, pk=idea_id, organization=org,
+        **_demo_owner_filter(org, request.user),
+    )
 
     is_admin = _is_org_admin(request.user)
     is_owner = idea.submitted_by == request.user
@@ -298,7 +326,10 @@ def idea_update_stage(request, idea_id):
     if blocked:
         return JsonResponse({'error': 'Discovery not available.'}, status=403)
 
-    idea = get_object_or_404(DiscoveryIdea, pk=idea_id, organization=org)
+    idea = get_object_or_404(
+        DiscoveryIdea, pk=idea_id, organization=org,
+        **_demo_owner_filter(org, request.user),
+    )
     is_admin = _is_org_admin(request.user)
     is_viewer = _is_viewer(request.user, org)
 
@@ -340,7 +371,10 @@ def idea_ai_score(request, idea_id):
     if _is_viewer(request.user, org):
         return JsonResponse({'error': 'Viewers cannot trigger AI scoring.'}, status=403)
 
-    idea = get_object_or_404(DiscoveryIdea, pk=idea_id, organization=org)
+    idea = get_object_or_404(
+        DiscoveryIdea, pk=idea_id, organization=org,
+        **_demo_owner_filter(org, request.user),
+    )
 
     scorer = DiscoveryAIScorer()
     result = scorer.score_idea(idea, org)
@@ -385,7 +419,10 @@ def idea_promote(request, idea_id):
     if not _is_org_admin(request.user):
         return JsonResponse({'error': 'Only org admins can promote ideas.'}, status=403)
 
-    idea = get_object_or_404(DiscoveryIdea, pk=idea_id, organization=org)
+    idea = get_object_or_404(
+        DiscoveryIdea, pk=idea_id, organization=org,
+        **_demo_owner_filter(org, request.user),
+    )
 
     board_id = request.POST.get('board_id') or None
     board = None
@@ -463,7 +500,9 @@ def discovery_matrix(request):
     if blocked:
         return blocked
 
-    all_ideas = DiscoveryIdea.objects.filter(organization=org)
+    all_ideas = DiscoveryIdea.objects.filter(
+        organization=org, **_demo_owner_filter(org, request.user),
+    )
 
     scored = all_ideas.filter(ai_score_impact__isnull=False)
     unscored = all_ideas.filter(ai_score_impact__isnull=True).exclude(stage='rejected')
@@ -504,7 +543,10 @@ def add_idea_comment(request, idea_id):
     if _is_viewer(request.user, org):
         return JsonResponse({'error': 'Viewers cannot comment on ideas.'}, status=403)
 
-    idea = get_object_or_404(DiscoveryIdea, pk=idea_id, organization=org)
+    idea = get_object_or_404(
+        DiscoveryIdea, pk=idea_id, organization=org,
+        **_demo_owner_filter(org, request.user),
+    )
 
     try:
         data = json.loads(request.body)
