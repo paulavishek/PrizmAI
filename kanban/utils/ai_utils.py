@@ -6367,23 +6367,56 @@ def generate_portfolio_analytics_narrative(record, record_type, groups_data):
         return METRIC_CONFIG.get(key, {}).get('label', key.replace('_', ' ').title())
 
     groups_summary = ''
+    total_board_count = 0
     for g in groups_data:
+        total_board_count += g.get('board_count', 0)
         metrics_str = ', '.join(
             f'{_metric_label(k)}: {v}' for k, v in g.get('metrics', {}).items()
         )
         groups_summary += f"  {g['label']} ({g['board_count']} boards): {metrics_str}\n"
 
+    # Altitude-aware framing. The boards a strategy sees are a subset of what its
+    # mission/goal see, so an altitude-agnostic prompt produces near-duplicate prose
+    # when the hierarchy is thin. Each level gets a distinct vantage point and is told
+    # explicitly NOT to re-narrate the level below it.
+    board_word = 'board' if total_board_count == 1 else 'boards'
+    level_framing = {
+        'strategy': (
+            f"You are a delivery lead reviewing ONE strategy's own {board_word} "
+            f"({total_board_count} {board_word}). Stay at the operational level: the concrete "
+            "execution health of these boards and what it means for delivering THIS strategy.\n"
+            "Sentence 1: the current operational state of these boards (factual, specific numbers).\n"
+            "Sentence 2: the single biggest execution risk to delivering this strategy on time."
+        ),
+        'mission': (
+            f"You are a program manager reviewing a mission that spans multiple strategies "
+            f"({total_board_count} {board_word} in total). Take a CROSS-STRATEGY view — do NOT "
+            "re-narrate any single board's task counts; instead synthesise patterns across the "
+            "boards and whether their combined effort delivers the mission.\n"
+            "Sentence 1: the aggregate trajectory across the mission's strategies (are they collectively on track?).\n"
+            "Sentence 2: the most important cross-strategy dependency, gap, or risk for the mission."
+        ),
+        'goal': (
+            f"You are a C-level advisor reviewing the ENTIRE portfolio under an organization goal, "
+            f"spanning all missions ({total_board_count} {board_word} across the whole goal). Take an "
+            "executive, cross-mission view — do NOT restate individual board or strategy mechanics; "
+            "speak to overall trajectory toward the Goal.\n"
+            "Sentence 1: the portfolio-wide state across all missions (executive altitude, not board-level).\n"
+            "Sentence 2: the primary strategic risk or opportunity for achieving the Goal by its target date."
+        ),
+    }
+    framing = level_framing.get(record_type, level_framing['strategy'])
+
     prompt = (
-        f"You are a data analyst writing a 2-sentence portfolio summary for a {record_type}.\n\n"
+        f"You are writing a 2-sentence summary for a {record_type}.\n\n"
         f"{record_type.title()}: {record.name}\n"
         f"Goal context: {goal_text or 'Not available'}\n"
         f"Goal target date: {target_date or 'Not set'}\n"
         f"Today's date: {datetime.now().strftime('%Y-%m-%d')}\n\n"
         f"Board groups:\n{groups_summary}\n"
-        "Write exactly 2 sentences:\n"
-        "Sentence 1: summarise the current state across all board groups (factual).\n"
-        "Sentence 2: assess the primary risk or opportunity for achieving the Goal.\n\n"
-        "Rules: plain text only, no JSON, no markdown, be specific to the numbers.\n"
+        f"{framing}\n\n"
+        "Rules: write exactly 2 sentences, plain text only, no JSON, no markdown, "
+        "be specific to the numbers, and match the altitude described above.\n"
     )
 
     start_ms = time.time()

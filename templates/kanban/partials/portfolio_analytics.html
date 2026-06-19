@@ -9,7 +9,16 @@ Expects: portfolio (dict with groups, unclassified_count), portfolio_narrative (
     <div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">
         <div class="d-flex align-items-center gap-2">
             <i class="fas fa-chart-pie text-primary"></i>
-            <span class="fw-semibold small">Portfolio Analytics</span>
+            {% comment %}
+            "Portfolio" means the whole collection of work, so it's reserved for
+            the Goal (apex) level. Mission/Strategy show the same scoped analytics
+            under a level-appropriate name to avoid the single-board "portfolio" misnomer.
+            {% endcomment %}
+            <span class="fw-semibold small">
+                {% if level_name == 'mission' %}Mission Analytics
+                {% elif level_name == 'strategy' %}Board Analytics
+                {% else %}Portfolio Analytics{% endif %}
+            </span>
         </div>
         {% if portfolio.unclassified_count > 0 %}
         <span class="badge bg-warning text-dark" style="font-size:0.65rem;">
@@ -55,7 +64,12 @@ Expects: portfolio (dict with groups, unclassified_count), portfolio_narrative (
         {% else %}
         <div class="border-top pt-2 mt-2 d-flex align-items-center gap-2">
             <i class="fas fa-lightbulb text-muted"></i>
-            <span class="text-muted small">Generate an AI narrative for this portfolio.</span>
+            <span class="text-muted small">
+                Generate an AI narrative for
+                {% if level_name == 'mission' %}this mission's boards.
+                {% elif level_name == 'strategy' %}this strategy's boards.
+                {% else %}this portfolio.{% endif %}
+            </span>
             <button class="btn btn-sm btn-outline-info ms-auto"
                     onclick="refreshPortfolioNarrative('{{ level_name }}', {{ record.id }})">
                 <i class="fas fa-magic me-1"></i>Generate

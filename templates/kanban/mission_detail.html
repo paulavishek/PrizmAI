@@ -250,10 +250,26 @@
     <div class="card-body py-2" id="ai-summary-body">
         {% if mission.ai_summary %}
         <p class="mb-0 small">{{ mission.ai_summary }}</p>
+        {% if can_edit %}
+        <div class="text-end mt-2">
+            <button class="btn btn-sm btn-outline-warning btn-regenerate-ai"
+                    data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
+                <i class="fas fa-sync-alt me-1"></i>Regenerate
+            </button>
+        </div>
+        {% endif %}
         {% else %}
         <p class="text-muted fst-italic mb-0 small">
-            <i class="fas fa-info-circle me-1"></i>No AI summary yet.
+            <i class="fas fa-info-circle me-1"></i>No AI summary yet. Summaries roll up from this mission's strategies.
         </p>
+        {% if can_edit %}
+        <div class="text-end mt-2">
+            <button class="btn btn-sm btn-primary btn-regenerate-ai"
+                    data-url="{% url 'regenerate_summary' level=level_name pk=record.pk %}">
+                <i class="fas fa-magic me-1"></i>Generate AI Summary
+            </button>
+        </div>
+        {% endif %}
         {% endif %}
     </div>
 </div>

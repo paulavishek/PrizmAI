@@ -564,11 +564,10 @@ def set_mission_goal(request, mission_id):
     if request.method == 'POST':
         goal_id = request.POST.get('goal_id', '').strip()
         if goal_id:
-            _active_ws = getattr(request, 'workspace', None)
-            goal_qs = OrganizationGoal.objects.all()
-            if _active_ws:
-                goal_qs = goal_qs.filter(workspace=_active_ws)
-            goal = get_object_or_404(goal_qs, id=goal_id)
+            # Resolve against the same scoped queryset the picker offers, so a
+            # demo goal (workspace=None, flagged is_demo) can be linked instead
+            # of 404ing on a strict workspace= filter.
+            goal = get_object_or_404(_goals_for_picker(request), id=goal_id)
             mission.organization_goal = goal
             mission.save(update_fields=['organization_goal'])
             messages.success(request, f'Mission linked to goal "{goal.name}".')
@@ -713,13 +712,20 @@ def mission_detail(request, mission_id):
             get_boards_for_record(mission, 'mission').values_list('id', flat=True)
         )
 
-    strategies = mission.strategies.all().annotate(
-        board_count=Count('boards', distinct=True)
-    ).order_by('-created_at') if _is_demo_mission else mission.strategies.filter(
-        boards__id__in=user_accessible_board_ids
-    ).distinct().annotate(
-        board_count=Count('boards', distinct=True)
-    ).order_by('-created_at')
+    # Demo browsing, owners, and org admins see every strategy under the mission —
+    # including ones with no boards linked yet (a freshly created strategy is valid
+    # and must still appear). Regular members are scoped to strategies they can reach
+    # through an accessible board.
+    if _is_demo_mission or _is_admin_or_owner:
+        strategies = mission.strategies.all().annotate(
+            board_count=Count('boards', distinct=True)
+        ).order_by('-created_at')
+    else:
+        strategies = mission.strategies.filter(
+            boards__id__in=user_accessible_board_ids
+        ).distinct().annotate(
+            board_count=Count('boards', distinct=True)
+        ).order_by('-created_at')
 
     # --- Board IDs under this mission (scoped to user) ---
     board_ids = list(user_accessible_board_ids)
@@ -1058,8 +1064,10 @@ def strategy_detail(request, mission_id, strategy_id):
 
     linked_boards = strategy.boards.all().order_by('-created_at')
 
-    # All boards (for "link existing board" dropdown) — scoped to user's accessible boards
-    all_boards = get_user_boards(request.user).exclude(strategy=strategy).order_by('name')
+    # All boards (for "link existing board" dropdown) — scoped to user's accessible boards.
+    # select_related('strategy') so the template can flag boards already under another
+    # strategy (linking moves them — a board belongs to exactly one strategy).
+    all_boards = get_user_boards(request.user).exclude(strategy=strategy).select_related('strategy').order_by('name')
 
     # --- Board IDs under this strategy ---
     board_ids = list(linked_boards.values_list('id', flat=True))
@@ -1234,6 +1242,30 @@ def delete_strategy(request, mission_id, strategy_id):
     })
 
 
+def _trigger_strategy_summary_cascade(strategy):
+    """Re-roll the AI summary up the chain after a board is (un)linked.
+
+    Linking/unlinking a board changes what the strategy — and the mission/goal
+    above it — should summarise, but it isn't a task-level event so the normal
+    signal-driven cascade never fires. Enqueue the affected levels async (the
+    worker serves the 'summaries' queue); failures are non-fatal.
+    """
+    try:
+        from kanban.tasks.ai_summary_tasks import (
+            generate_strategy_summary_task,
+            generate_mission_summary_task,
+            generate_goal_summary_task,
+        )
+        generate_strategy_summary_task.delay(strategy.id)
+        if strategy.mission_id:
+            generate_mission_summary_task.delay(strategy.mission_id)
+            goal_id = getattr(strategy.mission, 'organization_goal_id', None)
+            if goal_id:
+                generate_goal_summary_task.delay(goal_id)
+    except Exception as e:
+        logger.warning("Failed to trigger strategy summary cascade for %s: %s", strategy.id, e)
+
+
 @login_required
 @demo_write_guard
 def link_board_to_strategy(request, mission_id, strategy_id):
@@ -1253,6 +1285,7 @@ def link_board_to_strategy(request, mission_id, strategy_id):
             return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
         board.strategy = strategy
         board.save(update_fields=['strategy'])
+        _trigger_strategy_summary_cascade(strategy)
         messages.success(request, f'Board "{board.name}" linked to strategy "{strategy.name}".')
 
     return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
@@ -1273,6 +1306,7 @@ def unlink_board_from_strategy(request, mission_id, strategy_id, board_id):
     if request.method == 'POST':
         board.strategy = None
         board.save(update_fields=['strategy'])
+        _trigger_strategy_summary_cascade(strategy)
         messages.success(request, f'Board "{board.name}" unlinked from strategy.')
 
     return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
