@@ -36,17 +36,23 @@ def _get_discovery_widget_counts(user, organization):
     try:
         from kanban.preset_models import build_feature_flags
         from kanban.discovery_models import DiscoveryIdea
+        from kanban.discovery_views import _demo_owner_filter
         if organization is None:
             return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
         org_preset = getattr(getattr(organization, 'workspace_preset', None), 'global_preset', 'lean')
         features = build_feature_flags(org_preset)
         if not features.get('show_discovery'):
             return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
+        # In the demo org all users share one organization; ideas are isolated
+        # per sandbox_owner. Scope these counts the same way the Discovery page
+        # does, or the sidebar badge sums every demo user's ideas org-wide.
+        owner_filter = _demo_owner_filter(organization, user)
         to_score = DiscoveryIdea.objects.filter(
-            organization=organization, stage__in=['new', 'under_review'], ai_score_impact__isnull=True
+            organization=organization, stage__in=['new', 'under_review'], ai_score_impact__isnull=True,
+            **owner_filter,
         ).count()
         to_promote = DiscoveryIdea.objects.filter(
-            organization=organization, stage='approved'
+            organization=organization, stage='approved', **owner_filter,
         ).exclude(promotion__isnull=False).count()
         return {
             'discovery_enabled': True,
