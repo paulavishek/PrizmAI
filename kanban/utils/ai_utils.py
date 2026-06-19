@@ -2220,16 +2220,21 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
         - Organization Type: {organization_type}
         - Current Columns: {', '.join(existing_columns) if existing_columns else 'None (new board)'}
         
-        Recommend 4-7 columns that create an efficient workflow. Keep descriptions concise.
-        
-        REQUIRED: Your first column MUST be named "To Do" (this is where the task creation button is located).
-        Also ensure your recommendations include:
-        2. One or more active work stages (e.g., "In Progress", "Development", "Design", "Review")
-        3. A completion stage (e.g., "Done", "Complete", "Deployed")
-        
-        The "To Do" column is mandatory - do not use alternatives like "Backlog" or "Planned" for the first column.
-        
-        Format as JSON:
+        The board uses a FIXED architectural framework. The start and end of the
+        workflow are added automatically by the system and MUST NOT be included in
+        your response:
+          - Fixed start (auto-added): "Backlog", then "To Do"
+          - Fixed end (auto-added): "Done"
+
+        Your job is ONLY the DYNAMIC MIDDLE: recommend 2-5 active work stages that
+        sit between "To Do" and "Done", tailored to this project's title and type
+        (e.g., "Design & Spec", "In Development", "Review & QA", "Staging & Adoption").
+
+        Do NOT include "Backlog", "To Do", "Planned", or any completion stage
+        ("Done", "Complete", "Deployed") in recommended_columns — those are reserved
+        for the fixed framework and will be added by the system. Keep descriptions concise.
+
+        Format as JSON (recommended_columns = MIDDLE stages only):
         {{
             "recommended_columns": [
                 {{
@@ -2284,15 +2289,78 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
                     response_text = response_text[start_idx:end_idx+1]
             
             try:
-                return json.loads(response_text)
+                result = json.loads(response_text)
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parsing error in column recommendations: {str(e)}")
                 logger.error(f"Response text: {response_text[:500]}")
                 return None
+
+            # Enforce the fixed architectural framework in code so the structure is
+            # guaranteed regardless of what the model returns:
+            #   Fixed start -> Backlog, To Do
+            #   Dynamic middle -> AI-recommended active work stages
+            #   Fixed end -> Done
+            result['recommended_columns'] = _frame_recommended_columns(
+                result.get('recommended_columns') or []
+            )
+            return result
         return None
     except Exception as e:
         logger.error(f"Error recommending columns: {str(e)}")
         return None
+
+
+# Names reserved for the fixed framework; any AI-returned column matching one of
+# these (case-insensitive) is dropped from the dynamic middle to avoid duplicates.
+_RESERVED_COLUMN_NAMES = {
+    'backlog', 'to do', 'todo', 'to-do', 'planned',
+    'done', 'complete', 'completed', 'deployed', 'closed',
+}
+
+
+def _frame_recommended_columns(ai_columns: list) -> list:
+    """Wrap AI-recommended middle stages with the fixed Backlog/To Do ... Done rails.
+
+    The AI is asked to return only the dynamic middle stages, but we defensively
+    strip any reserved start/end names it returns anyway, then bookend the list
+    with the mandated columns and renumber positions sequentially.
+    """
+    fixed_start = [
+        {
+            'name': 'Backlog',
+            'description': 'Captured ideas and requests not yet prioritised for work.',
+            'color_suggestion': '#6c757d',
+            'purpose': 'Holding area for incoming work before it is scheduled.',
+            'typical_wip_limit': None,
+        },
+        {
+            'name': 'To Do',
+            'description': 'Prioritised tasks ready for the team to pick up.',
+            'color_suggestion': '#0d6efd',
+            'purpose': 'Committed, ready-to-start work.',
+            'typical_wip_limit': None,
+        },
+    ]
+    fixed_end = [
+        {
+            'name': 'Done',
+            'description': 'Work completed and verified.',
+            'color_suggestion': '#198754',
+            'purpose': 'Final completion stage.',
+            'typical_wip_limit': None,
+        },
+    ]
+
+    middle = [
+        col for col in ai_columns
+        if isinstance(col, dict)
+        and str(col.get('name', '')).strip().lower() not in _RESERVED_COLUMN_NAMES
+    ]
+
+    framed = fixed_start + middle + fixed_end
+    for idx, col in enumerate(framed, start=1):
+        col['position'] = idx
+    return framed
 
 
 def generate_board_setup_recommendations(board_data: Dict) -> Optional[Dict]:
