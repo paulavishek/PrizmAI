@@ -2207,9 +2207,12 @@ def create_board(request):
     strategy_id = request.GET.get('strategy_id') or request.POST.get('strategy_id')
     selected_strategy = None
     if strategy_id:
+        from kanban.utils.demo_protection import get_user_strategies
         try:
-            selected_strategy = KanbanStrategy.objects.get(id=strategy_id)
-        except KanbanStrategy.DoesNotExist:
+            # Scope to the user's accessible strategies so a crafted strategy_id
+            # cannot link a board to a strategy outside the current workspace/demo.
+            selected_strategy = get_user_strategies(request.user).get(id=strategy_id)
+        except (KanbanStrategy.DoesNotExist, ValueError):
             selected_strategy = None
 
     # All strategies for the optional "Link to Strategy" dropdown (only when no
@@ -2217,9 +2220,11 @@ def create_board(request):
     # branch below can re-render the form without recomputing.
     all_strategies = []
     if not selected_strategy:
-        from kanban.models import Strategy as _Strategy
+        from kanban.utils.demo_protection import get_user_strategies
         all_strategies = list(
-            _Strategy.objects.select_related('mission').order_by('mission__name', 'name')
+            get_user_strategies(request.user)
+            .select_related('mission')
+            .order_by('mission__name', 'name')
             .values('id', 'name', 'mission__name', 'mission_id')
         )
 
@@ -2297,21 +2302,13 @@ def create_board(request):
             if recommended_columns_json:
                 try:
                     recommended_columns = json.loads(recommended_columns_json)
-                    
-                    # Safety check: Ensure first column is "To Do" (required for Add Task button)
-                    if recommended_columns and recommended_columns[0]['name'] != 'To Do':
-                        # Prepend "To Do" if it's missing
-                        has_todo = any(col['name'].lower() in ['to do', 'todo'] for col in recommended_columns)
-                        if not has_todo:
-                            recommended_columns.insert(0, {
-                                'name': 'To Do',
-                                'description': 'Tasks to be started',
-                                'position': 0
-                            })
-                            # Adjust positions for other columns
-                            for i, col in enumerate(recommended_columns[1:], start=1):
-                                col['position'] = i
-                    
+
+                    # Safety backstop: the recommender frames columns as
+                    # Backlog/To Do ... Done, but defensively re-frame here in case
+                    # an older or hand-edited payload is posted.
+                    from kanban.utils.ai_utils import _frame_recommended_columns
+                    recommended_columns = _frame_recommended_columns(recommended_columns)
+
                     # Create the recommended columns
                     for i, column_data in enumerate(recommended_columns):
                         Column.objects.create(
