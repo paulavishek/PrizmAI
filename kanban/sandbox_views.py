@@ -2228,6 +2228,27 @@ def _purge_existing_sandbox(user):
     except Exception:
         pass
 
+    # ── User-created Discovery ideas in the demo org ──
+    # Discovery ideas are organization-scoped (not board-scoped), and the
+    # create view stores them with is_demo=False, so neither the board cleanup
+    # nor the seeded-idea flag covers them — without this they survive every
+    # reset. Seeded demo ideas (is_demo=True) are preserved. Deleting an idea
+    # cascades its comments and promotion record (any task the promotion
+    # created on a sandbox board is removed with the board; tasks created on an
+    # official template board are cleaned by the template-task sweep above).
+    try:
+        from kanban.discovery_models import DiscoveryIdea, IdeaComment
+        if demo_org:
+            DiscoveryIdea.objects.filter(
+                organization=demo_org, submitted_by=user, is_demo=False,
+            ).delete()
+            # Also remove the user's own comments left on seeded demo ideas.
+            IdeaComment.objects.filter(
+                idea__organization=demo_org, idea__is_demo=True, author=user,
+            ).delete()
+    except Exception:
+        pass
+
     # ── DemoSandbox record ──
     try:
         sandbox = user.demo_sandbox
