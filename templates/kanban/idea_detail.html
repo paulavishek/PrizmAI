@@ -76,6 +76,7 @@
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" style="font-size:0.82rem;">
         <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="{% url 'discovery_dashboard' %}">Discovery</a></li>
             <li class="breadcrumb-item active" aria-current="page">{{ idea.title|truncatechars:50 }}</li>
         </ol>

@@ -211,6 +211,14 @@
 {% block content %}
 <div class="container-fluid py-3">
 
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'discovery_dashboard' %}">Discovery</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Matrix</li>
+        </ol>
+    </nav>
+
     <div class="matrix-page-header">
         <div>
             <h4><i class="fas fa-th me-2 text-primary"></i>Impact vs Effort Matrix</h4>
@@ -356,7 +364,8 @@
     const PAD = 5;   // % padding at each edge
     const SCALE = 90; // % of height/width used for data
 
-    document.querySelectorAll('.scatter-dot').forEach(function(dot) {
+    const dots = Array.from(document.querySelectorAll('.scatter-dot'));
+    dots.forEach(function(dot) {
         const impact = parseFloat(dot.dataset.impact);
         const effort = parseFloat(dot.dataset.effort);
         if (isNaN(impact) || isNaN(effort)) return;
@@ -364,6 +373,61 @@
         // bottom: impact 0 → 5%, impact 100 → 95%
         dot.style.left   = (effort / 100 * SCALE + PAD) + '%';
         dot.style.bottom = (impact / 100 * SCALE + PAD) + '%';
+    });
+
+    // ── De-clump overlapping chips ───────────────────────────────────
+    // Ideas with similar scores land on the same spot (e.g. several
+    // Strategic Bets), making the labels unreadable. Nudge any overlapping
+    // chips apart with an iterative minimum-translation separation, keeping
+    // them as close to their true score position as possible.
+    const plot = document.getElementById('scatterPlot');
+    if (!plot) return;
+    const pr = plot.getBoundingClientRect();
+    const W = pr.width, H = pr.height;
+    if (!W || !H) return;
+
+    const nodes = dots.map(function(dot) {
+        if (!dot.style.left) return null;            // skip unscored/un-positioned
+        const r = dot.getBoundingClientRect();
+        return {
+            dot: dot,
+            x: r.left - pr.left + r.width / 2,        // centre x from left edge
+            y: r.top - pr.top + r.height / 2,         // centre y from top edge
+            hw: r.width / 2,
+            hh: r.height / 2,
+        };
+    }).filter(Boolean);
+
+    const GAP = 4; // px breathing room between chips
+    for (let iter = 0; iter < 80; iter++) {
+        let moved = false;
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const a = nodes[i], b = nodes[j];
+                const ox = (a.hw + b.hw + GAP) - Math.abs(a.x - b.x);
+                const oy = (a.hh + b.hh + GAP) - Math.abs(a.y - b.y);
+                if (ox > 0 && oy > 0) {               // overlapping: push apart
+                    moved = true;
+                    if (ox < oy) {                    // resolve along smaller axis
+                        const push = ox / 2 * (a.x <= b.x ? -1 : 1);
+                        a.x += push; b.x -= push;
+                    } else {
+                        const push = oy / 2 * (a.y <= b.y ? -1 : 1);
+                        a.y += push; b.y -= push;
+                    }
+                }
+            }
+        }
+        nodes.forEach(function(n) {                   // keep inside the plot
+            n.x = Math.max(n.hw + 2, Math.min(W - n.hw - 2, n.x));
+            n.y = Math.max(n.hh + 2, Math.min(H - n.hh - 2, n.y));
+        });
+        if (!moved) break;
+    }
+
+    nodes.forEach(function(n) {                       // write resolved positions back
+        n.dot.style.left   = (n.x / W * 100) + '%';
+        n.dot.style.bottom = ((H - n.y) / H * 100) + '%';
     });
 })();
 

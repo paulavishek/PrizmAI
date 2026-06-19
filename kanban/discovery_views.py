@@ -211,7 +211,10 @@ def idea_create(request):
         title = request.POST.get('title', '').strip()
         description = request.POST.get('description', '').strip()
         source = request.POST.get('source', 'other')
-        valid_sources = {c[0] for c in DiscoveryIdea.IDEA_SOURCE_CHOICES if hasattr(DiscoveryIdea, 'IDEA_SOURCE_CHOICES')}
+        from kanban.discovery_models import IDEA_SOURCE_CHOICES
+        valid_sources = {c[0] for c in IDEA_SOURCE_CHOICES}
+        if source not in valid_sources:
+            source = 'other'
 
         if not title:
             messages.error(request, 'Title is required.')

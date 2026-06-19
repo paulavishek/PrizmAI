@@ -127,6 +127,13 @@
 {% block content %}
 <div class="container-fluid py-3">
 
+    <nav aria-label="breadcrumb" style="font-size:0.82rem;">
+        <ol class="breadcrumb mb-2">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Discovery</li>
+        </ol>
+    </nav>
+
     <div class="discovery-header">
         <div>
             <h4><i class="fas fa-lightbulb me-2 text-warning"></i>Discovery Inbox</h4>
