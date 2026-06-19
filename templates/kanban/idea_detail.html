@@ -326,6 +326,10 @@
       </div>
       <div class="modal-body py-3" style="font-size:0.9rem;">
         Change stage to <span id="stageConfirmTarget" class="confirm-modal-stage"></span>?
+        <div id="unscoredWarning" class="alert alert-warning d-flex align-items-start gap-2 py-2 mt-3 mb-0" style="display:none; font-size:0.8rem;">
+          <i class="fas fa-robot mt-1"></i>
+          <span>Spectra hasn&rsquo;t scored this idea yet. You can still proceed, but you&rsquo;ll be deciding without the AI&rsquo;s impact, effort, and confidence assessment. Consider scoring it first.</span>
+        </div>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -340,6 +344,7 @@
 {% block extra_js %}
 <script>
 const IDEA_ID = {{ idea.pk }};
+const IDEA_IS_SCORED = {{ idea.is_scored|yesno:"true,false" }};
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 
 function submitPromote(e) {
@@ -366,6 +371,12 @@ function changeStage(newStage) {
     _pendingStage = newStage;
     const label = newStage.replace(/_/g, ' ');
     document.getElementById('stageConfirmTarget').textContent = label;
+    // Warn when approving/rejecting an idea Spectra hasn't scored yet.
+    const warn = document.getElementById('unscoredWarning');
+    if (warn) {
+        const risky = !IDEA_IS_SCORED && (newStage === 'approved' || newStage === 'rejected');
+        warn.style.display = risky ? '' : 'none';
+    }
     const modal = new bootstrap.Modal(document.getElementById('stageConfirmModal'));
     modal.show();
 }
