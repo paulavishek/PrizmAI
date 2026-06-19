@@ -199,6 +199,19 @@ def _catchup_daily_tasks(sender, **kwargs):
     """
     import threading
 
+    # Stagger the catch-up jobs a few minutes into the future instead of firing
+    # them the instant the worker boots. On a single (solo) worker every task
+    # runs one-at-a-time, so enqueueing these heavy AI jobs immediately floods
+    # the worker for 2–3 minutes and makes any interactive job started right
+    # after startup — most visibly "Reset Demo" — wait in line behind them.
+    # These are daily summaries with no minute-level deadline, so a short delay
+    # is harmless and leaves the worker free for interactive work straight after
+    # startup. Staggering (not all at the same ETA) also leaves idle gaps
+    # between them so a reset fired a little later still slots in quickly.
+    CATCHUP_BRIEFING_DELAY = 180       # 3 min
+    CATCHUP_DC_COLLECT_DELAY = 210     # 3.5 min
+    CATCHUP_DC_BRIEFING_DELAY = 240    # 4 min
+
     def _run_catchup():
         import django
         django.setup()
@@ -220,8 +233,11 @@ def _catchup_daily_tasks(sender, **kwargs):
                 ai_summary_generated_at__date=today,
             ).exists()
             if stale:
-                _logger.info("Missed daily executive briefing — enqueueing now")
-                app.send_task('kanban.ai_summary.generate_daily_executive_briefing')
+                _logger.info("Missed daily executive briefing — scheduling in %ss", CATCHUP_BRIEFING_DELAY)
+                app.send_task(
+                    'kanban.ai_summary.generate_daily_executive_briefing',
+                    countdown=CATCHUP_BRIEFING_DELAY,
+                )
             else:
                 _logger.info("Daily executive briefing already ran today — skipping")
         except Exception as exc:
@@ -233,8 +249,11 @@ def _catchup_daily_tasks(sender, **kwargs):
             cache_key = f'dc_collect_ran_{today.isoformat()}'
             already_ran = _cache.get(cache_key)
             if not already_ran:
-                _logger.info("Missed decision item collection — enqueueing now")
-                app.send_task('decision_center.collect_decision_items')
+                _logger.info("Missed decision item collection — scheduling in %ss", CATCHUP_DC_COLLECT_DELAY)
+                app.send_task(
+                    'decision_center.collect_decision_items',
+                    countdown=CATCHUP_DC_COLLECT_DELAY,
+                )
                 _cache.set(cache_key, True, 86400)  # expires in 24h
             else:
                 _logger.info("Decision item collection already ran today — skipping")
@@ -248,8 +267,11 @@ def _catchup_daily_tasks(sender, **kwargs):
                 generated_at__date=today,
             ).exists()
             if not has_today_briefing:
-                _logger.info("Missed decision center briefing — enqueueing now")
-                app.send_task('decision_center.generate_decision_briefing')
+                _logger.info("Missed decision center briefing — scheduling in %ss", CATCHUP_DC_BRIEFING_DELAY)
+                app.send_task(
+                    'decision_center.generate_decision_briefing',
+                    countdown=CATCHUP_DC_BRIEFING_DELAY,
+                )
             else:
                 _logger.info("Decision center briefing already ran today — skipping")
         except Exception as exc:

@@ -59,6 +59,10 @@ from kanban.tasks.sandbox_tasks import (
     _delete_sandbox,
 )
 
+from kanban.tasks.sandbox_provisioning import (
+    provision_sandbox_task,
+)
+
 from kanban.tasks.commitment_tasks import (
     run_commitment_decay_all,
     reset_weekly_tokens,
@@ -83,6 +87,8 @@ __all__ = [
     'detect_board_conflicts_task',
     # Demo tasks
     'refresh_demo_dates_task',
+    # Sandbox provisioning
+    'provision_sandbox_task',
     # Automation tasks
     'run_due_date_approaching_automations',
     'run_overdue_task_automations',
