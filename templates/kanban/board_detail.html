@@ -994,23 +994,6 @@
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <div class="dropdown-item" style="cursor:default;">
-                                    <i class="fas fa-palette me-2 text-muted"></i>Color
-                                    <div class="d-flex gap-1 mt-1">
-                                        {% for color_val, color_label in column.COLOR_CHOICES %}
-                                        <button type="button"
-                                                class="btn btn-sm p-0 border{% if column.color == color_val %} border-dark border-2{% endif %} column-color-btn"
-                                                data-column-id="{{ column.id }}" data-color="{{ color_val }}"
-                                                title="{{ color_label }}"
-                                                style="width:20px;height:20px;border-radius:50%;cursor:pointer;
-                                                {% if color_val == 'green' %}background:#c3e6cb;{% elif color_val == 'blue' %}background:#b8daff;{% elif color_val == 'purple' %}background:#d5c5f0;{% elif color_val == 'orange' %}background:#ffd8b2;{% elif color_val == 'red' %}background:#f5c6cb;{% elif color_val == 'yellow' %}background:#fff3cd;{% elif color_val == 'teal' %}background:#b2dfdb;{% elif color_val == 'gray' %}background:#e2e3e5;{% endif %}">
-                                        </button>
-                                        {% endfor %}
-                                    </div>
-                                </div>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
                                 <button type="button" class="dropdown-item edit-column-btn"
                                         data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
                                         data-bs-toggle="modal" data-bs-target="#editColumnModal">
@@ -2483,8 +2466,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })();
 
         // -- Collapse Column handler (MOVED to standalone script below) --
-        // -- Column Color Picker handler (MOVED to standalone script below) --
-        
+
         // Set up column delete functionality
         const deleteColumnBtns = document.querySelectorAll('.delete-column-btn');
         deleteColumnBtns.forEach(btn => {
@@ -2593,57 +2575,6 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     </script>
-
-<!-- Collapse Column & Color Picker — standalone script with document-level delegation -->
-<script>
-(function() {
-    function getCSRF() {
-        var el = document.querySelector('[name=csrfmiddlewaretoken]');
-        if (el) return el.value;
-        var m = document.cookie.match(/csrftoken=([^;]+)/);
-        return m ? m[1] : '';
-    }
-
-    // -- Column Color Picker (direct handlers on each button) --
-    document.querySelectorAll('.column-color-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-
-            var colId = btn.dataset.columnId;
-            var color = btn.dataset.color;
-            var fd = new FormData();
-            fd.append('color', color);
-            fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-            fetch('/columns/' + colId + '/update-color/', {
-                method: 'POST',
-                body: fd
-            })
-            .then(function(r) {
-                if (!r.ok) { console.error('Color update HTTP error:', r.status); return null; }
-                return r.json();
-            })
-            .then(function(data) {
-                if (data && data.success) {
-                    var header = document.querySelector('#column-' + colId + ' .kanban-column-header');
-                    if (header) {
-                        header.className = header.className.replace(/kanban-column-header--\w+/g, '');
-                        header.classList.add('kanban-column-header--' + color);
-                    }
-                    // Update selected ring
-                    var parent = btn.closest('.d-flex.gap-1');
-                    if (parent) {
-                        parent.querySelectorAll('.column-color-btn').forEach(function(b) {
-                            b.classList.remove('border-dark', 'border-2');
-                        });
-                        btn.classList.add('border-dark', 'border-2');
-                    }
-                }
-            })
-            .catch(function(err) { console.error('Color update failed:', err); });
-        });
-    });
-})();
-</script>
 
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 
