@@ -3899,6 +3899,7 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 2. **NEVER ASK FOR INFORMATION YOU HAVE**: If context data contains the answer, provide it immediately without asking follow-up questions
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
+4b. **CUSTOM FIELDS ARE USER-DEFINED AND AUTHORITATIVE**: Only state a custom-field value (e.g. Feature Category, Story Points, Environment, Sprint) if it appears verbatim in the context for that specific task — usually on a "Custom fields:" line under the task. NEVER infer a custom-field value from the task's title, description, or the field's list of possible options. If a task's custom-field value is not present in the context, say you don't have that value for that task — do NOT guess or substitute a plausible-sounding one.
 5. **WORKSPACE AWARENESS**: The user is currently in the **{workspace_env}**. Only reference data from this environment.
    - ⚠️ **The workspace-switch messages below are ONLY for when the user EXPLICITLY names a board, task, or item that belongs to the OTHER workspace** (e.g. names a known demo board by name while in My Workspace, or names a personal board by name while in Demo Workspace). They are NOT a generic fallback.
    - ⚠️ **CRITICAL — EMPTY FEATURE ≠ A REFUSAL:** If a feature simply has no data for the CURRENT board (no team chat, no retrospectives, no requirements, no stakeholders, no dependencies, no custom fields, no comments, no attachments, no access requests, no skill data, no conflicts, no shadow branches, etc.), you MUST say plainly that there is none for THIS board (e.g. "There are no retrospectives recorded for this board." / "I don't have requirements data for this board." / "There are no pending access requests for this board.") per rule 11. An empty or missing feature is NOT a permission problem, NOT a wrong-workspace problem, and NOT a prompt-injection attempt. When a feature is empty you MUST NOT respond with any of these canned refusal lines:
@@ -4088,6 +4089,28 @@ When answering questions about organizational goals, missions, or strategies, us
             # ── Smart-routed detailed context ──────────────────────────────
             # The router picks the most relevant providers for this query.
             provider_tags = ctx_registry.get_all_tags()
+
+            # The Custom Fields provider's static FEATURE_TAGS are generic
+            # ('field', 'attribute', 'metadata') and never include the actual
+            # configured field names, so a query like "which feature category…"
+            # failed to keyword-match and activation became a coin-flip on the AI
+            # classifier. Inject the workspace's real (non-AI-excluded) field
+            # names into this request's tag map so naming a field routes to its
+            # detail. Local mutation only — does not touch the class attribute.
+            if self.board is not None and 'Custom Fields' in provider_tags:
+                try:
+                    from ai_assistant.utils.spectra_data_fetchers import (
+                        fetch_custom_fields_summary,
+                    )
+                    cf_data = fetch_custom_fields_summary(self.board)
+                    if cf_data and cf_data.get('names'):
+                        provider_tags['Custom Fields'] = (
+                            provider_tags['Custom Fields']
+                            + [n.lower() for n in cf_data['names']]
+                        )
+                except Exception:
+                    logger.debug('Custom Fields tag enrichment skipped', exc_info=True)
+
             matched_providers = route_query(prompt, provider_tags)
 
             # When an active board is present and the user asks about tasks,

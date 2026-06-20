@@ -122,6 +122,18 @@ def fetch_task_dict(task):
     except Exception:
         subtask_count = 0
 
+    # Checklist items (requires prefetch_related('checklist_items')). Uses
+    # .all() on the prefetched relation — no extra query. Spectra was
+    # previously blind to checklists and would say "no checklist exists" for
+    # tasks that have one.
+    try:
+        checklist = [
+            {'title': c.title, 'is_completed': c.is_completed}
+            for c in task.checklist_items.all()
+        ]
+    except Exception:
+        checklist = []
+
     # Comment count
     try:
         comment_count = task.comments.count() if hasattr(task, 'comments') else 0
@@ -164,6 +176,7 @@ def fetch_task_dict(task):
         'ai_risk_score': task.ai_risk_score,
         'updated_at': task.updated_at if hasattr(task, 'updated_at') else None,
         'custom_fields': custom_fields,
+        'checklist': checklist,
     }
 
 
@@ -190,6 +203,7 @@ def fetch_board_tasks(board, filters=None):
         .select_related('column', 'assigned_to', 'parent_task')
         .prefetch_related(
             'dependencies', 'labels', 'subtasks',
+            'checklist_items',
             # Custom fields — see fetch_task_dict's N+1 warning above.
             'custom_field_values__field',
             'custom_field_values__selected_options',

@@ -71,8 +71,14 @@ class RiskContextProvider(BaseContextProvider):
         ]
         if high_risk_tasks:
             ctx += f'\n**🔴 High-Risk Tasks ({len(high_risk_tasks)}):**\n'
-            for t in sorted(high_risk_tasks, key=lambda x: x.get('ai_risk_score', 0), reverse=True)[:15]:
-                ctx += f'  • {t["title"]} — Risk: {t["risk_level"]} (Score: {t.get("ai_risk_score", "N/A")})\n'
+            # Coerce a missing OR None ai_risk_score to 0 for sorting. A task can
+            # qualify as high-risk via risk_level alone (e.g. 'high') while having
+            # a null AI score — `.get(..., 0)` does NOT cover that (key present,
+            # value None) and previously crashed the whole provider with a
+            # TypeError comparing None to None.
+            for t in sorted(high_risk_tasks, key=lambda x: x.get('ai_risk_score') or 0, reverse=True)[:15]:
+                score = t['ai_risk_score'] if t.get('ai_risk_score') is not None else 'N/A'
+                ctx += f'  • {t["title"]} — Risk: {t["risk_level"]} (Score: {score})\n'
                 ctx += f'    Status: {t["column_name"]}, Assigned: {t["assigned_to_display"]}\n'
                 if t['is_overdue']:
                     ctx += f'    ⚠️ OVERDUE by {t["overdue_days"]} days\n'
