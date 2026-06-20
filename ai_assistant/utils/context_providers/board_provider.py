@@ -127,13 +127,35 @@ class BoardContextProvider(BaseContextProvider):
                         due_str += f' ⚠️ OVERDUE by {t["overdue_days"]} days'
                     ctx += f'  • Due: {due_str}\n'
                 if t['risk_level']:
-                    ctx += f'  • Risk: {t["risk_level"]} (Score: {t.get("ai_risk_score", "N/A")})\n'
+                    # ai_risk_score can be present-but-None; show N/A, not "None".
+                    score = t['ai_risk_score'] if t.get('ai_risk_score') is not None else 'N/A'
+                    ctx += f'  • Risk: {t["risk_level"]} (Score: {score})\n'
                 if t['dependency_titles']:
                     ctx += f'  • Dependencies: {", ".join(t["dependency_titles"][:5])}\n'
                 if t['subtask_count']:
                     ctx += f'  • Has {t["subtask_count"]} subtask(s)\n'
                 if t['comment_count']:
                     ctx += f'  • Comments: {t["comment_count"]}\n'
+                # User-defined custom fields. Already serialized in the task dict
+                # via serialize_for_ai (honors exclude_from_ai + skips empties),
+                # and prefetched in fetch_board_tasks — no extra query here. This
+                # is the per-task source of truth; without it Spectra fell back to
+                # the board-wide recency sample (or invented values from the title).
+                if t.get('custom_fields'):
+                    cf = ', '.join(
+                        f'{k}: {", ".join(map(str, v)) if isinstance(v, list) else v}'
+                        for k, v in t['custom_fields'].items()
+                    )
+                    ctx += f'  • Custom fields: {cf}\n'
+                # Checklist items — without these Spectra wrongly reports "no
+                # checklist exists" for tasks that have one.
+                if t.get('checklist'):
+                    done = sum(1 for c in t['checklist'] if c['is_completed'])
+                    ctx += f'  • Checklist ({done}/{len(t["checklist"])} done): '
+                    ctx += '; '.join(
+                        f'{"[x]" if c["is_completed"] else "[ ]"} {c["title"]}'
+                        for c in t['checklist']
+                    ) + '\n'
                 expanded += 1
             else:
                 # Compact single-line for remaining tasks
