@@ -120,6 +120,7 @@ urlpatterns = [
     path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
     path('boards/<int:board_id>/list/', views.board_list_view, name='board_list_view'),
     path('boards/<int:board_id>/epics/', views.board_epics, name='board_epics'),
+    path('boards/<int:board_id>/epics/create/', views.create_epic, name='create_epic'),
 
     # -----------------------------------------------------------------------
     # Unified Cross-Board Calendar
