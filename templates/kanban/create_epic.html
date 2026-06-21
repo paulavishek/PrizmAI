@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ board.name }} - New Epic{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-2">
+        <div>
+            <h1 style="font-size:20px;font-weight:500;margin-bottom:0;" class="mb-0">
+                <i class="fas fa-layer-group me-2 text-warning"></i>{{ board.name }}
+            </h1>
+            <p class="text-muted mb-0">New Epic — a work container that groups related tasks</p>
+        </div>
+    </div>
+
+    <!-- View Mode Tabs -->
+    <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{% url 'board_epics' board.id %}"><i class="fas fa-layer-group me-1"></i>Epics</a></li>
+    </ul>
+
+    <div class="card border-0 shadow-sm mx-auto" style="max-width:760px;">
+        <div class="card-body">
+            <div class="alert alert-light border py-2 px-3 mb-4">
+                <i class="fas fa-info-circle text-warning me-1"></i>
+                <small>An Epic is a container — its progress, owner span, and dates roll up from its child tasks.
+                After creating it, add child tasks by setting their <strong>Parent Task</strong> to this Epic.</small>
+            </div>
+
+            <form method="post" action="{% url 'create_epic' board.id %}">
+                {% csrf_token %}
+
+                <div class="mb-3">
+                    <label for="epic-title" class="form-label">
+                        <i class="fas fa-heading text-primary me-1"></i> Title <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" class="form-control" id="epic-title" name="title"
+                           maxlength="200" required value="{{ request.POST.title|default:'' }}">
+                </div>
+
+                <div class="mb-3">
+                    <label for="epic-description" class="form-label">
+                        <i class="fas fa-align-left text-secondary me-1"></i> Description
+                    </label>
+                    <textarea class="form-control" id="epic-description" name="description" rows="3">{{ request.POST.description|default:'' }}</textarea>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="epic-priority" class="form-label">
+                            <i class="fas fa-flag text-warning me-1"></i> Priority
+                        </label>
+                        <select class="form-select" id="epic-priority" name="priority">
+                            {% for value, label in priority_choices %}
+                            <option value="{{ value }}" {% if value == 'medium' %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="epic-start" class="form-label">
+                            <i class="fas fa-play text-success me-1"></i> Target Start Date
+                        </label>
+                        <input type="date" class="form-control" id="epic-start" name="start_date" value="{{ request.POST.start_date|default:'' }}">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="epic-due" class="form-label">
+                            <i class="fas fa-calendar-alt text-info me-1"></i> Target Due Date
+                        </label>
+                        <input type="date" class="form-control" id="epic-due" name="due_date" value="{{ request.POST.due_date|default:'' }}">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="epic-owner" class="form-label">
+                        <i class="fas fa-user-check text-primary me-1"></i> Epic Owner
+                    </label>
+                    <select class="form-select" id="epic-owner" name="assigned_to">
+                        <option value="">Unassigned</option>
+                        {% for member in board_members %}
+                        <option value="{{ member.id }}">{{ member.get_full_name|default:member.username }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">The accountable owner — the actual work spans the child tasks' assignees.</small>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{% url 'board_epics' board.id %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Cancel
+                    </a>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-crown me-1"></i> Create Epic
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

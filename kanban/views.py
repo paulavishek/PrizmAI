@@ -3888,6 +3888,93 @@ def board_epics(request, board_id):
     return render(request, 'kanban/board_epics.html', context)
 
 
+@login_required
+def create_epic(request, board_id):
+    """Dedicated slim form for creating an Epic (``Task`` with ``item_type='epic'``).
+
+    Epics are container items hidden from the board whose progress/owner/dates
+    roll up from their child tasks, so they need only a handful of fields
+    (title, description, priority, target dates, owner). This mirrors the
+    Milestone creation pattern (``add_gantt_milestone``) rather than overloading
+    the task-creation form. Child tasks are linked afterward via each task's
+    Parent Task field.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    if not request.user.has_perm('prizmai.edit_board', board):
+        raise Http404
+
+    # Members who can own the epic (board members + creator)
+    board_members = User.objects.filter(
+        Q(board_memberships__board=board) | Q(created_boards=board)
+    ).distinct().order_by('username')
+
+    if request.method == 'POST':
+        title = (request.POST.get('title') or '').strip()
+        if not title:
+            messages.error(request, 'Epic title is required.')
+            return render(request, 'kanban/create_epic.html', {
+                'board': board,
+                'board_members': board_members,
+                'priority_choices': Task.PRIORITY_CHOICES,
+                'task_prefix': board.get_task_prefix(),
+            })
+
+        # Resolve target column (prefer Backlog, then first by position)
+        column = (
+            Column.objects.filter(board=board, name__icontains='backlog').first()
+            or Column.objects.filter(board=board).order_by('position').first()
+        )
+        if not column:
+            messages.error(request, 'This board has no columns to place the Epic in.')
+            return redirect('board_epics', board_id=board.id)
+
+        epic_kwargs = dict(
+            title=title,
+            description=(request.POST.get('description') or '').strip(),
+            column=column,
+            item_type='epic',
+            created_by=request.user,
+            position=Task.objects.filter(column=column).count(),
+            is_seed_demo_data=False,
+        )
+
+        priority = (request.POST.get('priority') or '').lower()
+        if priority in ('low', 'medium', 'high', 'urgent'):
+            epic_kwargs['priority'] = priority
+
+        from django.utils.dateparse import parse_date, parse_datetime
+        start_raw = (request.POST.get('start_date') or '').strip()
+        if start_raw:
+            parsed = parse_date(start_raw)
+            if parsed:
+                epic_kwargs['start_date'] = parsed
+
+        due_raw = (request.POST.get('due_date') or '').strip()
+        if due_raw:
+            parsed = parse_datetime(due_raw) or parse_date(due_raw)
+            if parsed:
+                epic_kwargs['due_date'] = parsed
+
+        # Owner must be a board member (or creator)
+        assignee_raw = (request.POST.get('assigned_to') or '').strip()
+        if assignee_raw.isdigit():
+            owner = board_members.filter(id=int(assignee_raw)).first()
+            if owner:
+                epic_kwargs['assigned_to'] = owner
+
+        epic = Task.objects.create(**epic_kwargs)
+        messages.success(request, f'Epic "{epic.title}" created. Add child tasks by setting their Parent Task to this Epic.')
+        return redirect('board_epics', board_id=board.id)
+
+    return render(request, 'kanban/create_epic.html', {
+        'board': board,
+        'board_members': board_members,
+        'priority_choices': Task.PRIORITY_CHOICES,
+        'task_prefix': board.get_task_prefix(),
+    })
+
+
 def add_gantt_milestone(request, board_id):
     """Create a new milestone (stored as a Task with item_type='milestone') from the Gantt chart."""
     if not request.user.is_authenticated:
