@@ -266,7 +266,7 @@ class Command(BaseCommand):
 
             # Ensure columns exist with WIP limits per spec.
             # Idempotent: keeps existing columns, fixes WIP limits and positions.
-            wip_for = {'Backlog': None, 'To Do': 8, 'In Progress': 6, 'In Review': None, 'Done': None}
+            wip_for = {'Backlog': None, 'To Do': 8, 'In Progress': 6, 'In Review': 3, 'Done': None}
             for position, column_name in enumerate(board_data['columns']):
                 col, col_created = Column.objects.get_or_create(
                     board=board,
