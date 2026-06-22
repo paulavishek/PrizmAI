@@ -970,6 +970,31 @@ document.addEventListener('DOMContentLoaded', function() {
         // miss early status messages. The worker pushes to the per-user group
         // sandbox_provision_<user_id>; the consumer authenticates via session.
         var settled = false;
+        var resetWatchdog = null;
+        function settleReset() {
+            settled = true;
+            if (resetWatchdog) { clearTimeout(resetWatchdog); resetWatchdog = null; }
+        }
+        // Unconditional safety net: if NO result/error ever arrives — the worker
+        // is down, stuck, or the task was queued behind a backlog and silently
+        // dropped — the banner must not spin forever. After ~95s (just past the
+        // task's 90s soft_time_limit) give the user a way out instead of a dead
+        // banner. NB: the old code only armed a fallback when the WebSocket
+        // failed to OPEN; a connected-but-silent socket left the user stuck.
+        function armResetWatchdog() {
+            if (resetWatchdog) { clearTimeout(resetWatchdog); }
+            resetWatchdog = setTimeout(function() {
+                if (settled) { return; }
+                banner.className = 'alert alert-warning mx-3 mt-2';
+                banner.innerHTML = '<i class="fas fa-clock me-2"></i>' +
+                    '<strong>This is taking longer than usual.</strong> ' +
+                    'Your reset may still be finishing in the background. ' +
+                    '<a href="/dashboard/" class="alert-link">Continue to your workspace</a> ' +
+                    'and check in a moment.';
+                if (btn) { btn.disabled = false; btn.innerHTML = 'Reset Demo'; }
+            }, 95000);
+        }
+
         var ws = null;
         try {
             var proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -985,17 +1010,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (payload.type === 'provision_status') {
                     if (payload.message) { setResetMsg(payload.message); }
                 } else if (payload.type === 'provision_result') {
-                    settled = true;
+                    settleReset();
                     var data = payload.data || {};
                     setResetMsg('Your workspace is ready!');
                     try { ws.close(); } catch (e) {}
                     window.location.href = data.redirect_url || '/dashboard/';
                 } else if (payload.type === 'provision_error') {
-                    settled = true;
+                    settleReset();
                     try { ws.close(); } catch (e) {}
                     failReset(payload.message);
                 }
             };
+            // If the socket drops before we got a result, don't leave the banner
+            // spinning — let the watchdog (still armed) surface the way-out link.
+            ws.onclose = function() { if (!settled) { armResetWatchdog(); } };
+            ws.onerror = function() { if (!settled) { armResetWatchdog(); } };
         }
 
         fetch('/demo/reset-mine/', {
@@ -1009,13 +1038,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(function(data) {
             if (data.status === 'resetting' || data.status === 'provisioning') {
                 // Worker accepted the job. Wait for the WebSocket to report
-                // completion. If the socket never opened, fall back to a delayed
-                // dashboard redirect so the user isn't stuck on a dead banner.
-                if (!ws) {
-                    setTimeout(function() {
-                        if (!settled) { window.location.href = '/dashboard/'; }
-                    }, 90000);
-                }
+                // completion, but ALWAYS arm the watchdog so a connected-but-
+                // silent socket (or one that never opened) can't strand the user.
+                armResetWatchdog();
             } else {
                 failReset(data.message);
             }

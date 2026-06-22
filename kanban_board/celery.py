@@ -182,6 +182,14 @@ app.conf.beat_schedule = {
 app.conf.task_routes = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
     'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
+    # User-triggered, latency-sensitive work (Reset Demo / sandbox provisioning)
+    # goes to a dedicated 'interactive' queue consumed by its own worker so it
+    # never queues behind the burst of heavy scheduled tasks that Celery Beat's
+    # DatabaseScheduler fires on startup (detect_conflicts, the daily Gemini
+    # executive briefing, commitment decay, digest emails — all on 'celery').
+    # NB: the task name is 'kanban.sandbox_provisioning.provision_sandbox'
+    # (see provision_sandbox_task's @shared_task name=), NOT 'provision_sandbox_task'.
+    'kanban.sandbox_provisioning.*': {'queue': 'interactive'},
 }
 
 
