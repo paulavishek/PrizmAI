@@ -487,6 +487,13 @@
     }
     .gantt-dep-banner i { color: #fbbf24; }
     .gantt-dep-banner .dep-banner-msg { flex: 1; }
+    .gantt-dep-banner .dep-banner-note {
+        display: block;
+        margin-top: 2px;
+        font-size: 0.85em;
+        font-style: italic;
+        opacity: 0.75;
+    }
     .gantt-dep-banner .dep-banner-btn {
         background: #3b82f6;
         color: #fff;
@@ -498,6 +505,8 @@
         font-weight: 600;
     }
     .gantt-dep-banner .dep-banner-btn:hover { background: #2563eb; }
+    .gantt-dep-banner .dep-banner-btn-primary { background: #f59e0b; }
+    .gantt-dep-banner .dep-banner-btn-primary:hover { background: #d97706; }
     .gantt-dep-banner .dep-banner-close {
         background: none;
         border: none;
@@ -509,6 +518,40 @@
     @keyframes bannerSlideIn {
         from { opacity: 0; transform: translateY(-10px); }
         to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Dependency highlight ("Review Dependencies"): make affected tasks pop and
+       fade everything else, until the user clicks away. */
+    #gantt.dep-focus-mode .bar-wrapper:not(.gantt-dep-highlight) { opacity: 0.18; }
+    #gantt .bar-wrapper { transition: opacity 0.2s ease; }
+    .bar-wrapper.gantt-dep-highlight { filter: drop-shadow(0 0 7px rgba(245,158,11,0.95)); }
+    .bar-wrapper.gantt-dep-highlight .bar {
+        stroke: #f59e0b;
+        stroke-width: 3px;
+        animation: depHighlightPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes depHighlightPulse {
+        0%, 100% { stroke-opacity: 1; }
+        50%      { stroke-opacity: 0.35; }
+    }
+    .gantt-table-row.gantt-dep-highlight-row {
+        background: rgba(245,158,11,0.22) !important;
+        box-shadow: inset 4px 0 0 #f59e0b;
+    }
+
+    /* Info toast (cascade success) — mirrors the error toast, green accent. */
+    .gantt-info-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 10000;
+        background: #16a34a;
+        color: #fff;
+        font-size: 13px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        animation: toastFadeIn 0.25s ease;
     }
 
     /* Error toast */
@@ -3189,7 +3232,7 @@
                             tooltip.style.display = 'block';
                             tooltip.style.left = (me.clientX + 14) + 'px';
                             tooltip.style.top = (me.clientY - 32) + 'px';
-                            tooltip.textContent = formatDate(startDate) + '  â†’  ' + formatDate(endDate);
+                            tooltip.textContent = formatDate(startDate) + '  →  ' + formatDate(endDate);
                         }
                     }
                 };
@@ -4276,6 +4319,7 @@
      * Sync HTML table row heights with SVG bar Y-positions.
      * Strictly separates DOM reads from DOM writes to prevent layout thrashing.
      */
+    let _syncRowHeightsRetries = 0;
     function syncTableRowHeights() {
         const tableBody = document.getElementById('gantt-table-body');
         const ganttSvg = document.querySelector('#gantt');
@@ -4283,6 +4327,25 @@
 
         const tableRows = tableBody.querySelectorAll('.gantt-table-row');
         if (tableRows.length === 0) return;
+
+        // Readiness guard: Frappe Gantt commits bar geometry asynchronously after
+        // it constructs the SVG. If we run before the bars are painted, their
+        // measured positions are stale and we'd write row heights that leave the
+        // left labels misaligned with the right bars (the intermittent drift seen
+        // after a drag/cascade). Defer to the next frame until the chart is laid
+        // out, bounded so we never loop forever.
+        const probeBar = ganttSvg.querySelector('.bar-wrapper .bar');
+        const notReady = !probeBar ||
+            probeBar.getBoundingClientRect().height === 0 ||
+            ganttSvg.getBoundingClientRect().height === 0;
+        if (notReady) {
+            if (_syncRowHeightsRetries < 10) {
+                _syncRowHeightsRetries++;
+                requestAnimationFrame(syncTableRowHeights);
+            }
+            return;
+        }
+        _syncRowHeightsRetries = 0;
 
         // â”€â”€ PASS 1: READ all SVG Y-positions into an array (no DOM writes) â”€â”€
         const yPositions = [];
@@ -4913,9 +4976,14 @@
                 // Update phase bar if we're in phase view
                 updatePhaseBarForTask(taskId);
 
-                // Redraw custom dependency lines and priority dots to match new bar positions
+                // Redraw custom dependency lines and priority dots to match new bar positions.
+                // syncTableRowHeights() must run FIRST: it re-reads the SVG bar Y-positions
+                // and re-applies the matching row heights + scroll sync to the left table.
+                // Without it the left labels and right bars drift out of alignment after a
+                // drag (the redraw moved a bar but never reconciled the two panels).
                 requestAnimationFrame(() => {
                     enhanceBarsWithPriorityDots();
+                    syncTableRowHeights();
                     drawCustomDependencyLines();
                     positionBarLabels();
                 });
@@ -4930,7 +4998,7 @@
 
                 // Dependency cascade notification
                 if (data.affected_dependents && data.affected_dependents.length > 0) {
-                    showDependencyCascadeBanner(data.affected_dependents);
+                    showDependencyCascadeBanner(data.affected_dependents, taskId, data.total_dependents);
                 }
             } else {
                 console.error('Reschedule failed:', data.error);
@@ -4945,16 +5013,149 @@
         });
     }
 
+    // Elements currently carrying a dependency highlight, plus the outside-click
+    // listener that clears them. Kept at module scope so a second drag clears the
+    // previous highlight first.
+    let _depHighlightEls = [];
+    let _depOutsideHandler = null;
+
+    /** Remove the dependency highlight and exit focus mode. */
+    function clearDependencyHighlight() {
+        const svg = document.querySelector('#gantt');
+        if (svg) svg.classList.remove('dep-focus-mode');
+        _depHighlightEls.forEach(function(el) {
+            el.classList.remove('gantt-dep-highlight');
+            el.classList.remove('gantt-dep-highlight-row');
+        });
+        _depHighlightEls = [];
+        if (_depOutsideHandler) {
+            document.removeEventListener('click', _depOutsideHandler, true);
+            _depOutsideHandler = null;
+        }
+    }
+
     /**
-     * Show a non-blocking dependency cascade notification banner.
+     * Prominently highlight every affected dependent (bar + table row), dim
+     * everything else, scroll both panels in lockstep to the first one, and keep
+     * the highlight up until the user clicks away. Lockstep scroll (not
+     * scrollIntoView) keeps the left table aligned with the right bars.
      */
-    function showDependencyCascadeBanner(dependents) {
-        // Remove any existing banner
+    function highlightDependents(dependents, firstId) {
+        clearDependencyHighlight();
+        const svg = document.querySelector('#gantt');
+        if (svg) svg.classList.add('dep-focus-mode');
+
+        dependents.forEach(function(dep) {
+            const bw = document.querySelector('.bar-wrapper[data-id="' + dep.id + '"]');
+            if (bw) { bw.classList.add('gantt-dep-highlight'); _depHighlightEls.push(bw); }
+            const row = document.querySelector('.gantt-table-row[data-table-id="' + dep.id + '"]')
+                      || document.querySelector('.split-view-row[data-task-id="' + dep.id + '"]');
+            if (row) { row.classList.add('gantt-dep-highlight-row'); _depHighlightEls.push(row); }
+        });
+
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        const tableBody = document.getElementById('gantt-table-body');
+        const firstBar = document.querySelector('.bar-wrapper[data-id="' + firstId + '"] .bar');
+        if (timelinePanel && firstBar) {
+            const barY = parseFloat(firstBar.getAttribute('y') || 0);
+            const target = Math.max(0, barY - timelinePanel.clientHeight / 2);
+            timelinePanel.scrollTop = target;
+            if (tableBody) tableBody.scrollTop = target;
+        }
+
+        // Clear on the next click that isn't on a highlighted bar or the banner.
+        // Deferred so the current "Review Dependencies" click doesn't clear it.
+        setTimeout(function() {
+            _depOutsideHandler = function(e) {
+                if (e.target.closest &&
+                    (e.target.closest('.gantt-dep-highlight') ||
+                     e.target.closest('#gantt-dep-banner'))) {
+                    return; // clicking a highlighted task or the banner keeps focus
+                }
+                clearDependencyHighlight();
+            };
+            document.addEventListener('click', _depOutsideHandler, true);
+        }, 0);
+    }
+
+    /**
+     * Push every transitive downstream dependent forward so the schedule stays
+     * valid (Finish-to-Start), preserving each task's duration. Gated behind a
+     * confirm by the caller. Re-renders the chart from the updated `tasks` array.
+     */
+    function cascadeReschedule(sourceTaskId) {
+        // Send the source task's authoritative new dates so the cascade is
+        // self-contained — it re-applies them in its own transaction and never
+        // depends on the earlier reschedule request being visible to it. The
+        // local `tasks` entry was updated to the new dates by rescheduleTask().
+        const srcTask = tasks.find(t => String(t.id) === String(sourceTaskId));
+        const body = {};
+        if (srcTask) {
+            if (srcTask.start) body.start_date = srcTask.start;
+            if (srcTask.end) body.due_date = srcTask.end;
+        }
+        fetch(`/api/tasks/${sourceTaskId}/cascade-reschedule/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(body)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(d => { throw new Error(d.error || 'Cascade failed'); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                showGanttErrorToast(data.error || 'Could not shift dependent tasks.');
+                return;
+            }
+            const moved = data.updated || [];
+            clearDependencyHighlight();
+            // Reload so the moved dependents are read back from the authoritative
+            // server state and the chart re-aligns via the normal init path. An
+            // in-place re-render here repainted unreliably (bars looked unmoved)
+            // and could leave rows misaligned, so we take the robust route. Carry
+            // the confirmation toast across the reload via sessionStorage.
+            try {
+                sessionStorage.setItem('ganttCascadeToast', moved.length
+                    ? (moved.length + ' dependent task' + (moved.length > 1 ? 's' : '') + ' rescheduled.')
+                    : 'No dependent tasks needed shifting.');
+            } catch (e) { /* sessionStorage unavailable — toast is non-essential */ }
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Cascade reschedule error:', error);
+            showGanttErrorToast(error.message || 'Could not shift dependent tasks.');
+        });
+    }
+
+    /**
+     * Dependency cascade notification banner. Offers two actions:
+     *   • Review Dependencies — prominently highlight affected tasks (persists).
+     *   • Shift N tasks       — confirm, then cascade-reschedule downstream.
+     */
+    function showDependencyCascadeBanner(dependents, sourceTaskId, totalDependents) {
         const old = document.getElementById('gantt-dep-banner');
         if (old) old.remove();
 
         const count = dependents.length;
         const firstId = dependents[0].id;
+
+        // Some downstream tasks (linked by arrows) may already start after the new
+        // due date and so don't need shifting. When that's the case, explain the
+        // gap between the arrows shown and the smaller number we offer to shift —
+        // otherwise new users wonder why "Shift N" is fewer than the arrows.
+        const skipped = (typeof totalDependents === 'number')
+            ? Math.max(0, totalDependents - count) : 0;
+        const skippedNote = skipped > 0
+            ? '<span class="dep-banner-note">' + skipped + ' other dependent' +
+              (skipped > 1 ? 's' : '') + ' already start' + (skipped > 1 ? '' : 's') +
+              ' after the new date — no shift needed.</span>'
+            : '';
 
         const banner = document.createElement('div');
         banner.id = 'gantt-dep-banner';
@@ -4962,12 +5163,12 @@
         banner.innerHTML =
             '<i class="fas fa-exclamation-triangle"></i>' +
             '<span class="dep-banner-msg">This change affects <strong>' + count +
-            '</strong> dependent task' + (count > 1 ? 's' : '') +
-            '. Update their dates too?</span>' +
+            '</strong> dependent task' + (count > 1 ? 's' : '') + '.' + skippedNote + '</span>' +
             '<button class="dep-banner-btn" id="dep-banner-review">Review Dependencies</button>' +
+            '<button class="dep-banner-btn dep-banner-btn-primary" id="dep-banner-shift">' +
+            'Shift ' + count + ' task' + (count > 1 ? 's' : '') + '</button>' +
             '<button class="dep-banner-close" id="dep-banner-close">&times;</button>';
 
-        // Insert before the gantt chart wrapper
         const chartArea = document.getElementById('gantt-chart-wrapper') ||
                           document.querySelector('.gantt-container');
         if (chartArea && chartArea.parentNode) {
@@ -4976,37 +5177,30 @@
             document.body.appendChild(banner);
         }
 
-        // "Review Dependencies" scrolls to the first affected task
+        // Review → prominent, persistent highlight (cleared on outside click).
         document.getElementById('dep-banner-review').addEventListener('click', function() {
-            const barWrapper = document.querySelector('.bar-wrapper[data-id="' + firstId + '"]');
-            if (barWrapper) {
-                barWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Brief highlight
-                barWrapper.style.outline = '3px solid #fbbf24';
-                barWrapper.style.outlineOffset = '2px';
-                setTimeout(() => {
-                    barWrapper.style.outline = '';
-                    barWrapper.style.outlineOffset = '';
-                }, 3000);
-            }
-            // Also try to highlight in the split-view table
-            const tableRow = document.querySelector('.split-view-row[data-task-id="' + firstId + '"]');
-            if (tableRow) {
-                tableRow.style.background = 'rgba(251, 191, 36, 0.15)';
-                setTimeout(() => { tableRow.style.background = ''; }, 3000);
-            }
-            banner.remove();
+            highlightDependents(dependents, firstId);
         });
 
-        // Close button
+        // Shift → confirm, then cascade-reschedule the whole downstream chain.
+        document.getElementById('dep-banner-shift').addEventListener('click', function() {
+            const ok = window.confirm(
+                'Shift ' + count + ' dependent task' + (count > 1 ? 's' : '') +
+                ' so the schedule stays valid?\n\nEach is moved to start after its ' +
+                'predecessor finishes, keeping its original duration. This may move ' +
+                'further downstream tasks too.'
+            );
+            if (!ok) return;
+            clearDependencyHighlight();
+            banner.remove();
+            cascadeReschedule(sourceTaskId);
+        });
+
+        // Close
         document.getElementById('dep-banner-close').addEventListener('click', function() {
+            clearDependencyHighlight();
             banner.remove();
         });
-
-        // Auto-dismiss after 10 seconds
-        setTimeout(() => {
-            if (document.getElementById('gantt-dep-banner')) banner.remove();
-        }, 10000);
     }
 
     /**
@@ -5019,6 +5213,45 @@
         document.body.appendChild(toast);
         setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
     }
+
+    /**
+     * Show a brief success/info toast at bottom-right.
+     */
+    function showGanttInfoToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'gantt-info-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
+    }
+
+    // After a cascade reschedule we reload the page; surface the confirmation
+    // toast that was stashed in sessionStorage just before the reload.
+    (function showPendingCascadeToast() {
+        function go() {
+            try {
+                const msg = sessionStorage.getItem('ganttCascadeToast');
+                if (msg) {
+                    sessionStorage.removeItem('ganttCascadeToast');
+                    showGanttInfoToast(msg);
+                }
+            } catch (e) { /* sessionStorage unavailable */ }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', go);
+        } else {
+            setTimeout(go, 400);
+        }
+    })();
+
+    // Belt-and-suspenders: once all resources/fonts are in and the SVG is fully
+    // laid out, reconcile row heights one more time so the panels are aligned
+    // even if the post-render sync ran a frame too early.
+    window.addEventListener('load', function () {
+        requestAnimationFrame(function () {
+            if (typeof syncTableRowHeights === 'function') syncTableRowHeights();
+        });
+    });
 
     // Update task progress
     function updateTaskProgress(taskId, progress) {
