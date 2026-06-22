@@ -114,6 +114,35 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     # forever (the exact symptom we hit). Surface it as a provision_error so the
     # UI can recover and tell the user to retry.
     from celery.exceptions import SoftTimeLimitExceeded
+    from django.core.cache import caches
+
+    # ── Cross-process single-flight lock ──────────────────────────────────────
+    # Provisioning deep-copies ~30 demo tasks per board and only writes its
+    # DemoSandbox marker row at the very END (see _provision_sandbox). So the
+    # `user.demo_sandbox` existence check inside cannot stop a SECOND trigger
+    # that arrives mid-copy. Without this lock a Reset Demo (async via
+    # /demo/reset-mine/) racing the dashboard's synchronous auto-provision
+    # (kanban/views.py, which fires when it sees no sandbox boards yet) — or a
+    # simple double-click — runs the copy twice and leaves 2–4 duplicate
+    # "Software Development" boards, some half-populated. The lock lives in
+    # 'ai_cache', the only alias guaranteed to be Redis (cross-process) even in
+    # local DEBUG runs; 'default' is per-process LocMemCache there and would not
+    # span the Daphne request thread and the Celery worker.
+    lock_cache = caches['ai_cache']
+    lock_key = f'sandbox_provision_lock_{user_id}'
+    try:
+        # TTL outlives the 120s hard time_limit so a crashed worker can't
+        # deadlock future resets; released in finally on normal completion.
+        got_lock = lock_cache.add(lock_key, '1', timeout=150)
+    except Exception:
+        got_lock = True  # cache unavailable — fail open, never block a reset
+    if not got_lock:
+        logger.info(
+            "Sandbox provisioning already in progress for user %s — skipping "
+            "duplicate trigger to avoid creating duplicate boards.", user_id,
+        )
+        return {'status': 'in_progress', 'message': 'Provisioning already running.'}
+
     try:
         return _provision_sandbox(self, user_id, is_reset=is_reset)
     except SoftTimeLimitExceeded:
@@ -127,6 +156,11 @@ def provision_sandbox_task(self, user_id, is_reset=False):
             'Reset Demo again.',
         )
         return {'status': 'error', 'message': 'soft time limit exceeded'}
+    finally:
+        try:
+            lock_cache.delete(lock_key)
+        except Exception:
+            pass
 
 
 def _provision_sandbox(self, user_id, is_reset=False):
