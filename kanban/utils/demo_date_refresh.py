@@ -413,9 +413,13 @@ def _refresh_task_dates(now, base_date):
         # from today so the demo always shows realistic deadline slippage
         # regardless of how many daily refreshes have elapsed.
         # days_started / days_overdue = how many days before today each date lands.
+        # days_started must keep each task starting AFTER its predecessor
+        # finishes (Security Architecture Patterns lands at today-12 after the
+        # uniform shift), so the Gantt never shows a task beginning before the
+        # work it depends on.
         _OVERDUE_PINS = {
-            'Social Login Integration':     {'days_started': 18, 'days_overdue': 8},
-            'Authentication System':        {'days_started': 20, 'days_overdue': 4},
+            'Social Login Integration':     {'days_started': 12, 'days_overdue': 8},
+            'Authentication System':        {'days_started': 10, 'days_overdue': 4},
             'Database Schema & Migrations': {'days_started': 15, 'days_overdue': 3},
         }
         for task in tasks_to_update:

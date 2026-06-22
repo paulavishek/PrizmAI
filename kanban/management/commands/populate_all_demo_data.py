@@ -772,7 +772,7 @@ class Command(BaseCommand):
                          'before this PR can be merged to main — the review was requested 4 days ago '
                          'and remains outstanding.'),
             column=col['In Review'], phase=PHASE_CORE, parent=epics['auth'],
-            priority='urgent', start_offset=-36, due_offset=-20, progress=90,
+            priority='urgent', start_offset=-26, due_offset=-20, progress=90,
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='high', collab=False,
             est_cost=5200, est_hours=60, hourly=87.5, actual_cost=4980,
@@ -880,7 +880,7 @@ class Command(BaseCommand):
                          'email first then try to login with social, manage token storage, implement '
                          'the consent screen flows, and add social login buttons to the authentication UI.'),
             column=col['In Progress'], phase=PHASE_CORE, parent=epics['auth'],
-            priority='high', start_offset=-34, due_offset=-24, progress=45,
+            priority='high', start_offset=-26, due_offset=-24, progress=45,
             complexity=6, risk_l='high', risk_i='medium', risk_level='high',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3000, est_hours=34, hourly=87.5, actual_cost=1350,
@@ -1244,14 +1244,17 @@ class Command(BaseCommand):
             ('D1', 'D3'),
             ('D3', 'D4'),
             ('D3', 'D5'),
+            # Security architecture feeds the auth-test suite and RBAC.
+            ('D5', 'D7'),
+            ('D5', 'D8'),
             # Phase 1 -> Phase 2 handoffs
             ('D4', 'P2'),
+            ('D4', 'D6'),
             ('D5', 'P3'),
             ('D5', 'R1'),
             # Phase 2 -- Core Features
             ('D6', 'P4'),
-            ('D7', 'R1'),
-            ('D8', 'R1'),
+            ('D6', 'R2'),
             ('R1', 'P1'),
             # Phase 2 -> Phase 3 handoffs
             ('P1', 'T1'),
@@ -1263,6 +1266,10 @@ class Command(BaseCommand):
             ('P4', 'T5'),
             # Phase 4 -- Launch Readiness: perf + rate limit + E2E tests gate
             # the prod deploy; deploy + accessibility + API docs gate the OSS launch.
+            # The API gateway also feeds the perf sprint and the outbound integrations.
+            ('P4', 'B1'),
+            ('P4', 'B3'),
+            ('P4', 'B4'),
             ('B1', 'B2'),
             ('T5', 'B2'),
             ('B6', 'B2'),
@@ -2566,7 +2573,7 @@ class Command(BaseCommand):
         )
 
         dep_count = sum(t.dependencies.count() for t in children)
-        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 21)')
+        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 26)')
 
         for username in PERSONA_USERNAMES:
             ok = User.objects.filter(username=username).exists()
