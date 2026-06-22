@@ -3352,7 +3352,11 @@ def reschedule_task_api(request, task_id):
         # Dependency cascade check (Finish-to-Start):
         # Find tasks that depend on *this* task (i.e. this task must finish before they start)
         # and whose start_date is now before this task's new due_date.
+        # total_dependents counts ALL downstream tasks (matching the linked arrows
+        # in the Gantt) so the banner can explain why it offers to shift fewer than
+        # the number of arrows (the rest already start after the new due date).
         affected_dependents = []
+        total_dependents = task.dependent_tasks.count()
         effective_due_date = task.due_date.date() if task.due_date else None
         if effective_due_date:
             dependents = task.dependent_tasks.filter(
@@ -3376,12 +3380,144 @@ def reschedule_task_api(request, task_id):
                 'due_date': task.due_date.date().isoformat() if task.due_date else None,
             },
             'affected_dependents': affected_dependents,
+            'total_dependents': total_dependents,
         })
 
     except ValueError as e:
         return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
     except Exception as e:
         logger.error(f"Error in reschedule_task_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def cascade_reschedule_task_api(request, task_id):
+    """
+    Cascade a reschedule downstream. After a task is dragged to a new date,
+    push every transitive dependent forward (Finish-to-Start) so each starts no
+    earlier than the LATEST due date among its predecessors, preserving each
+    task's own duration. Returns the list of tasks that were actually moved so
+    the Gantt can redraw them. Tasks already starting late enough are left
+    untouched (and their own dependents are not disturbed).
+    """
+    try:
+        from django.db import transaction
+        from datetime import datetime as dt, time as dt_time
+
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+
+        if not request.user.has_perm('prizmai.edit_board', board):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        # The drag that triggered this cascade already knows the source task's new
+        # dates; accept them here so the cascade is self-contained and never relies
+        # on a *separate* prior reschedule request having become visible. Without
+        # this, a stale read of the source's due date silently moves nothing.
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (ValueError, TypeError):
+            body = {}
+        src_start_str = body.get('start_date')
+        src_due_str = body.get('due_date')
+
+        updated = {}
+        with transaction.atomic():
+            # Re-apply the authoritative source dates inside the transaction so the
+            # fixpoint below reads the intended due date, not whatever was committed
+            # (or not) by an earlier request. Lock the row to avoid a lost update.
+            locked = Task.objects.select_for_update().get(id=task.id)
+            src_changed = False
+            if src_due_str:
+                nd = dt.strptime(src_due_str, '%Y-%m-%d').date()
+                if locked.due_date:
+                    locked.due_date = locked.due_date.replace(
+                        year=nd.year, month=nd.month, day=nd.day)
+                else:
+                    locked.due_date = timezone.make_aware(
+                        dt.combine(nd, dt_time(23, 59, 59)))
+                src_changed = True
+            if src_start_str:
+                locked.start_date = dt.strptime(src_start_str, '%Y-%m-%d').date()
+                src_changed = True
+            if src_changed:
+                locked.save(update_fields=['start_date', 'due_date'])
+            task = locked
+
+            # Collect every transitive dependent of the dragged task (BFS over the
+            # reverse dependency edge). We only ever move tasks reachable from here.
+            descendants = {}
+            queue = [task]
+            seen = {task.id}
+            while queue:
+                current = queue.pop(0)
+                for dep in current.dependent_tasks.all():
+                    if dep.id not in seen:
+                        seen.add(dep.id)
+                        descendants[dep.id] = dep
+                        queue.append(dep)
+
+            if not descendants:
+                return JsonResponse({'success': True, 'updated': []})
+
+            # Forward-pass fixpoint. A task with multiple predecessors must start
+            # after ALL of them finish, and a predecessor may itself shift during
+            # this pass, so we repeat until nothing changes. Bounded by the chain
+            # length as a safety cap against any unexpected cycle.
+            for _ in range(len(descendants) + 1):
+                changed = False
+                for dep in descendants.values():
+                    if not dep.start_date or not dep.due_date:
+                        continue
+                    # Re-read predecessors each pass so updated predecessor due
+                    # dates (saved below) are reflected.
+                    pred_dues = [
+                        p.due_date.date()
+                        for p in dep.dependencies.all()
+                        if p.due_date
+                    ]
+                    if not pred_dues:
+                        continue
+                    required_start = max(pred_dues)
+                    if dep.start_date < required_start:
+                        duration_days = (dep.due_date.date() - dep.start_date).days
+                        new_start = required_start
+                        new_due = new_start + timedelta(days=max(duration_days, 0))
+                        dep.start_date = new_start
+                        # Preserve the original due_date's time component + timezone.
+                        dep.due_date = dep.due_date.replace(
+                            year=new_due.year, month=new_due.month, day=new_due.day
+                        )
+                        dep.save(update_fields=['start_date', 'due_date'])
+                        updated[dep.id] = dep
+                        changed = True
+                if not changed:
+                    break
+
+            for dep in updated.values():
+                TaskActivity.objects.create(
+                    task=dep,
+                    user=request.user,
+                    activity_type='updated',
+                    description='Auto-rescheduled by dependency cascade from Gantt drag',
+                )
+
+        return JsonResponse({
+            'success': True,
+            'updated': [
+                {
+                    'id': d.id,
+                    'title': d.title,
+                    'start_date': d.start_date.isoformat() if d.start_date else None,
+                    'due_date': d.due_date.date().isoformat() if d.due_date else None,
+                }
+                for d in updated.values()
+            ],
+        })
+
+    except Exception as e:
+        logger.error(f"Error in cascade_reschedule_task_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
 
