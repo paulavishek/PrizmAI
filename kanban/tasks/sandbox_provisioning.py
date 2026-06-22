@@ -108,6 +108,30 @@ def provision_sandbox_task(self, user_id, is_reset=False):
     Args:
         is_reset: If True, this is a reset operation and last_reset_at will be set.
     """
+    # Guard the whole run. If the task blows past soft_time_limit (90s), Celery
+    # raises SoftTimeLimitExceeded; uncaught, the task dies WITHOUT sending a
+    # WebSocket result, leaving the frontend "Resetting…" banner spinning
+    # forever (the exact symptom we hit). Surface it as a provision_error so the
+    # UI can recover and tell the user to retry.
+    from celery.exceptions import SoftTimeLimitExceeded
+    try:
+        return _provision_sandbox(self, user_id, is_reset=is_reset)
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "provision_sandbox exceeded soft_time_limit (90s) for user %s — "
+            "sending error so the UI stops waiting.", user_id,
+        )
+        _send_provision_error(
+            user_id,
+            'Reset took longer than expected and was stopped. Please click '
+            'Reset Demo again.',
+        )
+        return {'status': 'error', 'message': 'soft time limit exceeded'}
+
+
+def _provision_sandbox(self, user_id, is_reset=False):
+    """Actual provisioning logic; wrapped by ``provision_sandbox_task`` so a
+    soft-timeout is reported to the frontend instead of dying silently."""
     from django.contrib.auth import get_user_model
     from kanban.models import Board, DemoSandbox
     from kanban.sandbox_views import (
@@ -284,6 +308,59 @@ def provision_sandbox_task(self, user_id, is_reset=False):
         'redirect_url': redirect_url,
     })
 
+    # ── Non-critical extras → DEFAULT worker ──────────────────────────────────
+    # Conflict pre-population, Decision Center counts, requirements/discovery/
+    # automation seeds and shadow-branch scores only populate *secondary* feature
+    # pages and each self-heals on next visit. They take 30–90s, so running them
+    # inline here would keep THIS dedicated 'interactive' worker busy and block a
+    # rapid successive Reset Demo (the interactive worker is solo, one-at-a-time
+    # — exactly what made reset #3 hang in testing). Hand them to the default
+    # 'celery' worker via a follow-up task so the interactive worker frees the
+    # instant the redirect is sent.
+    board_ids = [b.id for b in new_boards]
+    try:
+        finalize_sandbox_extras.delay(user_id, board_ids)
+    except Exception:
+        # Broker unreachable — run inline as a fallback so features still
+        # populate (slower, but correct).
+        _run_sandbox_extras(user_id, board_ids)
+
+    return {
+        'status': 'created',
+        'boards_created': len(new_boards),
+        'redirect_url': redirect_url,
+    }
+
+
+# NB: name is OUTSIDE the 'kanban.sandbox_provisioning.*' wildcard on purpose so
+# this routes to the DEFAULT 'celery' queue, NOT the 'interactive' queue — the
+# whole point is to get this work off the interactive worker.
+@shared_task(name='kanban.finalize_sandbox_extras')
+def finalize_sandbox_extras(user_id, board_ids):
+    """Follow-up task: populate secondary demo features for freshly-provisioned
+    sandbox boards on the default worker, keeping the interactive worker free for
+    the next Reset Demo."""
+    _run_sandbox_extras(user_id, board_ids)
+
+
+def _run_sandbox_extras(user_id, board_ids):
+    """Best-effort population of secondary demo features (conflicts, Decision
+    Center, requirements/discovery/automation seeds, shadow-branch scores) for
+    the given sandbox boards. Everything self-heals on next visit, so individual
+    failures are logged and swallowed."""
+    from django.contrib.auth import get_user_model
+    from kanban.models import Board
+    from kanban.utils.demo_protection import allow_demo_writes
+
+    User = get_user_model()
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return
+    new_boards = list(Board.objects.filter(id__in=board_ids))
+    if not new_boards:
+        return
+
     # Pre-populate conflicts so the Conflict Dashboard isn't empty on first
     # visit (matches every other pre-populated demo feature). Only run for
     # boards that don't already have conflicts copied from the template, and
@@ -309,10 +386,19 @@ def provision_sandbox_task(self, user_id, is_reset=False):
 
     # Regenerate Decision Center items so the dashboard/DC page
     # show fresh, accurate counts immediately after provisioning.
+    # collect_for_user is cheap (DB scans); the briefing makes a blocking Gemini
+    # call (30–60s) so it is enqueued separately rather than run inline.
     try:
-        from decision_center.tasks import collect_for_user, generate_briefing_for_user
+        from decision_center.tasks import collect_for_user
+        from decision_center.tasks import generate_briefing_for_user_task
         collect_for_user(user)
-        generate_briefing_for_user(user)
+        try:
+            generate_briefing_for_user_task.delay(user.id)
+        except Exception:
+            # Broker unreachable — fall back to inline so the briefing still
+            # generates (slower, but correct).
+            from decision_center.tasks import generate_briefing_for_user
+            generate_briefing_for_user(user)
     except Exception:
         pass
 
@@ -383,12 +469,3 @@ def provision_sandbox_task(self, user_id, is_reset=False):
                     pass
     except Exception as e:
         logger.warning("Could not recalc shadow branches after sandbox provision: %s", e)
-
-    # All background extras finished. The redirect was already sent above (right
-    # after the essential work), so here we just record the outcome for the
-    # Celery result backend — there is nothing left for the frontend to wait on.
-    return {
-        'status': 'created',
-        'boards_created': len(new_boards),
-        'redirect_url': redirect_url,
-    }

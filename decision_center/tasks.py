@@ -510,6 +510,24 @@ def generate_briefing_for_user(user):
     )
 
 
+@shared_task(name='decision_center.generate_briefing_for_user')
+def generate_briefing_for_user_task(user_id):
+    """
+    Async wrapper around ``generate_briefing_for_user`` so callers can defer the
+    (blocking, Gemini-backed) briefing generation off a latency-sensitive worker.
+
+    Used after sandbox provisioning: the reset runs on the dedicated
+    'interactive' worker, and we must NOT hold that worker for the 30–60s the
+    Gemini call can take (it would delay a rapid second Reset Demo). Enqueueing
+    this task hands the AI work to the default worker instead.
+    """
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return
+    generate_briefing_for_user(user)
+
+
 # ── Task 1: Collect Decision Items ──────────────────────────────────────────
 
 @shared_task(name='decision_center.collect_decision_items')

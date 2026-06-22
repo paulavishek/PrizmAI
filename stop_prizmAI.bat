@@ -6,6 +6,7 @@ echo.
 echo Stopping components by window title...
 taskkill /FI "WINDOWTITLE eq Redis Server" /T /F 2>nul
 taskkill /FI "WINDOWTITLE eq Celery Worker" /T /F 2>nul
+taskkill /FI "WINDOWTITLE eq Celery Worker (interactive)" /T /F 2>nul
 taskkill /FI "WINDOWTITLE eq Celery Beat" /T /F 2>nul
 taskkill /FI "WINDOWTITLE eq Daphne Server" /T /F 2>nul
 

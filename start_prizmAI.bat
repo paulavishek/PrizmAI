@@ -8,18 +8,26 @@ start cmd /k "title Redis Server && cd /d C:\redis\Redis-x64-5.0.14.1 && redis-s
 echo Redis server started.
 timeout /t 3 > nul
 
-:: Start Celery Worker
-echo [2/4] Starting Celery Worker...
+:: Start Celery Worker (background/scheduled tasks)
+echo [2/5] Starting Celery Worker...
 start cmd /k "title Celery Worker && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board worker --pool=solo -l info -Q celery,summaries,ai_tasks"
 echo Celery worker started.
 
+:: Start dedicated Interactive Worker (user-triggered, fast-response tasks such
+:: as Reset Demo / sandbox provisioning). Consuming ONLY the 'interactive' queue
+:: keeps these off the main worker, which is serial (--pool=solo) and gets
+:: flooded by Celery Beat's startup burst of heavy scheduled tasks.
+echo [3/5] Starting Celery Interactive Worker...
+start cmd /k "title Celery Worker (interactive) && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board worker --pool=solo -l info -Q interactive -n worker-interactive@%%h"
+echo Celery interactive worker started.
+
 :: Start Celery Beat
-echo [3/4] Starting Celery Beat...
+echo [4/5] Starting Celery Beat...
 start cmd /k "title Celery Beat && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board beat -l info"
 echo Celery beat started.
 
 :: Start Daphne Server (for websockets and HTTP)
-echo [4/4] Starting Daphne Server...
+echo [5/5] Starting Daphne Server...
 start cmd /k "title Daphne Server && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application"
 echo Daphne server started.
 
