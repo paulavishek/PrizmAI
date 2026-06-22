@@ -918,6 +918,36 @@ python manage.py runserver
 
 Open [http://localhost:8000](http://localhost:8000) and sign up to get started.
 
+### Background Services (Redis + Celery)
+
+`runserver` alone is enough to browse the app, but asynchronous and AI-backed
+features — **Reset Demo**, daily AI briefings, scheduled automations, conflict
+detection — need **Redis** (broker/cache) and **Celery** running alongside it.
+
+**Windows (one command):** `start_prizmAI.bat` launches the whole stack in
+separate windows — Redis, both Celery workers, Celery Beat, and Daphne.
+(`stop_prizmAI.bat` shuts them all down.)
+
+**Manual (any OS):** start Redis, then run each of these in its own terminal:
+
+```bash
+# 1. Default worker — scheduled/background tasks (AI summaries, automations, etc.)
+celery -A kanban_board worker --pool=solo -l info -Q celery,summaries,ai_tasks
+
+# 2. Interactive worker — user-triggered, fast-response tasks (Reset Demo /
+#    sandbox provisioning). It consumes ONLY the 'interactive' queue so these
+#    never queue behind the burst of heavy scheduled tasks Celery Beat fires on
+#    startup, which previously made Reset Demo hang for minutes.
+celery -A kanban_board worker --pool=solo -l info -Q interactive -n worker-interactive@%h
+
+# 3. Beat scheduler — runs periodic tasks
+celery -A kanban_board beat -l info
+```
+
+> `--pool=solo` is the local-dev choice on Windows (which can't use `prefork`).
+> For production worker topology (gevent/prefork, per-queue workers, beat
+> staggering), see **[CELERY_PRODUCTION_GUIDE.md](CELERY_PRODUCTION_GUIDE.md)**.
+
 ---
 
 ## Demo Data & Test Accounts
@@ -1082,7 +1112,7 @@ graph TB
 
 - **Django Backend** — Core application logic, business rules, and data processing
 - **WebSocket Server** — Real-time collaboration and live updates via Django Channels
-- **Celery Workers** — Asynchronous task processing for AI operations and scheduled automations
+- **Celery Workers** — Asynchronous task processing, split across a default worker (scheduled/background tasks) and a dedicated **interactive** worker (user-triggered tasks like Reset Demo) so latency-sensitive work never queues behind the heavy scheduled-task burst
 - **Redis** — Message broker for Celery and a shared caching layer
 - **AI Router** — Central provider switchboard (`AIRouter`) resolving Gemini · OpenAI · Anthropic per user, with BYOK key decryption, thread-safe Gemini calls, quota-aware error messages, and normalised response format
 - **REST API** — Token-authenticated endpoints for third-party integrations and mobile clients
