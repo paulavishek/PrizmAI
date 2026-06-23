@@ -113,8 +113,8 @@
 </div>
 
 <div class="row">
-    {% if boards %}
-        {% for board in boards %}
+    {% if owned_boards %}
+        {% for board in owned_boards %}
         <div class="col-md-4 mb-4">
             <div class="card dashboard-card h-100 shadow-sm">
                 <div class="card-body">
@@ -144,7 +144,7 @@
                             <li><a class="dropdown-item" href="{% url 'budget_dashboard' board.id %}">
                                 <i class="fas fa-dollar-sign me-2"></i>Budget & ROI
                             </a></li>
-                            {% if board.created_by == user or user.profile.is_admin or user == board.organization.created_by %}
+                            {% if board.created_by == user or user.profile.is_admin %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
                             <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal{{ board.id }}">Delete Board</a></li>
@@ -191,6 +191,47 @@
     </div>
     {% endif %}
 </div>
+
+{% if shared_boards %}
+<!-- ============================================================= -->
+<!-- Shared with me (boards from other users' workspaces)          -->
+<!-- ============================================================= -->
+<div class="row mt-2">
+    <div class="col-12 mb-3">
+        <h5 class="mb-0 text-gray-800"><i class="fas fa-user-friends me-2"></i>Shared with me</h5>
+        <small class="text-muted">Boards you collaborate on, owned by other workspaces</small>
+    </div>
+    {% for board in shared_boards %}
+    <div class="col-md-4 mb-4">
+        <div class="card dashboard-card h-100 shadow-sm" style="border-left:4px solid #64748b;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title">{{ board.name }}</h5>
+                    {% with my_role=my_board_roles|get_item:board.id %}
+                    <span class="badge {% if my_role == 'viewer' %}bg-secondary{% else %}bg-info{% endif %}">{{ my_role|default:"member"|title }}</span>
+                    {% endwith %}
+                </div>
+                <p class="card-text text-muted small">
+                    {% if board.description %}{{ board.description|truncatechars:100 }}{% else %}No description provided.{% endif %}
+                </p>
+                <div class="text-end mt-2">
+                    <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-primary">Open Board</a>
+                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-chart-pie fa-sm"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
+                <small class="text-muted"><i class="fas fa-user-circle me-1"></i>{{ board.created_by.get_full_name|default:board.created_by.username|default:"Unknown" }}</small>
+                {% with mcount=shared_board_member_counts|get_item:board.id %}
+                <small class="text-muted"><i class="fas fa-users me-1"></i>{{ mcount|default:0 }} member{{ mcount|pluralize }}</small>
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
 
 <!-- Note: board creation uses the dedicated create_board page (the "Create Board"
      button links there). A legacy create-board modal was removed from here as it
