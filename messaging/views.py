@@ -172,14 +172,12 @@ def chat_room_list(request, board_id):
     board = get_object_or_404(Board, id=board_id)
 
     from kanban.models import BoardMembership
-    from kanban.permissions import is_user_org_admin as _check_org_admin
-    _is_org_admin = _check_org_admin(request.user)
     _has_membership = BoardMembership.objects.filter(user=request.user, board=board).exists()
     _is_demo_board = (
         getattr(board, 'is_official_demo_board', False)
         or (board.workspace and getattr(board.workspace, 'is_demo', False))
     )
-    if not (_has_membership or board.created_by == request.user or _is_org_admin or _is_demo_board):
+    if not (_has_membership or board.created_by == request.user or _is_demo_board):
         raise Http404
     
     chat_rooms = board.chat_rooms.all()

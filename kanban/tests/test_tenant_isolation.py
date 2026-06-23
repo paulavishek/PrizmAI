@@ -93,11 +93,12 @@ class SpectraRBACIsolationTest(TestCase):
         self.assertEqual(get_user_board_role(a['user'], a['board']), 'owner')
         self.assertTrue(can_spectra_read_board(a['user'], a['board']))
 
-    def test_scoped_org_admin_still_works_within_own_org(self):
-        """An org-admin retains owner-level access to a board in THEIR org that
-        they didn't personally create — we tightened, not broke, this path."""
+    def test_org_admin_needs_membership_on_colleague_board(self):
+        """Workspace is the tenant boundary now: org-admin status alone grants
+        NO role on a colleague's board — access requires explicit membership.
+        An explicit BoardMembership still works."""
         from ai_assistant.utils.rbac_utils import get_user_board_role
-        from kanban.models import Board, Column
+        from kanban.models import Board, Column, BoardMembership
 
         a = _make_tenant('charlie')
         # A colleague creates a board inside A's own org/workspace.
@@ -108,8 +109,13 @@ class SpectraRBACIsolationTest(TestCase):
         )
         Column.objects.create(board=board2, name='Backlog', position=0)
 
-        # A is org admin of this board's org → owner-level (scoped, allowed).
-        self.assertEqual(get_user_board_role(a['user'], board2), 'owner')
+        # A is org admin but NOT a member → no role (Organization is not a
+        # basis for board access).
+        self.assertIsNone(get_user_board_role(a['user'], board2))
+
+        # Explicit membership grants the corresponding role.
+        BoardMembership.objects.create(board=board2, user=a['user'], role='member')
+        self.assertEqual(get_user_board_role(a['user'], board2), 'member')
 
 
 class CoreAccessGateIsolationTest(TestCase):

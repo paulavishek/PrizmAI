@@ -48,24 +48,8 @@ def get_user_board_role(user, board):
     if membership:
         return membership.role  # 'owner', 'member', or 'viewer'
 
-    # Scoped OrgAdmin — must be an admin of *this board's* organization. This
-    # mirrors kanban.simple_access.can_access_board exactly. Note: org-admin is a
-    # GLOBAL user flag (org creator / is_admin / OrgAdmin group), so it must be
-    # gated on org match — otherwise every account-owner (who is admin of their
-    # own org) would get owner-level access to every other tenant's board. The
-    # `board.organization_id and ...` guard also makes null org fail closed.
-    from kanban.permissions import is_user_org_admin
-    try:
-        if (
-            board.organization_id
-            and hasattr(user, 'profile')
-            and user.profile.organization_id == board.organization_id
-            and is_user_org_admin(user)
-        ):
-            return 'owner'
-    except Exception:
-        pass
-
+    # Access flows through board creator/owner + explicit membership only —
+    # Organization is no longer a basis for board access.
     return None
 
 
@@ -227,21 +211,14 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
             fallback = fallback.filter(organization=organization)
         return fallback.distinct()
 
-    # Personal workspace — only non-demo boards the user has explicit access to.
+    # Personal workspace — boards the user has explicit access to.  Access is
+    # board creator / owner / explicit membership; Organization is no longer
+    # used to scope (membership is the cross-tenant boundary now).
     qs = base.filter(
         Q(created_by=user)
         | Q(owner=user)
         | Q(memberships__user=user)
     )
-
-    if organization:
-        qs = qs.filter(organization=organization)
-    else:
-        try:
-            if hasattr(user, 'profile') and user.profile.organization_id:
-                qs = qs.filter(organization_id=user.profile.organization_id)
-        except Exception:
-            pass
 
     # Exclude demo artefacts from the personal workspace
     return qs.filter(

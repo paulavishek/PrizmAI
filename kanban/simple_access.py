@@ -36,14 +36,16 @@ def can_access_board(user, board):
     - Board creator or board.owner → always
     - Has any BoardMembership on this board → yes
     - Board is an official demo board → yes
-    - OrgAdmin of the board's specific organization → yes
-    
+
+    Organization is no longer a basis for board access — collaboration is by
+    explicit board membership only.
+
     Returns:
         Boolean
     """
     if not user or not user.is_authenticated:
         return False
-    
+
     if user.is_superuser:
         return True
 
@@ -62,19 +64,6 @@ def can_access_board(user, board):
     if BoardMembership.objects.filter(board=board, user=user).exists():
         return True
 
-    # Scoped OrgAdmin check — user must be admin of the board's specific org
-    try:
-        if (
-            board.organization_id
-            and hasattr(user, 'profile')
-            and user.profile.organization_id == board.organization_id
-        ):
-            from kanban.permissions import is_user_org_admin
-            if is_user_org_admin(user):
-                return True
-    except Exception:
-        pass
-
     return False
 
 
@@ -83,10 +72,10 @@ def can_manage_board(user, board):
     Check if user can manage a board (delete, manage members).
     
     Rules:
-    - Superuser / OrgAdmin → always
+    - Superuser → always
     - Board creator → always
     - BoardMembership with role='owner' → yes
-    
+
     Returns:
         Boolean
     """
@@ -96,16 +85,6 @@ def can_manage_board(user, board):
     if user.is_superuser:
         return True
 
-    # Scoped OrgAdmin: must be admin of the board's specific org
-    from kanban.permissions import is_user_org_admin
-    if (
-        board.organization_id
-        and hasattr(user, 'profile')
-        and user.profile.organization_id == board.organization_id
-        and is_user_org_admin(user)
-    ):
-        return True
-    
     if board.created_by_id == user.id:
         return True
 
@@ -133,22 +112,12 @@ def can_modify_board_content(user, board):
         board=board, user=user, role='viewer'
     ).exists()
 
-    # If user is the creator, owner, superuser, or scoped OrgAdmin they can modify
-    from kanban.permissions import is_user_org_admin
+    # If user is the creator, owner, superuser, or on a demo board they can modify
     if (
         user.is_superuser
         or board.created_by_id == user.id
         or getattr(board, 'owner_id', None) == user.id
         or getattr(board, 'is_official_demo_board', False)
-    ):
-        return True
-
-    # Scoped OrgAdmin: must be admin of the board's specific org
-    if (
-        board.organization_id
-        and hasattr(user, 'profile')
-        and user.profile.organization_id == board.organization_id
-        and is_user_org_admin(user)
     ):
         return True
 

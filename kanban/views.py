@@ -111,11 +111,7 @@ def dashboard(request):
     # Single-tier demo: when is_viewing_demo, show user's personal sandbox copies
     demo_mode = getattr(profile, 'is_viewing_demo', False)
     active_ws = getattr(request, 'workspace', None)
-    
-    # Org Admins see all boards regardless of membership
-    from kanban.permissions import is_user_org_admin
-    _is_org_admin = is_user_org_admin(request.user)
-    
+
     if demo_mode:
         # Single-tier demo: show user's sandbox copies, fall back to official demo boards
         sandbox_boards = Board.objects.filter(
@@ -218,21 +214,6 @@ def dashboard(request):
         # Workspace-scoped: delegate to the centralized helper.
         from kanban.utils.demo_protection import get_user_boards as _get_user_boards
         boards = _get_user_boards(request.user)
-    elif _is_org_admin:
-        # Org Admin: see all non-demo boards in their organization
-        org = profile.organization
-        if org and not getattr(org, 'is_demo', False):
-            boards = Board.objects.filter(
-                organization=org,
-                is_official_demo_board=False,
-                is_sandbox_copy=False,
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-        else:
-            # Corrupted state (org missing or demo org) — use safe helper
-            from kanban.utils.demo_protection import get_user_boards as _get_user_boards
-            boards = _get_user_boards(request.user)
     else:
         # v2 and v1: delegate to the centralized helper that handles all
         # demo/sandbox/spectra exclusion in one place.
@@ -595,10 +576,10 @@ def dashboard(request):
         for strategy in mission.strategies.all().order_by('-created_at'):
             board_list = []
             for board in strategy.boards.all().order_by('name'):
-                # RBAC: non-demo, non-admin users only see boards they
-                # are a member of (or created).  This prevents the
-                # Hierarchy Navigator from showing extra boards/strategies.
-                if not demo_mode and not _is_org_admin:
+                # RBAC: outside demo, users only see boards they are a member
+                # of (or created).  This prevents the Hierarchy Navigator from
+                # showing extra boards/strategies.
+                if not demo_mode:
                     if board.id not in _user_board_id_set:
                         continue
                 # In demo mode, look up stats via the sandbox copy ID
@@ -639,7 +620,7 @@ def dashboard(request):
             # Skip strategies with no visible boards for non-admin,
             # non-owner, non-demo users (RBAC board filter above may
             # have excluded all boards under this strategy).
-            if not board_list and not demo_mode and not _is_org_admin and strategy.created_by != request.user:
+            if not board_list and not demo_mode and strategy.created_by != request.user:
                 continue
             strategy_list.append({
                 'strategy': strategy,
@@ -673,7 +654,7 @@ def dashboard(request):
 
         # Skip missions with no visible strategies for non-admin,
         # non-owner, non-demo users.
-        if not strategy_list and not demo_mode and not _is_org_admin and mission.created_by != request.user:
+        if not strategy_list and not demo_mode and mission.created_by != request.user:
             continue
 
         item = {
@@ -716,17 +697,6 @@ def dashboard(request):
         )
     elif active_ws and not active_ws.is_demo:
         _all_goals_qs = OrganizationGoal.objects.filter(workspace=active_ws)
-    elif _is_org_admin:
-        _admin_org = getattr(profile, 'organization', None) if profile else None
-        if _admin_org and not getattr(_admin_org, 'is_demo', False):
-            _all_goals_qs = OrganizationGoal.objects.filter(
-                Q(workspace__organization=_admin_org),
-                is_demo=False, is_seed_demo_data=False,
-            )
-        else:
-            _all_goals_qs = OrganizationGoal.objects.filter(
-                created_by=request.user, is_demo=False, is_seed_demo_data=False,
-            )
     else:
         _all_goals_qs = OrganizationGoal.objects.filter(
             Q(created_by=request.user) |
@@ -1752,11 +1722,10 @@ def rename_workspace(request):
             return JsonResponse({'error': 'Cannot rename this workspace'}, status=400)
         return redirect('dashboard')
 
-    # Only org admin can rename
-    from kanban.permissions import is_user_org_admin
-    if not is_user_org_admin(request.user):
+    # Only the workspace owner can rename it
+    if ws.created_by_id != request.user.id:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': 'Only org admins can rename workspaces'}, status=403)
+            return JsonResponse({'error': 'Only the workspace owner can rename it'}, status=403)
         return redirect('dashboard')
 
     import re
@@ -1786,7 +1755,7 @@ def rename_workspace(request):
 def delete_workspace(request):
     """POST /delete-workspace/ — soft-delete a workspace.
 
-    Only the org creator can delete workspaces.  The currently active
+    Only the workspace owner (creator) can delete it.  The currently active
     workspace cannot be deleted — the user must switch to another first,
     unless it's the only real workspace (then we just redirect to
     onboarding).  Demo workspaces cannot be deleted this way.
@@ -1794,7 +1763,6 @@ def delete_workspace(request):
     Accepts ``workspace_id`` in POST body.
     """
     from kanban.models import Workspace
-    from kanban.permissions import is_user_org_admin
 
     workspace_id = request.POST.get('workspace_id')
     if not workspace_id:
@@ -1803,14 +1771,6 @@ def delete_workspace(request):
         return redirect('dashboard')
 
     profile = request.user.profile
-
-    # Only org admins can delete
-    if not is_user_org_admin(request.user):
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': 'Only org admins can delete workspaces'}, status=403)
-        from django.contrib import messages
-        messages.error(request, 'Only workspace admins can delete workspaces.')
-        return redirect('dashboard')
 
     try:
         ws = Workspace.objects.get(pk=workspace_id, is_active=True)
@@ -1825,10 +1785,12 @@ def delete_workspace(request):
             return JsonResponse({'error': 'Cannot delete demo workspace'}, status=400)
         return redirect('dashboard')
 
-    # Security: workspace must belong to user's organization
-    if not profile.organization or ws.organization_id != profile.organization_id:
+    # Security: workspaces are private to their owner — only the owner may delete.
+    if ws.created_by_id != request.user.id:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'error': 'Access denied'}, status=403)
+        from django.contrib import messages
+        messages.error(request, 'Only the workspace owner can delete this workspace.')
         return redirect('dashboard')
 
     # Soft-delete the workspace
@@ -1838,10 +1800,10 @@ def delete_workspace(request):
     from django.contrib import messages
     messages.success(request, f'Workspace "{ws.name}" has been deleted.')
 
-    # If the deleted workspace was the active one, switch to another
+    # If the deleted workspace was the active one, switch to another the user owns
     if profile.active_workspace_id == ws.pk:
         next_ws = Workspace.objects.filter(
-            organization=profile.organization,
+            created_by=request.user,
             is_active=True,
             is_demo=False,
         ).order_by('-created_at').first()
@@ -1884,11 +1846,6 @@ def switch_workspace(request):
 
     profile = request.user.profile
 
-    # Look up the workspace without restricting to the current org —
-    # the user's org might be the demo org right now, and the target
-    # workspace is in their real org (or vice-versa).  We verify access
-    # by checking the workspace belongs to any org the user is associated
-    # with (their real org, or the demo org, or one they created).
     try:
         target_ws = Workspace.objects.get(
             pk=workspace_id,
@@ -1897,22 +1854,9 @@ def switch_workspace(request):
     except Workspace.DoesNotExist:
         return redirect('dashboard')
 
-    # Security check: user must have a legitimate connection to this workspace
-    _allowed_org_ids = set()
-    if profile.organization_id:
-        _allowed_org_ids.add(profile.organization_id)
-    # Include orgs the user created (covers the case where profile.organization
-    # was temporarily switched to the demo org)
-    from accounts.models import Organization as _Org
-    _allowed_org_ids.update(
-        _Org.objects.filter(created_by=request.user).values_list('id', flat=True)
-    )
-    # Include the demo org so users can switch into demo
-    _demo_org = _Org.objects.filter(is_demo=True).values_list('id', flat=True).first()
-    if _demo_org:
-        _allowed_org_ids.add(_demo_org)
-
-    if target_ws.organization_id not in _allowed_org_ids:
+    # Security check: workspaces are private to their owner.  A user may only
+    # switch into a workspace they own, or the shared demo workspace.
+    if not target_ws.is_demo and target_ws.created_by_id != request.user.id:
         return redirect('dashboard')
 
     was_demo = profile.is_viewing_demo
@@ -1966,15 +1910,14 @@ def workspace_selection(request):
     """GET /workspace-selection/ — Jira-style workspace picker shown when
     a user has multiple real workspaces."""
     from kanban.models import Workspace
+    from kanban.utils.demo_protection import get_demo_workspace
 
     profile = request.user.profile
-    org = profile.organization
-    if not org:
-        return redirect('dashboard')
 
+    # Workspaces are private to their owner — only list the user's own.
     real_workspaces = list(
         Workspace.objects.filter(
-            organization=org, is_active=True, is_demo=False,
+            created_by=request.user, is_active=True, is_demo=False,
         ).order_by('-updated_at')
     )
 
@@ -1982,9 +1925,7 @@ def workspace_selection(request):
     if len(real_workspaces) <= 1:
         return redirect('dashboard')
 
-    demo_ws = Workspace.objects.filter(
-        organization=org, is_active=True, is_demo=True,
-    ).first()
+    demo_ws = get_demo_workspace()
 
     return render(request, 'kanban/workspace_selection.html', {
         'real_workspaces': real_workspaces,
@@ -2009,10 +1950,6 @@ def board_list(request):
     # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
     demo_mode = getattr(profile, 'is_viewing_demo', False)
     active_ws = getattr(request, 'workspace', None)
-
-    # Org Admins see all boards regardless of membership
-    from kanban.permissions import is_user_org_admin
-    _is_org_admin = is_user_org_admin(request.user)
 
     if demo_mode:
         # Single-tier demo: show user's sandbox copies + boards created
@@ -2044,26 +1981,15 @@ def board_list(request):
             user_created_boards = Board.objects.none()
         boards = (sandbox_boards | user_created_boards).distinct()
     elif active_ws and not active_ws.is_demo:
-        # Workspace-scoped: only boards in the active workspace
+        # Workspace boards, plus boards shared *to* the user as a non-owner
+        # member/viewer (owned boards stay workspace-scoped).
         boards = Board.objects.filter(
-            workspace=active_ws,
+            Q(workspace=active_ws)
+            | Q(memberships__user=request.user,
+                memberships__role__in=['member', 'viewer']),
             is_official_demo_board=False,
             is_sandbox_copy=False,
         ).distinct()
-    elif _is_org_admin:
-        # Org Admin: see all non-demo boards in their organization
-        org = profile.organization
-        if org and not getattr(org, 'is_demo', False):
-            boards = Board.objects.filter(
-                organization=org,
-                is_official_demo_board=False,
-                is_sandbox_copy=False,
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-        else:
-            from kanban.utils.demo_protection import get_user_boards as _get_user_boards
-            boards = _get_user_boards(request.user)
     elif profile.onboarding_version >= 2:
         # v2 onboarding (AI-generated or scratch) — never show demo or sandbox boards
         boards = Board.objects.filter(

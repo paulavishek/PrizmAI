@@ -62,70 +62,40 @@ def demo_context(request):
                             is_official_demo_board=True
                         ).first()
                     )
-                # Workspace context for the workspace switcher dropdown
+                # Workspace context for the workspace switcher dropdown.
+                # Workspaces are private to their owner, so the chooser lists
+                # only the workspaces this user owns, plus the shared demo
+                # workspace.  Organization is no longer read here.
                 active_ws = getattr(profile, 'active_workspace', None)
                 context['active_workspace'] = active_ws
-                if profile.organization:
-                    from kanban.models import Workspace
-                    all_ws = list(
-                        Workspace.objects.filter(
-                            organization=profile.organization,
-                            is_active=True,
-                        ).order_by('is_demo', '-created_at')
-                    )
-                    context['user_workspaces'] = all_ws
-                    # Split real vs demo for templates
-                    context['real_workspaces'] = [w for w in all_ws if not w.is_demo]
-                    context['demo_workspace'] = next((w for w in all_ws if w.is_demo), None)
 
-                    # When viewing demo, profile.organization is temporarily the
-                    # demo org, so the list above reflects the *demo* org — which
-                    # may contain leaked non-demo persona workspaces (e.g.
-                    # "Elena's Workspace").  The real user's "My Workspace" must
-                    # always resolve to their OWN non-demo workspace, found by
-                    # creator and never inside a demo org.  Recompute it
-                    # unconditionally — don't trust the demo org's contents.
-                    if getattr(profile, 'is_viewing_demo', False):
-                        own_ws = list(
-                            Workspace.objects.filter(
-                                created_by=request.user,
-                                is_demo=False,
-                                is_active=True,
-                            ).exclude(
-                                organization__is_demo=True,
-                            ).order_by('-created_at')
-                        )
-                        context['real_workspaces'] = own_ws
-                    # Workspace setup permission:
-                    # - Org creator can always set up new workspaces
-                    # - Demo-exploring users who haven't created their own
-                    #   workspace yet should also be able to set up
-                    is_org_creator = (
-                        profile.organization.created_by_id == request.user.id
-                    )
-                    is_demo_explorer_without_own_ws = (
-                        getattr(profile, 'is_viewing_demo', False)
-                        and profile.onboarding_status in ('demo_exploring', 'pending')
-                    )
-                    context['can_setup_workspace'] = (
-                        is_org_creator or is_demo_explorer_without_own_ws
-                    )
-                    # Org admins can rename the active workspace
-                    from kanban.permissions import is_user_org_admin
-                    context['can_rename_workspace'] = is_user_org_admin(request.user)
-                    context['can_delete_workspace'] = is_user_org_admin(request.user)
-                    # Workspace member management permission
-                    context['can_manage_ws_members'] = (
-                        active_ws
-                        and not getattr(active_ws, 'is_demo', False)
-                        and not getattr(profile, 'is_viewing_demo', False)
-                        and (is_user_org_admin(request.user) or (active_ws and active_ws.created_by_id == request.user.id))
-                    )
-                else:
-                    context['user_workspaces'] = []
-                    context['real_workspaces'] = []
-                    context['demo_workspace'] = None
-                    context['can_setup_workspace'] = True  # No org yet — can set up
+                from kanban.models import Workspace
+                from kanban.utils.demo_protection import get_demo_workspace
+                from kanban.permissions import owns_active_workspace
+
+                own_ws = list(
+                    Workspace.objects.filter(
+                        created_by=request.user,
+                        is_demo=False,
+                        is_active=True,
+                    ).order_by('-created_at')
+                )
+                demo_ws = get_demo_workspace()
+                context['real_workspaces'] = own_ws
+                context['demo_workspace'] = demo_ws
+                context['user_workspaces'] = own_ws + ([demo_ws] if demo_ws else [])
+
+                # Any authenticated user may create a workspace.
+                context['can_setup_workspace'] = True
+                # Rename / delete / manage-members are the active workspace
+                # owner's privileges (never on the demo workspace).
+                _owns_active = owns_active_workspace(request.user)
+                context['can_rename_workspace'] = _owns_active
+                context['can_delete_workspace'] = _owns_active
+                context['can_manage_ws_members'] = (
+                    _owns_active
+                    and not getattr(profile, 'is_viewing_demo', False)
+                )
             except Exception:
                 context['is_viewing_demo'] = False
                 context['active_workspace'] = None

@@ -21,7 +21,6 @@ from kanban.models import (
     WorkspaceInvitation,
     WorkspaceMembership,
 )
-from kanban.permissions import is_user_org_admin
 from kanban.workspace_member_utils import (
     add_workspace_member,
     remove_workspace_member,
@@ -37,7 +36,7 @@ def _can_manage_workspace(request):
     if not ws or ws.is_demo:
         raise Http404
 
-    if is_user_org_admin(request.user) or ws.created_by_id == request.user.pk:
+    if ws.created_by_id == request.user.pk:
         return ws
 
     raise Http404
