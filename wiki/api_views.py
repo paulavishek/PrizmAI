@@ -22,6 +22,7 @@ from kanban.decorators import demo_ai_guard
 from kanban.utils.demo_protection import get_user_boards
 from accounts.models import Organization
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
+from .scoping import wiki_scope_q
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 
@@ -53,17 +54,14 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         else:
             org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        # Get the wiki page - allow access to any published page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
-        
-        # Verify user has access to this wiki page's organization
-        if wiki_page.organization and hasattr(request.user, 'profile') and request.user.profile.organization != wiki_page.organization:
-            return JsonResponse({'error': 'Permission denied'}, status=403)
-        
+        # Fetch the page scoped to the user's active WORKSPACE (the tenant
+        # boundary). A page outside the active workspace 404s.
+        wiki_page = get_object_or_404(WikiPage, wiki_scope_q(request), id=wiki_page_id)
+
         try:
             # Get boards scoped to user's current workspace (demo-aware)
             available_boards = get_user_boards(request.user)
-            
+
             # Prepare wiki page context
             wiki_context = {
                 'title': wiki_page.title,
@@ -164,13 +162,10 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         else:
             org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        # Get the wiki page - allow access to any published page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
-        
-        # Verify user has access to this wiki page's organization
-        if wiki_page.organization and hasattr(request.user, 'profile') and request.user.profile.organization != wiki_page.organization:
-            return JsonResponse({'error': 'Permission denied'}, status=403)
-        
+        # Fetch the page scoped to the user's active WORKSPACE (the tenant
+        # boundary). A page outside the active workspace 404s.
+        wiki_page = get_object_or_404(WikiPage, wiki_scope_q(request), id=wiki_page_id)
+
         # Check if there's already a recent analysis for this content
         content_hash = hashlib.sha256(wiki_page.content.encode()).hexdigest()
         existing_analysis = WikiMeetingAnalysis.objects.filter(
@@ -340,7 +335,19 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         action_items = analysis.get_action_items()
         created_tasks = []
         failed_items = []
-        
+
+        # Workspace collaborators (members of any board in this board's workspace)
+        # — used as the assignee fallback instead of an org-wide lookup, so a task
+        # can't be auto-assigned to someone outside the workspace.
+        _ws_user_ids = set()
+        if board.workspace_id:
+            from kanban.models import BoardMembership
+            _ws_user_ids = set(
+                BoardMembership.objects
+                .filter(board__workspace_id=board.workspace_id)
+                .values_list('user_id', flat=True)
+            )
+
         with transaction.atomic():
             for idx in selected_indices:
                 try:
@@ -406,12 +413,13 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                                     | Q(first_name__icontains=assignee_name)
                                 ).first()
 
-                            # 5. Org-wide fallback (exact matches only)
-                            if not assignee and org:
+                            # 5. Workspace-wide fallback (exact matches only),
+                            #    restricted to collaborators in this workspace.
+                            if not assignee and _ws_user_ids:
                                 assignee = User.objects.filter(
                                     Q(username__iexact=assignee_name)
                                     | Q(first_name__iexact=assignee_name),
-                                    profile__organization=org,
+                                    id__in=_ws_user_ids,
                                 ).first()
 
                             if assignee:
@@ -631,9 +639,11 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
         else:
             org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        # Get the wiki page - allow access without org restriction
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
-        
+        # Fetch the page scoped to the user's active WORKSPACE — this is a write
+        # endpoint (imports a transcript into the page), so it must not accept an
+        # arbitrary page id from another workspace.
+        wiki_page = get_object_or_404(WikiPage, wiki_scope_q(request), id=wiki_page_id)
+
         # Parse request body
         data = json.loads(request.body)
         transcript_content = data.get('transcript_content', '').strip()
