@@ -51,6 +51,16 @@ class DiscoveryIdea(models.Model):
         on_delete=models.CASCADE,
         related_name='discovery_ideas',
     )
+    # Workspace is the tenant boundary (org is retired from access scoping).
+    # Nullable for the backfill migration; new ideas always set it.
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.CASCADE,
+        related_name='discovery_ideas',
+        null=True,
+        blank=True,
+        help_text='Workspace this idea belongs to (scopes visibility).',
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default='')
     source = models.CharField(

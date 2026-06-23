@@ -23,10 +23,10 @@ class WikiContextProvider(BaseContextProvider):
         except ImportError:
             return ''
 
-        # WikiPage is org-scoped, not board-scoped
-        org = self._get_user_org(user)
-        if org:
-            pages = WikiPage.objects.filter(organization=org, is_published=True)
+        # WikiPage is workspace-scoped (the tenant boundary), not board-scoped
+        ws = self._get_user_workspace(user)
+        if ws is not None:
+            pages = WikiPage.objects.filter(workspace=ws, is_published=True)
         else:
             pages = WikiPage.objects.none()
 
@@ -46,9 +46,9 @@ class WikiContextProvider(BaseContextProvider):
         except ImportError:
             return ''
 
-        org = self._get_user_org(user)
-        if org:
-            pages = WikiPage.objects.filter(organization=org, is_published=True)
+        ws = self._get_user_workspace(user)
+        if ws is not None:
+            pages = WikiPage.objects.filter(workspace=ws, is_published=True)
         else:
             pages = WikiPage.objects.none()
 

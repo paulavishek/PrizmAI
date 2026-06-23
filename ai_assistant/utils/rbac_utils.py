@@ -181,10 +181,10 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
     - Demo mode → only the current user's sandbox copies (``is_sandbox_copy=True``
       AND ``owner=user``) within a demo workspace.  Other users' sandboxes are
       never included.
-    - Personal mode → only non-demo boards in the user's active workspace /
-      organisation.  Sandbox copies and official demo boards are excluded.
-    - Organisation filter prevents cross-org data leakage when multiple orgs
-      share the same database.
+    - Personal mode → only non-demo boards the user created/owns or is a member
+      of. Sandbox copies and official demo boards are excluded.
+    - ``organization`` is DEPRECATED and ignored: membership + workspace are the
+      tenant boundary now, so org never gates board access.
     """
     from kanban.models import Board
 
@@ -205,11 +205,11 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
         ).distinct()
         if sandbox_qs.exists():
             return sandbox_qs
-        # Fallback to templates if sandbox not provisioned yet
-        fallback = base.filter(is_official_demo_board=True)
-        if organization:
-            fallback = fallback.filter(organization=organization)
-        return fallback.distinct()
+        # Fallback to the universal official demo templates if the user's sandbox
+        # isn't provisioned yet. These are shared, read-only seed boards (no
+        # private user data), so they are NOT org-scoped — org no longer gates
+        # board access.
+        return base.filter(is_official_demo_board=True).distinct()
 
     # Personal workspace — boards the user has explicit access to.  Access is
     # board creator / owner / explicit membership; Organization is no longer

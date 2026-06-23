@@ -1075,14 +1075,16 @@ def fetch_risk_scenarios_detail(board, limit=5):
     return result if found_any else None
 
 
-def fetch_discovery_summary(organization):
-    """Return summary of org-scoped discovery ideas, or None."""
+def fetch_discovery_summary(workspace):
+    """Return summary of workspace-scoped discovery ideas, or None."""
     try:
         from kanban.discovery_models import DiscoveryIdea, IDEA_STAGE_CHOICES
     except Exception:
         return None
 
-    qs = DiscoveryIdea.objects.filter(organization=organization)
+    if workspace is None:
+        return None
+    qs = DiscoveryIdea.objects.filter(workspace=workspace)
     total = qs.count()
     if total == 0:
         return {'total': 0, 'by_stage': {}, 'promoted': 0}
@@ -1097,14 +1099,16 @@ def fetch_discovery_summary(organization):
     return {'total': total, 'by_stage': by_stage, 'promoted': promoted}
 
 
-def fetch_discovery_detail(organization, recent_limit=12):
-    """Return detail of org-scoped discovery ideas, or None."""
+def fetch_discovery_detail(workspace, recent_limit=12):
+    """Return detail of workspace-scoped discovery ideas, or None."""
     try:
         from kanban.discovery_models import DiscoveryIdea, IDEA_STAGE_CHOICES
     except Exception:
         return None
 
-    qs = DiscoveryIdea.objects.filter(organization=organization)
+    if workspace is None:
+        return None
+    qs = DiscoveryIdea.objects.filter(workspace=workspace)
     total = qs.count()
     if total == 0:
         return {'total': 0, 'by_stage': {}, 'by_quadrant': {}, 'recent': []}

@@ -2544,16 +2544,18 @@ class TaskFlowChatbotService:
         ctx += "\n"
         return ctx
 
-    def _get_wiki_meeting_pages_context(self, org, prompt):
+    def _get_wiki_meeting_pages_context(self, workspace, prompt):
         """Search wiki pages in meeting-type categories when MeetingNotes model
         has no entries.  This bridges the gap where meetings are documented as
-        wiki pages rather than via the dedicated MeetingNotes model."""
+        wiki pages rather than via the dedicated MeetingNotes model.
+
+        Workspace-scoped (the tenant boundary)."""
         try:
             from wiki.models import WikiPage, WikiCategory
             from django.db.models import Q
 
             meeting_categories = WikiCategory.objects.filter(
-                Q(organization=org) & (
+                Q(workspace=workspace) & (
                     Q(ai_assistant_type='meeting') | Q(name__icontains='meeting')
                 )
             )
@@ -2562,7 +2564,7 @@ class TaskFlowChatbotService:
 
             pages = WikiPage.objects.filter(
                 category__in=meeting_categories,
-                organization=org,
+                workspace=workspace,
                 is_published=True,
             ).select_related('category', 'created_by').order_by('-updated_at')[:10]
 
@@ -2701,12 +2703,16 @@ class TaskFlowChatbotService:
                     return None
             
             context = "**🎤 Meeting & Discussion Context:**\n\n"
-            
+
+            # Workspace is the tenant boundary — scope meetings to the active
+            # workspace so Spectra never surfaces another workspace's notes.
+            ws = getattr(getattr(self.user, 'profile', None), 'active_workspace', None)
+
             # RBAC: scope meetings to boards the user has access to
             user_boards = self._get_user_boards()
             meetings = MeetingNotes.objects.filter(
-                Q(organization=org, related_board__in=user_boards) |
-                Q(organization=org, related_board__isnull=True)
+                Q(workspace=ws, related_board__in=user_boards) |
+                Q(workspace=ws, related_board__isnull=True)
             ).select_related('created_by', 'related_board').prefetch_related('attendees').order_by('-date')
             
             logger.info(f"Meeting query by {self.user.username} in org '{org.name}'")
@@ -2847,8 +2853,8 @@ class TaskFlowChatbotService:
                 # No matches found - provide helpful fallback
                 logger.info(f"No meetings matched query: {prompt[:50]}")
                 
-                # Try fuzzy matching to find similar meeting names
-                all_org_meetings = MeetingNotes.objects.filter(organization=org)[:30]
+                # Try fuzzy matching to find similar meeting names (workspace-scoped)
+                all_org_meetings = MeetingNotes.objects.filter(workspace=ws)[:30]
                 similar_meetings = self._find_similar_items(
                     prompt, 
                     all_org_meetings, 
@@ -2874,12 +2880,12 @@ class TaskFlowChatbotService:
                     context += "Please ask about a specific meeting from the list above.\n"
                     return context
                 
-                # Check if ANY meetings exist in the organization
-                all_meetings_count = MeetingNotes.objects.filter(organization=org).count()
+                # Check if ANY meetings exist in the workspace
+                all_meetings_count = MeetingNotes.objects.filter(workspace=ws).count()
                 
                 if all_meetings_count == 0:
                     # Before giving up, check wiki pages in meeting-type categories
-                    wiki_meeting_context = self._get_wiki_meeting_pages_context(org, prompt)
+                    wiki_meeting_context = self._get_wiki_meeting_pages_context(ws, prompt)
                     if wiki_meeting_context:
                         context += wiki_meeting_context
                         return context
