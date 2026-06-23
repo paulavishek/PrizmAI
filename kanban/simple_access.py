@@ -293,11 +293,16 @@ def check_modify_or_403(user, board):
 def get_accessible_boards(user, organization=None):
     """
     Get all boards accessible to a user.
-    
+
+    Access flows through board creator + explicit BoardMembership (delegated to
+    ``get_user_boards``). Board access is NEVER derived from Organization any
+    more — Workspace is the tenant boundary.
+
     Args:
         user: User object
-        organization: Optional organization filter
-    
+        organization: DEPRECATED and ignored. Kept only for call-site
+            backwards-compatibility; org must not gate board access.
+
     Returns:
         Board queryset
     """
@@ -319,10 +324,9 @@ def get_accessible_boards(user, organization=None):
         )
     else:
         queryset = get_user_boards(user)
-    
-    if organization:
-        queryset = queryset.filter(organization=organization)
-    
+
+    # NOTE: ``organization`` is intentionally ignored — board access is scoped by
+    # workspace + membership inside get_user_boards(), never by org.
     return queryset
 
 

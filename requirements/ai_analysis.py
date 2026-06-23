@@ -55,8 +55,11 @@ class RequirementsAIAnalyzer:
         reqs = list(Requirement.objects.filter(board=self.board).prefetch_related(
             'linked_tasks', 'linked_goals',
         ))
-        org = getattr(self.board, 'organization', None)
-        goals = list(OrganizationGoal.objects.filter(organization=org)) if org else []
+        # Scope goals to the board's WORKSPACE (the tenant boundary), not its
+        # legacy organization — otherwise gap analysis mixes goals across
+        # unrelated workspaces in the same org.
+        workspace = getattr(self.board, 'workspace', None)
+        goals = list(OrganizationGoal.objects.filter(workspace=workspace)) if workspace else []
         tasks = list(Task.objects.filter(column__board=self.board, item_type='task').select_related('column'))
 
         if not reqs and not tasks:

@@ -30,10 +30,10 @@ class DiscoveryContextProvider(BaseContextProvider):
 
         from ai_assistant.utils.spectra_data_fetchers import fetch_discovery_summary
 
-        org = self._get_user_org(user)
-        if not org:
+        ws = self._get_user_workspace(user)
+        if not ws:
             return ''
-        data = fetch_discovery_summary(org)
+        data = fetch_discovery_summary(ws)
         if data is None or data['total'] == 0:
             return ''
 
@@ -48,14 +48,14 @@ class DiscoveryContextProvider(BaseContextProvider):
     def _get_detail_impl(self, board, user, query='', is_demo_mode=False):
         from ai_assistant.utils.spectra_data_fetchers import fetch_discovery_detail
 
-        org = self._get_user_org(user)
-        if not org:
+        ws = self._get_user_workspace(user)
+        if not ws:
             return None
-        data = fetch_discovery_detail(org)
+        data = fetch_discovery_detail(ws)
         if data is None or data['total'] == 0:
             return None
 
-        ctx = f'**💡 Discovery Ideas — {org.name}** ({data["total"]} total)\n'
+        ctx = f'**💡 Discovery Ideas — {ws.name}** ({data["total"]} total)\n'
 
         if data['by_stage']:
             ctx += '\n**By Stage:**\n'

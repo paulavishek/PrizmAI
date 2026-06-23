@@ -58,15 +58,24 @@ class WikiPageForm(forms.ModelForm):
             'is_pinned': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Convert tags list to comma-separated string for editing
         if self.instance and self.instance.pk and self.instance.tags:
             if isinstance(self.instance.tags, list):
                 self.initial['tags'] = ', '.join(self.instance.tags)
-        
-        if organization:
+
+        # Workspace is the tenant boundary — when provided, scope the category /
+        # parent-page choices strictly to it (org scoping below is legacy).
+        if workspace is not None:
+            from django.db.models import Q
+            ws_filter = Q(workspace=workspace)
+            self.fields['category'].queryset = WikiCategory.objects.filter(ws_filter).distinct()
+            self.fields['parent_page'].queryset = WikiPage.objects.filter(
+                ws_filter
+            ).exclude(pk=self.instance.pk if self.instance.pk else None).distinct()
+        elif organization:
             from django.db.models import Q
             from accounts.models import Organization
             
@@ -138,11 +147,13 @@ class WikiLinkForm(forms.ModelForm):
             }),
         }
     
-    def __init__(self, *args, organization=None, user=None, **kwargs):
+    def __init__(self, *args, organization=None, user=None, workspace=None, **kwargs):
+        # ``workspace`` accepted for call-site consistency; board/task choices are
+        # already scoped via the centralized board helper below.
         super().__init__(*args, **kwargs)
         from kanban.models import Board, Task
         from django.db.models import Q
-        
+
         # Use centralized helper for demo/workspace-aware board scoping
         if user:
             from kanban.utils.demo_protection import get_user_boards
@@ -266,10 +277,16 @@ class WikiPageSearchForm(forms.Form):
         })
     )
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # MVP Mode: Show all categories (from user's org + demo org)
-        if organization:
+        # Workspace is the tenant boundary — scope the category filter to it when
+        # provided (org scoping below is legacy fallback).
+        if workspace is not None:
+            from django.db.models import Q
+            self.fields['category'].queryset = WikiCategory.objects.filter(
+                Q(workspace=workspace)
+            ).distinct()
+        elif organization:
             from django.db.models import Q
             from accounts.models import Organization
             demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
@@ -310,16 +327,24 @@ class QuickWikiLinkForm(forms.Form):
         })
     )
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         from django.db.models import Q
         from accounts.models import Organization
-        
+
+        # Workspace is the tenant boundary — when provided, scope linkable pages
+        # strictly to it (org scoping below is legacy fallback).
+        if workspace is not None:
+            self.fields['wiki_pages'].queryset = WikiPage.objects.filter(
+                workspace=workspace, is_published=True,
+            )
+            return
+
         # Include demo organization pages along with user's org pages
         demo_org_names = ['Demo - Acme Corporation']
         demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-        
+
         # Build query filter
         if organization:
             # User has an organization - show their org pages + demo pages

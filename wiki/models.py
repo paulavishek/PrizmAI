@@ -30,6 +30,15 @@ class WikiCategory(models.Model):
         blank=True,
         help_text="Organization (optional - MVP mode uses demo org for all wiki data)"
     )
+    # Workspace tenant boundary (org is retired from access scoping).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='wiki_categories',
+        null=True,
+        blank=True,
+        help_text='Workspace this category belongs to (scopes visibility).'
+    )
     icon = models.CharField(max_length=50, default='folder', help_text='Font Awesome icon name')
     color = models.CharField(max_length=7, default='#3498db', help_text='Hex color code')
     position = models.IntegerField(default=0)
@@ -83,7 +92,16 @@ class WikiPage(models.Model):
         blank=True,
         help_text="Organization (optional - MVP mode uses demo org for all wiki data)"
     )
-    
+    # Workspace tenant boundary (org is retired from access scoping).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='wiki_pages',
+        null=True,
+        blank=True,
+        help_text='Workspace this page belongs to (scopes visibility).'
+    )
+
     # Page metadata
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_wiki_pages')
     updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_wiki_pages')
@@ -294,6 +312,15 @@ class MeetingNotes(models.Model):
         null=True,
         blank=True,
         help_text="Organization (optional - MVP mode uses demo org)"
+    )
+    # Workspace tenant boundary (org is retired from access scoping).
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.SET_NULL,
+        related_name='meeting_notes',
+        null=True,
+        blank=True,
+        help_text='Workspace these notes belong to (scopes visibility).'
     )
     attendees = models.ManyToManyField(User, related_name='meeting_notes_attended')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_meeting_notes')

@@ -166,6 +166,17 @@ class BaseContextProvider(ABC):
             pass
         return None
 
+    def _get_user_workspace(self, user):
+        """Return the user's active workspace (the tenant boundary), or None.
+
+        Use this to scope workspace-owned data (wiki, discovery, meeting notes)
+        so Spectra never surfaces another workspace's content.
+        """
+        try:
+            return getattr(getattr(user, 'profile', None), 'active_workspace', None)
+        except Exception:
+            return None
+
     # ── Abstract methods (subclasses implement these) ───────────────────
 
     @abstractmethod

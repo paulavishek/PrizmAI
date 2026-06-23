@@ -24,6 +24,12 @@ from kanban.favorite_views import is_user_favorite as _is_fav
 from accounts.models import Organization
 
 
+def _wiki_scope_q(request):
+    """Workspace-scope Q for function-based views (delegates to the shared helper)."""
+    from wiki.scoping import wiki_scope_q
+    return wiki_scope_q(request)
+
+
 class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
     """Base view for wiki operations - MVP mode without organization requirement"""
     
@@ -62,25 +68,35 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
 
         return None
     
+    def get_workspace(self):
+        """Active workspace = the wiki tenant boundary.
+
+        Middleware already resets stale/foreign active workspaces, so the
+        profile's active_workspace is safe to trust here.
+        """
+        profile = getattr(self.request.user, 'profile', None)
+        return getattr(profile, 'active_workspace', None)
+
     def _wiki_org_filter(self):
-        """Return a Q filter for wiki objects based on workspace mode."""
-        org = self.get_organization()
+        """Return a Q filter scoping wiki objects to the active WORKSPACE.
+
+        Workspace is the tenant boundary now (org is retired from access
+        scoping). Demo mode additionally surfaces legacy null-workspace seed
+        rows; real mode fails CLOSED (shows nothing) when there is no active
+        workspace rather than leaking the shared null pool.
+        """
+        ws = self.get_workspace()
         if self._is_viewing_demo():
-            # Demo mode: show demo org content
+            if ws:
+                return Q(workspace=ws) | Q(workspace__isnull=True)
+            # Demo with no workspace resolved — fall back to demo-org content.
+            org = self.get_organization()
             if org:
                 return Q(organization=org) | Q(organization__isnull=True)
-            return Q()  # no demo org found
-        else:
-            # Real mode: STRICT per-org isolation. Previously this OR'd in
-            # Q(organization__isnull=True), which shared the entire null-org wiki
-            # pool (legacy/seed/demo pages) across every real tenant — a
-            # cross-tenant leak. Real user content is already tagged with the
-            # creator's org (see form_valid), so scope strictly to it and fail
-            # CLOSED when the user has no org (show nothing rather than the shared
-            # null pool).
-            if org:
-                return Q(organization=org)
-            return Q(pk__in=[])
+            return Q()
+        if ws:
+            return Q(workspace=ws)
+        return Q(pk__in=[])
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -144,7 +160,8 @@ class WikiPageListView(WikiBaseView, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         org = self.get_organization()
-        context['search_form'] = WikiPageSearchForm(self.request.GET, organization=org)
+        context['search_form'] = WikiPageSearchForm(
+            self.request.GET, organization=org, workspace=self.get_workspace())
         context['category_id'] = self.kwargs.get('category_id')
         return context
 
@@ -227,11 +244,13 @@ class WikiPageCreateView(WikiBaseView, CreateView):
         tpl = self._get_active_template()
         if tpl:
             org = self.get_organization()
-            # Auto-create the suggested category for this org if it doesn't exist yet
+            ws = self.get_workspace()
+            # Auto-create the suggested category for this workspace if missing yet
             category, _ = WikiCategory.objects.get_or_create(
                 name=tpl.category_name,
-                organization=org,
+                workspace=ws,
                 defaults={
+                    'organization': org,
                     'icon': 'folder-open',
                     'color': tpl.color,
                     'ai_assistant_type': 'meeting' if 'meeting' in tpl.category_name.lower() else 'documentation',
@@ -250,15 +269,17 @@ class WikiPageCreateView(WikiBaseView, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['workspace'] = self.get_workspace()
         return kwargs
     
     def form_valid(self, form):
         org = self.get_organization()
         form.instance.organization = org
+        form.instance.workspace = self.get_workspace()
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         response = super().form_valid(form)
-        
+
         # Create initial version
         WikiPageVersion.objects.create(
             page=self.object,
@@ -285,21 +306,14 @@ class WikiPageUpdateView(WikiBaseView, UpdateView):
     slug_url_kwarg = 'slug'
     
     def get_queryset(self):
-        org = self.get_organization()
-        # MVP Mode: Include demo organization content for all users
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        if org:
-            org_filter = Q(organization=org)
-            if demo_org:
-                org_filter |= Q(organization=demo_org)
-            return WikiPage.objects.filter(org_filter)
-        elif demo_org:
-            return WikiPage.objects.filter(organization=demo_org)
-        return WikiPage.objects.none()
+        # Workspace-scoped (the tenant boundary). Editing is limited to pages in
+        # the user's active workspace.
+        return WikiPage.objects.filter(self._wiki_org_filter())
     
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['workspace'] = self.get_workspace()
         return kwargs
     
     def form_valid(self, form):
@@ -332,11 +346,10 @@ class WikiPageDeleteView(WikiBaseView, DeleteView):
     template_name = 'wiki/page_confirm_delete.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
-    
+
     def get_queryset(self):
-        org = self.get_organization()
-        return WikiPage.objects.filter(organization=org)
-    
+        return WikiPage.objects.filter(self._wiki_org_filter())
+
     def get_success_url(self):
         return reverse_lazy('wiki:category_list')
 
@@ -350,6 +363,7 @@ class WikiCategoryCreateView(WikiBaseView, CreateView):
     def form_valid(self, form):
         org = self.get_organization()
         form.instance.organization = org
+        form.instance.workspace = self.get_workspace()
         response = super().form_valid(form)
         messages.success(self.request, f'Category "{self.object.name}" created!')
         return response
@@ -364,11 +378,10 @@ class WikiCategoryUpdateView(WikiBaseView, UpdateView):
     form_class = WikiCategoryForm
     template_name = 'wiki/category_form.html'
     pk_url_kwarg = 'pk'
-    
+
     def get_queryset(self):
-        org = self.get_organization()
-        return WikiCategory.objects.filter(organization=org)
-    
+        return WikiCategory.objects.filter(self._wiki_org_filter())
+
     def form_valid(self, form):
         response = super().form_valid(form)
         messages.success(self.request, f'Category "{self.object.name}" updated!')
@@ -383,13 +396,11 @@ class WikiCategoryDeleteView(WikiBaseView, DeleteView):
     model = WikiCategory
     template_name = 'wiki/category_confirm_delete.html'
     pk_url_kwarg = 'pk'
-    
+
     def get_queryset(self):
-        org = self.get_organization()
-        return WikiCategory.objects.filter(organization=org)
-    
+        return WikiCategory.objects.filter(self._wiki_org_filter())
+
     def delete(self, request, *args, **kwargs):
-        org = self.get_organization()
         messages.success(request, f'Category deleted successfully!')
         return super().delete(request, *args, **kwargs)
     
@@ -406,6 +417,7 @@ class WikiLinkCreateView(WikiBaseView, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['workspace'] = self.get_workspace()
         return kwargs
     
     def get_context_data(self, **kwargs):
@@ -414,17 +426,17 @@ class WikiLinkCreateView(WikiBaseView, CreateView):
         if page_slug:
             context['page'] = get_object_or_404(
                 WikiPage,
+                self._wiki_org_filter(),
                 slug=page_slug,
-                organization=self.get_organization()
             )
         return context
-    
+
     def form_valid(self, form):
         page_slug = self.kwargs.get('slug')
         page = get_object_or_404(
             WikiPage,
+            self._wiki_org_filter(),
             slug=page_slug,
-            organization=self.get_organization()
         )
         form.instance.wiki_page = page
         form.instance.created_by = self.request.user
@@ -448,11 +460,10 @@ class WikiLinkCreateView(WikiBaseView, CreateView):
 
 @login_required
 def wiki_search(request):
-    """Search wiki pages"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    if not org:
-        return redirect('dashboard')
-    
+    """Search wiki pages — scoped to the user's active workspace + accessible boards."""
+    profile = getattr(request.user, 'profile', None)
+    ws = getattr(profile, 'active_workspace', None)
+
     query = request.GET.get('q', '')
     results = {
         'pages': [],
@@ -460,39 +471,31 @@ def wiki_search(request):
         'tasks': [],
         'boards': []
     }
-    
+
     if query:
-        # Search wiki pages
-        results['pages'] = WikiPage.objects.filter(
-            organization=org,
-            is_published=True
-        ).filter(
-            Q(title__icontains=query) |
-            Q(content__icontains=query)
-        )[:10]
-        
-        # Search meeting notes - DISABLED
-        # results['notes'] = MeetingNotes.objects.filter(
-        #     organization=org
-        # ).filter(
-        #     Q(title__icontains=query) |
-        #     Q(content__icontains=query)
-        # )[:10]
-        
-        # Search tasks
-        from kanban.models import Board
+        from kanban.utils.demo_protection import get_user_boards
+        user_boards = get_user_boards(request.user)
+
+        # Search wiki pages — workspace-scoped (the tenant boundary)
+        if ws is not None:
+            results['pages'] = WikiPage.objects.filter(
+                workspace=ws,
+                is_published=True
+            ).filter(
+                Q(title__icontains=query) |
+                Q(content__icontains=query)
+            )[:10]
+
+        # Search tasks — limited to boards the user can access
         results['tasks'] = Task.objects.filter(
-            column__board__organization=org
+            column__board__in=user_boards
         ).filter(
             Q(title__icontains=query) |
             Q(description__icontains=query)
         )[:10]
-        
-        # Search boards
-        results['boards'] = Board.objects.filter(
-            organization=org,
-            name__icontains=query
-        )[:10]
+
+        # Search boards — limited to boards the user can access
+        results['boards'] = user_boards.filter(name__icontains=query)[:10]
     
     return render(request, 'wiki/search_results.html', {
         'query': query,
@@ -596,7 +599,8 @@ def quick_link_wiki(request, content_type, object_id):
     # Get boards scoped to user's current workspace (demo-aware)
     from kanban.utils.demo_protection import get_user_boards
     accessible_boards = get_user_boards(request.user)
-    
+    ws = getattr(getattr(request.user, 'profile', None), 'active_workspace', None)
+
     if content_type == 'task':
         # MVP Mode: Allow tasks from any accessible board
         item = get_object_or_404(Task, pk=object_id, column__board__in=accessible_boards)
@@ -605,17 +609,17 @@ def quick_link_wiki(request, content_type, object_id):
         item = get_object_or_404(Board, pk=object_id, id__in=accessible_boards.values_list('id', flat=True))
     else:
         return JsonResponse({'error': 'Invalid content type'}, status=400)
-    
+
     if request.method == 'GET':
-        form = QuickWikiLinkForm(organization=org)
+        form = QuickWikiLinkForm(organization=org, workspace=ws)
         return render(request, 'wiki/quick_link_modal.html', {
             'form': form,
             'content_type': content_type,
             'object_id': object_id,
             'item': item
         })
-    
-    form = QuickWikiLinkForm(request.POST, organization=org)
+
+    form = QuickWikiLinkForm(request.POST, organization=org, workspace=ws)
     if form.is_valid():
         pages = form.cleaned_data['wiki_pages']
         for page in pages:
@@ -699,37 +703,25 @@ def delete_wiki_link(request, link_id):
 @login_required
 def wiki_page_history(request, slug):
     """View wiki page version history"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile else None
-    
-    # MVP Mode: Fall back to demo organization if user has no org
-    if not org:
-        org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    
-    # Get page scoped to user's organization
-    page = WikiPage.objects.filter(slug=slug, organization=org).first()
+    # Workspace-scoped page lookup (the tenant boundary)
+    page = WikiPage.objects.filter(_wiki_scope_q(request), slug=slug).first()
     if not page:
         return redirect('wiki:page_list')
-    
+
     versions = page.versions.all()
-    
+
     return render(request, 'wiki/page_history.html', {
         'page': page,
         'versions': versions,
-        'organization': org
+        'organization': page.organization,
     })
 
 
 @login_required
 def wiki_page_restore(request, slug, version_number):
     """Restore a previous version of a wiki page"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile else None
-    
-    # MVP Mode: Fall back to demo organization if user has no org
-    if not org:
-        org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    
-    # Get page scoped to user's organization
-    page = WikiPage.objects.filter(slug=slug, organization=org).first()
+    # Workspace-scoped page lookup (the tenant boundary)
+    page = WikiPage.objects.filter(_wiki_scope_q(request), slug=slug).first()
     if not page:
         messages.error(request, 'Page not found')
         return redirect('wiki:page_list')
@@ -783,27 +775,15 @@ def template_gallery(request):
 def knowledge_hub_home(request):
     """Unified Knowledge Hub - Wiki Documentation with AI"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    
+
     # Get search query
     search_query = request.GET.get('q', '')
-    
-    # Include demo organization content only when in demo/sandbox mode
-    demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False) if hasattr(request.user, 'profile') else False
-    
-    # Build organization filter
-    if org:
-        org_filter = Q(organization=org)
-        if demo_org and is_demo_mode:
-            org_filter |= Q(organization=demo_org)
-    elif demo_org and is_demo_mode:
-        # If user has no org but is in demo mode, show demo org content
-        org_filter = Q(organization=demo_org)
-    else:
-        # No org at all (or not in demo mode with no org), show empty results
-        org_filter = Q(pk=None)
-    
-    # Get wiki pages from user's org AND demo org
+
+    # Workspace-scoped filter (the tenant boundary). Demo mode also surfaces
+    # legacy null-workspace seed content.
+    org_filter = _wiki_scope_q(request)
+
+    # Get wiki pages scoped to the active workspace
     wiki_pages = WikiPage.objects.filter(org_filter, is_published=True).select_related('category', 'created_by')
     if search_query:
         wiki_pages = wiki_pages.filter(

@@ -2295,11 +2295,15 @@ def run_discovery_idea_automations(sender, instance, created, **kwargs):
     """Fires `discovery_idea_submitted` on create, and
     `discovery_idea_scored` when ai_scored_at transitions to set."""
     from kanban.models import Board
-    # DiscoveryIdea has organization but not directly a board. For automation
-    # we use the org's most-recent board as the target_board (best-effort);
-    # in practice rules on discovery_idea_* should be board-agnostic and rely
-    # on the source object.
-    board = Board.objects.filter(organization=instance.organization).order_by('-id').first()
+    # DiscoveryIdea isn't tied to a single board. Scope the best-effort target
+    # board to the idea's WORKSPACE (the tenant boundary) so automations don't
+    # fire on an unrelated workspace's board. Rules on discovery_idea_* should be
+    # board-agnostic and rely on the source object.
+    workspace = getattr(instance, 'workspace', None)
+    board = (
+        Board.objects.filter(workspace=workspace).order_by('-id').first()
+        if workspace is not None else None
+    )
     if not board:
         return
     if created:
