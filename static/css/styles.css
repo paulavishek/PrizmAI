@@ -861,6 +861,18 @@ body {
     transform: translateY(-5px);
 }
 
+/* Keep an open board action menu above sibling board cards.
+   Without this, the next-row card paints over the dropdown items. */
+.dashboard-card .dropdown-menu {
+    z-index: 1056;
+}
+/* Lift the whole column (and its card) while its menu is open so it
+   wins the stacking order against later cards in the grid. */
+.row > [class*="col-"]:has(.dropdown-menu.show) {
+    position: relative;
+    z-index: 1056;
+}
+
 .stats-card {
     border-left: 4px solid;
     border-radius: 5px;
