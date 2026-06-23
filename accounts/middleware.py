@@ -72,6 +72,21 @@ class WorkspaceMiddleware:
                 self._heal_workspace_state(profile)
 
                 ws = profile.active_workspace  # re-read after potential heal
+
+                # ── Ownership guard ─────────────────────────────────────
+                # Workspaces are private to their owner.  A stale
+                # active_workspace pointing at someone else's workspace
+                # (legacy data from the org-based model) is reset to one the
+                # user owns, so they never land inside a foreign workspace.
+                if ws and not ws.is_demo and ws.created_by_id != request.user.id:
+                    from kanban.models import Workspace
+                    owned = Workspace.objects.filter(
+                        created_by=request.user, is_demo=False, is_active=True,
+                    ).order_by('-created_at').first()
+                    profile.active_workspace = owned
+                    profile.save(update_fields=['active_workspace'])
+                    ws = owned
+
                 if ws and ws.is_active:
                     request.workspace = ws
                 elif profile.organization and not profile.is_viewing_demo:

@@ -51,7 +51,12 @@ def _require_discovery(request):
     Return (org, features, None) if discovery is enabled and the user has an org.
     Return (None, None, HttpResponse) if access is blocked (redirect or 403).
     """
-    org = getattr(getattr(request.user, 'profile', None), 'organization', None)
+    # Scope org is derived from the active workspace (the tenant boundary),
+    # falling back to the profile's org.  Behaviour-preserving: each owned
+    # workspace lives under the user's own org.
+    profile = getattr(request.user, 'profile', None)
+    active_ws = getattr(profile, 'active_workspace', None)
+    org = getattr(active_ws, 'organization', None) or getattr(profile, 'organization', None)
     features = _get_features(request.user)
 
     if not features.get('show_discovery'):

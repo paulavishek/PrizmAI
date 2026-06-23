@@ -125,7 +125,7 @@
                                   data-board-id="{{ node.board_id }}"{% endif %}><i class="fas fa-triangle-exclamation me-1"></i>Gaps Noted</span>
                             {% endwith %}{% endwith %}
                             {% endif %}
-                            {% if node.is_org_wide %}<span class="badge bg-info text-dark" style="font-size:0.6rem;" title="Visible to everyone in your organization"><i class="fas fa-globe me-1"></i>Org-wide</span>{% endif %}
+                            {% if node.is_org_wide %}<span class="badge bg-info text-dark" style="font-size:0.6rem;" title="Visible to everyone who collaborates in this workspace"><i class="fas fa-globe me-1"></i>Workspace-wide</span>{% endif %}
                             <small class="text-muted ms-auto">{{ node.created_at|date:"M d" }}</small>
                             {% if node.manageable %}
                             <span class="memory-card-actions ms-1">
@@ -275,8 +275,8 @@
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" id="memoryOrgWide">
                     <label class="form-check-label" for="memoryOrgWide">
-                        Make this organization-wide
-                        <small class="text-muted d-block">Visible to everyone in your organization, not just members of this board.</small>
+                        Make this workspace-wide
+                        <small class="text-muted d-block">Visible to everyone who collaborates in this workspace, not just members of this board.</small>
                     </label>
                 </div>
                 {% endif %}

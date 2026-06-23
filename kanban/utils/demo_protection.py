@@ -122,28 +122,20 @@ def get_user_boards(user):
         # Fallback: official demo boards (read-only)
         return Board.objects.filter(is_official_demo_board=True).distinct()
 
-    # Real workspace — prefer workspace-scoped filter if available
+    # Real workspace — boards in the active workspace, plus any board shared *to*
+    # the user as a non-owner member/viewer (BoardMembership), regardless of its
+    # workspace. Owned boards stay workspace-scoped so switching workspaces still
+    # filters your own boards; only boards invited to you cross over. (Board.owner
+    # is a legacy nullable field — ownership is tracked by membership role.)
     if active_ws and not active_ws.is_demo:
         return Board.objects.filter(
-            workspace=active_ws,
+            Q(workspace=active_ws)
+            | Q(memberships__user=user, memberships__role__in=['member', 'viewer']),
             is_official_demo_board=False,
             is_sandbox_copy=False,
         ).distinct()
 
-    # Org admin fallback: scope to their organization (never return global)
-    from kanban.permissions import is_user_org_admin
-    if is_user_org_admin(user):
-        org = getattr(profile, 'organization', None)
-        if org and not getattr(org, 'is_demo', False):
-            return Board.objects.filter(
-                organization=org,
-                is_official_demo_board=False,
-                is_sandbox_copy=False,
-            ).exclude(
-                created_by_session__startswith='spectra_demo_'
-            ).distinct()
-
-    # Fallback: exclude every flavour of demo data
+    # Fallback (no active workspace): boards the user created or was invited to.
     return Board.objects.filter(
         Q(created_by=user) | Q(memberships__user=user),
         is_official_demo_board=False,
@@ -186,18 +178,6 @@ def get_user_missions(user):
             workspace=active_ws,
         ).distinct()
 
-    # Org admin fallback: scope to their organization
-    from kanban.permissions import is_user_org_admin
-    if is_user_org_admin(user):
-        org = getattr(profile, 'organization', None)
-        if org and not getattr(org, 'is_demo', False):
-            return Mission.objects.filter(
-                Q(workspace__organization=org) |
-                Q(strategies__boards__organization=org),
-                is_demo=False,
-                is_seed_demo_data=False,
-            ).distinct()
-
     return Mission.objects.filter(
         Q(created_by=user) |
         Q(strategies__boards__id__in=list(
@@ -230,18 +210,6 @@ def get_user_goals(user):
         return OrganizationGoal.objects.filter(
             workspace=active_ws,
         ).distinct()
-
-    # Org admin fallback: scope to their organization
-    from kanban.permissions import is_user_org_admin
-    if is_user_org_admin(user):
-        org = getattr(profile, 'organization', None)
-        if org and not getattr(org, 'is_demo', False):
-            return OrganizationGoal.objects.filter(
-                Q(workspace__organization=org) |
-                Q(missions__strategies__boards__organization=org),
-                is_demo=False,
-                is_seed_demo_data=False,
-            ).distinct()
 
     return OrganizationGoal.objects.filter(
         Q(created_by=user) |
@@ -281,17 +249,6 @@ def get_user_strategies(user):
         return Strategy.objects.filter(
             workspace=active_ws,
         ).distinct()
-
-    # Org admin fallback: scope to their organisation
-    from kanban.permissions import is_user_org_admin
-    if is_user_org_admin(user):
-        org = getattr(profile, 'organization', None)
-        if org and not getattr(org, 'is_demo', False):
-            return Strategy.objects.filter(
-                Q(workspace__organization=org) |
-                Q(boards__organization=org),
-                is_seed_demo_data=False,
-            ).distinct()
 
     return Strategy.objects.filter(
         Q(created_by=user) |

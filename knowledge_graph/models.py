@@ -38,8 +38,9 @@ class MemoryNode(models.Model):
     is_auto_captured = models.BooleanField(default=True)
     is_org_wide = models.BooleanField(
         default=False,
-        help_text="If True, visible to everyone in the organization, not just board members. "
-                  "Only Owners/Org Admins can set this.",
+        help_text="If True, visible to everyone who collaborates in this board's "
+                  "workspace (workspace-wide), not just members of this board. "
+                  "Only the board owner can set this.",
     )
     source_object_type = models.CharField(max_length=50, blank=True, default='')
     source_object_id = models.IntegerField(null=True, blank=True)

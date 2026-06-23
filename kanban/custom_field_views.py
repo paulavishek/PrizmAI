@@ -1,9 +1,8 @@
 """
 Workspace-admin UI for managing CustomFieldDefinition rows.
 
-RBAC: requires Org Admin (canonical check via
-`kanban.permissions.is_user_org_admin`). Custom fields are workspace-scoped,
-and a workspace belongs to an Organization, so Org Admin is the right tier.
+RBAC: requires the workspace owner. Custom fields are workspace-scoped, so
+the owner of the workspace (its creator) is the right tier.
 
 Routes (registered in kanban/urls.py):
     GET  /workspace/<ws_id>/custom-fields/             list
@@ -31,25 +30,21 @@ from .custom_field_models import (
     FIELD_TYPE_LIST,
 )
 from .models import Workspace
-from .permissions import is_user_org_admin, is_demo_context
+from .permissions import is_demo_context
 
 
 def _require_workspace_admin(request, workspace):
-    """Permission gate: must be Org Admin of the workspace's organization.
+    """Permission gate: must be the owner of the workspace.
 
-    Demo workspaces bypass the org-admin and same-org checks so that any
-    authenticated user exploring the demo can freely manage custom fields.
+    Demo workspaces bypass the owner check so that any authenticated user
+    exploring the demo can freely manage custom fields.
     """
     if is_demo_context(request, workspace=workspace):
         return None
-    if not is_user_org_admin(request.user):
+    if workspace.created_by_id != request.user.id:
         return HttpResponseForbidden(
-            "Only workspace admins can manage custom fields."
+            "Only the workspace owner can manage custom fields."
         )
-    # Same-org check: prevent an admin of org A from editing org B's workspace.
-    user_org_id = getattr(getattr(request.user, 'profile', None), 'organization_id', None)
-    if user_org_id and workspace.organization_id and user_org_id != workspace.organization_id:
-        return HttpResponseForbidden("This workspace is not in your organization.")
     return None
 
 

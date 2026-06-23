@@ -24,16 +24,20 @@ def _get_user_boards(user):
 
 def _accessible_memory_qs(user):
     """MemoryNodes the user may see: those on boards they can access, plus any
-    org-wide memories within their own organization.
+    workspace-wide memories in a workspace they collaborate in.
 
-    Org-wide scoping goes through board → workspace → organization so it never
-    leaks across tenants.
+    A "workspace-wide" memory (``is_org_wide=True``) on a board in workspace W
+    is visible to any collaborator of W — i.e. anyone who owns W or is a member
+    of a board in W.  That collaborator set is exactly the workspaces of the
+    user's accessible boards, so we reuse get_user_boards as the single source.
     """
-    board_ids = _get_user_boards(user)
+    from kanban.utils.demo_protection import get_user_boards
+    boards = get_user_boards(user)
+    board_ids = list(boards.values_list('id', flat=True))
+    collab_ws_ids = list(boards.values_list('workspace_id', flat=True))
     visibility = Q(board_id__in=board_ids)
-    org_id = getattr(getattr(user, 'profile', None), 'organization_id', None)
-    if org_id:
-        visibility |= Q(is_org_wide=True, board__workspace__organization_id=org_id)
+    if collab_ws_ids:
+        visibility |= Q(is_org_wide=True, board__workspace_id__in=collab_ws_ids)
     return MemoryNode.objects.filter(visibility).distinct()
 
 

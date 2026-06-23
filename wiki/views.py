@@ -48,11 +48,18 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
         
         if self._is_viewing_demo():
             return Organization.objects.filter(is_demo=True).first()
-        
-        # Real mode: user's own org (can be None in MVP mode)
-        if hasattr(self.request.user, 'profile') and self.request.user.profile and self.request.user.profile.organization:
-            return self.request.user.profile.organization
-        
+
+        # Real mode: derive the effective org from the active workspace (the
+        # tenant boundary), falling back to the profile's org.  Each owned
+        # workspace lives under the user's own org, so this is behaviour-
+        # preserving while no longer reading profile.organization as primary.
+        profile = getattr(self.request.user, 'profile', None)
+        ws = getattr(profile, 'active_workspace', None)
+        if ws and not ws.is_demo and ws.organization_id:
+            return ws.organization
+        if profile and profile.organization:
+            return profile.organization
+
         return None
     
     def _wiki_org_filter(self):

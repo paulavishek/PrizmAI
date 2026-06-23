@@ -23,7 +23,7 @@ from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
 from kanban.favorite_views import is_user_favorite as _is_fav
-from kanban.permissions import is_demo_context, can_user_create_goals, can_user_create_missions, is_user_org_admin
+from kanban.permissions import is_demo_context, can_user_create_goals, can_user_create_missions
 
 from kanban.utils.demo_protection import get_user_boards
 from kanban.utils.analytics_helpers import get_boards_for_record
@@ -270,20 +270,6 @@ def goal_list(request):
     elif active_ws and not active_ws.is_demo:
         # Workspace-scoped: show only goals belonging to this workspace
         goals = OrganizationGoal.objects.filter(workspace=active_ws)
-    elif is_user_org_admin(request.user):
-        # Org Admin: scope to their organization (never return global)
-        _admin_org = getattr(profile, 'organization', None) if profile else None
-        if _admin_org and not getattr(_admin_org, 'is_demo', False):
-            goals = OrganizationGoal.objects.filter(
-                Q(workspace__organization=_admin_org) |
-                Q(missions__strategies__boards__organization=_admin_org),
-                is_demo=False, is_seed_demo_data=False,
-            )
-        else:
-            goals = OrganizationGoal.objects.filter(
-                is_demo=False, is_seed_demo_data=False,
-                created_by=request.user,
-            )
     else:
         # RBAC: goals the user created OR goals that are ancestors of
         # boards the user is a member of (Upward Visibility Rule).
@@ -649,20 +635,6 @@ def mission_list(request):
     elif active_ws and not active_ws.is_demo:
         # Workspace-scoped: only missions in the active workspace
         missions = Mission.objects.filter(workspace=active_ws)
-    elif is_user_org_admin(request.user):
-        # Org Admin: scope to their organization (never return global)
-        _admin_org = getattr(profile, 'organization', None) if profile else None
-        if _admin_org and not getattr(_admin_org, 'is_demo', False):
-            missions = Mission.objects.filter(
-                Q(workspace__organization=_admin_org) |
-                Q(strategies__boards__organization=_admin_org),
-                is_demo=False, is_seed_demo_data=False,
-            )
-        else:
-            missions = Mission.objects.filter(
-                is_demo=False, is_seed_demo_data=False,
-                created_by=request.user,
-            )
     else:
         # RBAC: missions the user created OR missions whose strategies
         # contain boards the user is a member of (Upward Visibility Rule).
@@ -702,11 +674,8 @@ def mission_detail(request, mission_id):
             board__strategy__mission=mission,
         ).values_list('board_id', flat=True)
     )
-    # Org admins / record owners see everything
-    _is_admin_or_owner = (
-        request.user.has_perm('prizmai.edit_mission', mission)
-        or is_user_org_admin(request.user)
-    )
+    # Record owners (and ancestor owners, via the perm) see everything
+    _is_admin_or_owner = request.user.has_perm('prizmai.edit_mission', mission)
     if _is_admin_or_owner or _is_demo_mission:
         user_accessible_board_ids = set(
             get_boards_for_record(mission, 'mission').values_list('id', flat=True)

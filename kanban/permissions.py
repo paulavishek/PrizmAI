@@ -40,6 +40,24 @@ def is_user_org_admin(user):
     return False
 
 
+# ── Workspace ownership helpers ──────────────────────────────────────────────
+
+def is_workspace_owner(user, workspace):
+    """True if ``user`` owns ``workspace`` (its creator).
+
+    Workspaces are personal-per-user; ``created_by`` is the ownership signal
+    now that Workspace is the top-level tenant boundary (Organization is no
+    longer read for user-facing scoping).
+    """
+    return bool(workspace) and getattr(workspace, 'created_by_id', None) == getattr(user, 'id', None)
+
+
+def owns_active_workspace(user):
+    """True if the user's current (non-demo) active workspace is their own."""
+    ws = getattr(getattr(user, 'profile', None), 'active_workspace', None)
+    return bool(ws) and not getattr(ws, 'is_demo', False) and ws.created_by_id == getattr(user, 'id', None)
+
+
 # ── Demo context helper ──────────────────────────────────────────────────────
 
 def is_demo_context(request, board=None, workspace=None):
@@ -75,23 +93,24 @@ def is_demo_context(request, board=None, workspace=None):
 
 
 def can_user_create_goals(user, request=None):
-    """Check if a user can create Organization Goals.
-    Allowed: Org Admin (group, org creator, or UI-promoted admin).
+    """Check if a user can create Goals.
+    Allowed: the owner of the active (non-demo) workspace.  Goals are
+    workspace-scoped, so workspace ownership is the gate.
     If in demo context, always True.
     """
     if request and is_demo_context(request):
         return True
-    return is_user_org_admin(user)
+    return owns_active_workspace(user)
 
 
 def can_user_create_missions(user, request=None, parent_goal=None):
     """Check if a user can create Missions.
-    Allowed: Org Admin, org creator, UI-promoted admin, or owner/creator of
-    the parent Goal.  If in demo context, always True.
+    Allowed: the active-workspace owner, or the owner/creator of the parent
+    Goal.  If in demo context, always True.
     """
     if request and is_demo_context(request):
         return True
-    if is_user_org_admin(user):
+    if owns_active_workspace(user):
         return True
     # Owner or creator of the parent goal
     if parent_goal:
