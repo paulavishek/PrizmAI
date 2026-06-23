@@ -133,6 +133,10 @@ def get_user_boards(user):
             | Q(memberships__user=user, memberships__role__in=['member', 'viewer']),
             is_official_demo_board=False,
             is_sandbox_copy=False,
+        ).exclude(
+            # A board in a soft-deleted (inactive) workspace is gone — never
+            # surface it, even if a stale BoardMembership still points at it.
+            Q(workspace__isnull=False) & Q(workspace__is_active=False)
         ).distinct()
 
     # Fallback (no active workspace): boards the user created or was invited to.
@@ -142,6 +146,8 @@ def get_user_boards(user):
         is_sandbox_copy=False,
     ).exclude(
         created_by_session__startswith='spectra_demo_'
+    ).exclude(
+        Q(workspace__isnull=False) & Q(workspace__is_active=False)
     ).distinct()
 
 

@@ -224,14 +224,70 @@ def dashboard(request):
     # (Task has no direct FK to Board — it goes through Column)
     _now = timezone.now()
     boards = boards.annotate(
+        # ``distinct=True`` is REQUIRED: get_user_boards() joins ``memberships``
+        # (the "shared with me" branch), so a plain Count multiplies a board's
+        # task total by the number of membership rows that survive the WHERE —
+        # which differs per viewer (owner sees all member rows, a member sees
+        # only their own). distinct counts task rows once, regardless.
         task_count=Count(
             'columns__tasks',
             filter=Q(columns__tasks__item_type='task'),
+            distinct=True,
+        ),
+        done_task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task', columns__tasks__progress=100),
+            distinct=True,
         ),
     )
 
+    # ── Own vs shared board partition ────────────────────────────────
+    # A board is "owned" when the user created it, is its owner, or it lives in
+    # the active workspace. Anything else is a board shared *to* the user via
+    # BoardMembership from another workspace. Headline metrics cover owned boards
+    # only (the active-workspace snapshot); shared boards get their own section.
+    # In demo mode every visible board is a personal sandbox copy, so they are
+    # all treated as owned.
+    _active_ws_id = getattr(active_ws, 'id', None)
+    _owned_q = Q(created_by=request.user) | Q(owner=request.user)
+    if _active_ws_id:
+        _owned_q |= Q(workspace_id=_active_ws_id)
+    if demo_mode:
+        owned_boards = boards
+        shared_boards = boards.none()
+    else:
+        owned_boards = boards.filter(_owned_q)
+        shared_boards = boards.exclude(_owned_q)
+    owned_board_ids = list(owned_boards.values_list('id', flat=True))
+
+    # Collaborator metadata for the "Shared with me" section (no N+1): owner via
+    # select_related; member count + the viewer's own role come from independent
+    # BoardMembership queries. NOTE: we must NOT annotate Count('memberships') on
+    # ``shared_boards`` — that queryset carries get_user_boards()'s membership JOIN
+    # constrained to the current user, so the count would always be 1.
+    shared_boards = shared_boards.select_related('created_by')
+    _shared_board_ids = list(shared_boards.values_list('id', flat=True))
+    my_board_roles = {}
+    shared_board_member_counts = {}
+    if _shared_board_ids:
+        from kanban.models import BoardMembership
+        my_board_roles = {
+            m.board_id: m.role
+            for m in BoardMembership.objects.filter(
+                user=request.user, board_id__in=_shared_board_ids,
+            )
+        }
+        shared_board_member_counts = {
+            row['board_id']: row['c']
+            for row in BoardMembership.objects
+            .filter(board_id__in=_shared_board_ids)
+            .values('board_id')
+            .annotate(c=Count('id'))
+        }
+
     # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
-    _stats = Task.objects.filter(column__board__in=boards, item_type='task').aggregate(
+    # Scoped to owned boards: the headline cards reflect the active workspace only.
+    _stats = Task.objects.filter(column__board_id__in=owned_board_ids, item_type='task').aggregate(
         task_count=Count('id'),
         completed_count=Count('id', filter=Q(progress=100)),
         overdue_count=Count('id', filter=Q(due_date__lt=_now) & ~Q(progress=100)),
@@ -252,8 +308,8 @@ def dashboard(request):
     # Items per page
     items_per_page = 10
     
-    # All Tasks (exclude milestones)
-    all_tasks_list = Task.objects.filter(column__board__in=boards, item_type='task').select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
+    # All Tasks (exclude milestones) — owned boards only, to match the headline cards
+    all_tasks_list = Task.objects.filter(column__board_id__in=owned_board_ids, item_type='task').select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
     all_tasks_page = request.GET.get('all_tasks_page', 1)
     all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
     try:
@@ -265,7 +321,7 @@ def dashboard(request):
     
     # Completed Tasks (exclude milestones)
     completed_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         progress=100
     ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
@@ -280,7 +336,7 @@ def dashboard(request):
     
     # Overdue Tasks
     overdue_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         due_date__lt=timezone.now()
     ).exclude(
@@ -297,7 +353,7 @@ def dashboard(request):
     
     # Due Soon Tasks
     due_soon_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(
         progress=100
@@ -798,16 +854,19 @@ def dashboard(request):
             })
 
     # ----------------------------------------------------------------
-    # Total high-risk count across all accessible boards
+    # Total high-risk count — owned boards only, to match the headline card scope
     # ----------------------------------------------------------------
-    total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
+    total_high_risk = sum(
+        _board_stats_map.get(bid, {}).get('high_risk_tasks', 0)
+        for bid in owned_board_ids
+    )
 
     # Queryset of individual high-risk tasks (for modal)
     # Sort: critical first (0), then high (1); within each group earliest due date first (nulls last)
     high_risk_tasks_qs = (
         Task.objects
         .filter(
-            column__board_id__in=_board_ids,
+            column__board_id__in=owned_board_ids,
             item_type='task',
             risk_level__in=['high', 'critical'],
         )
@@ -1369,7 +1428,9 @@ def dashboard(request):
     # Standalone boards: user-accessible boards not linked to any strategy
     # In demo mode, exclude sandbox copies — they appear via the mission tree
     # through the template→sandbox mapping, not as standalone.
-    _standalone_qs = boards.filter(strategy__isnull=True)
+    # Owned boards only — shared cross-workspace boards belong to the "Shared with
+    # me" section, not this workspace's strategic hierarchy.
+    _standalone_qs = owned_boards.filter(strategy__isnull=True)
     if demo_mode:
         _standalone_qs = _standalone_qs.exclude(cloned_from__isnull=False)
     standalone_boards = _standalone_qs.order_by('name')
@@ -1527,6 +1588,10 @@ def dashboard(request):
 
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
+        'owned_boards': owned_boards,
+        'shared_boards': shared_boards,
+        'my_board_roles': my_board_roles,
+        'shared_board_member_counts': shared_board_member_counts,
         'task_count': task_count,
         'completed_count': completed_count,
         'completion_rate': round(completion_rate, 1),
@@ -1989,6 +2054,9 @@ def board_list(request):
                 memberships__role__in=['member', 'viewer']),
             is_official_demo_board=False,
             is_sandbox_copy=False,
+        ).exclude(
+            # Hide boards in soft-deleted (inactive) workspaces (see get_user_boards).
+            Q(workspace__isnull=False) & Q(workspace__is_active=False)
         ).distinct()
     elif profile.onboarding_version >= 2:
         # v2 onboarding (AI-generated or scratch) — never show demo or sandbox boards
@@ -1998,24 +2066,68 @@ def board_list(request):
             is_sandbox_copy=False,
         ).exclude(
             created_by_session__startswith='spectra_demo_'
+        ).exclude(
+            Q(workspace__isnull=False) & Q(workspace__is_active=False)
         ).distinct()
     else:
         # v1 legacy — use centralized helper for safe filtering
         from kanban.utils.demo_protection import get_user_boards as _get_user_boards
         boards = _get_user_boards(request.user)
 
-    # Annotate task counts so the template can display them efficiently
+    # Annotate task counts so the template can display them efficiently.
+    # ``distinct=True`` avoids the membership-join fan-out (see dashboard view).
     boards = boards.annotate(
         task_count=Count(
             'columns__tasks',
             filter=Q(columns__tasks__item_type='task'),
+            distinct=True,
+        ),
+        done_task_count=Count(
+            'columns__tasks',
+            filter=Q(columns__tasks__item_type='task', columns__tasks__progress=100),
+            distinct=True,
         ),
     )
 
-    # Compute summary metrics across all accessible boards
-    task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
+    # Own vs shared partition (mirrors the dashboard). Owned = created/owned by
+    # the user or in the active workspace; everything else is shared *to* them.
+    _active_ws_id = getattr(active_ws, 'id', None)
+    _owned_q = Q(created_by=request.user) | Q(owner=request.user)
+    if _active_ws_id:
+        _owned_q |= Q(workspace_id=_active_ws_id)
+    if demo_mode:
+        owned_boards = boards
+        shared_boards = boards.none()
+    else:
+        owned_boards = boards.filter(_owned_q)
+        shared_boards = boards.exclude(_owned_q)
+    owned_board_ids = list(owned_boards.values_list('id', flat=True))
+
+    shared_boards = shared_boards.select_related('created_by')
+    _shared_board_ids = list(shared_boards.values_list('id', flat=True))
+    my_board_roles = {}
+    shared_board_member_counts = {}
+    if _shared_board_ids:
+        from kanban.models import BoardMembership
+        my_board_roles = {
+            m.board_id: m.role
+            for m in BoardMembership.objects.filter(
+                user=request.user, board_id__in=_shared_board_ids,
+            )
+        }
+        shared_board_member_counts = {
+            row['board_id']: row['c']
+            for row in BoardMembership.objects
+            .filter(board_id__in=_shared_board_ids)
+            .values('board_id')
+            .annotate(c=Count('id'))
+        }
+
+    # Compute summary metrics — scoped to OWNED boards (the active-workspace
+    # snapshot), so the cards match the "Your Boards" grid below.
+    task_count = Task.objects.filter(column__board_id__in=owned_board_ids, item_type='task').count()
     completed_count = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         progress=100
     ).count()
@@ -2025,13 +2137,13 @@ def board_list(request):
     remaining_tasks = task_count - completed_count
 
     due_soon = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(progress=100).count()
 
     overdue_count = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         item_type='task',
         due_date__lt=timezone.now()
     ).exclude(progress=100).count()
@@ -2040,7 +2152,7 @@ def board_list(request):
 
     # All Tasks modal data
     all_tasks_list = Task.objects.filter(
-        column__board__in=boards, item_type='task'
+        column__board_id__in=owned_board_ids, item_type='task'
     ).select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
     all_tasks_page = request.GET.get('all_tasks_page', 1)
     all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
@@ -2053,7 +2165,7 @@ def board_list(request):
 
     # Completed Tasks modal data
     completed_tasks_list = Task.objects.filter(
-        column__board__in=boards, item_type='task', progress=100
+        column__board_id__in=owned_board_ids, item_type='task', progress=100
     ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
     completed_tasks_page = request.GET.get('completed_tasks_page', 1)
     completed_tasks_paginator = Paginator(completed_tasks_list, items_per_page)
@@ -2066,7 +2178,7 @@ def board_list(request):
 
     # Overdue Tasks modal data
     overdue_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         due_date__lt=timezone.now()
     ).exclude(progress=100).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
     overdue_tasks_page = request.GET.get('overdue_tasks_page', 1)
@@ -2080,7 +2192,7 @@ def board_list(request):
 
     # Due Soon Tasks modal data
     due_soon_tasks_list = Task.objects.filter(
-        column__board__in=boards,
+        column__board_id__in=owned_board_ids,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(progress=100).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
     due_soon_tasks_page = request.GET.get('due_soon_tasks_page', 1)
@@ -2096,6 +2208,10 @@ def board_list(request):
     # create_board view/page (the legacy create-board modal was removed).
     return render(request, 'kanban/board_list.html', {
         'boards': boards,
+        'owned_boards': owned_boards,
+        'shared_boards': shared_boards,
+        'my_board_roles': my_board_roles,
+        'shared_board_member_counts': shared_board_member_counts,
         'task_count': task_count,
         'completed_count': completed_count,
         'completion_rate': completion_rate,

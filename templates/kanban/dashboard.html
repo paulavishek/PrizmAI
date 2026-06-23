@@ -1247,9 +1247,9 @@
                 </div>
             </div>
             <div class="card-body p-3" style="overflow-y:auto; max-height:600px;">
-                {% if boards %}
+                {% if owned_boards %}
                 <div class="row g-3">
-                    {% for board in boards %}
+                    {% for board in owned_boards %}
                     <div class="col-md-6 col-xl-4">
                         <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
                             <div class="board-card-grid" style="border-left:4px solid {% cycle '#3b82f6' '#8b5cf6' '#f59e0b' '#10b981' '#ec4899' '#6366f1' %};">
@@ -1275,7 +1275,7 @@
                                     {% endif %}
                                 </div>
                                 <div class="board-card-progress">
-                                    {% with total=board.task_count done=board.completed_task_count %}
+                                    {% with total=board.task_count done=board.done_task_count %}
                                     {% if total > 0 %}
                                     <div class="progress" style="height: 4px;">
                                         <div class="progress-bar {% if done == total %}bg-success{% elif done > 0 %}bg-primary{% else %}bg-secondary{% endif %}" 
@@ -1304,6 +1304,74 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if shared_boards %}
+        <!-- ======================================================== -->
+        <!-- Shared with me (boards from other users' workspaces)     -->
+        <!-- ======================================================== -->
+        <div class="card prizm-surface mb-4 mt-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-user-friends me-2"></i>Shared with me
+                </h6>
+                <small class="text-muted">Boards you collaborate on, owned by other workspaces</small>
+            </div>
+            <div class="card-body p-3" style="overflow-y:auto; max-height:400px;">
+                <div class="row g-3">
+                    {% for board in shared_boards %}
+                    <div class="col-md-6 col-xl-4">
+                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
+                            <div class="board-card-grid" style="border-left:4px solid #64748b;">
+                                <div class="d-flex align-items-start justify-content-between mb-2">
+                                    <h6 class="board-card-title mb-0">{{ board.name }}</h6>
+                                    {% with health=board_health_map|get_item:board.id %}
+                                    {% if health.level == 'red' %}
+                                        <span class="board-health-dot bg-danger" title="{{ health.tooltip }}"></span>
+                                    {% elif health.level == 'amber' %}
+                                        <span class="board-health-dot bg-warning" title="{{ health.tooltip }}"></span>
+                                    {% else %}
+                                        <span class="board-health-dot bg-success" title="{{ health.tooltip }}"></span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </div>
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <small class="text-muted">{{ board.task_count }} tasks</small>
+                                    {% with my_role=my_board_roles|get_item:board.id %}
+                                    <span class="badge {% if my_role == 'viewer' %}bg-secondary{% else %}bg-info{% endif %}" style="font-size:0.65rem;">
+                                        {{ my_role|default:"member"|title }}
+                                    </span>
+                                    {% endwith %}
+                                </div>
+                                <div class="board-card-progress mb-2">
+                                    {% with total=board.task_count done=board.done_task_count %}
+                                    <div class="progress" style="height: 4px;">
+                                        {% if total > 0 %}
+                                        <div class="progress-bar {% if done == total %}bg-success{% elif done > 0 %}bg-primary{% else %}bg-secondary{% endif %}"
+                                             style="width: {% widthratio done total 100 %}%"></div>
+                                        {% else %}
+                                        <div class="progress-bar bg-secondary" style="width: 0%"></div>
+                                        {% endif %}
+                                    </div>
+                                    {% endwith %}
+                                </div>
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <small class="text-muted" style="font-size:0.7rem;">
+                                        <i class="fas fa-user-circle me-1"></i>{{ board.created_by.get_full_name|default:board.created_by.username|default:"Unknown" }}
+                                    </small>
+                                    {% with mcount=shared_board_member_counts|get_item:board.id %}
+                                    <small class="text-muted" style="font-size:0.7rem;">
+                                        <i class="fas fa-users me-1"></i>{{ mcount|default:0 }} member{{ mcount|pluralize }}
+                                    </small>
+                                    {% endwith %}
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
     </div>
     <!-- /col-lg-7 (Board Cards) -->
@@ -1527,12 +1595,12 @@
         {% else %}
             {# Empty state — depends on whether boards exist #}
             <div class="text-center py-5">
-                {% if boards %}
+                {% if owned_boards %}
                 {# User has boards but no goal hierarchy — manual workspace #}
                 <i class="fas fa-trophy fa-4x mb-3" style="opacity:0.3;color:#6366f1;"></i>
                 <p class="mb-2 fw-semibold">No Organization Goals yet</p>
                 <p class="text-muted small mb-4">
-                    You have <strong>{{ boards|length }} board{{ boards|length|pluralize }}</strong> in this workspace.
+                    You have <strong>{{ owned_boards|length }} board{{ owned_boards|length|pluralize }}</strong> in this workspace.
                     Create an <strong>Organization Goal</strong> to organize your boards into a hierarchy.
                 </p>
                 {% if can_create_goal %}
