@@ -322,3 +322,123 @@ class BoardDetailEndToEndIsolationTest(TestCase):
         client.force_login(b['user'])
         resp = client.get(reverse('board_detail', args=[a['board'].id]))
         self.assertEqual(resp.status_code, 403)
+
+
+def _make_pending_suggestion(tenant):
+    """A pending ResourceLevelingSuggestion on ``tenant``'s board."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from kanban.models import Task
+    from kanban.resource_leveling_models import ResourceLevelingSuggestion
+
+    task = Task.objects.create(
+        column=tenant['col'], title='RL task', created_by=tenant['user'],
+        assigned_to=tenant['user'],
+    )
+    return ResourceLevelingSuggestion.objects.create(
+        task=task,
+        workspace=tenant['ws'],
+        current_assignee=tenant['user'],
+        suggested_assignee=tenant['user'],
+        confidence_score=80.0,
+        time_savings_hours=2.0,
+        time_savings_percentage=20.0,
+        skill_match_score=50.0,
+        workload_impact='balances_load',
+        reasoning='test',
+        expires_at=timezone.now() + timedelta(hours=48),
+    )
+
+
+class ResourceLevelingSuggestionIsolationTest(TestCase):
+    """accept/reject_suggestion are keyed on suggestion_id, which the board-access
+    middleware does NOT cover — they must enforce board access themselves."""
+
+    def test_foreign_tenant_cannot_accept_suggestion(self):
+        a = _make_tenant('rl_alpha')
+        b = _make_tenant('rl_bravo')
+        sug = _make_pending_suggestion(a)
+
+        client = Client()
+        client.force_login(b['user'])
+        resp = client.post(reverse('accept_suggestion', args=[sug.id]))
+
+        self.assertEqual(resp.status_code, 403)
+        sug.refresh_from_db()
+        self.assertEqual(sug.status, 'pending')  # no state change
+
+    def test_foreign_tenant_cannot_reject_suggestion(self):
+        a = _make_tenant('rl_charlie')
+        b = _make_tenant('rl_delta')
+        sug = _make_pending_suggestion(a)
+
+        client = Client()
+        client.force_login(b['user'])
+        resp = client.post(reverse('reject_suggestion', args=[sug.id]))
+
+        self.assertEqual(resp.status_code, 403)
+        sug.refresh_from_db()
+        self.assertEqual(sug.status, 'pending')  # no state change
+
+    def test_owner_can_act_on_own_suggestion(self):
+        # Positive control: the board owner is not blocked by the new gate.
+        a = _make_tenant('rl_echo')
+        sug = _make_pending_suggestion(a)
+
+        client = Client()
+        client.force_login(a['user'])
+        resp = client.post(reverse('reject_suggestion', args=[sug.id]))
+
+        self.assertEqual(resp.status_code, 200)
+        sug.refresh_from_db()
+        self.assertEqual(sug.status, 'rejected')
+
+
+class PerformanceProfileIsolationTest(TestCase):
+    """get_user_performance_profile is keyed on user_id (not board-scoped) — a
+    user may read only their own profile or that of someone on a shared board."""
+
+    def test_foreign_user_profile_denied(self):
+        a = _make_tenant('pp_alpha')
+        b = _make_tenant('pp_bravo')
+        client = Client()
+        client.force_login(b['user'])
+        resp = client.get(
+            reverse('get_user_performance_profile', args=[a['user'].id])
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_own_profile_allowed(self):
+        b = _make_tenant('pp_charlie')
+        client = Client()
+        client.force_login(b['user'])
+        resp = client.get(
+            reverse('get_user_performance_profile', args=[b['user'].id])
+        )
+        self.assertEqual(resp.status_code, 200)
+
+
+class MemoryFeedbackIsolationTest(TestCase):
+    """memory_feedback is keyed on query_id — only the user who ran the query may
+    submit feedback (otherwise another tenant could poison memory ranking)."""
+
+    def test_foreign_tenant_cannot_submit_feedback(self):
+        import json
+        from knowledge_graph.models import OrganizationalMemoryQuery
+
+        a = _make_tenant('mf_alpha')
+        b = _make_tenant('mf_bravo')
+        query = OrganizationalMemoryQuery.objects.create(
+            asked_by=a['user'], query_text='what is the secret?',
+        )
+
+        client = Client()
+        client.force_login(b['user'])
+        resp = client.post(
+            reverse('memory_feedback', args=[query.id]),
+            data=json.dumps({'was_helpful': False}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+        query.refresh_from_db()
+        self.assertIsNone(query.was_helpful)  # no state change

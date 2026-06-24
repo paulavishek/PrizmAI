@@ -225,33 +225,15 @@ class AIRouter:
         # for any active OrganizationAISettings record.
         # ==============================================================
         if user is None:
-            # Try to find any org-level AI settings to use as context.
-            # For Celery tasks this gives the most-recently configured org.
-            try:
-                org_settings = OrganizationAISettings.objects.filter(
-                    provider__isnull=False
-                ).first()
-                if org_settings and org_settings.encrypted_api_key and org_settings.byok_provider:
-                    try:
-                        api_key = self._decrypt_key(org_settings.encrypted_api_key)
-                        logger.debug(
-                            "AIRouter (background task): using org BYOK key provider=%s",
-                            org_settings.byok_provider,
-                        )
-                        return (org_settings.byok_provider, api_key, True, org_settings.byok_model or None)
-                    except Exception:
-                        pass  # Decryption failure — fall through to platform key
-                if org_settings and org_settings.provider:
-                    api_key = self._platform_key(org_settings.provider)
-                    logger.debug(
-                        "AIRouter (background task): using org provider=%s",
-                        org_settings.provider,
-                    )
-                    return (org_settings.provider, api_key, False, None)
-            except Exception:
-                pass  # Table doesn't exist yet or any other error — fall through
-            # Final fallback for background tasks: Gemini with platform key.
-            logger.debug("AIRouter (background task): falling back to Gemini platform key")
+            # TENANT ISOLATION: a user-less background task has NO workspace
+            # context, so it must NEVER reach for "some" workspace's AI settings.
+            # Previously this scanned OrganizationAISettings and used the first
+            # row's BYOK key/provider — which, now that BYOK is per-workspace,
+            # would run one tenant's background AI on another tenant's BYOK key,
+            # quota and provider account. Always use the platform key instead.
+            # (If BYOK-in-background is ever needed, thread the owning workspace
+            # into the specific caller and resolve workspace.ai_settings there.)
+            logger.debug("AIRouter (background task): using Gemini platform key (no user/workspace context)")
             return ('gemini', self._platform_key('gemini'), False, None)
 
         # ---- Fetch user AI settings (starts empty for new users) ----

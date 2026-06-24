@@ -1067,6 +1067,14 @@ def memory_feedback(request, query_id):
     """
     query_record = get_object_or_404(OrganizationalMemoryQuery, pk=query_id)
 
+    # Tenant isolation: query_id is not covered by the board-access middleware.
+    # Feedback nudges cited memory-node importance scores and flags few-shot
+    # examples, so only the user who ran the query may submit feedback on it —
+    # otherwise a user could enumerate query ids and poison another tenant's
+    # memory ranking.
+    if query_record.asked_by_id != request.user.id:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
