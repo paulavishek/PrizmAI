@@ -157,8 +157,13 @@
     <div id="orgMemoryResult" style="display:none;">
         <div class="card search-result-card mb-3">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2 text-warning"></i>Answer</h5>
+                <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="backToMemoriesBtn">
+                            <i class="fas fa-arrow-left me-1"></i>Back to Memories
+                        </button>
+                        <h5 class="mb-0"><i class="fas fa-lightbulb me-2 text-warning"></i>Answer</h5>
+                    </div>
                     <span id="confidenceBadge" class="badge"></span>
                 </div>
                 <p id="answerText" class="mb-3"></p>
@@ -470,6 +475,25 @@ document.addEventListener('DOMContentLoaded', function() {
             doSearch();
         });
     });
+
+    // Restore the home view (Recent Memories list) from a single result.
+    function showMemoryHome() {
+        const recentSection = document.getElementById('recentMemoriesSection');
+        if (recentSection) recentSection.style.display = '';
+        resultDiv.style.display = 'none';
+        loadingDiv.style.display = 'none';
+        errorDiv.classList.add('d-none');
+        queryInput.value = '';
+    }
+
+    // "Back to Memories" button on the result card.
+    const backToMemoriesBtn = document.getElementById('backToMemoriesBtn');
+    if (backToMemoriesBtn) {
+        backToMemoriesBtn.addEventListener('click', function() {
+            showMemoryHome();
+            queryInput.focus();
+        });
+    }
 
     // Show recent section again when input is cleared
     queryInput.addEventListener('input', function() {
