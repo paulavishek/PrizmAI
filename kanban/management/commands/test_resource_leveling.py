@@ -34,7 +34,7 @@ class Command(BaseCommand):
         self.stdout.write(f'Testing resource leveling for board: {board.name}')
         
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService(workspace=board.workspace)
         
         # Update profiles
         self.stdout.write('Updating performance profiles...')

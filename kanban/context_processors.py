@@ -283,8 +283,7 @@ def discovery_count(request):
         return {'sidebar_discovery_to_score': 0}
     try:
         from kanban.views import _get_discovery_widget_counts
-        organization = getattr(getattr(request.user, 'profile', None), 'organization', None)
-        counts = _get_discovery_widget_counts(request.user, organization)
+        counts = _get_discovery_widget_counts(request.user)
         return {'sidebar_discovery_to_score': counts.get('discovery_ideas_to_score', 0)}
     except Exception:
         return {'sidebar_discovery_to_score': 0}

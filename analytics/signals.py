@@ -105,7 +105,7 @@ def on_user_ai_settings_saved(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender='ai_assistant.OrganizationAISettings')
 def on_org_ai_settings_saved(sender, instance, created, **kwargs):
-    """Record org-level BYOK events."""
+    """Record workspace-level BYOK events."""
     try:
         from analytics.models import AIQuotaEvent
         user = getattr(instance, 'updated_by', None)
@@ -119,7 +119,7 @@ def on_org_ai_settings_saved(sender, instance, created, **kwargs):
                 provider_configured=getattr(instance, 'byok_provider', '') or '',
             )
             _record_feature(user, 'byok_setup', 'integration',
-                            metadata={'scope': 'org', 'provider': getattr(instance, 'byok_provider', '')})
+                            metadata={'scope': 'workspace', 'provider': getattr(instance, 'byok_provider', '')})
     except Exception:
         logger.exception("on_org_ai_settings_saved analytics hook failed")
 

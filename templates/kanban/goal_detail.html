@@ -2,7 +2,7 @@
 {% extends 'kanban/partials/strategic_detail_base.html' %}
 
 {% block breadcrumb_items %}
-<li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
+<li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Workspace Goals</a></li>
 <li class="breadcrumb-item active">{{ goal.name|truncatechars:40 }}</li>
 {% endblock %}
 

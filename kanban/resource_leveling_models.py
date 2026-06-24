@@ -16,7 +16,9 @@ class UserPerformanceProfile(models.Model):
     Used for predicting task completion times and skill matching
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='performance_profile')
-    # Organization is optional - simplified mode doesn't require it
+    # Workspace is the tenant scope now. Optional — simplified mode doesn't require it.
+    workspace = models.ForeignKey('kanban.Workspace', on_delete=models.SET_NULL, null=True, blank=True, related_name='performance_profiles')
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='performance_profiles_org')
     
     # Performance metrics
@@ -335,7 +337,9 @@ class ResourceLevelingSuggestion(models.Model):
     Stores AI-generated resource leveling suggestions
     """
     task = models.ForeignKey('kanban.Task', on_delete=models.CASCADE, related_name='leveling_suggestions')
-    # Organization is optional - simplified mode doesn't require it
+    # Workspace is the tenant scope now. Optional — simplified mode doesn't require it.
+    workspace = models.ForeignKey('kanban.Workspace', on_delete=models.SET_NULL, null=True, blank=True, related_name='leveling_suggestions')
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='leveling_suggestions')
     
     # Current state

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Organization Goals - PrizmAI{% endblock %}
+{% block title %}Workspace Goals - PrizmAI{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -8,10 +8,10 @@
         <div class="d-sm-flex align-items-center justify-content-between mb-4">
             <div>
                 <h1 class="h3 mb-1 text-gray-800">
-                    <i class="fas fa-trophy me-2 text-warning"></i>Organization Goals
+                    <i class="fas fa-trophy me-2 text-warning"></i>Workspace Goals
                 </h1>
                 <p class="text-muted mb-0 small">
-                    An <strong>Organization Goal</strong> is your apex strategic ambition.
+                    An <strong>Workspace Goal</strong> is your apex strategic ambition.
                     Each Goal drives one or more <strong>Missions</strong>, which contain <strong>Strategies</strong>, <strong>Boards</strong>, and <strong>Tasks</strong>.
                 </p>
             </div>
@@ -33,7 +33,7 @@
 <div class="alert alert-info border-0 mb-4 d-flex align-items-center" role="alert" style="background: linear-gradient(135deg, #e8f4fd, #f0f8ff);">
     <i class="fas fa-info-circle fa-lg me-3 text-info"></i>
     <div>
-        <strong>Organization Goals</strong> can only be created by <strong>Workspace Admins</strong>.
+        <strong>Workspace Goals</strong> can only be created by <strong>Workspace Admins</strong>.
         {% if request.user.profile.is_viewing_demo and can_setup_workspace %}
         In demo mode, goal creation is disabled. <a href="{% url 'onboarding_welcome' %}?from=goals">Set up your own workspace</a> to create and manage goals.
         {% else %}
@@ -48,7 +48,7 @@
     <small class="text-muted">
         <i class="fas fa-sitemap me-1 text-warning"></i>
         <strong>Hierarchy:</strong>
-        <span class="text-warning fw-semibold">Organization Goal</span>
+        <span class="text-warning fw-semibold">Workspace Goal</span>
         <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
         <span class="text-primary fw-semibold">Mission</span>
         <i class="fas fa-chevron-right mx-1 text-muted" style="font-size:0.7rem;"></i>
@@ -149,7 +149,7 @@
         <div class="card shadow">
             <div class="card-body text-center py-5">
                 <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
-                <h5 class="text-muted mb-2">No Organization Goals yet</h5>
+                <h5 class="text-muted mb-2">No Workspace Goals yet</h5>
                 <p class="text-muted mb-4">
                     Define your <strong>highest-level strategic ambition</strong> — the North Star that all Missions should be moving towards.<br>
                     <small>Example: "Increase Market Share in Asia by 15%" or "Achieve $10M ARR by Q4"</small>
@@ -159,7 +159,7 @@
                     <i class="fas fa-plus fa-sm me-1"></i> Create Your First Goal
                 </a>
                 {% else %}
-                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Organization Goals.</p>
+                <p class="text-muted small"><i class="fas fa-lock me-1"></i> Only Workspace Admins can create Workspace Goals.</p>
                 {% endif %}
             </div>
         </div>

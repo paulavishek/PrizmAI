@@ -418,21 +418,31 @@ PROVIDER_CHOICES = [
 
 class OrganizationAISettings(models.Model):
     """
-    Stores the organisation-wide AI provider configuration.
+    Stores the workspace-wide AI provider configuration.
 
-    One record per organisation (OneToOne). Controls which AI provider
-    all users in the organisation use by default, whether users may
-    override it, and optionally holds an organisation-level BYOK API key
-    (stored encrypted — never plain text).
+    One record per workspace (OneToOne). Controls which AI provider all users
+    in the workspace use by default, whether users may override it, and
+    optionally holds a workspace-level BYOK API key (stored encrypted — never
+    plain text).
 
-    These settings are managed by an Org Admin. See the RBAC comment
+    These settings are managed by a Workspace Admin. See the RBAC comment
     block above for the full access rules enforced in views and the router.
+
+    (Class name kept for back-compat; the scope is the Workspace, not the org.)
     """
 
+    workspace = models.OneToOneField(
+        'kanban.Workspace',
+        on_delete=models.CASCADE,
+        related_name='ai_settings',
+        null=True, blank=True,
+    )
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organisation = models.OneToOneField(
         Organization,
         on_delete=models.CASCADE,
         related_name='ai_settings',
+        null=True, blank=True,
     )
 
     provider = models.CharField(
@@ -517,11 +527,14 @@ class OrganizationAISettings(models.Model):
     )
 
     class Meta:
-        verbose_name = 'Organisation AI Settings'
-        verbose_name_plural = 'Organisation AI Settings'
+        verbose_name = 'Workspace AI Settings'
+        verbose_name_plural = 'Workspace AI Settings'
 
     def __str__(self):
-        return f"AI Settings for {self.organisation.name} — {self.provider}"
+        scope = self.workspace.name if self.workspace else (
+            self.organisation.name if self.organisation else 'Unscoped'
+        )
+        return f"AI Settings for {scope} — {self.provider}"
 
 
 # ============================================================

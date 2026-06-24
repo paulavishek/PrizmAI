@@ -1814,7 +1814,7 @@ class Command(BaseCommand):
         from ai_assistant.utils.ai_router import AIRouter
         from ai_assistant.models import OrganizationAISettings
         try:
-            demo_provider = self.demo_org.ai_settings.provider or 'gemini'
+            demo_provider = self.board.workspace.ai_settings.provider or 'gemini'
         except (OrganizationAISettings.DoesNotExist, AttributeError):
             demo_provider = 'gemini'
         demo_ai_model = AIRouter.get_model_name(demo_provider, 'complex')

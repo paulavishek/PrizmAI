@@ -6,7 +6,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb small">
         <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Workspace Goals</a></li>
         <li class="breadcrumb-item"><a href="{% url 'goal_detail' goal.id %}">{{ goal.name|truncatechars:30 }}</a></li>
         <li class="breadcrumb-item active">Edit</li>
     </ol>
@@ -61,20 +61,6 @@
                             {{ form.status }}
                         </div>
                     </div>
-
-                    {% if organizations %}
-                    <div class="mb-4">
-                        <label for="organization" class="form-label fw-semibold">Organization <span class="text-muted small">(optional)</span></label>
-                        <select class="form-select" id="organization" name="organization">
-                            <option value="">— No organization —</option>
-                            {% for org in organizations %}
-                            <option value="{{ org.id }}" {% if goal.organization_id == org.id %}selected{% endif %}>
-                                {{ org.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    {% endif %}
 
                     <hr>
                     <h6 class="fw-semibold mb-3">Change Reason <span class="required-asterisk">*</span></h6>

@@ -528,52 +528,52 @@ class FeedbackLearningSystem:
         
         return max(0.1, min(1.0, final_confidence))
     
-    def _get_org_adjusted_confidence(self, suggestion_type: str, 
+    def _get_org_adjusted_confidence(self, suggestion_type: str,
                                       base_confidence: float, board) -> float:
         """
-        Cold-start fallback: use organization-level aggregated learning data
+        Cold-start fallback: use workspace-level aggregated learning data
         when a board has insufficient board-level insights.
-        
+
         Args:
             suggestion_type: Type of suggestion
             base_confidence: Base confidence from rules
-            board: Board context (used to find organization)
-            
+            board: Board context (used to find the workspace)
+
         Returns:
-            Adjusted confidence, or base_confidence if no org data available
+            Adjusted confidence, or base_confidence if no workspace data available
         """
         try:
             from kanban.coach_models import OrganizationLearningProfile
-            
-            org = getattr(board, 'organization', None)
-            if not org:
+
+            workspace = getattr(board, 'workspace', None)
+            if not workspace:
                 return base_confidence
-            
+
             profile = OrganizationLearningProfile.objects.filter(
-                organization=org,
+                workspace=workspace,
                 suggestion_type=suggestion_type,
                 total_feedback__gte=5,  # Need minimum data
             ).first()
-            
+
             if not profile:
                 return base_confidence
-            
+
             recommended = float(profile.recommended_confidence)
-            
-            # Lower weight for org-level data (max 0.4) — less specific than board-level
+
+            # Lower weight for workspace-level data (max 0.4) — less specific than board-level
             weight = min(profile.total_feedback / 50, 0.4)
             final = (recommended * weight) + (base_confidence * (1 - weight))
-            
+
             logger.debug(
-                f"Org-level confidence for {suggestion_type}: "
+                f"Workspace-level confidence for {suggestion_type}: "
                 f"{base_confidence:.2f} -> {final:.2f} "
-                f"(org: {org.name}, {profile.total_feedback} samples, weight={weight:.2f})"
+                f"(workspace: {workspace.name}, {profile.total_feedback} samples, weight={weight:.2f})"
             )
-            
+
             return max(0.1, min(1.0, final))
-            
+
         except Exception as e:
-            logger.debug(f"Org fallback unavailable: {e}")
+            logger.debug(f"Workspace fallback unavailable: {e}")
             return base_confidence
 
     def should_generate_suggestion(self, suggestion_type: str, board,
@@ -614,20 +614,20 @@ class FeedbackLearningSystem:
                     )
                     return False
         
-        # If no board-level insights exist, check organization-level suppression
+        # If no board-level insights exist, check workspace-level suppression
         if not insights:
             try:
                 from kanban.coach_models import OrganizationLearningProfile
-                org = getattr(board, 'organization', None)
-                if org:
-                    org_profile = OrganizationLearningProfile.objects.filter(
-                        organization=org,
+                workspace = getattr(board, 'workspace', None)
+                if workspace:
+                    ws_profile = OrganizationLearningProfile.objects.filter(
+                        workspace=workspace,
                         suggestion_type=suggestion_type,
                     ).first()
-                    if org_profile and org_profile.should_suppress:
+                    if ws_profile and ws_profile.should_suppress:
                         logger.info(
-                            f"Suppressing {suggestion_type} based on org-level data "
-                            f"(org: {org.name})"
+                            f"Suppressing {suggestion_type} based on workspace-level data "
+                            f"(workspace: {workspace.name})"
                         )
                         return False
             except Exception:

@@ -11,26 +11,26 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
-def update_user_performance_profile(user_id, organization_id):
+def update_user_performance_profile(user_id, workspace_id=None):
     """
     Update performance profile for a single user
-    
+
     Args:
         user_id: User ID
-        organization_id: Organization ID
+        workspace_id: Workspace ID (optional — tenant scope tag)
     """
     try:
         from kanban.resource_leveling_models import UserPerformanceProfile
-        from accounts.models import Organization
-        
+        from kanban.models import Workspace
+
         user = User.objects.get(id=user_id)
-        organization = Organization.objects.get(id=organization_id)
-        
+        workspace = Workspace.objects.filter(id=workspace_id).first() if workspace_id else None
+
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
-            organization=organization
+            defaults={'workspace': workspace},
         )
-        
+
         profile.update_metrics()
         
         logger.info(f"Updated performance profile for user {user.username}")
@@ -54,8 +54,8 @@ def update_board_performance_profiles(board_id):
         from kanban.resource_leveling import ResourceLevelingService
         
         board = Board.objects.get(id=board_id)
-        service = ResourceLevelingService(board.organization)
-        
+        service = ResourceLevelingService(workspace=board.workspace)
+
         result = service.update_all_profiles(board)
         
         logger.info(f"Updated {result['updated']} profiles for board {board.name}")
@@ -91,7 +91,7 @@ def track_task_completion(task_id):
             if task.assigned_to:
                 update_user_performance_profile.delay(
                     task.assigned_to.id,
-                    task.column.board.organization.id
+                    task.column.board.workspace_id
                 )
         
         return {'success': True, 'task': task.title}
@@ -122,9 +122,9 @@ def track_task_assignment_change(task_id, old_assignee_id, new_assignee_id, chan
         new_assignee = User.objects.get(id=new_assignee_id) if new_assignee_id else None
         changed_by = User.objects.get(id=changed_by_id)
         
-        organization = task.column.board.organization
-        service = ResourceLevelingService(organization)
-        
+        workspace = task.column.board.workspace
+        service = ResourceLevelingService(workspace=workspace)
+
         # Predict completion time for new assignee
         predicted_hours = None
         if new_assignee:
@@ -143,10 +143,11 @@ def track_task_assignment_change(task_id, old_assignee_id, new_assignee_id, chan
         )
         
         # Update workload for both users
+        workspace_id = workspace.id if workspace else None
         if old_assignee:
-            update_user_performance_profile.delay(old_assignee.id, organization.id)
+            update_user_performance_profile.delay(old_assignee.id, workspace_id)
         if new_assignee:
-            update_user_performance_profile.delay(new_assignee.id, organization.id)
+            update_user_performance_profile.delay(new_assignee.id, workspace_id)
         
         logger.info(f"Tracked assignment change for task {task.title}")
         return {'success': True}
@@ -170,8 +171,8 @@ def generate_board_suggestions(board_id):
         from kanban.resource_leveling import ResourceLevelingService
         
         board = Board.objects.get(id=board_id)
-        service = ResourceLevelingService(board.organization)
-        
+        service = ResourceLevelingService(workspace=board.workspace)
+
         # First update all profiles
         service.update_all_profiles(board)
         
@@ -257,9 +258,8 @@ def auto_suggest_on_task_create(task_id):
         if not task.column:
             return {'success': False, 'message': 'Task not in a column yet'}
         
-        organization = task.column.board.organization
-        service = ResourceLevelingService(organization)
-        
+        service = ResourceLevelingService(workspace=task.column.board.workspace)
+
         # Create suggestion
         suggestion = service.create_suggestion(task, force_analysis=True)
         
