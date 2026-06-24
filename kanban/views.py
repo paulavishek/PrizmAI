@@ -30,31 +30,36 @@ from .ai_briefing import build_action_plan_cached as _build_action_plan_cached
 from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
 
-def _get_discovery_widget_counts(user, organization):
+def _get_discovery_widget_counts(user):
     """Return discovery widget context vars for the dashboard.
-    Returns zero values if the feature is not enabled or org is missing."""
+
+    Scoped by the active WORKSPACE (the tenant boundary) — never the shared
+    Organization, which would sum ideas across sibling workspaces. Returns zero
+    values if the feature is not enabled or there is no active workspace."""
     try:
         from kanban.preset_models import build_feature_flags
         from kanban.discovery_models import DiscoveryIdea
-        from kanban.discovery_views import _demo_owner_filter
-        if organization is None:
+        profile = getattr(user, 'profile', None)
+        active_ws = getattr(profile, 'active_workspace', None)
+        if active_ws is None:
             return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
         # Preset is keyed on the active workspace, not the (shared) organization.
-        active_ws = getattr(getattr(user, 'profile', None), 'active_workspace', None)
         ws_preset = getattr(getattr(active_ws, 'workspace_preset', None), 'global_preset', 'lean')
         features = build_feature_flags(ws_preset)
         if not features.get('show_discovery'):
             return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
-        # In the demo org all users share one organization; ideas are isolated
-        # per sandbox_owner. Scope these counts the same way the Discovery page
-        # does, or the sidebar badge sums every demo user's ideas org-wide.
-        owner_filter = _demo_owner_filter(organization, user)
+        # Scope to the active workspace; in the shared demo workspace ideas are
+        # further isolated per sandbox_owner (mirrors _idea_scope / the Discovery
+        # page), or the badge would sum every demo user's ideas.
+        scope = {'workspace': active_ws}
+        if getattr(active_ws, 'is_demo', False) or getattr(profile, 'is_viewing_demo', False):
+            scope['sandbox_owner'] = user
         to_score = DiscoveryIdea.objects.filter(
-            organization=organization, stage__in=['new', 'under_review'], ai_score_impact__isnull=True,
-            **owner_filter,
+            stage__in=['new', 'under_review'], ai_score_impact__isnull=True,
+            **scope,
         ).count()
         to_promote = DiscoveryIdea.objects.filter(
-            organization=organization, stage='approved', **owner_filter,
+            stage='approved', **scope,
         ).exclude(promotion__isnull=False).count()
         return {
             'discovery_enabled': True,
@@ -1656,7 +1661,7 @@ def dashboard(request):
         'dc_top_items': dc_top_items,
         'dc_headline': dc_headline,
         # PrizmDiscovery widget counts (only if feature is enabled)
-        **_get_discovery_widget_counts(request.user, organization),
+        **_get_discovery_widget_counts(request.user),
         })
 
 
@@ -6804,21 +6809,19 @@ def workspace_preset_settings(request):
     from django.http import HttpResponseForbidden
 
     profile = request.user.profile
-    org = profile.organization
     workspace = profile.active_workspace
 
-    if org is None:
-        messages.warning(request, "You don't belong to an organization yet.")
+    if workspace is None:
+        messages.warning(request, "You don't have an active workspace yet.")
         return redirect('dashboard')
 
     if not is_user_org_admin(request.user):
-        messages.error(request, "Only organization admins can change workspace settings.")
+        messages.error(request, "Only workspace admins can change workspace settings.")
         return redirect('dashboard')
 
-    # Preset is keyed on the workspace (the tenant boundary), so each workspace
-    # has its own feature level even when several share one organization.
-    # AI provider settings, by contrast, are org-scoped — so they remain
-    # editable even if the user somehow has no active workspace.
+    # Both the preset (feature level) and AI provider settings are keyed on the
+    # workspace (the tenant boundary), so each workspace has its own feature
+    # level and BYOK/provider config even when several share one organisation.
     preset_obj = None
     if workspace is not None:
         preset_obj, _created = WorkspacePreset.objects.get_or_create(
@@ -6849,7 +6852,7 @@ def workspace_preset_settings(request):
                 byok_model_val = (cd.get('byok_model') or '').strip() or None
 
                 ai_settings, _ = OrganizationAISettings.objects.get_or_create(
-                    organisation=org,
+                    workspace=workspace,
                     defaults={'provider': 'gemini'},
                 )
                 ai_settings.provider = cd['provider']
@@ -6949,7 +6952,7 @@ def workspace_preset_settings(request):
     # -------------------------------------------------------------------
     ai_settings_obj = None
     try:
-        ai_settings_obj = org.ai_settings
+        ai_settings_obj = workspace.ai_settings
     except OrganizationAISettings.DoesNotExist:
         pass
 

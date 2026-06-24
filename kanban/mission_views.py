@@ -406,11 +406,11 @@ def goal_detail(request, goal_id):
 @login_required
 @demo_write_guard
 def create_goal(request):
-    """Create a new Organization Goal."""
+    """Create a new Workspace Goal."""
     from kanban.permissions import can_user_create_goals
 
     if not can_user_create_goals(request.user, request):
-        messages.error(request, 'Only Workspace Admins can create organization goals.')
+        messages.error(request, 'Only Workspace Admins can create workspace goals.')
         return redirect('goal_list')
 
     organizations = Organization.objects.all().order_by('name')
@@ -456,7 +456,7 @@ def create_goal(request):
         except Exception:
             pass  # Celery/Redis may be unavailable in dev
 
-        messages.success(request, f'Organization Goal "{goal.name}" created successfully!')
+        messages.success(request, f'Workspace Goal "{goal.name}" created successfully!')
         return redirect('goal_detail', goal_id=goal.id)
 
     return render(request, 'kanban/create_goal.html', {
@@ -467,7 +467,7 @@ def create_goal(request):
 @login_required
 @demo_write_guard
 def edit_goal(request, goal_id):
-    """Edit an existing Organization Goal with version history."""
+    """Edit an existing Workspace Goal with version history."""
     goal = get_object_or_404(OrganizationGoal, id=goal_id)
 
     if not (request.user.has_perm('prizmai.edit_goal', goal) or is_demo_context(request)):
@@ -506,7 +506,7 @@ def edit_goal(request, goal_id):
             # Post-edit cascade logic
             _handle_edit_cascade(request, goal, change_reason, 'goal')
 
-            messages.success(request, f'Organization Goal "{goal.name}" updated (v{goal.version}).')
+            messages.success(request, f'Workspace Goal "{goal.name}" updated (v{goal.version}).')
             return redirect('goal_detail', goal_id=goal.id)
     else:
         form = GoalEditForm(instance=goal)

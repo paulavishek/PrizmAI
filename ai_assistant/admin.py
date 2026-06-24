@@ -91,11 +91,11 @@ class SpectraConversationStateAdmin(admin.ModelAdmin):
 @admin.register(OrganizationAISettings)
 class OrganizationAISettingsAdmin(admin.ModelAdmin):
     """
-    Admin for organisation-wide AI provider settings.
+    Admin for workspace-wide AI provider settings.
     encrypted_api_key is intentionally excluded — it must never be visible in admin.
     """
     list_display = [
-        'organisation',
+        'workspace',
         'provider',
         'allow_user_provider_override',
         'byok_provider',
@@ -106,7 +106,7 @@ class OrganizationAISettingsAdmin(admin.ModelAdmin):
         'updated_by',
     ]
     list_filter = ['provider', 'allow_user_provider_override', 'byok_provider']
-    search_fields = ['organisation__name', 'updated_by__username']
+    search_fields = ['workspace__name', 'updated_by__username']
     readonly_fields = ['updated_at']
     # encrypted_api_key is excluded from fields entirely — never display it
     exclude = ['encrypted_api_key']

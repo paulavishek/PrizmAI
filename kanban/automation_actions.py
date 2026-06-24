@@ -295,6 +295,22 @@ def _resolve_board_organization(board):
     return getattr(profile, 'organization', None) if profile else None
 
 
+def _resolve_board_workspace(board):
+    """Resolve the Workspace a board's wiki/knowledge content belongs to.
+
+    Workspace is the tenant boundary the Wiki UI scopes reads by, so
+    automation-created pages must carry it or they'd be invisible. Mirror the
+    Wiki UI's resolution: the board's own workspace, falling back to the board
+    owner's active workspace.
+    """
+    ws = getattr(board, 'workspace', None)
+    if ws:
+        return ws
+    owner = getattr(board, 'owner', None)
+    profile = getattr(owner, 'profile', None) if owner else None
+    return getattr(profile, 'active_workspace', None) if profile else None
+
+
 _VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
 
 
@@ -1198,7 +1214,7 @@ def _act_link_wiki_page(target, rule, action):
 
 @register_action('create_wiki_page', requires='board')
 def _act_create_wiki_page(target, rule, action):
-    """Create a new WikiPage on the board's organization."""
+    """Create a new WikiPage scoped to the board's workspace."""
     try:
         from wiki.models import WikiPage, WikiCategory
     except Exception:
@@ -1211,17 +1227,20 @@ def _act_create_wiki_page(target, rule, action):
     content = action.get('message') or ''
     if target.target_task:
         content = _substitute_vars(content, target.target_task)
+    workspace = _resolve_board_workspace(board)
     org = _resolve_board_organization(board)
-    if not org:
-        raise _ActionNoOp('board has no organization')
+    if not workspace and not org:
+        raise _ActionNoOp('board has no workspace')
     try:
         # WikiPage requires a category and updated_by — land automation-created
-        # pages in a dedicated "Automation" category for the org.
+        # pages in a dedicated "Automation" category scoped to the workspace
+        # (org kept only for back-compat).
         category, _ = WikiCategory.objects.get_or_create(
-            organization=org, slug='automation',
-            defaults={'name': 'Automation'},
+            workspace=workspace, slug='automation',
+            defaults={'name': 'Automation', 'organization': org},
         )
         WikiPage.objects.create(
+            workspace=workspace,
             organization=org,
             category=category,
             title=title[:200],

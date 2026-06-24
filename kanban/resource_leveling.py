@@ -23,10 +23,11 @@ class ResourceLevelingService:
     Main service for AI-powered resource leveling and optimization
     """
     
-    def __init__(self, organization=None):
-        # Organization is optional - simplified mode doesn't require it
-        self.organization = organization
-    
+    def __init__(self, workspace=None, organization=None):
+        # Workspace is the tenant scope now. ``organization`` is accepted but
+        # ignored — kept only so legacy call sites don't break.
+        self.workspace = workspace
+
     def _is_qualified_candidate(self, profile):
         """
         Check if a user has enough data to be a valid reassignment candidate.
@@ -57,7 +58,7 @@ class ResourceLevelingService:
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
             defaults={
-                'organization': self.organization,
+                'workspace': self.workspace,
                 'weekly_capacity_hours': 40.0,
                 'velocity_score': 1.0,
                 'quality_score': 3.0
@@ -754,7 +755,7 @@ class ResourceLevelingService:
         # Create suggestion
         suggestion = ResourceLevelingSuggestion.objects.create(
             task=task,
-            organization=self.organization,
+            workspace=self.workspace,
             current_assignee=current_assignee,
             suggested_assignee=suggested_user,
             confidence_score=ai_confidence,  # AI confidence in the suggestion
@@ -1333,10 +1334,10 @@ class WorkloadBalancer:
     Advanced workload balancing algorithms
     """
     
-    def __init__(self, organization=None):
-        # Organization is optional - simplified mode doesn't require it
-        self.organization = organization
-        self.service = ResourceLevelingService(organization)
+    def __init__(self, workspace=None, organization=None):
+        # Workspace is the tenant scope now; ``organization`` accepted-but-ignored.
+        self.workspace = workspace
+        self.service = ResourceLevelingService(workspace=workspace)
     
     def balance_workload(self, board, target_utilization=75.0):
         """

@@ -322,14 +322,16 @@ def profile_view(request):
     # ------------------------------------------------------------------
     # AI context variables — computed once, used for GET and all re-renders
     # ------------------------------------------------------------------
-    org = profile.organization
+    # AI provider settings are scoped to the active WORKSPACE (the tenant
+    # boundary) — not the shared organisation.
+    workspace = profile.active_workspace
     allow_override = False
     org_provider = 'gemini'
-    if org:
+    if workspace:
         try:
-            org_ai = org.ai_settings
-            allow_override = org_ai.allow_user_provider_override
-            org_provider = org_ai.provider
+            ws_ai = workspace.ai_settings
+            allow_override = ws_ai.allow_user_provider_override
+            org_provider = ws_ai.provider
         except OrganizationAISettings.DoesNotExist:
             pass
 

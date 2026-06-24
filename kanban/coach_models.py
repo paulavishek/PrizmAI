@@ -444,15 +444,25 @@ class CoachingInsight(models.Model):
 
 class OrganizationLearningProfile(models.Model):
     """
-    Organization-level aggregated learning profile.
-    Aggregates coaching insights across all boards in an organization
+    Workspace-level aggregated learning profile.
+    Aggregates coaching insights across all boards in a workspace
     to enable cross-board collective intelligence and cold-start bootstrapping.
+
+    (Class name kept for back-compat; the scope is the Workspace, not the org.)
     """
-    
+
+    workspace = models.ForeignKey(
+        'kanban.Workspace',
+        on_delete=models.CASCADE,
+        related_name='learning_profiles',
+        null=True, blank=True,
+    )
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organization = models.ForeignKey(
         'accounts.Organization',
         on_delete=models.CASCADE,
-        related_name='learning_profiles'
+        related_name='learning_profiles',
+        null=True, blank=True,
     )
     
     # Per suggestion type aggregate effectiveness
@@ -504,14 +514,15 @@ class OrganizationLearningProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        unique_together = ['organization', 'suggestion_type']
+        unique_together = ['workspace', 'suggestion_type']
         ordering = ['-helpful_rate', '-total_feedback']
-        verbose_name = 'Organization Learning Profile'
-        verbose_name_plural = 'Organization Learning Profiles'
-    
+        verbose_name = 'Workspace Learning Profile'
+        verbose_name_plural = 'Workspace Learning Profiles'
+
     def __str__(self):
+        scope = self.workspace.name if self.workspace else 'Global'
         return (
-            f"{self.organization.name} - {self.suggestion_type}: "
+            f"{scope} - {self.suggestion_type}: "
             f"{self.helpful_rate*100:.0f}% helpful ({self.total_feedback} feedback)"
         )
 
@@ -528,8 +539,14 @@ class AIExperimentResult(models.Model):
         'Board', on_delete=models.CASCADE,
         related_name='experiment_results',
         null=True, blank=True,
-        help_text="Board scope (null = org-wide)"
+        help_text="Board scope (null = workspace-wide)"
     )
+    workspace = models.ForeignKey(
+        'kanban.Workspace', on_delete=models.CASCADE,
+        related_name='experiment_results',
+        null=True, blank=True,
+    )
+    # DEPRECATED: kept nullable for back-compat only; Workspace is the scope now.
     organization = models.ForeignKey(
         'accounts.Organization', on_delete=models.CASCADE,
         related_name='experiment_results',
@@ -564,28 +581,28 @@ class AIExperimentResult(models.Model):
     calculated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        unique_together = ['board', 'suggestion_type', 'generation_method', 'period_start']
+        unique_together = ['board', 'workspace', 'suggestion_type', 'generation_method', 'period_start']
         ordering = ['-period_end', '-helpful_rate']
         verbose_name = 'AI Experiment Result'
         verbose_name_plural = 'AI Experiment Results'
-    
+
     def __str__(self):
-        scope = self.board.name if self.board else (self.organization.name if self.organization else 'Global')
+        scope = self.board.name if self.board else (self.workspace.name if self.workspace else 'Global')
         return (
             f"{scope} - {self.suggestion_type} ({self.generation_method}): "
             f"{self.helpful_rate*100:.0f}% helpful"
         )
     
     @classmethod
-    def calculate_experiment_results(cls, board=None, organization=None, days=30):
+    def calculate_experiment_results(cls, board=None, workspace=None, days=30):
         """
         Calculate A/B experiment results comparing generation methods.
-        
+
         Args:
             board: Optional board to scope results
-            organization: Optional organization to scope results
+            workspace: Optional workspace to scope results
             days: Analysis period in days
-            
+
         Returns:
             List of created/updated AIExperimentResult objects
         """
@@ -604,8 +621,8 @@ class AIExperimentResult(models.Model):
         
         if board:
             qs = qs.filter(board=board)
-        elif organization:
-            qs = qs.filter(board__organization=organization)
+        elif workspace:
+            qs = qs.filter(board__workspace=workspace)
         
         # Group by suggestion_type + generation_method
         stats = qs.values('suggestion_type', 'generation_method').annotate(
@@ -640,11 +657,11 @@ class AIExperimentResult(models.Model):
             
             result, _ = cls.objects.update_or_create(
                 board=board,
+                workspace=workspace,
                 suggestion_type=stat['suggestion_type'],
                 generation_method=stat['generation_method'],
                 period_start=period_start,
                 defaults={
-                    'organization': organization,
                     'total_suggestions': stat['total'],
                     'total_feedback': stat['total'],
                     'helpful_rate': Decimal(str(round(helpful_rate, 4))),

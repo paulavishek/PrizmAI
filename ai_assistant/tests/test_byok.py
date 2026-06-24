@@ -25,6 +25,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from accounts.models import Organization, UserProfile
 from ai_assistant.models import OrganizationAISettings, UserAISettings
 from ai_assistant.utils.ai_router import AIRouter, AIProviderError
+from kanban.models import Workspace
 
 
 # A valid, throwaway Fernet key used by the encryption tests that override the
@@ -104,12 +105,20 @@ class TestResolveProvider(TestCase):
         self.router = AIRouter()
         self.creator = User.objects.create_user('creator', password='x')
         self.org = Organization.objects.create(name='Acme', created_by=self.creator)
+        self.workspace = Workspace.objects.create(
+            name='Acme WS', organization=self.org, created_by=self.creator,
+        )
 
     # -- helpers --------------------------------------------------------
 
     def _make_user(self, username, *, org=None, is_admin=False):
         user = User.objects.create_user(username, password='x')
-        UserProfile.objects.create(user=user, organization=org, is_admin=is_admin)
+        # When the user belongs to the org, point their active workspace at the
+        # test workspace so workspace-scoped AI settings resolve.
+        UserProfile.objects.create(
+            user=user, organization=org, is_admin=is_admin,
+            active_workspace=self.workspace if org else None,
+        )
         return user
 
     def _encrypt(self, raw):
@@ -143,7 +152,7 @@ class TestResolveProvider(TestCase):
         )
         # Even with an org BYOK present, the personal key must win.
         OrganizationAISettings.objects.create(
-            organisation=self.org,
+            workspace=self.workspace,
             byok_provider='anthropic',
             encrypted_api_key=self._encrypt('sk-org-anthropic'),
         )
@@ -176,7 +185,7 @@ class TestResolveProvider(TestCase):
 
     def test_override_respected_when_org_allows(self):
         OrganizationAISettings.objects.create(
-            organisation=self.org, provider='gemini',
+            workspace=self.workspace, provider='gemini',
             allow_user_provider_override=True,
         )
         user = self._make_user('member', org=self.org)
@@ -188,7 +197,7 @@ class TestResolveProvider(TestCase):
     def test_override_ignored_when_not_permitted(self):
         # Org default is gemini, overrides NOT allowed, user is not admin.
         OrganizationAISettings.objects.create(
-            organisation=self.org, provider='gemini',
+            workspace=self.workspace, provider='gemini',
             allow_user_provider_override=False,
         )
         user = self._make_user('member', org=self.org)
@@ -202,7 +211,7 @@ class TestResolveProvider(TestCase):
 
     def test_org_byok_used_when_no_user_settings(self):
         OrganizationAISettings.objects.create(
-            organisation=self.org,
+            workspace=self.workspace,
             provider='gemini',
             byok_provider='anthropic',
             encrypted_api_key=self._encrypt('sk-org-anthropic'),
@@ -219,7 +228,7 @@ class TestResolveProvider(TestCase):
 
     def test_org_provider_platform_key(self):
         OrganizationAISettings.objects.create(
-            organisation=self.org, provider='openai',
+            workspace=self.workspace, provider='openai',
         )
         user = self._make_user('member', org=self.org)
         provider, key, is_byok, _ = self.router._resolve_provider(user)
@@ -237,7 +246,7 @@ class TestResolveProvider(TestCase):
 
     def test_background_task_uses_org_byok(self):
         OrganizationAISettings.objects.create(
-            organisation=self.org,
+            workspace=self.workspace,
             provider='gemini',
             byok_provider='openai',
             encrypted_api_key=self._encrypt('sk-org-openai'),
@@ -342,6 +351,9 @@ class TestSettingsModels(TestCase):
         self.router = AIRouter()
         self.creator = User.objects.create_user('creator', password='x')
         self.org = Organization.objects.create(name='Acme', created_by=self.creator)
+        self.workspace = Workspace.objects.create(
+            name='Acme WS', organization=self.org, created_by=self.creator,
+        )
 
     def test_user_settings_never_stores_plaintext(self):
         raw = 'sk-plaintext-should-never-appear'
@@ -358,7 +370,7 @@ class TestSettingsModels(TestCase):
         self.assertEqual(settings_obj.key_last_four, '••••pear')
 
     def test_org_settings_defaults(self):
-        s = OrganizationAISettings.objects.create(organisation=self.org)
+        s = OrganizationAISettings.objects.create(workspace=self.workspace)
         self.assertEqual(s.provider, 'gemini')
         self.assertFalse(s.allow_user_provider_override)
         self.assertIsNone(s.encrypted_api_key)
@@ -383,8 +395,14 @@ class TestUserAISettingsView(TestCase):
         self.url = reverse('profile')
         self.creator = User.objects.create_user('creator', password='x')
         self.org = Organization.objects.create(name='Acme', created_by=self.creator)
+        self.workspace = Workspace.objects.create(
+            name='Acme WS', organization=self.org, created_by=self.creator,
+        )
         self.user = User.objects.create_user('member', password='x')
-        UserProfile.objects.create(user=self.user, organization=self.org, is_admin=False)
+        UserProfile.objects.create(
+            user=self.user, organization=self.org, is_admin=False,
+            active_workspace=self.workspace,
+        )
         self.router = AIRouter()
 
     def test_save_personal_byok_key_when_valid(self):
@@ -449,7 +467,7 @@ class TestUserAISettingsView(TestCase):
     def test_provider_override_forbidden_when_not_permitted(self):
         # Org disallows overrides and user is not an admin → 403.
         OrganizationAISettings.objects.create(
-            organisation=self.org, provider='gemini',
+            workspace=self.workspace, provider='gemini',
             allow_user_provider_override=False,
         )
         self.client.force_login(self.user)
@@ -478,10 +496,19 @@ class TestOrgAISettingsView(TestCase):
         # Admin is the org creator → is_user_org_admin() returns True.
         self.admin = User.objects.create_user('admin', password='x')
         self.org = Organization.objects.create(name='Acme', created_by=self.admin)
-        UserProfile.objects.create(user=self.admin, organization=self.org, is_admin=True)
+        self.workspace = Workspace.objects.create(
+            name='Acme WS', organization=self.org, created_by=self.admin,
+        )
+        UserProfile.objects.create(
+            user=self.admin, organization=self.org, is_admin=True,
+            active_workspace=self.workspace,
+        )
         # A plain member who is NOT an admin.
         self.member = User.objects.create_user('member', password='x')
-        UserProfile.objects.create(user=self.member, organization=self.org, is_admin=False)
+        UserProfile.objects.create(
+            user=self.member, organization=self.org, is_admin=False,
+            active_workspace=self.workspace,
+        )
         self.router = AIRouter()
 
     def test_admin_saves_org_byok_key(self):
@@ -497,7 +524,7 @@ class TestOrgAISettingsView(TestCase):
                 'remove_byok_key': '',
             })
         self.assertEqual(resp.status_code, 302)
-        s = OrganizationAISettings.objects.get(organisation=self.org)
+        s = OrganizationAISettings.objects.get(workspace=self.workspace)
         self.assertEqual(s.byok_provider, 'anthropic')
         self.assertEqual(self.router._decrypt_key(s.encrypted_api_key), 'sk-org-secret-5678')
         self.assertEqual(s.key_last_four, '••••5678')
@@ -516,4 +543,4 @@ class TestOrgAISettingsView(TestCase):
         })
         # Non-admins are redirected to the dashboard before any change is made.
         self.assertEqual(resp.status_code, 302)
-        self.assertFalse(OrganizationAISettings.objects.filter(organisation=self.org).exists())
+        self.assertFalse(OrganizationAISettings.objects.filter(workspace=self.workspace).exists())

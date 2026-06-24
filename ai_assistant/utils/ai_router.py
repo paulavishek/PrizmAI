@@ -263,16 +263,20 @@ class AIRouter:
         except AttributeError:
             pass  # Defensive: unexpected user object shape
 
-        # ---- Fetch organisation AI settings (also starts empty) ----
+        # ---- Fetch workspace AI settings (also starts empty) ----
+        # Scoped to the user's active WORKSPACE (the tenant boundary) — not the
+        # shared organisation, which would leak one workspace's BYOK key/provider
+        # to sibling workspaces under the same org.
         org_settings = None
         try:
             profile = getattr(user, 'profile', None)
-            if profile is not None and getattr(profile, 'organization', None) is not None:
-                org_settings = profile.organization.ai_settings
+            workspace = getattr(profile, 'active_workspace', None) if profile is not None else None
+            if workspace is not None:
+                org_settings = workspace.ai_settings
         except OrganizationAISettings.DoesNotExist:
-            pass  # No org-level settings yet — continue resolution
+            pass  # No workspace-level settings yet — continue resolution
         except AttributeError:
-            pass  # Defensive: profile or organization missing
+            pass  # Defensive: profile or workspace missing
 
         # ---- Determine if user is an Org Admin ----
         # Org Admin = UserProfile.is_admin == True (set by the accounts app)
