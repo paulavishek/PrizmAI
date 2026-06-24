@@ -43,10 +43,11 @@ app.conf.beat_schedule = {
         'task': 'kanban.detect_time_anomalies',
         'schedule': crontab(hour=9, minute=0),  # Daily at 9:00 AM
     },
-    # Weekly time summary - runs Monday at 8 AM
+    # Weekly time summary - runs Monday at 8:30 AM (offset off the daily 08:00
+    # executive briefing so they never fire in the same Monday tick).
     'weekly-time-summary': {
         'task': 'kanban.weekly_time_summary',
-        'schedule': crontab(hour=8, minute=0, day_of_week='1'),  # Monday at 8 AM
+        'schedule': crontab(hour=8, minute=30, day_of_week='1'),  # Monday at 8:30 AM
     },
     # Due-date approaching automations - runs every hour
     'due-date-approaching-automations': {
@@ -94,15 +95,17 @@ app.conf.beat_schedule = {
         'task': 'kanban.generate_coaching_suggestions',
         'schedule': crontab(hour=7, minute=0),
     },
-    # Train priority models weekly on Sunday at 2:00 AM
+    # Train priority models weekly on Sunday at 2:30 AM (offset off the daily
+    # 02:00 conflict cleanup so they never fire in the same Sunday tick).
     'train-priority-models-weekly': {
         'task': 'kanban.train_priority_models_periodic',
-        'schedule': crontab(hour=2, minute=0, day_of_week='0'),  # Sunday 2 AM
+        'schedule': crontab(hour=2, minute=30, day_of_week='0'),  # Sunday 2:30 AM
     },
-    # Analyze feedback text weekly on Wednesday at 3:00 AM
+    # Analyze feedback text weekly on Wednesday at 3:30 AM (offset off the daily
+    # 03:00 demo-date refresh so they never fire in the same Wednesday tick).
     'analyze-feedback-text-weekly': {
         'task': 'kanban.analyze_feedback_text',
-        'schedule': crontab(hour=3, minute=0, day_of_week='3'),  # Wednesday 3 AM
+        'schedule': crontab(hour=3, minute=30, day_of_week='3'),  # Wednesday 3:30 AM
     },
     # Aggregate org-level learning daily at 6:00 AM (before PM metrics)
     'aggregate-org-learning-daily': {
@@ -114,10 +117,11 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=4, minute=0, day_of_week=0),  # Sunday 4 AM
     },
     # --- Knowledge Graph Tasks ---
-    # Generate memory connections weekly on Sunday at 5:00 AM
+    # Generate memory connections weekly on Sunday at 5:30 AM (offset off the
+    # daily 05:00 analytics report so they never fire in the same Sunday tick).
     'kg-generate-connections-weekly': {
         'task': 'knowledge_graph.generate_memory_connections',
-        'schedule': crontab(hour=5, minute=0, day_of_week=0),  # Sunday 5 AM
+        'schedule': crontab(hour=5, minute=30, day_of_week=0),  # Sunday 5:30 AM
     },
     # Check missed deadlines daily at 1:00 AM
     'kg-check-missed-deadlines-daily': {
@@ -140,10 +144,13 @@ app.conf.beat_schedule = {
         'task': 'decision_center.generate_decision_briefing',
         'schedule': crontab(hour=7, minute=30),  # Daily 7:30 AM
     },
-    # Send digest emails every 30 min (honours per-user preferred time)
+    # Send digest emails every 30 min (honours per-user preferred time).
+    # Offset to :05/:35 so it does not dispatch in the same tick as the hourly
+    # conflict sweep (:00) and the :30 automation cluster — keeps any single
+    # second from flooding the solo worker with write-heavy jobs.
     'dc-send-digest-emails': {
         'task': 'decision_center.send_daily_digest_emails',
-        'schedule': crontab(minute='0,30'),  # Every 30 minutes
+        'schedule': crontab(minute='5,35'),  # Every 30 minutes, offset
     },
     # --- Exit Protocol Tasks ---
     # Monitor board health daily at 2:15 AM
@@ -152,10 +159,11 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=2, minute=15),  # Daily 2:15 AM
     },
     # --- Project Confidence Score ---
-    # Compute auto confidence scores for all boards every 6 hours
+    # Compute auto confidence scores for all boards every 6 hours.
+    # Offset to :40 so it does not collide with the due-date sweep at :30.
     'compute-board-confidence': {
         'task': 'kanban.compute_all_board_confidence',
-        'schedule': crontab(minute=30, hour='*/6'),  # Every 6 hours at :30
+        'schedule': crontab(minute=40, hour='*/6'),  # Every 6 hours at :40
     },
     # --- Analytics Tasks ---
     # Clean up user sessions older than 90 days (daily at 4:30 AM)

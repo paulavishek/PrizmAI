@@ -2339,20 +2339,55 @@ def _purge_existing_sandbox(user):
 @login_required
 @require_http_methods(["POST"])
 def reset_my_demo(request):
-    """POST /demo/reset-mine/ — wipe user's sandbox and re-provision via Celery."""
-    from kanban.models import DemoSandbox
+    """POST /demo/reset-mine/ — wipe the user's sandbox and re-provision it
+    SYNCHRONOUSLY, returning the dashboard redirect URL.
 
-    # The purge runs INSIDE the provisioning task (is_reset=True), not here.
-    # Purging in the request thread while the Celery worker duplicates boards
-    # created two concurrent SQLite writers → an immediate "database is locked"
-    # error that left a half-provisioned sandbox. Keeping purge + provision in
-    # the same worker serializes them against SQLite's single writer.
-    from kanban.tasks.sandbox_provisioning import provision_sandbox_task
-    result = provision_sandbox_task.delay(request.user.id, is_reset=True)
+    Why synchronous (no Celery, no WebSocket): the deep-copy is only ~10s
+    (measured). Routing it through a Celery task on a dedicated worker + a
+    WebSocket progress channel added exactly the machinery that kept failing on
+    the local solo-worker/Windows setup — the task was not reliably executed and
+    `async_to_sync(group_send)` could deadlock — leaving the reset hung for
+    minutes with the DB untouched. Doing the work right here in the request
+    removes all of that: the request itself completing IS the completion signal,
+    so the browser just redirects on the response.
 
+    A sync view under ASGI runs in Django's sync thread (the event loop and
+    WebSockets stay responsive); the ~10s only briefly serializes other sync
+    views, which is fine for the demo. Unlike the old Celery task, this also
+    cannot be killed by a 120s task time-limit, so it completes even if it has to
+    wait on SQLite's write lock.
+    """
+    # Switch the active workspace to the demo up front so the post-reset
+    # dashboard renders the demo (see the cross-process-race note that motivated
+    # this; it is now committed in the same process that does the reset).
+    try:
+        from kanban.utils.demo_protection import get_demo_workspace
+        profile = request.user.profile
+        demo_ws = get_demo_workspace()
+        if demo_ws:
+            profile.active_workspace = demo_ws
+        profile.is_viewing_demo = True
+        profile.save(update_fields=['active_workspace', 'is_viewing_demo'])
+    except Exception:
+        # Never let a workspace-switch hiccup block the reset itself.
+        pass
+
+    try:
+        from kanban.tasks.sandbox_provisioning import provision_sandbox_sync
+        result = provision_sandbox_sync(request.user.id, is_reset=True)
+    except Exception:
+        logger.exception("Synchronous demo reset failed for user %s", request.user.id)
+        return JsonResponse(
+            {'status': 'error',
+             'message': 'Reset failed. Please click Reset Demo again.'},
+            status=500,
+        )
+
+    if not isinstance(result, dict):
+        result = {}
     return JsonResponse({
-        'status': 'resetting',
-        'task_id': result.id,
+        'status': result.get('status', 'created'),
+        'redirect_url': result.get('redirect_url', '/dashboard/'),
     })
 
 

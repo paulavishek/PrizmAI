@@ -6,6 +6,7 @@ Celery worker deep-copies demo template boards → streams progress updates
 via Django Channels → frontend redirects on completion.
 """
 import logging
+import threading
 
 from celery import shared_task
 from channels.layers import get_channel_layer
@@ -14,9 +15,20 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+# When the reset runs SYNCHRONOUSLY inside an HTTP request (see
+# kanban.sandbox_views.reset_my_demo) there is no WebSocket to push progress to,
+# and calling async_to_sync(channel_layer.group_send) from that request thread —
+# which is itself driven by the ASGI event loop — can DEADLOCK (the hang behind
+# the "Reset is taking longer than usual" reports). The request path sets
+# `_ws_suppress.on = True` so these helpers become no-ops; the Celery path leaves
+# it False and streams progress as before.
+_ws_suppress = threading.local()
+
 
 def _send_provision_status(user_id, message, progress=0):
     """Send a provisioning progress update to the user's WebSocket group."""
+    if getattr(_ws_suppress, 'on', False):
+        return
     try:
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -33,6 +45,8 @@ def _send_provision_status(user_id, message, progress=0):
 
 def _send_provision_result(user_id, data):
     """Send the provisioning completion result."""
+    if getattr(_ws_suppress, 'on', False):
+        return
     try:
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -48,6 +62,8 @@ def _send_provision_result(user_id, data):
 
 def _send_provision_error(user_id, message):
     """Send a provisioning error."""
+    if getattr(_ws_suppress, 'on', False):
+        return
     try:
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -157,6 +173,41 @@ def provision_sandbox_task(self, user_id, is_reset=False):
         )
         return {'status': 'error', 'message': 'soft time limit exceeded'}
     finally:
+        try:
+            lock_cache.delete(lock_key)
+        except Exception:
+            pass
+
+
+def provision_sandbox_sync(user_id, is_reset=False):
+    """Run provisioning SYNCHRONOUSLY in the caller's thread (no Celery, no
+    WebSocket) and return the result dict.
+
+    Used by the Reset Demo HTTP view so the reset never depends on a Celery
+    worker consuming the task or on a WebSocket round-trip — both proved
+    unreliable on the local solo-worker/Windows setup and left resets hung with
+    the DB untouched. The deep-copy is only ~10s, well within an HTTP request.
+
+    Reuses the same single-flight lock as the Celery task (so a double-click or a
+    racing auto-provision can't create duplicate boards) and suppresses the
+    progress WebSocket sends (which would otherwise deadlock when async_to_sync
+    is called from the request thread).
+    """
+    from django.core.cache import caches
+    lock_cache = caches['ai_cache']
+    lock_key = f'sandbox_provision_lock_{user_id}'
+    try:
+        got_lock = lock_cache.add(lock_key, '1', timeout=150)
+    except Exception:
+        got_lock = True  # cache unavailable — fail open, never block a reset
+    if not got_lock:
+        return {'status': 'in_progress', 'redirect_url': '/dashboard/'}
+
+    _ws_suppress.on = True
+    try:
+        return _provision_sandbox(None, user_id, is_reset=is_reset)
+    finally:
+        _ws_suppress.on = False
         try:
             lock_cache.delete(lock_key)
         except Exception:

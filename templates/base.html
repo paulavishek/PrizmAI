@@ -925,35 +925,26 @@ document.addEventListener('DOMContentLoaded', function() {
     window.resetMyDemo = function() {
         if (!confirm('Reset your sandbox? This re-copies the demo data from scratch. All your current edits will be lost.')) return;
 
-        // Disable button and show spinner
+        // Disable button and show a spinner in place of the icon (same label, so
+        // the button width is unchanged and the centered workspace pill is never
+        // overlapped).
         var btn = document.getElementById('reset-demo-btn');
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Resetting… please wait';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Reset Demo';
         }
 
-        // Show in-page info banner. The reset runs asynchronously in a Celery
-        // worker (purge + re-clone of every demo board), so we stay on this page
-        // and report progress streamed over the SandboxProvision WebSocket,
-        // redirecting only once the worker signals completion. Redirecting
-        // immediately on the 'resetting' ack made a still-in-flight reset look
-        // like it did nothing (the user could revisit the stale board before the
-        // worker had purged it).
+        // Show an in-page info banner for the duration of the request.
         var banner = document.createElement('div');
         banner.id = 'reset-demo-banner';
         banner.className = 'alert alert-info mx-3 mt-2';
         banner.setAttribute('role', 'alert');
-        banner.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Resetting your demo workspace</strong> — <span id="reset-demo-msg">this usually takes 30–60 seconds</span>. Please don’t close this tab.';
+        banner.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Resetting your demo workspace</strong> — this usually takes 10–20 seconds. Please don’t close this tab.';
         var mainContent = document.querySelector('.prizm-main-content');
         if (mainContent) {
             mainContent.insertBefore(banner, mainContent.firstChild);
         } else {
             document.body.insertBefore(banner, document.body.firstChild);
-        }
-
-        function setResetMsg(text) {
-            var el = document.getElementById('reset-demo-msg');
-            if (el) { el.textContent = text; }
         }
 
         function failReset(message) {
@@ -962,71 +953,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 (message || 'Please click Reset Demo again.');
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = 'Reset Demo';
+                btn.innerHTML = '<i class="fas fa-redo me-1"></i>Reset Demo';
             }
         }
 
-        // Open the progress WebSocket BEFORE kicking off the reset so we don't
-        // miss early status messages. The worker pushes to the per-user group
-        // sandbox_provision_<user_id>; the consumer authenticates via session.
-        var settled = false;
-        var resetWatchdog = null;
-        function settleReset() {
-            settled = true;
-            if (resetWatchdog) { clearTimeout(resetWatchdog); resetWatchdog = null; }
-        }
-        // Unconditional safety net: if NO result/error ever arrives — the worker
-        // is down, stuck, or the task was queued behind a backlog and silently
-        // dropped — the banner must not spin forever. After ~95s (just past the
-        // task's 90s soft_time_limit) give the user a way out instead of a dead
-        // banner. NB: the old code only armed a fallback when the WebSocket
-        // failed to OPEN; a connected-but-silent socket left the user stuck.
-        function armResetWatchdog() {
-            if (resetWatchdog) { clearTimeout(resetWatchdog); }
-            resetWatchdog = setTimeout(function() {
-                if (settled) { return; }
-                banner.className = 'alert alert-warning mx-3 mt-2';
-                banner.innerHTML = '<i class="fas fa-clock me-2"></i>' +
-                    '<strong>This is taking longer than usual.</strong> ' +
-                    'Your reset may still be finishing in the background. ' +
-                    '<a href="/dashboard/" class="alert-link">Continue to your workspace</a> ' +
-                    'and check in a moment.';
-                if (btn) { btn.disabled = false; btn.innerHTML = 'Reset Demo'; }
-            }, 95000);
-        }
-
-        var ws = null;
-        try {
-            var proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            ws = new WebSocket(proto + '://' + window.location.host + '/ws/sandbox-provision/');
-        } catch (e) {
-            ws = null;
-        }
-
-        if (ws) {
-            ws.onmessage = function(evt) {
-                var payload;
-                try { payload = JSON.parse(evt.data); } catch (e) { return; }
-                if (payload.type === 'provision_status') {
-                    if (payload.message) { setResetMsg(payload.message); }
-                } else if (payload.type === 'provision_result') {
-                    settleReset();
-                    var data = payload.data || {};
-                    setResetMsg('Your workspace is ready!');
-                    try { ws.close(); } catch (e) {}
-                    window.location.href = data.redirect_url || '/dashboard/';
-                } else if (payload.type === 'provision_error') {
-                    settleReset();
-                    try { ws.close(); } catch (e) {}
-                    failReset(payload.message);
-                }
-            };
-            // If the socket drops before we got a result, don't leave the banner
-            // spinning — let the watchdog (still armed) surface the way-out link.
-            ws.onclose = function() { if (!settled) { armResetWatchdog(); } };
-            ws.onerror = function() { if (!settled) { armResetWatchdog(); } };
-        }
-
+        // The reset now runs SYNCHRONOUSLY on the server (no Celery task, no
+        // WebSocket): the deep-copy is ~10s and the request simply doesn't return
+        // until it's done. So the POST response IS the completion signal — on
+        // success we redirect; on failure we surface a retry. This removes the
+        // queue/worker/WebSocket round-trip that previously left resets hung.
         fetch('/demo/reset-mine/', {
             method: 'POST',
             headers: {
@@ -1034,19 +969,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.status === 'resetting' || data.status === 'provisioning') {
-                // Worker accepted the job. Wait for the WebSocket to report
-                // completion, but ALWAYS arm the watchdog so a connected-but-
-                // silent socket (or one that never opened) can't strand the user.
-                armResetWatchdog();
+        .then(function(r) {
+            return r.json().then(function(data) { return { ok: r.ok, data: data }; });
+        })
+        .then(function(res) {
+            var data = res.data || {};
+            if (res.ok && data.status !== 'error') {
+                window.location.href = data.redirect_url || '/dashboard/';
             } else {
                 failReset(data.message);
             }
         })
         .catch(function() {
-            if (!settled) { failReset('Could not reach the server.'); }
+            failReset('Could not reach the server.');
         });
     };
 
