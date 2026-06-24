@@ -319,7 +319,7 @@ def preset_features(request):
     Priority order:
       1. Demo accounts (persona accounts or is_viewing_demo) → always enterprise
       2. Board-specific preset (from URL board_id kwarg) → BoardPreset.effective_preset()
-      3. Org-level global preset → WorkspacePreset.global_preset
+      3. Active-workspace global preset → WorkspacePreset.global_preset
       4. Fallback → lean (safest default for unknown state)
     """
     from kanban.preset_models import build_feature_flags
@@ -350,18 +350,18 @@ def preset_features(request):
         try:
             from kanban.preset_models import BoardPreset
             bp = BoardPreset.objects.select_related(
-                'board__organization__workspace_preset'
+                'board__workspace__workspace_preset'
             ).get(board_id=board_id)
             preset = bp.effective_preset()
         except Exception:
             pass
 
-    # Fall back to org-level global preset
+    # Fall back to the active workspace's global preset (the tenant boundary)
     if preset is None:
         try:
-            org = request.user.profile.organization
-            if org is not None:
-                preset = org.workspace_preset.global_preset
+            ws = request.user.profile.active_workspace
+            if ws is not None:
+                preset = ws.workspace_preset.global_preset
         except Exception:
             pass
 

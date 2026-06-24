@@ -293,14 +293,11 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         """
         ctx = {'workspace_preset': '', 'byok_active': False, 'ai_provider_used': ''}
         try:
-            # Workspace preset from the user's primary org
-            from kanban.preset_models import WorkspacePreset
-            from accounts.models import OrganizationMembership
-            membership = OrganizationMembership.objects.filter(user=user).select_related('organization').first()
-            if membership:
-                preset_obj = WorkspacePreset.objects.filter(organization=membership.organization).first()
-                if preset_obj:
-                    ctx['workspace_preset'] = preset_obj.global_preset
+            # Workspace preset from the user's active workspace (the tenant boundary)
+            ws = getattr(getattr(user, 'profile', None), 'active_workspace', None)
+            preset_obj = getattr(ws, 'workspace_preset', None) if ws else None
+            if preset_obj:
+                ctx['workspace_preset'] = preset_obj.global_preset
         except Exception:
             pass
         try:

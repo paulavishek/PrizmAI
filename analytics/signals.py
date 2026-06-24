@@ -133,9 +133,13 @@ def on_workspace_preset_saved(sender, instance, created, **kwargs):
     """Record a WorkspacePresetEvent when the global_preset changes."""
     try:
         from analytics.models import WorkspacePresetEvent
+        # Preset is now keyed on the workspace; derive the org for the event.
+        org = getattr(instance.workspace, 'organization', None)
+        if org is None:
+            return
         # On creation there's no "from" tier, so from_preset is blank
         WorkspacePresetEvent.objects.create(
-            organization=instance.organization,
+            organization=org,
             from_preset='' if created else '',   # We can't know the old value after save; use signals' pre_save for that
             to_preset=instance.global_preset,
         )
