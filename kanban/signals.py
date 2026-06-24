@@ -1759,13 +1759,18 @@ def record_project_signal_on_task_delete(sender, instance, **kwargs):
 
 # ── Workspace Preset auto-creation ─────────────────────────────────
 
-@receiver(post_save, sender='accounts.Organization')
-def create_workspace_preset_for_org(sender, instance, created, **kwargs):
-    """Auto-create a WorkspacePreset when an Organization is created."""
+@receiver(post_save, sender='kanban.Workspace')
+def create_workspace_preset_for_workspace(sender, instance, created, **kwargs):
+    """Auto-create a WorkspacePreset when a Workspace is created.
+
+    The preset is keyed on the Workspace (the tenant boundary), so each
+    workspace gets its own feature level rather than inheriting a shared
+    org-level setting.
+    """
     if created:
         from kanban.preset_models import WorkspacePreset
         WorkspacePreset.objects.get_or_create(
-            organization=instance,
+            workspace=instance,
             defaults={'global_preset': 'professional'},
         )
 

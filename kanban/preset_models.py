@@ -6,8 +6,13 @@ Three preset tiers:
   - professional: Growing teams (10–50) — advanced PM features unlocked
   - enterprise:   Large organisations (50+) — full PrizmAI experience
 
-WorkspacePreset lives on the Organization (global ceiling).
+WorkspacePreset lives on each Workspace (the tenant boundary / global ceiling).
 BoardPreset lives on each Board (local override, can only restrict further).
+
+NOTE: The preset is keyed on Workspace — NOT Organization — because a single
+Organization can contain several independent Workspaces (one per user/team).
+Keying on Organization caused presets to leak between unrelated workspaces that
+happened to share an org.
 """
 from django.db import models
 
@@ -23,11 +28,11 @@ PRESET_CHOICES = [
 
 class WorkspacePreset(models.Model):
     """
-    Organisation-wide default preset.  All new boards inherit this setting.
-    Only Org Admins may change it.
+    Per-workspace default preset.  All boards in the workspace inherit this
+    setting.  Only Org Admins may change it.
     """
-    organization = models.OneToOneField(
-        'accounts.Organization',
+    workspace = models.OneToOneField(
+        'kanban.Workspace',
         on_delete=models.CASCADE,
         related_name='workspace_preset',
     )
@@ -43,7 +48,7 @@ class WorkspacePreset(models.Model):
         app_label = 'kanban'
 
     def __str__(self):
-        return f"{self.organization} — {self.get_global_preset_display()}"
+        return f"{self.workspace} — {self.get_global_preset_display()}"
 
 
 class BoardPreset(models.Model):
@@ -78,25 +83,27 @@ class BoardPreset(models.Model):
         Demo workspace boards always return 'enterprise' (all features unlocked).
 
         Falls back to 'lean' when:
-          - The board has no organization
-          - The organization has no WorkspacePreset record
+          - The board has no workspace
+          - The workspace has no WorkspacePreset record
         """
         # Demo workspace boards bypass presets — full feature access
         try:
             board = self.board
             if getattr(board, 'is_sandbox_copy', False):
                 return 'enterprise'
+            if board.workspace and board.workspace.is_demo:
+                return 'enterprise'
             if board.organization and board.organization.is_demo:
                 return 'enterprise'
         except Exception:
             pass
 
-        # Resolve the global ceiling
+        # Resolve the global ceiling from the board's workspace
         global_preset = 'lean'  # safe default
         try:
-            org = self.board.organization
-            if org is not None:
-                global_preset = org.workspace_preset.global_preset
+            ws = self.board.workspace
+            if ws is not None:
+                global_preset = ws.workspace_preset.global_preset
         except (AttributeError, WorkspacePreset.DoesNotExist):
             pass
 

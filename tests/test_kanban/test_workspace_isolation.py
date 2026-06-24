@@ -309,3 +309,74 @@ class WorkspaceIsolationTestCase(TestCase):
 
         assert self.profile.organization_id == self.real_org.id
         assert self.profile.active_workspace_id == self.real_ws.id
+
+
+class WorkspacePresetIsolationTestCase(TestCase):
+    """Workspace feature-level presets must not leak between sibling
+    workspaces that share a single Organization.
+
+    Regression for the bug where WorkspacePreset was keyed on Organization,
+    so two users in different workspaces of the same org saw (and overwrote)
+    each other's feature level.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.creator = User.objects.create_user('preset_creator', password='x')
+        # One org, two independent workspaces (the leak scenario).
+        cls.org = Organization.objects.create(
+            name='Shared Org', is_demo=False, created_by=cls.creator,
+        )
+        cls.ws_a = Workspace.objects.create(
+            name='Workspace A', organization=cls.org, created_by=cls.creator,
+        )
+        cls.ws_b = Workspace.objects.create(
+            name='Workspace B', organization=cls.org, created_by=cls.creator,
+        )
+
+    def _preset(self, ws):
+        from kanban.preset_models import WorkspacePreset
+        return WorkspacePreset.objects.get(workspace=ws).global_preset
+
+    def test_signal_creates_one_preset_per_workspace(self):
+        """Each workspace gets its own auto-created preset row."""
+        from kanban.preset_models import WorkspacePreset
+        self.assertTrue(WorkspacePreset.objects.filter(workspace=self.ws_a).exists())
+        self.assertTrue(WorkspacePreset.objects.filter(workspace=self.ws_b).exists())
+        self.assertEqual(
+            WorkspacePreset.objects.filter(workspace__organization=self.org).count(),
+            2,
+        )
+
+    def test_changing_one_workspace_does_not_affect_sibling(self):
+        """Setting Workspace A to lean leaves Workspace B untouched."""
+        from kanban.preset_models import WorkspacePreset
+        wp_a = WorkspacePreset.objects.get(workspace=self.ws_a)
+        wp_a.global_preset = 'lean'
+        wp_a.save()
+        wp_b = WorkspacePreset.objects.get(workspace=self.ws_b)
+        wp_b.global_preset = 'enterprise'
+        wp_b.save()
+
+        self.assertEqual(self._preset(self.ws_a), 'lean')
+        self.assertEqual(self._preset(self.ws_b), 'enterprise')
+
+    def test_board_effective_preset_follows_its_workspace(self):
+        """A board resolves its global ceiling from its own workspace."""
+        from kanban.preset_models import WorkspacePreset, BoardPreset
+        WorkspacePreset.objects.filter(workspace=self.ws_a).update(global_preset='lean')
+        WorkspacePreset.objects.filter(workspace=self.ws_b).update(global_preset='enterprise')
+
+        board_a = Board.objects.create(
+            name='Board A', organization=self.org, workspace=self.ws_a,
+            created_by=self.creator,
+        )
+        board_b = Board.objects.create(
+            name='Board B', organization=self.org, workspace=self.ws_b,
+            created_by=self.creator,
+        )
+        bp_a = BoardPreset.objects.get(board=board_a)
+        bp_b = BoardPreset.objects.get(board=board_b)
+
+        self.assertEqual(bp_a.effective_preset(), 'lean')
+        self.assertEqual(bp_b.effective_preset(), 'enterprise')

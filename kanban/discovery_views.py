@@ -35,12 +35,12 @@ logger = logging.getLogger(__name__)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_features(user):
-    """Return the feature flags dict for the user's organisation preset."""
+    """Return the feature flags dict for the user's active-workspace preset."""
     try:
-        org = user.profile.organization
-        if org is None:
+        ws = user.profile.active_workspace
+        if ws is None:
             return build_feature_flags('lean')
-        preset = org.workspace_preset.global_preset
+        preset = ws.workspace_preset.global_preset
         return build_feature_flags(preset)
     except Exception:
         return build_feature_flags('lean')

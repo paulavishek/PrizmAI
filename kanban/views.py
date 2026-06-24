@@ -39,8 +39,10 @@ def _get_discovery_widget_counts(user, organization):
         from kanban.discovery_views import _demo_owner_filter
         if organization is None:
             return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
-        org_preset = getattr(getattr(organization, 'workspace_preset', None), 'global_preset', 'lean')
-        features = build_feature_flags(org_preset)
+        # Preset is keyed on the active workspace, not the (shared) organization.
+        active_ws = getattr(getattr(user, 'profile', None), 'active_workspace', None)
+        ws_preset = getattr(getattr(active_ws, 'workspace_preset', None), 'global_preset', 'lean')
+        features = build_feature_flags(ws_preset)
         if not features.get('show_discovery'):
             return {'discovery_enabled': False, 'discovery_ideas_to_score': 0, 'discovery_ideas_to_promote': 0}
         # In the demo org all users share one organization; ideas are isolated
@@ -2610,12 +2612,12 @@ def board_detail(request, board_id):
     board_preset_effective = 'enterprise' if _is_demo_board else 'lean'
     try:
         from kanban.preset_models import BoardPreset, PRESET_CHOICES as _BP_CHOICES, PRESET_ORDER as _BP_ORDER
-        bp_obj = BoardPreset.objects.select_related('board__organization__workspace_preset').get(board=board)
+        bp_obj = BoardPreset.objects.select_related('board__workspace__workspace_preset').get(board=board)
         board_preset_local = bp_obj.local_preset  # None means "inherit"
         board_preset_effective = bp_obj.effective_preset()
         try:
-            if board.organization:
-                board_preset_global = board.organization.workspace_preset.global_preset
+            if board.workspace:
+                board_preset_global = board.workspace.workspace_preset.global_preset
         except Exception:
             pass
     except BoardPreset.DoesNotExist:
@@ -6803,6 +6805,7 @@ def workspace_preset_settings(request):
 
     profile = request.user.profile
     org = profile.organization
+    workspace = profile.active_workspace
 
     if org is None:
         messages.warning(request, "You don't belong to an organization yet.")
@@ -6812,10 +6815,16 @@ def workspace_preset_settings(request):
         messages.error(request, "Only organization admins can change workspace settings.")
         return redirect('dashboard')
 
-    preset_obj, _created = WorkspacePreset.objects.get_or_create(
-        organization=org,
-        defaults={'global_preset': 'lean'},
-    )
+    # Preset is keyed on the workspace (the tenant boundary), so each workspace
+    # has its own feature level even when several share one organization.
+    # AI provider settings, by contrast, are org-scoped — so they remain
+    # editable even if the user somehow has no active workspace.
+    preset_obj = None
+    if workspace is not None:
+        preset_obj, _created = WorkspacePreset.objects.get_or_create(
+            workspace=workspace,
+            defaults={'global_preset': 'lean'},
+        )
 
     # ai_form is set to a bound form only when we need to re-render with errors
     ai_form = None
@@ -6919,6 +6928,9 @@ def workspace_preset_settings(request):
 
         else:
             # Preset form (form_type='preset' or absent)
+            if preset_obj is None:
+                messages.error(request, "You don't have an active workspace to configure yet.")
+                return redirect('dashboard')
             new_preset = request.POST.get('global_preset', '').strip()
             if new_preset in PRESET_ORDER:
                 preset_obj.global_preset = new_preset
@@ -6962,7 +6974,7 @@ def workspace_preset_settings(request):
     context = {
         'preset_obj': preset_obj,
         'preset_choices': PRESET_CHOICES,
-        'current_preset': preset_obj.global_preset,
+        'current_preset': preset_obj.global_preset if preset_obj else 'lean',
         'ai_settings_form': ai_form,
         'ai_settings': ai_settings_obj,
         'has_byok_key': has_byok_key,
@@ -7004,8 +7016,8 @@ def board_preset_update(request, board_id):
     # Enforce ceiling: local cannot exceed global
     global_preset = 'lean'
     try:
-        if board.organization:
-            global_preset = board.organization.workspace_preset.global_preset
+        if board.workspace:
+            global_preset = board.workspace.workspace_preset.global_preset
     except WorkspacePreset.DoesNotExist:
         pass
 

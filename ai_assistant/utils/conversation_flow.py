@@ -2336,9 +2336,9 @@ class ConversationFlowManager:
                 try:
                     from kanban.preset_models import WorkspacePreset
                     profile = getattr(user, 'profile', None)
-                    org = getattr(profile, 'organization', None) if profile else None
-                    if org:
-                        wp = WorkspacePreset.objects.filter(organization=org).first()
+                    ws = getattr(profile, 'active_workspace', None) if profile else None
+                    if ws:
+                        wp = WorkspacePreset.objects.filter(workspace=ws).first()
                         # Only ask if preset is the auto-created default 'lean'
                         # and user is an admin (can change it)
                         if wp and wp.global_preset == 'lean' and getattr(profile, 'is_admin', False):
@@ -2407,15 +2407,15 @@ class ConversationFlowManager:
             from kanban.preset_models import WorkspacePreset, PRESET_CHOICES
             from kanban.permissions import is_user_org_admin
             profile = getattr(user, 'profile', None)
-            org = getattr(profile, 'organization', None) if profile else None
-            if org:
+            ws = getattr(profile, 'active_workspace', None) if profile else None
+            if ws:
                 if not is_user_org_admin(user):
                     state.reset()
                     return (
                         "Only organization admins can change workspace presets. "
                         "You can ask your org admin to update this in **Workspace Settings**."
                     )
-                wp, _ = WorkspacePreset.objects.get_or_create(organization=org)
+                wp, _ = WorkspacePreset.objects.get_or_create(workspace=ws)
                 wp.global_preset = preset
                 wp.save()
         except Exception:

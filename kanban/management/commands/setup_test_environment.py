@@ -112,18 +112,18 @@ class Command(BaseCommand):
                 profile.save(update_fields=['active_workspace'])
 
         # ------------------------------------------------------------------
-        # Step 3: Set Enterprise preset for each user's organization
+        # Step 3: Set Enterprise preset for each user's active workspace
         # ------------------------------------------------------------------
         self.stdout.write('\n3. Setting Enterprise preset...')
         for user in users:
-            org = user.profile.organization
-            if org and not org.is_demo:
+            ws = user.profile.active_workspace
+            if ws and not ws.is_demo:
                 preset, created = WorkspacePreset.objects.update_or_create(
-                    organization=org,
+                    workspace=ws,
                     defaults={'global_preset': 'enterprise'},
                 )
                 tag = '[CREATED]' if created else '[UPDATED]'
-                self.stdout.write(f'   {tag} {org.name} -> Enterprise')
+                self.stdout.write(f'   {tag} {ws.name} -> Enterprise')
 
         # ------------------------------------------------------------------
         # Step 4: Ensure each user has at least one board in their workspace
