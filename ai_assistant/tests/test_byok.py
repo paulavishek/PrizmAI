@@ -244,7 +244,10 @@ class TestResolveProvider(TestCase):
         self.assertEqual(key, 'platform-gemini')
         self.assertFalse(is_byok)
 
-    def test_background_task_uses_org_byok(self):
+    def test_background_task_never_uses_another_workspaces_byok(self):
+        # TENANT ISOLATION: a user-less background task has no workspace context,
+        # so it must NEVER pick up some workspace's BYOK key/provider. Even with a
+        # workspace BYOK configured, the background path uses the platform key.
         OrganizationAISettings.objects.create(
             workspace=self.workspace,
             provider='gemini',
@@ -252,9 +255,9 @@ class TestResolveProvider(TestCase):
             encrypted_api_key=self._encrypt('sk-org-openai'),
         )
         provider, key, is_byok, _ = self.router._resolve_provider(None)
-        self.assertEqual(provider, 'openai')
-        self.assertEqual(key, 'sk-org-openai')
-        self.assertTrue(is_byok)
+        self.assertEqual(provider, 'gemini')
+        self.assertEqual(key, 'platform-gemini')
+        self.assertFalse(is_byok)
 
 
 # ===========================================================================

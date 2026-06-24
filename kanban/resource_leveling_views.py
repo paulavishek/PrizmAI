@@ -19,6 +19,7 @@ from kanban.resource_leveling_models import (
     ResourceLevelingSuggestion,
     TaskAssignmentHistory
 )
+from kanban.simple_access import can_modify_board_content
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,14 @@ def accept_suggestion(request, suggestion_id):
     """
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
-        
+
+        # Tenant isolation: this endpoint is keyed on suggestion_id, which the
+        # BoardAccessEnforcementMiddleware does NOT cover. Accepting reassigns the
+        # task, so require content-modify access on the suggestion's board.
+        board = suggestion.task.column.board if suggestion.task.column_id else None
+        if board is None or not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+
         # Accept suggestion
         success = suggestion.accept(request.user)
         
@@ -175,7 +183,13 @@ def reject_suggestion(request, suggestion_id):
     """
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
-        
+
+        # Tenant isolation: suggestion_id is not covered by the board-access
+        # middleware; require modify access on the suggestion's board.
+        board = suggestion.task.column.board if suggestion.task.column_id else None
+        if board is None or not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+
         suggestion.reject(request.user)
         
         return JsonResponse({
@@ -544,7 +558,20 @@ def get_user_performance_profile(request, user_id):
     """
     try:
         user = get_object_or_404(User, id=user_id)
-        
+
+        # Tenant isolation: user_id is not covered by the board-access middleware.
+        # A user may read their OWN profile, or another user's profile only when
+        # they share a board the requester can access — never an arbitrary user's
+        # velocity/skills/utilization across tenants.
+        if user_id != request.user.id:
+            from kanban.utils.demo_protection import get_user_boards
+            accessible_boards = get_user_boards(request.user)
+            shares_board = User.objects.filter(
+                id=user_id, board_memberships__board__in=accessible_boards
+            ).exists()
+            if not shares_board:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+
         # Get or create performance profile - no organization needed
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
