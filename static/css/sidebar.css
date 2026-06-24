@@ -667,6 +667,12 @@
     font-weight: 700 !important;
     cursor: pointer !important;
     pointer-events: auto !important;
+    /* Reserve a stable footprint so swapping the icon for a spinner during
+       reset never grows the topbar-right row and pushes the display-mode gear
+       into the absolutely-centered workspace pill. */
+    min-width: 118px !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
 }
 .tws-btn-reset:hover {
     background: #fee2e2 !important;
@@ -869,6 +875,11 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    /* The switcher is absolutely centered (inline style) while .topbar-right is
+       a normal flex row. Keep the centered pill stacked ABOVE the right-hand
+       buttons so it is never visually obscured if the right row is wide on a
+       narrow viewport (defense-in-depth alongside the stable reset-button width). */
+    z-index: 2;
 }
 .tws-label {
     font-size: 0.78rem;

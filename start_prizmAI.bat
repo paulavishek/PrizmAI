@@ -21,15 +21,29 @@ echo [3/5] Starting Celery Interactive Worker...
 start cmd /k "title Celery Worker (interactive) && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board worker --pool=solo -l info -Q interactive -n worker-interactive@%%h"
 echo Celery interactive worker started.
 
-:: Start Celery Beat
-echo [4/5] Starting Celery Beat...
-start cmd /k "title Celery Beat && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board beat -l info"
-echo Celery beat started.
-
 :: Start Daphne Server (for websockets and HTTP)
-echo [5/5] Starting Daphne Server...
+echo [4/5] Starting Daphne Server...
 start cmd /k "title Daphne Server && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application"
 echo Daphne server started.
+
+:: Start Celery Beat LAST, after a delay that outlasts a typical login+reset.
+:: Two reasons for the delay:
+::  1) Beat's DatabaseScheduler writes its schedule to SQLite on startup; starting
+::     it into the workers+Daphne connection storm caused "database is locked" and a
+::     full schedule re-fire.
+::  2) More importantly, when Beat starts it dispatches any overdue hourly
+::     maintenance/automation tasks (idle/due-date/digest sweeps) to the solo
+::     default worker. On the local 100 MB+ SQLite DB those sweeps run for ~1-2 min
+::     and hold SQLite's single write lock, starving a Reset Demo that the user
+::     clicks right after login (the reset's own work is only ~10s, measured).
+:: A 90s delay means Beat (and that one-time startup churn) begins AFTER a normal
+:: "start servers -> log in -> Reset Demo" has already finished on a quiet DB.
+:: NB: this sidesteps the collision for the common workflow; it is not a cure for
+:: SQLite's single-writer limit. A reset clicked DURING the post-Beat churn, or on
+:: Postgres-less heavy concurrency, can still contend.
+echo [5/5] Starting Celery Beat (after a 90s delay so login+reset finishes first)...
+start cmd /k "title Celery Beat && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && echo Waiting 90s for login+reset to finish before starting Beat... && timeout /t 90 > nul && celery -A kanban_board beat -l info"
+echo Celery beat will start in ~90 seconds.
 
 echo.
 echo ============================================

@@ -655,7 +655,7 @@ PrizmAI's demo gives every visitor a private, fully editable sandbox the moment 
 2. **Experiment freely** — Your sandbox has full write access. Create tasks, delete columns, drag and drop, trigger automations — anything you like. Changes here have no effect on the shared demo templates or any other user's sandbox.
 3. **Switch workspaces freely** — Use the workspace switcher in the sidebar to toggle between your **Demo Workspace** and **My Workspace** at any time. Your sandbox is preserved between switches — nothing is deleted when you leave demo mode.
 4. **Sandbox persists** — Your sandbox has no expiry. It stays around as long as your account exists, so you can return to your demo data whenever you like.
-5. **Reset** — Click **Reset my demo** to wipe your sandbox and re-provision a fresh copy from the templates at any time.
+5. **Reset** — Click **Reset my demo** to wipe your sandbox and re-provision a fresh copy from the templates at any time. The reset runs **synchronously in the request** (no Celery task, no WebSocket) — the deep-copy takes ~10–20s and the page redirects to your fresh demo as soon as it completes. (Secondary, best-effort extras — conflict pre-population, Decision Center counts, etc. — are still handed off to Celery and self-heal on next visit.)
 
 ### Data isolation guarantees
 
@@ -925,8 +925,10 @@ Open [http://localhost:8000](http://localhost:8000) and sign up to get started.
 ### Background Services (Redis + Celery)
 
 `runserver` alone is enough to browse the app, but asynchronous and AI-backed
-features — **Reset Demo**, daily AI briefings, scheduled automations, conflict
-detection — need **Redis** (broker/cache) and **Celery** running alongside it.
+features — initial demo provisioning (**Try Demo**), daily AI briefings, scheduled
+automations, conflict detection — need **Redis** (broker/cache) and **Celery**
+running alongside it. (**Reset Demo** itself now runs synchronously in the request
+and does not require Celery; only its best-effort follow-up extras do.)
 
 **Windows (one command):** `start_prizmAI.bat` launches the whole stack in
 separate windows — Redis, both Celery workers, Celery Beat, and Daphne.
@@ -938,13 +940,16 @@ separate windows — Redis, both Celery workers, Celery Beat, and Daphne.
 # 1. Default worker — scheduled/background tasks (AI summaries, automations, etc.)
 celery -A kanban_board worker --pool=solo -l info -Q celery,summaries,ai_tasks
 
-# 2. Interactive worker — user-triggered, fast-response tasks (Reset Demo /
-#    sandbox provisioning). It consumes ONLY the 'interactive' queue so these
-#    never queue behind the burst of heavy scheduled tasks Celery Beat fires on
-#    startup, which previously made Reset Demo hang for minutes.
+# 2. Interactive worker — user-triggered, fast-response tasks (initial demo
+#    provisioning via "Try Demo"). It consumes ONLY the 'interactive' queue so
+#    these never queue behind the burst of heavy scheduled tasks Celery Beat
+#    fires on startup. (Reset Demo no longer uses this worker — it runs
+#    synchronously in the request — so its reliability no longer depends on a
+#    Celery worker consuming the job.)
 celery -A kanban_board worker --pool=solo -l info -Q interactive -n worker-interactive@%h
 
-# 3. Beat scheduler — runs periodic tasks
+# 3. Beat scheduler — runs periodic tasks. start_prizmAI.bat launches Beat ~90s
+#    after the others so its startup work lands on a settled DB.
 celery -A kanban_board beat -l info
 ```
 

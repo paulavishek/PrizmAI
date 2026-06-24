@@ -1155,7 +1155,16 @@ def dashboard(request):
 
     _oldest_board_time = boards.order_by('created_at').values_list('created_at', flat=True).first()
     workspace_is_new = (
-        _oldest_board_time is not None
+        # Never treat the demo as a brand-new onboarding workspace. Reset Demo
+        # re-clones the sandbox board on every reset, so its created_at is always
+        # "now" — combined with a transient completed_count==0 (the freshly cloned
+        # tasks not yet counted at the instant the post-reset dashboard renders),
+        # this heuristic misfired and swapped the demo dashboard for the onboarding
+        # "Your <goal> workspace is ready — Spectra built … 0 starter tasks" layout.
+        # That was the "different data after reset" page. The demo is pre-populated
+        # demo content, never an empty new workspace to onboard.
+        not demo_mode
+        and _oldest_board_time is not None
         and (timezone.now() - _oldest_board_time).total_seconds() < 86400
         and completed_count == 0
     )
