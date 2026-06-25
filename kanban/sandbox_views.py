@@ -1881,6 +1881,7 @@ def _clone_discovery_ideas_for_user(user):
     for tpl in templates:
         clone = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=tpl.workspace,
             title=tpl.title,
             description=tpl.description,
             source=tpl.source,

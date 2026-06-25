@@ -23,7 +23,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from django.contrib.auth import get_user_model
         from accounts.models import Organization
-        from kanban.models import Board
+        from kanban.models import Board, Workspace
         from kanban.discovery_models import DiscoveryIdea, IdeaComment, IdeaPromotion
 
         User = get_user_model()
@@ -32,6 +32,14 @@ class Command(BaseCommand):
         demo_org = Organization.objects.filter(is_demo=True).first()
         if not demo_org:
             self.stderr.write(self.style.ERROR('No demo organisation found. Run create_demo_organization first.'))
+            return
+
+        # Workspace is the tenant boundary used by the Discovery views' scope
+        # (see _idea_scope). Demo ideas must carry the shared demo workspace or
+        # the view's workspace filter excludes them and the inbox shows empty.
+        demo_ws = Workspace.objects.filter(is_demo=True).first()
+        if not demo_ws:
+            self.stderr.write(self.style.ERROR('No demo workspace found. Run create_demo_organization first.'))
             return
 
         # Always reset: delete the canonical TEMPLATE ideas and recreate them
@@ -104,6 +112,7 @@ class Command(BaseCommand):
         # holding it under review until those prerequisites clear.
         idea1 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Mobile App for Asian Markets',
             description=(
                 'Build a mobile-first application optimised for users in South-East Asia, '
@@ -170,6 +179,7 @@ class Command(BaseCommand):
         # ── Idea 2: AI-Powered Language Localisation (under_review, scored) ──
         idea2 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='AI-Powered Language Localisation Engine',
             description=(
                 'Replace manual translation workflow with an LLM-powered pipeline that '
@@ -195,6 +205,7 @@ class Command(BaseCommand):
         # ── Idea 3: Partnerships with Local Payment Gateways (under_review, scored) ──
         idea3 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Partnerships with Regional Payment Gateways',
             description=(
                 'Formal partnership agreements and technical integrations with Alipay, '
@@ -219,6 +230,7 @@ class Command(BaseCommand):
         # ── Idea 4: Offline Mode (new, unscored) ──────────────────────
         idea4 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Offline Mode for Low-Connectivity Regions',
             description=(
                 'Allow key app workflows to function without an active internet connection. '
@@ -234,6 +246,7 @@ class Command(BaseCommand):
         # ── Idea 5: Competitor Feature Parity - Dashboard Export (new, unscored) ──
         idea5 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Dashboard Export to PowerPoint / PDF',
             description=(
                 'Several APAC enterprise prospects have asked for the ability to export '
@@ -249,6 +262,7 @@ class Command(BaseCommand):
         # ── Idea 6: Gamification / Loyalty Programme (rejected) ───────
         idea6 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Gamification & Loyalty Programme',
             description=(
                 'Add points, badges, and leaderboards to incentivise daily active usage. '
@@ -282,6 +296,7 @@ class Command(BaseCommand):
         # ── Idea 7: Regional Pricing Tiers (approved + promoted) ──────
         idea7 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Regional Pricing Tiers for APAC',
             description=(
                 'Introduce market-specific pricing plans for South-East Asia and Japan. '
@@ -346,6 +361,7 @@ class Command(BaseCommand):
         # "Score with Spectra" themselves and see the AI analysis in action.
         idea8 = DiscoveryIdea.objects.create(
             organization=demo_org,
+            workspace=demo_ws,
             title='Update FAQ & Help Centre Copy',
             description=(
                 'Refresh the FAQ page and in-app help tooltips with accurate '
