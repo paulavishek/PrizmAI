@@ -143,6 +143,13 @@ GAP_CLEAR_THRESHOLD = 2
 # what Spectra still asks — two rounds of enrichment is enough.
 GAP_ENRICHMENT_CAP = 2
 
+# Minimum number of characters a flagged memory's content must grow by for an
+# edit to count as a genuine enrichment round. A no-op or near-empty save no
+# longer advances GAP_ENRICHMENT_CAP toward auto-clearing the badge — the
+# anchored AI recheck stays the authority, so the flag only clears when the
+# originally-flagged questions are actually answered.
+MIN_ENRICHMENT_CHARS = 40
+
 
 def gap_recheck_system_prompt(node_type, description):
     """Build the prompt used to re-assess gaps after a memory is edited.
@@ -188,11 +195,15 @@ def gap_progress_system_prompt(node_type, description, original_questions):
         "Checklist (do NOT add to it, do NOT rephrase it, do NOT invent new "
         "questions):\n"
         f"{numbered}\n\n"
+        "Mark a checklist question as ANSWERED only if the entry now contains "
+        "specific, relevant information that directly addresses THAT question. Do "
+        "NOT count vague, generic, off-topic, or padding text as an answer — if "
+        "the added detail does not actually answer the question, the question is "
+        "still unanswered. When in doubt, treat it as unanswered.\n\n"
         "Return ONLY the checklist questions that are still NOT answered by the "
         "memory entry, copied VERBATIM from the list above, as a JSON array of "
-        "strings. If every question is now answered, return an empty array. "
-        "Answer generously: if the entry gives a reasonable answer to a "
-        "question, treat it as answered.\n\n"
+        "strings. If every question is now genuinely answered, return an empty "
+        "array.\n\n"
         "Return ONLY the JSON array. No preamble, no markdown. Example: "
         '["Question two?"] or []'
     )
@@ -464,15 +475,22 @@ def edit_manual_memory(request, node_id):
 
     if not content:
         return JsonResponse({'error': 'Please describe what happened.'}, status=400)
-    # Title is optional — derive a clean one from the content when omitted.
+    # Title is optional. On edit, keep the memory's existing title so enriching a
+    # flagged memory never silently renames it; only derive from content when
+    # there is no prior title (legacy rows). Create (add_manual_memory) still
+    # derives from content.
     if not title:
-        title = _derive_title(content)
+        title = node.title or _derive_title(content)
 
     # Preserve the node's existing type when the submitted one isn't a valid
     # manual type (e.g. editing an auto-captured 'ai_recommendation' in demo) so
     # editing never silently reclassifies a system memory.
     if node_type not in ALLOWED_MANUAL_TYPES:
         node_type = node.node_type
+
+    # Capture how much the content grew BEFORE overwriting it, so a trivial edit
+    # can't advance the enrichment cap (see MIN_ENRICHMENT_CHARS below).
+    content_growth = len(content) - len(node.content or '')
 
     node.title = title[:200]
     node.content = content
@@ -494,20 +512,26 @@ def edit_manual_memory(request, node_id):
     if not node.gap_questions_original and node.gap_questions:
         node.gap_questions_original = node.gap_questions
 
-    # Count this edit as a round of enrichment only if the memory was flagged.
+    # Count this edit as a round of enrichment only if the memory was flagged AND
+    # the user actually added a meaningful amount of new context. A no-op or
+    # near-empty save must not march the memory toward the auto-clear cap.
     was_flagged = node.has_gaps
-    if was_flagged:
+    is_real_enrichment = was_flagged and content_growth >= MIN_ENRICHMENT_CHARS
+    if is_real_enrichment:
         node.gap_enrichment_count = (node.gap_enrichment_count or 0) + 1
 
     original = node.gap_questions_original or []
 
-    if was_flagged and node.gap_enrichment_count >= GAP_ENRICHMENT_CAP:
-        # Hard cap reached: clear the flag without another Gemini round-trip.
-        # The prompt can always find a deeper question, so the cap — not the AI —
-        # is the final backstop that terminates the loop for the user.
+    # The FREE-FORM recheck (no fixed checklist) can surface endless new
+    # questions, so a hard edit-count cap is the only guaranteed terminator.
+    # The ANCHORED recheck can't run away — its checklist only ever shrinks — so
+    # there the AI relevance check is the sole authority; a blind cap would clear
+    # the badge even for irrelevant edits, which is exactly what we must not do.
+    if was_flagged and not original and node.gap_enrichment_count >= GAP_ENRICHMENT_CAP:
         node.has_gaps = False
         node.gap_questions = None
     else:
+        ai_failed = False
         try:
             from ai_assistant.utils.ai_router import AIRouter
             if original:
@@ -528,25 +552,43 @@ def edit_manual_memory(request, node_id):
         except Exception as exc:
             logger.warning(f"Gap re-check on edit failed for node {node.pk}: {exc}")
             remaining = []
+            ai_failed = True
 
         if original:
             # Defensive: keep only real checklist items so Gemini can't smuggle
             # in new questions; the checklist can only shrink.
             original_set = set(original)
             remaining = [q for q in remaining if q in original_set]
-        elif remaining:
-            # First-time anchor: freeze whatever was found as the checklist.
-            node.gap_questions_original = remaining
 
-        # Clear when the checklist is complete (remaining empty), OR few enough
-        # remain that the entry is "good enough" (GAP_CLEAR_THRESHOLD safety net
-        # against a single stubborn question Gemini keeps returning).
-        if remaining and len(remaining) > GAP_CLEAR_THRESHOLD:
-            node.has_gaps = True
-            node.gap_questions = remaining
+            if ai_failed:
+                # Never clear an anchored memory on an AI outage — keep the
+                # unanswered questions standing so they can't vanish silently.
+                node.has_gaps = True
+                node.gap_questions = node.gap_questions or original
+            else:
+                # Clear ONLY when the user genuinely answered the flagged
+                # questions. "Made progress" (answered at least one) gates the
+                # good-enough threshold so that irrelevant additions — which
+                # answer nothing, leaving the full checklist — can never clear the
+                # badge, even for a one- or two-question checklist.
+                made_progress = len(remaining) < len(original)
+                good_enough = made_progress and len(remaining) <= GAP_CLEAR_THRESHOLD
+                if not remaining or good_enough:
+                    node.has_gaps = False
+                    node.gap_questions = None
+                else:
+                    node.has_gaps = True
+                    node.gap_questions = remaining
         else:
-            node.has_gaps = False
-            node.gap_questions = None
+            # First-time anchor: freeze whatever was found as the checklist.
+            if remaining:
+                node.gap_questions_original = remaining
+            if remaining and len(remaining) > GAP_CLEAR_THRESHOLD:
+                node.has_gaps = True
+                node.gap_questions = remaining
+            else:
+                node.has_gaps = False
+                node.gap_questions = None
     node.save()
 
     try:
@@ -654,20 +696,57 @@ def review_memory_gaps(request):
         description = (data.get('description') or '').strip()
         node_type = (data.get('node_type') or 'note').strip()
         if not description:
-            return JsonResponse({'questions': []})
+            return JsonResponse({'questions': [], 'sufficient': False})
+
+        # When previewing an EDIT of an already-flagged memory, anchor the review
+        # to that memory's ORIGINAL gap checklist (same prompt the save-time
+        # re-check uses) so the preview verdict matches what Save will actually
+        # do. Otherwise (create, or no anchored checklist yet) fall back to the
+        # free-form sufficiency review.
+        original = []
+        node_id = data.get('node_id')
+        if node_id:
+            anchored = (
+                MemoryNode.objects
+                .filter(id=node_id)
+                .values_list('gap_questions_original', flat=True)
+                .first()
+            )
+            original = anchored or []
 
         from ai_assistant.utils.ai_router import AIRouter
+        if original:
+            system_prompt = gap_progress_system_prompt(node_type, description, original)
+        else:
+            system_prompt = gap_analysis_system_prompt(node_type, description)
         response = AIRouter().complete(
-            prompt='Generate the JSON array of questions now.',
+            prompt='Return the JSON array of questions now.',
             user=request.user,
-            system_prompt=gap_analysis_system_prompt(node_type, description),
+            system_prompt=system_prompt,
             complexity='simple',
         )
         questions = parse_gap_questions(response.get('text', ''))
-        return JsonResponse({'questions': questions})
+        if original:
+            # Defensive: anchored review can only return a subset of the checklist.
+            original_set = set(original)
+            questions = [q for q in questions if q in original_set]
+        # "Sufficient" mirrors the save-time clear rule. For an anchored edit the
+        # badge clears only when every flagged question is answered, or the user
+        # answered all but a small remainder (good-enough net gated on real
+        # progress so irrelevant additions never read as sufficient). For a
+        # free-form create review it just means nothing critical is missing.
+        if original:
+            made_progress = len(questions) < len(original)
+            sufficient = (
+                len(questions) == 0
+                or (made_progress and len(questions) <= GAP_CLEAR_THRESHOLD)
+            )
+        else:
+            sufficient = len(questions) == 0
+        return JsonResponse({'questions': questions, 'sufficient': sufficient})
     except Exception as exc:
         logger.warning(f"review_memory_gaps failed, returning no questions: {exc}")
-        return JsonResponse({'questions': []})
+        return JsonResponse({'questions': [], 'sufficient': False})
 
 
 # ── View 3: Organizational Memory Page ──────────────────────────────────────
