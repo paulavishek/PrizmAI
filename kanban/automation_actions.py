@@ -1007,9 +1007,12 @@ def _act_create_memory_node(target, rule, action):
     """Capture a MemoryNode in the knowledge graph."""
     try:
         from knowledge_graph.models import MemoryNode
+        from knowledge_graph.demo_guard import is_demo_board
     except Exception:
         raise _ActionNoOp('knowledge_graph module not available')
     board = target.target_board
+    if is_demo_board(board):
+        raise _ActionNoOp('demo board — auto-capture suppressed')
     node_type = (_resolve_target(action) or 'manual_log').lower()
     content = action.get('message') or f'Captured by rule "{rule.name}"'
     if target.target_task:
@@ -1266,8 +1269,11 @@ def _act_capture_lesson(target, rule, action):
 def _capture_memory(target, rule, action, node_type):
     try:
         from knowledge_graph.models import MemoryNode
+        from knowledge_graph.demo_guard import is_demo_board
     except Exception:
         raise _ActionNoOp('knowledge_graph module not available')
+    if is_demo_board(target.target_board):
+        raise _ActionNoOp('demo board — auto-capture suppressed')
     content = action.get('message') or f'Captured {node_type} from rule "{rule.name}"'
     if target.target_task:
         content = _substitute_vars(content, target.target_task)

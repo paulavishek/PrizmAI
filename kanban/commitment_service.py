@@ -640,6 +640,9 @@ class CommitmentService:
         """Log a commitment event to the Knowledge Graph."""
         try:
             from knowledge_graph.models import MemoryNode
+            from knowledge_graph.demo_guard import is_demo_board
+            if is_demo_board(protocol.board):
+                return  # demo memory is curated/deterministic — no live auto-capture
             MemoryNode.objects.create(
                 board=protocol.board,
                 node_type='ai_recommendation',

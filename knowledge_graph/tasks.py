@@ -140,8 +140,12 @@ def check_missed_deadlines():
         .select_related('board', 'assigned_to')
     )
 
+    from knowledge_graph.demo_guard import is_demo_board
+
     created = 0
     for task in overdue_tasks:
+        if is_demo_board(task.board):
+            continue  # demo memory is curated/deterministic — no live auto-capture
         # Skip if a risk_event for this task already exists
         exists = MemoryNode.objects.filter(
             source_object_type='Task',
@@ -194,10 +198,14 @@ def check_budget_thresholds():
     from kanban.budget_models import ProjectBudget
     from knowledge_graph.models import MemoryNode
 
+    from knowledge_graph.demo_guard import is_demo_board
+
     budgets = ProjectBudget.objects.select_related('board').all()
     created = 0
 
     for budget in budgets:
+        if is_demo_board(budget.board):
+            continue  # demo memory is curated/deterministic — no live auto-capture
         status = budget.get_status()
         if status == 'ok':
             continue
