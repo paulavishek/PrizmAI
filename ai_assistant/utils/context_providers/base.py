@@ -158,7 +158,13 @@ class BaseContextProvider(ABC):
         )
 
     def _get_user_org(self, user):
-        """Return the user's organization, or None."""
+        """Return the user's organization, or None.
+
+        NOTE: currently unused — org is no longer a scoping boundary (workspace
+        + membership are). Kept as a generic helper alongside
+        ``_get_user_workspace`` (which IS used). Prefer ``_get_user_workspace``
+        for scoping new providers.
+        """
         try:
             if hasattr(user, 'profile') and user.profile.organization_id:
                 return user.profile.organization

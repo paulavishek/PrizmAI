@@ -27,17 +27,39 @@ def _accessible_memory_qs(user):
     workspace-wide memories in a workspace they collaborate in.
 
     A "workspace-wide" memory (``is_org_wide=True``) on a board in workspace W
-    is visible to any collaborator of W — i.e. anyone who owns W or is a member
-    of a board in W.  That collaborator set is exactly the workspaces of the
-    user's accessible boards, so we reuse get_user_boards as the single source.
+    is visible to the **formal members of W** — the WorkspaceMembership roster
+    managed on the Manage Members page — not to anyone who merely shares a single
+    board that happens to live in W. Keying on incidental board membership leaks
+    org-wide memories across tenants (a board shared cross-workspace would expose
+    every org-wide memory in the owning workspace), so we resolve membership from
+    WorkspaceMembership instead.
+
+    In demo mode the demo workspace has no WorkspaceMembership rows (demo is an
+    intentionally shared single workspace, isolated via per-user board copies),
+    so we retain the board-derived collaborator set there.
     """
     from kanban.utils.demo_protection import get_user_boards
     boards = get_user_boards(user)
     board_ids = list(boards.values_list('id', flat=True))
-    collab_ws_ids = list(boards.values_list('workspace_id', flat=True))
+
+    profile = getattr(user, 'profile', None)
+    if getattr(profile, 'is_viewing_demo', False):
+        member_ws_ids = list(boards.values_list('workspace_id', flat=True))
+    else:
+        from kanban.models import WorkspaceMembership, Workspace
+        member_ws_ids = set(
+            WorkspaceMembership.objects.filter(user=user)
+            .values_list('workspace_id', flat=True)
+        )
+        # Safety net for any workspace created before the membership backfill
+        # (kanban migration 0123) that lacks an explicit creator membership.
+        member_ws_ids |= set(
+            Workspace.objects.filter(created_by=user).values_list('id', flat=True)
+        )
+
     visibility = Q(board_id__in=board_ids)
-    if collab_ws_ids:
-        visibility |= Q(is_org_wide=True, board__workspace_id__in=collab_ws_ids)
+    if member_ws_ids:
+        visibility |= Q(is_org_wide=True, board__workspace_id__in=member_ws_ids)
     return MemoryNode.objects.filter(visibility).distinct()
 
 
