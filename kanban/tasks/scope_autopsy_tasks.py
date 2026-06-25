@@ -453,8 +453,11 @@ def _create_autopsy_memory_node(report, ai_result, user):
     """
     try:
         from knowledge_graph.models import MemoryNode
+        from knowledge_graph.demo_guard import is_demo_board
 
         board = report.board
+        if is_demo_board(board):
+            return None  # demo memory is curated/deterministic — no live auto-capture
         primary_driver = ai_result.get('primary_scope_driver', 'Unknown')
         growth = report.total_scope_growth_percentage
 
