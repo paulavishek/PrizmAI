@@ -258,6 +258,9 @@
                         </small>
                         <ol class="small text-muted mb-0 ps-3" id="spectraGapsItems"></ol>
                     </div>
+                    <div id="spectraGapsOk" class="alert alert-success py-2 px-3 mt-2 mb-0 small" style="display:none;">
+                        <i class="fas fa-circle-check me-1"></i><span id="spectraGapsOkMsg"></span>
+                    </div>
                     <input type="hidden" id="gapQuestionsField" value="">
                     <input type="hidden" id="gapReviewDescLen" value="">
                 </div>
@@ -752,6 +755,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const spectraGapsLoading = document.getElementById('spectraGapsLoading');
     const spectraGapsList = document.getElementById('spectraGapsList');
     const spectraGapsItems = document.getElementById('spectraGapsItems');
+    const spectraGapsOk = document.getElementById('spectraGapsOk');
+    const spectraGapsOkMsg = document.getElementById('spectraGapsOkMsg');
     const gapQuestionsField = document.getElementById('gapQuestionsField');
     const gapReviewDescLen = document.getElementById('gapReviewDescLen');
     const editGapPanel = document.getElementById('editGapPanel');
@@ -797,6 +802,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (gapReviewDescLen) gapReviewDescLen.value = '';
         if (spectraGapsItems) spectraGapsItems.innerHTML = '';
         if (spectraGapsList) spectraGapsList.style.display = 'none';
+        if (spectraGapsOk) spectraGapsOk.style.display = 'none';
         if (spectraGapsLoading) spectraGapsLoading.style.display = 'none';
         renderEditGapPanel([]);
         // Drop any type options injected for a non-manual (auto) memory.
@@ -818,26 +824,41 @@ document.addEventListener('DOMContentLoaded', function() {
             if (description.length < 20) return;
             spectraGapsLoading.style.display = '';
             spectraGapsList.style.display = 'none';
+            if (spectraGapsOk) spectraGapsOk.style.display = 'none';
             askSpectraGapsBtn.disabled = true;
+            // When editing, anchor the review to this memory's flagged checklist
+            // so the preview matches what Save will decide.
+            const editingNodeId = nodeIdField ? nodeIdField.value : '';
+            const reviewBody = { description: description, node_type: typeField.value };
+            if (editingNodeId) reviewBody.node_id = editingNodeId;
             fetch("{% url 'review_memory_gaps' %}", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                body: JSON.stringify({ description: description, node_type: typeField.value })
+                body: JSON.stringify(reviewBody)
             })
             .then(r => r.json())
             .then(data => {
                 const qs = (data && data.questions) || [];
+                const sufficient = !!(data && data.sufficient);
                 gapQuestions = qs;
                 gapQuestionsField.value = qs.length ? JSON.stringify(qs) : '';
                 gapReviewDescLen.value = description.length;
                 spectraGapsItems.innerHTML = '';
-                if (qs.length) {
+                if (qs.length && !sufficient) {
                     qs.forEach(q => {
                         const li = document.createElement('li');
                         li.textContent = q;
                         spectraGapsItems.appendChild(li);
                     });
                     spectraGapsList.style.display = '';
+                } else if (spectraGapsOk) {
+                    // Nothing critical missing — confirm it and clear the stale
+                    // "flagged gaps" panel so the modal stops showing old questions.
+                    spectraGapsOkMsg.textContent = editingNodeId
+                        ? 'Spectra has enough context now — saving will clear the Gaps Noted badge.'
+                        : 'Looks complete — Spectra found no critical gaps.';
+                    spectraGapsOk.style.display = '';
+                    renderEditGapPanel([]);
                 }
             })
             .catch(() => {})
