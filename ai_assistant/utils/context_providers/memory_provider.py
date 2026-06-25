@@ -3,9 +3,10 @@ Organizational Memory Context Provider — surfaces the knowledge graph
 (MemoryNode + MemoryConnection) so Spectra can answer "have we seen this
 before?" / "similar past projects" without inventing precedents.
 
-RBAC: memory nodes are scoped via their board FK. Nodes with board=None are
-treated as organization-wide and require an org match. Cross-org memory is
-NEVER exposed.
+RBAC: memory nodes are scoped via their board FK. Cross-board reach is limited
+to the user's accessible boards (get_accessible_boards_for_spectra), which is
+membership/workspace-scoped — not organization-scoped. A node on a board the
+user cannot access is never surfaced.
 """
 
 import logging
@@ -27,8 +28,7 @@ class MemoryContextProvider(BaseContextProvider):
     def _get_summary_impl(self, board, user, is_demo_mode=False):
         from ai_assistant.utils.spectra_data_fetchers import fetch_memory_summary
         accessible = self._get_accessible_boards(user, is_demo_mode) if not board else None
-        org = self._get_user_org(user)
-        data = fetch_memory_summary(board, accessible, org)
+        data = fetch_memory_summary(board, accessible)
         if data is None or data['total'] == 0:
             return ''
         type_parts = ', '.join(
@@ -44,8 +44,7 @@ class MemoryContextProvider(BaseContextProvider):
     def _get_detail_impl(self, board, user, query='', is_demo_mode=False):
         from ai_assistant.utils.spectra_data_fetchers import fetch_memory_detail
         accessible = self._get_accessible_boards(user, is_demo_mode) if not board else None
-        org = self._get_user_org(user)
-        data = fetch_memory_detail(board, accessible, org, query=query)
+        data = fetch_memory_detail(board, accessible, query=query)
         if data is None or not data['nodes']:
             return None
 

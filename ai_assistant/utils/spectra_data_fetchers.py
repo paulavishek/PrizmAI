@@ -1412,7 +1412,7 @@ def fetch_coach_detail(board, user, accessible_boards):
 
 # ── Organizational Memory ──────────────────────────────────────────────
 
-def fetch_memory_summary(board, accessible_boards, organization):
+def fetch_memory_summary(board, accessible_boards):
     """Memory node counts + latest title."""
     try:
         from knowledge_graph.models import MemoryNode
@@ -1442,7 +1442,7 @@ def fetch_memory_summary(board, accessible_boards, organization):
     }
 
 
-def fetch_memory_detail(board, accessible_boards, organization, query=''):
+def fetch_memory_detail(board, accessible_boards, query=''):
     """Top relevant nodes + recent connections. Lightweight keyword filter."""
     try:
         from knowledge_graph.models import MemoryNode, MemoryConnection
