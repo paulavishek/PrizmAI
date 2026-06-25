@@ -211,25 +211,15 @@ def get_accessible_boards_for_spectra(user, is_demo_mode=False, organization=Non
         # board access.
         return base.filter(is_official_demo_board=True).distinct()
 
-    # Personal workspace — boards the user has explicit access to.  Access is
-    # board creator / owner / explicit membership; Organization is no longer
-    # used to scope (membership is the cross-tenant boundary now).
-    qs = base.filter(
-        Q(created_by=user)
-        | Q(owner=user)
-        | Q(memberships__user=user)
-    )
-
-    # Exclude demo artefacts from the personal workspace
-    return qs.filter(
-        Q(workspace__is_demo=False) | Q(workspace__isnull=True)
-    ).exclude(
-        created_by_session__startswith='spectra_demo_'
-    ).exclude(
-        is_official_demo_board=True
-    ).exclude(
-        is_sandbox_copy=True
-    ).distinct()
+    # Personal workspace — defer to the canonical board-scoping helper so
+    # Spectra's board set (and the "analyzed N boards" count) matches the
+    # dashboard exactly: active-workspace boards + boards shared to the user as
+    # member/viewer, with inactive workspaces and demo/sandbox artefacts already
+    # excluded. get_user_boards() is the single source of truth for board
+    # scoping; building a separate query here is what let Spectra drift (e.g.
+    # counting boards owned in a non-active or inactive workspace).
+    from kanban.utils.demo_protection import get_user_boards
+    return get_user_boards(user)
 
 
 def filter_boards_by_read_access(user, boards_qs):
