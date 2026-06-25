@@ -463,9 +463,50 @@ document.addEventListener('DOMContentLoaded', function() {
             const words = cleanQ.split(/\s+/).filter(Boolean);
             const sessionTitle = 'Memory Review: ' + (words.slice(0, 6).join(' ') || 'memory') + (words.length > 6 ? '…' : '');
 
-            window.location.href = "{% url 'ai_assistant:chat' %}?title=" +
-                encodeURIComponent(sessionTitle) + "&q=" + encodeURIComponent(prompt);
+            // Each memory must get its OWN review thread. Redirecting with just a
+            // title (and no session) would fall through to "most recent session" on
+            // the chat side and stack a second memory's gaps into an unrelated
+            // thread. So create/reuse a dedicated session up front, then open it
+            // with an explicit session id. The deterministic per-memory title lets
+            // the duplicate-title check reuse the same thread on a re-click instead
+            // of spawning duplicates.
+            continueSpectraBtn.disabled = true;
+            openMemoryReviewSession(sessionTitle, prompt);
         });
+    }
+
+    // Create (or reuse) a dedicated Spectra session for a single memory, then open
+    // it with the gap-review prompt queued. `force` skips the duplicate-title reuse
+    // path and always makes a fresh thread.
+    function openMemoryReviewSession(title, prompt, force) {
+        const chatUrl = "{% url 'ai_assistant:chat' %}";
+        const openWith = (sessionId) => {
+            window.location.href = chatUrl + "?session=" + sessionId +
+                "&q=" + encodeURIComponent(prompt);
+        };
+        const fallbackOpen = () => {
+            // Last resort if session creation fails — preserve the old behaviour so
+            // the user still reaches Spectra rather than getting stuck.
+            window.location.href = chatUrl + "?title=" +
+                encodeURIComponent(title) + "&q=" + encodeURIComponent(prompt);
+        };
+        fetch("{% url 'ai_assistant:create_session' %}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ title: title, force: !!force })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'duplicate_warning' && data.existing_session_id) {
+                // This memory already has a review thread — reuse it.
+                openWith(data.existing_session_id);
+            } else if (data.session_id) {
+                openWith(data.session_id);
+            } else {
+                fallbackOpen();
+            }
+        })
+        .catch(fallbackOpen);
     }
 
     // Recent query click — use the exact stored query (not parsed display text).
