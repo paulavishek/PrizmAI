@@ -8,6 +8,7 @@ import logging
 from datetime import timedelta
 
 from django.db.models import Count, Avg, Q, F
+from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -38,10 +39,10 @@ METRIC_CONFIG = {
         'description': 'Urgent tasks (any progress) or high-priority tasks with 0% progress that may need attention. These are not necessarily blocked — there is no dependency/blocked state in the data.',
     },
     'completion_rate_by_column': {
-        'label': 'Column Completion',
+        'label': 'Board Completion',
         'icon': 'fas fa-columns',
         'color': 'primary',
-        'description': 'Task completion rate across each board column.',
+        'description': 'Overall completion, with task distribution across columns.',
     },
     'workload_distribution': {
         'label': 'Active Contributors',
@@ -104,22 +105,14 @@ def _format_metric_value(key, value):
     """Convert complex dict metric values to simple display strings."""
     if not isinstance(value, dict):
         return value
-    if key == 'completion_rate_by_column':
-        if not value:
-            return 'N/A'
-        # Show average completion rate across columns
-        rates = []
-        for v in value.values():
-            try:
-                rates.append(int(v.replace('%', '')))
-            except (ValueError, AttributeError):
-                pass
-        avg_rate = int(sum(rates) / len(rates)) if rates else 0
-        return f"{avg_rate}% avg"
+    # NOTE: 'completion_rate_by_column' always supplies an explicit headline via
+    # headline_overrides ("X% complete"), so it never reaches this formatter.
     if key == 'workload_distribution':
         if not value:
             return '0 active'
-        return f"{len(value)} contributors"
+        # Count only real people — 'Unassigned' is a bucket, not a contributor.
+        named = [k for k in value if k != 'Unassigned']
+        return f"{len(named)} contributors"
     if key == 'tasks_by_phase':
         if not value:
             return '0 phases'
@@ -171,8 +164,9 @@ def get_promoted_metrics(board, raw=False):
     total = tasks.count()
 
     metrics = {}
-    task_details = {}   # key -> list of task dicts for modal display
-    explanations = {}   # key -> human-readable explanation string
+    task_details = {}        # key -> list of task dicts for modal display
+    explanations = {}        # key -> human-readable explanation string
+    headline_overrides = {}  # key -> headline string (when it differs from the breakdown)
 
     if project_type == 'product_tech':
         # Task velocity: tasks completed in last 7 days
@@ -201,20 +195,26 @@ def get_promoted_metrics(board, raw=False):
             f"(not necessarily blocked)."
         )
 
-        # Task completion rate by column
+        # Board completion. Headline = overall % of tasks at 100% progress (stable
+        # and meaningful). The breakdown is the task COUNT per column — i.e. the
+        # work distribution, so you can see where remaining work is concentrated.
+        # NOTE: we deliberately do NOT show a per-column completion *rate*: because
+        # progress is coupled to column (a task only hits 100% in Done), every
+        # non-Done column is 0% by construction and Done is 100% — it carries no
+        # signal and cannot indicate stalling.
         columns = Column.objects.filter(board=board).order_by('position')
-        col_rates = {}
+        col_counts = {}
         for col in columns:
-            col_tasks = tasks.filter(column=col)
-            col_total = col_tasks.count()
-            col_done = col_tasks.filter(progress=100).count()
-            rate = int((col_done / col_total * 100)) if col_total > 0 else 0
-            col_rates[col.name] = f"{rate}%"
-        metrics['completion_rate_by_column'] = col_rates
+            n = tasks.filter(column=col).count()
+            col_counts[col.name] = f"{n} task" + ("" if n == 1 else "s")
+        metrics['completion_rate_by_column'] = col_counts
+        done_all = tasks.filter(progress=100).count()
+        overall_pct = int(done_all / total * 100) if total else 0
+        headline_overrides['completion_rate_by_column'] = f"{overall_pct}% complete"
         explanations['completion_rate_by_column'] = (
-            "Shows what percentage of tasks in each column have reached 100% progress. "
-            "Columns like 'Done' are expected to be 100% while active columns will be lower. "
-            "This helps identify columns where tasks are stalling."
+            f"Overall board completion: {done_all} of {total} tasks are at 100% progress "
+            f"({overall_pct}%). The breakdown below shows how many tasks sit in each column, "
+            f"so you can see where the remaining work is concentrated."
         )
 
         # Workload distribution — show ALL users with tasks on the board
@@ -226,6 +226,9 @@ def get_promoted_metrics(board, raw=False):
             )
             .order_by('-count')
         )
+        # Named contributors first (by volume), the 'Unassigned' bucket last so it
+        # reads as a separate pile rather than a teammate.
+        workload.sort(key=lambda w: (w['assigned_to__username'] is None, -w['count']))
         metrics['workload_distribution'] = {
             (w['assigned_to__username'] or 'Unassigned'): f"{w['active_count']} active / {w['count']} total"
             for w in workload
@@ -246,12 +249,18 @@ def get_promoted_metrics(board, raw=False):
         # Deadline adherence rate
         with_due = tasks.filter(due_date__isnull=False)
         total_with_due = with_due.count()
-        # Simpler calculation: completed tasks that were not overdue at completion
-        completed_with_due = with_due.filter(progress=100).count()
-        overdue_completed = with_due.filter(
-            progress=100, due_date__date__lt=F('updated_at__date')
-        ).count()
-        on_time_completed = completed_with_due - overdue_completed
+        # Completed tasks that were not overdue at completion. Judge by the real
+        # completion date (completed_at), not updated_at — updated_at is auto_now
+        # and unreliable as a completion signal (see on_time_rate / the chart).
+        completed_with_due = with_due.filter(progress=100)
+        completed_with_due_count = completed_with_due.count()
+        overdue_completed = completed_with_due.annotate(
+            _completed=Coalesce('completed_at', 'updated_at'),
+        ).annotate(
+            _completed_date=TruncDate('_completed'),
+            _due_date=TruncDate('due_date'),
+        ).filter(_due_date__lt=F('_completed_date')).count()
+        on_time_completed = completed_with_due_count - overdue_completed
         adherence_pct = int(on_time_completed / total_with_due * 100) if total_with_due > 0 else 0
         metrics['deadline_adherence_rate'] = f"{adherence_pct}%" if total_with_due > 0 else "N/A"
         explanations['deadline_adherence_rate'] = (
@@ -335,6 +344,9 @@ def get_promoted_metrics(board, raw=False):
             )
             .order_by('-count')
         )
+        # Named contributors first (by volume), the 'Unassigned' bucket last so it
+        # reads as a separate pile rather than a teammate.
+        workload.sort(key=lambda w: (w['assigned_to__username'] is None, -w['count']))
         metrics['workload_distribution'] = {
             (w['assigned_to__username'] or 'Unassigned'): f"{w['active_count']} active / {w['count']} total"
             for w in workload
@@ -344,12 +356,18 @@ def get_promoted_metrics(board, raw=False):
             f"Shows active (incomplete) and total task counts per contributor."
         )
 
-        # Average cycle time (creation → completion, in days)
-        completed_tasks_qs = tasks.filter(progress=100, updated_at__isnull=False)
+        # Average cycle time (creation → completion, in days). Measure to the real
+        # completion timestamp (completed_at), not updated_at — updated_at is
+        # auto_now and gets bumped by any later edit/reorder, which would inflate
+        # the average. Mirrors get_cycle_time_distribution so card and chart agree.
+        completed_tasks_qs = tasks.filter(progress=100)
         if completed_tasks_qs.exists():
             cycle_times = []
             for t in completed_tasks_qs[:100]:  # cap for perf
-                delta = (t.updated_at - t.created_at).total_seconds()
+                end = t.completed_at or t.updated_at
+                if not end or not t.created_at:
+                    continue
+                delta = (end - t.created_at).total_seconds()
                 cycle_times.append(max(0, delta / 86400))  # convert to days, floor at 0
             avg_days = sum(cycle_times) / len(cycle_times) if cycle_times else 0
             metrics['avg_cycle_time_days'] = f"{avg_days:.1f} days"
@@ -368,10 +386,19 @@ def get_promoted_metrics(board, raw=False):
         ).exclude(progress=100).count()
         metrics['overdue_count'] = overdue
 
-        # On-time rate
-        with_due = tasks.filter(due_date__isnull=False, progress=100)
+        # On-time rate. Compare the deadline to the REAL completion date
+        # (completed_at, falling back to updated_at only when it is missing) — not
+        # updated_at, which auto_now bumps on any later edit so moving one task
+        # could flip many previously-on-time tasks to "late". Mirrors the
+        # On-Time vs Late chart so the card and chart always agree.
+        with_due = tasks.filter(due_date__isnull=False, progress=100).annotate(
+            _completed=Coalesce('completed_at', 'updated_at'),
+        ).annotate(
+            _completed_date=TruncDate('_completed'),
+            _due_date=TruncDate('due_date'),
+        )
         total_done_with_due = with_due.count()
-        overdue_at_completion = with_due.filter(due_date__date__lt=F('updated_at__date')).count()
+        overdue_at_completion = with_due.filter(_due_date__lt=F('_completed_date')).count()
         on_time = total_done_with_due - overdue_at_completion
         on_time_pct = int(on_time / total_done_with_due * 100) if total_done_with_due > 0 else 0
         metrics['on_time_rate'] = f"{on_time_pct}%" if total_done_with_due > 0 else "N/A"
@@ -394,7 +421,7 @@ def get_promoted_metrics(board, raw=False):
             entry = {
                 'key': key,
                 'label': config.get('label', key.replace('_', ' ').title()),
-                'value': _format_metric_value(key, raw_value),
+                'value': headline_overrides.get(key, _format_metric_value(key, raw_value)),
                 'icon': config.get('icon', 'fas fa-chart-bar'),
                 'color': config.get('color', 'primary'),
                 'description': config.get('description', ''),

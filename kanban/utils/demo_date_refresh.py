@@ -332,7 +332,7 @@ def _refresh_task_dates(now, base_date):
     Edge-case: tasks that have no start_date are left untouched.
     """
     try:
-        from kanban.models import Task
+        from kanban.models import Task, Column
         from django.db.models import Q
         import datetime as _dt
 
@@ -453,16 +453,94 @@ def _refresh_task_dates(now, base_date):
                 tasks_to_update, ['due_date', 'start_date', 'completed_at'], batch_size=500
             )
 
-            # Also update created_at to sit a few days before start_date
-            # (created_at has auto_now_add=True, so bypass via .update()).
-            # start_date <= completed_at for Done tasks (a task completes after it
-            # starts) and completed_at is now shifted by the same delta, so this
-            # keeps created_at < completed_at and yields realistic cycle times.
-            for task in tasks_to_update:
+        # Re-derive created_at (auto_now_add=True, so bypass via .update()) so the
+        # analytics charts that key off task age look professional. This runs for
+        # EVERY demo board on EVERY refresh — independent of the uniform shift
+        # above (when dates are already current, shift==0 and tasks_to_update is
+        # empty, but created_at still needs to be reshaped). It is type-aware and
+        # ranked deterministically by id so the spread is stable across resets:
+        #   • Done tasks      → created_at = completed_at - DESIRED_CYCLE[rank] so
+        #     the Cycle Time Distribution fills every bucket instead of collapsing
+        #     into "1-2 weeks"/"2+ weeks". (A short-cycle task may land created_at
+        #     slightly after start_date — purely cosmetic; the Gantt uses
+        #     start/due, and cycle = completed_at - created_at.)
+        #   • Backlog tasks   → created_at = today - BACKLOG_AGE[rank] so the Task
+        #     Age in Backlog chart spans <1wk … >1mo. (Backlog tasks have FUTURE
+        #     start_dates, so the old start_date-based rule put every one in the
+        #     "< 1 week" bucket.)
+        #   • Everything else → keep the original start_date - (id%7+1) rule.
+        DESIRED_CYCLE = [1, 3, 5, 6, 9, 12, 16, 20]   # days, spans all 5 buckets
+        BACKLOG_AGE = [3, 6, 10, 16, 22, 30, 40, 50]  # days, spans all 4 buckets
+
+        # Group ALL loaded demo tasks (not just shifted ones) by board. These are
+        # the same objects mutated above, so completed_at reflects any shift.
+        tasks_by_board_all = {}
+        for task in tasks:
+            board_id = task.column.board_id if task.column else 0
+            tasks_by_board_all.setdefault(board_id, []).append(task)
+
+        for board_id, board_tasks in tasks_by_board_all.items():
+            # Match get_backlog_age_distribution()'s column selection so the tasks
+            # we age are exactly the ones that chart reads.
+            backlog_col = (
+                Column.objects.filter(board_id=board_id)
+                .filter(
+                    Q(name__icontains='to do')
+                    | Q(name__icontains='todo')
+                    | Q(name__icontains='backlog')
+                )
+                .order_by('position')
+                .first()
+            )
+            if not backlog_col:
+                backlog_col = (
+                    Column.objects.filter(board_id=board_id)
+                    .order_by('position')
+                    .first()
+                )
+            backlog_col_id = backlog_col.id if backlog_col else None
+
+            # Restrict to item_type='task' so the ranking matches exactly the
+            # tasks the Cycle Time / Backlog Age charts read (they exclude
+            # milestones). Milestones fall through to the default rule below.
+            done_tasks = sorted(
+                (t for t in board_tasks
+                 if getattr(t, 'item_type', 'task') == 'task'
+                 and getattr(t, 'progress', 0) == 100 and t.completed_at),
+                key=lambda t: t.id,
+            )
+            backlog_tasks = sorted(
+                (t for t in board_tasks
+                 if getattr(t, 'item_type', 'task') == 'task'
+                 and getattr(t, 'progress', 0) != 100
+                 and t.column and t.column_id == backlog_col_id),
+                key=lambda t: t.id,
+            )
+            done_ids = {t.id for t in done_tasks}
+            backlog_ids = {t.id for t in backlog_tasks}
+
+            for rank, task in enumerate(done_tasks):
+                cycle_days = DESIRED_CYCLE[rank % len(DESIRED_CYCLE)]
+                created_dt = task.completed_at - timedelta(days=cycle_days)
+                Task.objects.filter(pk=task.pk).update(created_at=created_dt)
+
+            def _aware_noon(d):
+                # created_at is a DateTimeField; build a tz-aware noon datetime so
+                # the calendar date is stable and Django gets no naive datetime.
+                return timezone.make_aware(_dt.datetime.combine(d, _dt.time(12, 0)))
+
+            for rank, task in enumerate(backlog_tasks):
+                age_days = BACKLOG_AGE[rank % len(BACKLOG_AGE)]
+                created_dt = _aware_noon(base_date - timedelta(days=age_days))
+                Task.objects.filter(pk=task.pk).update(created_at=created_dt)
+
+            for task in board_tasks:
+                if task.id in done_ids or task.id in backlog_ids:
+                    continue
                 if task.start_date:
                     days_before = (task.id % 7) + 1  # deterministic per task
-                    created_date = task.start_date - timedelta(days=days_before)
-                    Task.objects.filter(pk=task.pk).update(created_at=created_date)
+                    created_dt = _aware_noon(task.start_date - timedelta(days=days_before))
+                    Task.objects.filter(pk=task.pk).update(created_at=created_dt)
 
         return len(tasks_to_update)
 
@@ -1431,12 +1509,15 @@ def _refresh_completed_task_updated_at(now):
     across the whole window instead of bunching into the last 4 weeks and
     leaving the earlier week-buckets blank.
 
-    Approach: linspace the completions from SPREAD_OLDEST_DAYS ago down to
-    SPREAD_NEWEST_DAYS ago across the board's completed tasks (sorted by ID, so
-    foundational tasks land oldest — matching the real project timeline). With
-    ~8 completions this gives ~one per week (a full, even trend); with many more
-    (e.g. the historical archive board) several land in the same week, which
-    still produces the 2+/week height variation the velocity view wants.
+    Approach: a uniform linspace (the previous behaviour) put ~one completion in
+    EVERY week, which renders as identical height-1 bars — it looks fake. Instead
+    we distribute completions across the 8 weeks following a fixed, non-uniform
+    "velocity curve" (WEEK_WEIGHTS) so some weeks have 0 and others 2-3. With
+    only 8 completions over 8 weeks, variation REQUIRES empty weeks (8 tasks at
+    min-1 each = all 1s = uniform), and zero-velocity weeks are realistic. Tasks
+    are sorted by ID (foundational first) and mapped to a week by cumulative
+    weight proportion, so the curve scales to any completion count (e.g. the
+    historical archive board gets ~3-6/week with the same shape).
 
     Each board is processed INDEPENDENTLY so adding/removing sandbox boards
     never shifts another board's offsets. Uses .update() to bypass auto_now.
@@ -1445,6 +1526,18 @@ def _refresh_completed_task_updated_at(now):
     # weeks back, newest ~5 days ago (keeps a little recent activity).
     SPREAD_OLDEST_DAYS = 56
     SPREAD_NEWEST_DAYS = 5
+    # Relative completions per week, oldest (week 0) → newest (week 7). Sums to 8
+    # so an 8-task board reproduces bar heights [1,0,2,1,2,0,1,1]. The two
+    # intentionally-late Done tasks (4th & 6th by id) land in weeks 3 and 4, so
+    # On-Time vs Late shows one all-late week and one mixed week.
+    WEEK_WEIGHTS = [1, 0, 2, 1, 2, 0, 1, 1]
+    _total_weight = sum(WEEK_WEIGHTS)
+    _cum = []
+    _running = 0
+    for _w in WEEK_WEIGHTS:
+        _running += _w
+        _cum.append(_running / _total_weight)
+    _weeks_n = len(WEEK_WEIGHTS)
     try:
         from kanban.models import Task
 
@@ -1465,15 +1558,25 @@ def _refresh_completed_task_updated_at(now):
                 continue
 
             total = len(tasks)
-            span = SPREAD_OLDEST_DAYS - SPREAD_NEWEST_DAYS
 
             for i, task in enumerate(tasks):
                 if total == 1:
-                    days_ago = (SPREAD_OLDEST_DAYS + SPREAD_NEWEST_DAYS) // 2
+                    week = _weeks_n // 2
                 else:
-                    days_ago = SPREAD_OLDEST_DAYS - round(span * i / (total - 1))
-                # Anchor to midnight so the calendar date is stable regardless of
-                # the current time of day, then add business-hours variation.
+                    # Cumulative-weight bucketing: the first week whose running
+                    # weight fraction covers this task's position. Zero-weight
+                    # weeks share their predecessor's threshold so they are never
+                    # selected (a lower index always matches first).
+                    p = (i + 0.5) / total
+                    week = next(
+                        (w for w in range(_weeks_n) if p <= _cum[w]),
+                        _weeks_n - 1,
+                    )
+                days_ago = SPREAD_OLDEST_DAYS - week * 7
+                days_ago = max(SPREAD_NEWEST_DAYS, min(SPREAD_OLDEST_DAYS, days_ago))
+                # Anchor to midnight so the calendar date (and therefore the week
+                # bucket) is stable; vary only the time-of-day so same-week
+                # completions never cross a date boundary.
                 midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 day_midnight = midnight - timedelta(days=days_ago)
                 hours_offset = 9 + (task.id % 7)   # 9 am … 4 pm
