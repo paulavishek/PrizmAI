@@ -986,51 +986,123 @@ def _refresh_wiki_dates(now):
 
 
 def _refresh_ai_session_dates(now):
-    """Refresh AI assistant session dates."""
+    """Refresh AI assistant session, message AND analytics dates.
+
+    The Spectra Analytics dashboard (ai_assistant.views.analytics_dashboard /
+    get_analytics_data) only looks at activity in a trailing 30-day window. If
+    the seeded demo sessions/analytics are not slid forward they age out of that
+    window and every metric/chart reads 0.
+
+    SCOPING — by demo flag/workspace, NOT by a hard-coded username list.
+    ──────────────────────────────────────────────────────────────────
+    The previous implementation targeted a static username list
+    (``demo_admin_solo`` etc.) that no longer owns the seeded data after the
+    persona swap (the data now belongs to the legacy ``alex_chen_demo`` account,
+    and future re-seeds use ``priya.sharma``). That made this function a silent
+    no-op — the root cause of the empty analytics page. We now scope by the
+    intrinsic ``is_demo`` flag (sessions) and the demo workspace (analytics),
+    which survives any persona swap.
+    """
     try:
-        from ai_assistant.models import AIAssistantSession, AIAssistantMessage
-        
-        # Get demo users
-        from django.contrib.auth.models import User
-        demo_usernames = ['demo_admin_solo', 'priya.sharma', 'marcus.chen', 
-                         'elena.vasquez', 'john_doe', 'jane_smith']
-        demo_users = list(User.objects.filter(username__in=demo_usernames).values_list('id', flat=True))
-        
-        if not demo_users:
-            return 0
-        
-        sessions = list(AIAssistantSession.objects.filter(user_id__in=demo_users))
-        
+        from ai_assistant.models import (
+            AIAssistantSession, AIAssistantMessage, AIAssistantAnalytics,
+        )
+
+        # ── Sessions: seeded demo sessions carry is_demo=True ──────────────
+        # Real users' own sessions (is_demo=False) keep their genuine dates.
+        sessions = list(AIAssistantSession.objects.filter(is_demo=True))
+
         sessions_to_update = []
-        for i, session in enumerate(sessions):
+        for session in sessions:
             # Use record ID so session dates are stable when user/session
             # counts change (no global-index dependency).
             days_offset = -(session.id % 14)   # 0–13 days ago
             hours_offset = -(session.id % 8)   # 0–7 hours ago
-            
+
             session.created_at = now + timedelta(days=days_offset, hours=hours_offset)
             session.updated_at = now + timedelta(days=days_offset) + timedelta(hours=hours_offset + 1)
             sessions_to_update.append(session)
-        
+
         if sessions_to_update:
-            AIAssistantSession.objects.bulk_update(sessions_to_update, 
+            AIAssistantSession.objects.bulk_update(sessions_to_update,
                                                    ['created_at', 'updated_at'], batch_size=100)
-        
-        # Update messages too
-        messages = list(AIAssistantMessage.objects.filter(session__user_id__in=demo_users))
-        
-        for i, message in enumerate(messages):
-            days_offset = -(message.id % 14)  # stable per record
-            minutes_offset = message.id % 60
-            message.created_at = now + timedelta(days=days_offset, minutes=minutes_offset)
-        
-        if messages:
-            AIAssistantMessage.objects.bulk_update(messages, ['created_at'], batch_size=500)
-        
+
+        # ── Messages within those demo sessions ───────────────────────────
+        session_ids = [s.id for s in sessions]
+        if session_ids:
+            messages = list(AIAssistantMessage.objects.filter(session_id__in=session_ids))
+            for message in messages:
+                days_offset = -(message.id % 14)  # stable per record
+                minutes_offset = message.id % 60
+                message.created_at = now + timedelta(days=days_offset, minutes=minutes_offset)
+            if messages:
+                AIAssistantMessage.objects.bulk_update(messages, ['created_at'], batch_size=500)
+
+        # ── Analytics rows: slide the whole series forward so it stays in the
+        #    30-day window. Analytics has no is_demo flag, so scope by demo
+        #    workspace + seed-persona owners (current + legacy). ─────────────
+        _refresh_ai_analytics_dates(now)
+
         return len(sessions_to_update)
-        
+
     except Exception as e:
         logger.warning(f"Error refreshing AI session dates: {e}")
+        return 0
+
+
+def _refresh_ai_analytics_dates(now):
+    """Slide demo AIAssistantAnalytics rows forward into the trailing window.
+
+    Uses an OFFSET-PRESERVING uniform shift (same approach as
+    ``_refresh_task_dates``): the most recent seeded row is anchored to *today*
+    and every other row is shifted by the same delta. This keeps the per-day
+    spread (so the daily charts render across the window) and preserves the
+    ``unique_together = (user, board, date)`` invariant.
+
+    To stay safe under the unique constraint even when the shift is smaller than
+    the date span (e.g. the +1 day shift on a daily refresh, where old and new
+    date ranges overlap), rows are updated one at a time in an order that always
+    writes into a currently-free date slot.
+    """
+    try:
+        from ai_assistant.models import AIAssistantAnalytics
+        from kanban.models import Workspace
+        from accounts.demo_personas import DEMO_USERNAMES, LEGACY_DEMO_USERNAMES
+
+        demo_ws_ids = list(
+            Workspace.objects.filter(is_demo=True).values_list('id', flat=True)
+        )
+        if not demo_ws_ids:
+            return 0
+
+        seed_owners = set(DEMO_USERNAMES) | set(LEGACY_DEMO_USERNAMES)
+        rows = list(AIAssistantAnalytics.objects.filter(
+            workspace_id__in=demo_ws_ids,
+            user__username__in=seed_owners,
+        ))
+        if not rows:
+            return 0
+
+        today = now.date()
+        max_date = max(r.date for r in rows)
+        shift = (today - max_date).days
+        if shift == 0:
+            return 0
+
+        # Process larger dates first when shifting forward (and smaller dates
+        # first when shifting back) so each per-row update lands on a free slot
+        # and never transiently collides with a not-yet-moved row.
+        rows.sort(key=lambda r: r.date, reverse=(shift > 0))
+        for r in rows:
+            AIAssistantAnalytics.objects.filter(pk=r.pk).update(
+                date=r.date + timedelta(days=shift),
+                created_at=r.created_at + timedelta(days=shift),
+            )
+
+        return len(rows)
+
+    except Exception as e:
+        logger.warning(f"Error refreshing AI analytics dates: {e}")
         return 0
 
 
