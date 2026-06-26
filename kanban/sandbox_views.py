@@ -141,6 +141,7 @@ def _duplicate_board(template_board, user):
             progress=task.progress,
             due_date=task.due_date,
             start_date=task.start_date,
+            completed_at=task.completed_at,
             phase=task.phase,
             item_type=task.item_type,
             milestone_status=task.milestone_status,
@@ -158,6 +159,9 @@ def _duplicate_board(template_board, user):
             ai_recommendations=None,
         )
         new_task.save()
+        # Preserve created_at (auto_now_add bypass) so the per-user copy keeps the
+        # template's real task age — analytics (cycle-time, backlog-age) depend on it.
+        Task.objects.filter(pk=new_task.pk).update(created_at=task.created_at)
         task_map[task.pk] = new_task
         task_template_dates[new_task.pk] = task.updated_at
 

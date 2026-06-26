@@ -351,6 +351,15 @@ class Command(BaseCommand):
                     is_seed_demo_data=True,
                 )
                 promotion7.tasks.add(pricing_task)
+                # Tag with a work-type label (a new pricing capability is a Feature)
+                # so it joins the board's Bug/Feature/Chore analytics cleanly instead
+                # of being title-inferred. Label is seeded by populate_all_demo_data.
+                from kanban.models import TaskLabel
+                feat_label = TaskLabel.objects.filter(
+                    board=software_board, name='Feature'
+                ).first()
+                if feat_label:
+                    pricing_task.labels.add(feat_label)
                 # Backdate so the ticket isn't stamped with the seeder run time.
                 Task.objects.filter(pk=pricing_task.pk).update(
                     created_at=t_idea7 + timedelta(days=2),
