@@ -108,13 +108,23 @@ def _duplicate_board(template_board, user):
         label_map[label.pk] = new_label
 
     # --- Columns ---
+    from kanban.models import column_name_disables_aging
     column_map = {}  # old column pk → new column instance
     for col in template_board.columns.order_by('position'):
+        # Carry over the template's aging config; fall back to the name-based
+        # default so Done/Backlog columns stay disabled even if the template
+        # column predates the aging feature / wasn't backfilled.
+        aging_mode = col.aging_mode
+        if aging_mode == 'inherit' and column_name_disables_aging(col.name):
+            aging_mode = 'disabled'
         new_col = Column(
             name=col.name,
             board=new_board,
             position=col.position,
             wip_limit=col.wip_limit,
+            aging_mode=aging_mode,
+            aging_warning_days=col.aging_warning_days,
+            aging_critical_days=col.aging_critical_days,
         )
         new_col.save()
         column_map[col.pk] = new_col

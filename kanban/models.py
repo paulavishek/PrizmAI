@@ -800,6 +800,24 @@ class Board(models.Model):
         help_text="Target completion date for the project (Time constraint). Set from the Triple Constraint dashboard."
     )
 
+    # Task Aging / Stalling Detection — board-level defaults
+    aging_enabled = models.BooleanField(
+        default=True,
+        help_text="Show task-aging badges on this board (per-column overrides still apply)."
+    )
+    aging_warning_days = models.PositiveSmallIntegerField(
+        default=7,
+        help_text="Days a task can sit in a column before its aging badge turns amber (warning)."
+    )
+    aging_critical_days = models.PositiveSmallIntegerField(
+        default=14,
+        help_text="Days a task can sit in a column before its aging badge turns red (critical)."
+    )
+    aging_configured = models.BooleanField(
+        default=False,
+        help_text="True once anyone has saved aging settings on this board; suppresses the one-time onboarding tooltip."
+    )
+
     # Hierarchy: Mission → Strategy → Board
     strategy = models.ForeignKey(
         'Strategy',
@@ -1033,6 +1051,21 @@ class Board(models.Model):
         
         return (False, None, status['scope_change_percentage'])
 
+# Column names that should have task-aging badges disabled by default (Done/Backlog-style
+# columns). Matched as case-insensitive substrings of the column name. Shared by the migration
+# backfill and the create_column view so the two can't drift.
+AGING_DISABLED_NAME_KEYWORDS = (
+    'done', 'complete', 'closed', 'backlog', 'archive',
+    'shipped', 'deployed', 'released', 'cancelled', 'canceled',
+)
+
+
+def column_name_disables_aging(name):
+    """Return True if a column with this name should default to aging disabled."""
+    low = (name or '').lower()
+    return any(kw in low for kw in AGING_DISABLED_NAME_KEYWORDS)
+
+
 class Column(models.Model):
     COLOR_CHOICES = [
         ('green', 'Green'),
@@ -1045,19 +1078,39 @@ class Column(models.Model):
         ('gray', 'Gray'),
     ]
 
+    AGING_MODE_CHOICES = [
+        ('inherit', 'Use board defaults'),
+        ('custom', 'Custom for this column'),
+        ('disabled', 'Disabled'),
+    ]
+
     name = models.CharField(max_length=100)
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='columns')
     position = models.IntegerField(default=0)
     color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='blue')
     wip_limit = models.PositiveIntegerField(null=True, blank=True, default=None,
                                             help_text="Maximum number of tasks allowed in this column. Leave blank for no limit.")
-    
+
+    # Task Aging / Stalling Detection — per-column override
+    aging_mode = models.CharField(
+        max_length=10, choices=AGING_MODE_CHOICES, default='inherit',
+        help_text="How aging badges behave for this column: inherit board defaults, custom thresholds, or disabled."
+    )
+    aging_warning_days = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Custom warning (amber) threshold in days; used only when aging_mode='custom'."
+    )
+    aging_critical_days = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Custom critical (red) threshold in days; used only when aging_mode='custom'."
+    )
+
     class Meta:
         ordering = ['position']
-    
+
     def __str__(self):
         return f"{self.name} - {self.board.name}"
-    
+
     def is_wip_exceeded(self, task_count=None):
         """Return True if the column has exceeded its WIP limit."""
         if self.wip_limit is None:
@@ -1065,6 +1118,43 @@ class Column(models.Model):
         if task_count is None:
             task_count = self.task_set.filter(item_type='task').count()
         return task_count > self.wip_limit
+
+    def effective_aging(self):
+        """Resolve the effective aging config for this column.
+
+        Returns a dict: {'enabled': bool, 'warning': int, 'critical': int, 'show': int}.
+        Single source of truth used by the board view, the column popover subtitle, the save
+        endpoint, and the downstream Focus Today / Spectra integrations.
+
+        The 'show' threshold (when the neutral grey pill first appears) is DERIVED, not
+        user-configured: show = max(1, ceil(warning / 2)).
+        """
+        import math
+        board = self.board
+        if self.aging_mode == 'disabled' or not board.aging_enabled:
+            return {'enabled': False, 'warning': 0, 'critical': 0, 'show': 0}
+        if self.aging_mode == 'custom' and self.aging_warning_days and self.aging_critical_days:
+            warning = self.aging_warning_days
+            critical = self.aging_critical_days
+        else:  # 'inherit' (or custom with missing values → fall back to board defaults)
+            warning = board.aging_warning_days
+            critical = board.aging_critical_days
+        show = max(1, math.ceil(warning / 2))
+        return {'enabled': True, 'warning': warning, 'critical': critical, 'show': show}
+
+class AgingOnboardingDismissal(models.Model):
+    """Records that a user has seen and dismissed the one-time task-aging onboarding tooltip
+    on a given board. Server-side so it persists across devices/browsers."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='aging_onboarding_dismissals')
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='aging_onboarding_dismissals')
+    dismissed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'board')
+
+    def __str__(self):
+        return f"Aging onboarding dismissed: {self.user} on {self.board}"
+
 
 class TaskLabel(models.Model):
     CATEGORY_CHOICES = [

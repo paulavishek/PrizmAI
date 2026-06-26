@@ -40,7 +40,8 @@ class BoardForm(forms.ModelForm):
     required_css_class = 'required'
     class Meta:
         model = Board
-        fields = ['name', 'description', 'num_phases']
+        fields = ['name', 'description', 'num_phases',
+                  'aging_enabled', 'aging_warning_days', 'aging_critical_days']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -51,10 +52,29 @@ class BoardForm(forms.ModelForm):
                 'placeholder': '0 = no phases, 3 = Phase 1, 2, 3',
                 'title': 'Number of phases for organizing tasks in this board (0 to disable phases)'
             }),
+            'aging_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'aging_warning_days': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 1, 'max': 365,
+            }),
+            'aging_critical_days': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 1, 'max': 365,
+            }),
         }
         help_texts = {
             'num_phases': 'Set the number of phases for your project (e.g., 3 for Phase 1, Phase 2, Phase 3). Set to 0 if you don\'t need phase-based organization.',
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('aging_enabled'):
+            warning = cleaned.get('aging_warning_days')
+            critical = cleaned.get('aging_critical_days')
+            if warning is not None and warning < 1:
+                self.add_error('aging_warning_days', 'Warning threshold must be at least 1 day.')
+            if critical is not None and warning is not None and critical <= warning:
+                self.add_error('aging_critical_days',
+                               'Critical threshold must be greater than the warning threshold.')
+        return cleaned
 
 class ColumnForm(forms.ModelForm):
     required_css_class = 'required'
