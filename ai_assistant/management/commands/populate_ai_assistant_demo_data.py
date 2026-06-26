@@ -23,7 +23,7 @@ from ai_assistant.models import (
 )
 from kanban.models import Board, Task
 from accounts.models import Organization
-from accounts.demo_personas import DEMO_PERSONAS
+from accounts.demo_personas import DEMO_PERSONAS, LEGACY_DEMO_USERNAMES
 
 
 class Command(BaseCommand):
@@ -155,10 +155,7 @@ class Command(BaseCommand):
         """Create demo chat sessions with Q&A messages"""
         self.stdout.write('\n2. Creating Chat Sessions & Q&A...')
         
-        # Prioritize demo_admin_solo for solo demo mode, fall back to priya.sharma
-        primary_user = demo_users.filter(username='demo_admin_solo').first() or \
-                       demo_users.filter(username=DEMO_PERSONAS['lead']['username']).first() or \
-                       demo_users.first()
+        primary_user = self._primary_demo_user(demo_users)
         secondary_user = demo_users.exclude(pk=primary_user.pk).first()
         
         # Get boards
@@ -347,38 +344,63 @@ Mitigation Strategies:
         self.stdout.write(f'  Created {count} knowledge base entries')
         return count
 
+    def _primary_demo_user(self, demo_users):
+        """Resolve the primary demo user the seeded AI data is attributed to.
+
+        Prefers the legacy solo-admin if it still exists, otherwise the current
+        lead persona (priya.sharma). Falls back to any demo user. Kept as a
+        single source so sessions and analytics are always owned by the SAME
+        user — the analytics seeder counts that user's seeded messages.
+        """
+        return (
+            demo_users.filter(username='demo_admin_solo').first()
+            or demo_users.filter(username=DEMO_PERSONAS['lead']['username']).first()
+            or demo_users.first()
+        )
+
     def create_analytics(self, demo_users, demo_boards):
         """Create analytics data - realistic summary records matching demo sessions"""
         self.stdout.write('\n4. Creating Analytics Data...')
-        
-        # Delete existing analytics for demo users
+
+        # Delete existing analytics for the current demo users AND any left over
+        # from a previous persona generation in the demo workspaces, so repeated
+        # seeds don't accumulate duplicate/stale rows.
         AIAssistantAnalytics.objects.filter(user__in=demo_users).delete()
-        
+        AIAssistantAnalytics.objects.filter(
+            user__username__in=LEGACY_DEMO_USERNAMES,
+            workspace__is_demo=True,
+        ).delete()
+
         count = 0
-        # Get demo_admin_solo as the primary demo user
-        demo_admin_solo = demo_users.filter(username='demo_admin_solo').first()
-        
-        if not demo_admin_solo:
-            self.stdout.write('  Skipped (no demo_admin_solo user found)')
+        # Attribute analytics to the same primary user the sessions belong to.
+        # (Previously keyed on the now-removed ``demo_admin_solo``, which made
+        # this a no-op after the persona swap.)
+        primary_user = self._primary_demo_user(demo_users)
+
+        if not primary_user:
+            self.stdout.write('  Skipped (no demo user found)')
             return 0
-        
+
         # Count actual messages for this user to base analytics on real data
         from ai_assistant.models import AIAssistantMessage, AIAssistantSession
-        user_sessions = AIAssistantSession.objects.filter(user=demo_admin_solo)
-        
+        user_sessions = AIAssistantSession.objects.filter(user=primary_user)
+
         # Create per-board analytics with realistic values based on actual data
         boards_list = list(demo_boards)
         for board in boards_list:
             # Get sessions for this board
             board_sessions = user_sessions.filter(board=board)
             board_messages = AIAssistantMessage.objects.filter(session__in=board_sessions).count()
-            
+
             if board_messages == 0:
                 board_messages = 2  # Minimum for display purposes
-            
+
             analytics = AIAssistantAnalytics.objects.create(
-                user=demo_admin_solo,
+                user=primary_user,
                 board=board,
+                # Workspace MUST be set: the analytics dashboard scopes strictly
+                # by request.workspace, so a NULL workspace = invisible row.
+                workspace=getattr(board, 'workspace', None),
                 sessions_created=max(1, board_sessions.count()),
                 messages_sent=board_messages,
                 gemini_requests=board_messages // 2 + 1,
@@ -392,15 +414,22 @@ Mitigation Strategies:
                 avg_response_time_ms=random.randint(900, 1400),
             )
             count += 1
-        
+
         # Create a record for sessions without a specific board (general queries)
         sessions_without_board = user_sessions.filter(board__isnull=True)
         general_messages = AIAssistantMessage.objects.filter(session__in=sessions_without_board).count()
-        
+
         if general_messages > 0:
+            # General (board-less) sessions still belong to a workspace. Reuse the
+            # demo board's workspace so the row is visible in the demo dashboard.
+            general_ws = next(
+                (getattr(b, 'workspace', None) for b in boards_list if getattr(b, 'workspace', None)),
+                None,
+            )
             analytics = AIAssistantAnalytics.objects.create(
-                user=demo_admin_solo,
+                user=primary_user,
                 board=None,  # General analytics for non-board sessions
+                workspace=general_ws,
                 sessions_created=sessions_without_board.count(),
                 messages_sent=general_messages,
                 gemini_requests=general_messages // 2 + 1,
@@ -414,7 +443,7 @@ Mitigation Strategies:
                 avg_response_time_ms=1100,
             )
             count += 1
-        
+
         self.stdout.write(f'  Created {count} analytics records')
         return count
 
