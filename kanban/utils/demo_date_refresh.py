@@ -407,6 +407,21 @@ def _refresh_task_dates(now, base_date):
 
                 task.start_date = new_start
                 task.due_date = new_due_datetime
+                # Shift completed_at by the SAME uniform delta so a Done task's
+                # completion stays aligned with its (shifted) start/due dates.
+                # Without this, completed_at stays frozen in the old past while
+                # start_date slides forward, leaving created_at AFTER completed_at
+                # → negative cycle time → every task collapses into the "1 day"
+                # bucket on the Cycle Time analytics chart.
+                # Clamp to today: the uniform start-shift can over-advance the
+                # most-recent completion past "now" (a Done task must not complete
+                # in the future).
+                if task.completed_at:
+                    shifted_completed = task.completed_at + timedelta(days=shift)
+                    today_noon = timezone.make_aware(
+                        _dt.datetime.combine(base_date, _dt.time(12, 0))
+                    )
+                    task.completed_at = min(shifted_completed, today_noon)
                 tasks_to_update.append(task)
 
         # After the uniform shift, pin known overdue scenarios to fixed offsets
@@ -434,10 +449,15 @@ def _refresh_task_dates(now, base_date):
                 )
 
         if tasks_to_update:
-            Task.objects.bulk_update(tasks_to_update, ['due_date', 'start_date'], batch_size=500)
+            Task.objects.bulk_update(
+                tasks_to_update, ['due_date', 'start_date', 'completed_at'], batch_size=500
+            )
 
-            # Also update created_at to be before start_date
-            # (created_at has auto_now_add=True, so bypass via .update())
+            # Also update created_at to sit a few days before start_date
+            # (created_at has auto_now_add=True, so bypass via .update()).
+            # start_date <= completed_at for Done tasks (a task completes after it
+            # starts) and completed_at is now shifted by the same delta, so this
+            # keeps created_at < completed_at and yields realistic cycle times.
             for task in tasks_to_update:
                 if task.start_date:
                     days_before = (task.id % 7) + 1  # deterministic per task
@@ -1405,23 +1425,26 @@ def _refresh_task_activity_dates(now):
 def _refresh_completed_task_updated_at(now):
     """
     Spread the updated_at timestamps for completed (progress=100) demo tasks
-    across the last 28 days so the Completion Velocity chart always shows
-    a realistic wave where some days have 2+ completions (bar height > 1).
+    EVENLY across the last ~8 weeks so the weekly analytics charts
+    (Deployment/Completion Frequency, Content Delivered per Week, On-Time vs
+    Late Completion — all keyed on updated_at over an 8-week window) are filled
+    across the whole window instead of bunching into the last 4 weeks and
+    leaving the earlier week-buckets blank.
 
-    Uses a BUCKETED approach: tasks are mapped into N_BUCKETS distinct date
-    slots where N_BUCKETS < total tasks.  This ensures multiple tasks land on
-    the same date, producing natural variation in bar heights (e.g. [2,2,2,1]
-    for 7 tasks or [2,1,2,1,2,1,2,1,2,1] for 15 tasks).
+    Approach: linspace the completions from SPREAD_OLDEST_DAYS ago down to
+    SPREAD_NEWEST_DAYS ago across the board's completed tasks (sorted by ID, so
+    foundational tasks land oldest — matching the real project timeline). With
+    ~8 completions this gives ~one per week (a full, even trend); with many more
+    (e.g. the historical archive board) several land in the same week, which
+    still produces the 2+/week height variation the velocity view wants.
 
-    Each board is processed INDEPENDENTLY so that adding or removing sandbox
-    boards never shifts the date offsets for other boards.
-
-    Within each board tasks are sorted by ID (ascending) so lower-ID tasks
-    (created earliest in the populate script) map to older date buckets —
-    matching the real project timeline where foundational tasks finished first.
-
-    Uses .update() to bypass auto_now on the updated_at field.
+    Each board is processed INDEPENDENTLY so adding/removing sandbox boards
+    never shifts another board's offsets. Uses .update() to bypass auto_now.
     """
+    # Window roughly matches the 8-week analytics charts: oldest completion ~8
+    # weeks back, newest ~5 days ago (keeps a little recent activity).
+    SPREAD_OLDEST_DAYS = 56
+    SPREAD_NEWEST_DAYS = 5
     try:
         from kanban.models import Task
 
@@ -1442,35 +1465,20 @@ def _refresh_completed_task_updated_at(now):
                 continue
 
             total = len(tasks)
-            # n_buckets < total so multiple tasks share dates → bars of height 2+.
-            # Clamped to [3, 10].  ~67% of total tasks.
-            n_buckets = max(3, (total * 2) // 3)
-            n_buckets = min(n_buckets, 10)
-
-            # Spread buckets evenly across the FULL 30-day window:
-            # bucket 0 → 28 days ago (oldest), bucket n-1 → 2 days ago (recent).
-            # Dynamic formula guarantees full coverage regardless of n_buckets.
-            if n_buckets == 1:
-                bucket_days = [15]
-            else:
-                bucket_days = [
-                    28 - int((26 * b) / (n_buckets - 1))
-                    for b in range(n_buckets)
-                ]
+            span = SPREAD_OLDEST_DAYS - SPREAD_NEWEST_DAYS
 
             for i, task in enumerate(tasks):
-                bucket = min((i * n_buckets) // total, n_buckets - 1)
-                days_ago = bucket_days[bucket]
-                # Anchor to midnight so all tasks in the same bucket land on
-                # the same calendar date regardless of the current time of day.
-                # (Subtracting hours from `now` could push into the previous
-                # date when now < 10am, splitting a bucket across two bars.)
+                if total == 1:
+                    days_ago = (SPREAD_OLDEST_DAYS + SPREAD_NEWEST_DAYS) // 2
+                else:
+                    days_ago = SPREAD_OLDEST_DAYS - round(span * i / (total - 1))
+                # Anchor to midnight so the calendar date is stable regardless of
+                # the current time of day, then add business-hours variation.
                 midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                bucket_midnight = midnight - timedelta(days=days_ago)
-                # Add business-hours variation (9am – 4pm) — stays within same day
+                day_midnight = midnight - timedelta(days=days_ago)
                 hours_offset = 9 + (task.id % 7)   # 9 am … 4 pm
                 minutes_offset = (task.id * 11) % 60
-                new_dt = bucket_midnight.replace(
+                new_dt = day_midnight.replace(
                     hour=hours_offset, minute=minutes_offset
                 )
                 Task.objects.filter(pk=task.pk).update(updated_at=new_dt)

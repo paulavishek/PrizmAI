@@ -603,11 +603,15 @@ def get_on_time_vs_late_weekly(board, weeks=8):
 
     week_map = {}
     for t in completed:
+        # Bucket by updated_at (spread across the full window) but judge on-time
+        # vs late by the REAL completion date vs the deadline — updated_at can be
+        # bumped by any later edit and is not a reliable completion signal.
         d = t.updated_at.date()
         monday = d - timedelta(days=d.weekday())
         if monday not in week_map:
             week_map[monday] = {'on_time': 0, 'late': 0}
-        if t.updated_at.date() <= t.due_date.date():
+        completed_on = (t.completed_at or t.updated_at).date()
+        if completed_on <= t.due_date.date():
             week_map[monday]['on_time'] += 1
         else:
             week_map[monday]['late'] += 1

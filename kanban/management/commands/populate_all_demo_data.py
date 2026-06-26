@@ -97,6 +97,27 @@ def _aware_due(d):
     return timezone.make_aware(datetime.combine(d, time(12, 0)))
 
 
+# Work-type per task code → drives the "Bug vs Feature vs Chore" analytics chart.
+# Tuned for a realistic greenfield mix (feature-heavy build-out, a handful of
+# fix/hardening bugs, infra/docs/test chores). Epics carry the 'Epic' label and
+# classify as Feature automatically, so they're omitted here.
+_WORK_TYPE = {
+    # Done
+    'D1': 'Chore', 'D2': 'Chore', 'D3': 'Chore', 'D4': 'Feature',
+    'D5': 'Feature', 'D6': 'Feature', 'D7': 'Bug', 'D8': 'Feature',
+    # In Review
+    'R1': 'Feature', 'R2': 'Feature',
+    # In Progress
+    'P1': 'Feature', 'P2': 'Chore', 'P3': 'Feature', 'P4': 'Chore',
+    # To Do
+    'T1': 'Feature', 'T2': 'Feature', 'T3': 'Feature', 'T4': 'Feature',
+    'T5': 'Bug', 'T6': 'Bug',
+    # Backlog
+    'B1': 'Bug', 'B2': 'Chore', 'B3': 'Feature', 'B4': 'Feature',
+    'B5': 'Chore', 'B6': 'Chore', 'B7': 'Chore', 'B8': 'Feature',
+}
+
+
 class Command(BaseCommand):
     help = (
         'Populate the Software Development demo board with realistic, '
@@ -415,6 +436,11 @@ class Command(BaseCommand):
             ('Documentation', '#6b7280', 'regular'),
             ('Performance', '#c2410c', 'regular'),
             ('Epic', '#7c3aed', 'regular'),
+            # Work-type labels — drive the "Bug vs Feature vs Chore" analytics chart.
+            # Names matched by analytics_helpers._classify_text (bug/feature keywords).
+            ('Bug', '#ef4444', 'regular'),
+            ('Feature', '#3b82f6', 'regular'),
+            ('Chore', '#64748b', 'regular'),
         ]
         labels = {}
         for name, color, category in defs:
@@ -480,6 +506,14 @@ class Command(BaseCommand):
             task.actual_duration_days = (completed_at.date() - start_date).days
             task.save(update_fields=['actual_duration_days'])
 
+        # Backdate created_at (auto_now_add bypass) so analytics that key off it
+        # — cycle-time, backlog-age, avg-cycle-time — read real durations instead
+        # of collapsing to "today". Kept relative to TODAY (a task is "created"
+        # when its work starts) so the demo stays evergreen across resets.
+        # Future-dated backlog items are clamped to today (never created in the future).
+        created_dt = _aware_due(self.TODAY + timedelta(days=min(start_offset, 0)))
+        Task.objects.filter(pk=task.pk).update(created_at=created_dt)
+
         TaskCost.objects.create(
             task=task,
             estimated_cost=Decimal(str(est_cost)),
@@ -492,6 +526,11 @@ class Command(BaseCommand):
             for ln in label_names:
                 if ln in labels:
                     task.labels.add(labels[ln])
+            # Tag with a Bug/Feature/Chore work-type so the analytics breakdown
+            # chart renders real categories instead of falling back to priority.
+            wt = _WORK_TYPE.get(code)
+            if wt and wt in labels:
+                task.labels.add(labels[wt])
 
         for pos, (text, done) in enumerate(checklist):
             ChecklistItem.objects.create(
@@ -653,7 +692,9 @@ class Command(BaseCommand):
             complexity=7, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3500, est_hours=40, hourly=87.5, actual_cost=3325,
-            assignee=self.fourth_member, creator=self.marcus, completed_offset=33,
+            # Delivered 4 days past its deadline (due_offset -33) so the On-Time
+            # vs Late analytics shows a realistic mix instead of 100% on-time.
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=29,
             label_names=['Database', 'Backend', 'Value-Added'], labels=labels,
             checklist=[
                 ('Create ER diagram for all core entities', True),
@@ -700,7 +741,9 @@ class Command(BaseCommand):
             complexity=6, risk_l='low', risk_i='medium', risk_level='low',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=2800, est_hours=32, hourly=87.5, actual_cost=2650,
-            assignee=self.fourth_member, creator=self.marcus, completed_offset=22,
+            # Delivered 3 days past its deadline (due_offset -22) — second of two
+            # intentionally-late Done tasks feeding the On-Time vs Late chart.
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=19,
             label_names=['Backend', 'API', 'Value-Added'], labels=labels,
             checklist=[
                 ('Configure DRF router and URL patterns under /api/v1/', True),
@@ -1305,7 +1348,7 @@ class Command(BaseCommand):
              49, 'upcoming', PHASE_INTEGRATIONS, 'T5'),
         ]
         for title, desc, due_off, status, phase, anchor_code in ms_defs:
-            Task.objects.create(
+            ms = Task.objects.create(
                 title=title,
                 description=desc,
                 column=col,
@@ -1321,6 +1364,11 @@ class Command(BaseCommand):
                 created_by=self.priya,
                 position_after_task=tasks_by_code[anchor_code],
                 is_seed_demo_data=True,
+            )
+            # Keep created_at relative to TODAY (clamp future milestones to today)
+            # so the "all dates relative" invariant holds across resets.
+            Task.objects.filter(pk=ms.pk).update(
+                created_at=_aware_due(self.TODAY + timedelta(days=min(due_off, 0)))
             )
         self.stdout.write('  [OK] Created 3 milestones')
 
