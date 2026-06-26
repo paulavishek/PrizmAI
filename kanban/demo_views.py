@@ -1913,6 +1913,18 @@ def reset_demo_data(request):
                 except Exception:
                     pass
 
+            # Re-clone the per-user Discovery ideas synchronously. populate_all_demo_data
+            # above only recreates the shared templates (sandbox_owner=None); the
+            # Discovery view shows the user only their own clones (sandbox_owner=user).
+            # The async provisioning path also clones, but it can be starved after a
+            # reset — do it here so the inbox is never empty when the user lands back
+            # on the Discovery page. Idempotent (clears the user's existing clones first).
+            try:
+                from kanban.sandbox_views import _clone_discovery_ideas_for_user
+                _clone_discovery_ideas_for_user(request.user)
+            except Exception:
+                pass
+
             # Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
