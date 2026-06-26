@@ -2589,15 +2589,31 @@ def board_detail(request, board_id):
             and t.progress < 100
         )
 
-    # ── Build per-column metadata (task count, WIP exceeded) ──
+    # ── Build per-column metadata (task count, WIP exceeded, aging config) ──
     column_meta = {}
     for col in columns:
         count = sum(1 for t in tasks if t.column_id == col.id)
+        aging = col.effective_aging()
+        if not aging['enabled']:
+            aging_subtitle = 'Aging badges disabled'
+        elif col.aging_mode == 'custom':
+            aging_subtitle = f"Custom ({aging['warning']}d / {aging['critical']}d)"
+        else:
+            aging_subtitle = f"Using board defaults ({aging['warning']}d / {aging['critical']}d)"
         column_meta[col.id] = {
             'task_count': count,
             'wip_exceeded': col.is_wip_exceeded(count),
             'wip_limit': col.wip_limit,
+            'aging': aging,
+            'aging_mode': col.aging_mode,
+            'aging_subtitle': aging_subtitle,
         }
+
+    # Aging onboarding: has THIS user already dismissed the one-time tooltip on THIS board?
+    from kanban.models import AgingOnboardingDismissal
+    aging_onboarding_dismissed = AgingOnboardingDismissal.objects.filter(
+        user=request.user, board=board
+    ).exists()
 
     # Board members list for inline assignee picker.
     from kanban.models import BoardMembership
@@ -2681,6 +2697,7 @@ def board_detail(request, board_id):
         'can_delete_board': can_delete_board,
         'can_manage_invites': can_manage_invites,  # For invite button visibility
         'column_meta': column_meta,  # Per-column WIP/count metadata
+        'aging_onboarding_dismissed': aging_onboarding_dismissed,  # One-time aging tooltip state
         'board_members_list': board_members_list,  # For inline assignee picker
         'task_prefix': board.get_task_prefix(),  # For task ID on kanban cards
         'hospice_risk_score': hospice_risk_score,
@@ -3246,6 +3263,10 @@ def create_column(request, board_id):
             # Set position to be at the end
             last_position = Column.objects.filter(board=board).order_by('-position').first()
             column.position = (last_position.position + 1) if last_position else 0
+            # Done/Backlog-style columns default to aging disabled.
+            from kanban.models import column_name_disables_aging
+            if column_name_disables_aging(column.name):
+                column.aging_mode = 'disabled'
             column.save()
             
             # Log to audit trail
@@ -5404,6 +5425,9 @@ def edit_board(request, board_id):
         if form.is_valid():
             form.save()
 
+            # Saving board settings counts as configuring aging — suppress onboarding tooltip.
+            mark_board_aging_configured(board)
+
             # Handle strategy linking/unlinking — scope to the user's workspace
             strategy_id = request.POST.get('strategy_id', '').strip()
             if strategy_id:
@@ -6674,6 +6698,65 @@ def column_update_color(request, column_id):
     column.color = color
     column.save(update_fields=['color'])
     return JsonResponse({'success': True, 'color': column.color})
+
+
+def mark_board_aging_configured(board):
+    """Flag a board as having had its aging settings configured (suppresses the one-time
+    onboarding tooltip). Called from BOTH save paths — board settings (edit_board) and the
+    per-column popover (column_update_aging) — so the two can't drift."""
+    if not board.aging_configured:
+        board.aging_configured = True
+        board.save(update_fields=['aging_configured'])
+
+
+@login_required
+@require_http_methods(["POST"])
+def column_update_aging(request, column_id):
+    """Set the per-column task-aging override from the column ellipsis popover.
+
+    Accepts: aging_mode ('inherit'|'custom'|'disabled') and, when mode='custom',
+    aging_warning_days + aging_critical_days. Returns the resolved effective config.
+    """
+    column = get_object_or_404(Column, id=column_id)
+    if not request.user.has_perm('prizmai.edit_board', column.board):
+        return JsonResponse({'error': 'You do not have permission to modify this board.'}, status=403)
+
+    mode = request.POST.get('aging_mode', '').strip()
+    if mode not in ('inherit', 'custom', 'disabled'):
+        return JsonResponse({'error': 'Invalid aging mode'}, status=400)
+
+    column.aging_mode = mode
+    if mode == 'custom':
+        try:
+            warning = int(request.POST.get('aging_warning_days', ''))
+            critical = int(request.POST.get('aging_critical_days', ''))
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Warning and critical days must be numbers.'}, status=400)
+        if warning < 1 or critical <= warning:
+            return JsonResponse(
+                {'error': 'Critical days must be greater than warning days (min 1).'}, status=400)
+        column.aging_warning_days = warning
+        column.aging_critical_days = critical
+    else:
+        # inherit / disabled don't use custom values
+        column.aging_warning_days = None
+        column.aging_critical_days = None
+
+    column.save(update_fields=['aging_mode', 'aging_warning_days', 'aging_critical_days'])
+    mark_board_aging_configured(column.board)
+
+    eff = column.effective_aging()
+    return JsonResponse({'success': True, 'aging_mode': column.aging_mode, 'effective': eff})
+
+
+@login_required
+@require_http_methods(["POST"])
+def dismiss_aging_onboarding(request, board_id):
+    """Mark the one-time aging onboarding tooltip as dismissed for this user+board."""
+    from kanban.models import AgingOnboardingDismissal
+    board = get_object_or_404(Board, id=board_id)
+    AgingOnboardingDismissal.objects.get_or_create(user=request.user, board=board)
+    return JsonResponse({'success': True})
 
 
 @login_required

@@ -156,6 +156,7 @@ def refresh_all_demo_dates(skip_mark_cache=False):
         'comments_updated': 0,
         'chat_messages_updated': 0,
         'boards_deadline_updated': 0,
+        'column_entered_at_updated': 0,
     }
     
     now = timezone.now()
@@ -178,6 +179,10 @@ def refresh_all_demo_dates(skip_mark_cache=False):
 
             # 1. Refresh Task dates
             stats['tasks_updated'] = _refresh_task_dates(now, base_date)
+
+            # 1b. Refresh column-entry timestamps so Task Aging badges always show
+            #     a realistic spread (grey / amber / red) on demo boards.
+            stats['column_entered_at_updated'] = _refresh_column_entered_at(now, base_date)
 
             # 2. Refresh Time Entry dates
             stats['time_entries_updated'] = _refresh_time_entry_dates(base_date)
@@ -549,6 +554,62 @@ def _refresh_task_dates(now, base_date):
         return 0
 
 
+# Days-in-current-column ages assigned to demo tasks, ranked per column. With the
+# default 7/14 thresholds (grey "show" = 4) this leads with visible values so even a
+# 1-2 task column shows a badge: amber → red → grey, then a spread that still includes
+# fresh (hidden) cards for larger columns. Stable across resets (ranked by id).
+_COLUMN_AGE_SPREAD = [9, 18, 5, 25, 12, 1, 3, 6]
+
+
+def _refresh_column_entered_at(now, base_date):
+    """
+    Stamp a deterministic spread of ``column_entered_at`` values on SEED demo tasks
+    so the Task Aging badges always render a realistic mix on demo boards — instead
+    of every freshly provisioned/cloned task reading 0 days (badge hidden).
+
+    Uses ``.update()`` to bypass the ``track_column_entry_time`` pre_save signal
+    (which would otherwise reset the value to "now"). Only touches seed demo data
+    (created_by_session NULL/empty), never user-created tasks. Done/Backlog columns
+    are aging-disabled so their badges stay hidden regardless of the value here.
+    """
+    try:
+        from kanban.models import Task
+        from django.db.models import Q
+
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        tasks = list(
+            Task.objects.filter(
+                column__board_id__in=demo_board_ids,
+                item_type='task',
+            ).filter(
+                Q(created_by_session__isnull=True) | Q(created_by_session='')
+            ).select_related('column')
+        )
+        if not tasks:
+            return 0
+
+        # Group by (board, column) and rank by id so the spread is stable.
+        by_column = {}
+        for t in tasks:
+            key = (t.column.board_id if t.column else 0, t.column_id)
+            by_column.setdefault(key, []).append(t)
+
+        updated = 0
+        for col_tasks in by_column.values():
+            for rank, task in enumerate(sorted(col_tasks, key=lambda t: t.id)):
+                age = _COLUMN_AGE_SPREAD[rank % len(_COLUMN_AGE_SPREAD)]
+                Task.objects.filter(pk=task.pk).update(
+                    column_entered_at=now - timedelta(days=age)
+                )
+                updated += 1
+        return updated
+
+    except Exception as e:
+        logger.warning(f"Error refreshing column_entered_at: {e}")
+        return 0
 
 
 

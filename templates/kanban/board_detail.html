@@ -311,6 +311,22 @@
     .card-due.overdue { color: #dc3545; font-weight: 600; }
     .card-due.at-risk { color: #f59e0b; font-weight: 600; }
 
+    /* Task-aging badge (days in current column) */
+    .card-aging-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: .65rem;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 8px;
+        white-space: nowrap;
+        line-height: 1.4;
+    }
+    .card-aging-badge.aging-neutral { background: #e5e7eb; color: #4b5563; }
+    .card-aging-badge.aging-warning { background: #fef3c7; color: #92400e; }
+    .card-aging-badge.aging-critical { background: #fee2e2; color: #991b1b; }
+
     /* Label pills */
     .card-label-primary {
         display: inline-flex;
@@ -948,10 +964,16 @@
 </div>
 
 <!-- Kanban Board -->
-<div class="kanban-board" id="kanban-board" data-board-id="{{ board.id }}">
+<div class="kanban-board" id="kanban-board" data-board-id="{{ board.id }}"
+     data-aging-configured="{{ board.aging_configured|yesno:'1,0' }}"
+     data-aging-onboarding-dismissed="{{ aging_onboarding_dismissed|yesno:'1,0' }}">
     {% for column in columns %}
     {% with col_meta=column_meta|get_item:column.id %}
-    <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
+    <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true"
+         data-aging-enabled="{{ col_meta.aging.enabled|yesno:'1,0' }}"
+         data-aging-warning="{{ col_meta.aging.warning }}"
+         data-aging-critical="{{ col_meta.aging.critical }}"
+         data-aging-show="{{ col_meta.aging.show }}">
         {# -- Column Header (redesigned) -- #}
         <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}" data-column-name="{{ column.name }}">
             <div class="d-flex justify-content-between align-items-center w-100">
@@ -985,6 +1007,17 @@
                                         data-column-id="{{ column.id }}" data-wip="{{ col_meta.wip_limit|default_if_none:'' }}"
                                         data-bs-toggle="modal" data-bs-target="#wipLimitModal">
                                     <i class="fas fa-tachometer-alt me-2 text-info"></i>Set WIP Limit
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" class="dropdown-item set-aging-btn d-flex flex-column align-items-start"
+                                        data-column-id="{{ column.id }}"
+                                        data-aging-mode="{{ col_meta.aging_mode }}"
+                                        data-aging-warning="{{ col_meta.aging.warning }}"
+                                        data-aging-critical="{{ col_meta.aging.critical }}"
+                                        data-bs-toggle="modal" data-bs-target="#columnAgingModal">
+                                    <span><i class="fas fa-hourglass-half me-2 text-warning"></i>Aging Alerts</span>
+                                    <small class="text-muted ms-4" style="font-size:.7rem;">{{ col_meta.aging_subtitle }}</small>
                                 </button>
                             </li>
                             <li>
@@ -1023,6 +1056,7 @@
                      id="task-{{ task.id }}"
                      draggable="true"
                      data-task-id="{{ task.id }}"
+                     data-column-entered-at="{{ task.column_entered_at|date:'c' }}"
                      hx-get="{% url 'task_quick_view' task.id %}"
                      hx-target="#task-drawer-body"
                      hx-swap="innerHTML"
@@ -1036,6 +1070,8 @@
                         </div>
                         <div class="card-meta-row">
                             <div class="d-flex align-items-center gap-2">
+                                {# Task-aging badge — populated/shown by kanban_aging.js based on days in column #}
+                                <span class="card-aging-badge d-none" hidden></span>
                                 {% if task.due_date %}
                                 <span class="card-due {% if task.is_overdue %}overdue{% elif task.is_at_risk %}at-risk{% endif %}">
                                     <i class="far fa-calendar-alt"></i>
@@ -1150,6 +1186,50 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="wipLimitSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Aging Alerts (per-column) Modal -->
+<div class="modal fade" id="columnAgingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-hourglass-half text-warning me-2"></i>Aging Alerts</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Control how the aging badge behaves for this column.</p>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="agingMode" id="agingModeInherit" value="inherit">
+                    <label class="form-check-label" for="agingModeInherit">
+                        Use board defaults <span class="text-muted" id="agingBoardDefaults"></span>
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="agingMode" id="agingModeCustom" value="custom">
+                    <label class="form-check-label" for="agingModeCustom">Custom for this column</label>
+                </div>
+                <div class="row ms-1 mb-2 mt-1" id="agingCustomInputs">
+                    <div class="col-6">
+                        <label for="agingWarningInput" class="form-label small mb-1">Warning (days)</label>
+                        <input type="number" class="form-control form-control-sm" id="agingWarningInput" min="1" max="365">
+                    </div>
+                    <div class="col-6">
+                        <label for="agingCriticalInput" class="form-label small mb-1">Critical (days)</label>
+                        <input type="number" class="form-control form-control-sm" id="agingCriticalInput" min="1" max="365">
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="agingMode" id="agingModeDisabled" value="disabled">
+                    <label class="form-check-label" for="agingModeDisabled">Disable aging badges for this column</label>
+                </div>
+                <div class="text-danger small mt-2" id="agingError" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="agingSaveBtn">Save</button>
             </div>
         </div>
     </div>
@@ -2465,6 +2545,87 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         })();
 
+        // -- Aging Alerts (per-column) modal handler --
+        (function() {
+            const agingModal = document.getElementById('columnAgingModal');
+            if (!agingModal) return;
+            const customInputs = document.getElementById('agingCustomInputs');
+            const warnInput = document.getElementById('agingWarningInput');
+            const critInput = document.getElementById('agingCriticalInput');
+            const errBox = document.getElementById('agingError');
+            const saveBtn = document.getElementById('agingSaveBtn');
+            const boardDefaults = document.getElementById('agingBoardDefaults');
+            let _agingColumnId = null;
+
+            function selectedMode() {
+                const r = agingModal.querySelector('input[name="agingMode"]:checked');
+                return r ? r.value : 'inherit';
+            }
+            function syncCustomVisibility() {
+                customInputs.style.display = selectedMode() === 'custom' ? '' : 'none';
+            }
+            agingModal.querySelectorAll('input[name="agingMode"]').forEach(r =>
+                r.addEventListener('change', syncCustomVisibility));
+
+            agingModal.addEventListener('show.bs.modal', function(e) {
+                const trigger = e.relatedTarget;
+                if (!trigger || !trigger.classList.contains('set-aging-btn')) return;
+                _agingColumnId = trigger.dataset.columnId;
+                errBox.style.display = 'none';
+                const mode = trigger.dataset.agingMode || 'inherit';
+                document.getElementById('agingMode' + mode.charAt(0).toUpperCase() + mode.slice(1)).checked = true;
+                // The data-* warning/critical are already the EFFECTIVE values, so prefill them.
+                warnInput.value = trigger.dataset.agingWarning || '';
+                critInput.value = trigger.dataset.agingCritical || '';
+                // For a column in inherit mode the effective values ARE the board defaults.
+                if (mode === 'inherit' && trigger.dataset.agingWarning) {
+                    boardDefaults.textContent = `(${trigger.dataset.agingWarning}d / ${trigger.dataset.agingCritical}d)`;
+                } else {
+                    boardDefaults.textContent = '';
+                }
+                syncCustomVisibility();
+            });
+
+            saveBtn.addEventListener('click', function() {
+                if (!_agingColumnId) return;
+                const mode = selectedMode();
+                errBox.style.display = 'none';
+                const fd = new FormData();
+                fd.append('aging_mode', mode);
+                if (mode === 'custom') {
+                    const w = parseInt(warnInput.value, 10);
+                    const c = parseInt(critInput.value, 10);
+                    if (!(w >= 1) || !(c > w)) {
+                        errBox.textContent = 'Critical days must be greater than warning days (min 1).';
+                        errBox.style.display = 'block';
+                        return;
+                    }
+                    fd.append('aging_warning_days', w);
+                    fd.append('aging_critical_days', c);
+                }
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+                saveBtn.disabled = true;
+                fetch(`/columns/${_agingColumnId}/update-aging/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: fd,
+                })
+                .then(r => r.json().then(d => ({ ok: r.ok, d })))
+                .then(({ ok, d }) => {
+                    if (!ok) {
+                        errBox.textContent = d.error || 'Could not save.';
+                        errBox.style.display = 'block';
+                        saveBtn.disabled = false;
+                        return;
+                    }
+                    bootstrap.Modal.getInstance(agingModal).hide();
+                    location.reload();
+                })
+                .catch(() => { saveBtn.disabled = false; location.reload(); });
+            });
+        })();
+
         // -- Collapse Column handler (MOVED to standalone script below) --
 
         // Set up column delete functionality
@@ -2576,6 +2737,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     </script>
 
+<script src="{% static 'js/kanban_aging.js' %}?v={{ STATIC_VERSION|default:'9' }}_{% now 'U' %}"></script>
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 
 <!-- Déjà Vu Banner Script -->
