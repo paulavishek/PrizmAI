@@ -1341,6 +1341,20 @@ def dashboard(request):
         )
         briefing_action_type = 'high_risk'
         briefing_action_tasks = list(high_risk_tasks_qs[:3])
+    elif (_stalled_all := Task.stalled_for_boards(_board_ids, tier='warning')):
+        # Nothing overdue or high-risk, but work has stopped moving. Surface the
+        # tasks past their aging warning threshold (same signal as the card badges
+        # via Task.aging_state — see kanban/models.py). Ranked after high-risk per
+        # the Focus Today integration design.
+        _stalled = _stalled_all[:3]
+        _n = len(_stalled)
+        briefing_action = (
+            f"Unblock {_n} stalled task{'s' if _n != 1 else ''} that "
+            f"{'have' if _n != 1 else 'has'} sat untouched in their column — "
+            "momentum is slipping."
+        )
+        briefing_action_type = 'stalled'
+        briefing_action_tasks = _stalled
     elif completion_rate >= 80:
         briefing_action = "Strong progress — verify final tasks are assigned before the sprint ends."
         briefing_action_type = 'progress'

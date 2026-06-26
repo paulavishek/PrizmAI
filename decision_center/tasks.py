@@ -395,30 +395,38 @@ def collect_for_user(user):
         logger.exception("collect_for_user: unassigned tasks failed for user %s", user.pk)
 
     # 10. Stale tasks (grouped by board)
+    # "Stale" = stuck in the SAME column for >= min_stale_days, measured via
+    # column_entered_at (the task-aging signal — see kanban/models.py aging_state).
+    # We deliberately use column dwell, not updated_at: a comment or metadata edit
+    # bumps updated_at and used to hide genuinely stuck work. Honors the user's
+    # min_stale_days setting (not the board's per-column badge thresholds).
     try:
         from kanban.models import Task
         stale_threshold = now - timedelta(days=settings.min_stale_days)
         for board in boards:
             stale = Task.objects.filter(
                 column__board=board,
-                updated_at__lt=stale_threshold,
+                column_entered_at__lt=stale_threshold,
+                column_entered_at__isnull=False,
                 item_type='task',
-            ).exclude(progress=100)
+            ).exclude(progress=100).select_related('column')
             count = stale.count()
             if count > 0:
                 task_ids = list(stale.values_list('id', flat=True)[:50])
+                oldest = stale.order_by('column_entered_at').first()
+                days_stuck = (now - oldest.column_entered_at).days
                 _ensure_item(
                     user=user,
                     board=board,
                     item_type='stale_task',
                     priority_level='quick_win',
                     title=(
-                        f"{count} stale task{'s' if count != 1 else ''} on "
-                        f"{board.name} — no updates in {settings.min_stale_days}+ days"
+                        f"{count} stalled task{'s' if count != 1 else ''} on "
+                        f"{board.name} — stuck {days_stuck}+ days with no column movement"
                     ),
-                    suggested_action='Close completed tasks or reassign stalled work',
+                    suggested_action='Unblock or reassign stalled work',
                     estimated_minutes=2,
-                    context_data={'task_ids': task_ids},
+                    context_data={'task_ids': task_ids, 'oldest_days': days_stuck},
                 )
     except Exception:
         logger.exception("collect_for_user: stale tasks failed for user %s", user.pk)

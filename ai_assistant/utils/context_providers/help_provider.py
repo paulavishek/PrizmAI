@@ -116,6 +116,7 @@ class FeatureGuideContextProvider(BaseContextProvider):
         'pre-mortem', 'premortem', 'shadow board', 'gantt', 'stress test',
         'what-if', 'scope autopsy', 'prizmbrief', 'retrospective',
         'focus today', 'decision center', 'discovery', 'knowledge base',
+        'task aging', 'aging alerts', 'aging badge', 'configure aging',
     ]
 
     def _check_access(self, board, user, is_demo_mode=False):

@@ -33,6 +33,11 @@ named below).
 - **Use it when:** You're planning and tracking the actual work.
 - **Where to find it:** Sidebar → Boards.
 
+### Task Aging Alerts
+- **What it does:** Every kanban card shows an adaptive badge counting how many days the task has sat in its **current column** (the count resets whenever the task moves). The badge stays hidden while a task is fresh, then escalates through a neutral grey pill, an amber **warning**, and a red **critical** as it stalls. Spectra reads the same signal, so you can ask "which tasks are stalling?" and stalled tasks also surface in Focus Today.
+- **Use it when:** You want to spot work that has stopped moving and may be blocked.
+- **Where to find it:** It's automatic on board cards. Tune thresholds in Board Settings (board-level Warning/Critical day counts) or per column via the column's ⋮ menu → *Aging Alerts* (inherit, custom, or disable). Done/Backlog-style columns have it off by default.
+
 ### Discovery
 - **What it does:** Ideas inbox with AI scoring and an impact/effort matrix to triage what to build next.
 - **Use it when:** You have a backlog of raw ideas and need to decide which are worth pursuing.
