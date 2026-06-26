@@ -1537,6 +1537,86 @@ class Task(models.Model):
             return 0
         return int((progress['completed'] / progress['total']) * 100)
 
+    # ------------------------------------------------------------------
+    # Task Aging / Stalling — SINGLE SOURCE OF TRUTH
+    # ------------------------------------------------------------------
+    # aging_state() is the one server-side definition of a task's column-dwell
+    # tier. It deliberately mirrors the card badge math in static/js/kanban_aging.js
+    # (daysSince + recalc) and Column.effective_aging() so Spectra, Focus Today and
+    # the Decision Center always report numbers identical to the badge on the board.
+    # Do NOT re-derive "stalled" from created_at / updated_at in any consumer.
+    def aging_state(self, now=None):
+        """Resolve this task's aging tier from column dwell time + column thresholds.
+
+        Returns a dict::
+
+            {'enabled': bool, 'days': int|None,
+             'tier': 'fresh'|'show'|'warning'|'critical',
+             'warning': int, 'critical': int}
+
+        ``tier == 'fresh'`` means below the grey 'show' threshold (no badge).
+        Disabled columns, completed tasks (progress 100 / milestone done) and tasks
+        with no ``column_entered_at`` resolve to ``enabled=False, tier='fresh'``.
+        """
+        cfg = self.column.effective_aging() if self.column_id else {
+            'enabled': False, 'warning': 0, 'critical': 0, 'show': 0,
+        }
+        completed = (self.progress or 0) >= 100 or self.milestone_status == 'completed'
+        if not cfg['enabled'] or completed or self.column_entered_at is None:
+            return {'enabled': False, 'days': None, 'tier': 'fresh',
+                    'warning': cfg['warning'], 'critical': cfg['critical']}
+
+        if now is None:
+            now = timezone.now()
+        # Whole 24h periods elapsed, floored — matches kanban_aging.js daysSince().
+        delta = now - self.column_entered_at
+        days = delta.days if delta.days > 0 else 0
+
+        warning, critical, show = cfg['warning'], cfg['critical'], cfg['show']
+        if critical and days >= critical:
+            tier = 'critical'
+        elif warning and days >= warning:
+            tier = 'warning'
+        elif days >= show:
+            tier = 'show'
+        else:
+            tier = 'fresh'
+        return {'enabled': True, 'days': days, 'tier': tier,
+                'warning': warning, 'critical': critical}
+
+    # Tier ordering for "at least this stalled" comparisons.
+    _AGING_TIER_RANK = {'fresh': 0, 'show': 1, 'warning': 2, 'critical': 3}
+
+    @classmethod
+    def stalled_for_boards(cls, board_ids, tier='warning', now=None):
+        """Return non-complete tasks whose aging tier is >= ``tier``, each annotated
+        with a ``days_in_column`` attribute, ordered oldest-first (most stalled).
+
+        ``tier`` is 'warning' (amber+) or 'critical' (red only). Shared by Focus
+        Today and the Decision Center so "stalled" means the same thing everywhere.
+        """
+        if now is None:
+            now = timezone.now()
+        floor_rank = cls._AGING_TIER_RANK.get(tier, 2)
+        qs = (
+            cls.objects
+            .filter(column__board_id__in=board_ids, item_type='task')
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+        )
+        out = []
+        for task in qs:
+            state = task.aging_state(now=now)
+            if not state['enabled']:
+                continue
+            if cls._AGING_TIER_RANK[state['tier']] < floor_rank:
+                continue
+            task.days_in_column = state['days']
+            task.aging_tier = state['tier']
+            out.append(task)
+        out.sort(key=lambda t: t.days_in_column, reverse=True)
+        return out
+
     @staticmethod
     def compute_progress_status(progress, due_date, start_date, now=None):
         """Pure computation of the schedule-status badge from raw field values.

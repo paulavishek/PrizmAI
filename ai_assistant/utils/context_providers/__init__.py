@@ -197,6 +197,8 @@ def _auto_register():
         shadow_board_provider,
         # ── June 2026: Feature-guide / onboarding advisor ──
         help_provider,
+        # ── June 2026: Task aging / stalling detection ──
+        task_aging_provider,
     )
 
 

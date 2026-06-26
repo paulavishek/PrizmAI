@@ -15,9 +15,12 @@ from django.contrib.auth.models import User
 from django.test import TestCase, Client
 from django.urls import reverse
 
+from datetime import timedelta
+from django.utils import timezone
+
 from accounts.models import Organization, UserProfile
 from kanban.models import (
-    Board, Column, AgingOnboardingDismissal,
+    Board, Column, Task, AgingOnboardingDismissal,
     column_name_disables_aging,
 )
 from kanban.forms import BoardForm
@@ -190,6 +193,119 @@ class ColumnUpdateAgingEndpointTest(TestCase):
         self.assertEqual(resp.status_code, 403)
         owner['col'].refresh_from_db()
         self.assertEqual(owner['col'].aging_mode, 'inherit')
+
+
+def _make_task(col, *, days_ago=None, progress=0, item_type='task',
+               milestone_status=None, title='T'):
+    """Create a task whose column_entered_at is `days_ago` in the past.
+
+    column_entered_at is passed at create time so the track_column_entry_time
+    pre_save signal preserves it (it only stamps now() when the field is unset).
+    """
+    entered = None if days_ago is None else timezone.now() - timedelta(days=days_ago)
+    task = Task.objects.create(
+        column=col, title=title, progress=progress, item_type=item_type,
+        milestone_status=milestone_status, column_entered_at=entered,
+        created_by=col.board.created_by,
+    )
+    if entered is None:
+        # The track_column_entry_time pre_save signal stamps now() on create when
+        # the field is unset; force a true NULL (as legacy pre-migration tasks have)
+        # via an UPDATE that bypasses the signal.
+        Task.objects.filter(pk=task.pk).update(column_entered_at=None)
+        task.refresh_from_db()
+    return task
+
+
+class AgingStateTest(TestCase):
+    """Task.aging_state() — the single source of truth shared by Spectra,
+    Focus Today and the Decision Center. Mirrors kanban_aging.js badge tiers."""
+
+    def test_tiers_by_days(self):
+        t = _make_tenant('as_alpha', warning=7, critical=14)  # show=4
+        col = t['col']
+        self.assertEqual(_make_task(col, days_ago=2).aging_state()['tier'], 'fresh')
+        self.assertEqual(_make_task(col, days_ago=5).aging_state()['tier'], 'show')
+        self.assertEqual(_make_task(col, days_ago=9).aging_state()['tier'], 'warning')
+        st = _make_task(col, days_ago=20).aging_state()
+        self.assertEqual(st['tier'], 'critical')
+        self.assertEqual(st['days'], 20)
+        self.assertEqual((st['warning'], st['critical']), (7, 14))
+
+    def test_disabled_column_is_not_enabled(self):
+        t = _make_tenant('as_beta')
+        t['col'].aging_mode = 'disabled'
+        t['col'].save()
+        st = _make_task(t['col'], days_ago=30).aging_state()
+        self.assertFalse(st['enabled'])
+        self.assertEqual(st['tier'], 'fresh')
+
+    def test_null_column_entered_at(self):
+        t = _make_tenant('as_gamma')
+        st = _make_task(t['col'], days_ago=None).aging_state()
+        self.assertFalse(st['enabled'])
+        self.assertIsNone(st['days'])
+
+    def test_completed_task_not_stalled(self):
+        t = _make_tenant('as_delta')
+        st = _make_task(t['col'], days_ago=30, progress=100).aging_state()
+        self.assertFalse(st['enabled'])
+
+    def test_completed_milestone_not_stalled(self):
+        t = _make_tenant('as_eps')
+        st = _make_task(t['col'], days_ago=30, item_type='milestone',
+                        milestone_status='completed').aging_state()
+        self.assertFalse(st['enabled'])
+
+
+class StalledForBoardsTest(TestCase):
+    def test_warning_tier_floor_and_ordering(self):
+        t = _make_tenant('sf_alpha', warning=7, critical=14)
+        col = t['col']
+        _make_task(col, days_ago=2, title='fresh')       # below show — excluded
+        _make_task(col, days_ago=5, title='show')         # show tier — excluded at warning floor
+        warn = _make_task(col, days_ago=9, title='warn')
+        crit = _make_task(col, days_ago=20, title='crit')
+        result = Task.stalled_for_boards([t['board'].id], tier='warning')
+        self.assertEqual([x.title for x in result], ['crit', 'warn'])  # oldest first
+        self.assertEqual(result[0].days_in_column, 20)
+        self.assertEqual(crit.id, result[0].id)
+        self.assertEqual(warn.id, result[1].id)
+
+    def test_critical_tier_floor(self):
+        t = _make_tenant('sf_beta', warning=7, critical=14)
+        col = t['col']
+        _make_task(col, days_ago=9, title='warn')   # excluded at critical floor
+        _make_task(col, days_ago=20, title='crit')
+        result = Task.stalled_for_boards([t['board'].id], tier='critical')
+        self.assertEqual([x.title for x in result], ['crit'])
+
+    def test_completed_excluded(self):
+        t = _make_tenant('sf_gamma', warning=7, critical=14)
+        _make_task(t['col'], days_ago=20, progress=100, title='done')
+        self.assertEqual(Task.stalled_for_boards([t['board'].id]), [])
+
+
+class StalledBriefingPlanTest(TestCase):
+    """Focus Today rule-based action plan for the 'stalled' action type speaks to
+    column dwell, not deadlines (kanban/ai_briefing.py)."""
+
+    def test_rule_based_plan_uses_column_dwell_wording(self):
+        # Test the rule-based functions directly so no live Gemini call is made.
+        from kanban.ai_briefing import _rule_based_action_plan, _rule_based_summary
+        t = _make_tenant('br_alpha', warning=7, critical=14)
+        task = _make_task(t['col'], days_ago=12, progress=30, title='Migrate API')
+        task.days_in_column = 12  # set by the view from aging_state()
+
+        plan = _rule_based_action_plan([task], 'stalled', 0, timezone.now())
+        self.assertEqual(len(plan), 1)
+        why = plan[0]['why'].lower()
+        self.assertIn('12 days', why)
+        self.assertIn('in progress', why)  # the column name
+        self.assertNotIn('overdue', why)   # not framed around deadlines
+
+        summary = _rule_based_summary(plan, 'stalled', 0, '')
+        self.assertIn('stopped moving', summary.lower())
 
 
 class DismissOnboardingTest(TestCase):

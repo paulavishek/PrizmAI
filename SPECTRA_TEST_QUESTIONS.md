@@ -579,6 +579,43 @@ have none.
 
 ---
 
+## Section G — Task Aging / Stalling Detection
+*Spectra reads the SAME column-dwell signal as the kanban aging badges (via `Task.aging_state()` / `Task.stalled_for_boards()`), so its day counts must match the badges on the board exactly. These verify accuracy and the no-hallucination guard for the Task Aging provider.*
+
+---
+
+**Q68.** Which tasks are stalling (data + superlative)
+
+- **Log in as:** testuser1
+- **Select board:** "Core AI Protocol Development"
+- **Ask Spectra:** `Which tasks are stalling on this board, and which one has been sitting in its column the longest?`
+- **Tests:** Task Aging provider — lists stalled tasks with day-in-column counts and identifies the oldest.
+- **Expected:** ✅ Lists the tasks past their aging threshold with the **exact** days-in-column and column name shown on the card badges (e.g. "80 days in To Do", critical at 14), and correctly names the longest-sitting task(s). Day counts must match the badges — not the due-date or last-edited age.
+- **Fail condition:** Spectra invents tasks/day counts, uses created/updated date instead of column dwell, or contradicts the on-card badges.
+
+---
+
+**Q69.** Tasks past warning / critical threshold
+
+- **Log in as:** testuser1
+- **Select board:** "Core AI Protocol Development"
+- **Ask Spectra:** `Are there any tasks past their aging warning or critical threshold? How many days have they been stuck?`
+- **Tests:** Task Aging provider — tier classification (amber warning vs. red critical) and dwell duration.
+- **Expected:** ✅ Reports the warning/critical tasks with their day counts and the relevant threshold ("critical at 14 days"). If no task has crossed a threshold, it says so plainly rather than inventing one.
+- **Fail condition:** Spectra mislabels tiers, fabricates day counts, or reports stalled tasks on a board where aging is disabled.
+
+---
+
+**Q70.** How the Task Aging feature works (feature guide)
+
+- **Log in as:** any user
+- **Ask Spectra:** `How does the Task Aging feature work, and where do I configure its thresholds?`
+- **Tests:** Feature guide (help_provider) — explains the feature + correct configuration path.
+- **Expected:** ✅ Explains the per-column day badge that resets on move and escalates grey → amber (warning) → red (critical); points to **Board Settings** (board-level Warning/Critical day counts) and the column **⋮ menu → Aging Alerts** (inherit / custom / disable); notes Done/Backlog-style columns are off by default and that stalled tasks also surface in **Focus Today**.
+- **Fail condition:** Spectra invents a nav path, a different threshold model, or a non-existent capability.
+
+---
+
 ## Coverage Map: Question → Provider
 
 Every Spectra context provider (and the two legacy builders) is exercised at least once.
@@ -624,7 +661,8 @@ Every Spectra context provider (and the two legacy builders) is exercised at lea
 | Exit Protocol / Cemetery | Q49 |
 | Risk Scenarios (Pre-Mortem) | Q50 |
 | Risk Scenarios (Stress Test) | Q51 |
-| Feature Guide / Onboarding Advisor (help_provider) | Q54–Q59 |
+| Feature Guide / Onboarding Advisor (help_provider) | Q54–Q59, Q70 |
+| Task Aging / Stalling (task_aging_provider) | Q68, Q69 |
 | RBAC read access | Q60–Q63 |
 | Cross-workspace / data isolation | Q64, Q65 |
 | Prompt-injection safety | Q66 |
@@ -649,5 +687,8 @@ Every Spectra context provider (and the two legacy builders) is exercised at lea
 | 65 | Non-member board read | testuser2 | — | — | ❌ Deny / no leak |
 | 66 | Prompt injection | testuser3 | Core AI Protocol Dev | Viewer | ❌ Reject / no leak |
 | 67 | Empty-feature honesty | Any | Readable board | Any | ✅ "No data", no fabrication |
+| 68 | Stalling tasks + longest | testuser1 | Core AI Protocol Dev | Member | ✅ Day counts match badges |
+| 69 | Past warning/critical threshold | testuser1 | Core AI Protocol Dev | Member | ✅ Correct tiers + dwell days |
+| 70 | Task Aging feature guide | Any | None needed | Any | ✅ Explained, no hallucination |
 </content>
 </invoke>
