@@ -949,6 +949,153 @@ def _compute_confidence_score(parsed: Dict) -> float:
     return max(0.3, min(0.95, score))
 
 
+def _reconcile_summary_numbers(summary: Dict, analytics_data: Dict) -> Dict:
+    """Reconcile the AI summary's narrative numbers against the authoritative metrics.
+
+    LLMs occasionally misquote a figure in prose that contradicts the exact number they
+    were given (e.g. "2 overdue tasks" when overdue is really 3). The metric cards/tables
+    are always computed in code and correct; only the free-text narrative can drift.
+
+    This walks the known text fields of the (transformed) summary and applies a curated set
+    of ANCHORED rules — a number is only touched when it sits directly next to a strong
+    keyword, so legitimate recommendation numbers ("transition 5 tasks", "WIP limit of 3")
+    are never rewritten. Unambiguous integer counts are auto-corrected; percentages are
+    flagged (logged) but left alone, since rounding (27.6 vs 27 vs 28) is legitimate.
+
+    Never raises — on any error it returns the summary unchanged.
+    """
+    if not isinstance(summary, dict) or not isinstance(analytics_data, dict):
+        return summary
+
+    try:
+        counters = {'corrections': 0, 'flags': 0}
+        board_name = analytics_data.get('board_name', 'Board')
+
+        # ---- Build the anchored auto-correct rules (integer counts only) ----
+        # Each rule: (compiled_regex_with_one_numeric_group, authoritative_int, label)
+        rules = []
+
+        def _add_rule(pattern, value, label):
+            if value is None:
+                return
+            try:
+                rules.append((re.compile(pattern, re.IGNORECASE), int(value), label))
+            except (TypeError, ValueError):
+                pass
+
+        # Overdue count — the canonical drift case ("2 overdue" vs 3).
+        _add_rule(r'(\d+)(?=\s+overdue)', analytics_data.get('overdue_count'), 'overdue')
+
+        # Total tasks (three phrasings the model uses).
+        total_tasks = analytics_data.get('total_tasks')
+        _add_rule(r'(\d+)(?=\s+total\s+tasks)', total_tasks, 'total_tasks')
+        _add_rule(r'(?<=total\s)(?:of\s)?(\d+)(?=\s+tasks)', total_tasks, 'total_tasks')
+        _add_rule(r'(?<=out of\s)(\d+)(?=\s+(?:total\s+)?tasks?)', total_tasks, 'total_tasks')
+
+        # Completed count — "N tasks completed" / "N completed", but NOT "N percent complete".
+        _add_rule(
+            r'(?<![%\d.])(?<!percent )(\d+)\s+(?:tasks?\s+)?(?:completed|complete)\b',
+            analytics_data.get('completed_count'), 'completed',
+        )
+
+        # Per-column counts — "N tasks in <column>" and close variants.
+        for col in analytics_data.get('tasks_by_column', []) or []:
+            name = (col.get('name') or '').strip()
+            if not name:
+                continue
+            _add_rule(
+                r'(\d+)\s+(?:tasks?\s+)?(?:in|stuck in|sitting in|remaining in|remain in)\s+'
+                r'(?:the\s+)?' + re.escape(name),
+                col.get('count'), f'column:{name}',
+            )
+
+        def _correct(text):
+            """Apply integer-count rules to one string; returns corrected text."""
+            if not isinstance(text, str) or not text:
+                return text
+            for regex, value, label in rules:
+                def _sub(m):
+                    found = m.group(1)
+                    if found is None or int(found) == value:
+                        return m.group(0)
+                    counters['corrections'] += 1
+                    logger.warning(
+                        "Analytics summary number drift [%s]: '%s' -> '%s' (board=%s)",
+                        label, found, value, board_name,
+                    )
+                    return m.group(0).replace(found, str(value), 1)
+                text = regex.sub(_sub, text)
+            return text
+
+        # ---- Flag-only check for percentages (productivity / value-added) ----
+        pct_targets = []
+        prod = analytics_data.get('productivity')
+        if prod is not None:
+            pct_targets.append(('productivity', float(prod)))
+        va = analytics_data.get('value_added_percentage')
+        if va is not None:
+            pct_targets.append(('value_added', float(va)))
+        pct_regex = re.compile(r'(\d+(?:\.\d+)?)\s*(?:percent|%)', re.IGNORECASE)
+
+        def _flag_percentages(text):
+            if not isinstance(text, str) or not text or not pct_targets:
+                return
+            for m in pct_regex.finditer(text):
+                try:
+                    claimed = float(m.group(1))
+                except ValueError:
+                    continue
+                # Only flag if it doesn't match ANY known percentage within tolerance.
+                if all(abs(claimed - v) > 1.0 for _, v in pct_targets):
+                    counters['flags'] += 1
+                    logger.warning(
+                        "Analytics summary percentage not matching any metric: '%s%%' "
+                        "(known: %s) (board=%s)",
+                        m.group(1), ', '.join(f"{lbl}={v}" for lbl, v in pct_targets),
+                        board_name,
+                    )
+
+        def _process(text):
+            _flag_percentages(text)
+            return _correct(text)
+
+        # ---- Walk the known text-bearing fields of the transformed summary ----
+        if isinstance(summary.get('executive_summary'), str):
+            summary['executive_summary'] = _process(summary['executive_summary'])
+
+        ha = summary.get('health_assessment')
+        if isinstance(ha, dict) and isinstance(ha.get('score_reasoning'), str):
+            ha['score_reasoning'] = _process(ha['score_reasoning'])
+
+        for item in summary.get('key_insights', []) or []:
+            if not isinstance(item, dict):
+                continue
+            for key in ('insight', 'evidence'):
+                if isinstance(item.get(key), str):
+                    item[key] = _process(item[key])
+
+        for item in summary.get('areas_of_concern', []) or []:
+            if not isinstance(item, dict):
+                continue
+            for key in ('concern', 'recommended_action'):
+                if isinstance(item.get(key), str):
+                    item[key] = _process(item[key])
+
+        for item in summary.get('process_improvement_recommendations', []) or []:
+            if not isinstance(item, dict):
+                continue
+            for key in ('recommendation', 'expected_impact'):
+                if isinstance(item.get(key), str):
+                    item[key] = _process(item[key])
+
+        if counters['corrections'] or counters['flags']:
+            summary['_number_reconciliation'] = counters
+        return summary
+    except Exception as exc:  # never let reconciliation break summary generation
+        logger.warning("Number reconciliation skipped due to error: %s", exc)
+        return summary
+
+
 def _transform_analytics_response(parsed: Dict) -> Dict:
     """
     Transform simplified AI response to full format for backward compatibility.
@@ -1130,6 +1277,33 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
                 supplemental_lines.append(f"- Estimated avg days per stage: {st_str}")
         supplemental_block = ('\n' + '\n'.join(supplemental_lines)) if supplemental_lines else ''
 
+        # Headline metrics that mirror the on-screen analytics cards (populated by
+        # get_ai_summary_augmentation). Give these to the AI explicitly so a type
+        # specific summary cites the right figure (e.g. operations Process
+        # Completion / On-Time / Cycle-Time) rather than the generic productivity %.
+        promoted_metrics = analytics_data.get('promoted_metrics', {})
+        promoted_line = ''
+        if promoted_metrics:
+            promoted_line = (
+                "\n- Headline card metrics (cite THESE exact values for this board type): "
+                + ', '.join(f"{label}: {value}" for label, value in promoted_metrics.items())
+            )
+
+        # Workload guidance — prevents the model from mistaking a contributor's
+        # completion RATE for their share of the WORKLOAD. Workload = task count.
+        named_users = [u for u in tasks_by_user if (u.get('username') or 'Unassigned') != 'Unassigned']
+        workload_hint = ''
+        if named_users:
+            busiest = max(named_users, key=lambda u: u['count'])
+            lightest = min(named_users, key=lambda u: u['count'])
+            if busiest['username'] != lightest['username']:
+                workload_hint = (
+                    f"\n- Workload note: {busiest['username']} has the MOST tasks "
+                    f"({busiest['count']}); {lightest['username']} has the FEWEST "
+                    f"({lightest['count']}). Judge workload by task COUNT, not completion rate. "
+                    f"To rebalance, move work FROM the busiest person TO the lightest — never the reverse."
+                )
+
         prompt = f"""Analyze this {project_type.replace('_', ' ')} board "{board_name}" and provide actionable insights for a project manager.
 
 ## Board Type: {project_type.replace('_', ' ').title()}
@@ -1141,9 +1315,9 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
 - Lean: {value_added_percentage}% value-added (target: 60%+), {total_categorized} categorized
 - Columns: {', '.join([f"{col['name']}:{col['count']}" for col in tasks_by_column])}
 - Priority: {', '.join([f"{pri['priority']}:{pri['count']}" for pri in tasks_by_priority])}
-- Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}{supplemental_block}
+- Team workload (each entry = tasks assigned, then that person's own completion rate — the % is NOT their share of the workload): {', '.join([f"{user['username']}: {user['count']} tasks assigned, {user['completion_rate']}% of them complete" for user in tasks_by_user[:5]])}{workload_hint}{promoted_line}{supplemental_block}
 
-IMPORTANT: Do NOT use markdown formatting like asterisks, bold, or headers in any text values. Use plain text only.
+IMPORTANT: Use ONLY the exact figures provided above. Never invent, round differently, or alter any count — overdue is exactly {overdue_count}, and every number in your insights/evidence/recommendations must match a figure listed above. Do NOT use markdown formatting like asterisks, bold, or headers in any text values. Use plain text only.
 Respond with ONLY the JSON object below, no commentary, no code fences, no explanation before or after:
 {{
   "executive_summary": "2-3 plain text sentences summarizing health and key findings for this {project_type.replace('_', ' ')} board",
@@ -1233,6 +1407,7 @@ Respond with ONLY the JSON object below, no commentary, no code fences, no expla
                     logger.info(f"Successfully parsed board analytics JSON with {len(parsed)} keys")
                     # Transform simplified format to full format for backward compatibility
                     parsed = _transform_analytics_response(parsed)
+                    parsed = _reconcile_summary_numbers(parsed, analytics_data)
                     return parsed
                 else:
                     logger.warning(f"AI returned non-dict JSON: {type(parsed)}")
@@ -1258,6 +1433,7 @@ Respond with ONLY the JSON object below, no commentary, no code fences, no expla
                         if isinstance(parsed, dict) and 'executive_summary' in parsed:
                             logger.info("Recovered JSON using regex extraction")
                             parsed = _transform_analytics_response(parsed)
+                            parsed = _reconcile_summary_numbers(parsed, analytics_data)
                             return parsed
                     except json.JSONDecodeError:
                         continue

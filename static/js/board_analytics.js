@@ -824,6 +824,12 @@ function generateAISummary(boardId) {
 
         triggerAITask('/api/summarize-board-analytics/' + boardId + '/', {
             method: 'GET',
+            // Wait longer than the backend's real limit (Gemini 120s network
+            // timeout) so a slow-but-successful summary is delivered instead of
+            // a misleading "timed out" while the backend keeps running and
+            // consumes AI quota. A genuinely stuck call surfaces Gemini's own
+            // timeout as a real ai_error well before this fires.
+            timeoutMs: 140000,
             containerSelector: '#ai-summary-text',
             statusSelector: '#ai-summary-status',
             progressSelector: '#ai-summary-progress',

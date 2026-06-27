@@ -181,8 +181,13 @@ def run_premortem_task(self, board_id, user_id):
 @shared_task(
     bind=True,
     name='kanban.ai_streaming.summarize_board_analytics',
-    time_limit=120,
-    soft_time_limit=90,
+    # Keep the Celery limits ABOVE the Gemini network timeout (120s, see
+    # ai_router.py) and the client WebSocket timeout (140s, board_analytics.js)
+    # so the worker is never killed mid-call before a slow-but-successful
+    # result — or a real Gemini timeout error — can be streamed back.
+    # Ordering: Gemini 120s < soft 130s < client 140s < hard 150s.
+    time_limit=150,
+    soft_time_limit=130,
 )
 def summarize_board_analytics_task(self, board_id, user_id):
     """Summarize board analytics with AI, streaming progress updates."""
@@ -274,6 +279,12 @@ def summarize_board_analytics_task(self, board_id, user_id):
             'board_name': board.name,
             'project_type': board.project_type or 'general',
         }
+
+        # Augment with type-specific chart series + headline card metrics so the
+        # summary is genuinely board-type-aware (e.g. operations Process
+        # Completion / On-Time / Cycle-Time) and not just generic productivity.
+        from kanban.utils.analytics_helpers import get_ai_summary_augmentation
+        analytics_data.update(get_ai_summary_augmentation(board))
 
         _send_status(task_id, 'Generating AI insights…', 60)
         summary = summarize_board_analytics(analytics_data)
