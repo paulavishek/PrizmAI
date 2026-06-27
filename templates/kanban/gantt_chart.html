@@ -681,13 +681,32 @@
     }
 
     /* Phase bar labels: frappe-gantt positions x at bar centre, so use middle anchor
-       to keep the text properly centred inside the bar in all view modes. */
-    .gantt .bar-wrapper[data-id^="phase-"] .bar-label {
+       to keep the text properly centred inside the bar in all view modes.
+       The "unphased" bucket bar is a phase bar too but its id isn't "phase-…". */
+    .gantt .bar-wrapper[data-id^="phase-"] .bar-label,
+    .gantt .bar-wrapper[data-id="unphased"] .bar-label {
         text-anchor: middle !important;
         fill: rgba(255, 255, 255, 0.92) !important;
         font-size: 12px;
         font-weight: 700;
         filter: none;
+    }
+
+    /* Narrow phase bars (e.g. an unphased/undated task that collapses to a
+       single day) can't fit their label inside. polishPhaseBarLabels() then
+       renders the label to the right of the bar inside this gradient pill.
+       Scoped under the phase/unphased parents so it out-specifies the centred
+       rule above (which also uses !important). */
+    .gantt .bar-wrapper[data-id^="phase-"] .bar-label.phase-label-outside,
+    .gantt .bar-wrapper[data-id="unphased"] .bar-label.phase-label-outside {
+        text-anchor: start !important;
+        fill: #ffffff !important;
+        font-size: 12px;
+        font-weight: 700;
+        filter: none;
+    }
+    .gantt .phase-label-pill {
+        filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.35));
     }
 
     .gantt .bar-label.outside-left,
@@ -2484,42 +2503,48 @@
             });
         });
 
-        // Kahn's algorithm with start-date priority queue
-        // Tasks with zero in-degree are ready; among them, earliest start date goes first
-        const queue = [];
-        taskIdSet.forEach(id => {
-            if (inDegree.get(id) === 0) queue.push(id);
-        });
-        // Sort initial queue by start date
-        queue.sort((a, b) => {
+        // Hybrid ordering: date-primary, dependencies respected.
+        // Stable comparator — start date, then due/end date, then numeric id.
+        // A task only becomes "ready" once all its predecessors are placed, so a
+        // successor can never appear above its predecessor; among ready tasks we
+        // always emit the earliest-dated one, giving a chronological read-down.
+        const orderCmp = (a, b) => {
             const ta = taskMap.get(a), tb = taskMap.get(b);
-            return new Date(ta.start) - new Date(tb.start);
+            const sa = new Date(ta.start), sb = new Date(tb.start);
+            if (sa - sb !== 0) return sa - sb;
+            const ea = new Date(ta.end), eb = new Date(tb.end);
+            if (ea - eb !== 0) return ea - eb;
+            return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
+        };
+
+        // Kahn's algorithm over a re-sorted "ready" frontier
+        const ready = [];
+        taskIdSet.forEach(id => {
+            if (inDegree.get(id) === 0) ready.push(id);
         });
 
         const sorted = [];
-        while (queue.length > 0) {
-            const id = queue.shift();
+        while (ready.length > 0) {
+            // Re-sort the whole frontier each step so the globally-earliest
+            // available task is emitted next (not just the earliest of a batch).
+            ready.sort(orderCmp);
+            const id = ready.shift();
             sorted.push(taskMap.get(id));
             const succs = successors.get(id) || [];
-            // Collect newly-ready successors, then sort by start date before adding
-            const newlyReady = [];
             succs.forEach(succId => {
                 inDegree.set(succId, inDegree.get(succId) - 1);
-                if (inDegree.get(succId) === 0) newlyReady.push(succId);
+                if (inDegree.get(succId) === 0) ready.push(succId);
             });
-            newlyReady.sort((a, b) => {
-                const ta = taskMap.get(a), tb = taskMap.get(b);
-                return new Date(ta.start) - new Date(tb.start);
-            });
-            newlyReady.forEach(id => queue.push(id));
         }
 
-        // If any tasks weren't reached (cycle), append them at the end by start date
+        // If any tasks weren't reached (cycle), append them ordered the same way
         if (sorted.length < taskList.length) {
             const sortedIds = new Set(sorted.map(t => String(t.id)));
-            const remaining = taskList.filter(t => !sortedIds.has(String(t.id)));
-            remaining.sort((a, b) => new Date(a.start) - new Date(b.start));
-            remaining.forEach(t => sorted.push(t));
+            const remaining = taskList
+                .filter(t => !sortedIds.has(String(t.id)))
+                .map(t => String(t.id))
+                .sort(orderCmp);
+            remaining.forEach(id => sorted.push(taskMap.get(id)));
         }
 
         return sorted;
@@ -3047,7 +3072,9 @@
                 }
                 e.stopPropagation();
                 if (!taskId) return;
-                if (taskId.startsWith('phase-')) {
+                if (taskId === 'unphased') {
+                    togglePhase('Unphased', e);
+                } else if (taskId.startsWith('phase-')) {
                     const phaseIdPart = taskId.replace('phase-', '');
                     const phaseName = 'Phase ' + phaseIdPart.split('-').map(word => 
                         word.charAt(0).toUpperCase() + word.slice(1)
@@ -4246,7 +4273,9 @@
             let statusHTML = '';
             if (!isPhase && !isMilestone && item.status) {
                 const statusClass = 'status-' + (item.status || 'todo').replace('_', '-');
-                const statusLabel = STATUS_LABELS[item.status] || item.status;
+                // Show the real column name (Backlog, In Review, …) so the Gantt
+                // matches the board & detail drawer; fall back to the 3-state label.
+                const statusLabel = item.column_name || STATUS_LABELS[item.status] || item.status;
                 statusHTML = `<span class="status-lozenge ${escapeHTML(statusClass)}">${escapeHTML(statusLabel)}</span>`;
             }
 
@@ -4870,15 +4899,26 @@
     function updatePhaseBarForTask(taskId) {
         if (!ganttChart || currentView !== 'phases') return;
         const task = tasks.find(t => String(t.id) === String(taskId));
-        if (!task || !task.phase) return;
+        if (!task) return;
 
-        const phaseName = task.phase;
-        const phaseId = phaseName.replace(/\s+/g, '-').toLowerCase();
+        // Work out which bucket this task belongs to. Tasks with no numbered
+        // phase live in the "unphased" bar (id="unphased"), which must resize
+        // from its members just like the numbered phases do.
+        const phasedNames = new Set();
+        for (let i = 1; i <= numPhases; i++) phasedNames.add(`Phase ${i}`);
+        const taskPhase = (task.phase || '').trim();
+        const isUnphased = !phasedNames.has(taskPhase);
+
+        const phaseId = isUnphased ? 'unphased' : taskPhase.replace(/\s+/g, '-').toLowerCase();
         const phaseWrapper = document.querySelector(`.bar-wrapper[data-id="${phaseId}"]`);
         if (!phaseWrapper) return;
 
-        // Gather all tasks in this phase that have valid dates
-        const phaseTasks = tasks.filter(t => t.phase === phaseName && t.start && t.end && t.start !== '' && t.end !== '');
+        // Gather all tasks in this bucket that have valid dates
+        const phaseTasks = tasks.filter(t => {
+            const tp = (t.phase || '').trim();
+            const inBucket = isUnphased ? !phasedNames.has(tp) : (tp === taskPhase);
+            return inBucket && t.start && t.end && t.start !== '' && t.end !== '';
+        });
         if (phaseTasks.length === 0) return;
 
         const starts = phaseTasks.map(t => new Date(t.start)).filter(d => !isNaN(d.getTime()));
@@ -4986,6 +5026,9 @@
                     syncTableRowHeights();
                     drawCustomDependencyLines();
                     positionBarLabels();
+                    // Re-flow phase-bar labels (inside vs gradient pill) now that
+                    // the phase bar has been resized to its members' span.
+                    if (currentView === 'phases') polishPhaseBarLabels();
                 });
 
                 // Sync triage drawer if it's open for this task
@@ -5503,6 +5546,53 @@
             }
         }
 
+        // Unphased tasks (e.g. ideas promoted from PrizmDiscovery are created
+        // without a phase). Without their own group they'd be silently dropped
+        // from the phase view, so the Gantt would show fewer tasks than the board.
+        const phasedNames = new Set();
+        for (let i = 1; i <= numPhases; i++) phasedNames.add(`Phase ${i}`);
+        const unphasedTasks = tasks.filter(t =>
+            !phasedNames.has((t.phase || '').trim()) &&
+            t.start && t.end && t.start !== '' && t.end !== '');
+
+        if (unphasedTasks.length > 0) {
+            const phaseName = 'Unphased';
+            const isExpanded = expandedPhases.has(phaseName);
+            const taskStarts = unphasedTasks.map(t => new Date(t.start)).filter(d => !isNaN(d.getTime()));
+            const taskEnds = unphasedTasks.map(t => new Date(t.end)).filter(d => !isNaN(d.getTime()));
+            const phaseStart = taskStarts.length ? new Date(Math.min(...taskStarts)).toISOString().split('T')[0] : '';
+            const phaseEnd = taskEnds.length ? new Date(Math.max(...taskEnds)).toISOString().split('T')[0] : '';
+
+            if (phaseStart && phaseEnd) {
+                ganttData.push({
+                    id: 'unphased',
+                    name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${unphasedTasks.length} tasks)`,
+                    fullName: phaseName,
+                    start: phaseStart,
+                    end: phaseEnd,
+                    progress: 0,
+                    dependencies: '',
+                    custom_class: 'phase-bar',
+                    priority: 'phase',
+                    status: 'phase',
+                    assigned_to: '',
+                    assignee_first_name: '',
+                    assignee_last_name: '',
+                    item_type: 'phase',
+                    phase: phaseName,
+                    isPhase: true,
+                    phaseName: phaseName
+                });
+
+                if (isExpanded) {
+                    // Milestones with no phase are appended separately below, so
+                    // only the tasks are nested here to avoid duplicating them.
+                    const regularTasks = topologicalSortTasks(unphasedTasks);
+                    buildOrderedTaskList(regularTasks, []).forEach(item => ganttData.push(item));
+                }
+            }
+        }
+
         // Also add unphased milestones when not using phase filter
         // (they'll just appear at end)
         visibleMilestones.filter(m => !m.phase).forEach(m => {
@@ -5692,8 +5782,9 @@
             if (bar && label) {
                 const taskName = label.textContent || '';
 
-                // Check if this is a phase bar
-                if (taskName.includes('Phase') && taskName.includes('tasks')) {
+                // Check if this is a phase bar. The "unphased" bucket bar is a
+                // phase bar too, but its label says "Unphased" (no "Phase").
+                if ((taskName.includes('Phase') && taskName.includes('tasks')) || taskId === 'unphased') {
                     bar.setAttribute('data-is-phase', 'true');
                     bar.style.cursor = 'pointer';
                 }
@@ -5702,6 +5793,97 @@
 
         // Also apply standard styling
         applyCustomStyling();
+
+        // Place phase-bar labels inside the bar when they fit, or in a gradient
+        // pill to the right when the bar is too narrow to hold them.
+        polishPhaseBarLabels();
+    }
+
+    /**
+     * For every phase bar, decide whether its label fits inside the bar.
+     *  - Fits  → centre the label inside (default phase styling).
+     *  - Too narrow → render the label to the right of the bar inside a gradient
+     *    "pill" so a 1-day/undated phase bar still reads cleanly.
+     * Re-runs after a drag so the label flips back inside once the bar widens.
+     */
+    function polishPhaseBarLabels() {
+        const svg = document.querySelector('#gantt');
+        if (!svg) return;
+        ensurePhaseLabelGradient(svg);
+
+        document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
+            const bar = wrapper.querySelector('.bar');
+            const label = wrapper.querySelector('.bar-label');
+            if (!bar || !label) return;
+            if (bar.getAttribute('data-is-phase') !== 'true') return;
+
+            // Clear any pill from a previous pass so we measure cleanly.
+            const oldPill = wrapper.querySelector('.phase-label-pill');
+            if (oldPill) oldPill.remove();
+            label.classList.remove('phase-label-outside');
+
+            const barX = parseFloat(bar.getAttribute('x'));
+            const barW = parseFloat(bar.getAttribute('width'));
+            let barBox;
+            try { barBox = bar.getBBox(); } catch (e) { return; }
+            const cy = barBox.y + barBox.height / 2;
+            if (isNaN(barX) || isNaN(barW)) return;
+
+            // Measure the label's natural width.
+            let textW;
+            try { textW = label.getBBox().width; } catch (e) { return; }
+
+            const INSIDE_PAD = 16;
+            if (textW + INSIDE_PAD <= barW) {
+                // Fits — centre inside the bar (default behaviour).
+                label.setAttribute('x', barX + barW / 2);
+                label.setAttribute('y', cy);
+                return;
+            }
+
+            // Too narrow — render the label to the right inside a gradient pill.
+            label.classList.add('phase-label-outside');
+            const GAP = 8;        // space between bar and pill
+            const PILL_PAD = 10;  // horizontal padding inside the pill
+            const PILL_H = 20;
+            label.setAttribute('x', barX + barW + GAP + PILL_PAD);
+            label.setAttribute('y', cy);
+
+            let labelW;
+            try { labelW = label.getBBox().width; } catch (e) { labelW = textW; }
+
+            const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            pill.setAttribute('class', 'phase-label-pill');
+            pill.setAttribute('x', barX + barW + GAP);
+            pill.setAttribute('y', cy - PILL_H / 2);
+            pill.setAttribute('width', labelW + PILL_PAD * 2);
+            pill.setAttribute('height', PILL_H);
+            pill.setAttribute('rx', 6);
+            pill.setAttribute('ry', 6);
+            pill.setAttribute('fill', 'url(#phaseLabelGradient)');
+            // Insert behind the text label so the text stays readable.
+            (label.parentNode || wrapper).insertBefore(pill, label);
+        });
+    }
+
+    /** Inject the phase-label pill gradient into the SVG's <defs> once. */
+    function ensurePhaseLabelGradient(svg) {
+        if (svg.querySelector('#phaseLabelGradient')) return;
+        let defs = svg.querySelector('defs');
+        if (!defs) {
+            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            svg.insertBefore(defs, svg.firstChild);
+        }
+        const grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        grad.setAttribute('id', 'phaseLabelGradient');
+        grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+        grad.setAttribute('x2', '1'); grad.setAttribute('y2', '0');
+        const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', '#6366f1');
+        const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', '#4f46e5');
+        grad.appendChild(stop1); grad.appendChild(stop2);
+        defs.appendChild(grad);
     }
 
     // Initialize phase view on load if phases exist

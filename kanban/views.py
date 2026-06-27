@@ -3755,6 +3755,26 @@ def gantt_chart(request, board_id):
                     'task_count': 0,
                 }
 
+        # Tasks that don't belong to any numbered phase (e.g. ideas promoted from
+        # Discovery are created without a phase) would otherwise vanish from the
+        # phase view entirely. Surface them in an "Unphased" group so the Gantt
+        # accounts for every board task, not just the phased ones.
+        phased_names = [f'Phase {i}' for i in range(1, board.num_phases + 1)]
+        unphased_tasks = tasks.exclude(phase__in=phased_names)
+        if unphased_tasks.exists():
+            unphased_starts = list(unphased_tasks.filter(
+                start_date__isnull=False
+            ).values_list('start_date', flat=True))
+            unphased_dues = list(unphased_tasks.filter(
+                due_date__isnull=False
+            ).values_list('due_date', flat=True))
+            unphased_dues_as_date = [d.date() if hasattr(d, 'date') else d for d in unphased_dues]
+            phases_data['Unphased'] = {
+                'start': min(unphased_starts).isoformat() if unphased_starts else None,
+                'end': max(unphased_dues_as_date).isoformat() if unphased_dues_as_date else None,
+                'task_count': unphased_tasks.count(),
+            }
+
         # Convert to JSON for JavaScript consumption
         phases_data_json = json.dumps(phases_data)
     else:
