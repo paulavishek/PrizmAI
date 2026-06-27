@@ -22,7 +22,10 @@ class BurndownPredictor:
     # Configuration constants
     DEFAULT_CONFIDENCE_LEVEL = 90  # 90% confidence interval
     MIN_VELOCITY_SAMPLES = 3  # Minimum samples for reliable prediction
-    VELOCITY_WINDOW_WEEKS = 8  # Look back 8 weeks for velocity calculation
+    # Look back 6 weeks for velocity. The demo anchors the project to start
+    # ~40 days (≈6 weeks) before today, so a 6-week lens fits the actual work
+    # span — an 8-week window left ~2 structurally-empty leading weeks.
+    VELOCITY_WINDOW_WEEKS = 6
     Z_SCORES = {
         90: 1.645,  # 90% confidence
         95: 1.96,   # 95% confidence
@@ -210,7 +213,7 @@ class BurndownPredictor:
         team_member_ids = [m.id for m in team_members]
         
         # Create/update snapshots for current week and previous weeks
-        for week_offset in range(0, 8):
+        for week_offset in range(0, self.VELOCITY_WINDOW_WEEKS):
             period_start = current_week_monday - timedelta(weeks=week_offset)
             period_end = current_week_sunday - timedelta(weeks=week_offset)
             
@@ -227,9 +230,13 @@ class BurndownPredictor:
             period_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
             period_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
             
-            # Calculate velocity for this period
+            # Calculate velocity for this period. Count only real tasks —
+            # milestones/epics completing in a week are not "throughput" and
+            # would otherwise inflate the velocity bars (scope metrics exclude
+            # them the same way).
             completed_tasks = Task.objects.filter(
                 column__board=board,
+                item_type='task',
                 completed_at__gte=period_start_dt,
                 completed_at__lte=period_end_dt
             )

@@ -8,7 +8,7 @@ organisation, owned by Priya Sharma, with:
   - 5 columns (Backlog / To Do / In Progress / In Review / Done)
   - 13 labels (3 Lean + 9 technical + 1 Epic marker)
   - 4 epic parent tasks   (item_type='epic', live in Backlog)
-  - 28 child tasks        (8 Done + 2 In Review + 4 In Progress + 6 To Do + 8 Backlog)
+  - 32 child tasks        (12 Done + 2 In Review + 4 In Progress + 6 To Do + 8 Backlog)
   - 3 milestones          (item_type='milestone' on the Gantt)
   - 4 stakeholders, 1 project budget, 28 task-cost rows, ~80 time entries
   - 4 AI coach suggestions, 1 Phase-1 retrospective
@@ -105,6 +105,7 @@ _WORK_TYPE = {
     # Done
     'D1': 'Chore', 'D2': 'Chore', 'D3': 'Chore', 'D4': 'Feature',
     'D5': 'Feature', 'D6': 'Feature', 'D7': 'Bug', 'D8': 'Feature',
+    'D9': 'Chore', 'D10': 'Chore', 'D11': 'Chore', 'D12': 'Chore',
     # In Review
     'R1': 'Feature', 'R2': 'Feature',
     # In Progress
@@ -602,14 +603,14 @@ class Command(BaseCommand):
         }
 
     # ------------------------------------------------------------------
-    # 28 child tasks
+    # 32 child tasks
     # ------------------------------------------------------------------
     def _create_child_tasks(self, epics, labels):
-        """Create the 28 child tasks across all columns. Returns code -> task."""
+        """Create the 32 child tasks across all columns. Returns code -> task."""
         col = self.columns
         out = {}
 
-        # ===================== DONE (8) =====================
+        # ===================== DONE (12) =====================
         out['D1'] = self._make_task(
             code='D1', title='Requirements Analysis & Planning',
             description=('Define functional and non-functional requirements for the platform. '
@@ -640,11 +641,11 @@ class Command(BaseCommand):
                          'tools (linting, formatting, pre-commit hooks), and document the onboarding '
                          'process for new developers.'),
             column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
-            priority='high', start_offset=-52, due_offset=-44, progress=100,
+            priority='high', start_offset=-52, due_offset=-40, progress=100,
             complexity=6, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_NVA, workload='high', collab=True,
             est_cost=2800, est_hours=32, hourly=87.5, actual_cost=2650,
-            assignee=self.elena, creator=self.priya, completed_offset=44,
+            assignee=self.elena, creator=self.priya, completed_offset=41,
             label_names=['DevOps', 'Value-Added'], labels=labels,
             checklist=[
                 ('Set up Docker Compose for local development', True),
@@ -664,11 +665,11 @@ class Command(BaseCommand):
                          'Cloud Run. Produce architecture decision records (ADRs) for all major '
                          'technology choices.'),
             column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
-            priority='urgent', start_offset=-48, due_offset=-40, progress=100,
+            priority='urgent', start_offset=-48, due_offset=-37, progress=100,
             complexity=9, risk_l='medium', risk_i='high', risk_level='high',
             lss=LSS_VA, workload='high', collab=True,
             est_cost=5600, est_hours=64, hourly=87.5, actual_cost=5950,
-            assignee=self.marcus, creator=self.priya, completed_offset=40,
+            assignee=self.marcus, creator=self.priya, completed_offset=38,
             label_names=['Backend', 'Documentation', 'Value-Added'], labels=labels,
             checklist=[
                 ('Design Django app structure and module boundaries', True),
@@ -688,13 +689,13 @@ class Command(BaseCommand):
                          'initial Django migrations, establish naming conventions, and document the '
                          'data model with field-level descriptions.'),
             column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['api'],
-            priority='high', start_offset=-39, due_offset=-33, progress=100,
+            priority='high', start_offset=-39, due_offset=-31, progress=100,
             complexity=7, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=3500, est_hours=40, hourly=87.5, actual_cost=3325,
-            # Delivered 4 days past its deadline (due_offset -33) so the On-Time
+            # Delivered 4 days past its deadline (due_offset -31) so the On-Time
             # vs Late analytics shows a realistic mix instead of 100% on-time.
-            assignee=self.fourth_member, creator=self.marcus, completed_offset=29,
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=27,
             label_names=['Database', 'Backend', 'Value-Added'], labels=labels,
             checklist=[
                 ('Create ER diagram for all core entities', True),
@@ -714,11 +715,11 @@ class Command(BaseCommand):
                          'queries, XSS sanitization with bleach, and brute-force protection with '
                          'django-axes.'),
             column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['auth'],
-            priority='urgent', start_offset=-38, due_offset=-28, progress=100,
+            priority='urgent', start_offset=-38, due_offset=-23, progress=100,
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='high', collab=True,
             est_cost=4200, est_hours=48, hourly=87.5, actual_cost=4050,
-            assignee=self.priya, creator=self.priya, completed_offset=28,
+            assignee=self.priya, creator=self.priya, completed_offset=24,
             label_names=['Security', 'Backend', 'Value-Added'], labels=labels,
             checklist=[
                 ('Implement JWT authentication middleware', True),
@@ -737,13 +738,13 @@ class Command(BaseCommand):
                          'API versioning under /api/v1/, token authentication setup, and standardized '
                          'response envelope format. This is the foundation all feature APIs will build on.'),
             column=col['Done'], phase=PHASE_CORE, parent=epics['api'],
-            priority='high', start_offset=-30, due_offset=-22, progress=100,
+            priority='high', start_offset=-30, due_offset=-24, progress=100,
             complexity=6, risk_l='low', risk_i='medium', risk_level='low',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=2800, est_hours=32, hourly=87.5, actual_cost=2650,
-            # Delivered 3 days past its deadline (due_offset -22) — second of two
+            # Delivered 3 days past its deadline (due_offset -24) — second of two
             # intentionally-late Done tasks feeding the On-Time vs Late chart.
-            assignee=self.fourth_member, creator=self.marcus, completed_offset=19,
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=21,
             label_names=['Backend', 'API', 'Value-Added'], labels=labels,
             checklist=[
                 ('Configure DRF router and URL patterns under /api/v1/', True),
@@ -765,7 +766,7 @@ class Command(BaseCommand):
             complexity=5, risk_l='low', risk_i='medium', risk_level='low',
             lss=LSS_VA, workload='medium', collab=False,
             est_cost=2400, est_hours=28, hourly=85, actual_cost=2380,
-            assignee=self.elena, creator=self.priya, completed_offset=16,
+            assignee=self.elena, creator=self.priya, completed_offset=19,
             label_names=['Testing', 'Security', 'Value-Added'], labels=labels,
             checklist=[
                 ('Write unit tests for JWT token generation and validation', True),
@@ -788,7 +789,7 @@ class Command(BaseCommand):
             complexity=8, risk_l='low', risk_i='high', risk_level='medium',
             lss=LSS_VA, workload='high', collab=True,
             est_cost=4800, est_hours=56, hourly=85, actual_cost=4650,
-            assignee=self.fourth_member, creator=self.priya, completed_offset=12,
+            assignee=self.fourth_member, creator=self.priya, completed_offset=18,
             label_names=['Security', 'Backend', 'Value-Added'], labels=labels,
             checklist=[
                 ('Implement django-rules permission predicates for all roles', True),
@@ -798,6 +799,101 @@ class Command(BaseCommand):
             comments=[
                 (self.fourth_member, 'RBAC implementation complete. All 4 roles tested across the hierarchy. django-rules predicates are clean and easy to extend. Every view now has @permission_required decorators.', 13),
                 (self.marcus, 'Security review passed. No privilege escalation paths found in testing.', 12),
+            ],
+        )
+
+        # D9-D12 fill out a steady delivery cadence (~2 tasks/week) across the
+        # velocity window so the Burndown "Velocity History" reads as a healthy,
+        # consistently-delivering team instead of a few sparse spikes. They are
+        # low-risk, on-time foundation/core chores. completed_offset values are
+        # spaced ~3-7 days apart; after the daily refresh's uniform shift they
+        # land evenly across the last ~6 weeks.
+        out['D9'] = self._make_task(
+            code='D9', title='Logging & Observability Setup',
+            description=('Stand up structured logging and observability for the platform: '
+                         'JSON log formatting, request correlation IDs, centralized log '
+                         'aggregation, error tracking via Sentry, and dashboards for latency, '
+                         'error rate, and Celery queue depth.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='medium', start_offset=-56, due_offset=-53, progress=100,
+            complexity=5, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='medium', collab=False,
+            est_cost=2600, est_hours=30, hourly=87.5, actual_cost=2520,
+            assignee=self.elena, creator=self.marcus, completed_offset=53,
+            label_names=['DevOps', 'Backend', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Configure JSON structured logging with correlation IDs', True),
+                ('Integrate Sentry error tracking', True),
+                ('Build latency / error-rate / queue-depth dashboards', True),
+            ],
+            comments=[
+                (self.elena, 'Observability stack is live. Correlation IDs make tracing a request across services trivial now. Sentry is catching issues before users report them.', 54),
+            ],
+        )
+        out['D10'] = self._make_task(
+            code='D10', title='CI Test Coverage Gates',
+            description=('Enforce automated quality gates in the CI pipeline: minimum 80% '
+                         'coverage threshold, fail-on-new-untested-code policy, parallel test '
+                         'execution to keep the pipeline under 5 minutes, and a coverage trend '
+                         'report posted to each pull request.'),
+            column=col['Done'], phase=PHASE_FOUNDATION, parent=epics['foundation'],
+            priority='medium', start_offset=-50, due_offset=-45, progress=100,
+            complexity=4, risk_l='low', risk_i='low', risk_level='low',
+            lss=LSS_NVA, workload='low', collab=False,
+            est_cost=1800, est_hours=20, hourly=90, actual_cost=1750,
+            assignee=self.elena, creator=self.priya, completed_offset=46,
+            label_names=['Testing', 'DevOps', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Add coverage gate (80% min) to CI pipeline', True),
+                ('Parallelize the test suite under 5 minutes', True),
+                ('Post coverage trend report to each PR', True),
+            ],
+            comments=[
+                (self.elena, 'Coverage gate is enforced. The suite runs in 4m20s with parallelization. PRs now get an automatic coverage delta comment.', 48),
+            ],
+        )
+        out['D11'] = self._make_task(
+            code='D11', title='API Reference Documentation',
+            description=('Auto-generate and publish interactive API reference documentation '
+                         'from the OpenAPI schema: drf-spectacular schema generation, a hosted '
+                         'Swagger UI / Redoc portal, request/response examples for every '
+                         'endpoint, and authentication walkthroughs for API consumers.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['api'],
+            priority='medium', start_offset=-37, due_offset=-34, progress=100,
+            complexity=5, risk_l='low', risk_i='low', risk_level='low',
+            lss=LSS_VA, workload='medium', collab=False,
+            est_cost=2200, est_hours=26, hourly=85, actual_cost=2150,
+            assignee=self.marcus, creator=self.priya, completed_offset=34,
+            label_names=['Documentation', 'API', 'Value-Added'], labels=labels,
+            checklist=[
+                ('Generate OpenAPI schema with drf-spectacular', True),
+                ('Publish hosted Swagger UI / Redoc portal', True),
+                ('Add request/response examples for every endpoint', True),
+            ],
+            comments=[
+                (self.marcus, 'API docs portal is live and auto-updates from the schema on every deploy. Examples for all endpoints are in. External integrators will love this.', 35),
+            ],
+        )
+        out['D12'] = self._make_task(
+            code='D12', title='Health Check & Readiness Probes',
+            description=('Implement liveness and readiness probe endpoints for Cloud Run: '
+                         'database connectivity check, Redis reachability, Celery worker '
+                         'heartbeat, and a dependency-aware readiness gate that keeps traffic '
+                         'off an instance until all downstream services are confirmed healthy.'),
+            column=col['Done'], phase=PHASE_CORE, parent=epics['api'],
+            priority='medium', start_offset=-34, due_offset=-31, progress=100,
+            complexity=4, risk_l='low', risk_i='medium', risk_level='low',
+            lss=LSS_NVA, workload='low', collab=False,
+            est_cost=1600, est_hours=18, hourly=87.5, actual_cost=1540,
+            assignee=self.fourth_member, creator=self.marcus, completed_offset=31,
+            label_names=['DevOps', 'API', 'Necessary NVA'], labels=labels,
+            checklist=[
+                ('Implement /healthz liveness probe', True),
+                ('Implement /readyz readiness gate with dependency checks', True),
+                ('Wire probes into the Cloud Run deployment config', True),
+            ],
+            comments=[
+                (self.fourth_member, 'Probes are wired into Cloud Run. Rolling deploys now wait for readiness before shifting traffic — zero-downtime deploys confirmed in staging.', 32),
             ],
         )
 
@@ -2606,7 +2702,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('DEMO DATA VERIFICATION REPORT'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(f'Board: {b.name}')
-        self.stdout.write(f'Total task rows: {tasks.count()}  (expected: 35 - 4 epics + 28 tasks + 3 milestones)')
+        self.stdout.write(f'Total task rows: {tasks.count()}  (expected: 40 - 4 epics + 32 tasks + 3 milestones + 1 sub-seeder task)')
         for c in b.columns.all().order_by('position'):
             self.stdout.write(
                 f'  {c.name:<14} {tasks.filter(column=c).count():>3}'
