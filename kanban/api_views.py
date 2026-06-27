@@ -644,41 +644,45 @@ def summarize_board_analytics_api(request, board_id):
         today = timezone.now().date()
         overdue_tasks = Task.objects.filter(
             column__board=board,
+            item_type='task',
+            due_date__isnull=False,
             due_date__date__lt=today
         ).exclude(progress=100)
-        
+
         upcoming_tasks = Task.objects.filter(
             column__board=board,
+            item_type='task',
+            due_date__isnull=False,
             due_date__date__gte=today,
             due_date__date__lte=today + timedelta(days=7)
         ).exclude(
             progress=100
         )
-        
+
         # Lean Six Sigma metrics
         value_added_count = Task.objects.filter(
-            column__board=board, 
-            labels__name='Value-Added', 
+            column__board=board,
+            labels__name='Value-Added',
             labels__category='lean'
         ).count()
-        
+
         necessary_nva_count = Task.objects.filter(
-            column__board=board, 
-            labels__name='Necessary NVA', 
+            column__board=board,
+            labels__name='Necessary NVA',
             labels__category='lean'
         ).count()
-        
+
         waste_count = Task.objects.filter(
-            column__board=board, 
-            labels__name='Waste/Eliminate', 
+            column__board=board,
+            labels__name='Waste/Eliminate',
             labels__category='lean'
         ).count()
-        
+
         total_categorized = value_added_count + necessary_nva_count + waste_count
         value_added_percentage = 0
         if total_categorized > 0:
             value_added_percentage = (value_added_count / total_categorized) * 100
-        
+
         # Task distribution by column
         columns = Column.objects.filter(board=board)
         tasks_by_column = []
@@ -742,17 +746,11 @@ def summarize_board_analytics_api(request, board_id):
             'project_type': board.project_type or 'general',
         }
 
-        # Augment with type-specific chart data so the AI can reference real numbers
-        if board.project_type:
-            from kanban.utils.analytics_helpers import get_promoted_chart_data
-            chart_data = get_promoted_chart_data(board)
-            analytics_data['cycle_time_data']        = chart_data.get('cycle_time_distribution', [])
-            analytics_data['weekly_completion_data'] = chart_data.get('weekly_completion', [])
-            analytics_data['label_type_data']        = chart_data.get('label_type_breakdown') or []
-            analytics_data['backlog_age_data']       = chart_data.get('backlog_age', [])
-            analytics_data['on_time_late_data']      = chart_data.get('on_time_vs_late') or []
-            analytics_data['stage_time_data']        = chart_data.get('stage_time', [])
-        
+        # Augment with type-specific chart series + headline card metrics so the
+        # AI references the same numbers shown on the analytics cards.
+        from kanban.utils.analytics_helpers import get_ai_summary_augmentation
+        analytics_data.update(get_ai_summary_augmentation(board))
+
         # Generate analytics summary
         summary = summarize_board_analytics(analytics_data)
         
@@ -833,30 +831,35 @@ def download_analytics_summary_pdf(request, board_id):
         from django.utils import timezone
         from datetime import timedelta
         
-        # Get all tasks for this board
-        all_tasks = Task.objects.filter(column__board=board)
+        # Get all tasks for this board (exclude milestones to match metric cards)
+        all_tasks = Task.objects.filter(column__board=board, item_type='task')
         total_tasks = all_tasks.count()
-        
+
         # Completed tasks
         completed_count = Task.objects.filter(
-            column__board=board, 
+            column__board=board,
+            item_type='task',
             progress=100
         ).count()
-        
+
         # Calculate productivity based on completion rate (completed tasks / total tasks)
         productivity = 0
         if total_tasks > 0:
             productivity = (completed_count / total_tasks) * 100
-        
+
         # Overdue and upcoming tasks
         today = timezone.now().date()
         overdue_tasks = Task.objects.filter(
             column__board=board,
+            item_type='task',
+            due_date__isnull=False,
             due_date__date__lt=today
         ).exclude(progress=100)
-        
+
         upcoming_tasks = Task.objects.filter(
             column__board=board,
+            item_type='task',
+            due_date__isnull=False,
             due_date__date__gte=today,
             due_date__date__lte=today + timedelta(days=7)
         ).exclude(
@@ -891,11 +894,11 @@ def download_analytics_summary_pdf(request, board_id):
         columns = Column.objects.filter(board=board)
         tasks_by_column = []
         for column in columns:
-            count = Task.objects.filter(column=column).count()
+            count = Task.objects.filter(column=column, item_type='task').count()
             tasks_by_column.append({'name': column.name, 'count': count})
-        
+
         # Task distribution by priority
-        priority_queryset = Task.objects.filter(column__board=board).values('priority').annotate(
+        priority_queryset = Task.objects.filter(column__board=board, item_type='task').values('priority').annotate(
             count=Count('id')
         ).order_by('priority')
         
@@ -906,18 +909,19 @@ def download_analytics_summary_pdf(request, board_id):
         
         # Task distribution by user
         user_queryset = Task.objects.filter(
-            column__board=board
+            column__board=board, item_type='task'
         ).values('assigned_to__username', 'assigned_to__first_name', 'assigned_to__last_name').annotate(
             count=Count('id')
         ).order_by('-count')
-        
+
         tasks_by_user = []
         for item in user_queryset:
             raw_username = item['assigned_to__username'] or 'Unassigned'
             full_name = f"{item.get('assigned_to__first_name', '')} {item.get('assigned_to__last_name', '')}".strip()
             display_name = full_name or raw_username
             user_tasks = Task.objects.filter(
-                column__board=board, 
+                column__board=board,
+                item_type='task',
                 assigned_to__username=raw_username
             )
             completed_by_user = user_tasks.filter(progress=100).count()
@@ -951,7 +955,12 @@ def download_analytics_summary_pdf(request, board_id):
             'board_name': board.name,
             'project_type': getattr(board, 'project_type', '') or 'general',
         }
-        
+
+        # Augment with type-specific chart series + headline card metrics so the
+        # AI references the same numbers shown on the analytics cards.
+        from kanban.utils.analytics_helpers import get_ai_summary_augmentation
+        analytics_data.update(get_ai_summary_augmentation(board))
+
         # Generate analytics summary using AI
         from kanban.utils.ai_utils import summarize_board_analytics
         summary = summarize_board_analytics(analytics_data)

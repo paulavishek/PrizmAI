@@ -448,6 +448,45 @@ def get_promoted_metrics(board, raw=False):
     return result
 
 
+def get_ai_summary_augmentation(board):
+    """Build the type-specific data block fed to the analytics AI summary.
+
+    Returns the per-type chart series (consumed by
+    ``summarize_board_analytics``'s supplemental block) plus a
+    ``promoted_metrics`` dict of the board's headline card values, so the AI
+    references the SAME numbers shown on the analytics cards (e.g. the
+    operations Process Completion / On-Time / Cycle-Time figures) instead of
+    falling back to the generic all-time productivity number.
+
+    Single source of truth for all three summary entry points: the async
+    streaming task, the synchronous endpoint, and the PDF download.
+    """
+    if not board.project_type:
+        return {}
+
+    chart = get_promoted_chart_data(board)
+    aug = {
+        'cycle_time_data':        chart.get('cycle_time_distribution', []),
+        'weekly_completion_data': chart.get('weekly_completion', []),
+        'label_type_data':        chart.get('label_type_breakdown') or [],
+        'backlog_age_data':       chart.get('backlog_age', []),
+        'on_time_late_data':      chart.get('on_time_vs_late') or [],
+        'stage_time_data':        chart.get('stage_time', []),
+    }
+
+    # Headline metrics that mirror the on-screen cards. Skip dict/list values
+    # (workload / phase breakdowns) — those are already covered by the Team and
+    # Columns lines of the prompt; we only want the scalar headline figures.
+    headline = {}
+    for key, value in get_promoted_metrics(board, raw=True).items():
+        if isinstance(value, (dict, list)):
+            continue
+        label = METRIC_CONFIG.get(key, {}).get('label', key.replace('_', ' ').title())
+        headline[label] = value
+    aug['promoted_metrics'] = headline
+    return aug
+
+
 # ---------------------------------------------------------------------------
 # Per-type chart data computation helpers
 # ---------------------------------------------------------------------------
