@@ -428,7 +428,7 @@
 
             <div class="metric-card">
                 <div class="metric-label">Average Velocity</div>
-                <div class="metric-value">{{ prediction.average_velocity }}</div>
+                <div class="metric-value">{{ prediction.average_velocity|floatformat:2 }}</div>
                 <div class="metric-subtext">tasks/week (used for prediction)</div>
             </div>
 
