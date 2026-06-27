@@ -264,10 +264,21 @@ class BurndownPredictor:
         snapshots = TeamVelocitySnapshot.objects.filter(
             board=board,
             period_end__gte=cutoff_date
-        ).order_by('-period_end')
-        
+        ).order_by('-period_end', '-id')
+
+        # Defence in depth: dedupe by week and cap to the look-back window so
+        # stray/overlapping snapshots can never dilute the velocity statistics.
+        # Snapshots are ordered newest-first; the first row seen for a given
+        # (period_start, period_end) wins. We then keep at most
+        # VELOCITY_WINDOW_WEEKS distinct weekly buckets.
         history = []
+        seen_periods = set()
         for snapshot in snapshots:
+            period_key = (snapshot.period_start, snapshot.period_end)
+            if period_key in seen_periods:
+                continue
+            seen_periods.add(period_key)
+
             history.append({
                 'id': snapshot.id,
                 'period_start': snapshot.period_start.isoformat(),
@@ -277,7 +288,10 @@ class BurndownPredictor:
                 'team_size': snapshot.active_team_members,
                 'quality_score': float(snapshot.quality_score),
             })
-        
+
+            if len(history) >= self.VELOCITY_WINDOW_WEEKS:
+                break
+
         return history
     
     def _calculate_velocity_statistics(self, velocity_history: List[Dict]) -> Dict:

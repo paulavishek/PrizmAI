@@ -79,6 +79,15 @@ class TeamVelocitySnapshot(models.Model):
             models.Index(fields=['board', '-period_end']),
             models.Index(fields=['period_start', 'period_end']),
         ]
+        constraints = [
+            # One snapshot per board per period. Prevents the duplicate /
+            # overlapping buckets that previously diluted velocity statistics
+            # (see _ensure_velocity_snapshots / demo date refresh).
+            models.UniqueConstraint(
+                fields=['board', 'period_start', 'period_end'],
+                name='uniq_velocity_board_period',
+            ),
+        ]
     
     def __str__(self):
         return f"{self.board.name} Velocity: {self.period_start} to {self.period_end} ({self.tasks_completed} tasks)"

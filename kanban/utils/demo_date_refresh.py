@@ -193,8 +193,10 @@ def refresh_all_demo_dates(skip_mark_cache=False):
             # 4. Refresh Retrospective dates
             stats['retrospectives_updated'] = _refresh_retrospective_dates(base_date)
 
-            # 5. Refresh Velocity Snapshot dates
-            stats['velocity_snapshots_updated'] = _refresh_velocity_snapshot_dates(base_date)
+            # 5. Refresh Velocity Snapshot dates (uses savepoint: deletes +
+            #    regenerates weekly snapshots, and the unique constraint can
+            #    raise IntegrityError on the legacy non-weekly path).
+            _safe(lambda: _refresh_velocity_snapshot_dates(base_date), 'velocity_snapshots_updated')
 
             # 6. Refresh Coaching Suggestion dates
             stats['coaching_suggestions_updated'] = _refresh_coaching_suggestion_dates(now)
@@ -748,32 +750,59 @@ def _refresh_retrospective_dates(base_date):
 
 
 def _refresh_velocity_snapshot_dates(base_date):
-    """Refresh velocity snapshot period dates."""
+    """Rebuild demo *weekly* velocity snapshots on the canonical ISO-week grid.
+
+    The legacy implementation re-dated every snapshot using ``snapshot.id % 24``,
+    which pushed weekly snapshots onto a non-ISO grid that never matched the
+    Monday-Sunday keys used by ``BurndownPredictor._ensure_velocity_snapshots``.
+    Because the predictor keys ``update_or_create`` on
+    ``(board, period_start, period_end)``, the mismatched dates meant it could
+    never update the existing rows — it created fresh ones every cycle, so demo
+    boards accumulated dozens of duplicate, overlapping snapshots. Combined with
+    ``id % 24`` collisions (ids 24 apart map to the same offset) this produced
+    2-3 exact-duplicate buckets per week and diluted average velocity toward 0.
+
+    Fix: let the predictor be the single source of truth for weekly velocity.
+    Drop the demo weekly snapshots and regenerate them — the predictor derives
+    ``tasks_completed`` from ``completed_at``, which ``_refresh_task_dates``
+    already keeps current, so velocity rides on the dominant date mechanism
+    instead of independently re-dating itself. Non-weekly snapshots (daily /
+    sprint / monthly), which aren't subject to this bug, keep the legacy
+    id-based re-dating.
+    """
     try:
         from kanban.burndown_models import TeamVelocitySnapshot
-        
-        demo_board_ids = _get_demo_board_ids()
-        snapshots = list(TeamVelocitySnapshot.objects.filter(
-            board_id__in=demo_board_ids
-        ))
-        
-        if not snapshots:
-            return 0
-        
-        snapshots_to_update = []
-        
-        for i, snapshot in enumerate(snapshots):
-            period_type = getattr(snapshot, 'period_type', 'weekly')
+        from kanban.utils.burndown_predictor import BurndownPredictor
+        from kanban.models import Board
 
-            # Spread snapshots across past periods using record ID so the
-            # ordering is stable regardless of how many total snapshots exist
-            # across all boards (no global-index dependency).
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        refreshed = 0
+
+        # --- Weekly: regenerate on the canonical Monday-Sunday grid ----------
+        predictor = BurndownPredictor()
+        for board in Board.objects.filter(id__in=demo_board_ids):
+            TeamVelocitySnapshot.objects.filter(
+                board=board, period_type='weekly'
+            ).delete()
+            predictor._ensure_velocity_snapshots(board)
+            refreshed += TeamVelocitySnapshot.objects.filter(
+                board=board, period_type='weekly'
+            ).count()
+
+        # --- Non-weekly: preserve legacy id-based re-dating ------------------
+        other_snapshots = list(TeamVelocitySnapshot.objects.filter(
+            board_id__in=demo_board_ids
+        ).exclude(period_type='weekly'))
+
+        snapshots_to_update = []
+        for snapshot in other_snapshots:
+            period_type = getattr(snapshot, 'period_type', 'weekly')
             if period_type == 'daily':
                 period_end_offset = -(snapshot.id % 28 + 1)
                 period_duration = 1
-            elif period_type == 'weekly':
-                period_end_offset = -(snapshot.id % 24 * 7 + 7)
-                period_duration = 7
             elif period_type == 'sprint':
                 period_end_offset = -(snapshot.id % 12 * 14 + 14)
                 period_duration = 14
@@ -786,11 +815,12 @@ def _refresh_velocity_snapshot_dates(base_date):
             snapshots_to_update.append(snapshot)
 
         if snapshots_to_update:
-            TeamVelocitySnapshot.objects.bulk_update(snapshots_to_update, 
-                                                     ['period_start', 'period_end'], batch_size=100)
-        
-        return len(snapshots_to_update)
-        
+            TeamVelocitySnapshot.objects.bulk_update(
+                snapshots_to_update, ['period_start', 'period_end'], batch_size=100)
+            refreshed += len(snapshots_to_update)
+
+        return refreshed
+
     except Exception as e:
         logger.warning(f"Error refreshing velocity snapshot dates: {e}")
         return 0
