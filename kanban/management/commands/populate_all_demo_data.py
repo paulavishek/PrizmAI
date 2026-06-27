@@ -1383,6 +1383,16 @@ class Command(BaseCommand):
             ('D1', 'D3'),
             ('D3', 'D4'),
             ('D3', 'D5'),
+            # DevOps chain: observability is stood up first, then the CI coverage
+            # gates build on it; the gates then feed the automated test suite.
+            ('D9', 'D10'),
+            ('D10', 'D7'),
+            # API design documents itself (architecture -> API reference docs).
+            ('D3', 'D11'),
+            # The readiness probe's DB-connectivity check depends on the schema,
+            # and the probes in turn gate the production deployment.
+            ('D4', 'D12'),
+            ('D12', 'B2'),
             # Security architecture feeds the auth-test suite and RBAC.
             ('D5', 'D7'),
             ('D5', 'D8'),
@@ -2717,7 +2727,7 @@ class Command(BaseCommand):
         )
 
         dep_count = sum(t.dependencies.count() for t in children)
-        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 26)')
+        self.stdout.write(f'Total dependency links: {dep_count}  (expected: 31)')
 
         for username in PERSONA_USERNAMES:
             ok = User.objects.filter(username=username).exists()
