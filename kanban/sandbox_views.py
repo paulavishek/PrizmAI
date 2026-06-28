@@ -1945,6 +1945,16 @@ def _clone_discovery_ideas_for_user(user):
                 ).first()
                 if match:
                     clone_promo.tasks.add(match)
+                    # Mirror the template promoted task's phase onto the user's
+                    # board copy. The sandbox board is duplicated BEFORE the
+                    # discovery seeder (re)creates the template ticket with its
+                    # phase, so the copy can carry a stale/empty phase — sync it
+                    # here so the promoted ticket isn't stranded in the Gantt's
+                    # "Unphased" row.
+                    tpl_task = tpl_promo.tasks.first()
+                    if tpl_task and match.phase != tpl_task.phase:
+                        match.phase = tpl_task.phase
+                        match.save(update_fields=['phase'])
 
 
 def _leave_demo_org(user):

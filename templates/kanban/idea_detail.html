@@ -191,13 +191,27 @@
                     {% csrf_token %}
                     <div class="mb-3">
                         <label for="boardSelect" class="fw-semibold" style="font-size:0.82rem;">Target Board <span class="text-danger">*</span></label>
-                        <select id="boardSelect" name="board_id" class="form-select form-select-sm mt-1" required>
+                        <select id="boardSelect" name="board_id" class="form-select form-select-sm mt-1" required onchange="onBoardChange()">
                             <option value="">— Select a board —</option>
                             {% for board in org_boards %}
-                            <option value="{{ board.id }}">{{ board.name }}</option>
+                            <option value="{{ board.id }}" data-num-phases="{{ board.num_phases }}">{{ board.name }}</option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">A new task will be created in the first column of this board.</div>
+                        <div class="form-text">A new task will be created on this board.</div>
+                    </div>
+                    <div class="mb-3 d-none" id="columnField">
+                        <label for="columnSelect" class="fw-semibold" style="font-size:0.82rem;">Target Column</label>
+                        <select id="columnSelect" name="column_id" class="form-select form-select-sm mt-1">
+                            <option value="">— First column (default) —</option>
+                        </select>
+                        <div class="form-text">Choose which column the new task starts in.</div>
+                    </div>
+                    <div class="mb-3 d-none" id="phaseField">
+                        <label for="phaseSelect" class="fw-semibold" style="font-size:0.82rem;">Phase</label>
+                        <select id="phaseSelect" name="phase" class="form-select form-select-sm mt-1">
+                            <option value="">— No phase (Unphased) —</option>
+                        </select>
+                        <div class="form-text">Place the task in a phase so it appears under that phase on the Gantt chart.</div>
                     </div>
                     <button type="submit" class="btn btn-success btn-sm" id="promoteBtn">
                         <i class="fas fa-arrow-up me-1"></i>Promote &amp; Create Task
@@ -347,6 +361,47 @@
 const IDEA_ID = {{ idea.pk }};
 const IDEA_IS_SCORED = {{ idea.is_scored|yesno:"true,false" }};
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+const BOARD_COLUMNS = {{ board_columns_json|default:"{}"|safe }};
+
+// Rebuild the phase dropdown whenever the target board changes. Boards with no
+// phases (num_phases == 0) hide the field entirely.
+function onBoardChange() {
+    const boardSel = document.getElementById('boardSelect');
+    const phaseField = document.getElementById('phaseField');
+    const phaseSel = document.getElementById('phaseSelect');
+    const opt = boardSel.options[boardSel.selectedIndex];
+
+    // Populate the target-column dropdown for the selected board.
+    const colField = document.getElementById('columnField');
+    const colSel = document.getElementById('columnSelect');
+    const cols = (boardSel.value && BOARD_COLUMNS[boardSel.value]) || [];
+    colSel.innerHTML = '<option value="">— First column (default) —</option>';
+    if (cols.length) {
+        cols.forEach(function(c) {
+            const o = document.createElement('option');
+            o.value = c[0];
+            o.textContent = c[1];
+            colSel.appendChild(o);
+        });
+        colField.classList.remove('d-none');
+    } else {
+        colField.classList.add('d-none');
+    }
+
+    const n = opt ? parseInt(opt.getAttribute('data-num-phases') || '0', 10) : 0;
+    phaseSel.innerHTML = '<option value="">— No phase (Unphased) —</option>';
+    if (n > 0) {
+        for (let i = 1; i <= n; i++) {
+            const o = document.createElement('option');
+            o.value = 'Phase ' + i;
+            o.textContent = 'Phase ' + i;
+            phaseSel.appendChild(o);
+        }
+        phaseField.classList.remove('d-none');
+    } else {
+        phaseField.classList.add('d-none');
+    }
+}
 
 function submitPromote(e) {
     e.preventDefault();
@@ -356,6 +411,8 @@ function submitPromote(e) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Promoting…';
     const fd = new FormData();
     fd.append('board_id', boardId);
+    fd.append('column_id', document.getElementById('columnSelect').value);
+    fd.append('phase', document.getElementById('phaseSelect').value);
     fd.append('csrfmiddlewaretoken', CSRF);
     fetch(`/discovery/${IDEA_ID}/promote/`, { method: 'POST', body: fd })
     .then(r => r.json())

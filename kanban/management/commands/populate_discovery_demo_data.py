@@ -332,17 +332,30 @@ class Command(BaseCommand):
         # "No task created yet" stub). Mirrors kanban.discovery_views.idea_promote.
         if software_board:
             import re
+            from datetime import datetime, time
             from kanban.models import Column, Task
-            _intake_names = re.compile(r'\b(to.?do|backlog|inbox|todo|open|new|ideas?|ready)\b', re.I)
             all_cols = list(Column.objects.filter(board=software_board).order_by('position'))
-            first_col = next((c for c in all_cols if _intake_names.search(c.name)), None) or (all_cols[0] if all_cols else None)
-            if first_col:
+            # Land the promoted ticket in "To Do" so it sits with its Phase 3
+            # siblings (the OAuth/notification tasks) rather than alone in
+            # Backlog — a Phase 3 ticket parked in Backlog looks unrealistic on
+            # the Gantt. Fall back to the usual intake column if there's no To Do.
+            _intake_names = re.compile(r'\b(to.?do|backlog|inbox|todo|open|new|ideas?|ready)\b', re.I)
+            target_col = (
+                next((c for c in all_cols if c.name.strip().lower() in ('to do', 'todo')), None)
+                or next((c for c in all_cols if _intake_names.search(c.name)), None)
+                or (all_cols[0] if all_cols else None)
+            )
+            if target_col:
                 pricing_task = Task.objects.create(
                     title=idea7.title,
                     description=f'Promoted from PrizmDiscovery.\n\n{idea7.description}',
-                    column=first_col,
+                    column=target_col,
                     created_by=alex,
-                    position=Task.objects.filter(column=first_col).count(),
+                    position=Task.objects.filter(column=target_col).count(),
+                    # Place in a real phase (board has num_phases=4) so the
+                    # promoted ticket joins Phase 3 on the Gantt instead of the
+                    # lone "Unphased" row. The clone path copies task.phase.
+                    phase='Phase 3',
                     # Mark as seed data: this task lives on the official demo
                     # board and must be copied into each sandbox + survive the
                     # purge's "user-created tasks on official boards" cleanup
@@ -360,6 +373,27 @@ class Command(BaseCommand):
                 ).first()
                 if feat_label:
                     pricing_task.labels.add(feat_label)
+
+                # Give the ticket a realistic Phase 3 timeline + a Gantt
+                # dependency so it isn't a floating, dateless bar. Regional
+                # pricing / local payment methods build on the payment-capable
+                # API gateway, so anchor it to start just after "API Gateway
+                # Configuration" finishes (matching the pattern where Phase 3
+                # tasks depend on a Phase 2 predecessor). Anchoring to a sibling's
+                # already-seeded dates keeps it inside the phase window and lets
+                # refresh_demo_dates shift it in lockstep with the rest of the board.
+                api_gw = Task.objects.filter(
+                    column__board=software_board, title='API Gateway Configuration'
+                ).first()
+                if api_gw and api_gw.start_date and api_gw.due_date:
+                    anchor = api_gw.due_date.date() if hasattr(api_gw.due_date, 'date') else api_gw.due_date
+                    pricing_task.start_date = anchor + timedelta(days=3)
+                    pricing_task.due_date = timezone.make_aware(
+                        datetime.combine(anchor + timedelta(days=17), time(12, 0))
+                    )
+                    pricing_task.save(update_fields=['start_date', 'due_date'])
+                    pricing_task.dependencies.add(api_gw)
+
                 # Backdate so the ticket isn't stamped with the seeder run time.
                 Task.objects.filter(pk=pricing_task.pk).update(
                     created_at=t_idea7 + timedelta(days=2),

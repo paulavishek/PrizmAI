@@ -218,12 +218,25 @@ def idea_detail(request, idea_id):
     if demo_mode:
         org_boards = Board.objects.filter(
             owner=request.user, is_sandbox_copy=True, is_archived=False
-        ).order_by('name').values('id', 'name')
+        ).order_by('name').values('id', 'name', 'num_phases')
     else:
         from kanban.utils.demo_protection import get_user_boards
         org_boards = get_user_boards(request.user).filter(
             is_archived=False
-        ).order_by('name').values('id', 'name')
+        ).order_by('name').values('id', 'name', 'num_phases')
+
+    # Columns per board for the promote form's "Target Column" dropdown, so the
+    # user can drop the new task straight into the right column (e.g. To Do)
+    # rather than always landing in the auto-detected intake column.
+    import json
+    from kanban.models import Column
+    org_boards = list(org_boards)
+    board_columns = {}
+    for col in (
+        Column.objects.filter(board_id__in=[b['id'] for b in org_boards])
+        .order_by('position').values('id', 'name', 'board_id')
+    ):
+        board_columns.setdefault(col['board_id'], []).append([col['id'], col['name']])
 
     return render(request, 'kanban/idea_detail.html', {
         'idea': idea,
@@ -234,6 +247,7 @@ def idea_detail(request, idea_id):
         'features': features,
         'org': org,
         'org_boards': org_boards,
+        'board_columns_json': json.dumps(board_columns),
     })
 
 
@@ -459,6 +473,16 @@ def idea_promote(request, idea_id):
             from kanban.utils.demo_protection import get_user_boards
             board = get_user_boards(request.user).filter(pk=board_id).first()
 
+    # Optional phase for the promoted task. Ignore anything outside the board's
+    # configured phase range so the task can't be put in a non-existent phase
+    # (empty/None falls back to Unphased, preserving the original behaviour).
+    phase = (request.POST.get('phase') or '').strip() or None
+    if phase and board:
+        import re as _re
+        m = _re.fullmatch(r'Phase (\d+)', phase)
+        if not (m and 1 <= int(m.group(1)) <= (board.num_phases or 0)):
+            phase = None
+
     # Idempotent — if a promotion already exists, just update it
     promotion, _ = IdeaPromotion.objects.get_or_create(
         idea=idea,
@@ -483,11 +507,17 @@ def idea_promote(request, idea_id):
         try:
             from kanban.models import Column, Task
             import re
-            # Try to find an intake column by common names; fall back to position=0
-            _intake_names = re.compile(r'\b(to.?do|backlog|inbox|todo|open|new|ideas?|ready)\b', re.I)
             all_cols = list(Column.objects.filter(board=board).order_by('position'))
-            first_col = next((c for c in all_cols if _intake_names.search(c.name)), None) or (all_cols[0] if all_cols else None)
-            if first_col:
+            # Honour an explicitly-chosen target column (must belong to this
+            # board); otherwise fall back to the auto-detected intake column.
+            target_col = None
+            column_id = (request.POST.get('column_id') or '').strip()
+            if column_id:
+                target_col = next((c for c in all_cols if str(c.pk) == column_id), None)
+            if target_col is None:
+                _intake_names = re.compile(r'\b(to.?do|backlog|inbox|todo|open|new|ideas?|ready)\b', re.I)
+                target_col = next((c for c in all_cols if _intake_names.search(c.name)), None) or (all_cols[0] if all_cols else None)
+            if target_col:
                 task = Task.objects.create(
                     title=idea.title,
                     description=(
@@ -495,9 +525,10 @@ def idea_promote(request, idea_id):
                         if idea.description
                         else 'Promoted from PrizmDiscovery.'
                     ),
-                    column=first_col,
+                    column=target_col,
                     created_by=request.user,
-                    position=Task.objects.filter(column=first_col).count(),
+                    position=Task.objects.filter(column=target_col).count(),
+                    phase=phase,
                 )
                 promotion.tasks.add(task)
         except Exception as e:

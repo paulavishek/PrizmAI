@@ -276,6 +276,19 @@ def _provision_sandbox(self, user_id, is_reset=False):
         _send_provision_error(user_id, 'No demo template boards found.')
         return {'status': 'error', 'message': 'No demo template boards found.'}
 
+    # Re-seed the canonical PrizmDiscovery template ideas on the shared template
+    # board BEFORE duplicating it. The promoted "Regional Pricing" ticket is
+    # (re)created here with its phase, Phase 3 dates and Gantt dependency, so
+    # duplicating the board AFTER this makes the user's copy carry all of it
+    # (_duplicate_board copies phase, dates and dependencies). The per-user idea
+    # clone itself runs further down, once the user's board copy exists.
+    try:
+        from django.core.management import call_command
+        with allow_demo_writes():
+            call_command('populate_discovery_demo_data')
+    except Exception as e:
+        logger.warning("Could not seed Discovery template ideas before board copy: %s", e)
+
     _send_provision_status(user_id, 'Copying demo boards…', 15)
 
     new_boards = []
@@ -369,6 +382,20 @@ def _provision_sandbox(self, user_id, is_reset=False):
                 refresh_single_board_dates(board.id)
     except Exception as e:
         logger.warning("Error refreshing sandbox board dates: %s", e)
+
+    # Clone the (already-seeded) PrizmDiscovery ideas into the user's private
+    # per-user set SYNCHRONOUSLY, before the redirect. This used to be deferred to
+    # _run_sandbox_extras on the default worker, which is starvation-prone right
+    # after a reset — so the user landed on an EMPTY Discovery inbox (the recurring
+    # "no ideas in the inbox" bug). It is small (~8 ideas) so it adds negligible
+    # time to the reset. The templates were seeded before the board copy above; the
+    # clone re-points each promotion to the user's own board copy + matching task.
+    try:
+        from kanban.sandbox_views import _clone_discovery_ideas_for_user
+        with allow_demo_writes():
+            _clone_discovery_ideas_for_user(user)
+    except Exception as e:
+        logger.warning("Could not clone Discovery demo ideas during provision: %s", e)
 
     # ── Essential work is done ────────────────────────────────────────────────
     # The sandbox boards now exist with the correct columns, tasks, assignments
@@ -494,17 +521,11 @@ def _run_sandbox_extras(user_id, board_ids):
     except Exception as e:
         logger.warning("Could not seed requirements after sandbox provision: %s", e)
 
-    # Seed the canonical PrizmDiscovery template ideas (idempotent), then clone
-    # them into a private per-user set. Discovery ideas are org-scoped, so this
-    # per-user clone is what makes the feature obey the sandbox isolation model
-    # (each demo user sees and mutates only their own copies).
-    try:
-        from django.core.management import call_command
-        from kanban.sandbox_views import _clone_discovery_ideas_for_user
-        call_command('populate_discovery_demo_data')
-        _clone_discovery_ideas_for_user(user)
-    except Exception as e:
-        logger.warning("Could not seed/clone Discovery demo ideas after sandbox provision: %s", e)
+    # NB: PrizmDiscovery ideas are now seeded + cloned SYNCHRONOUSLY in
+    # _provision_sandbox (before the redirect) so the inbox is never empty and the
+    # promoted ticket's phase is mirrored onto the user's board copy. Do not
+    # re-run it here — a second clear-and-clone on the default worker would just
+    # re-delete and recreate the user's clones for no benefit.
 
     # Seed automation hierarchy demo data: checklist items, parent/subtask
     # groups, and blocking dependency pair needed for T-22–T-29 test scenarios.
