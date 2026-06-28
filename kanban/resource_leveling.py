@@ -8,6 +8,7 @@ from django.db.models import Q, Avg, Count, Sum
 from datetime import timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
+import math
 
 from kanban.resource_leveling_models import (
     UserPerformanceProfile,
@@ -22,7 +23,12 @@ class ResourceLevelingService:
     """
     Main service for AI-powered resource leveling and optimization
     """
-    
+
+    # Suggestions below this confidence are treated as noise and not surfaced.
+    # Confidence floors out around 25–38 when there are no time logs / peer
+    # history, so anything under this threshold carries essentially no evidence.
+    MIN_DISPLAY_CONFIDENCE = 40.0
+
     def __init__(self, workspace=None, organization=None):
         # Workspace is the tenant scope now. ``organization`` is accepted but
         # ignored — kept only so legacy call sites don't break.
@@ -290,10 +296,24 @@ class ResourceLevelingService:
                         top_candidate, current_analysis, improvement
                     )
         elif top_candidate and not current_assignee:
-            # Unassigned task - recommend top candidate only if they're not already overloaded
-            if top_candidate['utilization'] <= 90:
+            # Unassigned task — recommend the best-scored candidate who is NOT already
+            # overloaded. Guard on ACTUAL utilization, not the projected
+            # `adjusted_utilization`: an earlier suggestion in the same generation run
+            # can move a task OFF an overloaded member, dropping their *projected* util
+            # to ~90 and slipping them past a projected-only gate — so the engine would
+            # hand a brand-new task to someone the modal is simultaneously flagging at
+            # 105%. Require both actual and projected utilization to be within range so
+            # we never pile new work onto an overloaded person.
+            eligible = next(
+                (c for c in candidates
+                 if c.get('actual_utilization', c['utilization']) <= 90
+                 and c['utilization'] <= 90),
+                None
+            )
+            if eligible:
+                result['top_recommendation'] = eligible
                 result['should_reassign'] = True
-                result['reasoning'] = self._generate_initial_assignment_reasoning(top_candidate)
+                result['reasoning'] = self._generate_initial_assignment_reasoning(eligible)
         
         return result
     
@@ -1027,6 +1047,28 @@ class ResourceLevelingService:
         # Positive delta = user gained tasks; negative = user lost tasks.
         projected_adjustments = {}
 
+        # Direction tracking to keep a batch COHERENT. Within one generation run a
+        # user must be either a giver (work moves OFF them) or a receiver (work moves
+        # ONTO them) — never both. Without this, a single "Accept All" could contain
+        # "Marcus → testuser1" AND "testuser1 → Marcus", churning tasks back and forth
+        # and leaving the team MORE imbalanced than before (observed: Accept-All pushed
+        # the overloaded member from 93% to 95% while the receiver fell back to 48%).
+        source_user_ids = set()   # users losing a task in this batch
+        target_user_ids = set()   # users gaining a task in this batch
+
+        def _would_contradict(suggested_user_id, current_assignee_id):
+            # Receiving while already giving (or vice versa) is the contradiction.
+            if suggested_user_id in source_user_ids:
+                return True
+            if current_assignee_id is not None and current_assignee_id in target_user_ids:
+                return True
+            return False
+
+        def _record_direction(suggested_user_id, current_assignee_id):
+            target_user_ids.add(suggested_user_id)
+            if current_assignee_id is not None:
+                source_user_ids.add(current_assignee_id)
+
         # Diversity penalty grows linearly per prior suggestion targeting a given
         # user. 20 points per hit is large enough to overcome the typical 20–25
         # point availability advantage a single low-utilization person enjoys
@@ -1054,11 +1096,21 @@ class ResourceLevelingService:
             )
             if suggestion:
                 suggested_user_id = suggestion.suggested_assignee.id
+                cur_assignee_id = suggestion.current_assignee.id if suggestion.current_assignee else None
+
+                # Reject moves that would make this batch self-contradictory (a user
+                # both giving and receiving). Drop the row so it can't be displayed
+                # or accepted, and move on to the next task.
+                if _would_contradict(suggested_user_id, cur_assignee_id):
+                    suggestion.delete()
+                    continue
+
                 current_count = suggestion_counts_per_user.get(suggested_user_id, 0)
 
                 # Only add suggestion if user hasn't reached the hard cap
                 if current_count < max_suggestions_per_user:
                     suggestions.append(suggestion)
+                    _record_direction(suggested_user_id, cur_assignee_id)
                     suggestion_counts_per_user[suggested_user_id] = current_count + 1
                     # Reflect the projected reassignment in the running state so the
                     # NEXT iteration sees workload as it would be after this move.
@@ -1095,6 +1147,12 @@ class ResourceLevelingService:
                                 continue  # Don't suggest keeping current assignee
                             if candidate['utilization'] > 90:
                                 continue  # Don't pile more work onto overloaded members
+                            # Same direction-coherence guard as the primary path.
+                            if _would_contradict(
+                                candidate['user_id'],
+                                current_assignee.id if current_assignee else None,
+                            ):
+                                continue
                             # Same safety guard as in analyze_task_assignment: don't fall
                             # back to a candidate who is meaningfully MORE loaded than the
                             # source, unless skill match is decisively better.
@@ -1116,6 +1174,10 @@ class ResourceLevelingService:
                             )
                             if alt_suggestion:
                                 suggestions.append(alt_suggestion)
+                                _record_direction(
+                                    candidate['user_id'],
+                                    current_assignee.id if current_assignee else None,
+                                )
                                 suggestion_counts_per_user[candidate['user_id']] = alt_count + 1
                                 projected_adjustments[candidate['user_id']] = (
                                     projected_adjustments.get(candidate['user_id'], 0) + 1
@@ -1127,13 +1189,38 @@ class ResourceLevelingService:
                                     )
                                 break  # Use first valid alternative
 
+        # Drop very-low-confidence suggestions. Below this floor a recommendation
+        # is essentially a guess (no time logs / no peer history pushes confidence
+        # down to its 25–38 floor), and surfacing it with a prominent Accept button
+        # invites the user to act on noise. When everything is filtered out, the
+        # view still surfaces the overloaded-members banner + capacity alert, so the
+        # imbalance is never hidden — only the unreliable per-task move is.
+        suggestions = [
+            s for s in suggestions if s.confidence_score >= self.MIN_DISPLAY_CONFIDENCE
+        ]
+
         # Sort by impact (time savings percentage * confidence)
         suggestions.sort(
             key=lambda s: s.time_savings_percentage * (s.confidence_score / 100),
             reverse=True
         )
 
-        return suggestions[:limit]
+        final = suggestions[:limit]
+
+        # CRITICAL: persistence must match what the user sees. Every create_suggestion
+        # call above persists a pending row, but we then drop some from the *returned*
+        # list — below the confidence floor, or beyond `limit`. "Accept All" acts on
+        # ALL pending rows for the board (see accept_all_suggestions), so any pending
+        # row we are NOT returning would be applied as a reassignment the user never
+        # saw. Expire those leftovers now so displayed == acceptable. (The per-user-cap
+        # path already deletes its own rejects; this catches the floor/limit drops.)
+        kept_ids = {s.id for s in final}
+        ResourceLevelingSuggestion.objects.filter(
+            task__column__board=board,
+            status='pending',
+        ).exclude(id__in=kept_ids).update(status='expired')
+
+        return final
     
     def optimize_board_workload(self, board, auto_apply=False):
         """
@@ -1245,13 +1332,29 @@ class ResourceLevelingService:
         avg_utilization = sum(member_utils) / len(member_utils) if member_utils else 0
         overloaded_count = len(report['bottlenecks'])
 
+        # Round HALF-UP (not Python's banker's rounding) so these numbers match the
+        # workload bars, which the frontend renders with JS Math.round (half-up). With
+        # plain round(), a member at 92.5% shows "93%" on the bar but "92%" in the
+        # capacity-alert text — the visible 92-vs-93 mismatch the user reported.
+        def _round_half_up(u):
+            return int(math.floor(u + 0.5))
+
         if member_utils:
-            max_util = max(member_utils)
-            min_util = min(member_utils)
+            # Round each member's utilization to whole points BEFORE deriving
+            # max/min/spread so the headline arithmetic visibly adds up. Using the
+            # raw .1-rounded values made the message read "max 105%, min 48% (58 pt
+            # spread)" — 105−48 is 57, not 58 — because the true min (47.5) rounds
+            # up for display but was used un-rounded in the subtraction.
+            rounded_utils = [_round_half_up(u) for u in member_utils]
+            max_util = max(rounded_utils)
+            min_util = min(rounded_utils)
             spread = max_util - min_util
             # Find the people behind the max/min so the message can name them.
-            max_member = next((m for m in report['members'] if m['utilization'] == max_util), None)
-            min_member = next((m for m in report['members'] if m['utilization'] == min_util), None)
+            # Match on the rounded utilization (members are sorted desc, so the
+            # first/last entries are the max/min) to stay consistent with the
+            # rounded max_util/min_util above.
+            max_member = next((m for m in report['members'] if _round_half_up(m['utilization']) == max_util), None)
+            min_member = next((m for m in report['members'] if _round_half_up(m['utilization']) == min_util), None)
         else:
             max_util = min_util = spread = 0
             max_member = min_member = None

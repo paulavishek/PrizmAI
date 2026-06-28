@@ -13,7 +13,7 @@
     <!-- Scoring methodology info banner -->
     <div id="ai-scoring-info" class="alert alert-light border small d-none mb-3" style="font-size:0.82rem;">
         <strong><i class="fas fa-brain"></i> AI Scoring Methodology</strong>
-        <p class="mb-2 mt-1">Each team member is scored on 5 factors for every task. The member with the highest overall score is recommended.</p>
+        <p class="mb-2 mt-1">Each team member is scored on 5 factors for every task, and the highest-scoring member is recommended. When someone is overloaded (&gt;90% capacity), relieving that bottleneck takes priority — so a less-loaded teammate may be suggested even if another would score marginally higher.</p>
         <table class="table table-sm table-borderless mb-2" style="font-size:0.8rem;">
             <thead><tr><th>Factor</th><th>Weight</th><th>What it measures</th></tr></thead>
             <tbody>
@@ -412,8 +412,16 @@ function displayWorkloadSummary(data) {
         const clone = template.content.cloneNode(true);
         
         clone.querySelector('.member-name').textContent = member.name;
-        clone.querySelector('.member-stats').textContent = 
-            `${member.active_tasks} tasks • ${member.workload_hours}h`;
+        // "load pts", not hours: this figure is the sum of each active task's
+        // complexity score (1–10), measured against a 40-point weekly capacity —
+        // it is NOT tracked time. Labelling it "h" implied real hours and made the
+        // per-task estimates look like literal multi-day efforts.
+        const memberStats = clone.querySelector('.member-stats');
+        memberStats.textContent =
+            `${member.active_tasks} tasks • ${member.workload_hours} load pts`;
+        memberStats.title =
+            'Load points = sum of active task complexity (1–10 each) vs a 40-point weekly capacity. ' +
+            'This is a relative effort estimate, not tracked hours.';
         
         const progressBar = clone.querySelector('.progress-bar');
         // Cap the visual bar at 100% but show actual percentage in text
@@ -506,6 +514,15 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     const suggestionsHeader = document.getElementById('suggestions-header');
     if (suggestionsHeader) suggestionsHeader.classList.add('d-none');
 
+    // Reset the Accept-All button — it persists across in-place refreshes (it lives
+    // in the static header, not the regenerated cards), so without this it would stay
+    // stuck in the disabled "Accepting…" spinner state after an Accept-All refresh.
+    const acceptAllBtn = document.getElementById('accept-all-btn');
+    if (acceptAllBtn) {
+        acceptAllBtn.disabled = false;
+        acceptAllBtn.innerHTML = '<i class="fas fa-check-double"></i> Accept All';
+    }
+
     if (suggestions.length === 0) {
         noSuggestions.classList.remove('d-none');
         const icon = document.getElementById('no-suggestions-icon');
@@ -534,7 +551,8 @@ function displaySuggestions(suggestions, insufficientData, overloadedMembers) {
     // card thinking it speeds the task up. Genuine time-savers come first
     // (sorted by confidence desc); pure workload-balance / speed-regression
     // suggestions follow under a clear divider.
-    const isBalanceOnly = (s) => s.is_speed_regression || s.time_savings === '0%';
+    const isBalanceOnly = (s) =>
+        s.is_workload_balance_only ?? (s.is_speed_regression || s.time_savings === '0%');
     const timeSavers = suggestions.filter(s => !isBalanceOnly(s)).sort((a, b) => b.confidence - a.confidence);
     const balanceOnly = suggestions.filter(isBalanceOnly).sort((a, b) => b.confidence - a.confidence);
     const orderedSuggestions = [...timeSavers, ...balanceOnly];
@@ -615,7 +633,11 @@ function renderSuggestionCard(suggestion, template, container) {
             clone.querySelector('.speed-regression-warning').classList.remove('d-none');
         }
         
-        // Time savings metric: show meaningful label instead of raw 0%
+        // Headline metric. A "% Time Savings" claim is only honest when the
+        // estimate is anchored by real time-tracking data. For workload-balance /
+        // limited-data suggestions the "% savings" is purely the context-switching
+        // model — the footer already tells the user these do NOT speed up the task —
+        // so we lead with the workload framing instead of a contradicting number.
         const timeSavingsEl = clone.querySelector('.time-savings');
         const timeSavingsLabel = clone.querySelector('.time-savings-label');
         if (suggestion.is_speed_regression) {
@@ -623,7 +645,7 @@ function renderSuggestionCard(suggestion, template, container) {
             timeSavingsEl.classList.add('text-warning');
             timeSavingsEl.style.fontSize = '1.1rem';
             timeSavingsLabel.textContent = 'Speed Impact';
-        } else if (suggestion.time_savings === '0%') {
+        } else if (suggestion.is_workload_balance_only) {
             timeSavingsEl.textContent = 'Workload';
             timeSavingsEl.classList.add('text-info');
             timeSavingsEl.style.fontSize = '1.1rem';
@@ -713,10 +735,14 @@ function acceptAllSuggestions() {
             container.innerHTML = `
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle"></i>
-                    ${data.accepted} task(s) reassigned successfully. Refreshing…
+                    ${data.accepted} task(s) reassigned successfully. Updating workload…
                 </div>
             `;
-            setTimeout(() => window.location.reload(), 1500);
+            // Refresh the modal IN PLACE (re-fetch workload + suggestions) rather than
+            // reloading the whole page. A full reload closed the modal and forced the
+            // user to re-open the feature — and was inconsistent with single-Accept,
+            // which already refreshes in place via reloadResourceOptimization().
+            setTimeout(() => reloadResourceOptimization(), 800);
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
             btn.disabled = false;

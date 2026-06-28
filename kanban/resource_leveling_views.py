@@ -318,6 +318,19 @@ def get_board_suggestions(request, board_id):
                 limited_data_flags.append('due_date')
             if 'No other team member has completed tasks' in reasoning_text:
                 limited_data_flags.append('peer_history')
+            # A suggestion only represents a *real* time saving when there is
+            # actual time-tracking data anchoring the per-person completion
+            # estimates. Without a time log, the displayed "% savings" is purely
+            # the context-switching model (1 + tasks×0.08) — i.e. "a less-busy
+            # person finishes sooner", not a measured speedup. Flag these (plus
+            # 0% and speed-regression cases) so the UI leads with the workload
+            # framing instead of a headline "16% Time Savings" the footer then
+            # contradicts with "these reassignments do NOT speed up the task".
+            is_workload_balance_only = (
+                'time_log' in limited_data_flags
+                or is_speed_regression
+                or s.time_savings_percentage == 0
+            )
             suggestion_list.append({
                 'id': s.id,
                 'task_id': s.task.id,
@@ -336,6 +349,7 @@ def get_board_suggestions(request, board_id):
                 'created_at': s.created_at.isoformat(),
                 'status': s.status,
                 'is_speed_regression': is_speed_regression,
+                'is_workload_balance_only': is_workload_balance_only,
                 'limited_data_flags': limited_data_flags,
             })
             total_savings += s.time_savings_hours
