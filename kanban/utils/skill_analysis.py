@@ -280,16 +280,98 @@ def _canonicalize_skill_name(name: str) -> str:
     return cleaned.strip(' ,;:')
 
 
+# Curated discipline alias map: normalized skill name -> canonical bucket key.
+#
+# WHY: The AI extracts *discipline* names from task titles ("Backend Development",
+# "Frontend Development", "Database Design") while team member profiles store
+# *specific technologies* ("Python", "React", "PostgreSQL"). Exact-name matching
+# can never bridge the two, so a fully capable team was reported as having ZERO
+# coverage for almost everything. Mapping BOTH the generic and the specific names
+# into the same canonical bucket lets coverage be detected correctly.
+#
+# Keys MUST already be canonicalized + lowercased (i.e. the output of
+# _canonicalize_skill_name(name).lower()) so the lookup is exact.
+#
+# DELIBERATELY UNMAPPED (so they remain genuine gaps): authentication,
+# authentication protocols, oauth, web security, cryptography, security
+# engineering — the demo team has no dedicated auth/security specialist, and the
+# feature should still surface that.
+_SKILL_ALIASES = {
+    # backend
+    'backend development': 'backend',
+    'backend framework': 'backend',
+    'backend api development': 'backend',
+    'python': 'backend',
+    'django': 'backend',
+    'flask': 'backend',
+    'node.js': 'backend',
+    'nodejs': 'backend',
+    'asynchronous programming': 'backend',
+    # api
+    'api integration': 'api',
+    'api design': 'api',
+    'api development': 'api',
+    'api gateway': 'api',
+    'rest apis': 'api',
+    'rest api': 'api',
+    'rest': 'api',
+    # frontend
+    'frontend development': 'frontend',
+    'frontend optimization': 'frontend',
+    'react': 'frontend',
+    'javascript': 'frontend',
+    'typescript': 'frontend',
+    'css': 'frontend',
+    'css / tailwind': 'frontend',
+    'html': 'frontend',
+    'ux design': 'frontend',
+    # database
+    'database design': 'database',
+    'database management': 'database',
+    'database migration': 'database',
+    'sql': 'database',
+    'postgresql': 'database',
+    'mysql': 'database',
+    'data access layer': 'database',
+    # devops / ci-cd
+    'ci/cd': 'devops',
+    'github actions': 'devops',
+    'infrastructure as code': 'devops',
+    'docker': 'devops',
+    'containerization': 'devops',
+    'docker / containers': 'devops',
+    'google cloud platform': 'devops',
+    'cloud computing': 'devops',
+    'kubernetes': 'devops',
+    'test automation': 'devops',
+}
+
+# Friendly display labels for canonical bucket keys (used as the gap's
+# skill_name when multiple aliases collapse into a single bucket).
+_CANONICAL_DISPLAY = {
+    'backend': 'Backend Development',
+    'api': 'API Development',
+    'frontend': 'Frontend Development',
+    'database': 'Database',
+    'devops': 'DevOps / CI-CD',
+}
+
+
 def _normalize_skill_name(name: str) -> str:
     """Normalize a skill name to a case-insensitive deduplication key.
 
-    Applies _canonicalize_skill_name first (strips parenthetical qualifiers)
-    then lowercases.  This ensures verbose AI-extracted names like:
+    Applies _canonicalize_skill_name first (strips parenthetical qualifiers),
+    then lowercases, then maps known aliases to a canonical discipline bucket
+    via _SKILL_ALIASES.  This ensures both verbose AI-extracted names like
         'Backend Framework (e.g., Node.js)'  and
         'Backend Framework (e.g., Django/Flask)'
-    both resolve to 'backend framework' and merge into one gap record.
+    collapse to one key, AND that generic task disciplines match the specific
+    technologies stored on team profiles:
+        'Backend Development' / 'Python' / 'Django'  -> 'backend'
+        'CI/CD' / 'CI/CD (GitHub Actions)'           -> 'devops'
     """
-    return _canonicalize_skill_name(name).lower()
+    base = _canonicalize_skill_name(name).lower()
+    return _SKILL_ALIASES.get(base, base)
 
 
 def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
@@ -407,9 +489,36 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         skill_inventory = team_profile['skill_inventory']
         team_size = team_profile.get('team_size', 1) or 1
 
-        # Build case-insensitive lookup to match AI-extracted skill names to team profile names.
-        # e.g. "Problem-Solving" (from task) matches "Problem Solving" (from team member profile)
-        skill_inventory_norm = {k.lower(): v for k, v in skill_inventory.items()}
+        # Build a normalized lookup to match AI-extracted skill names to team profile names.
+        # Both sides are routed through _normalize_skill_name so that:
+        #   - parenthetical qualifiers are stripped ("CI/CD (GitHub Actions)" -> "ci/cd" -> "devops")
+        #   - generic disciplines match specific technologies via the alias map
+        #     ("Python"/"Django" -> "backend", "React"/"JavaScript" -> "frontend")
+        # Multiple profile skills can collapse to the same canonical key, so we MERGE
+        # (sum level counts) and dedupe members by user_id — each member counts once per
+        # bucket at their highest level, otherwise coverage is inflated and real gaps hidden.
+        _level_rank = {'expert': 4, 'advanced': 3, 'intermediate': 2, 'beginner': 1}
+        skill_inventory_norm = {}
+        for raw_name, data in skill_inventory.items():
+            key = _normalize_skill_name(raw_name)
+            entry = skill_inventory_norm.setdefault(key, {
+                'expert': 0, 'advanced': 0, 'intermediate': 0, 'beginner': 0,
+                'members': [],
+            })
+            for member in data.get('members', []):
+                uid = member.get('user_id')
+                m_level = (member.get('level') or 'Intermediate').lower()
+                existing = next((m for m in entry['members'] if m.get('user_id') == uid), None)
+                if existing is None:
+                    entry['members'].append(dict(member))
+                elif _level_rank.get(m_level, 0) > _level_rank.get((existing.get('level') or '').lower(), 0):
+                    # Keep the member's highest level across collapsed skills
+                    existing['level'] = member.get('level')
+            # Recompute per-level counts from the deduped member list
+            for lvl in ('expert', 'advanced', 'intermediate', 'beginner'):
+                entry[lvl] = sum(
+                    1 for m in entry['members'] if (m.get('level') or '').lower() == lvl
+                )
 
         # Aggregate required skills from tasks (re-check since some may have been updated)
         required_skills = {}
@@ -465,9 +574,13 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                         skill_key = _normalize_skill_name(skill_name)
                         if skill_key not in required_skills:
                             required_skills[skill_key] = {
-                                # Use canonicalized (no parens) name for display so the UI
-                                # shows "Backend Framework" not "Backend Framework (e.g., …)"
-                                'display_name': _canonicalize_skill_name(skill_name),
+                                # Friendly label for canonical buckets (e.g. "backend" ->
+                                # "Backend Development"); otherwise the canonicalized
+                                # (no-parens) name so the UI shows "Backend Framework"
+                                # not "Backend Framework (e.g., …)".
+                                'display_name': _CANONICAL_DISPLAY.get(
+                                    skill_key, _canonicalize_skill_name(skill_name)
+                                ),
                                 'expert': 0,
                                 'advanced': 0,
                                 'intermediate': 0,
@@ -930,22 +1043,27 @@ def _calculate_skill_match(required_skills: List[Dict], member_skills: List[Dict
     total_required_weight = 0
     total_matched_weight = 0
     
-    # Build member skill lookup
+    # Build member skill lookup, keyed by the same canonical key used for gap
+    # detection so generic task disciplines match specific member technologies
+    # (e.g. task "Backend Development" matches member "Python"/"Django"). If
+    # several member skills collapse to one key, keep the highest weight.
     member_skill_map = {}
     for skill in member_skills:
-        skill_name = skill.get('name', '').strip().lower()
+        skill_name = _normalize_skill_name(skill.get('name', '').strip())
         skill_level = skill.get('level', 'Intermediate').lower()
-        member_skill_map[skill_name] = level_weights.get(skill_level, 2)
-    
+        weight = level_weights.get(skill_level, 2)
+        if weight > member_skill_map.get(skill_name, 0):
+            member_skill_map[skill_name] = weight
+
     # Check each required skill
     for req_skill in required_skills:
         skill_name = req_skill.get('name', '').strip()
         required_level = req_skill.get('level', 'Intermediate').lower()
         required_weight = level_weights.get(required_level, 2)
         total_required_weight += required_weight
-        
-        skill_name_lower = skill_name.lower()
-        
+
+        skill_name_lower = _normalize_skill_name(skill_name)
+
         if skill_name_lower in member_skill_map:
             member_weight = member_skill_map[skill_name_lower]
             
