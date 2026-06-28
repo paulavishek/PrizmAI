@@ -6364,15 +6364,33 @@ def board_status_report(request, board_id):
             high_risk = all_tasks.filter(risk_level__in=['high', 'critical']).count()
 
             # Budget status (optional)
+            budget_spent_pct = None
+            budget_vs_progress_note = None
             try:
                 from kanban.budget_models import ProjectBudget
                 budget = ProjectBudget.objects.filter(board=board).first()
                 if budget:
-                    utilization = round(budget.get_budget_utilization_percent(), 1)
+                    utilization = round(budget.get_budget_utilization_percent(), 1)  # spent %
+                    remaining_pct = round(100 - utilization, 1)
                     raw_status = budget.get_status()  # 'ok', 'warning', 'critical', 'over'
                     status_labels = {'ok': 'On Track', 'warning': 'Warning', 'critical': 'Critical', 'over': 'Over'}
                     status_label = status_labels.get(raw_status, raw_status.title())
-                    budget_status = f"{status_label} ({utilization}%)"
+                    spent = budget.get_spent_amount()
+                    allocated = budget.allocated_budget
+                    cur = budget.currency or ''
+                    # Explicit spent-vs-remaining so the AI cannot invert the figure.
+                    budget_status = (
+                        f"{status_label} — {utilization}% spent "
+                        f"({cur} {spent:,.0f} of {cur} {allocated:,.0f}), "
+                        f"{remaining_pct}% remaining"
+                    )
+                    budget_spent_pct = utilization
+                    # Flag spend running ahead of progress (>10pt gap) so RAG can weigh it.
+                    if utilization - completion_pct > 10:
+                        budget_vs_progress_note = (
+                            f"{utilization}% of budget spent at {completion_pct}% task "
+                            f"completion — spend is running ahead of progress"
+                        )
                 else:
                     budget_status = 'Not tracked'
             except Exception:
@@ -6395,6 +6413,8 @@ def board_status_report(request, board_id):
                 'velocity': velocity,
                 'high_risk_count': high_risk,
                 'budget_status': budget_status,
+                'budget_spent_pct': budget_spent_pct,
+                'budget_vs_progress_note': budget_vs_progress_note,
                 'tasks_by_column': tasks_by_column,
                 'report_date': today.strftime('%B %d, %Y'),
             }
