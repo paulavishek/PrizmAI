@@ -19,8 +19,9 @@ from accounts.models import Organization, UserProfile
 from kanban.models import (
     Board, Column, Task, TaskActivity, MeetingTranscript,
     ResourceDemandForecast, TeamCapacityAlert,
-    WorkloadDistributionRecommendation
+    WorkloadDistributionRecommendation, BoardMembership
 )
+from kanban.utils.skill_analysis import calculate_skill_gaps, _normalize_skill_name
 
 
 class TaskActivityTests(TestCase):
@@ -444,3 +445,81 @@ class WorkloadDistributionRecommendationTests(TestCase):
             alternative_assignees=alternatives
         )
         self.assertEqual(len(recommendation.alternative_assignees), 2)
+
+
+class SkillGapMatchingTests(TestCase):
+    """Skill-gap detection must match generic task disciplines to the specific
+    technologies stored on team-member profiles (and tolerate parenthetical
+    qualifiers). Regression coverage for the false "Critical – Cannot proceed"
+    gaps reported when a capable team's skills were named differently from the
+    skills the AI extracted from task titles.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='lead', email='lead@example.com', password='x'
+        )
+        self.board = Board.objects.create(name='SkillBoard', created_by=self.user)
+        self.column = Column.objects.create(name='To Do', board=self.board)
+        # One member who is a backend Expert and a DevOps/CI-CD Expert, using the
+        # specific-technology + parenthetical names that real profiles store.
+        UserProfile.objects.create(
+            user=self.user,
+            skills=[
+                {'name': 'Python', 'level': 'Expert'},
+                {'name': 'Django', 'level': 'Expert'},
+                {'name': 'CI/CD (GitHub Actions)', 'level': 'Expert'},
+            ],
+        )
+        BoardMembership.objects.create(board=self.board, user=self.user, role='owner')
+
+    def _make_task(self, title, skills):
+        return Task.objects.create(
+            title=title, column=self.column, created_by=self.user,
+            required_skills=skills,
+        )
+
+    def test_normalize_collapses_aliases_to_buckets(self):
+        """Generic disciplines and their specific technologies share one key."""
+        self.assertEqual(_normalize_skill_name('Backend Development'), 'backend')
+        self.assertEqual(_normalize_skill_name('Python'), 'backend')
+        self.assertEqual(_normalize_skill_name('Django'), 'backend')
+        # Parenthetical qualifiers are stripped before aliasing.
+        self.assertEqual(_normalize_skill_name('CI/CD'), 'devops')
+        self.assertEqual(_normalize_skill_name('CI/CD (GitHub Actions)'), 'devops')
+        # Unmapped specialties keep their own canonical key (remain genuine gaps).
+        self.assertEqual(_normalize_skill_name('OAuth'), 'oauth')
+
+    def test_covered_discipline_not_reported_as_zero_coverage(self):
+        """CI/CD tasks must not be a zero-coverage gap when a member is a
+        CI/CD Expert under the name 'CI/CD (GitHub Actions)'."""
+        # 2+ tasks needed to pass the frequency filter.
+        self._make_task('Set up CI pipeline', [{'name': 'CI/CD', 'level': 'Advanced'}])
+        self._make_task('Add deploy workflow', [{'name': 'CI/CD', 'level': 'Advanced'}])
+
+        gaps = calculate_skill_gaps(self.board)
+        zero_coverage = [g for g in gaps if not g.get('has_team_coverage')]
+        # No gap should claim the team has zero people for a covered discipline.
+        self.assertFalse(
+            any(g['available_count'] == 0 and g.get('severity') == 'critical'
+                and g['skill_name'] in ('DevOps / CI-CD', 'CI/CD')
+                for g in gaps),
+            f"CI/CD wrongly flagged as zero-coverage critical: {gaps}"
+        )
+        # And the covered backend discipline should show coverage too.
+        self._make_task('Build API a', [{'name': 'Backend Development', 'level': 'Advanced'}])
+        self._make_task('Build API b', [{'name': 'Python', 'level': 'Advanced'}])
+        gaps = calculate_skill_gaps(self.board)
+        backend = next((g for g in gaps if g['skill_name'] == 'Backend Development'), None)
+        if backend is not None:
+            self.assertTrue(backend['has_team_coverage'])
+            self.assertGreater(backend['available_count'], 0)
+
+    def test_genuinely_missing_skill_still_flagged(self):
+        """A skill no member has must still surface as a gap."""
+        self._make_task('OAuth login', [{'name': 'OAuth', 'level': 'Advanced'}])
+        self._make_task('OAuth refresh', [{'name': 'OAuth', 'level': 'Advanced'}])
+        gaps = calculate_skill_gaps(self.board)
+        oauth = next((g for g in gaps if g['skill_name'].lower() == 'oauth'), None)
+        self.assertIsNotNone(oauth, f"OAuth gap should be reported: {gaps}")
+        self.assertFalse(oauth['has_team_coverage'])
