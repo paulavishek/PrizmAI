@@ -5105,6 +5105,7 @@ def generate_status_report(report_data: Dict) -> Optional[Dict]:
         velocity = report_data.get('velocity', 'N/A')
         high_risk_count = report_data.get('high_risk_count', 0)
         budget_status = report_data.get('budget_status', 'N/A')
+        budget_vs_progress_note = report_data.get('budget_vs_progress_note')
         tasks_by_column = report_data.get('tasks_by_column', [])
         report_date = report_data.get('report_date', datetime.now().strftime('%B %d, %Y'))
 
@@ -5132,10 +5133,15 @@ Write a concise, professional stakeholder update for the project "{board_name}" 
 - Overdue tasks: {overdue}
 - Velocity: {velocity} tasks/week
 - High-risk tasks: {high_risk_count}
-- Budget status: {budget_status}
+- Budget status: {budget_status}{(chr(10) + "- Budget vs progress: " + budget_vs_progress_note) if budget_vs_progress_note else ""}
 - Column breakdown: {column_summary}
 
 ## Instructions
+IMPORTANT — Budget: The "Budget status" line already states spent vs remaining explicitly.
+Quote those figures verbatim; NEVER infer "remaining" from a single percentage, and do not
+flip spent and remaining. If budget spent materially exceeds completion % (see "Budget vs
+progress" when present), treat it as a risk in your RAG assessment rather than calling the
+budget "healthy".
 Return your response as a JSON object with these keys:
 
 {{
