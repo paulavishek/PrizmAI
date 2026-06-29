@@ -12,6 +12,7 @@ urlpatterns = [
     # Global organizational memory
     path('memory/', views.organizational_memory, name='organizational_memory'),
     path('memory/browse/', views.memory_browse, name='memory_browse'),
+    path('memory/<int:node_id>/detail/', views.memory_node_detail, name='memory_node_detail'),
     path('memory/search/', views.organizational_memory_search, name='organizational_memory_search'),
     path('memory/feedback/<int:query_id>/', views.memory_feedback, name='memory_feedback'),
 ]

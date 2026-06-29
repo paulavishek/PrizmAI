@@ -40,9 +40,10 @@ FEATURE_GUIDES = [
             '</p>'
         ),
     },
-    # NOTE: The 'knowledge_graph' guide was removed — the Project Knowledge page
-    # now ships an inline, graphical "How does it work?" guide (see
-    # templates/knowledge_graph/board_knowledge.html) instead of the text popover.
+    # NOTE: The 'knowledge_graph' guide was removed — the board Knowledge Base
+    # page was retired and consolidated into the Organizational Memory page
+    # (templates/knowledge_graph/organizational_memory.html), which carries its
+    # own inline guidance.
     {
         'feature_key': 'org_memory',
         'feature_name': 'Organizational Memory',

@@ -623,7 +623,7 @@
 <!-- Déjà Vu Banner (Knowledge Graph) — compact -->
 <div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-2 py-2" role="alert" style="display:none; font-size:.9rem;">
     <i class="fas fa-lightbulb me-1"></i><strong>Déjà Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
-    <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View &rarr;</a>
+    <a href="{% url 'organizational_memory' %}?project={{ board.id }}" class="alert-link ms-2">View &rarr;</a>
     <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close" style="padding:.5rem;"></button>
 </div>
 
@@ -1613,9 +1613,9 @@
                         <span class="tile-label">PrizmBrief <i class="fas fa-lock lock-badge"></i></span>
                     </span>
                     {% endif %}
-                    <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}" title="Your project's interconnected memory: decisions, lessons, risks & milestones">
+                    <a class="ai-panel-tile" href="{% url 'organizational_memory' %}?project={{ board.id }}" title="Organizational Memory: decisions, lessons, risks &amp; milestones — with AI-discovered connections">
                         <span class="tile-icon" style="color: #7F77DD;"><i class="fas fa-brain"></i></span>
-                        <span class="tile-label">Knowledge Base</span>
+                        <span class="tile-label">Memory</span>
                     </a>
                 </div>
             </div>
