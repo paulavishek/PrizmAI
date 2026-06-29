@@ -157,6 +157,7 @@ def refresh_all_demo_dates(skip_mark_cache=False):
         'chat_messages_updated': 0,
         'boards_deadline_updated': 0,
         'column_entered_at_updated': 0,
+        'memory_nodes_updated': 0,
     }
     
     now = timezone.now()
@@ -257,7 +258,11 @@ def refresh_all_demo_dates(skip_mark_cache=False):
 
             # 26. Refresh project_deadline on demo boards (always ~150 days ahead)
             stats['boards_deadline_updated'] = _refresh_board_deadlines(base_date)
-        
+
+            # 27. Refresh Organizational Memory (knowledge graph) node dates so
+            #     they track the tasks/events they describe instead of drifting.
+            _safe(lambda: _refresh_memory_node_dates(base_date), 'memory_nodes_updated')
+
         # Mark refresh as complete
         if not skip_mark_cache:
             mark_demo_dates_refreshed()
@@ -291,6 +296,62 @@ def _refresh_board_deadlines(base_date):
         return updated
     except Exception as e:
         logger.warning(f"_refresh_board_deadlines failed: {e}")
+        return 0
+
+
+# Newest seeded memory sits this many days before "today" — matches the seeder,
+# where the most recent auto-captured memory is created at past(7).
+MEMORY_ANCHOR_OFFSET = 7
+
+
+def _refresh_memory_node_dates(base_date):
+    """
+    Keep Organizational Memory (knowledge graph) node dates relative to "today",
+    the same way task dates are kept current.
+
+    Without this, MemoryNode.created_at values stay frozen at seed time while
+    every other demo entity (tasks, conflicts, AI sessions, ...) is shifted
+    forward on each daily refresh — so memory dates would slowly drift into the
+    past relative to the tasks and events they describe.
+
+    APPROACH: Offset-preserving uniform shift (same idea as _refresh_task_dates).
+    Per demo board, the newest memory is anchored to MEMORY_ANCHOR_OFFSET days
+    before today and every node is shifted by that single delta, so the relative
+    spacing between memories — and their alignment with the events narrated in
+    their content — is preserved.
+
+    created_at is auto_now_add, so we bypass it with an F() update.
+    """
+    try:
+        from knowledge_graph.models import MemoryNode
+        from django.db.models import Max, F
+        from datetime import timedelta
+
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        total = 0
+        for board_id in demo_board_ids:
+            newest = MemoryNode.objects.filter(board_id=board_id).aggregate(
+                newest=Max('created_at')
+            )['newest']
+            if not newest:
+                continue
+
+            target_newest = timezone.now() - timedelta(days=MEMORY_ANCHOR_OFFSET)
+            shift = target_newest - newest
+            # Skip churn when the board's memories are already current (e.g. right
+            # after Reset Demo, the seed dates are correct and shift is ~0).
+            if abs(shift) < timedelta(days=1):
+                continue
+
+            total += MemoryNode.objects.filter(board_id=board_id).update(
+                created_at=F('created_at') + shift
+            )
+        return total
+    except Exception as e:
+        logger.warning(f"_refresh_memory_node_dates failed: {e}")
         return 0
 
 

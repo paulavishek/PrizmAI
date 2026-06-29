@@ -570,7 +570,9 @@ Organizational Memory is only as valuable as the detail inside each entry. Auto-
 
 ### Logging a memory
 
-On the **Organizational Memory** page (`/memory/`), click **Log a Memory**. Pick the board, describe what happened in plain English, choose a type (Decision, Lesson Learned, Risk Event, Milestone, Note), and — as the board owner — optionally mark it **workspace-wide** so it's visible to everyone who collaborates in that board's workspace (anyone who owns the workspace or is a member of any board in it), not just members of this board. A clean title is derived automatically from the text. Manually logged memories can be edited or deleted by their creator, board overseers, or anyone in the demo sandbox.
+The **Organizational Memory** page (`/memory/`, left-nav **Memory**) is the single home for project memory. It replaces the former per-board "Knowledge Base" tab, which was a redundant second view over the same data; the old route `/boards/<id>/knowledge/` now redirects here, pre-filtered to that board.
+
+On the Memory page, click **Log a Memory**. Pick the board, describe what happened in plain English, choose a type (Decision, Lesson Learned, Risk Event, Milestone, Note), and — as the board owner — optionally mark it **workspace-wide** so it's visible to everyone who collaborates in that board's workspace (anyone who owns the workspace or is a member of any board in it), not just members of this board. A clean title is derived automatically from the text. Manually logged memories can be edited or deleted by their creator, board overseers, or anyone in the demo sandbox.
 
 ### Pre-save review — "Ask Spectra what's missing"
 
@@ -588,9 +590,13 @@ Editing a flagged memory re-runs Spectra against the new content: the badge clea
 
 Ask questions in natural language ("Have we migrated databases before? What went wrong?") and Spectra synthesises an answer from the memories you can access, citing its sources, with thumbs-up/down feedback that nudges memory rankings and seeds future answers. Results are cached per user for an hour, so reopening the same memory is instant and consistent. **Continue in Ask Spectra** hands the answer off to the full assistant as a structured "knowledge gaps" prompt for a deeper dive.
 
+### AI-Discovered Connections
+
+Memories don't stand alone — a decision *leads to* a lesson, a lesson *prevents* a future risk. Memories with such links show a **🔗 connections** badge on the recent-memory grid and in the Browse panel; clicking it opens a detail view with the full entry, its tags, and each AI-discovered connection (`led to` / `caused` / `similar to` / `prevented` / `repeated from`) with the reasoning behind it. This causal graph was previously only visible on the retired per-board Knowledge Base page and now lives on the Memory page for every memory you can access.
+
 ### Demo data
 
-The demo workspace pre-seeds a handful of prominent memories with realistic gap flags so the feature is visible immediately, without waiting for background analysis. It's seeded as part of the full demo (`populate_all_demo_data`) or standalone:
+The demo workspace pre-seeds a handful of prominent memories with realistic gap flags and AI-discovered connections so the feature is visible immediately, without waiting for background analysis. Auto-captured demo memories are dated to match the events they describe, and their dates are kept current by the daily demo date-refresh (so they never drift relative to the tasks they reference). It's seeded as part of the full demo (`populate_all_demo_data`) or standalone:
 
 ```bash
 python manage.py populate_knowledge_demo_data

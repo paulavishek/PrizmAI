@@ -20,6 +20,24 @@
 .recent-memory-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .browse-memory-card { transition: box-shadow 0.15s; }
 .browse-memory-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+/* AI-Discovered Connections (ported from the retired board knowledge page) */
+.kg-conn-item { background: #f8f9fa; border-radius: 6px; }
+.kg-conn-arrow { font-size: 1.1rem; color: #6c757d; }
+.conn-badge-led_to { background-color: #0d6efd !important; }
+.conn-badge-caused { background-color: #fd7e14 !important; }
+.conn-badge-similar_to { background-color: #6c757d !important; }
+.conn-badge-prevented { background-color: #198754 !important; }
+.conn-badge-repeated_from { background-color: #6f42c1 !important; }
+.modal-header.kg-modal-header { border-left: 5px solid #6c757d; border-radius: 0.375rem 0.375rem 0 0; }
+.modal-header.kg-modal-header.decision { border-left-color: #0d6efd; }
+.modal-header.kg-modal-header.manual_log { border-left-color: #20c997; }
+.modal-header.kg-modal-header.risk_event { border-left-color: #dc3545; }
+.modal-header.kg-modal-header.milestone { border-left-color: #0dcaf0; }
+.modal-header.kg-modal-header.conflict_resolution { border-left-color: #6f42c1; }
+.modal-header.kg-modal-header.scope_change { border-left-color: #fd7e14; }
+.modal-header.kg-modal-header.ai_recommendation { border-left-color: #667eea; }
+.modal-header.kg-modal-header.lesson { border-left-color: #198754; }
+.modal-header.kg-modal-header.outcome { border-left-color: #ffc107; }
 </style>
 {% endblock %}
 
@@ -126,6 +144,7 @@
                             {% endwith %}{% endwith %}
                             {% endif %}
                             {% if node.is_org_wide %}<span class="badge bg-info text-dark" style="font-size:0.6rem;" title="Visible to everyone who collaborates in this workspace"><i class="fas fa-globe me-1"></i>Workspace-wide</span>{% endif %}
+                            {% if node.connection_count %}<span class="badge bg-info text-dark memory-conn-badge" style="font-size:0.6rem;cursor:pointer;" tabindex="0" data-node-id="{{ node.pk }}" title="View AI-discovered connections"><i class="fas fa-link me-1"></i>{{ node.connection_count }}</span>{% endif %}
                             <small class="text-muted ms-auto">{{ node.created_at|date:"M d" }}</small>
                             {% if node.manageable %}
                             <span class="memory-card-actions ms-1">
@@ -220,6 +239,42 @@
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body" id="browsePanelBody" style="overflow-y:auto;"></div>
+</div>
+
+<!-- Memory Detail Modal (full content + AI-Discovered Connections) -->
+<div class="modal fade" id="memoryDetailModal" tabindex="-1" aria-labelledby="memoryDetailTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header kg-modal-header" id="memoryDetailHeader">
+                <div class="flex-grow-1 me-3">
+                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                        <span class="badge" id="memoryDetailTypeBadge"></span>
+                        <span id="memoryDetailAutoBadge" class="badge bg-success" style="display:none;"><i class="fas fa-robot me-1"></i>Auto-Captured</span>
+                        <span id="memoryDetailOrgBadge" class="badge bg-info text-dark" style="display:none;"><i class="fas fa-globe me-1"></i>Workspace-wide</span>
+                        <small class="text-muted" id="memoryDetailMeta"></small>
+                    </div>
+                    <h5 class="modal-title mb-0" id="memoryDetailTitle" style="line-height:1.4;"></h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="memoryDetailContent" class="text-body" style="white-space:pre-wrap;"></p>
+                <div id="memoryDetailTags" class="mb-2"></div>
+                <div id="memoryDetailBoard" class="text-muted small mb-2"></div>
+                <div id="memoryDetailConnSection" style="display:none;">
+                    <hr class="my-3">
+                    <h6 class="mb-3">
+                        <i class="fas fa-diagram-project me-2 text-info"></i>AI-Discovered Connections
+                        <span class="badge bg-info ms-1" id="memoryDetailConnCount"></span>
+                    </h6>
+                    <div id="memoryDetailConnList"></div>
+                </div>
+                <div id="memoryDetailLoading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Log a Memory Modal -->
@@ -551,11 +606,110 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Recent memory cards — click to pre-fill search and run it
     document.querySelectorAll('.recent-memory-card').forEach(card => {
-        card.addEventListener('click', function() {
+        card.addEventListener('click', function(e) {
+            // Let the connections badge open its own detail modal instead of
+            // running a search (its delegated handler bubbles after this one).
+            if (e.target.closest('.memory-conn-badge')) return;
             queryInput.value = cleanForSearch(this.dataset.title);
             queryInput.focus();
             doSearch();
         });
+    });
+
+    // ── AI-Discovered Connections detail modal (ported from board knowledge) ────
+    const CONN_LABELS = {
+        led_to:        { out: 'LED TO →',       in:  '← LED HERE BY' },
+        caused:        { out: 'CAUSED →',        in:  '← CAUSED BY'   },
+        similar_to:    { out: 'SIMILAR TO',      in:  'SIMILAR TO'    },
+        prevented:     { out: 'PREVENTED →',     in:  '← PREVENTED BY'},
+        repeated_from: { out: 'REPEATED FROM →', in:  '← REPEATED IN' },
+    };
+    const TYPE_COLORS = {
+        decision: 'primary', manual_log: 'success', risk_event: 'danger',
+        outcome: 'warning', milestone: 'info', conflict_resolution: 'purple',
+        scope_change: 'warning', ai_recommendation: 'secondary', lesson: 'success',
+    };
+    let memoryDetailModalInst = null;
+
+    function renderMemoryDetail(node) {
+        document.getElementById('memoryDetailHeader').className =
+            'modal-header kg-modal-header ' + (node.node_type || '');
+        const typeBadge = document.getElementById('memoryDetailTypeBadge');
+        typeBadge.className = 'badge bg-' + (TYPE_COLORS[node.node_type] || 'secondary');
+        typeBadge.textContent = node.node_type_display || '';
+        document.getElementById('memoryDetailAutoBadge').style.display = node.is_auto_captured ? 'inline-flex' : 'none';
+        document.getElementById('memoryDetailOrgBadge').style.display = node.is_org_wide ? 'inline-flex' : 'none';
+        const metaParts = [node.created_at];
+        if (node.created_by) metaParts.push('by ' + node.created_by);
+        document.getElementById('memoryDetailMeta').textContent = metaParts.filter(Boolean).join(' · ');
+        document.getElementById('memoryDetailTitle').textContent = node.title || '';
+        document.getElementById('memoryDetailContent').textContent = node.content || '';
+
+        const tagsEl = document.getElementById('memoryDetailTags');
+        if (node.tags && node.tags.length) {
+            tagsEl.innerHTML = node.tags.map(t =>
+                '<span class="badge bg-light text-dark border me-1 mb-1" style="font-size:0.8rem;">' + escapeHtml(t) + '</span>'
+            ).join('');
+            tagsEl.style.display = '';
+        } else { tagsEl.style.display = 'none'; }
+
+        const boardEl = document.getElementById('memoryDetailBoard');
+        boardEl.innerHTML = node.board_name
+            ? '<i class="fas fa-folder me-1 opacity-50"></i>' + escapeHtml(node.board_name) : '';
+
+        const conns = node.connections || [];
+        const connSection = document.getElementById('memoryDetailConnSection');
+        if (conns.length) {
+            document.getElementById('memoryDetailConnCount').textContent = conns.length;
+            document.getElementById('memoryDetailConnList').innerHTML = conns.map(conn => {
+                const labels = CONN_LABELS[conn.type] || { out: conn.type_display, in: conn.type_display };
+                const isOutgoing = conn.direction === 'outgoing';
+                const label = isOutgoing ? labels.out : labels.in;
+                const thisLabel = '<span class="text-muted fst-italic">This memory</span>';
+                const otherLabel = '<strong>' + escapeHtml(conn.other_title) + '</strong> <small class="text-muted">(' + escapeHtml(conn.other_type) + ')</small>';
+                const flow = isOutgoing
+                    ? thisLabel + ' &nbsp;<span class="kg-conn-arrow">→</span>&nbsp; ' + otherLabel
+                    : otherLabel + ' &nbsp;<span class="kg-conn-arrow">→</span>&nbsp; ' + thisLabel;
+                const aiPill = conn.ai_generated
+                    ? '<span class="badge bg-light text-secondary border" style="font-size:0.7rem;"><i class="fas fa-robot me-1"></i>AI discovered</span>' : '';
+                return '<div class="kg-conn-item p-3 mb-2 d-flex align-items-start gap-3">' +
+                    '<div class="pt-1"><span class="badge conn-badge-' + conn.type + ' text-white" style="font-size:0.72rem; min-width:110px; text-align:center;">' + escapeHtml(label) + '</span></div>' +
+                    '<div class="flex-grow-1"><div class="mb-1">' + flow + '</div>' +
+                    (conn.reason ? '<p class="mb-1 small text-muted fst-italic">&ldquo;' + escapeHtml(conn.reason) + '&rdquo;</p>' : '') +
+                    aiPill + '</div></div>';
+            }).join('');
+            connSection.style.display = '';
+        } else { connSection.style.display = 'none'; }
+    }
+
+    // Delegated so it also works for badges inside the dynamically-loaded browse
+    // panel. stopPropagation keeps the parent card from also running a search.
+    document.addEventListener('click', function(e) {
+        const badge = e.target.closest('.memory-conn-badge');
+        if (!badge) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const nodeId = badge.dataset.nodeId;
+        if (!nodeId) return;
+        if (!memoryDetailModalInst) {
+            memoryDetailModalInst = new bootstrap.Modal(document.getElementById('memoryDetailModal'));
+        }
+        ['memoryDetailContent', 'memoryDetailTitle'].forEach(id => document.getElementById(id).textContent = '');
+        document.getElementById('memoryDetailTags').innerHTML = '';
+        document.getElementById('memoryDetailBoard').innerHTML = '';
+        document.getElementById('memoryDetailConnSection').style.display = 'none';
+        document.getElementById('memoryDetailLoading').style.display = '';
+        memoryDetailModalInst.show();
+        fetch('/memory/' + nodeId + '/detail/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => { if (!r.ok) throw new Error('detail'); return r.json(); })
+            .then(node => {
+                document.getElementById('memoryDetailLoading').style.display = 'none';
+                renderMemoryDetail(node);
+            })
+            .catch(() => {
+                document.getElementById('memoryDetailLoading').style.display = 'none';
+                document.getElementById('memoryDetailContent').textContent = 'Could not load this memory.';
+            });
     });
 
     // ── "Gaps Noted" badges + popovers (Part 3C) ───────────────────────────────
@@ -737,6 +891,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const browseAllBtn = document.getElementById('browseAllBtn');
     if (browseAllBtn) browseAllBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
+
+    // Deep-link from the retired board Knowledge Base: /memory/?project=<id>
+    // opens the browse panel pre-filtered to that board.
+    const _projectParam = new URLSearchParams(window.location.search).get('project');
+    if (_projectParam) {
+        openBrowsePanel('newest', _projectParam);
+    }
 
     // ── Log a Memory (create / edit / delete) ──────────────────────────────────
     const logMemoryModalEl = document.getElementById('logMemoryModal');

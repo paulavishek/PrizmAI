@@ -249,60 +249,24 @@ def _can_manage_memory(request, node):
     return request.user.has_perm('prizmai.invite_board_member', node.board)
 
 
-# ── View 1: Board Knowledge Tab ─────────────────────────────────────────────
+def build_node_connections_map(node_ids):
+    """Per-node map of AI-discovered connections (incoming + outgoing).
 
-@login_required
-def board_knowledge(request, board_id):
-    """Knowledge page for a specific board — decisions, lessons, auto-captured memories."""
-    board = get_object_or_404(Board, id=board_id)
+    Shared by the board knowledge page and the Organizational Memory detail
+    endpoint so both render connections identically. Returns a dict keyed by
+    str(node_id) -> list of connection dicts.
+    """
+    id_set = set(node_ids)
+    if not id_set:
+        return {}
 
-    # RBAC: user must have view permission on the board
-    if not request.user.has_perm('prizmai.view_board', board):
-        from django.http import Http404
-        raise Http404
-
-    nodes = (
-        MemoryNode.objects
-        .filter(board=board)
-        .select_related('created_by')
-        .annotate(connection_count=Count('outgoing_connections') + Count('incoming_connections'))
-        .order_by('-importance_score', '-created_at')
-    )
-
-    manual_nodes = nodes.filter(is_auto_captured=False)
-    auto_nodes = nodes.filter(is_auto_captured=True)
-
-    # Serialize all node data + connections as JSON for the interactive detail modal
-    node_list = list(nodes)
-    all_node_ids = [n.pk for n in node_list]
-
-    nodes_data = {}
-    for node in node_list:
-        nodes_data[str(node.pk)] = {
-            'title': node.title,
-            'content': node.content,
-            'node_type': node.node_type,
-            'node_type_display': node.get_node_type_display(),
-            'tags': node.tags if isinstance(node.tags, list) else [],
-            'created_at': node.created_at.strftime('%b %d, %Y'),
-            'created_by': (
-                node.created_by.get_full_name() or node.created_by.username
-                if node.created_by else None
-            ),
-            'is_auto_captured': node.is_auto_captured,
-            'is_org_wide': node.is_org_wide,
-            'manageable': _can_manage_memory(request, node),
-            'importance_score': round(node.importance_score, 2),
-        }
-
-    # Build per-node connection map (both incoming and outgoing)
     connections_qs = MemoryConnection.objects.filter(
-        Q(from_node_id__in=all_node_ids) | Q(to_node_id__in=all_node_ids)
+        Q(from_node_id__in=id_set) | Q(to_node_id__in=id_set)
     ).select_related('from_node', 'to_node')
 
     node_connections_map = {}
     for conn in connections_qs:
-        if conn.from_node_id in all_node_ids:
+        if conn.from_node_id in id_set:
             node_connections_map.setdefault(str(conn.from_node_id), []).append({
                 'direction': 'outgoing',
                 'type': conn.connection_type,
@@ -312,7 +276,7 @@ def board_knowledge(request, board_id):
                 'other_type': conn.to_node.get_node_type_display(),
                 'ai_generated': conn.ai_generated,
             })
-        if conn.to_node_id in all_node_ids:
+        if conn.to_node_id in id_set:
             node_connections_map.setdefault(str(conn.to_node_id), []).append({
                 'direction': 'incoming',
                 'type': conn.connection_type,
@@ -322,19 +286,32 @@ def board_knowledge(request, board_id):
                 'other_type': conn.from_node.get_node_type_display(),
                 'ai_generated': conn.ai_generated,
             })
+    return node_connections_map
 
-    context = {
-        'board': board,
-        'manual_nodes': manual_nodes,
-        'auto_nodes': auto_nodes,
-        'auto_count': auto_nodes.count(),
-        'total_count': nodes.count(),
-        'nodes_data': nodes_data,
-        'node_connections_data': node_connections_map,
-        'manual_node_types': MANUAL_NODE_TYPES,
-        'can_mark_org_wide': request.user.has_perm('prizmai.invite_board_member', board),
-    }
-    return render(request, 'knowledge_graph/board_knowledge.html', context)
+
+# ── View 1: Board Knowledge Tab (retired → redirects to Memory) ──────────────
+
+@login_required
+def board_knowledge(request, board_id):
+    """Retired board-scoped knowledge page.
+
+    The board Knowledge Base was consolidated into the single Organizational
+    Memory page (left-nav "Memory"). This route now redirects there, pre-filtered
+    to the board, so existing links and bookmarks keep working. The board-only
+    feature it carried — AI-Discovered Connections — now lives on the Memory page
+    (see ``memory_node_detail`` and the detail modal in organizational_memory.html).
+    """
+    from django.shortcuts import redirect
+    from django.urls import reverse
+
+    board = get_object_or_404(Board, id=board_id)
+
+    # RBAC: user must have view permission on the board
+    if not request.user.has_perm('prizmai.view_board', board):
+        from django.http import Http404
+        raise Http404
+
+    return redirect(f"{reverse('organizational_memory')}?project={board.id}")
 
 
 # ── View 2: Add Manual Memory ───────────────────────────────────────────────
@@ -777,6 +754,7 @@ def organizational_memory(request):
     _raw_nodes = (
         accessible
         .select_related('board', 'created_by')
+        .annotate(connection_count=Count('outgoing_connections') + Count('incoming_connections'))
         .order_by('-created_at')[:30]
     )
     _seen_titles = set()
@@ -844,7 +822,11 @@ def organizational_memory(request):
 def memory_browse(request):
     """AJAX: return HTML partial for the browse-memories offcanvas panel."""
     board_ids = _get_user_boards(request.user)
-    base_qs = _accessible_memory_qs(request.user).select_related('board')
+    base_qs = (
+        _accessible_memory_qs(request.user)
+        .select_related('board')
+        .annotate(connection_count=Count('outgoing_connections') + Count('incoming_connections'))
+    )
 
     sort = request.GET.get('sort', 'newest')
     project_id = request.GET.get('project', '').strip()
@@ -895,6 +877,40 @@ def memory_browse(request):
         'cards_only': cards_only,
     }
     return render(request, 'knowledge_graph/_memory_browse_panel.html', context)
+
+
+# ── View 3c: Memory Node Detail (AJAX — full content + AI connections) ────────
+
+@login_required
+@require_GET
+def memory_node_detail(request, node_id):
+    """JSON detail for a single memory node, including its AI-discovered
+    connections. Powers the detail modal on the Organizational Memory page
+    (the connections view ported over from the retired board knowledge page).
+    Access is scoped to memories the user may see.
+    """
+    node = get_object_or_404(
+        _accessible_memory_qs(request.user).select_related('board', 'created_by'),
+        pk=node_id,
+    )
+    connections = build_node_connections_map([node.pk]).get(str(node.pk), [])
+    return JsonResponse({
+        'id': node.pk,
+        'title': node.title,
+        'content': node.content,
+        'node_type': node.node_type,
+        'node_type_display': node.get_node_type_display(),
+        'tags': node.tags if isinstance(node.tags, list) else [],
+        'created_at': node.created_at.strftime('%b %d, %Y'),
+        'created_by': (
+            node.created_by.get_full_name() or node.created_by.username
+            if node.created_by else None
+        ),
+        'is_auto_captured': node.is_auto_captured,
+        'is_org_wide': node.is_org_wide,
+        'board_name': node.board.name if node.board else None,
+        'connections': connections,
+    })
 
 
 # ── View 4: Organizational Memory Search (AJAX) ─────────────────────────────

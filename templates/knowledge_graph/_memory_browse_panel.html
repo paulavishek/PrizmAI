@@ -63,6 +63,7 @@
                   data-board-id="{{ node.board_id }}"{% endif %}><i class="fas fa-triangle-exclamation me-1"></i>Gaps Noted</span>
             {% endwith %}{% endwith %}
             {% endif %}
+            {% if node.connection_count %}<span class="badge bg-info text-dark memory-conn-badge" style="font-size:0.6rem;cursor:pointer;" tabindex="0" data-node-id="{{ node.pk }}" title="View AI-discovered connections"><i class="fas fa-link me-1"></i>{{ node.connection_count }}</span>{% endif %}
             <small class="text-muted ms-auto" style="white-space:nowrap;">{{ node.created_at|date:"M d, Y" }}</small>
         </div>
         <div class="fw-semibold small mb-1 browse-card-title" style="cursor:pointer;" data-title="{{ node.title }}">

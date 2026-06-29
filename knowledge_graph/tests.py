@@ -11,8 +11,8 @@ from django.test import TestCase
 
 from kanban.tests.test_tenant_isolation import _make_tenant
 from kanban.models import Board, Column, BoardMembership
-from knowledge_graph.models import MemoryNode
-from knowledge_graph.views import _accessible_memory_qs
+from knowledge_graph.models import MemoryNode, MemoryConnection
+from knowledge_graph.views import _accessible_memory_qs, build_node_connections_map
 
 
 class WorkspaceWideMemoryVisibilityTest(TestCase):
@@ -73,3 +73,50 @@ class WorkspaceWideMemoryVisibilityTest(TestCase):
         """Board-level sharing still works — B can open board_a2, so its memory
         is reachable via the board clause (no over-restriction)."""
         self.assertIn(self.mem_shared_board.id, self._ids(self.b))
+
+
+class BuildNodeConnectionsMapTest(TestCase):
+    """Guards the shared connection serializer that powers AI-Discovered
+    Connections — ported from the retired board knowledge page onto the
+    Organizational Memory detail endpoint (memory_node_detail)."""
+
+    def setUp(self):
+        self.t = _make_tenant('conn')
+        self.src = MemoryNode.objects.create(
+            board=self.t['board'], node_type='decision', title='Source',
+            content='from', created_by=self.t['user'],
+        )
+        self.dst = MemoryNode.objects.create(
+            board=self.t['board'], node_type='lesson', title='Target',
+            content='to', created_by=self.t['user'],
+        )
+        self.conn = MemoryConnection.objects.create(
+            from_node=self.src, to_node=self.dst, connection_type='led_to',
+            reason='because', ai_generated=True,
+        )
+
+    def test_outgoing_and_incoming_are_mirrored(self):
+        cmap = build_node_connections_map([self.src.pk, self.dst.pk])
+
+        out = cmap[str(self.src.pk)]
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]['direction'], 'outgoing')
+        self.assertEqual(out[0]['type'], 'led_to')
+        self.assertEqual(out[0]['other_title'], 'Target')
+        self.assertTrue(out[0]['ai_generated'])
+
+        inc = cmap[str(self.dst.pk)]
+        self.assertEqual(len(inc), 1)
+        self.assertEqual(inc[0]['direction'], 'incoming')
+        self.assertEqual(inc[0]['other_title'], 'Source')
+
+    def test_empty_input_returns_empty_map(self):
+        self.assertEqual(build_node_connections_map([]), {})
+
+    def test_unconnected_node_absent_from_map(self):
+        lonely = MemoryNode.objects.create(
+            board=self.t['board'], node_type='note', title='Lonely',
+            content='x', created_by=self.t['user'],
+        )
+        cmap = build_node_connections_map([lonely.pk])
+        self.assertNotIn(str(lonely.pk), cmap)

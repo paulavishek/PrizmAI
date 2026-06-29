@@ -13,7 +13,7 @@ Usage:
 This creates:
 - 10 Decision entries (manual, is_auto_captured=False)
 - 10 Lesson / General Note entries (manual, is_auto_captured=False)
-- 8 Auto-captured system entries (risk events, milestones, scope changes, etc.)
+- 9 Auto-captured system entries (risk events, milestones, scope changes, etc.)
 - 6 AI-discovered MemoryConnections linking related nodes causally
 """
 from django.core.management.base import BaseCommand
@@ -474,7 +474,9 @@ class Command(BaseCommand):
                     'due_date': 'Apr 17',
                     'blocker': 'Authentication System dependency',
                 },
-                'created_at': past(9),
+                # Captured the day after the Apr 17 due date tipped overdue, so the
+                # display date matches the event narrated in the content/context_data.
+                'created_at': past(72),
             },
             {
                 'node_type': 'risk_event',
@@ -523,7 +525,7 @@ class Command(BaseCommand):
                 'title': 'Milestone: Authentication System moved to Done',
                 'content': (
                     'The Authentication System (SD-10304) was successfully completed and '
-                    'moved to the Done column on Apr 10. This unblocked three downstream '
+                    'moved to the Done column on Apr 25. This unblocked three downstream '
                     'tasks: User Registration Flow, File Upload System, and the '
                     'Notification Service. Milestone automatically captured as all '
                     'acceptance criteria were verified.'
@@ -533,10 +535,13 @@ class Command(BaseCommand):
                 'context_data': {
                     'task_title': 'Authentication System',
                     'task_ref': 'SD-10304',
-                    'completed_date': 'Apr 10',
+                    'completed_date': 'Apr 25',
                     'unblocked': ['User Registration Flow', 'File Upload System', 'Notification Service'],
                 },
-                'created_at': past(16),
+                # Auth merged Apr 25 — after the User Registration Flow's Apr 17 due date,
+                # which is precisely why that task missed its deadline ("Auth not yet merged").
+                # Display date matches the Apr 25 completion narrated above.
+                'created_at': past(65),
             },
             # --- Conflict Resolutions ---
             {
@@ -608,9 +613,10 @@ class Command(BaseCommand):
                 'content': (
                     'Confidence in the Sprint 3 Core Delivery commitment dropped to 52%, '
                     'falling below the 60% negotiation threshold. The primary drivers were: '
-                    'the Database Schema & Migrations task remaining unassigned for 5 days, '
-                    'the User Registration Flow running 3 days overdue, and a velocity shortfall '
-                    'of 1.8 tasks/week against the required 3.0. '
+                    'the Notification Service slipping its deadline for a third consecutive '
+                    'sprint, a velocity shortfall of 1.8 tasks/week against the required 3.0, '
+                    'and an AI-flagged test-coverage gap in the authentication module raising '
+                    'rework risk. '
                     'AI drafted a renegotiation package with three scope options: (1) defer the '
                     'Notification Service to v2 and retain the original deadline, (2) extend the '
                     'deadline by 10 days with the current scope, or (3) add a fourth team member '
