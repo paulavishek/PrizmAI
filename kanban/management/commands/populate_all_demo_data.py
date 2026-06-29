@@ -192,6 +192,9 @@ class Command(BaseCommand):
                 self._create_priority_decisions(tasks_by_code)
                 self._create_wiki_pages()
                 self._create_velocity_snapshots()
+                # Run last: reads the final board task count so the ROI history's
+                # total_tasks matches every other budget surface (33, not 32/36).
+                self._create_roi_snapshots()
 
             # Always run — idempotent via get_or_create
             self._create_custom_fields()
@@ -515,12 +518,18 @@ class Command(BaseCommand):
         created_dt = _aware_due(self.TODAY + timedelta(days=min(start_offset, 0)))
         Task.objects.filter(pk=task.pk).update(created_at=created_dt)
 
+        # actual_cost is the DIRECT (non-labor) cost only — labor is derived
+        # separately from logged time × hourly_rate in TaskCost.get_total_actual_cost().
+        # The per-task `actual_cost` figures passed in here were ~labor-sized, so
+        # writing them to this field double-counted labor (every task showed ~+100%
+        # overrun and "Spent" disagreed with the cost breakdown). Demo tasks have no
+        # separate materials cost, so this is 0; real actual spend comes from time entries.
         TaskCost.objects.create(
             task=task,
             estimated_cost=Decimal(str(est_cost)),
             estimated_hours=Decimal(str(est_hours)),
             hourly_rate=Decimal(str(hourly)),
-            actual_cost=Decimal(str(actual_cost)),
+            actual_cost=Decimal('0.00'),
         )
 
         if labels is not None:
@@ -1552,6 +1561,61 @@ class Command(BaseCommand):
         weights = [random.uniform(0.7, 1.3) for _ in range(n)]
         s = sum(weights)
         return [max(0.25, round(total * w / s, 2)) for w in weights]
+
+    def _create_roi_snapshots(self, n=10):
+        """Seed a chronological ROI history (clear-and-replace).
+
+        Snapshots are created oldest-first so id-ascending == chronological, which
+        is the ordering `demo_date_refresh._refresh_roi_snapshot_dates` relies on
+        (it dates by id and assumes value/completion increase with id). Completion,
+        realized value and cost all RISE over time toward the project's current
+        state, so the ROI History/Trend tells a coherent forward story (the legacy
+        data was reversed — completion fell to 0 at the latest snapshot).
+        """
+        from kanban.budget_models import ProjectROI, ProjectBudget
+        from kanban.budget_utils import BudgetAnalyzer
+
+        ProjectROI.objects.filter(board=self.board).delete()
+
+        budget = ProjectBudget.objects.filter(board=self.board).first()
+        allocated = budget.allocated_budget if budget else Decimal('85000.00')
+
+        tasks = BudgetAnalyzer.get_board_tasks(self.board)
+        total_tasks = tasks.count()
+        current_completed = tasks.filter(progress=100).count()
+        current_cost = budget.get_spent_amount() if budget else Decimal('0.00')
+
+        # End state of the series (the latest snapshot = "now").
+        expected_value = Decimal('150000.00')
+        current_realized = Decimal('60000.00')  # 40% of expected delivered so far
+
+        created = 0
+        for i in range(n):
+            frac = Decimal(i + 1) / Decimal(n)          # 0.1 .. 1.0
+            completed = max(1, round(current_completed * float(frac)))
+            if i == n - 1:
+                completed = current_completed           # latest == real state
+            realized = (current_realized * frac).quantize(Decimal('0.01'))
+            total_cost = (current_cost * frac).quantize(Decimal('0.01'))
+            roi_pct = (((realized - allocated) / allocated) * 100).quantize(Decimal('0.01')) \
+                if allocated > 0 else None
+            snap = ProjectROI.objects.create(
+                board=self.board,
+                expected_value=expected_value,
+                realized_value=realized,
+                total_cost=total_cost,
+                roi_percentage=roi_pct,
+                completed_tasks=completed,
+                total_tasks=total_tasks,
+                snapshot_date=self.NOW - timedelta(days=(n - 1 - i) * 7),
+                created_by=self.priya,
+            )
+            ProjectROI.objects.filter(pk=snap.pk).update(
+                created_at=self.NOW - timedelta(days=(n - 1 - i) * 7)
+            )
+            created += 1
+
+        self.stdout.write(f'  [OK] ROI history: {created} chronological snapshots.')
 
     # ------------------------------------------------------------------
     # Stakeholders

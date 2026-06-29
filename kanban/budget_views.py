@@ -79,10 +79,12 @@ def budget_dashboard(request, board_id):
             status='pending'
         ).order_by('-priority', '-created_at')[:5]
     
-    # Get recent time entries
+    # Get recent time entries — order by work_date first so the list reads
+    # chronologically. (Seeded demo entries share a created_at, so ordering by
+    # created_at alone shows work dates jumbled out of order.)
     recent_entries = TimeEntry.objects.filter(
         task__column__board=board
-    ).select_related('user', 'task').order_by('-created_at')[:10]
+    ).select_related('user', 'task').order_by('-work_date', '-created_at')[:10]
     
     context = {
         'board': board,

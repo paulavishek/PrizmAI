@@ -399,6 +399,22 @@ class Command(BaseCommand):
                     created_at=t_idea7 + timedelta(days=2),
                 )
 
+                # Give the promoted ticket a cost record like every other task on
+                # the board (a fresh To Do ticket → estimate only, no actuals yet).
+                # Without this it's the one task missing a TaskCost, so the budget
+                # "Cost Breakdown" count and the board's task count disagree (32 vs 33).
+                from decimal import Decimal
+                from kanban.budget_models import TaskCost
+                TaskCost.objects.get_or_create(
+                    task=pricing_task,
+                    defaults={
+                        'estimated_cost': Decimal('3000.00'),
+                        'estimated_hours': Decimal('34.00'),
+                        'hourly_rate': Decimal('88.00'),
+                        'actual_cost': Decimal('0.00'),
+                    },
+                )
+
         # ── Idea 8: Update FAQ & Help Centre copy (new, unscored) ───────
         # Intentionally left unscored so demo users can experience clicking
         # "Score with Spectra" themselves and see the AI analysis in action.
