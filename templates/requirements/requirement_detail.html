@@ -495,7 +495,7 @@ function runAiImpactAnalysis() {
         var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
             '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
             '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
-            (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count || 0) + ' goal(s)</span></div>';
+            (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count ?? 0) + ' goal(s)</span></div>';
         if (d.impact_summary) {
             html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
         }
@@ -583,7 +583,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var html = '<div class="d-flex align-items-center gap-3 mb-2">' +
                 '<span class="fw-bold">Risk Level:</span> ' + _riskBadge(d.risk_level) +
                 '<span class="small text-muted ms-2">' + (d.linked_tasks_count||0) + ' task(s), ' +
-                (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count || 0) + ' goal(s)</span></div>';
+                (d.children_count||0) + ' child req(s), ' + (d.goals_count ?? d.objectives_count ?? 0) + ' goal(s)</span></div>';
             if (d.impact_summary) {
                 html += '<p class="small mb-2">' + _esc(d.impact_summary) + '</p>';
             }

@@ -70,3 +70,28 @@ def sanitize_html_safe(html_content):
     template rendering without auto-escaping.
     """
     return mark_safe(sanitize_html(html_content))
+
+
+# Characters that spreadsheet apps (Excel, Google Sheets, LibreOffice) treat as
+# the start of a formula. A cell beginning with one of these is interpreted and
+# either shows a #NAME?/#REF? error or, worse, executes a formula injection
+# payload. See OWASP "CSV Injection".
+_CSV_FORMULA_TRIGGERS = ('=', '+', '-', '@', '\t', '\r')
+
+
+def csv_safe_cell(value):
+    """
+    Make a single value safe to write into a CSV that may be opened in a
+    spreadsheet, neutralising CSV/formula injection.
+
+    If the stringified value starts with a formula-trigger character it is
+    prefixed with a single quote ``'`` — the standard mitigation, which
+    spreadsheets render as plain text (the apostrophe is hidden in Excel and
+    Google Sheets). Empty/None values pass through unchanged.
+    """
+    if value is None:
+        return ''
+    text = str(value)
+    if text and text[0] in _CSV_FORMULA_TRIGGERS:
+        return "'" + text
+    return text
