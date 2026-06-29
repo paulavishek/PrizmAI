@@ -1584,6 +1584,30 @@ def _duplicate_board(template_board, user):
     except Exception:
         pass
 
+    # --- Project Confidence score history (Triple Constraint → 30-Day Trend) ---
+    # Without this, sandbox boards have zero history and the trend chart shows
+    # "Not enough data yet" until the user recalculates twice. computed_at is
+    # auto_now_add, so preserve the original timestamp with a follow-up update.
+    try:
+        from kanban.project_signals_models import ProjectConfidenceScore
+        for sc in ProjectConfidenceScore.objects.filter(board=template_board):
+            new_sc = ProjectConfidenceScore.objects.create(
+                board=new_board,
+                scope_score=sc.scope_score,
+                budget_score=sc.budget_score,
+                schedule_score=sc.schedule_score,
+                signal_adjustment=sc.signal_adjustment,
+                composite_score=sc.composite_score,
+                trend=sc.trend,
+                previous_score=sc.previous_score,
+                computation_data=sc.computation_data,
+            )
+            ProjectConfidenceScore.objects.filter(pk=new_sc.pk).update(
+                computed_at=sc.computed_at,
+            )
+    except Exception:
+        pass
+
     # --- Exit Protocol: Health Signals + Cemetery Entry + HospiceSession + Organs ---
     try:
         from exit_protocol.models import (

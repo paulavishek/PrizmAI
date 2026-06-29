@@ -167,6 +167,7 @@ class Command(BaseCommand):
             existing_tasks = Task.objects.filter(
                 column__board=self.board, is_seed_demo_data=True,
             ).count()
+            did_full_seed = False
             if existing_tasks > 0 and not self.reset:
                 self.stdout.write(self.style.WARNING(
                     f'  Board already has {existing_tasks} seed tasks. '
@@ -176,6 +177,7 @@ class Command(BaseCommand):
                 self._create_labels(self.board)
             else:
                 # Core seed sequence
+                did_full_seed = True
                 labels = self._create_labels(self.board)
                 epics = self._create_epics(labels)
                 tasks_by_code = self._create_child_tasks(epics, labels)
@@ -184,7 +186,6 @@ class Command(BaseCommand):
                 self._create_budget_and_time(tasks_by_code, epics)
                 self._create_stakeholders(tasks_by_code)
                 self._create_scope_baseline()
-                self._create_scope_autopsy()
                 self._create_retrospective()
                 self._create_chat_rooms()
                 self._create_coaching_suggestions(tasks_by_code)
@@ -192,6 +193,7 @@ class Command(BaseCommand):
                 self._create_priority_decisions(tasks_by_code)
                 self._create_wiki_pages()
                 self._create_velocity_snapshots()
+                self._create_confidence_history()
                 # Run last: reads the final board task count so the ROI history's
                 # total_tasks matches every other budget surface (33, not 32/36).
                 self._create_roi_snapshots()
@@ -201,6 +203,13 @@ class Command(BaseCommand):
 
         # Optional sub-seeders (best-effort, outside the transaction)
         self._call_optional_subseeders()
+
+        # Run AFTER the sub-seeders: populate_discovery_demo_data promotes the
+        # "Regional Pricing Tiers for APAC" idea onto the board (the 33rd task).
+        # The autopsy reads the final board task count, so it must run last —
+        # otherwise it captures 28->32 and permanently misses the promoted task.
+        if did_full_seed:
+            self._create_scope_autopsy()
 
         self._print_verification_report()
 
@@ -1726,13 +1735,15 @@ class Command(BaseCommand):
             current_task_count = Task.objects.filter(
                 column__board=self.board, item_type='task',
             ).count()
-            # Story: project started with 24 tasks, grew to current count
-            # (typically 28) over the project lifecycle. All four additions
-            # are documented, so the AI verdict is "well-managed scope".
-            baseline_count = max(1, current_task_count - 4)
-            growth_pct = round(
-                ((current_task_count - baseline_count) / baseline_count) * 100, 1
-            )
+            # Story: project started at a baseline and grew to the current count
+            # over the lifecycle. Every addition below is documented, so the AI
+            # verdict is "well-managed scope". The baseline is derived from the
+            # event list (current - documented additions) rather than a magic
+            # number so it stays correct no matter how many events we seed —
+            # this is what keeps the autopsy in sync with the Discovery-promoted
+            # "Regional Pricing" task that lands after the core board seed.
+            # (baseline_count / growth_pct are computed below, once
+            # events_payload is built.)
 
             kickoff = self.NOW - timedelta(days=56)
             baseline_date = kickoff + timedelta(hours=24)
@@ -1815,7 +1826,39 @@ class Command(BaseCommand):
                         'launch than scramble post-launch.'
                     ),
                 },
+                {
+                    # Promoted from PrizmDiscovery by the discovery sub-seeder
+                    # (populate_discovery_demo_data) AFTER the core board seed —
+                    # this is the 33rd task that the autopsy historically missed.
+                    # created_at on the promoted ticket is now - 9d6h, so anchor
+                    # the event ~9 days ago to match the timeline.
+                    'days_ago': 9,
+                    'title': 'Regional Pricing Tiers for APAC promoted from Discovery',
+                    'description': (
+                        'Market-specific pricing plans for South-East Asia and Japan, '
+                        'promoted from PrizmDiscovery after stakeholder review. USD-only '
+                        'pricing was identified as a conversion barrier in APAC; the idea '
+                        'was approved and promoted to a delivery ticket in Phase 3.'
+                    ),
+                    'source_type': 'task_added',
+                    'tasks_added': 1,
+                    'delay_days': 3,
+                    'budget_impact': Decimal('3000.00'),
+                    'added_by': self.marcus,
+                    'reason': 'stakeholder_request',
+                    'reason_note': (
+                        'Promoted from PrizmDiscovery — approved as a market-expansion '
+                        'requirement for APAC; scoped into Phase 3 with stakeholder sign-off.'
+                    ),
+                },
             ]
+
+            # Baseline = current count minus all documented additions. With the
+            # five events above this resolves to 28 -> 33 (+17.9%).
+            baseline_count = max(1, current_task_count - sum(e['tasks_added'] for e in events_payload))
+            growth_pct = round(
+                ((current_task_count - baseline_count) / baseline_count) * 100, 1
+            )
 
             total_delay = sum(e['delay_days'] for e in events_payload)
             total_budget = sum(e['budget_impact'] for e in events_payload)
@@ -1823,20 +1866,22 @@ class Command(BaseCommand):
             ai_summary = (
                 f'The Software Development project grew from {baseline_count} tasks at '
                 f'kickoff to {current_task_count} tasks today — a {growth_pct}% expansion '
-                f'over roughly 8 weeks. All four scope additions were recorded with a '
+                f'over roughly 8 weeks. All five scope additions were recorded with a '
                 'documented reason, putting this project well below the 25%+ undocumented '
-                'growth typical of comparable engineering programs. Two of the four '
-                'additions (Rate Limiting, Error Tracking) addressed real risks discovered '
-                'during execution; the other two (Auth Test Suite, Accessibility) were '
-                'planning gaps surfaced in week-1 security review and stakeholder '
-                'alignment.'
+                'growth typical of comparable engineering programs. Two additions (Rate '
+                'Limiting, Error Tracking) addressed real risks discovered during execution; '
+                'two more (Auth Test Suite, Accessibility) were planning gaps surfaced in '
+                'week-1 security review and stakeholder alignment; the most recent — Regional '
+                'Pricing Tiers for APAC — was a market-expansion idea promoted from '
+                'PrizmDiscovery with stakeholder sign-off.'
             )
             pattern_analysis = (
                 'Scope growth was front-loaded and event-driven rather than chaotic — three '
-                'of four additions came during Phase 1 security/quality reviews, which is '
-                'the *right* time to absorb new requirements. The remaining Phase 2 addition '
-                '(observability) was a coach-suggested gap closure. There is no evidence of '
-                'gold-plating or stakeholder churn.'
+                'of five additions came during Phase 1 security/quality reviews, which is '
+                'the *right* time to absorb new requirements. A later Phase 2 addition '
+                '(observability) was a coach-suggested gap closure, and the final Phase 3 '
+                'addition (regional pricing) was a deliberate, stakeholder-approved Discovery '
+                'promotion. There is no evidence of gold-plating or stakeholder churn.'
             )
             recommendations = [
                 {
@@ -1962,6 +2007,9 @@ class Command(BaseCommand):
                 ('Error Tracking',
                  events_payload[3]['reason'], events_payload[3]['reason_note'],
                  events_payload[3]['added_by']),
+                ('Regional Pricing',
+                 events_payload[4]['reason'], events_payload[4]['reason_note'],
+                 events_payload[4]['added_by']),
             ]
             for keyword, reason, note, recorder in reason_targets:
                 t = Task.objects.filter(
@@ -1988,6 +2036,105 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(
                 f'  [WARN] Could not seed scope autopsy: {e}'
+            ))
+
+    # ------------------------------------------------------------------
+    # Project Confidence history (Triple Constraint → 30-Day Trend)
+    # ------------------------------------------------------------------
+    def _create_confidence_history(self):
+        """
+        Seed ~16 daily ProjectConfidenceScore rows so the "30-Day Confidence
+        Trend" chart renders out of the box. Without this, a fresh demo has zero
+        history and the chart shows "Not enough data yet" until the user clicks
+        Recalculate twice.
+
+        The arc tells a coherent story: confidence drifts down from ~86 to ~66
+        as scope-growth signals accumulate (mirroring the live composite the
+        user sees today — scope ~92, budget 100, schedule 70, with a negative
+        signal adjustment from the recent task additions). Budget stays healthy
+        throughout; the dip is driven by schedule pressure + scope signals.
+
+        Deterministic (no randomness) so the demo is reproducible. computed_at
+        is auto_now_add, so each row is backdated with a follow-up .update().
+        """
+        try:
+            from kanban.project_signals_models import ProjectConfidenceScore
+
+            # Idempotent clear-and-replace for this board.
+            ProjectConfidenceScore.objects.filter(board=self.board).delete()
+
+            # Weights mirror ProjectConfidenceService (scope .30 / budget .30 /
+            # schedule .40) so seeded composites are consistent with live ones.
+            W_SCOPE, W_BUDGET, W_SCHEDULE = 0.30, 0.30, 0.40
+
+            num_points = 16  # one per day, ending yesterday (today is the live recalc slot)
+            prev_composite = None
+            seeded = 0
+
+            for i in range(num_points):
+                days_ago = num_points - i  # 16 .. 1
+                frac = i / (num_points - 1)  # 0.0 -> 1.0
+
+                # Scope drifts 96 -> 92 (additions chip away at stability).
+                scope_score = round(96.0 - 4.0 * frac, 1)
+                # Budget stays healthy (well under the 70% utilisation knee).
+                budget_score = 100.0
+                # Schedule dips mid-history (crunch around the security review)
+                # then settles at 70. Small deterministic bowl shape.
+                schedule_score = round(74.0 - 6.0 * (1 - abs(0.5 - frac) * 2) - 0.0, 1)
+                # Signal adjustment grows more negative as scope-growth signals
+                # accumulate: ~-2 early -> ~-19 now (lands composite near 66).
+                signal_adjustment = round(-2.0 - 17.0 * frac, 1)
+
+                raw = (
+                    scope_score * W_SCOPE
+                    + budget_score * W_BUDGET
+                    + schedule_score * W_SCHEDULE
+                    + signal_adjustment
+                )
+                composite_score = round(max(0.0, min(100.0, raw)), 1)
+
+                if prev_composite is None:
+                    trend = 'stable'
+                else:
+                    delta = composite_score - prev_composite
+                    trend = 'improving' if delta > 3 else ('declining' if delta < -3 else 'stable')
+
+                computation_data = {
+                    'scope_score': scope_score,
+                    'budget_score': budget_score,
+                    'schedule_score': schedule_score,
+                    'signal_adjustment': signal_adjustment,
+                    'weights': {'scope': W_SCOPE, 'budget': W_BUDGET, 'schedule': W_SCHEDULE},
+                    'recent_signal_count': max(0, int(round(2 + 10 * frac))),
+                }
+
+                score = ProjectConfidenceScore.objects.create(
+                    board=self.board,
+                    scope_score=scope_score,
+                    budget_score=budget_score,
+                    schedule_score=schedule_score,
+                    signal_adjustment=signal_adjustment,
+                    composite_score=composite_score,
+                    trend=trend,
+                    previous_score=prev_composite,
+                    computation_data=computation_data,
+                )
+                # computed_at is auto_now_add; backdate it. Spread through the
+                # day so ordering is stable.
+                ProjectConfidenceScore.objects.filter(pk=score.pk).update(
+                    computed_at=self.NOW - timedelta(days=days_ago, hours=2),
+                )
+
+                prev_composite = composite_score
+                seeded += 1
+
+            self.stdout.write(
+                f'  [OK] Project confidence history seeded ({seeded} daily points)'
+            )
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(
+                f'  [WARN] Could not seed project confidence history: {e}'
             ))
 
     # ------------------------------------------------------------------

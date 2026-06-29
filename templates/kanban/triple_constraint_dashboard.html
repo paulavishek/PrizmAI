@@ -743,7 +743,14 @@
                     <div class="mt-3">
                         <h6 class="text-muted mb-2"><i class="fas fa-chart-line me-1"></i>30-Day Confidence Trend</h6>
                         {% if confidence_history|length >= 2 %}
-                        <canvas id="confidenceChart" height="120"></canvas>
+                        <!-- Fixed-height, position:relative wrapper is REQUIRED:
+                             the chart uses responsive + maintainAspectRatio:false,
+                             which sizes to the parent. Without a constrained parent
+                             the canvas re-expands every resize tick and grows
+                             infinitely. -->
+                        <div style="position: relative; height: 220px;">
+                            <canvas id="confidenceChart"></canvas>
+                        </div>
                         {% else %}
                         <div class="text-center py-3 border rounded bg-light">
                             <i class="fas fa-chart-line fa-2x text-muted mb-2"></i>
@@ -1073,6 +1080,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Chart.js — required by the 30-Day Confidence Trend chart below. base.html
+     does not load it globally, so include it here (mirrors burndown_dashboard). -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 /* ── What‑if simulator ───────────────────────────────────────────────────── */
 var WIF = {
@@ -1205,7 +1215,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 scales: {
                     y: { min: 0, max: 100, ticks: { callback: function(v) { return v + '%'; } } },
-                    x: { ticks: { maxTicksToShow: 10, font: { size: 10 } } },
+                    x: { ticks: { maxTicksLimit: 10, autoSkip: true, font: { size: 10 } } },
                 }
             }
         });
