@@ -301,20 +301,23 @@ Generate a response following this exact structure. Be specific, actionable, and
         col_dist = fetch_column_distribution(board)
         milestones = fetch_milestones(board)
 
-        # Velocity (matches the Burndown page)
+        # Velocity — use the latest *fully-elapsed* period only. The current
+        # period is still in progress (a sprint week that started today has 0
+        # completed on day one), so counting it makes velocity read as a ~100%
+        # collapse and misleads the LLM. Mirrors
+        # CoachingRuleEngine._check_velocity_drop (period_end < today).
+        from django.utils import timezone
         velocity_text = 'N/A'
         try:
-            predictor = BurndownPredictor()
-            predictor._ensure_velocity_snapshots(board)
-            history = predictor._get_velocity_history(board)
-            if history:
-                stats = predictor._calculate_velocity_statistics(history)
-                velocity_text = f"{float(stats['current_velocity']):.1f} tasks/week"
-        except Exception as vel_err:
-            logger.warning(f"Velocity calc failed for board {board.id}: {vel_err}")
-            snap = TeamVelocitySnapshot.objects.filter(board=board).order_by('-period_end').first()
+            today = timezone.now().date()
+            BurndownPredictor()._ensure_velocity_snapshots(board)
+            snap = (TeamVelocitySnapshot.objects
+                    .filter(board=board, period_end__lt=today)
+                    .order_by('-period_end').first())
             if snap:
                 velocity_text = f"{snap.tasks_completed} tasks/week"
+        except Exception as vel_err:
+            logger.warning(f"Velocity calc failed for board {board.id}: {vel_err}")
 
         # Workload per assignee (active incomplete)
         workload: Dict[str, Dict[str, int]] = {}

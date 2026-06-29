@@ -81,12 +81,19 @@ class CoachingRuleEngine:
     def _check_velocity_drop(self):
         """Detect significant velocity drops"""
         from kanban.burndown_models import TeamVelocitySnapshot
-        
-        # Get recent velocity snapshots
+        from django.utils import timezone
+
+        # Only consider fully-elapsed periods.  The current period is still in
+        # progress (e.g. a sprint week that started today), so its task count is
+        # naturally low and would otherwise read as a ~100% velocity collapse on
+        # day one of every period.  Excluding period_end >= today avoids that
+        # false positive.
+        today = timezone.now().date()
         snapshots = TeamVelocitySnapshot.objects.filter(
-            board=self.board
+            board=self.board,
+            period_end__lt=today,
         ).order_by('-period_end')[:4]
-        
+
         if snapshots.count() < 3:
             return  # Need at least 3 data points
         
