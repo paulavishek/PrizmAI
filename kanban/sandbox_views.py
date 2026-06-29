@@ -1758,6 +1758,17 @@ def _clone_board_memories(template_board, new_board):
 
 NUM_TASKS_TO_REASSIGN = 3  # How many demo tasks to reassign to the real user
 
+# Tasks whose ownership is asserted by name in the seeded coaching suggestions
+# (see populate_all_demo_data._create_coaching_suggestions).  These must NOT be
+# reassigned to the sandbox owner, or the AI Coach cards contradict the board
+# (e.g. the overload card says "Priya owns Social Login Integration" while the
+# board shows it assigned to the real user).
+_COACHING_PROTECTED_TASK_TITLES = [
+    'Social Login Integration',
+    'Database Schema & Migrations',
+    'Authentication System',
+]
+
 
 def _reassign_demo_tasks_to_user(sandbox, user):
     """
@@ -1803,6 +1814,7 @@ def _reassign_demo_tasks_to_user(sandbox, user):
             assigned_to__email__contains='@demo.prizmai.local',
         )
         .exclude(progress=100)
+        .exclude(title__in=_COACHING_PROTECTED_TASK_TITLES)
         .select_related('assigned_to', 'column__board')
         .order_by('due_date')
     )

@@ -210,6 +210,10 @@ class Command(BaseCommand):
         # otherwise it captures 28->32 and permanently misses the promoted task.
         if did_full_seed:
             self._create_scope_autopsy()
+            # Same ordering reason as the autopsy: the scope-creep suggestion is
+            # created before the Discovery sub-seeder promotes the 33rd task, so
+            # its "current scope" must be recomputed from the final board count.
+            self._finalize_scope_creep_figures()
 
         self._print_verification_report()
 
@@ -1688,7 +1692,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def _create_scope_baseline(self):
         try:
-            from kanban.models import ScopeChangeSnapshot
+            from kanban.models import ScopeChangeSnapshot, Task
             # Idempotent: a non-reset re-run must not stack another baseline
             # row on top of the existing one.
             existing = ScopeChangeSnapshot.objects.filter(
@@ -1697,12 +1701,17 @@ class Command(BaseCommand):
             if existing:
                 self.stdout.write('  [OK] Scope baseline already present - skipped')
                 return
+            # Describe the baseline with the real task count so the note does
+            # not drift from the board (create_scope_snapshot counts item_type='task').
+            _baseline_count = Task.objects.filter(
+                column__board=self.board, item_type='task',
+            ).count()
             self.board.create_scope_snapshot(
                 user=self.priya,
                 snapshot_type='manual',
                 is_baseline=True,
-                notes=('Initial project baseline - established at project kickoff '
-                       'with 26 tasks across 4 phases.'),
+                notes=(f'Initial project baseline - established at project kickoff '
+                       f'with {_baseline_count} tasks across 4 phases.'),
             )
             self.stdout.write('  [OK] Scope baseline snapshot recorded')
         except Exception as e:
@@ -2420,6 +2429,17 @@ class Command(BaseCommand):
     # Coaching suggestions
     # ------------------------------------------------------------------
     def _create_coaching_suggestions(self, tasks_by_code):
+        from kanban.models import Task
+        # Derive the scope-creep figures from the live board so the card always
+        # matches what a user can count (item_type='task' is what
+        # Board.create_scope_snapshot() measures).  The narrative is "two tasks
+        # were added after the baseline", so baseline = current - 2.
+        _scope_added = 2
+        _scope_current = Task.objects.filter(
+            column__board=self.board, item_type='task',
+        ).count()
+        _scope_baseline = max(_scope_current - _scope_added, 1)
+        _scope_pct = round((_scope_added / _scope_baseline) * 100, 1)
         items = [
             dict(
                 suggestion_type='resource_overload', severity='critical', status='active',
@@ -2444,16 +2464,16 @@ class Command(BaseCommand):
                          'depends on R1 (Authentication System) being merged.'),
                 recommended_actions=[
                     {'action': 'Run a daily 15-min standup focused on P3 unblocking'},
-                    {'action': 'Prioritise R1 code review (Marcus has the open PR)'},
+                    {'action': 'Prioritise R1 code review (Priya has the open PR)'},
                 ],
                 task=tasks_by_code['R1'], days_ago=3,
             ),
             dict(
                 suggestion_type='scope_creep', severity='medium', status='acknowledged',
                 title='Scope creep detected',
-                message=('Two tasks were added after the baseline was set. Original scope was '
-                         '26 tasks; current scope is 28 tasks (7.7% increase). Review timeline '
-                         'impact.'),
+                message=(f'Two tasks were added after the baseline was set. Original scope was '
+                         f'{_scope_baseline} tasks; current scope is {_scope_current} tasks '
+                         f'({_scope_pct}% increase). Review timeline impact.'),
                 recommended_actions=[
                     {'action': 'Review whether the 2 new tasks are scope or scope-creep'},
                     {'action': 'Update Phase 4 timeline estimate if needed'},
@@ -2489,6 +2509,35 @@ class Command(BaseCommand):
                 created_at=self.NOW - timedelta(days=days_ago),
             )
         self.stdout.write('  [OK] 4 coaching suggestions created')
+
+    def _finalize_scope_creep_figures(self):
+        """Recompute the scope-creep suggestion against the final board.
+
+        _create_coaching_suggestions runs before the Discovery sub-seeder
+        promotes the 33rd task, so the figures captured there are one short of
+        what a user can count on the board.  Recompute from the final
+        item_type='task' count (the same metric Board.create_scope_snapshot
+        uses), keeping the "two tasks added" narrative.
+        """
+        from kanban.models import Task
+        cs = CoachingSuggestion.objects.filter(
+            board=self.board, suggestion_type='scope_creep',
+        ).order_by('-created_at').first()
+        if not cs:
+            return
+        added = 2
+        current = Task.objects.filter(
+            column__board=self.board, item_type='task',
+        ).count()
+        baseline = max(current - added, 1)
+        pct = round((added / baseline) * 100, 1)
+        cs.message = (
+            f'Two tasks were added after the baseline was set. Original scope '
+            f'was {baseline} tasks; current scope is {current} tasks '
+            f'({pct}% increase). Review timeline impact.'
+        )
+        cs.save(update_fields=['message'])
+        self.stdout.write(f'  [OK] Scope-creep figures finalised ({baseline} -> {current} tasks)')
 
     # ------------------------------------------------------------------
     # Historical ML training data
