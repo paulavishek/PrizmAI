@@ -26,6 +26,7 @@ from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, 
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 from .favorite_views import is_user_favorite as _is_fav
+from .utils.sanitize import csv_safe_cell
 from .ai_briefing import build_action_plan_cached as _build_action_plan_cached
 from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
@@ -4961,7 +4962,7 @@ def export_board(request, board_id):
             tasks = Task.objects.filter(column=column, item_type='task').order_by('position')
             for task in tasks:
                 labels = ", ".join(list(task.labels.values_list('name', flat=True)))
-                writer.writerow([
+                writer.writerow([csv_safe_cell(v) for v in (
                     column.name,
                     task.title,
                     task.description,
@@ -4974,7 +4975,7 @@ def export_board(request, board_id):
                     labels,
                     task.priority,
                     task.progress
-                ])
+                )])
         
         return response
     else:

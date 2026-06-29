@@ -533,6 +533,7 @@ def abuse_export(request):
     import csv
     from django.http import HttpResponse
     from analytics.models import DemoAbusePrevention
+    from kanban.utils.sanitize import csv_safe_cell
     
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="abuse_data_{timezone.now().strftime("%Y%m%d")}.csv"'
@@ -545,7 +546,7 @@ def abuse_export(request):
     ])
     
     for record in DemoAbusePrevention.objects.all().order_by('-last_seen'):
-        writer.writerow([
+        writer.writerow([csv_safe_cell(v) for v in (
             record.ip_address,
             record.browser_fingerprint[:16] + '...' if record.browser_fingerprint else '',
             record.total_sessions_created,
@@ -556,6 +557,6 @@ def abuse_export(request):
             record.flag_reason,
             record.first_seen.strftime('%Y-%m-%d %H:%M'),
             record.last_seen.strftime('%Y-%m-%d %H:%M'),
-        ])
+        )])
     
     return response

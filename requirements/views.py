@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from kanban.models import Board, BoardMembership, Task, Strategy
+from kanban.utils.sanitize import csv_safe_cell
 
 from .forms import (
     RequirementCategoryForm,
@@ -357,7 +358,9 @@ def traceability_matrix(request, board_id):
     requirements = list(Requirement.objects.filter(board=board).prefetch_related(
         'linked_goals', 'linked_tasks', 'linked_strategies',
     ))
-    all_tasks = list(Task.objects.filter(column__board=board, item_type='task').select_related('column', 'assigned_to'))
+    # Coverage universe must match the dashboard's definition (any linked work
+    # item, including EPICs/milestones) so the two pages report the same %.
+    all_tasks = list(Task.objects.filter(column__board=board).select_related('column', 'assigned_to'))
 
     # Determine which tasks to show — default to top 15, prioritising linked ones
     DEFAULT_TASK_COLUMNS = 15
@@ -487,7 +490,7 @@ def export_requirements_csv(request, board_id):
 
     for req in requirements:
         linked = ', '.join(t.title for t in req.linked_tasks.all())
-        writer.writerow([
+        writer.writerow([csv_safe_cell(v) for v in (
             req.identifier,
             req.title,
             req.get_type_display(),
@@ -500,7 +503,7 @@ def export_requirements_csv(request, board_id):
             req.created_by.username if req.created_by else '',
             req.created_at.strftime('%Y-%m-%d %H:%M'),
             req.updated_at.strftime('%Y-%m-%d %H:%M'),
-        ])
+        )])
 
     return response
 
