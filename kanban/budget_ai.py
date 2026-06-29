@@ -379,46 +379,28 @@ You are a project management AI consultant. Generate actionable budget optimizat
 
 {f"## Additional Context: {context}" if context else ""}
 
-Generate 3-7 specific, actionable recommendations. For each recommendation:
+Generate 3-5 specific, actionable recommendations. For each recommendation:
 1. Choose appropriate type: reallocation, scope_cut, timeline_change, resource_optimization, risk_mitigation, or efficiency_improvement
 2. Provide clear title and detailed description
-3. Estimate potential cost savings
+3. Estimate potential cost savings (a number, or null if not quantifiable)
 4. Rate confidence (0-100)
 5. Set priority (low/medium/high/urgent)
-6. Explain AI reasoning with full transparency
+6. Explain the AI reasoning behind the recommendation
 
-Format as JSON array with objects containing FULL EXPLAINABILITY:
+Return ONLY a JSON array. Each object must contain exactly these keys:
 [
     {{
-        "type": "recommendation_type",
-        "title": "Clear recommendation title",
-        "description": "Detailed description of the recommendation",
+        "type": "reallocation|scope_cut|timeline_change|resource_optimization|risk_mitigation|efficiency_improvement",
+        "title": "Clear, concise recommendation title",
+        "description": "Detailed description of the recommendation and what to do",
         "estimated_savings": 1000.00,
         "confidence": 85,
-        "confidence_factors": [
-            {{
-                "factor": "What influences confidence",
-                "direction": "increases|decreases",
-                "explanation": "How this affects confidence"
-            }}
-        ],
         "priority": "low|medium|high|urgent",
-        "priority_reasoning": "Why this priority level",
-        "reasoning": "Detailed explanation of why this is recommended based on data",
-        "implementation_steps": ["Step 1", "Step 2", "Step 3"],
-        "risks_of_implementation": ["Risk 1"],
-        "success_metrics": ["How to measure if this worked"],
+        "reasoning": "Why this is recommended, grounded in the data above",
         "patterns": {{
             "data_patterns_used": ["What patterns informed this recommendation"],
             "historical_support": "Any historical data supporting this"
-        }},
-        "alternative_approaches": [
-            {{
-                "alternative": "Alternative approach",
-                "tradeoff": "What you gain/lose"
-            }}
-        ],
-        "assumptions": ["Key assumption for this recommendation"]
+        }}
     }}
 ]
 """

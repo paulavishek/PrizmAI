@@ -383,7 +383,13 @@ def _duplicate_board(template_board, user):
     # --- ProjectROI ---
     try:
         from kanban.budget_models import ProjectROI
-        for roi in ProjectROI.objects.filter(board=template_board):
+        # Clone oldest-first so the new rows' ids stay in chronological order.
+        # ProjectROI's default ordering is ['-snapshot_date'] (newest first); cloning
+        # in that order would assign ids in reverse-chronological order, and
+        # demo_date_refresh._refresh_roi_snapshot_dates (which re-dates by id,
+        # assuming value/completion rise with id) would then invert the timeline
+        # — completion falling to 0 at the latest snapshot.
+        for roi in ProjectROI.objects.filter(board=template_board).order_by('snapshot_date'):
             new_roi = ProjectROI.objects.create(
                 board=new_board,
                 expected_value=roi.expected_value,

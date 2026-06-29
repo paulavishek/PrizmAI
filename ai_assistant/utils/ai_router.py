@@ -587,7 +587,12 @@ class AIRouter:
         # GEMINI_MODEL_SIMPLE should point to a non-thinking model (e.g. gemini-3.1-flash-lite).
         # ThinkingConfig is not available in google-generativeai 0.8.x; thinking behaviour
         # is controlled solely by model choice.
-        max_output_tokens = 2048 if complexity == 'simple' else 8192
+        # 'complex' tasks emit large structured JSON (e.g. multi-item budget
+        # recommendations). gemini-2.5-flash is a thinking model whose reasoning
+        # tokens are drawn from this same budget, so 8192 was too low — the JSON
+        # was being cut off mid-object (MAX_TOKENS) and salvaged as a single
+        # truncated item. 16384 leaves headroom for thinking + the full payload.
+        max_output_tokens = 2048 if complexity == 'simple' else 16384
         generation_config = {
             'temperature': 0.7,
             'top_p': 0.8,
@@ -651,6 +656,19 @@ class AIRouter:
                     "The content may have been blocked by safety filters."
                 ),
             )
+
+        # Surface truncation: a MAX_TOKENS finish reason means the model ran out
+        # of output budget and the response (often JSON) is cut off. This is not
+        # an API error, so it would otherwise pass silently to the caller.
+        try:
+            finish_reason = response.candidates[0].finish_reason
+            if finish_reason and getattr(finish_reason, 'name', str(finish_reason)) == 'MAX_TOKENS':
+                logger.warning(
+                    "Gemini response hit MAX_TOKENS (model=%s, max_output_tokens=%s) — "
+                    "output is likely truncated.", model_name, max_output_tokens,
+                )
+        except (AttributeError, IndexError):
+            pass
 
         text = response.text
         tokens_used = None

@@ -823,9 +823,13 @@ class BudgetAnalyzer:
             List of task cost breakdowns
         """
         from kanban.budget_models import TaskCost, TimeEntry, ProjectBudget
-        
+
+        # Only real tasks (item_type='task') — EPIC/milestone rows have TaskCost
+        # records too (at 0 cost) and would inflate the "N Tasks" badge (36 vs 33)
+        # and add empty bars to the "Top 10 Expensive Tasks" chart.
         task_costs = TaskCost.objects.filter(
-            task__column__board=board
+            task__column__board=board,
+            task__item_type='task',
         ).select_related('task', 'task__assigned_to')
         
         # Get budget for percent calculation
@@ -1025,8 +1029,11 @@ class ROICalculator:
         task_costs = TaskCost.objects.filter(task__column__board=board)
         total_cost = sum([tc.get_total_actual_cost() for tc in task_costs])
 
-        # Task metrics - use progress instead of column name
-        tasks = Task.objects.filter(column__board=board)
+        # Task metrics - use progress instead of column name, and the canonical
+        # board task queryset (item_type='task') so the snapshot's totals match
+        # every other budget surface (otherwise EPIC/milestone rows inflate the
+        # count, e.g. 36 vs 33).
+        tasks = BudgetAnalyzer.get_board_tasks(board)
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
 
