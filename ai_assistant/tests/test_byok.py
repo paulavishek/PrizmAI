@@ -313,7 +313,8 @@ class TestCompleteNormalisation(SimpleTestCase):
             result = self.router.complete('hi', user=None)
         self.assertEqual(
             set(result.keys()),
-            {'text', 'provider', 'model', 'used_byok', 'tokens_used'},
+            {'text', 'provider', 'model', 'used_byok', 'tokens_used',
+             'input_tokens', 'output_tokens'},
         )
         self.assertEqual(result['text'], 'Answer')
         self.assertEqual(result['provider'], 'openai')

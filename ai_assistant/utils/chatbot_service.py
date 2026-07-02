@@ -4251,7 +4251,11 @@ When answering questions about organizational goals, missions, or strategies, us
 
             logger.debug(f"Spectra query classified: {query_type}, temp: {temperature}")
 
-            response = self.gemini_client.get_response(prompt, system_prompt, temperature=temperature)
+            # Escape hatch: when a genuinely large document is in context for this turn,
+            # route just this message to the premium long-context model (gemini-2.5-flash).
+            task_complexity = 'premium' if (file_context and len(file_context) > 9_500) else 'simple'
+            response = self.gemini_client.get_response(
+                prompt, system_prompt, temperature=temperature, task_complexity=task_complexity)
 
             # ── Debug telemetry for the admin debug view ──
             import hashlib

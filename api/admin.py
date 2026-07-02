@@ -108,16 +108,23 @@ class AIUsageQuotaAdmin(admin.ModelAdmin):
 class AIRequestLogAdmin(admin.ModelAdmin):
     list_display = [
         'timestamp', 'user', 'feature', 'request_type',
-        'success', 'response_time_ms', 'ai_model'
+        'success', 'response_time_ms', 'ai_model', 'cost_display'
     ]
     list_filter = ['feature', 'success', 'ai_model', 'timestamp']
     search_fields = ['user__username', 'feature', 'request_type']
     readonly_fields = [
         'user', 'feature', 'request_type', 'ai_model',
-        'tokens_used', 'success', 'error_message',
+        'tokens_used', 'input_tokens', 'output_tokens', 'cost_display',
+        'success', 'error_message',
         'response_time_ms', 'board_id', 'timestamp'
     ]
-    
+
+    @admin.display(description='Est. cost (USD)')
+    def cost_display(self, obj):
+        from ai_assistant.utils.ai_pricing import estimate_cost_usd
+        cost = estimate_cost_usd(obj.ai_model, obj.input_tokens or 0, obj.output_tokens or 0)
+        return f'${cost:.6f}' if cost is not None else '—'
+
     def has_add_permission(self, request):
         return False
     

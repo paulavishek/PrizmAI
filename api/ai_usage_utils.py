@@ -248,20 +248,33 @@ def get_usage_stats(user, days=30):
     """
     from api.ai_usage_models import AIRequestLog
     from datetime import timedelta
-    from django.db.models import Count, Avg
-    
+    from django.db.models import Count, Avg, Sum
+    from ai_assistant.utils.ai_pricing import estimate_cost_usd
+
     quota = get_or_create_quota(user)
-    
+
     # Get logs from last N days
     since = timezone.now() - timedelta(days=days)
     logs = AIRequestLog.objects.filter(user=user, timestamp__gte=since)
-    
+
     # Aggregate by feature
-    by_feature = logs.values('feature').annotate(
+    by_feature = list(logs.values('feature').annotate(
         count=Count('id'),
         avg_response_time=Avg('response_time_ms')
-    ).order_by('-count')
-    
+    ).order_by('-count'))
+
+    # Per-feature estimated cost. Pricing is per-model (input/output split), so group by
+    # (feature, ai_model), price each group in Python, then fold up into per-feature totals.
+    cost_by_feature = {}
+    for grp in logs.values('feature', 'ai_model').annotate(
+        input_sum=Sum('input_tokens'), output_sum=Sum('output_tokens')
+    ):
+        cost = estimate_cost_usd(grp['ai_model'], grp['input_sum'] or 0, grp['output_sum'] or 0)
+        if cost:
+            cost_by_feature[grp['feature']] = cost_by_feature.get(grp['feature'], 0.0) + cost
+    for row in by_feature:
+        row['estimated_cost_usd'] = round(cost_by_feature.get(row['feature'], 0.0), 4)
+
     # Success rate
     total_requests = logs.count()
     successful_requests = logs.filter(success=True).count()
@@ -286,6 +299,6 @@ def get_usage_stats(user, days=30):
             'successful_requests': successful_requests,
             'failed_requests': total_requests - successful_requests,
             'success_rate': round(success_rate, 1),
-            'by_feature': list(by_feature),
+            'by_feature': by_feature,
         }
     }
