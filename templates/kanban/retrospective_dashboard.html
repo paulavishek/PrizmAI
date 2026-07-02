@@ -201,7 +201,7 @@
                     <div class="card-body d-flex flex-column justify-content-center py-4">
                         <h3 class="mb-1">{{ stats.implementation_rate|floatformat:1 }}%</h3>
                         <p class="text-muted mb-1 fw-semibold">Implementation Rate</p>
-                        <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }} lessons</small>
+                        <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }} lessons implemented or validated</small>
                     </div>
                 </div>
             </a>
@@ -218,7 +218,7 @@
             </a>
         </div>
         <div class="col">
-            <a href="#recurring-themes" class="text-decoration-none">
+            {% if stats.recurring_issues > 0 %}<a href="#recurring-themes" class="text-decoration-none">{% endif %}
                 <div class="card text-center h-100 metric-card {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
                     <div class="card-body d-flex flex-column justify-content-center py-4">
                         <h3 class="mb-1">{{ stats.recurring_issues }}</h3>
@@ -226,13 +226,36 @@
                         <small class="text-muted">Issues seen 2+ times</small>
                     </div>
                 </div>
-            </a>
+            {% if stats.recurring_issues > 0 %}</a>{% endif %}
         </div>
     </div>
 
+    <!-- Recurring Issues (lessons flagged as recurring across retrospectives) -->
+    {% if recurring_lessons %}
+    <div class="card mb-4" id="recurring-themes">
+        <div class="card-header">
+            <h5><i class="fas fa-repeat"></i> Recurring Issues</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Lessons flagged as recurring — the same underlying issue has appeared in 2 or more retrospectives.</p>
+            <ul class="list-group">
+                {% for lesson in recurring_lessons %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ lesson.title }}</strong>
+                        <br><small class="text-muted">{{ lesson.get_category_display }} &middot; {{ lesson.get_status_display }}</small>
+                    </div>
+                    <span class="badge bg-warning">{{ lesson.recurrence_count }}x</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Trend Analysis -->
     {% if trend %}
-    <div class="card mb-4" id="recurring-themes">
+    <div class="card mb-4">
         <div class="card-header">
             <h5><i class="fas fa-chart-area"></i> Trend Analysis</h5>
         </div>

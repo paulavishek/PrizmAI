@@ -135,6 +135,8 @@ def refresh_all_demo_dates(skip_mark_cache=False):
         'time_entries_updated': 0,
         'engagement_records_updated': 0,
         'retrospectives_updated': 0,
+        'retrospective_ai_model_updated': 0,
+        'retrospective_metrics_updated': 0,
         'velocity_snapshots_updated': 0,
         'coaching_suggestions_updated': 0,
         'pm_metrics_updated': 0,
@@ -193,6 +195,14 @@ def refresh_all_demo_dates(skip_mark_cache=False):
 
             # 4. Refresh Retrospective dates
             stats['retrospectives_updated'] = _refresh_retrospective_dates(base_date)
+
+            # 4b. Keep "Model Used" in sync with the current AI tier config
+            _safe(lambda: _refresh_retrospective_ai_model(), 'retrospective_ai_model_updated')
+
+            # 4c. Keep task-derived retrospective metrics (Total Tasks,
+            #     Completion Rate, Improvement Metrics) in sync with the
+            #     live Task rows, since task dates just shifted in step 1.
+            _safe(lambda: _refresh_retrospective_metrics(), 'retrospective_metrics_updated')
 
             # 5. Refresh Velocity Snapshot dates (uses savepoint: deletes +
             #    regenerates weekly snapshots, and the unique constraint can
@@ -804,9 +814,143 @@ def _refresh_retrospective_dates(base_date):
                                                      ['period_start', 'period_end'], batch_size=100)
         
         return len(retrospectives_to_update)
-        
+
     except Exception as e:
         logger.warning(f"Error refreshing retrospective dates: {e}")
+        return 0
+
+
+def _refresh_retrospective_ai_model():
+    """
+    Recompute ai_model_used for demo retrospectives from the current AI
+    tier config (GEMINI_MODEL_COMPLEX / workspace provider), so the "Model
+    Used" shown in AI Analysis Metadata doesn't go stale after the model
+    tier settings change post-seeding.
+    """
+    try:
+        from kanban.retrospective_models import ProjectRetrospective
+        from ai_assistant.utils.ai_router import AIRouter
+        from ai_assistant.models import OrganizationAISettings
+
+        demo_board_ids = _get_demo_board_ids()
+        retrospectives = list(ProjectRetrospective.objects.filter(
+            board_id__in=demo_board_ids
+        ).select_related('board__workspace'))
+
+        if not retrospectives:
+            return 0
+
+        retrospectives_to_update = []
+
+        for retro in retrospectives:
+            try:
+                provider = retro.board.workspace.ai_settings.provider or 'gemini'
+            except (OrganizationAISettings.DoesNotExist, AttributeError):
+                provider = 'gemini'
+            current_model = AIRouter.get_model_name(provider, 'complex')
+            if retro.ai_model_used != current_model:
+                retro.ai_model_used = current_model
+                retrospectives_to_update.append(retro)
+
+        if retrospectives_to_update:
+            ProjectRetrospective.objects.bulk_update(
+                retrospectives_to_update, ['ai_model_used'], batch_size=100
+            )
+
+        return len(retrospectives_to_update)
+
+    except Exception as e:
+        logger.warning(f"Error refreshing retrospective AI model: {e}")
+        return 0
+
+
+def _refresh_retrospective_metrics():
+    """
+    Recompute metrics_snapshot's task-derived numbers (total_tasks,
+    completed_tasks, completion_rate, velocity, avg_completion_time) and
+    the matching ImprovementMetric rows from the actual Task data, for any
+    demo retrospective whose metrics_snapshot carries a 'phase_tag' marker
+    (set by the seeder to say "this retrospective's numbers should track
+    the live Task rows for this phase" instead of staying a frozen literal).
+
+    Task *dates* drift forward on every demo refresh (see
+    _refresh_task_dates), so without this, a retrospective's stat cards and
+    Improvement Metrics would silently diverge from the task data they
+    claim to summarize. Task *count* and *column* are untouched by date
+    refreshes, so total_tasks/completed_tasks/completion_rate stay stable;
+    only avg_completion_time genuinely varies run to run.
+    """
+    try:
+        from kanban.models import Task
+        from kanban.retrospective_models import ProjectRetrospective, ImprovementMetric
+
+        demo_board_ids = _get_demo_board_ids()
+        retrospectives = list(ProjectRetrospective.objects.filter(
+            board_id__in=demo_board_ids
+        ).exclude(metrics_snapshot__phase_tag__isnull=True).select_related('board'))
+
+        if not retrospectives:
+            return 0
+
+        retrospectives_to_update = []
+        metrics_to_update = []
+
+        for retro in retrospectives:
+            phase_tag = retro.metrics_snapshot.get('phase_tag')
+            if not phase_tag:
+                continue
+
+            tasks = Task.objects.filter(
+                column__board=retro.board, phase=phase_tag
+            ).exclude(item_type='epic')
+
+            total_tasks = tasks.count()
+            if total_tasks == 0:
+                continue
+            completed_tasks = tasks.filter(progress=100).count()
+            completion_rate = round(completed_tasks / total_tasks * 100, 1)
+
+            durations = [
+                (t.completed_at.date() - t.start_date).days
+                for t in tasks
+                if t.start_date and t.completed_at
+            ]
+            avg_completion_time = round(sum(durations) / len(durations), 1) if durations else None
+
+            snapshot = dict(retro.metrics_snapshot)
+            snapshot['total_tasks'] = total_tasks
+            snapshot['completed_tasks'] = completed_tasks
+            snapshot['completion_rate'] = completion_rate
+            snapshot['velocity'] = completed_tasks
+            if avg_completion_time is not None:
+                snapshot['avg_completion_time'] = avg_completion_time
+            retro.metrics_snapshot = snapshot
+            retrospectives_to_update.append(retro)
+
+            metric_values = {
+                'velocity': completed_tasks,
+                'quality': completion_rate,
+            }
+            if avg_completion_time is not None:
+                metric_values['cycle_time'] = avg_completion_time
+
+            for metric in retro.metrics.filter(metric_type__in=metric_values.keys()):
+                metric.metric_value = metric_values[metric.metric_type]
+                metrics_to_update.append(metric)
+
+        if retrospectives_to_update:
+            ProjectRetrospective.objects.bulk_update(
+                retrospectives_to_update, ['metrics_snapshot'], batch_size=100
+            )
+        if metrics_to_update:
+            ImprovementMetric.objects.bulk_update(
+                metrics_to_update, ['metric_value'], batch_size=100
+            )
+
+        return len(retrospectives_to_update)
+
+    except Exception as e:
+        logger.warning(f"Error refreshing retrospective metrics: {e}")
         return 0
 
 

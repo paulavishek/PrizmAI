@@ -121,6 +121,7 @@
                             <th>Category</th>
                             <th>Priority</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -135,8 +136,8 @@
                                 {{ lesson.get_priority_display }}
                             </span></td>
                             <td>
-                                <select class="form-select form-select-sm lesson-status-dropdown" 
-                                        data-lesson-id="{{ lesson.id }}" 
+                                <select class="form-select form-select-sm lesson-status-dropdown"
+                                        data-lesson-id="{{ lesson.id }}"
                                         data-board-id="{{ board.id }}"
                                         style="width: auto; display: inline-block;">
                                     <option value="identified" {% if lesson.status == 'identified' %}selected{% endif %}>Identified</option>
@@ -146,6 +147,14 @@
                                     <option value="validated" {% if lesson.status == 'validated' %}selected{% endif %}>Validated</option>
                                     <option value="not_applicable" {% if lesson.status == 'not_applicable' %}selected{% endif %}>N/A</option>
                                 </select>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#lessonModal{{ lesson.id }}"
+                                        title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -643,6 +652,170 @@ document.addEventListener('DOMContentLoaded', function() {
                             Created: {{ action.created_at|date:"F d, Y g:i A" }}
                             {% if action.updated_at != action.created_at %}
                                 | Updated: {{ action.updated_at|date:"F d, Y g:i A" }}
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% for lesson in lessons %}
+<div class="modal fade" id="lessonModal{{ lesson.id }}" tabindex="-1" aria-labelledby="lessonModalLabel{{ lesson.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lessonModalLabel{{ lesson.id }}">
+                    <i class="fas fa-graduation-cap"></i> Lesson Learned Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="fw-bold">{{ lesson.title }}</h6>
+                        <p class="text-muted mb-3">{{ lesson.description }}</p>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Category:</strong>
+                        <span class="badge bg-info">{{ lesson.get_category_display }}</span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Priority:</strong>
+                        <span class="badge bg-{% if lesson.priority == 'critical' %}danger{% elif lesson.priority == 'high' %}warning{% else %}secondary{% endif %}">
+                            {{ lesson.get_priority_display }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <span class="badge bg-{% if lesson.status == 'validated' %}success{% elif lesson.status == 'implemented' %}primary{% elif lesson.status == 'in_progress' %}info{% else %}secondary{% endif %}">
+                            {{ lesson.get_status_display }}
+                        </span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Owner:</strong><br>
+                        {% if lesson.action_owner %}
+                            <i class="fas fa-user"></i> {{ lesson.action_owner.get_full_name|default:lesson.action_owner.username }}
+                        {% else %}
+                            <span class="text-muted">Unassigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if lesson.trigger_event %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Trigger Event:</strong>
+                        <p class="text-muted mt-1">{{ lesson.trigger_event }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if lesson.impact_description %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Impact:</strong>
+                        <p class="text-muted mt-1">{{ lesson.impact_description }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Recommended Action:</strong>
+                        <p class="mt-1">{{ lesson.recommended_action }}</p>
+                    </div>
+                </div>
+
+                {% if lesson.expected_benefit or lesson.actual_benefit %}
+                <div class="row mb-3">
+                    {% if lesson.expected_benefit %}
+                    <div class="col-md-6">
+                        <strong>Expected Benefit:</strong>
+                        <p class="text-muted mt-1">{{ lesson.expected_benefit }}</p>
+                    </div>
+                    {% endif %}
+                    {% if lesson.actual_benefit %}
+                    <div class="col-md-6">
+                        <strong>Actual Benefit:</strong>
+                        <p class="text-success mt-1">{{ lesson.actual_benefit }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if lesson.success_metrics %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Success Metrics:</strong>
+                        <ul class="mb-0 mt-1">
+                            {% for m in lesson.success_metrics %}
+                            <li>{{ m.metric }}: {{ m.before }} &rarr; {{ m.after }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Implementation Date:</strong><br>
+                        {% if lesson.implementation_date %}
+                            <i class="far fa-calendar"></i> {{ lesson.implementation_date|date:"F d, Y" }}
+                        {% else %}
+                            <span class="text-muted">Not yet</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Validation Date:</strong><br>
+                        {% if lesson.validation_date %}
+                            <i class="far fa-calendar-check"></i> {{ lesson.validation_date|date:"F d, Y" }}
+                        {% else %}
+                            <span class="text-muted">Not yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if lesson.is_recurring_issue %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-repeat"></i> <strong>Recurring Issue</strong> &mdash; seen {{ lesson.recurrence_count }} time(s) across retrospectives.
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if lesson.ai_suggested %}
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <i class="fas fa-robot"></i> <strong>AI-Identified Lesson</strong>
+                            {% if lesson.ai_confidence %}
+                                <br>Confidence: {{ lesson.ai_confidence|as_percentage }}%
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <small class="text-muted">
+                            Created: {{ lesson.created_at|date:"F d, Y g:i A" }}
+                            {% if lesson.updated_at != lesson.created_at %}
+                                | Updated: {{ lesson.updated_at|date:"F d, Y g:i A" }}
                             {% endif %}
                         </small>
                     </div>

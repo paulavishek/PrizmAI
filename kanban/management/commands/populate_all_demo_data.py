@@ -2204,9 +2204,15 @@ class Command(BaseCommand):
             # (total_tasks / completed_tasks / completion_rate / avg_completion_time),
             # otherwise retrospective_detail falls back to live board counts and shows
             # the current board state instead of this historical Phase-1 snapshot.
+            # 'phase_tag' marks this as live-trackable: _refresh_retrospective_metrics()
+            # (kanban/utils/demo_date_refresh.py) recomputes the numbers below from the
+            # actual Phase 1 Task rows on every demo refresh, so they never go stale
+            # relative to the task dates that get shifted forward over time. The values
+            # here are just the initial seed (used until the first refresh runs).
             metrics_snapshot={
+                'phase_tag': PHASE_FOUNDATION,
                 'total_tasks': 8, 'completed_tasks': 8, 'completion_rate': 100,
-                'velocity': 52, 'avg_completion_time': 8.5,
+                'velocity': 8, 'avg_completion_time': 8.5,
                 'quality_score': 9.1, 'budget_variance': -3.2,
             },
             what_went_well=(
