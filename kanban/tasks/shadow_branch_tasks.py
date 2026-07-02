@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 MIN_BASELINE_VELOCITY = 0.5
 
+# Minimum score movement (in points, 0-100 scale) from a real board event
+# before it is recorded as a "Significant Score Change" (BranchDivergenceLog).
+# Kept low so moderate real-world shifts register; heartbeats/baseline
+# corrections are excluded separately via is_real_board_event().
+DIVERGENCE_THRESHOLD = 2
+
 # Trigger strings that represent a heartbeat / housekeeping recalc rather
 # than a real-world event.  Snapshots from these may be dedup'd; snapshots
 # from any other trigger always land in history so the audit trail reflects
@@ -58,6 +64,23 @@ def is_real_board_event(trigger_event: str) -> bool:
     if any(trigger_event.startswith(p) for p in BASELINE_CORRECTION_PREFIXES):
         return False
     return True
+
+
+def is_baseline_correction(trigger_event: str) -> bool:
+    """
+    True when `trigger_event` re-baselines a branch against the live board
+    WITHOUT any real-world event having occurred (branch created/restored,
+    sandbox-cloned, or a legacy blank trigger from before this field existed).
+    Distinct from a heartbeat ("Manual refresh"): a heartbeat still reflects
+    genuinely-live board state, so it should count toward "today's real
+    progress" if real work happened before it; a correction should not,
+    because it can jump the score by dozens of points purely from re-syncing
+    stale template/demo data.  Used to anchor the "How It Affected Your
+    Branches" before/after comparison past any such jump.
+    """
+    if not trigger_event:
+        return True
+    return any(trigger_event.startswith(p) for p in BASELINE_CORRECTION_PREFIXES)
 
 
 def _parse_date(value):
@@ -237,9 +260,11 @@ def _is_duplicate_snapshot(latest, new_feasibility, new_proj_date,
                             new_deadline_delta_weeks=None):
     """
     True if a new snapshot would be functionally identical to the latest one
-    AND we already have one today.  Allows exactly one heartbeat snapshot per
-    day so the Feasibility Trend chart stays continuous on quiet days without
-    bloating Snapshot History with minute-by-minute duplicates.
+    AND we already have one today.  Applied to every trigger (heartbeats and
+    real board events alike): allows exactly one snapshot per day per distinct
+    state so the Feasibility Trend chart stays continuous on quiet days without
+    bloating Snapshot History with duplicates (e.g. a burst of task-completion
+    recalcs that all land on the same score).
 
     What "identical" means here:
       * Feasibility score (rounded to 2dp — matches what users see in the UI)
@@ -461,10 +486,23 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             # create, manual refresh) lands it directly, so recalculating with
             # no real change is idempotent and repeated refreshes never drift.
 
-            # --- Dedup + daily heartbeat ---
+            # --- Dedup (applies to ALL triggers, not just heartbeats) ---
+            # Skip creating a snapshot that would be functionally identical to
+            # the latest one already recorded today (same 2dp score, same
+            # scope/team/deadline levers, same conflicts).  This used to run for
+            # heartbeats only, so real board events always wrote a row "for the
+            # audit trail" — but when the solo Celery worker processes a burst of
+            # task-completion signals together, every recalc sees the SAME final
+            # board state and produced a string of byte-identical snapshots
+            # (e.g. 6× "73.58" one second apart), bloating Snapshot History and
+            # the trend chart with rows that carry no new information.  A real
+            # event that actually moves the score (or changes a lever/conflict)
+            # still lands; the per-task audit record lives in TaskActivity /
+            # the "Real Progress Today" standup table, not here.  The first
+            # capture of each day is always allowed (see _is_duplicate_snapshot)
+            # so the trend chart keeps a daily point on quiet days.
             new_deadline_weeks = params['deadline_shift_days'] // 7
-            is_heartbeat = trigger_event in HEARTBEAT_TRIGGERS
-            if is_heartbeat and _is_duplicate_snapshot(
+            if _is_duplicate_snapshot(
                 latest_snapshot, new_feasibility,
                 projected_date, new_budget_util, new_conflicts,
                 new_scope_delta=params['tasks_added'],
@@ -472,8 +510,9 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
                 new_deadline_delta_weeks=new_deadline_weeks,
             ):
                 logger.debug(
-                    f'Skipping duplicate heartbeat snapshot for branch '
-                    f'{branch.id} (score={new_feasibility} unchanged today)'
+                    f'Skipping duplicate snapshot for branch '
+                    f'{branch.id} (score={new_feasibility} unchanged today, '
+                    f'trigger={trigger_event!r})'
                 )
                 continue
 
@@ -493,15 +532,22 @@ def run_branch_recalc_sync(board_id, trigger_event='Manual recalculation',
             snapshot_ids.append(new_snapshot.id)
 
             # Log divergence only for genuine board events that moved the
-            # score by more than 5 points.  Heartbeats ("Manual refresh") and
-            # baseline corrections ("Branch restored", "Branch <name> created")
-            # are excluded — they correct a stale/intermediate value rather
-            # than reflecting real-world work, so surfacing them as a
-            # "Significant Score Change" (e.g. "Manual refresh -25") misled
-            # users into thinking a refresh tanked the score.
+            # score by more than DIVERGENCE_THRESHOLD points.  Heartbeats
+            # ("Manual refresh") and baseline corrections ("Branch restored",
+            # "Branch <name> created") are excluded — they correct a
+            # stale/intermediate value rather than reflecting real-world work,
+            # so surfacing them as a "Significant Score Change"
+            # (e.g. "Manual refresh -25") misled users into thinking a refresh
+            # tanked the score.  The threshold is 2 (not 5): once the
+            # feasibility curve was widened to spread healthy branches across a
+            # ~10-point band, real deadline/team/scope events routinely move the
+            # score by 2-4 points, and a 5-point gate meant a freshly-promoted
+            # branch that only saw such moves never logged anything — leaving
+            # its "Significant Score Changes" section permanently empty while
+            # seeded branches (with big historical swings) showed one.
             if (latest_snapshot is not None
                     and is_real_board_event(trigger_event)
-                    and abs(float(new_feasibility) - float(old_score)) > 5):
+                    and abs(float(new_feasibility) - float(old_score)) > DIVERGENCE_THRESHOLD):
                 recent_cutoff = timezone.now() - timedelta(seconds=60)
                 is_recent_dup = BranchDivergenceLog.objects.filter(
                     branch=branch,

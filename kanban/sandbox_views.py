@@ -1345,7 +1345,16 @@ def _duplicate_board(template_board, user):
     try:
         from django.utils import timezone as _tz
         from kanban.shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog
+        from kanban.tasks.shadow_branch_tasks import compute_baseline_velocity
         _clone_now = _tz.now()
+        # Recompute (rather than copy) the baseline velocity against the new
+        # sandbox board's own cloned TeamVelocitySnapshot/BurndownPrediction
+        # rows (cloned earlier in this function). Copying the template's raw
+        # value verbatim let a stale/atypical baseline (e.g. 0.56 tasks/wk)
+        # survive into every sandbox, which inflates velocity_health =
+        # actual/baseline as soon as real tasks are completed and pushes
+        # every branch to the feasibility ceiling together.
+        _new_board_baseline_velocity = compute_baseline_velocity(new_board)
         for branch in ShadowBranch.objects.filter(board=template_board):
             old_branch_pk = branch.pk
             new_source = whatif_map.get(branch.source_scenario_id) if branch.source_scenario_id else None
@@ -1358,7 +1367,7 @@ def _duplicate_board(template_board, user):
                 source_scenario=new_source,
                 branch_color=branch.branch_color,
                 is_starred=branch.is_starred,
-                baseline_velocity_per_week=branch.baseline_velocity_per_week,
+                baseline_velocity_per_week=_new_board_baseline_velocity or branch.baseline_velocity_per_week,
             )
             ShadowBranch.objects.filter(pk=new_branch.pk).update(created_at=branch.created_at)
 
