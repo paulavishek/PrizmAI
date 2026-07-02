@@ -260,12 +260,19 @@
     </div>
 
     <!-- Divergence Log -->
-    {% if divergence_logs|length > 0 %}
     <div class="card">
         <div class="card-header bg-light">
             <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Significant Score Changes</h6>
         </div>
         <div class="card-body">
+            {% if divergence_logs|length == 0 %}
+            <p class="text-muted small mb-0">
+                <i class="fas fa-info-circle me-2"></i>No significant score changes yet. This branch's
+                feasibility has moved only gradually so far — you can see that gentle trend in the
+                Feasibility Trend chart above. Larger shifts (from completing a batch of work, or
+                changing the deadline or team size) will be listed here as they happen.
+            </p>
+            {% else %}
             {% for log in divergence_logs %}
             <div class="divergence-log {% if log.score_delta > 0 %}increase{% elif log.score_delta < 0 %}decrease{% endif %}">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -290,9 +297,9 @@
                 </p>
             </div>
             {% endfor %}
+            {% endif %}
         </div>
     </div>
-    {% endif %}
 
     <!-- Actions -->
     <div class="mt-4 mb-4">

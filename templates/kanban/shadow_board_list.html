@@ -306,6 +306,19 @@
                         </ol>
                     </div>
 
+                    <div class="col-12"><hr class="my-0"></div>
+
+                    <!-- How scores behave / how committing works -->
+                    <div class="col-md-6">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-wave-square me-1 text-info"></i>How these scores behave</h6>
+                        <p class="small mb-0 text-secondary">Shadow Board is a <strong>live simulation</strong> — scores recalculate automatically as your real board changes (tasks completed, deadline or team changes), so they can differ between visits. Each score is a <strong>deterministic</strong> function of the current board state: refreshing with no real change always returns the same number. <strong>AI analysis</strong> is generated in the background and may take a few seconds to appear after a branch is created or restored. Two branches can show similar scores when both are well past the point of being feasible — open a branch to see its specific risks. Click <strong>Refresh Scores</strong> to force an immediate recalculation.</p>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6 class="mb-2 fw-semibold text-dark"><i class="fas fa-check-double me-1 text-info"></i>How committing works</h6>
+                        <p class="small mb-0 text-secondary">When you commit a branch it becomes your chosen project direction and all other active branches are automatically archived. Archived branches are preserved — use the <i class="fas fa-undo"></i> button on any card to bring one back to active, or click <strong>Restore All Archived</strong> to unarchive everything at once.</p>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -340,7 +353,7 @@
                                 <tr>
                                     <td><small><i class="fas fa-check-circle text-success me-1"></i>{{ task.title|truncatewords:5 }}</small></td>
                                     <td><small>{% if task.completer %}{{ task.completer.get_full_name|default:task.completer.username|default:"Unassigned" }}{% else %}Unassigned{% endif %}</small></td>
-                                    <td class="text-end"><small>{{ task.completed_at|time }}</small></td>
+                                    <td class="text-end"><small>{{ task.activity_time|time }}</small></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -400,31 +413,6 @@
         <i class="fas fa-lightbulb me-2 text-info"></i>
         <strong>Tip:</strong> Shadow Board works best when you check in regularly. After your team completes tasks, return here to see how each branch's feasibility score has shifted — then commit the branch that's winning.
         <button type="button" class="btn-close" id="shadowBoardTipDismiss" aria-label="Close"></button>
-    </div>
-
-    <!-- Single collapsible guide combining "how scores behave" and "how
-         committing works" — replaces three separate always-on banners.
-         Expanded automatically on a user's first visit this session, then
-         collapsed on subsequent visits (see extra_js). -->
-    <div class="mb-4">
-        <a class="small text-decoration-none" data-bs-toggle="collapse" href="#shadowBoardGuide"
-           role="button" aria-expanded="false" aria-controls="shadowBoardGuide">
-            <i class="fas fa-circle-info me-1 text-secondary"></i><span id="shadow-board-guide-label">How does Shadow Board work?</span>
-            <i class="fas fa-chevron-down ms-1 shadow-board-guide-chevron" style="display:inline-block; transition: transform 0.2s;"></i>
-        </a>
-        <div class="collapse" id="shadowBoardGuide">
-            <div class="alert alert-light border py-2 px-3 mt-2 mb-0">
-                <small>
-                <strong>How these scores behave:</strong>
-                Shadow Board is a <strong>live simulation</strong> — scores recalculate automatically as your real board changes (tasks completed, deadline or team changes), so they can differ between visits. Each score is a deterministic function of the current board state: refreshing with no real change always returns the same number.
-                <strong>AI analysis</strong> is generated in the background and may take a few seconds to appear after a branch is created or restored.
-                Two branches can show <strong>similar scores when both are well past the point of being feasible</strong> — open a branch to see its specific risks.
-                Click <strong>Refresh Scores</strong> to force an immediate recalculation.
-                <br><br>
-                <strong>How committing works:</strong> When you commit a branch it becomes your chosen project direction and all other active branches are automatically archived. Archived branches are preserved — use the <i class="fas fa-undo"></i> button on any card to bring one back to active, or click <strong>Restore All Archived</strong> to unarchive everything at once.
-                </small>
-            </div>
-        </div>
     </div>
     {% endif %}
 
@@ -695,7 +683,10 @@ document.addEventListener('DOMContentLoaded', function() {
         new bootstrap.Tooltip(el, { boundary: 'window' });
     });
 
-    // Guide toggle label + chevron sync, and first-visit auto-expand.
+    // Guide toggle label + chevron sync. Collapsed by default on every visit
+    // (including the first) — the guide is one click away via the toggle, and
+    // starting it open pushed the rest of the page down before the user asked
+    // for it.
     var sbGuide = document.getElementById('shadowBoardGuide');
     if (sbGuide) {
         sbGuide.addEventListener('shown.bs.collapse', function() {
@@ -706,20 +697,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         sbGuide.addEventListener('hidden.bs.collapse', function() {
             var label = document.getElementById('shadow-board-guide-label');
-            if (label) label.textContent = 'How does Shadow Board work?';
+            if (label) label.textContent = 'How does this work?';
             var chevron = document.querySelector('.shadow-board-guide-chevron');
             if (chevron) chevron.style.transform = 'rotate(0deg)';
         });
-
-        // Show the guide expanded the first time this session so a new user
-        // gets context without hunting for the toggle; collapse it on later
-        // visits to keep the page clean.  Using bootstrap.Collapse.show()
-        // fires shown.bs.collapse, which syncs the label + chevron above.
-        var GUIDE_SEEN_KEY = 'shadowBoardGuideSeen';
-        if (!sessionStorage.getItem(GUIDE_SEEN_KEY)) {
-            sessionStorage.setItem(GUIDE_SEEN_KEY, '1');
-            bootstrap.Collapse.getOrCreateInstance(sbGuide).show();
-        }
     }
 });
 </script>

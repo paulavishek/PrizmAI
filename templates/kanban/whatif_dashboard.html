@@ -752,16 +752,16 @@
 
             var data = await response.json();
             if (data.success) {
-                showToast(data.message || 'Branch created! Redirecting…', 'success');
+                window.showToast(data.message || 'Branch created! Redirecting…', 'success');
                 setTimeout(function() {
                     window.location.href = '/boards/{{ board.id }}/shadow/';
                 }, 1500);
             } else {
-                showToast('Error: ' + (data.error || data.message || 'Unknown error'), 'danger');
+                window.showToast('Error: ' + (data.error || data.message || 'Unknown error'), 'danger');
             }
         } catch (err) {
             console.error('Error promoting scenario:', err);
-            showToast('Failed to promote scenario to branch.', 'danger');
+            window.showToast('Failed to promote scenario to branch.', 'danger');
         }
     }
 </script>

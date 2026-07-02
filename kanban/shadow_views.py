@@ -131,6 +131,14 @@ class ShadowBoardListView(ListView):
             .order_by('task_id', '-created_at')
         )
 
+        # `order_by('task_id', '-created_at')` above is grouped by task_id so
+        # the loop can dedup to "latest activity per task" with a simple
+        # seen-set; but that means the resulting list comes out sorted by
+        # task_id (an arbitrary PK), not by when each task was actually
+        # completed. Collect everything first, then sort by the activity's
+        # own timestamp (not Task.completed_at — see the module-level note
+        # above on why that field can't be trusted) before capping to 10, so
+        # "Real Progress Today" reads as an actual timeline.
         seen_task_ids: set = set()
         completed_today = []
         for act in move_activities_today:
@@ -147,27 +155,46 @@ class ShadowBoardListView(ListView):
             # which surfaced "Unknown" whenever the dragger's first_name
             # was blank (common on seeded demo users).
             act.task.completer = act.task.assigned_to or act.user
+            act.task.activity_time = act.created_at
             completed_today.append(act.task)
-            if len(completed_today) >= 10:
-                break
+
+        # Most recent completion first (matches Snapshot History's newest-on-top
+        # convention elsewhere in Shadow Board), capped to the latest 10.
+        completed_today.sort(key=lambda t: t.activity_time, reverse=True)
+        completed_today = completed_today[:10]
 
         context['tasks_completed_today'] = completed_today
         context['tasks_completed_count'] = len(completed_today)
 
         # "How It Affected Your Branches" must reflect *today's real board
         # events* (tasks completed, deadline/team changes) — NOT baseline
-        # corrections or heartbeats.  A restored or freshly-created branch
-        # writes a snapshot that re-baselines its score against the live
-        # board; counting that as "today's progress" produced phantom swings
-        # (e.g. a restored branch correcting a stale 81% to 40.75% looked like
-        # a -40-point drop caused by today's work, which is false).
+        # corrections.  A restored or freshly-created branch writes a snapshot
+        # that re-baselines its score against the live board; counting that as
+        # "today's progress" produced phantom swings (e.g. a restored branch
+        # correcting a stale 81% to 40.75% looked like a -40-point drop caused
+        # by today's work, which is false). A branch only appears in this
+        # table when at least one real event happened today (see
+        # is_real_board_event); that guard is unchanged.
         #
-        # We therefore key the table off snapshots whose trigger_event is a
-        # genuine board event (see is_real_board_event).  before = the score
-        # immediately PRIOR to today's first real event; after = the latest
-        # real-event snapshot today.  Branches with no real-event snapshot
-        # today are omitted.
-        from kanban.tasks.shadow_branch_tasks import is_real_board_event
+        # What changed: "before" used to be the score immediately prior to
+        # today's FIRST real-event-labeled snapshot, and "after" was the LAST
+        # real-event-labeled snapshot. That undercounts real progress whenever
+        # a user clicks "Refresh Scores" (a heartbeat, by trigger label) after
+        # completing tasks but before the Celery-queued completion signal has
+        # run — the heartbeat's recalc already reflects the live (already
+        # updated) board, so by the time the real-event snapshot fires there's
+        # nothing left to capture, and the table showed "±0" despite the
+        # branch clearly having moved that day. Heartbeats DO reflect genuine
+        # live board state (just triggered manually rather than by a signal),
+        # so they should count toward today's total; only true baseline
+        # corrections (creation/restore/sandbox-clone) should not, since those
+        # can jump a score by dozens of points from re-syncing stale data
+        # rather than from any real work. So: "before" is anchored to the
+        # score right after the last correction-type snapshot before today's
+        # first real event (or the last snapshot before today, or today's
+        # first snapshot, if no correction occurred today) — and "after" is
+        # simply the latest snapshot of the day, of any trigger.
+        from kanban.tasks.shadow_branch_tasks import is_real_board_event, is_baseline_correction
 
         today_snapshots_qs = BranchSnapshot.objects.filter(
             branch__board=board,
@@ -192,21 +219,22 @@ class ShadowBoardListView(ListView):
                 # affected this branch, so it doesn't belong in the table.
                 continue
             first_real = real_events[0]
-            after_snap = real_events[-1]
+            after_snap = snaps[-1]  # latest of the day, any trigger
 
-            # Baseline = the score immediately before today's first real event
-            # (could be an earlier-today heartbeat or yesterday's tail).
-            before_snap = (
-                BranchSnapshot.objects
-                .filter(branch_id=branch_id, captured_at__lt=first_real.captured_at)
-                .order_by('-captured_at')
-                .first()
-            )
-            old_score = (
-                before_snap.feasibility_score
-                if before_snap is not None
-                else first_real.feasibility_score
-            )
+            corrections_before_first_real = [
+                s for s in snaps
+                if s.captured_at < first_real.captured_at and is_baseline_correction(s.trigger_event)
+            ]
+            if corrections_before_first_real:
+                anchor_snap = corrections_before_first_real[-1]
+            else:
+                anchor_snap = (
+                    BranchSnapshot.objects
+                    .filter(branch_id=branch_id, captured_at__lt=today_start)
+                    .order_by('-captured_at')
+                    .first()
+                ) or snaps[0]
+            old_score = anchor_snap.feasibility_score
             new_score = after_snap.feasibility_score
             branch_impacts.append(types.SimpleNamespace(
                 branch=after_snap.branch,

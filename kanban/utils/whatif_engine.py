@@ -273,6 +273,14 @@ class WhatIfEngine:
         if new_predicted_date and new_deadline and new_predicted_date > new_deadline:
             schedule_overshoot_days = (new_predicted_date - new_deadline).days
 
+        # --- Schedule buffer (signed; None when there isn't enough data) ---
+        # Positive = days of slack before the deadline, negative = overshoot.
+        # Used only to differentiate penalty-free scenarios (see the headroom
+        # ceiling in _compute_feasibility) — never affects the penalty math above.
+        buffer_days = None
+        if new_predicted_date and new_deadline:
+            buffer_days = (new_deadline - new_predicted_date).days
+
         # --- Delay probability ---
         new_delay_prob = self._estimate_delay_probability(
             new_remaining, new_velocity, new_predicted_date, new_deadline,
@@ -318,6 +326,7 @@ class WhatIfEngine:
             'utilization_pct': new_utilization,
             'utilization_raw': utilization_raw,
             'schedule_overshoot_days': schedule_overshoot_days,
+            'buffer_days': buffer_days,
         }
 
     # ------------------------------------------------------------------
@@ -496,15 +505,53 @@ class WhatIfEngine:
         if tail:
             score -= min(tail, 0.10)
 
+        # --- Headroom ceiling ---
+        # The penalty bands above only ever fire once a metric crosses a risk
+        # threshold (delay_probability > 40, utilization > 100, budget > 100).
+        # Below those thresholds every "healthy" scenario scores identically
+        # (score == 1.0, later clamped), even though a scenario with a huge
+        # schedule buffer and idle capacity is obviously safer than one that
+        # just barely clears the thresholds. `headroom` is a pure function of
+        # already-computed `projected` values — it re-uses the same signals
+        # that feed the penalties, so it stays deterministic and adds no
+        # smoothing/damping across recalcs.
+        def _slack(value, full_credit_at, floor_at=0):
+            if value is None:
+                return 0.5  # no data — neutral, avoids rewarding/punishing missing deadlines
+            span = full_credit_at - floor_at
+            if span <= 0:
+                return 0.5
+            return max(0.0, min(1.0, (value - floor_at) / span))
+
+        # Schedule buffer saturates at a 90-day horizon: beyond ~a quarter of
+        # runway, extra buffer adds little real feasibility, but within it a
+        # bigger buffer (and completing work, which grows it) should still lift
+        # the score. Utilization carries the most weight because among healthy
+        # scenarios it is the lever that BOTH differentiates scope trade-offs
+        # (cut-scope vs add-scope) AND moves as real tasks complete — so it
+        # keeps the score responsive to progress instead of flat-lining.
+        schedule_slack = _slack(projected.get('buffer_days'), full_credit_at=90, floor_at=0)
+        utilization_slack = 1 - _slack(util, full_credit_at=100, floor_at=0)
+        budget_slack = 1 - _slack(bu, full_credit_at=100, floor_at=0)
+        headroom = 0.30 * schedule_slack + 0.50 * utilization_slack + 0.20 * budget_slack
+
         # Soft ceiling: real projects never have *zero* residual risk —
-        # unforeseen scope creep, illness, dependencies — so we cap the
-        # displayed score at 0.98.  Without this, scenarios that clear
-        # every structural penalty AND ride a +10% velocity boost
-        # saturate at exactly 1.00, which reads as "the engine is
-        # claiming perfect certainty" — a UX cliff users rightly
-        # distrust.  The 0.0 floor stays at hard zero (a project can
+        # unforeseen scope creep, illness, dependencies — so the maximum
+        # displayed score is 0.98, reached only by scenarios with the most
+        # headroom (big schedule buffer, idle capacity, budget slack).
+        # Scenarios that merely clear the risk thresholds without much margin
+        # land well below (down to ~0.68) instead of tying near the top —
+        # otherwise a scope-adding scenario that just barely avoids conflicts
+        # reads almost identically to a scope-cutting scenario with room to
+        # spare, leaving every branch clustered so tightly the user can't tell
+        # which to commit to. The floor/span were widened (0.68 + 0.30) so
+        # healthy scenarios spread across a ~10-point band and completing tasks
+        # produces a visible move. The 0.0 hard floor stays (a project can
         # legitimately be fully blocked).
-        return round(max(0.0, min(score, 0.98)), 4)
+        HEADROOM_FLOOR = 0.68
+        HEADROOM_SPAN = 0.30
+        ceiling = min(0.98, HEADROOM_FLOOR + HEADROOM_SPAN * headroom)
+        return round(max(0.0, min(score, ceiling)), 4)
 
     # ------------------------------------------------------------------
     # Warnings for missing data

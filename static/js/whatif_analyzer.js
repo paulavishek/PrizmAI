@@ -505,6 +505,7 @@
         document.body.appendChild(el);
         setTimeout(function () { el.remove(); }, 4000);
     }
+    window.showToast = showToast;
 
     // ── Init ────────────────────────────────────────────────────
     updateSliderLabels();
