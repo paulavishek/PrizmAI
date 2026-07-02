@@ -308,6 +308,8 @@ def retrospective_dashboard(request, board_id):
     all_lessons = LessonLearned.objects.filter(board=board)
     all_actions = RetrospectiveActionItem.objects.filter(board=board)
     
+    recurring_lessons = all_lessons.filter(is_recurring_issue=True).order_by('-recurrence_count', '-priority')
+
     stats = {
         'total_retrospectives': ProjectRetrospective.objects.filter(board=board).count(),
         'total_lessons': all_lessons.count(),
@@ -316,7 +318,7 @@ def retrospective_dashboard(request, board_id):
         'total_actions': all_actions.count(),
         'actions_completed': all_actions.filter(status='completed').count(),
         'completion_rate': 0,
-        'recurring_issues': all_lessons.filter(is_recurring_issue=True).count(),
+        'recurring_issues': recurring_lessons.count(),
     }
     
     if stats['total_lessons'] > 0:
@@ -364,6 +366,7 @@ def retrospective_dashboard(request, board_id):
         'lessons_by_category': lessons_by_category,
         'urgent_actions': urgent_actions,
         'trend': trend,
+        'recurring_lessons': recurring_lessons,
         'is_demo_mode': False,
         'is_demo_board': False,
     }
@@ -682,12 +685,13 @@ def retrospective_export(request, board_id, retro_id):
     elements.append(Spacer(1, 0.2 * inch))
     
     # Header information
+    generated_at_local = timezone.localtime(retrospective.ai_generated_at) if retrospective.ai_generated_at else None
     info_data = [
         ['Board:', board.name],
         ['Type:', retrospective.get_retrospective_type_display()],
         ['Period:', f"{retrospective.period_start.strftime('%B %d, %Y')} - {retrospective.period_end.strftime('%B %d, %Y')}"],
         ['Status:', retrospective.get_status_display()],
-        ['Generated:', retrospective.ai_generated_at.strftime('%B %d, %Y at %I:%M %p') if retrospective.ai_generated_at else 'N/A'],
+        ['Generated:', generated_at_local.strftime('%B %d, %Y at %I:%M %p') if generated_at_local else 'N/A'],
     ]
     
     if retrospective.team_morale_indicator:
@@ -788,7 +792,8 @@ def retrospective_export(request, board_id, retro_id):
             if action.description and action.description != action.title:
                 action_text += f"{action.description}<br/>"
             action_text += f"<i>Priority: {action.get_priority_display()} | "
-            action_text += f"Target: {action.target_completion_date.strftime('%B %d, %Y')} | "
+            if action.target_completion_date:
+                action_text += f"Target: {action.target_completion_date.strftime('%B %d, %Y')} | "
             action_text += f"Status: {action.get_status_display()}"
             if action.assigned_to:
                 action_text += f" | Assigned to: {action.assigned_to.get_full_name() or action.assigned_to.username}"
@@ -809,7 +814,7 @@ def retrospective_export(request, board_id, retro_id):
         alignment=TA_CENTER
     )
     elements.append(Paragraph(
-        f"Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')} | PrizMAI Project Management",
+        f"Generated on {timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p')} | PrizMAI Project Management",
         footer_style
     ))
     
