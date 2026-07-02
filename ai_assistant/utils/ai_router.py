@@ -89,7 +89,8 @@ class AIRouter:
     # ------------------------------------------------------------------
 
     def complete(self, prompt: str, user=None, system_prompt: str = None,
-                 conversation_history: list = None, complexity: str = 'simple') -> dict:
+                 conversation_history: list = None, complexity: str = 'simple',
+                 feature: str = None) -> dict:
         """
         Make an AI completion call on behalf of a user.
 
@@ -116,10 +117,15 @@ class AIRouter:
                 accepted.  The router converts this into each provider's
                 native message format before making the call.  Gemini
                 currently ignores history (stateless calls only).
-            complexity (str): 'simple' or 'complex'.  Maps to a cheaper/faster
-                model for light tasks, or the full model for heavy analysis.
-                Defaults to 'simple'.  Call sites should pass 'complex' for
-                multi-step AI analysis, document understanding, or code tasks.
+            complexity (str): 'simple', 'complex', or 'premium'.  'simple'/'complex'
+                both map to the economical default Gemini model; 'premium' is the
+                escape hatch (gemini-2.5-flash) reserved for large-document /
+                long-context requests and should be passed only by size-triggered
+                call sites.  Defaults to 'simple'.
+            feature (str, optional): Short feature name (e.g. 'file_attachment_analysis').
+                When provided together with a non-None ``user``, the router records a
+                per-feature AIRequestLog row for cost attribution.  Logging failures
+                never affect the returned response.
 
         Returns:
             dict: Normalised response — see _normalise_response() for keys.
@@ -150,10 +156,18 @@ class AIRouter:
             else:
                 raise AIProviderError(provider, ValueError(f"Unknown provider: '{provider}'"))
 
-        except (AIProviderError, NotImplementedError, ImproperlyConfigured):
+        except (AIProviderError, NotImplementedError, ImproperlyConfigured) as exc:
+            self._log_feature_usage(feature, user, provider, None, None, None, success=False)
             raise  # already correctly typed — pass straight through
         except Exception as exc:
+            self._log_feature_usage(feature, user, provider, None, None, None, success=False)
             raise AIProviderError(provider, exc) from exc
+
+        self._log_feature_usage(
+            feature, user, raw.get('model') or provider,
+            raw.get('input_tokens'), raw.get('output_tokens'), raw.get('tokens_used'),
+            success=True,
+        )
 
         return self._normalise_response(
             text=raw.get('text', ''),
@@ -161,7 +175,48 @@ class AIRouter:
             model=raw.get('model', ''),
             used_byok=is_byok,
             tokens_used=raw.get('tokens_used'),
+            input_tokens=raw.get('input_tokens'),
+            output_tokens=raw.get('output_tokens'),
         )
+
+    # ------------------------------------------------------------------
+    # Per-feature cost attribution
+    # ------------------------------------------------------------------
+
+    def _log_feature_usage(self, feature, user, model, input_tokens,
+                           output_tokens, tokens_used, success=True):
+        """
+        Record a per-feature AIRequestLog row for internal cost attribution.
+
+        Deliberately writes AIRequestLog directly instead of calling
+        api.ai_usage_utils.track_ai_request(): that helper increments the user's
+        monthly quota, and many call sites are already wrapped by the
+        require_ai_quota decorator which increments it too — reusing it here would
+        double-count quota and duplicate log rows. This method never touches quota.
+
+        No-ops unless both ``feature`` and ``user`` are provided (AIRequestLog.user
+        is a required FK, so background tasks with user=None are intentionally
+        unattributed). All failures are swallowed — attribution must never break the
+        actual AI response.
+        """
+        if not feature or user is None:
+            return
+        try:
+            from api.ai_usage_models import AIRequestLog
+            AIRequestLog.objects.create(
+                user=user,
+                feature=feature[:50],
+                ai_model=(model or 'gemini')[:50],
+                tokens_used=tokens_used or 0,
+                input_tokens=input_tokens or 0,
+                output_tokens=output_tokens or 0,
+                success=success,
+            )
+        except Exception:
+            logger.warning(
+                "AIRouter: failed to log AIRequestLog for feature=%s", feature,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Provider resolution
@@ -568,14 +623,17 @@ class AIRouter:
             )
 
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
-        # 'simple' → gemini-3.1-flash-lite (no thinking mode, fast structured output)
-        # 'complex' → gemini-2.5-flash (full model for analysis, generation, reasoning)
+        # 'simple'/'complex' → gemini-3.1-flash-lite (fast, economical, no thinking mode)
+        # 'premium'          → gemini-2.5-flash (escape hatch for large-document / long-context
+        #                      requests; wired only at size-triggered call sites)
         if model_override:
             model_name = model_override
+        elif complexity == 'premium':
+            model_name = getattr(settings, 'GEMINI_MODEL_PREMIUM', 'gemini-2.5-flash')
         elif complexity == 'complex':
-            model_name = getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash')
+            model_name = getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-3.1-flash-lite')
         else:
-            model_name = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.0-flash')
+            model_name = getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-3.1-flash-lite')
 
         full_prompt = prompt
         if system_prompt:
@@ -592,6 +650,8 @@ class AIRouter:
         # tokens are drawn from this same budget, so 8192 was too low — the JSON
         # was being cut off mid-object (MAX_TOKENS) and salvaged as a single
         # truncated item. 16384 leaves headroom for thinking + the full payload.
+        # 'simple' gets a tight budget; 'complex' and 'premium' both need headroom for
+        # thinking tokens + full structured-JSON payloads.
         max_output_tokens = 2048 if complexity == 'simple' else 16384
         generation_config = {
             'temperature': 0.7,
@@ -672,13 +732,17 @@ class AIRouter:
 
         text = response.text
         tokens_used = None
+        input_tokens = None
+        output_tokens = None
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
-            tokens_used = (
-                getattr(response.usage_metadata, 'prompt_token_count', 0)
-                + getattr(response.usage_metadata, 'candidates_token_count', 0)
-            )
+            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0)
+            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0)
+            tokens_used = input_tokens + output_tokens
 
-        return {'text': text, 'model': model_name, 'tokens_used': tokens_used}
+        return {
+            'text': text, 'model': model_name, 'tokens_used': tokens_used,
+            'input_tokens': input_tokens, 'output_tokens': output_tokens,
+        }
 
     def _call_openai(self, prompt: str, api_key: str, system_prompt: str = None,
                      conversation_history: list = None, complexity: str = 'simple',
@@ -719,7 +783,9 @@ class AIRouter:
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
         if model_override:
             model = model_override
-        elif complexity == 'complex':
+        elif complexity in ('complex', 'premium'):
+            # 'premium' is the Gemini escape-hatch tier; for a BYOK OpenAI user it maps to
+            # their full model, not the cheap one.
             model = getattr(settings, 'OPENAI_MODEL_COMPLEX', getattr(settings, 'OPENAI_MODEL', 'gpt-4o'))
         else:
             model = getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
@@ -820,7 +886,9 @@ class AIRouter:
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
         if model_override:
             model = model_override
-        elif complexity == 'complex':
+        elif complexity in ('complex', 'premium'):
+            # 'premium' is the Gemini escape-hatch tier; for a BYOK Anthropic user it maps to
+            # their full model, not the cheap one.
             model = getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6'))
         else:
             model = getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5')
@@ -904,7 +972,8 @@ class AIRouter:
     # ------------------------------------------------------------------
 
     def _normalise_response(self, text: str, provider: str, model: str,
-                             used_byok: bool, tokens_used=None) -> dict:
+                             used_byok: bool, tokens_used=None,
+                             input_tokens=None, output_tokens=None) -> dict:
         """
         Produce a consistent response dictionary regardless of provider.
 
@@ -942,6 +1011,8 @@ class AIRouter:
             'model': model,
             'used_byok': used_byok,
             'tokens_used': tokens_used,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
         }
         return result
 

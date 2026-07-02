@@ -190,6 +190,18 @@ class AIRequestLog(models.Model):
         default=0,
         help_text="Approximate tokens used (if available)"
     )
+    input_tokens = models.IntegerField(
+        default=0,
+        null=True,
+        blank=True,
+        help_text="Prompt (input) tokens, if the provider reported the split"
+    )
+    output_tokens = models.IntegerField(
+        default=0,
+        null=True,
+        blank=True,
+        help_text="Generated (output) tokens, if the provider reported the split"
+    )
     
     # Response info
     success = models.BooleanField(
