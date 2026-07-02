@@ -122,6 +122,7 @@
                      data-title="{{ node.title }}"
                      {% if node.manageable %}data-node-id="{{ node.pk }}"
                      data-node-type="{{ node.node_type }}"
+                     data-node-type-display="{{ node.get_node_type_display }}"
                      data-content="{{ node.content }}"
                      data-org-wide="{{ node.is_org_wide|yesno:'1,0' }}"
                      data-board-id="{{ node.board_id }}"{% endif %}>
@@ -138,6 +139,7 @@
                                   data-gap-rounds="{{ node.gap_enrichment_count }}"
                                   {% if node.manageable %}data-node-id="{{ node.pk }}"
                                   data-node-type="{{ node.node_type }}"
+                                  data-node-type-display="{{ node.get_node_type_display }}"
                                   data-content="{{ node.content }}"
                                   data-org-wide="{{ node.is_org_wide|yesno:'1,0' }}"
                                   data-board-id="{{ node.board_id }}"{% endif %}><i class="fas fa-triangle-exclamation me-1"></i>Gaps Noted</span>
@@ -754,21 +756,53 @@ document.addEventListener('DOMContentLoaded', function() {
         return html;
     }
 
+    // Tracked like feature_guide.js's activePopover — 'click' trigger alone
+    // leaves the popover open with no way to dismiss it except re-clicking
+    // the exact badge, so this is driven manually with outside-click/Escape
+    // dismissal instead.
+    let activeGapPopover = null;
+
     function initGapPopovers(root) {
         (root || document).querySelectorAll('.gap-badge').forEach(badge => {
             if (bootstrap.Popover.getInstance(badge)) return;
-            new bootstrap.Popover(badge, {
+            const popover = new bootstrap.Popover(badge, {
                 html: true,
                 sanitize: false,
-                trigger: 'click',
+                trigger: 'manual',
                 placement: 'bottom',
                 container: 'body',
                 content: function() { return buildGapPopoverContent(badge); }
             });
-            // Keep a badge click from bubbling to the card (which runs a search).
-            badge.addEventListener('click', function(e) { e.stopPropagation(); });
+            badge.addEventListener('click', function(e) {
+                // Keep a badge click from bubbling to the card (which runs a search).
+                e.stopPropagation();
+
+                if (activeGapPopover && activeGapPopover._element === badge) {
+                    activeGapPopover.hide();
+                    activeGapPopover = null;
+                    return;
+                }
+                if (activeGapPopover) activeGapPopover.hide();
+                popover.show();
+                activeGapPopover = popover;
+            });
         });
     }
+
+    document.addEventListener('click', function(e) {
+        if (!activeGapPopover) return;
+        const tip = activeGapPopover.getTipElement ? activeGapPopover.getTipElement() : activeGapPopover.tip;
+        if (tip && tip.contains(e.target)) return;
+        if (activeGapPopover._element && activeGapPopover._element.contains(e.target)) return;
+        activeGapPopover.hide();
+        activeGapPopover = null;
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && activeGapPopover) {
+            activeGapPopover.hide();
+            activeGapPopover = null;
+        }
+    });
 
     // Delegated: "Expand this memory" inside a gap popover opens the edit modal
     // pre-populated with that memory's content.
@@ -779,11 +813,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!badge) return;
         const pop = bootstrap.Popover.getInstance(badge);
         if (pop) pop.hide();
+        if (activeGapPopover === pop) activeGapPopover = null;
         openEditMemoryFromData({
             nodeId: badge.dataset.nodeId,
             boardId: badge.dataset.boardId,
             content: badge.dataset.content,
             nodeType: badge.dataset.nodeType,
+            nodeTypeDisplay: badge.dataset.nodeTypeDisplay,
             orgWide: badge.dataset.orgWide,
             gapQuestions: gapQuestionsForBadge(badge),
         });
@@ -1061,12 +1097,15 @@ document.addEventListener('DOMContentLoaded', function() {
         logError.classList.add('d-none');
         resetGapReviewUI();
         // Select the node's type, injecting an option for non-manual (auto)
-        // types so editing them in demo never reclassifies the memory.
+        // types so editing them in demo never reclassifies the memory. Use the
+        // server's display label (get_node_type_display) rather than deriving
+        // one client-side — naive title-casing turns "ai_recommendation" into
+        // "Ai Recommendation" instead of "AI Recommendation".
         if (d.nodeType && !Array.from(typeField.options).some(o => o.value === d.nodeType)) {
             const opt = document.createElement('option');
             opt.value = d.nodeType;
             opt.className = 'injected-type-opt';
-            opt.textContent = d.nodeType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            opt.textContent = d.nodeTypeDisplay || d.nodeType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             typeField.appendChild(opt);
         }
         typeField.value = d.nodeType || 'decision';
@@ -1081,6 +1120,7 @@ document.addEventListener('DOMContentLoaded', function() {
             boardId: card.dataset.boardId,
             content: card.dataset.content,
             nodeType: card.dataset.nodeType,
+            nodeTypeDisplay: card.dataset.nodeTypeDisplay,
             orgWide: card.dataset.orgWide,
             gapQuestions: gapQuestionsForBadge(card.querySelector('.gap-badge')),
         });

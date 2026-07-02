@@ -58,6 +58,7 @@
                   data-gap-rounds="{{ node.gap_enrichment_count }}"
                   {% if node.manageable %}data-node-id="{{ node.pk }}"
                   data-node-type="{{ node.node_type }}"
+                  data-node-type-display="{{ node.get_node_type_display }}"
                   data-content="{{ node.content }}"
                   data-org-wide="{{ node.is_org_wide|yesno:'1,0' }}"
                   data-board-id="{{ node.board_id }}"{% endif %}><i class="fas fa-triangle-exclamation me-1"></i>Gaps Noted</span>
