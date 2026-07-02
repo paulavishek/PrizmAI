@@ -141,9 +141,9 @@ def track_priority_and_progress_change(sender, instance, **kwargs):
             # auto_update_progress_for_done_column runs as a later pre_save signal
             # and will set instance.progress = 100, but at this point instance.progress
             # still holds the old value, so we must detect the column change here.
-            column_name = instance.column.name.lower() if instance.column else ''
             moving_to_done_column = (
-                ('done' in column_name or 'complete' in column_name)
+                instance.column is not None
+                and instance.column.is_done()
                 and old_task.progress < 100
                 and old_task.column_id != instance.column_id
             )
@@ -1214,11 +1214,8 @@ def auto_update_progress_for_done_column(sender, instance, **kwargs):
     Automatically set progress to 100% when a task is moved to a Done or Complete column
     This ensures the progress bar always shows full when tasks are in completion columns
     """
-    if instance.column:
-        column_name_lower = instance.column.name.lower()
-        # Check if column name contains 'done' or 'complete'
-        if ('done' in column_name_lower or 'complete' in column_name_lower) and instance.progress < 100:
-            instance.progress = 100
+    if instance.column and instance.column.is_done() and instance.progress < 100:
+        instance.progress = 100
 
 
 @receiver(post_save, sender=Task)

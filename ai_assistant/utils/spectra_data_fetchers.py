@@ -23,15 +23,19 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-# Column names that indicate a task is complete (lowercase comparison always)
-DONE_COLUMN_NAMES = frozenset({
-    'done', 'completed', 'complete', 'closed', 'finished', 'resolved'
-})
+# Column status semantics live in kanban.column_semantics (single source of
+# truth). Re-exported here for back-compat with existing importers.
+from kanban.column_semantics import DONE_COLUMN_NAMES, is_done_column
 
 
-def _is_done_column(column_name):
-    """Check if a column name indicates completion."""
-    return column_name.lower().strip() in DONE_COLUMN_NAMES
+def _is_done_column(col_or_name):
+    """Check if a column (or column name) indicates completion.
+
+    Delegates to the central helper, which prefers the structural column_type
+    marker and falls back to a broadened name heuristic (so "Finished"/
+    "Achieved" also count, not just "done"/"complete").
+    """
+    return is_done_column(col_or_name)
 
 
 def fetch_task_dict(task):
@@ -66,9 +70,9 @@ def fetch_task_dict(task):
     col_name = task.column.name if task.column_id else 'Unknown'
 
     # Completion: dual condition — neither alone is sufficient
-    #   1. Column name indicates done, OR
+    #   1. Column is a Done-type column (structural marker or name heuristic), OR
     #   2. Milestone with milestone_status='completed'
-    in_done_column = _is_done_column(col_name)
+    in_done_column = _is_done_column(task.column) if task.column_id else False
     is_milestone_completed = (
         task.item_type != 'task' and task.milestone_status == 'completed'
     )
@@ -336,7 +340,7 @@ def fetch_dependency_graph(board):
     graph = {}
     for tid, task in task_lookup.items():
         col_name = task.column.name if task.column_id else 'Unknown'
-        is_complete = _is_done_column(col_name)
+        is_complete = _is_done_column(task.column) if task.column_id else False
 
         assignee = 'Unassigned'
         if task.assigned_to_id:

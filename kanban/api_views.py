@@ -3554,9 +3554,8 @@ def update_task_fields_api(request, task_id):
             new_column = get_object_or_404(Column, id=data['column_id'], board=board)
             old_column_name = task.column.name
             task.column = new_column
-            # Auto-set progress to 100% when moved to done/complete column
-            col_lower = new_column.name.lower()
-            if 'done' in col_lower or 'complete' in col_lower:
+            # Auto-set progress to 100% when moved to a Done-type column
+            if new_column.is_done():
                 task.progress = 100
             changes.append(f"Status changed from '{old_column_name}' to '{new_column.name}'")
 
@@ -3596,11 +3595,11 @@ def update_task_fields_api(request, task_id):
                 description='; '.join(changes)
             )
 
-        # Derive status from column name
-        col_lower = task.column.name.lower()
-        if 'done' in col_lower or 'complete' in col_lower:
+        # Derive status from the column's resolved type
+        resolved = task.column.resolved_type()
+        if resolved == 'done':
             status = 'done'
-        elif 'progress' in col_lower:
+        elif resolved == 'in_progress':
             status = 'in_progress'
         else:
             status = 'todo'

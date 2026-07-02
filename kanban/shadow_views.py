@@ -145,8 +145,7 @@ class ShadowBoardListView(ListView):
             if act.task_id in seen_task_ids:
                 continue
             seen_task_ids.add(act.task_id)
-            col_lower = act.task.column.name.lower()
-            if 'done' not in col_lower and 'complete' not in col_lower:
+            if not act.task.column.is_done():
                 continue  # moved back out of Done later today
             # Prefer the task's owner (assignee) for "Completed By" — that's
             # who's actually responsible for the work.  Fall back to whoever

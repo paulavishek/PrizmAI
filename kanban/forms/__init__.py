@@ -80,9 +80,20 @@ class ColumnForm(forms.ModelForm):
     required_css_class = 'required'
     class Meta:
         model = Column
-        fields = ['name']
+        fields = ['name', 'column_type']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'column_type': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'column_type': 'Column type',
+        }
+        help_texts = {
+            'column_type': (
+                'Leave on Auto to detect from the name. Set explicitly if you name the '
+                'column something custom (e.g. "Achieved") so features still recognise it '
+                'as a Done column.'
+            ),
         }
 
 class TaskLabelForm(forms.ModelForm):

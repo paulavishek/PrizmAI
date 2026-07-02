@@ -1494,8 +1494,9 @@ class TaskFlowChatbotService:
                 return "You don't have access to any boards yet."
 
             from ai_assistant.utils.spectra_data_fetchers import (
-                fetch_board_tasks, fetch_column_distribution, DONE_COLUMN_NAMES,
+                fetch_board_tasks, fetch_column_distribution,
             )
+            from kanban.column_semantics import is_done_column
 
             # Aggregate across boards the user can see
             target_boards = [self.board] if self.board else list(user_boards)
@@ -1522,7 +1523,7 @@ class TaskFlowChatbotService:
                 col = t['column_name']
                 col_counts[col] = col_counts.get(col, 0) + 1
 
-            completed = sum(cnt for col, cnt in col_counts.items() if col.lower() in DONE_COLUMN_NAMES)
+            completed = sum(cnt for col, cnt in col_counts.items() if is_done_column(col))
             incomplete = total - completed
 
             # Count milestones separately
@@ -1545,7 +1546,7 @@ class TaskFlowChatbotService:
             context += f"**Task Distribution by Column (actual workflow status):**\n"
             for col_name, count in sorted(col_counts.items(), key=lambda x: x[1], reverse=True):
                 pct = 100 * count / total
-                marker = " ✅" if col_name.lower() in DONE_COLUMN_NAMES else ""
+                marker = " ✅" if is_done_column(col_name) else ""
                 context += f"  - {col_name}: {count} ({pct:.1f}%){marker}\n"
             context += f"\n  Summary: {completed} completed, {incomplete} incomplete\n\n"
 
@@ -2189,7 +2190,7 @@ class TaskFlowChatbotService:
             reasons = []
             
             # Check if task is not done
-            if task.column and 'done' not in task.column.name.lower() and 'closed' not in task.column.name.lower():
+            if task.column and not task.column.is_done():
                 bottleneck_score += 3
                 reasons.append(f"Not completed (Status: {task.column.name})")
             
@@ -2216,7 +2217,7 @@ class TaskFlowChatbotService:
                     reasons.append(f"Overdue by {(today - due_date).days} days")
             
             # Check if blocked
-            if task.column and 'block' in task.column.name.lower():
+            if task.column and task.column.is_blocked():
                 bottleneck_score += 4
                 reasons.append("Currently blocked")
             

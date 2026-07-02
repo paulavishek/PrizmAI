@@ -2058,6 +2058,8 @@ def _purge_existing_sandbox(user):
     from kanban.models import DemoSandbox, Board, Task, Workspace
     from accounts.models import Organization
 
+    uid = getattr(user, 'id', None)
+
     sandbox_boards = Board.objects.filter(
         owner=user,
         is_sandbox_copy=True,
@@ -2090,7 +2092,9 @@ def _purge_existing_sandbox(user):
         # Restore assignments before deleting
         _restore_demo_task_assignments(sandbox)
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     if sandbox_board_ids:
         sandbox_task_ids = list(
@@ -2108,13 +2112,17 @@ def _purge_existing_sandbox(user):
             orphan_sessions.delete()
             AIAssistantAnalytics.objects.filter(board_id__in=sandbox_board_ids).delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         try:
             from kanban.models import CalendarEvent
             CalendarEvent.objects.filter(board_id__in=sandbox_board_ids).delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         try:
             from knowledge_graph.models import MemoryNode, MemoryConnection
@@ -2127,7 +2135,9 @@ def _purge_existing_sandbox(user):
                 ).delete()
                 orphan_nodes.delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         try:
             from wiki.models import WikiLink
@@ -2135,7 +2145,9 @@ def _purge_existing_sandbox(user):
             if sandbox_task_ids:
                 WikiLink.objects.filter(task_id__in=sandbox_task_ids).delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         # ── Exit Protocol models (belt-and-suspenders, also cascade from board) ──
         try:
@@ -2154,7 +2166,9 @@ def _purge_existing_sandbox(user):
             ProjectHealthSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
             HospiceDismissal.objects.filter(board_id__in=sandbox_board_ids).delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         # ── Nullify SET_NULL FKs from objects OUTSIDE the deletion set ──
         # (e.g. CemeteryEntry.resurrected_as on a non-sandbox board pointing
@@ -2164,7 +2178,9 @@ def _purge_existing_sandbox(user):
                 cloned_from_id__in=sandbox_board_ids,
             ).update(cloned_from=None)
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         try:
             from exit_protocol.models import CemeteryEntry
@@ -2172,7 +2188,9 @@ def _purge_existing_sandbox(user):
                 resurrected_as_id__in=sandbox_board_ids,
             ).update(resurrected_as=None)
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         try:
             from wiki.models import MeetingNotes
@@ -2180,7 +2198,9 @@ def _purge_existing_sandbox(user):
                 related_board_id__in=sandbox_board_ids,
             ).update(related_board=None)
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         # Explicitly delete board-scoped signal rows first. This clears the rows
         # that exist *before* the cascade; the post-cascade sweep below handles
@@ -2190,9 +2210,17 @@ def _purge_existing_sandbox(user):
             ProjectSignal.objects.filter(board_id__in=sandbox_board_ids).delete()
             ProjectConfidenceScore.objects.filter(board_id__in=sandbox_board_ids).delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
         # ── Now delete sandbox boards + user-created demo boards (cascades most other models) ──
+        # Vendor note: the PRAGMA path below is SQLite-only. On PostgreSQL
+        # (production / Google Cloud) the plain .delete() runs with FK
+        # enforcement ON, so a genuinely-missed cascade child surfaces as an
+        # IntegrityError here instead of being silently orphaned. Either way the
+        # post-cascade orphan sweep below runs unconditionally, so the known
+        # ProjectSignal/TaskActivity orphans are cleaned on both backends.
         from django.db import connection
         if connection.vendor == 'sqlite':
             # SQLite enforces FK constraints per-statement; complex cascade
@@ -2223,7 +2251,9 @@ def _purge_existing_sandbox(user):
             ProjectConfidenceScore.objects.filter(board_id__in=sandbox_board_ids).delete()
             TaskActivity.objects.filter(task_id__in=sandbox_task_ids).delete()
         except Exception:
-            pass
+            logger.warning(
+                "_purge_existing_sandbox: a cleanup step failed for user %s "
+                "(continuing; see traceback)", uid, exc_info=True)
 
     # ── User-scoped data (not board-scoped, survives board deletion) ──
     try:
@@ -2232,26 +2262,34 @@ def _purge_existing_sandbox(user):
         # Only clear the demo briefing — the real-workspace briefing survives.
         DecisionCenterBriefing.objects.filter(user=user, is_demo=True).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from decision_center.models import DecisionCenterSettings
         DecisionCenterSettings.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from django.core.cache import cache
         cache.delete(f'dc_widget_{user.id}_demo')
         cache.delete(f'dc_widget_{user.id}_real')
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from messaging.models import Notification
         Notification.objects.filter(recipient=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from ai_assistant.models import AIAssistantMessage, AIAssistantSession
@@ -2260,60 +2298,78 @@ def _purge_existing_sandbox(user):
         AIAssistantMessage.objects.filter(session__in=user_sessions).delete()
         user_sessions.delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from ai_assistant.models import SpectraConversationState
         SpectraConversationState.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from kanban.models import CalendarEvent
         # Clean user-created calendar events (not board-scoped ones)
         CalendarEvent.objects.filter(created_by=user, board__isnull=True).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── GenericForeignKey models (orphaned references after board/task deletion) ──
     try:
         from kanban.models import UserFavorite
         UserFavorite.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from kanban.models import StrategicFollower
         StrategicFollower.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     try:
         from kanban.models import StrategicUpdate
         StrategicUpdate.objects.filter(author=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Commitment / Prediction market user data ──
     try:
         from kanban.commitment_models import UserCredibilityScore
         UserCredibilityScore.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Knowledge graph query logs ──
     try:
         from knowledge_graph.models import OrganizationalMemoryQuery
         OrganizationalMemoryQuery.objects.filter(asked_by=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Wiki pages / categories created by user in demo ──
     try:
         from wiki.models import WikiPage
         WikiPage.objects.filter(created_by=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Analytics session data ──
     # Only delete closed (historical) sessions. The currently-open session must
@@ -2325,21 +2381,27 @@ def _purge_existing_sandbox(user):
         from analytics.models import UserSession
         UserSession.objects.filter(user=user, session_end__isnull=False).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── AI usage logs ──
     try:
         from api.ai_usage_models import AIRequestLog
         AIRequestLog.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Onboarding preview data ──
     try:
         from kanban.onboarding_models import OnboardingWorkspacePreview
         OnboardingWorkspacePreview.objects.filter(user=user).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Clean user-created tasks on official demo template boards ──
     # Users may have accidentally created tasks on the template (e.g. via
@@ -2360,7 +2422,9 @@ def _purge_existing_sandbox(user):
             TaskFile.objects.filter(task_id__in=task_ids).delete()
             user_tasks_on_template.delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── Exit protocol entries on official demo boards (created by user) ──
     # These aren't caught by the board-scoped cleanup above because official
@@ -2386,7 +2450,9 @@ def _purge_existing_sandbox(user):
                 board_id__in=template_ids, user=user,
             ).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── User-created Goals & Missions in the demo workspace ──
     # Reset must clear strategic objects the user added in the sandbox; they
@@ -2404,7 +2470,9 @@ def _purge_existing_sandbox(user):
                 workspace=demo_ws, created_by=user, is_seed_demo_data=False,
             ).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── User's private Discovery idea sandbox in the demo org ──
     # Discovery ideas are organization-scoped, but the demo sandbox clones them
@@ -2419,14 +2487,18 @@ def _purge_existing_sandbox(user):
                 organization=demo_org, sandbox_owner=user,
             ).delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
     # ── DemoSandbox record ──
     try:
         sandbox = user.demo_sandbox
         sandbox.delete()
     except Exception:
-        pass
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
 
 
 # ── Views ─────────────────────────────────────────────────────────────────────

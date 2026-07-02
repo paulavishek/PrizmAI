@@ -131,20 +131,26 @@ def check_missed_deadlines():
     now = timezone.now()
     yesterday = now - timezone.timedelta(hours=24)
 
+    # Task has no `status` field — workflow status is the column. Consider a
+    # task "missed" only if it's NOT in a Done-type column (structural marker or
+    # name heuristic — see kanban.column_semantics).
+    from kanban.column_semantics import column_type_q
     overdue_tasks = (
         Task.objects
         .filter(
             due_date__range=(yesterday, now),
-            status__in=['todo', 'in_progress', 'review'],
+            item_type='task',
         )
-        .select_related('board', 'assigned_to')
+        .exclude(column_type_q('done'))
+        .select_related('column', 'column__board', 'assigned_to')
     )
 
     from knowledge_graph.demo_guard import is_demo_board
 
     created = 0
     for task in overdue_tasks:
-        if is_demo_board(task.board):
+        board = task.column.board if task.column_id else None
+        if board is None or is_demo_board(board):
             continue  # demo memory is curated/deterministic — no live auto-capture
         # Skip if a risk_event for this task already exists
         exists = MemoryNode.objects.filter(
@@ -159,21 +165,22 @@ def check_missed_deadlines():
         if task.assigned_to:
             assignee = task.assigned_to.get_full_name() or task.assigned_to.username
 
+        column_name = task.column.name if task.column_id else 'Unknown'
         MemoryNode.objects.create(
-            board=task.board,
+            board=board,
             node_type='risk_event',
             title=f"Missed deadline: {task.title[:150]}",
             content=(
                 f"Task '{task.title}' missed its deadline of "
                 f"{task.due_date.strftime('%b %d, %Y')}. "
-                f"Status at deadline: {task.get_status_display()}."
+                f"Status at deadline: {column_name}."
                 + (f" Assigned to: {assignee}." if assignee else "")
             ),
             context_data={
                 'task_id': task.pk,
                 'task_title': task.title,
                 'due_date': task.due_date.isoformat(),
-                'status': task.status,
+                'status': column_name,
             },
             tags=['missed-deadline', 'risk'],
             importance_score=0.7,

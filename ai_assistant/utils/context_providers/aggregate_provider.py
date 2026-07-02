@@ -36,15 +36,13 @@ class AggregateContextProvider(BaseContextProvider):
             column__board__in=accessible, item_type='task',
         ).select_related('column')
 
-        # Count done using column name (VDF-consistent logic)
-        from ai_assistant.utils.spectra_data_fetchers import DONE_COLUMN_NAMES
+        # Count done using the column's resolved type (single source of truth)
         done_count = 0
         overdue_count = 0
         from django.utils import timezone
         today = timezone.now().date()
-        for t in done_tasks.only('column__name', 'due_date', 'progress'):
-            col = t.column.name.lower().strip() if t.column_id else ''
-            if col in DONE_COLUMN_NAMES:
+        for t in done_tasks.only('column__name', 'column__column_type', 'due_date', 'progress'):
+            if t.column_id and t.column.is_done():
                 done_count += 1
             elif t.due_date:
                 due = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
@@ -65,10 +63,8 @@ class AggregateContextProvider(BaseContextProvider):
             return '**🏠 Dashboard Overview:** No boards.\n'
 
         from kanban.models import Task
-        from ai_assistant.utils.spectra_data_fetchers import (
-            fetch_column_distribution,
-            DONE_COLUMN_NAMES,
-        )
+        from ai_assistant.utils.spectra_data_fetchers import fetch_column_distribution
+        from kanban.column_semantics import is_done_column, column_type_q
         from django.utils import timezone
         today = timezone.now().date()
 
@@ -81,14 +77,14 @@ class AggregateContextProvider(BaseContextProvider):
         for b in accessible[:15]:
             col_dist = fetch_column_distribution(b)
             total = sum(c for _, c in col_dist)
-            done = sum(c for name, c in col_dist if name.lower().strip() in DONE_COLUMN_NAMES)
+            done = sum(c for name, c in col_dist if is_done_column(name))
 
-            # Overdue count
+            # Overdue count (exclude tasks already in a Done-type column)
             overdue = Task.objects.filter(
                 column__board=b, item_type='task',
                 due_date__lt=today,
             ).exclude(
-                column__name__in=['Done', 'Completed', 'Complete', 'Closed', 'Finished', 'Resolved']
+                column_type_q('done')
             ).count()
 
             grand_total += total
