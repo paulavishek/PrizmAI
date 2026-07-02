@@ -326,8 +326,12 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         if column_id:
             target_column = get_object_or_404(Column, id=column_id, board=board)
         else:
-            # Get default column (usually "To Do" or first column)
-            target_column = board.columns.filter(name__icontains='todo').first() or board.columns.first()
+            # Get default column (prefer a To Do-type column, else first column)
+            from kanban.column_semantics import column_type_q
+            target_column = (
+                board.columns.filter(column_type_q('todo', field='')).order_by('position').first()
+                or board.columns.first()
+            )
         
         if not target_column:
             return JsonResponse({'error': 'No columns found in board'}, status=400)

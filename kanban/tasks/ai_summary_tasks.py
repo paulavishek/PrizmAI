@@ -309,9 +309,8 @@ def generate_board_summary_task(self, board_id):
             if is_high_risk:
                 agg['high_risk'] += 1
 
-            # blocked-column flag
-            col_name = (task.column.name or '').lower() if task.column else ''
-            is_blocked = any(kw in col_name for kw in ('block', 'stall', 'stuck', 'hold'))
+            # blocked-column flag (structural column_type marker, else name heuristic)
+            is_blocked = task.column.is_blocked() if task.column else False
 
             # LSS counts
             lss = task.lss_classification or ''

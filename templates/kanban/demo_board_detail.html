@@ -744,8 +744,9 @@ kbd {
                 <div class="column-actions">
                     {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
                         <!-- Edit button for To Do column -->
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn"
                                 data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                data-column-type="{{ column.column_type }}"
                                 data-bs-toggle="modal" data-bs-target="#editColumnModal"
                                 title="Rename Column">
                             <i class="fas fa-edit"></i>
@@ -757,8 +758,9 @@ kbd {
                         </button>
                     {% else %}
                         <!-- Edit button for other columns -->
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn"
                                 data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                data-column-type="{{ column.column_type }}"
                                 data-bs-toggle="modal" data-bs-target="#editColumnModal"
                                 title="Rename Column">
                             <i class="fas fa-edit"></i>
@@ -1028,6 +1030,23 @@ kbd {
                         <label for="editColumnName" class="form-label">Column Name</label>
                         <input type="text" class="form-control" id="editColumnName" name="name" required>
                     </div>
+                    <div class="mb-3">
+                        <label for="editColumnType" class="form-label">Column type</label>
+                        <select class="form-select" id="editColumnType" name="column_type">
+                            <option value="">Auto (detect from name)</option>
+                            <option value="todo">To Do</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="review">Review</option>
+                            <option value="done">Done</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Leave on Auto to detect from the name. Set explicitly if you name the
+                            column something custom (e.g. &quot;Achieved&quot;) so features still
+                            recognise it as a Done column.
+                        </small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1113,11 +1132,16 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             const columnId = this.dataset.columnId;
             const columnName = this.dataset.columnName;
+            const columnType = this.dataset.columnType || '';
             const editForm = document.getElementById('editColumnForm');
             const editColumnNameInput = document.getElementById('editColumnName');
-            
+            const editColumnTypeInput = document.getElementById('editColumnType');
+
             editForm.action = `/columns/${columnId}/update/`;
             editColumnNameInput.value = columnName;
+            if (editColumnTypeInput) {
+                editColumnTypeInput.value = columnType;
+            }
         });
     });
     

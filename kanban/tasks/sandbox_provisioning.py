@@ -15,6 +15,21 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+
+def touch_sandbox_access(user):
+    """Stamp DemoSandbox.last_accessed_at = now for this user, if a sandbox exists.
+
+    Called whenever the user actively enters demo mode so the stale-sandbox
+    garbage collector (cleanup_stale_sandboxes) only reclaims genuinely
+    abandoned demos. Best-effort: never raises into the request path.
+    """
+    try:
+        from kanban.models import DemoSandbox
+        DemoSandbox.objects.filter(user=user).update(last_accessed_at=timezone.now())
+    except Exception:
+        logger.warning("touch_sandbox_access failed for user %s", getattr(user, 'id', None), exc_info=True)
+
+
 # When the reset runs SYNCHRONOUSLY inside an HTTP request (see
 # kanban.sandbox_views.reset_my_demo) there is no WebSocket to push progress to,
 # and calling async_to_sync(channel_layer.group_send) from that request thread —
@@ -344,6 +359,7 @@ def _provision_sandbox(self, user_id, is_reset=False):
         sandbox = DemoSandbox.objects.create(
             user=user,
             last_reset_at=timezone.now() if is_reset else None,
+            last_accessed_at=timezone.now(),
         )
 
         # Join demo org and reassign a few tasks to the real user

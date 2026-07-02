@@ -33,6 +33,13 @@ app.conf.beat_schedule = {
         'task': 'kanban.refresh_demo_dates',
         'schedule': crontab(hour=3, minute=0),  # Daily at 3:00 AM
     },
+    # Reclaim abandoned demo sandboxes - runs daily at 4 AM (offset from the
+    # 3 AM demo-date refresh). Deletes sandboxes idle for STALE_SANDBOX_DAYS
+    # (default 90) so demo storage doesn't grow unbounded in production.
+    'cleanup-stale-sandboxes-daily': {
+        'task': 'kanban.cleanup_stale_sandboxes',
+        'schedule': crontab(hour=4, minute=0),  # Daily at 4:00 AM
+    },
     # Time tracking reminder - runs at 5 PM on weekdays
     'time-tracking-reminder': {
         'task': 'kanban.send_time_tracking_reminders',

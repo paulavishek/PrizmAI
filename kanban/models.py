@@ -10,6 +10,8 @@ from colorfield.fields import ColorField
 from accounts.models import Organization
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+from kanban import column_semantics
+
 # Import coach models
 from kanban.coach_models import CoachingSuggestion, CoachingFeedback, PMMetrics, CoachingInsight
 
@@ -943,17 +945,11 @@ class Board(models.Model):
         high_priority = tasks.filter(priority='high').count()
         urgent_priority = tasks.filter(priority='urgent').count()
         
-        # Task status breakdown (approximate based on column names)
-        todo_tasks = tasks.filter(column__name__icontains='to do').count() + \
-                    tasks.filter(column__name__icontains='backlog').count()
-        in_progress_tasks = tasks.filter(
-            Q(column__name__icontains='in progress') | 
-            Q(column__name__icontains='doing')
-        ).count()
-        completed_tasks = tasks.filter(
-            Q(column__name__icontains='done') | 
-            Q(column__name__icontains='complete')
-        ).count()
+        # Task status breakdown by the column's resolved type (structural
+        # column_type marker, else name heuristic — single source of truth).
+        todo_tasks = tasks.filter(column_semantics.column_type_q('todo')).count()
+        in_progress_tasks = tasks.filter(column_semantics.column_type_q('in_progress')).count()
+        completed_tasks = tasks.filter(column_semantics.column_type_q('done')).count()
         
         # Get baseline for comparison
         baseline = None
@@ -1088,6 +1084,13 @@ class Column(models.Model):
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='columns')
     position = models.IntegerField(default=0)
     color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='blue')
+    # Structural status marker. '' == "auto" (derive from name via the keyword
+    # heuristic). Set explicitly so a column can be named anything and still be
+    # recognised as Done/To Do/etc. See kanban/column_semantics.py.
+    column_type = models.CharField(
+        max_length=20, choices=column_semantics.COLUMN_TYPE_CHOICES, blank=True, default='',
+        help_text="Semantic type of this column. Leave on Auto to detect from the name.",
+    )
     wip_limit = models.PositiveIntegerField(null=True, blank=True, default=None,
                                             help_text="Maximum number of tasks allowed in this column. Leave blank for no limit.")
 
@@ -1118,6 +1121,28 @@ class Column(models.Model):
         if task_count is None:
             task_count = self.task_set.filter(item_type='task').count()
         return task_count > self.wip_limit
+
+    # ── Status semantics (single source of truth: kanban/column_semantics.py) ──
+    # Prefer the explicit column_type marker; fall back to the name heuristic
+    # when it's left on "auto" (empty). Never re-implement substring checks
+    # inline — use these so renaming "Done" -> "Finished"/"Achieved" is safe.
+    def resolved_type(self):
+        return self.column_type or column_semantics.classify_column_name(self.name)
+
+    def is_done(self):
+        return self.resolved_type() == column_semantics.DONE
+
+    def is_in_progress(self):
+        return self.resolved_type() == column_semantics.IN_PROGRESS
+
+    def is_todo(self):
+        return self.resolved_type() == column_semantics.TODO
+
+    def is_review(self):
+        return self.resolved_type() == column_semantics.REVIEW
+
+    def is_blocked(self):
+        return self.resolved_type() == column_semantics.BLOCKED
 
     def effective_aging(self):
         """Resolve the effective aging config for this column.
@@ -2811,6 +2836,13 @@ class DemoSandbox(models.Model):
     last_reset_at = models.DateTimeField(
         null=True, blank=True,
         help_text="When the user last reset their demo. NULL on first provision."
+    )
+    last_accessed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            "When the user last entered demo mode / (re)provisioned. Used by the "
+            "stale-sandbox garbage collector to reclaim storage for abandoned demos."
+        ),
     )
     reassigned_tasks = models.JSONField(
         default=dict, blank=True,

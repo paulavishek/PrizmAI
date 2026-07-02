@@ -1726,6 +1726,8 @@ def toggle_demo_mode(request):
             # Re-enter existing sandbox instantly
             _join_demo_org(request.user)
             _reassign_demo_tasks_to_user(existing, request.user)
+            from kanban.tasks.sandbox_provisioning import touch_sandbox_access
+            touch_sandbox_access(request.user)
             profile.is_viewing_demo = True
             profile.active_workspace = demo_ws
             fields = ['is_viewing_demo', 'active_workspace']
@@ -1965,6 +1967,8 @@ def switch_workspace(request):
                 existing = request.user.demo_sandbox
                 _join_demo_org(request.user)
                 _reassign_demo_tasks_to_user(existing, request.user)
+                from kanban.tasks.sandbox_provisioning import touch_sandbox_access
+                touch_sandbox_access(request.user)
             except DemoSandbox.DoesNotExist:
                 from kanban.tasks.sandbox_provisioning import provision_sandbox_task
                 try:
@@ -3319,13 +3323,22 @@ def update_column(request, column_id):
     if request.method == 'POST':
         new_name = request.POST.get('name', '').strip()
         if new_name:
+            from kanban.column_semantics import COLUMN_TYPE_CHOICES
             old_name = column.name
             column.name = new_name
+            # Optional structural type marker. '' == auto (derive from name).
+            # An explicit type survives renames on purpose; leaving it on Auto
+            # keeps status detection tracking the name.
+            if 'column_type' in request.POST:
+                requested = request.POST.get('column_type', '').strip()
+                valid = {c[0] for c in COLUMN_TYPE_CHOICES}
+                if requested in valid:
+                    column.column_type = requested
             column.save()
-            
+
             # Log to audit trail
             log_model_change('column.updated', column, request.user if request.user.is_authenticated else None, request)
-            
+
             messages.success(request, f'Column renamed from "{old_name}" to "{new_name}"!')
         else:
             messages.error(request, 'Column name cannot be empty.')
@@ -4331,11 +4344,10 @@ def move_task(request):
         task.column = new_column
         task.position = position
         
-        # Auto-update progress to 100% when moved to a "Done" or "Complete" column
-        column_name_lower = new_column.name.lower()
-        if 'done' in column_name_lower or 'complete' in column_name_lower:
+        # Auto-update progress to 100% when moved to a Done-type column
+        if new_column.is_done():
             task.progress = 100
-        
+
         task.save()
 
         response_data = {'success': True, 'progress': task.progress}
@@ -4356,8 +4368,7 @@ def move_task(request):
                       changes={'column': {'old': old_column.name, 'new': new_column.name}})
             
             # If progress was set to 100% automatically, record that too
-            column_name_lower = new_column.name.lower()
-            if ('done' in column_name_lower or 'complete' in column_name_lower) and task.progress == 100:
+            if new_column.is_done() and task.progress == 100:
                 TaskActivity.objects.create(
                     task=task,
                     user=request.user,
@@ -6662,9 +6673,8 @@ def task_update_status(request, task_id):
     old_column = task.column
     task.column = new_column
 
-    # Auto-progress when moved to Done/Complete
-    col_lower = new_column.name.lower()
-    if 'done' in col_lower or 'complete' in col_lower:
+    # Auto-progress when moved to a Done-type column
+    if new_column.is_done():
         task.progress = 100
 
     task.save()
@@ -6845,8 +6855,7 @@ def task_update_fields(request, task_id):
         new_column = get_object_or_404(Column, id=request.POST['column_id'], board=board)
         if new_column.id != task.column_id:
             task.column = new_column
-            col_lower = new_column.name.lower()
-            if 'done' in col_lower or 'complete' in col_lower:
+            if new_column.is_done():
                 task.progress = 100
             changes.append(f"Status → {new_column.name}")
             moved_column = new_column

@@ -226,10 +226,14 @@ def compute_actual_7d_velocity(board):
     by user-facing views).
     """
     from datetime import timedelta
-    from django.db.models import Q
     from kanban.models import TaskActivity
 
     cutoff = timezone.now() - timedelta(days=7)
+    # Candidates = tasks with a move/update activity in the window. The
+    # Done-ness gate is applied per-task below via Column.is_done() (which
+    # honours the structural column_type marker), so we don't pre-filter on the
+    # activity description text — that would silently miss renamed Done columns
+    # (e.g. "Finished"/"Achieved").
     qs = (
         TaskActivity.objects
         .filter(
@@ -238,7 +242,6 @@ def compute_actual_7d_velocity(board):
             activity_type__in=['moved', 'updated'],
             created_at__gte=cutoff,
         )
-        .filter(Q(description__icontains='done') | Q(description__icontains='complete'))
         .select_related('task', 'task__column')
     )
 
@@ -246,8 +249,7 @@ def compute_actual_7d_velocity(board):
     for act in qs:
         if act.task_id in seen:
             continue
-        col_lower = act.task.column.name.lower()
-        if 'done' in col_lower or 'complete' in col_lower:
+        if act.task.column.is_done():
             seen.add(act.task_id)
 
     # 7-day count IS already per-week; no scaling needed.

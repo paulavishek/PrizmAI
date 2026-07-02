@@ -57,6 +57,7 @@ from kanban.tasks.shadow_branch_tasks import (
 
 from kanban.tasks.sandbox_tasks import (
     _delete_sandbox,
+    cleanup_stale_sandboxes,
 )
 
 from kanban.tasks.sandbox_provisioning import (
@@ -89,6 +90,7 @@ __all__ = [
     'refresh_demo_dates_task',
     # Sandbox provisioning
     'provision_sandbox_task',
+    'cleanup_stale_sandboxes',
     # Automation tasks
     'run_due_date_approaching_automations',
     'run_overdue_task_automations',

@@ -59,13 +59,13 @@ class SpectraActionService:
 
     @staticmethod
     def _resolve_column(board):
-        """Find the 'To Do' column (or fall back to the first column)."""
+        """Find the To Do-type column (or fall back to the first column)."""
         from kanban.models import Column
+        from kanban.column_semantics import column_type_q
 
         col = Column.objects.filter(
-            board=board,
-            name__iregex=r'^(to do|todo)$',
-        ).first()
+            column_type_q('todo', field=''), board=board,
+        ).order_by('position').first()
         if not col:
             col = Column.objects.filter(board=board).order_by('position').first()
         return col
@@ -885,10 +885,16 @@ class SpectraActionService:
 
             # Apply the update based on field
             if field == 'status':
-                # "done", "complete" → move to last column; otherwise match column name
-                val_lower = new_value.lower()
-                if val_lower in ('done', 'complete', 'completed', 'finished'):
-                    target_col = Column.objects.filter(board=board).order_by('-position').first()
+                # A "done"-type value → move to the board's Done column (fall back
+                # to the last column); otherwise match the column name.
+                from kanban.column_semantics import classify_column_name, column_type_q
+                wants_done = classify_column_name(new_value) == 'done'
+                if wants_done:
+                    target_col = (
+                        Column.objects.filter(column_type_q('done', field=''), board=board)
+                        .order_by('-position').first()
+                        or Column.objects.filter(board=board).order_by('-position').first()
+                    )
                 else:
                     target_col = Column.objects.filter(
                         board=board, name__icontains=new_value,
@@ -901,7 +907,7 @@ class SpectraActionService:
                 task.save(update_fields=['column', 'position', 'updated_at'])
                 # Proactive insight: remaining open tasks
                 insight = ''
-                if val_lower in ('done', 'complete', 'completed', 'finished'):
+                if wants_done:
                     remaining = Task.objects.filter(
                         column__board=board,
                     ).exclude(column=target_col).count()

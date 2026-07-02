@@ -292,10 +292,10 @@ def confirm_create_tasks(request, room_id):
 
     board = room.board
 
-    # Resolve target column: prefer "To Do" by name, fallback to first column by position
+    # Resolve target column: prefer a To Do-type column, fallback to first by position
+    from kanban.column_semantics import column_type_q
     column = (
-        Column.objects.filter(board=board, name__icontains="to do").first()
-        or Column.objects.filter(board=board, name__icontains="todo").first()
+        Column.objects.filter(column_type_q('todo', field=''), board=board).order_by("position").first()
         or Column.objects.filter(board=board).order_by("position").first()
     )
 
@@ -472,9 +472,9 @@ def create_tasks_from_chat_attachment(request, file_id):
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
     else:
+        from kanban.column_semantics import column_type_q
         column = (
-            Column.objects.filter(board=board, name__icontains="to do").first()
-            or Column.objects.filter(board=board, name__icontains="todo").first()
+            Column.objects.filter(column_type_q('todo', field=''), board=board).order_by("position").first()
             or Column.objects.filter(board=board).order_by("position").first()
         )
 

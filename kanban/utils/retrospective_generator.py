@@ -59,11 +59,13 @@ class RetrospectiveGenerator:
             completed_at__lt=period_start_dt
         )
         
-        # Detect "done"-type columns by name (case-insensitive) — tasks here count as completed
+        # Detect "done"-type columns via the column's resolved type (structural
+        # column_type marker, else name heuristic — single source of truth).
         from kanban.models import Column as KanbanColumn
+        from kanban import column_semantics
         done_column_ids = list(KanbanColumn.objects.filter(
+            column_semantics.column_type_q('done', field=''),
             board=self.board,
-            name__iregex=r'(done|completed?|finished|closed)'
         ).values_list('id', flat=True))
 
         # Get completed tasks: progress=100 OR task is in a done-type column
