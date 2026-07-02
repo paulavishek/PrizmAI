@@ -759,6 +759,15 @@
     .sandbox-active-detail { display: none; }
     .sandbox-active-banner { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 }
+/* Bootstrap's offcanvas defaults to z-index 1045 (backdrop 1040), below the
+   sticky sandbox banner's 1049 — without this the banner renders on top of
+   any open offcanvas panel (e.g. Memory's Browse panel, board AI Tools). */
+.offcanvas {
+    z-index: 1051;
+}
+.offcanvas-backdrop {
+    z-index: 1050;
+}
 [data-bs-theme="dark"] .sandbox-active-banner {
     background: linear-gradient(135deg, #2e1065 0%, #3b0764 50%, #2e1065 100%);
     border-bottom-color: #a78bfa;
