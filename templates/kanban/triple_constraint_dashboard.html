@@ -1082,7 +1082,7 @@
 {% block extra_js %}
 <!-- Chart.js — required by the 30-Day Confidence Trend chart below. base.html
      does not load it globally, so include it here (mirrors burndown_dashboard). -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 /* ── What‑if simulator ───────────────────────────────────────────────────── */
 var WIF = {

@@ -278,7 +278,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
     {% if has_budget and roi_snapshots %}
     // ROI Trend Chart

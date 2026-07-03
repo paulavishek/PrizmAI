@@ -4,7 +4,7 @@
 {% block title %}{{ board.name }} - Gantt Chart{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
+<link rel="stylesheet" href="{% static 'vendor/frappe-gantt.min.css' %}?v={{ STATIC_VERSION|default:'12' }}">
 <style>
     /* ============================================
        PROFESSIONAL GANTT CHART STYLES
@@ -2223,7 +2223,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<script src="{% static 'vendor/frappe-gantt.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
     // Suppress known Frappe Gantt library errors related to $bar
     // These occur during mouse interactions when bars are not yet rendered

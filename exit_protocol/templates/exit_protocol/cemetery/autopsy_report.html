@@ -264,7 +264,7 @@
 
 {% block extra_js %}
 {% if entry.decline_timeline %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="{% static 'js/chart.umd.min.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>
 (function() {
   const timeline = {{ entry.decline_timeline|safe }};
