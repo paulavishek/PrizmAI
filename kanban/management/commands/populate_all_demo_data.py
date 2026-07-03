@@ -2946,6 +2946,7 @@ class Command(BaseCommand):
             'populate_knowledge_demo_data',
             'populate_discovery_demo_data',
             'populate_automation_demo_data',
+            'fix_premortem_stress_demo',
         ]
         for name in subs:
             try:

@@ -332,8 +332,14 @@
                         <div class="card-body">
                             <i class="fas fa-crosshairs fa-2x text-danger mb-2"></i>
                             <h3>{{ total_scenarios }}</h3>
-                            <p class="text-muted mb-0">Attacks Simulated</p>
-                            <small class="text-muted" id="scenarios-addressed-count">{{ scenarios_addressed }} addressed</small>
+                            <p class="text-muted mb-0">
+                                Attacks Simulated
+                                <span data-bs-toggle="tooltip" data-bs-placement="top"
+                                      title="Cumulative across every run on this board. Each 'Run Stress Test' adds 5 fresh threats to the total, and 'Mark Addressed' acknowledgments stay counted here permanently, just like Vaccines Applied.">
+                                    <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.7rem; cursor:help;"></i>
+                                </span>
+                            </p>
+                            <small class="text-muted" id="scenarios-addressed-count" data-count="{{ scenarios_addressed }}">{{ scenarios_addressed }} addressed across all runs</small>
                         </div>
                     </div>
                 </div>
@@ -342,7 +348,13 @@
                         <div class="card-body">
                             <i class="fas fa-syringe fa-2x text-success mb-2"></i>
                             <h3 id="vaccines-applied-counter">{{ vaccines_applied }} / {{ vaccines_total }}</h3>
-                            <p class="text-muted mb-0">Vaccines Applied</p>
+                            <p class="text-muted mb-0">
+                                Vaccines Applied
+                                <span data-bs-toggle="tooltip" data-bs-placement="top"
+                                      title="Cumulative, like Attacks Simulated — once you apply a vaccine it stays counted here permanently, even after a re-run generates a new vaccine shelf.">
+                                    <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.7rem; cursor:help;"></i>
+                                </span>
+                            </p>
                             <small class="text-muted">across all sessions</small>
                         </div>
                     </div>
@@ -440,7 +452,7 @@
             {% if session_count > 1 %}
             <p class="text-muted small mb-3">
                 <i class="fas fa-info-circle me-1 text-info"></i>
-                Each re-run generates 5 fresh scenarios targeting your <em>current</em> weakest points. Applied vaccines close old gaps — so the AI automatically shifts its attacks to probe your remaining vulnerabilities.
+                Each re-run generates 5 fresh scenarios targeting your <em>current</em> weakest points — these are new, unaddressed threats below. Applied vaccines close old gaps — so the AI automatically shifts its attacks to probe your remaining vulnerabilities.
             </p>
             {% endif %}
             {% for scenario in session.scenarios.all %}
@@ -631,8 +643,18 @@
                             <th>Run By</th>
                             <th>Immunity Score</th>
                             <th>Band</th>
-                            <th>Scenarios</th>
-                            <th>Vaccines Applied</th>
+                            <th>Scenarios
+                                <span data-bs-toggle="tooltip" data-bs-placement="top"
+                                      title="Scoped to this run's own 5 threats — each run generates brand-new scenarios, so 'addressed' here only counts acknowledgments made against that run's specific threats.">
+                                    <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.7rem; cursor:help;"></i>
+                                </span>
+                            </th>
+                            <th>Vaccines Applied
+                                <span data-bs-toggle="tooltip" data-bs-placement="top"
+                                      title="Cumulative, board-wide — the running total of all vaccines applied up to this run, not just vaccines applied during this specific run.">
+                                    <i class="fas fa-question-circle text-muted ms-1" style="font-size:0.7rem; cursor:help;"></i>
+                                </span>
+                            </th>
                             <th>Score Delta</th>
                         </tr>
                     </thead>
@@ -657,12 +679,12 @@
                             <td>
                                 {{ s.scenarios.count }} attacks
                                 <small class="text-muted">
-                                    ({{ s.scenarios_unaddressed_count }} not yet addressed)
+                                    ({{ s.scenarios_unaddressed_count }} not yet addressed this run)
                                 </small>
                             </td>
                             <td>
                                 <strong>{{ s.vaccines_applied_at_run }}</strong>
-                                <small class="text-muted">applied at run</small>
+                                <small class="text-muted">cumulative as of this run</small>
                             </td>
                             <td>
                                 {% if delta is None %}
@@ -905,11 +927,16 @@ function toggleScenarioAddressed(scenarioId, btn) {
                 btn.classList.add('btn-outline-secondary');
                 btn.innerHTML = '<i class="fas fa-circle me-1"></i> Mark Addressed';
             }
-            // Update the addressed counter in the stat card
+            // Update the addressed counter in the stat card. This count is
+            // cumulative across all runs (like Vaccines Applied), so adjust the
+            // server-rendered baseline by +/-1 rather than recomputing from only
+            // the scenario cards currently on screen (which belong to the latest
+            // session only — earlier sessions' addressed scenarios aren't rendered).
             const counterEl = document.getElementById('scenarios-addressed-count');
             if (counterEl) {
-                const n = document.querySelectorAll('[id^="scenario-"] .btn-success').length;
-                counterEl.textContent = n + ' addressed';
+                const next = (parseInt(counterEl.dataset.count, 10) || 0) + (data.is_addressed ? 1 : -1);
+                counterEl.dataset.count = next;
+                counterEl.textContent = next + ' addressed across all runs';
             }
             // Show re-run reminder
             showRerunBanner();
