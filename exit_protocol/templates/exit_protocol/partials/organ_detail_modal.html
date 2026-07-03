@@ -1,0 +1,267 @@
+<!-- Organ Detail Modal (shared by Organ Bank + Organ Library) -->
+<div class="modal fade" id="organDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title mb-1" id="organModalLabel"></h5>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary" id="organModalTypeBadge"></span>
+            <span class="badge" id="organModalStatusBadge"></span>
+          </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="organModalDescription" class="mb-3" style="color: #4a5568;"></p>
+
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <small class="text-muted">Reusability:</small>
+          <div class="progress flex-grow-1" style="height: 6px;">
+            <div class="progress-bar bg-success" id="organModalScoreBar" style="width: 0%;"></div>
+          </div>
+          <small id="organModalScoreText"></small>
+        </div>
+
+        <div id="organModalSourceRow" class="mb-3" style="display: none;">
+          <small class="text-muted">From:</small>
+          <span id="organModalSource" style="font-size: 0.85rem;"></span>
+        </div>
+
+        <div id="organModalRationaleSection" class="mb-3" style="display: none;">
+          <strong style="font-size: 0.85rem; color: #4a5568;">
+            <i class="fas fa-robot me-1" style="color: #805ad5;"></i> Why reusable?
+          </strong>
+          <p class="mb-0 mt-1" style="font-size: 0.85rem; color: #718096;" id="organModalRationale"></p>
+        </div>
+        <div id="organModalBestSuitedSection" class="mb-3" style="display: none;">
+          <strong style="font-size: 0.85rem; color: #4a5568;">Best suited for</strong>
+          <p class="mb-0 mt-1" style="font-size: 0.85rem; color: #718096;" id="organModalBestSuited"></p>
+        </div>
+        <div id="organModalCautionsSection" class="mb-3" style="display: none;">
+          <strong style="font-size: 0.85rem; color: #c05621;">
+            <i class="fas fa-exclamation-triangle me-1"></i> Cautions
+          </strong>
+          <p class="mb-0 mt-1" style="font-size: 0.85rem; color: #718096;" id="organModalCautions"></p>
+        </div>
+
+        <hr>
+        <strong style="font-size: 0.85rem; color: #4a5568;">Component Details</strong>
+        <div id="organModalPayload" class="mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="organModalCopyBtn">
+          <i class="fas fa-copy"></i> Copy Details
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function getOrgansById() {
+    var el = document.getElementById('organs-data');
+    if (!el) return {};
+    try {
+      var list = JSON.parse(el.textContent);
+      var map = {};
+      list.forEach(function (o) { map[o.id] = o; });
+      return map;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function humanizeKey(k) {
+    return k.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        resolve();
+      } catch (e) {
+        reject(e);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    });
+  }
+
+  // Plain-text mirror of renderValue()/renderObject() below, for the
+  // clipboard copy — same generic, schema-agnostic walk but text instead of HTML.
+  function valueToText(value, indent) {
+    if (value === null || value === undefined || value === '') return '—';
+    if (Array.isArray(value)) {
+      if (!value.length) return '—';
+      if (typeof value[0] === 'object' && value[0] !== null) {
+        return '\n' + value.map(function (item) {
+          return indent + '  - ' + objectToText(item, indent + '    ');
+        }).join('\n');
+      }
+      return '\n' + value.map(function (v) { return indent + '  - ' + v; }).join('\n');
+    }
+    if (typeof value === 'object') return '\n' + objectToText(value, indent + '  ');
+    return String(value);
+  }
+
+  function objectToText(obj, indent) {
+    return Object.keys(obj).map(function (k) {
+      return indent + humanizeKey(k) + ': ' + valueToText(obj[k], indent);
+    }).join('\n');
+  }
+
+  function buildOrganCopyText(organ) {
+    var lines = [];
+    lines.push(organ.name + ' (' + organ.organ_type_display + ')');
+    lines.push('Reusability: ' + (organ.reusability_score || 0) + '% — ' + organ.status_display);
+    if (organ.source_board_name) lines.push('From: ' + organ.source_board_name);
+    if (organ.description) { lines.push(''); lines.push(organ.description); }
+    if (organ.ai_rationale) { lines.push(''); lines.push('Why reusable: ' + organ.ai_rationale); }
+    if (organ.best_suited_for) { lines.push(''); lines.push('Best suited for: ' + organ.best_suited_for); }
+    if (organ.cautions) { lines.push(''); lines.push('Cautions: ' + organ.cautions); }
+    var payloadKeys = organ.payload ? Object.keys(organ.payload) : [];
+    if (payloadKeys.length) {
+      lines.push('');
+      lines.push('Details:');
+      lines.push(objectToText(organ.payload, ''));
+    }
+    return lines.join('\n');
+  }
+
+  // Payload shapes are free-form JSON (they differ per organ_type and even
+  // across organs of the same type), so rendering is generic rather than
+  // schema-aware: scalars become text, arrays of scalars become bullet
+  // lists, arrays of objects and nested objects become definition lists.
+  function renderValue(value) {
+    if (value === null || value === undefined || value === '') {
+      return '<span class="text-muted">—</span>';
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '<span class="text-muted">—</span>';
+      if (typeof value[0] === 'object' && value[0] !== null) {
+        return '<div class="d-flex flex-column gap-2">' + value.map(function (item) {
+          return '<div class="p-2 rounded" style="background:#f7fafc;border:1px solid #e2e8f0;">' + renderObject(item) + '</div>';
+        }).join('') + '</div>';
+      }
+      return '<ul class="mb-0 ps-3">' + value.map(function (v) {
+        return '<li style="font-size:0.85rem;">' + escapeHtml(String(v)) + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (typeof value === 'object') return renderObject(value);
+    return '<span style="font-size:0.85rem;">' + escapeHtml(String(value)) + '</span>';
+  }
+
+  function renderObject(obj) {
+    var keys = Object.keys(obj);
+    if (!keys.length) return '<span class="text-muted">—</span>';
+    return '<dl class="row mb-0">' + keys.map(function (k) {
+      return '<dt class="col-4 text-muted" style="font-size:0.78rem;">' + escapeHtml(humanizeKey(k)) + '</dt>' +
+             '<dd class="col-8" style="font-size:0.85rem;">' + renderValue(obj[k]) + '</dd>';
+    }).join('') + '</dl>';
+  }
+
+  function renderPayload(payload) {
+    var keys = payload ? Object.keys(payload) : [];
+    if (!keys.length) {
+      return '<p class="text-muted mb-0" style="font-size:0.85rem;">No additional details captured for this component.</p>';
+    }
+    return keys.map(function (k) {
+      return '<div class="mb-3"><strong class="d-block mb-1" style="font-size:0.8rem;color:#4a5568;text-transform:uppercase;letter-spacing:0.4px;">' +
+        escapeHtml(humanizeKey(k)) + '</strong>' + renderValue(payload[k]) + '</div>';
+    }).join('');
+  }
+
+  function toggleSection(sectionId, textId, text) {
+    var section = document.getElementById(sectionId);
+    if (text) {
+      document.getElementById(textId).textContent = text;
+      section.style.display = '';
+    } else {
+      section.style.display = 'none';
+    }
+  }
+
+  var currentOrgan = null;
+
+  function openOrganModal(organ) {
+    currentOrgan = organ;
+    document.getElementById('organModalLabel').textContent = organ.name;
+    document.getElementById('organModalTypeBadge').textContent = organ.organ_type_display;
+    document.getElementById('organModalDescription').textContent = organ.description || '';
+
+    var statusBadge = document.getElementById('organModalStatusBadge');
+    statusBadge.textContent = organ.status_display;
+    statusBadge.className = 'badge ' + (
+      organ.status === 'available' ? 'bg-success' :
+      organ.status === 'transplanted' ? 'bg-info' : 'bg-secondary'
+    );
+
+    var score = organ.reusability_score || 0;
+    var scoreBar = document.getElementById('organModalScoreBar');
+    scoreBar.style.width = score + '%';
+    scoreBar.className = 'progress-bar ' + (score >= 70 ? 'bg-success' : score >= 40 ? 'bg-warning' : 'bg-danger');
+    document.getElementById('organModalScoreText').textContent = score + '%';
+
+    var sourceRow = document.getElementById('organModalSourceRow');
+    if (organ.source_board_name) {
+      document.getElementById('organModalSource').textContent = organ.source_board_name;
+      sourceRow.style.display = '';
+    } else {
+      sourceRow.style.display = 'none';
+    }
+
+    toggleSection('organModalRationaleSection', 'organModalRationale', organ.ai_rationale);
+    toggleSection('organModalBestSuitedSection', 'organModalBestSuited', organ.best_suited_for);
+    toggleSection('organModalCautionsSection', 'organModalCautions', organ.cautions);
+
+    document.getElementById('organModalPayload').innerHTML = renderPayload(organ.payload);
+
+    var modalEl = document.getElementById('organDetailModal');
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+
+  // Delegated listener: works regardless of DOM-ready timing and covers
+  // cards added by client-side filtering (organ_bank.html's type/search filter
+  // only toggles display, but this is robust either way).
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.view-organ-btn');
+    if (!btn) return;
+    var organ = getOrgansById()[btn.dataset.organId];
+    if (organ) openOrganModal(organ);
+  });
+
+  var copyBtn = document.getElementById('organModalCopyBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (!currentOrgan) return;
+      copyToClipboard(buildOrganCopyText(currentOrgan))
+        .then(function () {
+          var original = copyBtn.innerHTML;
+          copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied';
+          setTimeout(function () { copyBtn.innerHTML = original; }, 1500);
+        })
+        .catch(function () { alert('Could not copy to clipboard.'); });
+    });
+  }
+})();
+</script>

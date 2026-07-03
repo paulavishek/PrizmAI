@@ -273,6 +273,11 @@ def refresh_all_demo_dates(skip_mark_cache=False):
             #     they track the tasks/events they describe instead of drifting.
             _safe(lambda: _refresh_memory_node_dates(base_date), 'memory_nodes_updated')
 
+            # 28. Refresh Exit Protocol wind-down dates (buried hospice session,
+            #     extracted organs, health-signal history) so they stay relative
+            #     to today instead of drifting from their frozen clone dates.
+            _safe(lambda: _refresh_exit_protocol_dates(base_date), 'exit_protocol_dates_updated')
+
         # Mark refresh as complete
         if not skip_mark_cache:
             mark_demo_dates_refreshed()
@@ -362,6 +367,71 @@ def _refresh_memory_node_dates(base_date):
         return total
     except Exception as e:
         logger.warning(f"_refresh_memory_node_dates failed: {e}")
+        return 0
+
+
+# Exit Protocol wind-down anchors — how many days before "today" the demo's
+# buried hospice session sits. Kept in step with the offsets used by the
+# ``seed_exit_protocol_demo`` management command.
+HOSPICE_INITIATED_DAYS_AGO = 90
+HOSPICE_BURIED_DAYS_AGO = 75
+ORGAN_EXTRACTED_DAYS_AGO = 77
+
+
+def _refresh_exit_protocol_dates(base_date):
+    """
+    Keep Exit Protocol wind-down timestamps relative to "today".
+
+    The demo's buried HospiceSession, its extracted ProjectOrgans, and the
+    ProjectHealthSignal history are otherwise frozen at seed/clone time (the
+    sandbox clone deliberately preserves the template's original dates), so
+    without this they slowly drift into the past relative to every other demo
+    entity that is shifted forward on each daily refresh.
+
+    HospiceSession + ProjectOrgan carry a single logical event each, so they are
+    re-anchored to fixed absolute offsets before today. ProjectHealthSignal is a
+    time series whose relative spacing feeds the Health Signal History chart, so
+    it gets an offset-preserving uniform shift (same idea as memory nodes).
+
+    All three fields are auto-populated on insert, so we bypass them with .update().
+    """
+    try:
+        from exit_protocol.models import HospiceSession, ProjectOrgan, ProjectHealthSignal
+        from django.db.models import Max, F
+        from datetime import timedelta
+
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        now = timezone.now()
+        total = 0
+
+        # Buried sessions -> fixed offsets.
+        total += HospiceSession.objects.filter(board_id__in=demo_board_ids).update(
+            initiated_at=now - timedelta(days=HOSPICE_INITIATED_DAYS_AGO),
+            buried_at=now - timedelta(days=HOSPICE_BURIED_DAYS_AGO),
+        )
+        total += ProjectOrgan.objects.filter(source_board_id__in=demo_board_ids).update(
+            extracted_at=now - timedelta(days=ORGAN_EXTRACTED_DAYS_AGO),
+        )
+
+        # Health-signal history -> offset-preserving shift per board.
+        for board_id in demo_board_ids:
+            newest = ProjectHealthSignal.objects.filter(board_id=board_id).aggregate(
+                newest=Max('recorded_at')
+            )['newest']
+            if not newest:
+                continue
+            shift = now - newest
+            if abs(shift) < timedelta(days=1):
+                continue
+            total += ProjectHealthSignal.objects.filter(board_id=board_id).update(
+                recorded_at=F('recorded_at') + shift
+            )
+        return total
+    except Exception as e:
+        logger.warning(f"_refresh_exit_protocol_dates failed: {e}")
         return 0
 
 

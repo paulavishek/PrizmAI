@@ -416,6 +416,31 @@ def dismiss_hospice_banner(request, board_id):
 # Organ Transplant Views
 # ──────────────────────────
 
+def _organ_to_dict(organ):
+    """Serialize a ProjectOrgan for the client-side organ detail modal.
+
+    Payload shapes are not fixed per organ_type (AI-extracted organs from
+    ``scan_and_extract_organs`` and hand-seeded demo organs both use free-form
+    JSON), so the modal renders whatever keys are present generically rather
+    than assuming a schema.
+    """
+    return {
+        'id': organ.id,
+        'name': organ.name,
+        'organ_type': organ.organ_type,
+        'organ_type_display': organ.get_organ_type_display(),
+        'description': organ.description,
+        'reusability_score': organ.reusability_score,
+        'status': organ.status,
+        'status_display': organ.get_status_display(),
+        'ai_rationale': organ.ai_rationale,
+        'best_suited_for': organ.best_suited_for,
+        'cautions': organ.cautions,
+        'payload': organ.payload or {},
+        'source_board_name': organ.source_board.name if organ.source_board_id else '',
+    }
+
+
 @login_required
 def organ_bank(request, board_id):
     board = get_object_or_404(Board, id=board_id)
@@ -428,6 +453,7 @@ def organ_bank(request, board_id):
     return render(request, 'exit_protocol/organ_bank.html', {
         'board': board,
         'organs': organs,
+        'organs_json': [_organ_to_dict(o) for o in organs],
     })
 
 
@@ -456,9 +482,15 @@ def organ_library(request):
         except (ValueError, TypeError):
             pass
 
+    # Free-text search. Historically this only matched the source project's
+    # name (the "From: ..." line on each card), which surprised users who typed
+    # the organ's own title — the text most prominent on the card. Match both.
     source_project = request.GET.get('source_project')
     if source_project:
-        organs = organs.filter(source_board__name__icontains=source_project)
+        organs = organs.filter(
+            Q(name__icontains=source_project) |
+            Q(source_board__name__icontains=source_project)
+        )
 
     # Lazy compatibility scoring for target board
     target_board_id = request.GET.get('target_board_id')
@@ -504,6 +536,8 @@ def organ_library(request):
         'target_board_id': target_board_id,
         'compatibility_scores': compatibility_scores,
         'organ_type_choices': ProjectOrgan.ORGAN_TYPE_CHOICES,
+        'organs_json': [_organ_to_dict(o) for o in organs],
+        'has_active_filters': bool(organ_type or min_score or source_project),
     })
 
 
@@ -584,7 +618,7 @@ def transplant_organ(request, organ_id):
     OrganTransplant.objects.create(
         organ=organ,
         target_board=target_board,
-        transplanted_by=request.user,
+        approved_by=request.user,
         compatibility_score=0,
     )
 
