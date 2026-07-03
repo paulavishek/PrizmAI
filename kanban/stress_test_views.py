@@ -165,13 +165,18 @@ def stress_test_dashboard(request, board_id):
     )
 
     # Stats
-    total_scenarios = 0
-    scenarios_addressed = 0
     vaccines_applied_session = 0
     if latest_session:
-        total_scenarios = latest_session.scenarios.count()
-        scenarios_addressed = latest_session.scenarios.filter(is_addressed=True).count()
         vaccines_applied_session = latest_session.vaccines.filter(is_applied=True).count()
+
+    # Cumulative across all sessions on this board — mirrors vaccines_applied_total
+    # below. A scenario marked "addressed" stays counted here permanently, even
+    # after a re-run generates a fresh scenario shelf, since the acknowledgment
+    # reflects awareness the user has genuinely built up over time.
+    total_scenarios = StressTestScenario.objects.filter(session__board=board).count()
+    scenarios_addressed = StressTestScenario.objects.filter(
+        session__board=board, is_addressed=True
+    ).count()
 
     vaccines_applied_total = Vaccine.objects.filter(board=board, is_applied=True).count()
     vaccines_total = Vaccine.objects.filter(board=board).count()
@@ -308,9 +313,9 @@ def run_stress_test(request, board_id):
     # so vaccines always produce visible improvement on re-run.
     last_score = board_data.get('last_immunity_score') or 0
     total_vaccine_credit = board_data.get('total_vaccine_improvement') or 0
-    score_floor = max(1, last_score + int(total_vaccine_credit * 0.6))
+    score_floor = min(max(1, last_score + int(total_vaccine_credit * 0.6)), 100)
     raw_overall = result.get('overall_immunity_score') or 50
-    overall_score = max(raw_overall, score_floor)
+    overall_score = min(max(raw_overall, score_floor), 100)
     if overall_score != raw_overall:
         logger.info(
             "Stress Test board %s: clamped AI score %s → %s (floor=%s, last=%s, "
