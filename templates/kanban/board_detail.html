@@ -1584,10 +1584,9 @@
                     {% if features.show_discovery %}
                     <a class="ai-panel-tile" href="{% url 'discovery_dashboard' %}"
                        id="discoveryPanelTile"
-                       title="PrizmDiscovery — ideas inbox and impact/effort matrix"
-                       data-board-id="{{ board.id }}">
+                       title="PrizmDiscovery — ideas inbox and impact/effort matrix">
                         <span class="tile-icon" style="color: #f59e0b;"><i class="fas fa-lightbulb"></i></span>
-                        <span class="tile-label">Discovery <span id="discoveryPanelBadge" class="badge rounded-pill" style="font-size:0.65rem; display:none;"></span></span>
+                        <span class="tile-label">Discovery</span>
                     </a>
                     {% else %}
                     <span class="ai-panel-tile ai-tool-locked" data-bs-toggle="tooltip" title="Available in Professional mode — upgrade your workspace to unlock">
@@ -1962,30 +1961,6 @@ document.addEventListener('DOMContentLoaded', function() {
         new bootstrap.Tooltip(el, { trigger: 'hover', placement: 'top' });
     });
 });
-</script>
-
-<!-- Discovery panel badge loader -->
-<script>
-(function () {
-    const tile = document.getElementById('discoveryPanelTile');
-    if (!tile) return;
-    const boardId = tile.dataset.boardId;
-    if (!boardId) return;
-    fetch(`/api/boards/${boardId}/discovery-link/`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.count > 0) {
-                const badge = document.getElementById('discoveryPanelBadge');
-                if (badge) {
-                    badge.textContent = data.count;
-                    badge.style.background = '#dcfce7';
-                    badge.style.color = '#166534';
-                    badge.style.display = 'inline';
-                }
-            }
-        })
-        .catch(() => {});
-})();
 </script>
 
 {% if pending_scope_reason_task_id %}
