@@ -617,19 +617,13 @@
       </div>
       {% endif %}
 
+      {% if hospice_session.status != 'buried' %}
       <div class="hospice-actions">
-        <a href="{% url 'exit_protocol:transition_memos' board.id %}" class="btn btn-outline-primary">
-          <i class="fas fa-file-alt me-1"></i> Transition Memos
-        </a>
-        <a href="{% url 'exit_protocol:organ_bank' board.id %}" class="btn btn-outline-secondary">
-          <i class="fas fa-cubes me-1"></i> Organ Bank
-        </a>
-        {% if hospice_session.status != 'buried' %}
         <button type="button" class="btn-bury" data-bs-toggle="modal" data-bs-target="#buryModal">
           <i class="bi bi-archive me-1"></i> Archive This Project
         </button>
-        {% endif %}
       </div>
+      {% endif %}
 
       {% elif show_initiate_cta %}
       <div class="d-flex align-items-start gap-3">

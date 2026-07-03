@@ -26,7 +26,8 @@
         style="width: 9rem;" value="{{ request.GET.min_score }}">
     </div>
     <div class="col-auto">
-      <input type="text" name="source_project" class="form-control form-control-sm" placeholder="Source project..."
+      <input type="text" name="source_project" class="form-control form-control-sm" placeholder="Search organ or project name..."
+        title="Matches the component's name or the project it came from"
         value="{{ request.GET.source_project }}">
     </div>
     {% if target_board_id %}
@@ -35,6 +36,12 @@
     <div class="col-auto">
       <button type="submit" class="btn btn-outline-primary btn-sm">Filter</button>
     </div>
+    {% if has_active_filters %}
+    <div class="col-auto">
+      <a href="{% url 'exit_protocol:organ_library' %}{% if target_board_id %}?target_board_id={{ target_board_id }}{% endif %}"
+        class="btn btn-outline-secondary btn-sm">Clear Filters</a>
+    </div>
+    {% endif %}
   </form>
 
   {% if organs %}
@@ -77,6 +84,10 @@
           {% endwith %}
           {% endif %}
 
+          <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2 view-organ-btn" data-organ-id="{{ organ.id }}">
+            View Details
+          </button>
+
           {% if organ.status == 'available' %}
           <button class="btn btn-sm btn-outline-success w-100 mt-2 transplant-btn"
             data-organ-id="{{ organ.id }}"
@@ -98,15 +109,22 @@
     <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🫀</div>
     <p style="font-size: 1rem; font-weight: 600; color: #4a5568; margin-bottom: 0.25rem;">No organs found</p>
     <p style="font-size: 0.875rem; color: #718096; margin: 0;">
-      {% if request.GET.organ_type or request.GET.min_score or request.GET.source_project %}
+      {% if has_active_filters %}
         No reusable components match your current filters. Try clearing them.
       {% else %}
         Organs are extracted from projects when a wind-down review is completed.<br>
         Once archived, their reusable components appear here.
       {% endif %}
     </p>
+    {% if has_active_filters %}
+    <a href="{% url 'exit_protocol:organ_library' %}{% if target_board_id %}?target_board_id={{ target_board_id }}{% endif %}"
+      class="btn btn-outline-secondary btn-sm mt-2">Clear Filters</a>
+    {% endif %}
   </div>
   {% endif %}
+
+  {{ organs_json|json_script:"organs-data" }}
+  {% include 'exit_protocol/partials/organ_detail_modal.html' %}
 </div>
 {% endblock %}
 
