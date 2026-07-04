@@ -543,7 +543,7 @@ def set_mission_goal(request, mission_id):
     """POST: Set (or clear) the parent Goal for a Mission — from the Mission's own detail page."""
     mission = get_object_or_404(Mission, id=mission_id)
 
-    if not request.user.has_perm('prizmai.edit_mission', mission):
+    if not (request.user.has_perm('prizmai.edit_mission', mission) or is_demo_context(request)):
         messages.error(request, 'You do not have permission to modify this mission.')
         return redirect('mission_detail', mission_id=mission.id)
 
