@@ -222,6 +222,7 @@ function confirmMissionMove(form) {
 {{ block.super }}
 
 {# ── Outcome Indicators (Proxy Metrics) ── #}
+<div id="outcome-indicators-wrap">
 {% if proxy_metrics %}
 <div class="card border-0 shadow-sm mb-3 mt-3">
     <div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">
@@ -234,9 +235,12 @@ function confirmMissionMove(form) {
         </button>
     </div>
     <div class="card-body py-2">
+        <p class="text-muted mb-2" style="font-size:0.7rem;">
+            <i class="fas fa-info-circle me-1"></i>AI-suggested, real-world KPIs for this goal — tracked manually below, not derived from tasks. Each <i class="fas fa-sync-alt mx-1"></i>Re-generate asks the AI to brainstorm a fresh set, so names and count may change.
+        </p>
         <div class="row gx-2">
             {% for pm in proxy_metrics %}
-            <div class="col-md-4 mb-2">
+            <div class="col-md-4 mb-2" data-metric-id="{{ pm.id }}">
                 <div class="border rounded p-2 bg-light">
                     <div class="d-flex justify-content-between align-items-start mb-1">
                         <span class="fw-bold small">{{ pm.name }}</span>
@@ -274,20 +278,86 @@ function confirmMissionMove(form) {
 </div>
 {% elif not proxy_metrics.exists %}
 <div class="card border-0 shadow-sm mb-3 mt-3">
-    <div class="card-body py-2 d-flex align-items-center gap-2">
-        <i class="fas fa-tachometer-alt text-muted"></i>
-        <span class="text-muted small">No outcome indicators yet.</span>
-        <button class="btn btn-sm btn-outline-success ms-auto" onclick="regenerateProxyMetrics()">
-            <i class="fas fa-magic me-1"></i>Generate
-        </button>
+    <div class="card-body py-2">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-tachometer-alt text-muted"></i>
+            <span class="text-muted small">No outcome indicators yet.</span>
+            <button class="btn btn-sm btn-outline-success ms-auto" onclick="regenerateProxyMetrics()">
+                <i class="fas fa-magic me-1"></i>Generate
+            </button>
+        </div>
+        <p class="text-muted mb-0 mt-2" style="font-size:0.7rem;">
+            <i class="fas fa-info-circle me-1"></i>Outcome Indicators are AI-suggested, real-world KPIs for this goal — tracked manually, not derived from tasks. Generating asks the AI to brainstorm a set from scratch.
+        </p>
     </div>
 </div>
 {% endif %}
+</div>
 
 {# ── Portfolio Analytics ── #}
 {% include 'kanban/partials/portfolio_analytics.html' %}
 
 <script>
+function escapeHtmlPm(s) {
+    var d = document.createElement('div');
+    d.textContent = (s === null || s === undefined) ? '' : String(s);
+    return d.innerHTML;
+}
+function metricCardHtml(pm) {
+    var hasValue = pm.current_value !== null && pm.current_value !== undefined && pm.current_value !== '';
+    var badge = hasValue
+        ? '<span class="badge bg-success">' + escapeHtmlPm(pm.current_value) + '</span>'
+        : '<span class="badge bg-secondary">—</span>';
+    var controls;
+    if (!hasValue) {
+        controls = '<div class="input-group input-group-sm mt-1">' +
+            '<input type="text" class="form-control" placeholder="Enter value" id="pm-val-' + pm.id + '">' +
+            '<button class="btn btn-outline-success btn-sm" onclick="updateProxyMetric(' + pm.id + ')"><i class="fas fa-check"></i></button>' +
+            '</div>';
+    } else {
+        controls = '<div class="input-group input-group-sm mt-1">' +
+            '<input type="text" class="form-control" placeholder="New value" id="pm-val-' + pm.id + '">' +
+            '<button class="btn btn-outline-primary btn-sm" onclick="updateProxyMetric(' + pm.id + ')" title="Update value"><i class="fas fa-arrow-up"></i></button>' +
+            '</div>';
+        if (pm.previous_value !== null && pm.previous_value !== undefined && pm.previous_value !== '') {
+            controls += '<small class="text-muted" style="font-size:0.65rem;">Previous: ' + escapeHtmlPm(pm.previous_value) + '</small>';
+        }
+    }
+    return '<div class="col-md-4 mb-2" data-metric-id="' + pm.id + '">' +
+        '<div class="border rounded p-2 bg-light">' +
+            '<div class="d-flex justify-content-between align-items-start mb-1">' +
+                '<span class="fw-bold small">' + escapeHtmlPm(pm.name) + '</span>' + badge +
+            '</div>' +
+            '<p class="text-muted mb-1" style="font-size:0.75rem;">' + escapeHtmlPm(pm.why_it_matters) + '</p>' +
+            '<p class="mb-1" style="font-size:0.7rem;"><strong>How to measure:</strong> ' + escapeHtmlPm(pm.how_to_measure) + '</p>' +
+            controls +
+        '</div>' +
+    '</div>';
+}
+function renderOutcomeIndicators(metrics) {
+    var wrap = document.getElementById('outcome-indicators-wrap');
+    if (!wrap) return;
+    var cardsHtml = metrics.map(metricCardHtml).join('');
+    wrap.innerHTML =
+        '<div class="card border-0 shadow-sm mb-3 mt-3">' +
+            '<div class="card-header d-flex align-items-center justify-content-between py-2 bg-transparent">' +
+                '<div class="d-flex align-items-center gap-2">' +
+                    '<i class="fas fa-tachometer-alt text-success"></i>' +
+                    '<span class="fw-semibold small">Outcome Indicators</span>' +
+                '</div>' +
+                '<button class="btn btn-sm btn-outline-success" onclick="regenerateProxyMetrics()" title="Re-generate metrics">' +
+                    '<i class="fas fa-sync-alt"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div class="card-body py-2">' +
+                '<p class="text-muted mb-2" style="font-size:0.7rem;">' +
+                    '<i class="fas fa-info-circle me-1"></i>AI-suggested, real-world KPIs for this goal — tracked manually below, not derived from tasks. ' +
+                    'Each <i class="fas fa-sync-alt mx-1"></i>Re-generate asks the AI to brainstorm a fresh set, so names and count may change.' +
+                '</p>' +
+                '<div class="row gx-2">' + cardsHtml + '</div>' +
+            '</div>' +
+        '</div>';
+}
 function regenerateProxyMetrics() {
     fetch("{% url 'generate_proxy_metrics_api' goal.id %}", {
         method: 'POST',
@@ -296,14 +366,15 @@ function regenerateProxyMetrics() {
         if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error'); });
         return r.json();
     }).then(function(data) {
-        if (data.success) { location.reload(); }
+        if (data.success) { renderOutcomeIndicators(data.metrics); }
         else { alert(data.error || 'Failed.'); }
     }).catch(function(err) { alert(err.message || 'Network error.'); });
 }
 function updateProxyMetric(metricId) {
-    var val = document.getElementById('pm-val-' + metricId).value.trim();
+    var input = document.getElementById('pm-val-' + metricId);
+    var val = input.value.trim();
     if (!val) return;
-    fetch('/kanban/api/goals/{{ goal.id }}/proxy-metrics/' + metricId + '/update-value/', {
+    fetch("{% url 'update_proxy_metric_value_api' goal.id 0 %}".replace('/0/update-value/', '/' + metricId + '/update-value/'), {
         method: 'POST',
         headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}',
                   'Content-Type': 'application/json'},
@@ -312,8 +383,23 @@ function updateProxyMetric(metricId) {
         if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error'); });
         return r.json();
     }).then(function(data) {
-        if (data.success) { location.reload(); }
-        else { alert(data.error || 'Failed.'); }
+        if (!data.success) { alert(data.error || 'Failed.'); return; }
+        var card = document.querySelector('#outcome-indicators-wrap [data-metric-id="' + metricId + '"]');
+        if (!card) return;
+        card.querySelector('.badge').outerHTML = '<span class="badge bg-success">' + escapeHtmlPm(data.current_value) + '</span>';
+        var inputGroup = card.querySelector('.input-group');
+        inputGroup.innerHTML =
+            '<input type="text" class="form-control" placeholder="New value" id="pm-val-' + metricId + '">' +
+            '<button class="btn btn-outline-primary btn-sm" onclick="updateProxyMetric(' + metricId + ')" title="Update value"><i class="fas fa-arrow-up"></i></button>';
+        var existingPrev = card.querySelector('small.text-muted');
+        if (existingPrev) existingPrev.remove();
+        if (data.previous_value !== null && data.previous_value !== undefined && data.previous_value !== '') {
+            var prevEl = document.createElement('small');
+            prevEl.className = 'text-muted';
+            prevEl.style.fontSize = '0.65rem';
+            prevEl.textContent = 'Previous: ' + data.previous_value;
+            inputGroup.insertAdjacentElement('afterend', prevEl);
+        }
     }).catch(function(err) { alert(err.message || 'Network error.'); });
 }
 </script>

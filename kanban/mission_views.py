@@ -477,7 +477,7 @@ def edit_goal(request, goal_id):
     organizations = Organization.objects.all().order_by('name')
 
     if request.method == 'POST':
-        form = GoalEditForm(request.POST, instance=goal)
+        form = GoalEditForm(request.POST, instance=goal, workspace=goal.workspace, current_user=request.user)
         if form.is_valid():
             change_reason = form.cleaned_data['change_reason']
             change_notes = form.cleaned_data['change_notes']
@@ -509,7 +509,7 @@ def edit_goal(request, goal_id):
             messages.success(request, f'Workspace Goal "{goal.name}" updated (v{goal.version}).')
             return redirect('goal_detail', goal_id=goal.id)
     else:
-        form = GoalEditForm(instance=goal)
+        form = GoalEditForm(instance=goal, workspace=goal.workspace, current_user=request.user)
 
     return render(request, 'kanban/edit_goal.html', {
         'goal': goal,
@@ -919,7 +919,7 @@ def edit_mission(request, mission_id):
         return redirect('mission_detail', mission_id=mission.id)
 
     if request.method == 'POST':
-        form = MissionEditForm(request.POST, instance=mission)
+        form = MissionEditForm(request.POST, instance=mission, workspace=mission.workspace, current_user=request.user)
         if form.is_valid():
             change_reason = form.cleaned_data['change_reason']
             change_notes = form.cleaned_data['change_notes']
@@ -947,7 +947,7 @@ def edit_mission(request, mission_id):
             messages.success(request, f'Mission "{mission.name}" updated (v{mission.version}).')
             return redirect('mission_detail', mission_id=mission.id)
     else:
-        form = MissionEditForm(instance=mission)
+        form = MissionEditForm(instance=mission, workspace=mission.workspace, current_user=request.user)
 
     return render(request, 'kanban/edit_mission.html', {
         'mission': mission,
@@ -1151,7 +1151,7 @@ def edit_strategy(request, mission_id, strategy_id):
         return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
 
     if request.method == 'POST':
-        form = StrategyEditForm(request.POST, instance=strategy)
+        form = StrategyEditForm(request.POST, instance=strategy, workspace=strategy.workspace, current_user=request.user)
         if form.is_valid():
             change_reason = form.cleaned_data['change_reason']
             change_notes = form.cleaned_data['change_notes']
@@ -1179,7 +1179,7 @@ def edit_strategy(request, mission_id, strategy_id):
             messages.success(request, f'Strategy "{strategy.name}" updated (v{strategy.version}).')
             return redirect('strategy_detail', mission_id=mission.id, strategy_id=strategy.id)
     else:
-        form = StrategyEditForm(instance=strategy)
+        form = StrategyEditForm(instance=strategy, workspace=strategy.workspace, current_user=request.user)
 
     return render(request, 'kanban/edit_strategy.html', {
         'mission': mission,
