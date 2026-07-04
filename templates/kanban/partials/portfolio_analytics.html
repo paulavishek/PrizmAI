@@ -52,6 +52,7 @@ Expects: portfolio (dict with groups, unclassified_count), portfolio_narrative (
         </div>
         {% endfor %}
 
+        <div id="portfolio-narrative-wrap">
         {% if portfolio_narrative %}
         <div class="border-top pt-2 mt-2 d-flex align-items-start gap-2">
             <i class="fas fa-lightbulb text-info mt-1"></i>
@@ -76,10 +77,16 @@ Expects: portfolio (dict with groups, unclassified_count), portfolio_narrative (
             </button>
         </div>
         {% endif %}
+        </div>
     </div>
 </div>
 
 <script>
+function escapeHtmlNarrative(s) {
+    var d = document.createElement('div');
+    d.textContent = (s === null || s === undefined) ? '' : String(s);
+    return d.innerHTML;
+}
 function refreshPortfolioNarrative(recordType, recordId) {
     var btn = event ? event.target.closest('button') : null;
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating\u2026'; }
@@ -90,10 +97,27 @@ function refreshPortfolioNarrative(recordType, recordId) {
         if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Server error (' + r.status + ')'); });
         return r.json();
     }).then(function(data) {
-        if (data.success) { window.location.hash = 'tab-ai'; location.reload(); }
+        if (data.success) {
+            var wrap = document.getElementById('portfolio-narrative-wrap');
+            if (wrap) {
+                wrap.innerHTML =
+                    '<div class="border-top pt-2 mt-2 d-flex align-items-start gap-2">' +
+                        '<i class="fas fa-lightbulb text-info mt-1"></i>' +
+                        '<span class="small">' + escapeHtmlNarrative(data.narrative) + '</span>' +
+                        '<button class="btn btn-sm btn-outline-info ms-auto flex-shrink-0" ' +
+                            'onclick="refreshPortfolioNarrative(\'' + recordType + '\', ' + recordId + ')" title="Refresh">' +
+                            '<i class="fas fa-sync-alt"></i>' +
+                        '</button>' +
+                    '</div>';
+            }
+        }
         else { alert(data.error || 'Failed to generate narrative.'); }
     }).catch(function(err) { alert(err.message || 'Network error.'); })
-    .finally(function() { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic me-1"></i>Generate'; } });
+    .finally(function() {
+        // Only restore the button's own label if it's still in the DOM (the
+        // success path above already replaced it with a fresh, enabled button).
+        if (btn && document.body.contains(btn)) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic me-1"></i>Generate'; }
+    });
 }
 </script>
 {% endif %}
