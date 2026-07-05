@@ -101,6 +101,8 @@
 .status-pill.at_risk .pill-dot, .status-pill.at-risk .pill-dot { background: #f59e0b; }
 .status-pill.late      { background: #fee2e2; color: #7f1d1d; }
 .status-pill.late .pill-dot      { background: #ef4444; }
+.status-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
+.status-pill.not_assessed .pill-dot  { background: #94a3b8; }
 .risk-pill.low    { background: #d1fae5; color: #065f46; }
 .risk-pill.low .pill-dot    { background: #10b981; }
 .risk-pill.medium { background: #fef3c7; color: #92400e; }
