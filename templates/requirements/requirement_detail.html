@@ -283,11 +283,34 @@
                 </div>
                 <ul class="list-group list-group-flush" style="font-size:.85rem;">
                     {% for goal in linked_goals %}
-                    <li class="list-group-item py-2"><a href="{% url 'goal_detail' goal.id %}"><i class="fas fa-trophy text-warning me-1"></i>{{ goal.name }}</a></li>
+                    <li class="list-group-item py-2 d-flex justify-content-between align-items-center">
+                        <a href="{% url 'goal_detail' goal.id %}"><i class="fas fa-trophy text-warning me-1"></i>{{ goal.name }}</a>
+                        {% if can_edit %}
+                        <form method="post" action="{% url 'requirements:unlink_goal' board.id requirement.pk %}" class="ms-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="goal_id" value="{{ goal.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="fas fa-times"></i></button>
+                        </form>
+                        {% endif %}
+                    </li>
                     {% empty %}
                     <li class="list-group-item py-2 text-muted text-center">No linked goals</li>
                     {% endfor %}
                 </ul>
+                {% if can_edit %}
+                <div class="card-footer py-2">
+                    <form method="post" action="{% url 'requirements:link_goal' board.id requirement.pk %}" class="d-flex gap-2">
+                        {% csrf_token %}
+                        <select name="goal_id" class="form-select form-select-sm" required>
+                            <option value="">Link a goal...</option>
+                            {% for goal in available_goals %}
+                            <option value="{{ goal.id }}">{{ goal.name|truncatewords:6 }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fas fa-link"></i></button>
+                    </form>
+                </div>
+                {% endif %}
             </div>
 
             <!-- Linked Tasks -->
