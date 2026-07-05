@@ -212,54 +212,6 @@
     {% endif %}
 </div>
 
-{# ── Milestones ── #}
-<div class="d-flex justify-content-between align-items-center mb-3 mt-2">
-    <h5 class="mb-0">
-        <i class="fas fa-flag-checkered text-warning me-2"></i>Milestones
-        <span class="badge bg-secondary ms-1">{{ milestones|length }}</span>
-    </h5>
-</div>
-
-{% if milestones %}
-<div class="card shadow-sm mb-4">
-    <div class="card-body py-2">
-        {% for m in milestones %}
-        <div class="d-flex align-items-center gap-3 py-2 {% if not forloop.last %}border-bottom{% endif %}">
-            {# Status icon #}
-            {% if m.status == 'complete' %}
-            <span class="text-success" title="Complete"><i class="fas fa-check-circle fa-lg"></i></span>
-            {% elif m.status == 'missed' %}
-            <span class="text-danger" title="Missed"><i class="fas fa-times-circle fa-lg"></i></span>
-            {% else %}
-            <span class="text-muted" title="Upcoming"><i class="far fa-circle fa-lg"></i></span>
-            {% endif %}
-
-            <div class="flex-grow-1">
-                <span class="fw-semibold">{{ m.name }}</span>
-            </div>
-            <div class="text-end">
-                <small class="text-muted me-2">Due {{ m.due_date|date:"d M Y" }}</small>
-                {% if m.status == 'missed' %}
-                <span class="badge bg-danger">Missed</span>
-                {% elif m.status == 'complete' %}
-                <span class="badge bg-success">Complete</span>
-                {% else %}
-                <span class="badge bg-secondary">Upcoming</span>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% else %}
-<div class="card shadow-sm mb-4">
-    <div class="card-body text-center py-4">
-        <i class="fas fa-flag-checkered fa-2x text-gray-300 mb-2"></i>
-        <p class="text-muted small mb-0">No milestones defined. Add milestones to track concrete checkpoints.</p>
-    </div>
-</div>
-{% endif %}
-
 {% endblock %}
 
 {# ================================================================ #}
@@ -377,16 +329,6 @@
         {% endif %}
     {% endfor %}
     {% endwith %}
-</div>
-
-<div class="sidebar-section">
-    <div class="sidebar-label">Milestones</div>
-    <div class="sidebar-value">
-        {% if milestones_missed > 0 %}<span class="text-danger"><i class="fas fa-times-circle me-1"></i>{{ milestones_missed }} missed</span><br>{% endif %}
-        {% if milestones_complete > 0 %}<span class="text-success"><i class="fas fa-check-circle me-1"></i>{{ milestones_complete }} complete</span><br>{% endif %}
-        {% if milestones_pending > 0 %}<span class="text-muted"><i class="far fa-circle me-1"></i>{{ milestones_pending }} upcoming</span>{% endif %}
-        {% if not milestones %}—{% endif %}
-    </div>
 </div>
 
 <div class="sidebar-section">

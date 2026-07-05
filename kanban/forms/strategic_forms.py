@@ -4,7 +4,7 @@ from django.db.models import Q
 
 from ..models import (
     OrganizationGoal, Mission, Strategy,
-    GoalVersion, Milestone,
+    GoalVersion,
 )
 
 
@@ -135,14 +135,4 @@ class StrategyEditForm(forms.ModelForm):
         widgets = {
             'due_date': forms.DateInput(attrs={'type': 'date'}),
             'description': forms.Textarea(attrs={'rows': 4}),
-        }
-
-
-class MilestoneForm(forms.ModelForm):
-    required_css_class = 'required'
-    class Meta:
-        model = Milestone
-        fields = ['name', 'due_date', 'status']
-        widgets = {
-            'due_date': forms.DateInput(attrs={'type': 'date'}),
         }

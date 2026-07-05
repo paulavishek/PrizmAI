@@ -571,32 +571,6 @@ class StrategicUpdate(models.Model):
 
 
 # ---------------------------------------------------------------------------
-# MILESTONE — concrete checkpoints unique to the Strategy level
-# ---------------------------------------------------------------------------
-class Milestone(models.Model):
-    STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('complete', 'Complete'),
-        ('missed', 'Missed'),
-    ]
-
-    strategy = models.ForeignKey(
-        Strategy, on_delete=models.CASCADE, related_name='milestones'
-    )
-    name = models.CharField(max_length=255)
-    due_date = models.DateField()
-    status = models.CharField(
-        max_length=10, choices=STATUS_CHOICES, default='pending'
-    )
-
-    class Meta:
-        ordering = ['due_date']
-
-    def __str__(self):
-        return f"{self.name} ({self.get_status_display()}) — {self.due_date}"
-
-
-# ---------------------------------------------------------------------------
 # STRATEGIC FOLLOWER — polymorphic follower (Goal / Mission / Strategy)
 # ---------------------------------------------------------------------------
 class StrategicFollower(models.Model):

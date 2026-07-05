@@ -1024,7 +1024,7 @@ def create_strategy(request, mission_id):
 
 @login_required
 def strategy_detail(request, mission_id, strategy_id):
-    """Show a strategy with 4-tab layout, health score, milestones, versions, updates, followers."""
+    """Show a strategy with 4-tab layout, health score, versions, updates, followers."""
     mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
     strategy = get_object_or_404(Strategy, id=strategy_id, mission=mission)
 
@@ -1058,13 +1058,6 @@ def strategy_detail(request, mission_id, strategy_id):
             'completion_pct': b_pct, 'health_score': b_health,
             'overdue_count': overdue_count, 'member_count': member_count,
         })
-
-    # --- Milestones ---
-    from .models import Milestone
-    milestones = strategy.milestones.all().order_by('due_date')
-    milestones_missed = milestones.filter(status='missed').count()
-    milestones_complete = milestones.filter(status='complete').count()
-    milestones_pending = milestones.filter(status='pending').count()
 
     # --- Version history ---
     versions = StrategyVersion.objects.filter(strategy=strategy).order_by('-version_number')
@@ -1122,10 +1115,6 @@ def strategy_detail(request, mission_id, strategy_id):
         'linked_boards': linked_boards,
         'board_items': board_items,
         'all_boards': all_boards,
-        'milestones': milestones,
-        'milestones_missed': milestones_missed,
-        'milestones_complete': milestones_complete,
-        'milestones_pending': milestones_pending,
         # Goal-Aware Analytics
         'portfolio': portfolio,
         'portfolio_narrative': strategy.portfolio_narrative,

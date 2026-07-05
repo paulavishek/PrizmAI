@@ -6,7 +6,7 @@ from .models import (
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation,
     CalendarEvent,
     GoalVersion, MissionVersion, StrategyVersion,
-    StrategicUpdate, Milestone, StrategicFollower,
+    StrategicUpdate, StrategicFollower,
     UserFavorite, ChecklistItem,
     WorkspaceMembership, WorkspaceInvitation,
 )
@@ -147,13 +147,6 @@ class StrategicUpdateAdmin(admin.ModelAdmin):
     list_display = ('author', 'status', 'content_type', 'object_id', 'created_at')
     list_filter = ('status', 'content_type', 'created_at')
     readonly_fields = ('content_type', 'object_id', 'author', 'status', 'message', 'created_at')
-
-
-@admin.register(Milestone)
-class MilestoneAdmin(admin.ModelAdmin):
-    list_display = ('name', 'strategy', 'due_date', 'status')
-    list_filter = ('status', 'due_date')
-    search_fields = ('name', 'strategy__name')
 
 
 @admin.register(StrategicFollower)
