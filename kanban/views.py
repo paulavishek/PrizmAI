@@ -585,7 +585,7 @@ def dashboard(request):
         # making the board harder to achieve a clean On Track status.
         denom = active  # includes late + at_risk + no_due + on-track-active
         if denom == 0:
-            schedule_status = 'on_track'
+            schedule_status = 'not_assessed'
         elif late / denom > _board_late_thresh:
             schedule_status = 'late'
         elif (late + at_risk) / denom > _board_at_risk_thresh:
@@ -612,7 +612,8 @@ def dashboard(request):
         """Return worst schedule status from a list."""
         if 'late' in statuses: return 'late'
         if 'at_risk' in statuses: return 'at_risk'
-        return 'on_track'
+        if 'on_track' in statuses: return 'on_track'
+        return 'not_assessed'
 
     def _worst_risk(*levels):
         """Return worst risk level from a list."""
@@ -674,7 +675,7 @@ def dashboard(request):
             # Strategy health = worst of its boards
             s_schedules = [b['schedule_status'] for b in board_list]
             s_risks = [b['risk_level'] for b in board_list]
-            s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'on_track'
+            s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'not_assessed'
             s_risk = _worst_risk(*s_risks) if s_risks else 'not_assessed'
             s_health = 'green'
             if s_schedule == 'late' or s_risk == 'high': s_health = 'red'
@@ -700,7 +701,7 @@ def dashboard(request):
         # Mission health = worst of its strategies
         m_schedules = [s['schedule_status'] for s in strategy_list]
         m_risks = [s['risk_level'] for s in strategy_list]
-        m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'on_track'
+        m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'not_assessed'
         m_risk = _worst_risk(*m_risks) if m_risks else 'not_assessed'
         m_health = 'green'
         if m_schedule == 'late' or m_risk == 'high': m_health = 'red'
@@ -782,7 +783,7 @@ def dashboard(request):
     for goal_entry in goal_tree:
         g_schedules = [m['schedule_status'] for m in goal_entry['missions']]
         g_risks = [m['risk_level'] for m in goal_entry['missions']]
-        goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'on_track'
+        goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'not_assessed'
         goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'not_assessed'
         goal_entry['total_tasks'] = sum(m['total_tasks'] for m in goal_entry['missions'])
         goal_entry['done_tasks'] = sum(m['done_tasks'] for m in goal_entry['missions'])
