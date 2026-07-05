@@ -42,18 +42,18 @@ class RequirementForm(forms.ModelForm):
             from django.contrib.auth.models import User
             self.fields['assigned_reviewer'].queryset = User.objects.filter(id__in=member_ids)
             from kanban.models import OrganizationGoal
-            org = getattr(board, 'organization', None)
-            # Fall back to the user's profile org when the board has no org (e.g. sandbox copies)
-            if org is None and user is not None:
+            workspace = getattr(board, 'workspace', None)
+            # Fall back to the user's active workspace when the board has none (e.g. sandbox copies)
+            if workspace is None and user is not None:
                 try:
                     from accounts.models import UserProfile
-                    profile = UserProfile.objects.filter(user=user).select_related('organization').first()
-                    org = getattr(profile, 'organization', None) if profile else None
+                    profile = UserProfile.objects.filter(user=user).select_related('active_workspace').first()
+                    workspace = getattr(profile, 'active_workspace', None) if profile else None
                 except Exception:
                     pass
-            if org:
+            if workspace:
                 self.fields['linked_goals'].queryset = OrganizationGoal.objects.filter(
-                    organization=org
+                    workspace=workspace
                 ).order_by('name')
             else:
                 self.fields['linked_goals'].queryset = OrganizationGoal.objects.none()

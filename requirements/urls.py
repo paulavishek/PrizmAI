@@ -23,6 +23,8 @@ urlpatterns = [
     # Link / unlink
     path('board/<int:board_id>/<int:pk>/link-task/', views.requirement_link_task, name='link_task'),
     path('board/<int:board_id>/<int:pk>/unlink-task/', views.requirement_unlink_task, name='unlink_task'),
+    path('board/<int:board_id>/<int:pk>/link-goal/', views.requirement_link_goal, name='link_goal'),
+    path('board/<int:board_id>/<int:pk>/unlink-goal/', views.requirement_unlink_goal, name='unlink_goal'),
 
     # Category
     path('board/<int:board_id>/category/create/', views.category_create, name='category_create'),
