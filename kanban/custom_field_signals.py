@@ -19,13 +19,43 @@ GUARDRAIL — bulk/system writes must NOT pollute autopsy history.
 """
 
 import logging
+import threading
 
-from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.db.models.signals import post_save, post_delete, pre_delete, m2m_changed
 from django.dispatch import receiver
 
 from .custom_field_models import TaskCustomFieldValue
 
 logger = logging.getLogger(__name__)
+
+
+# ── Task-deletion guard ─────────────────────────────────────────────────────
+# Deleting a Task cascades to its TaskCustomFieldValue rows, and each value's
+# post_delete fires record_custom_field_clear (below), which inserts a fresh
+# TaskActivity referencing the task. That row is born *during* the cascade,
+# after Django's collector already deleted the task's existing TaskActivity
+# rows and chose what else to delete, so at COMMIT it points at a task that
+# no longer exists → "FOREIGN KEY constraint failed". Mirrors the Board-
+# deletion guard in kanban/signals.py.
+_task_delete_state = threading.local()
+
+
+def _tasks_being_deleted():
+    ids = getattr(_task_delete_state, 'ids', None)
+    if ids is None:
+        ids = set()
+        _task_delete_state.ids = ids
+    return ids
+
+
+@receiver(pre_delete, sender='kanban.Task')
+def _mark_task_deleting(sender, instance, **kwargs):
+    _tasks_being_deleted().add(instance.pk)
+
+
+@receiver(post_delete, sender='kanban.Task')
+def _unmark_task_deleting(sender, instance, **kwargs):
+    _tasks_being_deleted().discard(instance.pk)
 
 
 @receiver(post_save, sender=TaskCustomFieldValue)
@@ -65,6 +95,11 @@ def record_custom_field_change(sender, instance, created, **kwargs):
 def record_custom_field_clear(sender, instance, **kwargs):
     """Same guard: only log explicit user clears (not cascading deletes)."""
     if instance.updated_by_id is None:
+        return
+
+    # Skip when the task itself is being deleted — recording a new activity
+    # here would orphan it and break the cascade's COMMIT (FK constraint failure).
+    if instance.task_id in _tasks_being_deleted():
         return
 
     try:
