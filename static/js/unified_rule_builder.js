@@ -796,6 +796,7 @@ const UnifiedRuleBuilder = (() => {
     // generic "to [Value]" box is meaningless for them — hide it.
     const ACTIONS_WITH_NO_TARGET = [
       'close_task', 'post_comment', 'flag_for_review', 'mention_users_in_comment',
+      'clear_assignee', 'clear_due_date',
     ];
     const ACTIONS_WITH_MESSAGE = [
       'send_notification', 'post_comment', 'create_wiki_page',
@@ -901,12 +902,14 @@ const UnifiedRuleBuilder = (() => {
       </select>`;
     }
     if (actionType === 'set_due_date') {
-      return `<select class="form-select form-select-sm" style="max-width:160px"
-        id="rbActionTarget_${branch}_${idx}" aria-label="Due date">
-        ${[['today','Today'],['in_2_days','In 2 days'],['in_7_days','In 7 days'],
-           ['in_14_days','In 14 days'],['in_30_days','In 30 days']].map(([v,l]) =>
-          `<option value="${v}" ${target === v ? 'selected':''}>${l}</option>`).join('')}
-      </select>`;
+      const DUE_DATE_PRESET_DAYS = { today: 0, in_2_days: 2, in_7_days: 7, in_14_days: 14, in_30_days: 30 };
+      const days = target in DUE_DATE_PRESET_DAYS ? DUE_DATE_PRESET_DAYS[target] : (target || 0);
+      return `<span class="d-inline-flex align-items-center gap-1 flex-shrink-0">
+        <input type="number" class="form-control form-control-sm"
+          id="rbActionTarget_${branch}_${idx}" min="0" max="9999" style="width:80px"
+          value="${_esc(days)}" aria-label="Days from now">
+        <span class="small text-muted text-nowrap">days from now</span>
+      </span>`;
     }
     if (actionType === 'add_label' || actionType === 'remove_label') {
       return `<input type="text" class="form-control form-control-sm"
@@ -951,11 +954,10 @@ const UnifiedRuleBuilder = (() => {
       // explicit `selected` option shows the first option as visually selected,
       // but the change event never fires, leaving state.target as '' and the
       // rule saving with an empty recipient/priority/etc.
-      if (targetEl.tagName === 'SELECT') {
-        const actionList = branch === 'then' ? state.actions : state.otherwiseActions;
-        if (!actionList[idx].target && targetEl.value) {
-          actionList[idx].target = targetEl.value;
-        }
+      const actionList0 = branch === 'then' ? state.actions : state.otherwiseActions;
+      if ((targetEl.tagName === 'SELECT' || actionList0[idx].type === 'set_due_date') &&
+          !actionList0[idx].target && targetEl.value) {
+        actionList0[idx].target = targetEl.value;
       }
       const ev = targetEl.tagName === 'SELECT' ? 'change' : 'input';
       targetEl.addEventListener(ev, e => {
