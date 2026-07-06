@@ -2364,7 +2364,7 @@
     </div>
 </div>
 <script>
-(function () {
+document.addEventListener('DOMContentLoaded', function () {
     var dataEl = document.getElementById('riskHeatmapCellTasks');
     if (!dataEl) return;
     var cellTasks = JSON.parse(dataEl.textContent);
@@ -2391,8 +2391,9 @@
         var rows = tasks.map(function (t) {
             var due = t.due_date ? escapeHtml(t.due_date) : '<span class="text-muted">—</span>';
             var assignee = t.assigned_to ? escapeHtml(t.assigned_to) : 'Unassigned';
+            var riskBadgeClass = { low: 'bg-success', medium: 'bg-warning text-dark', high: 'bg-danger' }[t.risk_level] || 'bg-secondary';
             var riskBadge = t.risk_level
-                ? '<span class="badge bg-danger">' + escapeHtml(t.risk_level.charAt(0).toUpperCase() + t.risk_level.slice(1)) + '</span>'
+                ? '<span class="badge ' + riskBadgeClass + '">' + escapeHtml(t.risk_level.charAt(0).toUpperCase() + t.risk_level.slice(1)) + '</span>'
                 : '<span class="text-muted">—</span>';
             return '<tr>' +
                 '<td>' + escapeHtml(t.title) + '</td>' +
@@ -2427,7 +2428,7 @@
             }
         });
     });
-})();
+});
 </script>
 
 <!-- Standalone Boards (not linked to any strategy) -->
