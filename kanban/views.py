@@ -961,7 +961,7 @@ def dashboard(request):
     # ----------------------------------------------------------------
     # Risk Heatmap  (3×3 grid: likelihood 1-3 × impact 1-3)
     # ----------------------------------------------------------------
-    _risk_rows = (
+    _risk_task_rows = (
         Task.objects
         .filter(
             column__board_id__in=_board_ids,
@@ -969,21 +969,34 @@ def dashboard(request):
             risk_likelihood__isnull=False,
             risk_impact__isnull=False,
         )
-        .values('risk_likelihood', 'risk_impact')
-        .annotate(count=Count('id'))
+        .select_related('column__board', 'assigned_to')
+        .order_by('due_date')
     )
     risk_matrix = [[0] * 3 for _ in range(3)]
+    # cell_tasks[likelihood_row][impact_col] -> list of task dicts, so clicking
+    # a heatmap cell can show exactly the tasks that make up its count.
+    risk_cell_tasks = [[[] for _ in range(3)] for _ in range(3)]
     risk_total  = 0
-    for row in _risk_rows:
-        lik = row['risk_likelihood'] - 1   # 0-indexed (0=low, 1=med, 2=high)
-        imp = row['risk_impact']     - 1   # 0-indexed
+    for t in _risk_task_rows:
+        lik = t.risk_likelihood - 1   # 0-indexed (0=low, 1=med, 2=high)
+        imp = t.risk_impact     - 1   # 0-indexed
         if 0 <= lik <= 2 and 0 <= imp <= 2:
-            risk_matrix[lik][imp] += row['count']
-            risk_total += row['count']
+            risk_matrix[lik][imp] += 1
+            risk_total += 1
+            risk_cell_tasks[lik][imp].append({
+                'id':          t.id,
+                'title':       t.title,
+                'board':       t.column.board.name,
+                'risk_level':  t.risk_level,
+                'due_date':    t.due_date.strftime('%b %d, %Y') if t.due_date else None,
+                'priority':    t.priority,
+                'assigned_to': t.assigned_to.username if t.assigned_to else None,
+            })
     risk_heatmap_data = {
-        'matrix':   risk_matrix,  # [likelihood_row][impact_col]
-        'total':    risk_total,
-        'has_data': risk_total > 0,
+        'matrix':      risk_matrix,  # [likelihood_row][impact_col]
+        'cell_tasks':  risk_cell_tasks,
+        'total':       risk_total,
+        'has_data':    risk_total > 0,
     }
 
     # ----------------------------------------------------------------

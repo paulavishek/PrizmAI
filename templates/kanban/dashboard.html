@@ -593,10 +593,11 @@
         font-size: 0.78rem;
         font-weight: 700;
         color: white;
-        cursor: default;
+        cursor: pointer;
         transition: transform 0.15s ease;
     }
     .risk-heatmap-cell:hover { transform: scale(1.06); }
+    .risk-heatmap-cell:focus-visible { outline: 2px solid #1e40af; outline-offset: 2px; }
     .risk-heatmap-cell .cell-count { font-size: 1.2rem; font-weight: 800; line-height: 1; }
     /*  likelihood (row) × impact (col):  1×1=low, 3×3=critical  */
     .rhc-1-1 { background: #86EFAC; color: #065f46; }
@@ -2276,13 +2277,13 @@
                                     <div style="width:52px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:8px;">
                                         <span style="font-size:0.72rem; font-weight:800; color:#495057; text-transform:uppercase; letter-spacing:0.03em;">High</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-3-1" title="High Likelihood × Low Impact: {{ risk_heatmap_data.matrix.2.0 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-3-1" role="button" tabindex="0" data-lik-idx="2" data-imp-idx="0" data-lik-label="High" data-imp-label="Low" title="High Likelihood × Low Impact: {{ risk_heatmap_data.matrix.2.0 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.2.0 }}</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-3-2" title="High Likelihood × Medium Impact: {{ risk_heatmap_data.matrix.2.1 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-3-2" role="button" tabindex="0" data-lik-idx="2" data-imp-idx="1" data-lik-label="High" data-imp-label="Medium" title="High Likelihood × Medium Impact: {{ risk_heatmap_data.matrix.2.1 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.2.1 }}</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-3-3" title="High Likelihood × High Impact: {{ risk_heatmap_data.matrix.2.2 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-3-3" role="button" tabindex="0" data-lik-idx="2" data-imp-idx="2" data-lik-label="High" data-imp-label="High" title="High Likelihood × High Impact: {{ risk_heatmap_data.matrix.2.2 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.2.2 }}</span>
                                     </div>
                                 </div>
@@ -2291,13 +2292,13 @@
                                     <div style="width:52px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:8px;">
                                         <span style="font-size:0.72rem; font-weight:800; color:#495057; text-transform:uppercase; letter-spacing:0.03em;">Med</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-2-1" title="Med Likelihood × Low Impact: {{ risk_heatmap_data.matrix.1.0 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-2-1" role="button" tabindex="0" data-lik-idx="1" data-imp-idx="0" data-lik-label="Medium" data-imp-label="Low" title="Med Likelihood × Low Impact: {{ risk_heatmap_data.matrix.1.0 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.1.0 }}</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-2-2" title="Med Likelihood × Med Impact: {{ risk_heatmap_data.matrix.1.1 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-2-2" role="button" tabindex="0" data-lik-idx="1" data-imp-idx="1" data-lik-label="Medium" data-imp-label="Medium" title="Med Likelihood × Med Impact: {{ risk_heatmap_data.matrix.1.1 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.1.1 }}</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-2-3" title="Med Likelihood × High Impact: {{ risk_heatmap_data.matrix.1.2 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-2-3" role="button" tabindex="0" data-lik-idx="1" data-imp-idx="2" data-lik-label="Medium" data-imp-label="High" title="Med Likelihood × High Impact: {{ risk_heatmap_data.matrix.1.2 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.1.2 }}</span>
                                     </div>
                                 </div>
@@ -2306,13 +2307,13 @@
                                     <div style="width:52px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:8px;">
                                         <span style="font-size:0.72rem; font-weight:800; color:#495057; text-transform:uppercase; letter-spacing:0.03em;">Low</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-1-1" title="Low Likelihood × Low Impact: {{ risk_heatmap_data.matrix.0.0 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-1-1" role="button" tabindex="0" data-lik-idx="0" data-imp-idx="0" data-lik-label="Low" data-imp-label="Low" title="Low Likelihood × Low Impact: {{ risk_heatmap_data.matrix.0.0 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.0.0 }}</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-1-2" title="Low Likelihood × Med Impact: {{ risk_heatmap_data.matrix.0.1 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-1-2" role="button" tabindex="0" data-lik-idx="0" data-imp-idx="1" data-lik-label="Low" data-imp-label="Medium" title="Low Likelihood × Med Impact: {{ risk_heatmap_data.matrix.0.1 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.0.1 }}</span>
                                     </div>
-                                    <div class="flex-fill risk-heatmap-cell rhc-1-3" title="Low Likelihood × High Impact: {{ risk_heatmap_data.matrix.0.2 }} tasks">
+                                    <div class="flex-fill risk-heatmap-cell rhc-1-3" role="button" tabindex="0" data-lik-idx="0" data-imp-idx="2" data-lik-label="Low" data-imp-label="High" title="Low Likelihood × High Impact: {{ risk_heatmap_data.matrix.0.2 }} tasks">
                                         <span class="cell-count">{{ risk_heatmap_data.matrix.0.2 }}</span>
                                     </div>
                                 </div>
@@ -2321,6 +2322,7 @@
                     </div>
                 </div>
                 <p class="text-muted small mb-0 mt-1"><i class="fas fa-info-circle me-1"></i>{{ risk_heatmap_data.total }} task{{ risk_heatmap_data.total|pluralize }} with risk assessments</p>
+                {{ risk_heatmap_data.cell_tasks|json_script:"riskHeatmapCellTasks" }}
                 {% else %}
                 <div class="d-flex align-items-center justify-content-center h-100 text-muted small py-3">
                     <div class="text-center">
@@ -2341,6 +2343,92 @@
 </div><!-- /collapse analyticsZone3 -->
 </div><!-- /card -->
 {% endif %}{# /features.show_full_analytics #}
+
+<!-- Risk Heatmap Cell Tasks Modal -->
+<div class="modal fade" id="riskHeatmapCellModal" tabindex="-1" aria-labelledby="riskHeatmapCellModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="riskHeatmapCellModalLabel">
+                    <i class="fas fa-fire me-2"></i><span id="riskHeatmapCellModalTitle">Risk Tasks</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="riskHeatmapCellModalBody"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var dataEl = document.getElementById('riskHeatmapCellTasks');
+    if (!dataEl) return;
+    var cellTasks = JSON.parse(dataEl.textContent);
+    var modalEl = document.getElementById('riskHeatmapCellModal');
+    if (!modalEl || typeof bootstrap === 'undefined') return;
+    var modal = new bootstrap.Modal(modalEl);
+    var titleEl = document.getElementById('riskHeatmapCellModalTitle');
+    var bodyEl = document.getElementById('riskHeatmapCellModalBody');
+    var taskUrlTemplate = '{% url "task_detail" 999999999 %}';
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function renderCell(likIdx, impIdx, likLabel, impLabel) {
+        var tasks = (cellTasks[likIdx] && cellTasks[likIdx][impIdx]) || [];
+        titleEl.textContent = likLabel + ' Likelihood × ' + impLabel + ' Impact (' + tasks.length + ')';
+        if (!tasks.length) {
+            bodyEl.innerHTML = '<div class="text-center text-muted py-4">No tasks in this cell.</div>';
+            return;
+        }
+        var rows = tasks.map(function (t) {
+            var due = t.due_date ? escapeHtml(t.due_date) : '<span class="text-muted">—</span>';
+            var assignee = t.assigned_to ? escapeHtml(t.assigned_to) : 'Unassigned';
+            var riskBadge = t.risk_level
+                ? '<span class="badge bg-danger">' + escapeHtml(t.risk_level.charAt(0).toUpperCase() + t.risk_level.slice(1)) + '</span>'
+                : '<span class="text-muted">—</span>';
+            return '<tr>' +
+                '<td>' + escapeHtml(t.title) + '</td>' +
+                '<td>' + escapeHtml(t.board) + '</td>' +
+                '<td>' + riskBadge + '</td>' +
+                '<td>' + due + '</td>' +
+                '<td><span class="badge priority-' + escapeHtml(t.priority) + '">' + escapeHtml((t.priority || '').charAt(0).toUpperCase() + (t.priority || '').slice(1)) + '</span></td>' +
+                '<td>' + assignee + '</td>' +
+                '<td><a href="' + taskUrlTemplate.replace('999999999', t.id) + '" class="btn btn-sm btn-outline-primary">View</a></td>' +
+                '</tr>';
+        }).join('');
+        bodyEl.innerHTML = '<table class="table table-striped table-hover">' +
+            '<thead><tr><th>Title</th><th>Board</th><th>Risk Level</th><th>Due Date</th><th>Priority</th><th>Assigned To</th><th></th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    document.querySelectorAll('.risk-heatmap-cell[data-lik-idx]').forEach(function (cell) {
+        function open() {
+            renderCell(
+                parseInt(cell.dataset.likIdx, 10),
+                parseInt(cell.dataset.impIdx, 10),
+                cell.dataset.likLabel,
+                cell.dataset.impLabel
+            );
+            modal.show();
+        }
+        cell.addEventListener('click', open);
+        cell.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                open();
+            }
+        });
+    });
+})();
+</script>
 
 <!-- Standalone Boards (not linked to any strategy) -->
 {% if standalone_boards %}
