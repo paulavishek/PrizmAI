@@ -170,11 +170,21 @@ class Tier2cAiRiskPlatformActionsTest(TestCase):
 
     def test_c08_promote_discovery_idea(self):
         from kanban.discovery_models import DiscoveryIdea
+        from kanban.models import Workspace
+        # The discovery_idea_submitted receiver resolves its target board from the
+        # idea's WORKSPACE (the tenant boundary, added by the Discovery
+        # workspace-FK migration). Set the board + idea workspace so the trigger
+        # routes — an idea with only `organization` set no longer fires.
+        ws = Workspace.objects.create(
+            name='Tier2c WS', organization=self.org, created_by=self.tester)
+        self.board.workspace = ws
+        self.board.save(update_fields=['workspace'])
         rule = self._make_rule('TIER2C-C08: Promote discovery idea',
                                [{'type': 'promote_discovery_idea'}],
                                trigger_type='discovery_idea_submitted')
         idea = DiscoveryIdea.objects.create(
-            organization=self.org, title='Add dark mode', submitted_by=self.tester)
+            organization=self.org, workspace=ws,
+            title='Add dark mode', submitted_by=self.tester)
         self.assertEqual(self._reload(idea).stage, 'approved')
         self._assert_log(rule)  # source-triggered: no task_affected
 
