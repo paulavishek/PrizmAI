@@ -668,6 +668,7 @@ const UnifiedRuleBuilder = (() => {
       // selected without firing a change event.
       if (!state.conditions[idx].operator && opSel.value) {
         state.conditions[idx].operator = opSel.value;
+        _renderConditionValue(idx);
       }
       opSel.addEventListener('change', e => {
         state.conditions[idx].operator = e.target.value;
