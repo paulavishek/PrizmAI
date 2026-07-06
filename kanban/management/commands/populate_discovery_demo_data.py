@@ -362,6 +362,18 @@ class Command(BaseCommand):
                     # (which only deletes is_seed_demo_data=False). Without this,
                     # the lead persona's reset would delete the template task.
                     is_seed_demo_data=True,
+                    # Give this ticket a risk assessment like every other seeded
+                    # task, otherwise the Risk Heatmap's "N tasks with risk
+                    # assessments" count undercounts the board by one (32 vs the
+                    # 33 real tasks) because the heatmap query filters on
+                    # risk_likelihood/risk_impact being set. Medium/medium
+                    # reflects the dependency on the payment-processor
+                    # integration and multi-currency/compliance considerations
+                    # called out in Spectra's scoring reasoning above.
+                    risk_likelihood=2,
+                    risk_impact=2,
+                    risk_score=4,
+                    risk_level='medium',
                 )
                 promotion7.tasks.add(pricing_task)
                 # Tag with a work-type label (a new pricing capability is a Feature)
