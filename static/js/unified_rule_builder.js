@@ -109,6 +109,106 @@ const UnifiedRuleBuilder = (() => {
     },
   };
 
+  // ─── Rule linter: trigger ↔ condition compatibility ───────────────────────
+  // Some conditions reference a field whose value is *fixed and known* at a
+  // given trigger's fire time, making the condition provably unsatisfiable
+  // ('dead' — the rule can never fire its THEN) or trivially always-true
+  // ('pointless'). This is a deterministic, enumerable check — NOT an AI task.
+  //
+  // Shape: TRIGGER_FIELD_CONSTRAINTS[triggerKey][attributeKey] = fn(op, value)
+  //   → null                         when the condition is fine for this trigger
+  //   → { level: 'dead'|'pointless', msg }  otherwise
+  // Predicates mirror the runtime handlers in kanban/automation_conditions.py.
+  // Extend by adding trigger/attribute entries — no other code changes needed.
+  const TRIGGER_FIELD_CONSTRAINTS = {
+    // A brand-new task is born with progress = 0 (the create form has no
+    // progress input; the model defaults it to 0), so any progress condition
+    // is evaluated against 0. See _cond_progress in automation_conditions.py.
+    task_created: {
+      progress: (op, value) => {
+        const n = parseInt(value, 10);
+        const num = isNaN(n) ? 0 : n;
+        if (op === 'gte') {
+          return num > 0
+            ? { level: 'dead', msg: `Progress is always 0% the moment a task is created, so “Progress ≥ ${num}%” can never be true — this rule will skip every time.` }
+            : { level: 'pointless', msg: `A new task always has 0% progress, so “Progress ≥ ${num}%” is always true and adds nothing.` };
+        }
+        if (op === 'equals') {
+          return num !== 0
+            ? { level: 'dead', msg: `Progress is always 0% the moment a task is created, so “Progress = ${num}%” can never be true — this rule will skip every time.` }
+            : { level: 'pointless', msg: `A new task always has 0% progress, so “Progress = 0%” is always true and adds nothing.` };
+        }
+        if (op === 'lte') {
+          return num >= 0
+            ? { level: 'pointless', msg: `A new task always has 0% progress, so “Progress ≤ ${num}%” is always true and adds nothing.` }
+            : { level: 'dead', msg: `Progress is always 0% at creation, so “Progress ≤ ${num}%” can never be true — this rule will skip every time.` };
+        }
+        return null;
+      },
+      // A just-created task has no subtasks yet, so _cond_all_subtasks_done
+      // returns False at creation (empty subtask set → not "all done").
+      all_subtasks_done: (op /*, value */) => {
+        if (op === 'is_true') {
+          return { level: 'dead', msg: `A brand-new task has no subtasks yet, so “All subtasks done” is never true at creation — this rule will skip every time.` };
+        }
+        if (op === 'is_false') {
+          return { level: 'pointless', msg: `A brand-new task has no subtasks, so “All subtasks done is false” is always true and adds nothing.` };
+        }
+        return null;
+      },
+    },
+  };
+
+  // Inspect the current builder state for provably-broken conditions.
+  // Returns [{ index, level, msg }], 'dead' findings first.
+  function _lintRule() {
+    const perTrigger = TRIGGER_FIELD_CONSTRAINTS[state.trigger];
+    if (!perTrigger) return [];
+    const findings = [];
+    state.conditions.forEach((c, index) => {
+      if (!c.attribute || !c.operator) return;
+      const predicate = perTrigger[c.attribute];
+      if (!predicate) return;
+      const result = predicate(c.operator, c.value);
+      if (result) findings.push({ index, level: result.level, msg: result.msg });
+    });
+    // Surface dead-ends before pointless notes.
+    return findings.sort((a, b) => (a.level === 'dead' ? 0 : 1) - (b.level === 'dead' ? 0 : 1));
+  }
+
+  // Render linter findings into the #rbLintWarnings container beneath the
+  // preview strip. Non-blocking: the rule can still be saved.
+  function _renderLintWarnings() {
+    const box = document.getElementById('rbLintWarnings');
+    if (!box) return;
+    const findings = _lintRule();
+    if (!findings.length) {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
+    box.innerHTML = findings.map(f => {
+      const dead = f.level === 'dead';
+      const cls = dead ? 'alert alert-warning py-2 small mb-2' : 'small text-muted mb-2';
+      const icon = dead
+        ? '<i class="fas fa-exclamation-triangle me-1"></i>'
+        : '<i class="fas fa-info-circle me-1"></i>';
+      const removeBtn = `
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                onclick="UnifiedRuleBuilder.removeCondition(${f.index})">
+          Remove this condition
+        </button>`;
+      return `<div class="${cls}">${icon}${_escapeHtml(f.msg)}${dead ? removeBtn : ''}</div>`;
+    }).join('');
+    box.style.display = '';
+  }
+
+  function _escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : String(s);
+    return div.innerHTML;
+  }
+
   // Flattened lookups built once for label rendering (preview, edit views).
   const TRIGGER_LABELS = Object.assign({}, ...Object.values(TRIGGER_GROUPS));
   const ACTION_LABELS  = Object.assign({}, ...Object.values(ACTION_GROUPS));
@@ -1095,12 +1195,16 @@ const UnifiedRuleBuilder = (() => {
 
     if (!trigText && !thenText) {
       el.innerHTML = '<em class="text-muted">When ____, then ____.</em>';
+      _renderLintWarnings();  // clears any stale banner when the form is emptied
       return;
     }
 
     const trigSpan  = trigText ? trigText : '<em class="text-muted">____</em>';
     const thenSpan  = thenText ? thenText : '<em class="text-muted">____</em>';
     el.innerHTML = `When ${trigSpan}, ${condText}${thenSpan}${elseText}.`;
+
+    // Re-run the trigger/condition linter on every edit (non-blocking).
+    _renderLintWarnings();
   }
 
   function _formatCondText(c) {
