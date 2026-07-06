@@ -120,6 +120,42 @@ const UnifiedRuleBuilder = (() => {
   //   → { level: 'dead'|'pointless', msg }  otherwise
   // Predicates mirror the runtime handlers in kanban/automation_conditions.py.
   // Extend by adding trigger/attribute entries — no other code changes needed.
+  // ── Predicate factories (shared by the constraints table below) ──────────
+  // Each is proven against the real runtime in
+  // kanban/tests/test_automation_linter_parity.py — keep the two in lock-step.
+
+  // A numeric field whose value is provably 0 at the trigger's fire moment.
+  // Handles gte / lte / equals and the count_* variants. The ">0 required"
+  // side is 'dead'; the always-satisfied side is 'pointless'.
+  const _zeroNumeric = (label, why) => (op, value) => {
+    const n = Number(value);
+    const num = isNaN(n) ? 0 : n;
+    if (op === 'gte' || op === 'count_gte') {
+      return num > 0
+        ? { level: 'dead', msg: `${why}, so “${label} ≥ ${num}” can never be true — this rule will skip every time.` }
+        : { level: 'pointless', msg: `${why}, so “${label} ≥ ${num}” is always true and adds nothing.` };
+    }
+    if (op === 'equals') {
+      return num !== 0
+        ? { level: 'dead', msg: `${why}, so “${label} = ${num}” can never be true — this rule will skip every time.` }
+        : { level: 'pointless', msg: `${why}, so “${label} = 0” is always true and adds nothing.` };
+    }
+    if (op === 'lte' || op === 'count_lte') {
+      return num >= 0
+        ? { level: 'pointless', msg: `${why}, so “${label} ≤ ${num}” is always true and adds nothing.` }
+        : { level: 'dead', msg: `${why}, so “${label} ≤ ${num}” can never be true — this rule will skip every time.` };
+    }
+    return null;
+  };
+
+  // A boolean field that is provably FALSE at the trigger's fire moment.
+  // is_true → dead; is_false → pointless.
+  const _falseBoolean = (label, why) => (op) => {
+    if (op === 'is_true')  return { level: 'dead', msg: `${why}, so “${label}” is never true at this point — this rule will skip every time.` };
+    if (op === 'is_false') return { level: 'pointless', msg: `${why}, so “${label} is false” is always true and adds nothing.` };
+    return null;
+  };
+
   const TRIGGER_FIELD_CONSTRAINTS = {
     // A brand-new task is born with progress = 0 (the create form has no
     // progress input; the model defaults it to 0), so any progress condition
@@ -153,6 +189,71 @@ const UnifiedRuleBuilder = (() => {
         }
         if (op === 'is_false') {
           return { level: 'pointless', msg: `A brand-new task has no subtasks, so “All subtasks done is false” is always true and adds nothing.` };
+        }
+        return null;
+      },
+
+      // ── Structural emptiness at the creation instant ──────────────────────
+      // A subtask / comment / attachment / dependency / time-entry cannot exist
+      // yet, and age / idle-time / time-in-column are all 0 the moment the task
+      // is saved. Each mirrors its runtime handler in automation_conditions.py.
+      subtask_count:          _zeroNumeric('Subtask count',      'A brand-new task has no subtasks yet'),
+      subtask_completion_pct: _zeroNumeric('Subtask completion', 'A brand-new task has no subtasks yet'),
+      checklist_progress:     _zeroNumeric('Checklist progress', 'A brand-new task has no checklist items yet'),
+      idle_days:              _zeroNumeric('Idle days',          'A brand-new task was just updated (0 days idle)'),
+      time_in_column:         _zeroNumeric('Time in column',     'A brand-new task just entered its column (0 days)'),
+      hours_logged:           _zeroNumeric('Hours logged',       'A brand-new task has no logged time yet'),
+      has_attachments:        _falseBoolean('Has attachments',   'A brand-new task has no attachments yet'),
+      has_dependencies:       _falseBoolean('Has dependencies',  'A brand-new task has no dependencies yet'),
+      has_blocked_tasks:      _falseBoolean('Blocking other tasks', "A brand-new task isn't blocking anything yet"),
+      // has_comments carries both is_true/is_false AND count_gte/count_lte.
+      has_comments: (op, value) => {
+        const asBool = _falseBoolean('Has comments', 'A brand-new task has no comments yet')(op);
+        if (asBool) return asBool;
+        return _zeroNumeric('Comment count', 'A brand-new task has no comments yet')(op, value);
+      },
+    },
+
+    // The "task overdue" trigger only fires for a task with a PAST due date, so
+    // "no due date" / "due within N days" can never hold. See run_overdue_task_
+    // automations + _cond_due_date.
+    task_overdue: {
+      due_date: (op) => {
+        if (op === 'is_empty' || op === 'within_days') {
+          const cond = op === 'is_empty' ? 'Due date is empty' : 'Due date is within N days';
+          return { level: 'dead', msg: `A task only becomes overdue once its due date is in the past, so “${cond}” can never be true here — this rule will skip every time.` };
+        }
+        if (op === 'is_not_empty' || op === 'is_overdue') {
+          return { level: 'pointless', msg: `An overdue task always has a past due date, so this condition is always true and adds nothing.` };
+        }
+        return null;
+      },
+    },
+
+    // The "task assigned" trigger only fires when a task GAINS an assignee.
+    task_assigned: {
+      assignee: (op, value) => {
+        const isNone = String(value).toLowerCase() === 'none';
+        if (op === 'is_empty' || (op === 'is' && isNone)) {
+          return { level: 'dead', msg: `The “task assigned” trigger only fires when the task has an assignee, so “Assignee is unassigned” can never be true — this rule will skip every time.` };
+        }
+        if (op === 'is_not_empty') {
+          return { level: 'pointless', msg: `A just-assigned task always has an assignee, so “Assignee is not empty” is always true and adds nothing.` };
+        }
+        return null;
+      },
+    },
+
+    // The "task unassigned" trigger only fires when a task LOSES its assignee.
+    task_unassigned: {
+      assignee: (op, value) => {
+        const isNone = String(value).toLowerCase() === 'none';
+        const namesSomeone = op === 'is' && !isNone && value != null && value !== '';
+        if (op === 'is_not_empty' || namesSomeone) {
+          return { level: 'dead', msg: `The “task unassigned” trigger only fires when the task has no assignee, so requiring an assignee can never be true — this rule will skip every time.` };
+        }
+        if (op === 'is_empty' || (op === 'is' && isNone)) {
+          return { level: 'pointless', msg: `A just-unassigned task never has an assignee, so this condition is always true and adds nothing.` };
         }
         return null;
       },
