@@ -1778,58 +1778,64 @@ def validate_time_entry_api(request):
 def create_split_time_entries(request):
     """
     Create multiple time entries at once from AI split suggestions.
-    
+
     POST body:
         entries: list - Array of entry objects with:
             - task_id: int
             - hours: float
             - date: str (YYYY-MM-DD)
             - description: str (optional)
-    
+        original_entry_ids: list[int] (optional) - IDs of pre-existing TimeEntry
+            rows being replaced by this split (e.g. the overlogged entry a user
+            is dividing across days). When present, these are deleted so the
+            split entries replace rather than add to the original hours.
+
     Returns:
         JSON with created entries
     """
     from kanban.budget_models import TimeEntry
     from datetime import datetime
-    
+    from django.db import transaction
+
     try:
         data = json.loads(request.body)
         entries_data = data.get('entries', [])
-        
+        original_entry_ids = data.get('original_entry_ids') or []
+
         if not entries_data:
             return JsonResponse({
                 'success': False,
                 'error': 'No entries provided'
             }, status=400)
-        
+
         if len(entries_data) > 10:
             return JsonResponse({
                 'success': False,
                 'error': 'Maximum 10 entries per request'
             }, status=400)
-        
-        created_entries = []
+
+        validated = []
         errors = []
-        
+
         for i, entry_data in enumerate(entries_data):
             try:
                 task_id = entry_data.get('task_id')
                 hours = Decimal(str(entry_data.get('hours', 0)))
                 date_str = entry_data.get('date')
                 description = entry_data.get('description', '')
-                
+
                 # Validate required fields
                 if not all([task_id, hours, date_str]):
                     errors.append(f"Entry {i+1}: Missing required fields")
                     continue
-                
+
                 # Parse date
                 try:
                     work_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
                     errors.append(f"Entry {i+1}: Invalid date format")
                     continue
-                
+
                 # Get task
                 try:
                     task = Task.objects.get(id=task_id)
@@ -1842,33 +1848,54 @@ def create_split_time_entries(request):
                 if not request.user.has_perm('prizmai.edit_board', board):
                     errors.append(f"Entry {i+1}: Permission denied for this task's board")
                     continue
-                
+
                 # Validate hours
                 if hours <= 0 or hours > 16:
                     errors.append(f"Entry {i+1}: Hours must be between 0 and 16")
                     continue
-                
-                # Create the entry
-                entry = TimeEntry.objects.create(
-                    task=task,
-                    user=request.user,
-                    hours_spent=hours,
-                    work_date=work_date,
-                    description=description[:500] if description else ''
-                )
-                
-                created_entries.append({
-                    'id': entry.id,
-                    'task_id': task.id,
-                    'task_title': task.title,
-                    'hours': float(entry.hours_spent),
-                    'date': entry.work_date.isoformat(),
-                    'description': entry.description
+
+                validated.append({
+                    'task': task,
+                    'hours': hours,
+                    'work_date': work_date,
+                    'description': description[:500] if description else ''
                 })
-                
+
             except Exception as e:
                 errors.append(f"Entry {i+1}: {str(e)}")
-        
+
+        created_entries = []
+
+        # Only touch the database if at least one entry validated. When the
+        # caller identifies pre-existing entries being replaced by this split
+        # (e.g. splitting an overlogged day's hours across multiple days),
+        # delete those originals in the same transaction so the split
+        # entries replace rather than add to the original hours.
+        if validated:
+            with transaction.atomic():
+                if original_entry_ids:
+                    TimeEntry.objects.filter(
+                        id__in=original_entry_ids,
+                        user=request.user
+                    ).delete()
+
+                for item in validated:
+                    entry = TimeEntry.objects.create(
+                        task=item['task'],
+                        user=request.user,
+                        hours_spent=item['hours'],
+                        work_date=item['work_date'],
+                        description=item['description']
+                    )
+                    created_entries.append({
+                        'id': entry.id,
+                        'task_id': item['task'].id,
+                        'task_title': item['task'].title,
+                        'hours': float(entry.hours_spent),
+                        'date': entry.work_date.isoformat(),
+                        'description': entry.description
+                    })
+
         return JsonResponse({
             'success': len(created_entries) > 0,
             'created_count': len(created_entries),
