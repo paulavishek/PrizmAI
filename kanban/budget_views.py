@@ -898,11 +898,11 @@ def my_timesheet(request, board_id=None):
     # from collapsing demo mode and exposing real workspace tasks in the timesheet.
     is_demo_mode = getattr(getattr(request.user, 'profile', None), 'is_viewing_demo', False)
     if is_demo_mode:
-        from accounts.models import Organization as _Org
-        _demo_org = _Org.objects.filter(is_demo=True).first()
-        _demo_board_qs = Board.objects.filter(
-            models.Q(is_sandbox_copy=True) | models.Q(organization=_demo_org)
-        ) if _demo_org else Board.objects.filter(is_sandbox_copy=True)
+        # Owner-scoped sandbox boards only (via the canonical helper the dashboard
+        # uses) — NOT every user's sandbox + the demo org. A loose scope let a user
+        # who owned entries on the template AND their sandbox double-count.
+        from kanban.utils.demo_protection import get_user_boards
+        _demo_board_qs = get_user_boards(request.user)
         user_has_entries = TimeEntry.objects.filter(
             user=request.user,
             task__column__board__in=_demo_board_qs,
@@ -935,15 +935,15 @@ def my_timesheet(request, board_id=None):
         # All boards user has access to (include demo boards in MVP mode).
         # In demo mode, always scope to demo/sandbox boards regardless of showing_demo_data
         # to prevent real workspace tasks bleeding through after first demo time entry.
-        if showing_demo_data or is_demo_mode:
-            demo_org = Organization.objects.filter(is_demo=True).first()
-            if demo_org:
-                boards = Board.objects.filter(
-                    models.Q(is_sandbox_copy=True) |
-                    models.Q(organization=demo_org)
-                ).distinct()
-            else:
-                boards = Board.objects.filter(is_sandbox_copy=True).distinct()
+        if showing_demo_data:
+            # Persona-fallback data lives on the official demo boards.
+            boards = Board.objects.filter(is_official_demo_board=True).distinct()
+        elif is_demo_mode:
+            # The user's OWN sandbox boards only (matches _resolve_time_scope);
+            # a demo-org-wide scope would span other users' sandboxes + the
+            # template and double-count a user who owns entries on both.
+            from kanban.utils.demo_protection import get_user_boards
+            boards = get_user_boards(request.user)
         else:
             boards = Board.objects.filter(
                 models.Q(created_by=request.user) | models.Q(memberships__user=request.user),

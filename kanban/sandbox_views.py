@@ -376,7 +376,20 @@ def _duplicate_board(template_board, user):
         from kanban.budget_models import TimeEntry
         _primary_persona = User.objects.filter(username='priya.sharma').first()
         _primary_persona_id = _primary_persona.id if _primary_persona else None
-        for te in TimeEntry.objects.filter(task__column__board=template_board).select_related('task'):
+        for te in TimeEntry.objects.filter(
+            task__column__board=template_board
+        ).select_related('task', 'user'):
+            # Only clone entries owned by demo personas. A real user must never
+            # own entries on the official template (invariant), but if pollution
+            # slips in, cloning it verbatim would replicate that user's stray
+            # rows into every new sandbox (owner-filtered dashboards then show
+            # inflated totals). Skip non-persona rows so clones stay clean
+            # regardless of template state. All demo personas share the
+            # @demo.prizmai.local email domain (the is_demo_account flag is only
+            # set for the priya/elena/marcus team, not alex/sam/jordan, so it is
+            # NOT a reliable persona test). See [[project_time_tracking_demo_isolation]].
+            if not (te.user.email or '').lower().endswith('@demo.prizmai.local'):
+                continue
             new_task = task_map.get(te.task_id)
             if new_task:
                 new_te = TimeEntry.objects.create(
@@ -2516,6 +2529,29 @@ def _purge_existing_sandbox(user):
             TaskActivity.objects.filter(task_id__in=task_ids).delete()
             TaskFile.objects.filter(task_id__in=task_ids).delete()
             user_tasks_on_template.delete()
+    except Exception:
+        logger.warning(
+            "_purge_existing_sandbox: a cleanup step failed for user %s "
+            "(continuing; see traceback)", uid, exc_info=True)
+
+    # ── Strip real-user pollution from official demo template boards ──
+    # A real user must never own TimeEntry rows or a BoardMembership on the
+    # official template (invariant: see [[project_demo_reset_official_board_invariants]]).
+    # _duplicate_board clones template time entries, so any stray real-user rows
+    # here get copied into every new sandbox as that user's own, inflating their
+    # timesheet on every reset. Delete them so the user self-heals on reset even
+    # if pollution slipped in via a legacy path. Only the resetting user's own
+    # rows are touched; persona-owned seed entries are preserved.
+    try:
+        from kanban.budget_models import TimeEntry
+        from kanban.models import BoardMembership
+        template_boards = Board.objects.filter(is_official_demo_board=True)
+        TimeEntry.objects.filter(
+            user=user, task__column__board__in=template_boards,
+        ).delete()
+        BoardMembership.objects.filter(
+            user=user, board__in=template_boards,
+        ).delete()
     except Exception:
         logger.warning(
             "_purge_existing_sandbox: a cleanup step failed for user %s "
