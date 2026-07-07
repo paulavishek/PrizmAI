@@ -1505,6 +1505,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def _create_budget_and_time(self, tasks_by_code, epics):
         """Project budget + time entries for done/in-review/in-progress tasks."""
+        rng = random.Random(1310)  # deterministic so Time Tracking is stable across resets
         ProjectBudget.objects.create(
             board=self.board,
             allocated_budget=Decimal('85000.00'),
@@ -1533,8 +1534,8 @@ class Command(BaseCommand):
                 continue
 
             # Spread across 3-6 entries within the task window
-            num_entries = random.choice([3, 4, 5, 6])
-            entries = self._distribute_hours(total_hours, num_entries)
+            num_entries = rng.choice([3, 4, 5, 6])
+            entries = self._distribute_hours(total_hours, num_entries, rng)
 
             start = task.start_date
             end_date = (task.completed_at.date()
@@ -1559,7 +1560,7 @@ class Command(BaseCommand):
                     user=task.assigned_to,
                     hours_spent=Decimal(f'{hrs:.2f}'),
                     work_date=work_date,
-                    description=random.choice(descriptions) + f' - {task.title}',
+                    description=rng.choice(descriptions) + f' - {task.title}',
                     is_billable=True,
                 )
                 time_entry_count += 1
@@ -1569,9 +1570,9 @@ class Command(BaseCommand):
         )
 
     @staticmethod
-    def _distribute_hours(total, n):
+    def _distribute_hours(total, n, rng):
         """Split `total` hours across `n` entries with mild random variation."""
-        weights = [random.uniform(0.7, 1.3) for _ in range(n)]
+        weights = [rng.uniform(0.7, 1.3) for _ in range(n)]
         s = sum(weights)
         return [max(0.25, round(total * w / s, 2)) for w in weights]
 

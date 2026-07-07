@@ -15,10 +15,11 @@ IMPORTANT ARCHITECTURAL NOTES:
 """
 
 import threading
+import time
 from contextlib import contextmanager
 from datetime import timedelta, date
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, OperationalError
 from django.core.cache import cache
 from django.conf import settings
 import logging
@@ -113,16 +114,54 @@ def refresh_single_board_dates(board_id):
         return refresh_all_demo_dates(skip_mark_cache=True)
 
 
+# How many times to re-run the whole demo-date refresh if a SQLite write lock
+# poisons its single all-or-nothing transaction.
+_MAX_DEMO_REFRESH_ATTEMPTS = 4
+
+
 def refresh_all_demo_dates(skip_mark_cache=False):
     """
     Refresh all SEED demo data dates to be relative to the current date.
-    
+
+    Public entry point. Delegates to ``_refresh_all_demo_dates_once`` and retries
+    the ENTIRE refresh if a SQLite write lock poisoned the transaction (raised as
+    ``OperationalError``). The refresh is fully idempotent, so a retry re-runs it
+    from scratch — this is what guarantees a demo Reset always converges on the
+    same dates instead of committing whatever partial state a lock left behind
+    (the "different Time Tracking data on every Reset" bug). ``transaction_mode:
+    IMMEDIATE`` (settings) makes such locks rare in the first place; this is the
+    belt-and-suspenders net for the ones that still slip through.
+    """
+    for attempt in range(_MAX_DEMO_REFRESH_ATTEMPTS):
+        try:
+            return _refresh_all_demo_dates_once(skip_mark_cache=skip_mark_cache)
+        except OperationalError as e:
+            if attempt < _MAX_DEMO_REFRESH_ATTEMPTS - 1:
+                logger.warning(
+                    f"Demo date refresh hit a DB lock (attempt {attempt + 1}/"
+                    f"{_MAX_DEMO_REFRESH_ATTEMPTS}); retrying: {e}"
+                )
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            logger.error(
+                f"Demo date refresh failed after {_MAX_DEMO_REFRESH_ATTEMPTS} "
+                f"attempts: {e}"
+            )
+            raise
+
+
+def _refresh_all_demo_dates_once(skip_mark_cache=False):
+    """
+    Refresh all SEED demo data dates to be relative to the current date.
+
     IMPORTANT: This only refreshes original demo data, not user-created content.
     User-created content (tasks, boards with created_by_session set) is preserved
     and will be cleaned up by the 48-hour reset system instead.
-    
-    This is the main entry point called by middleware or management command.
-    Returns a dict of statistics about what was updated.
+
+    Runs as a single all-or-nothing transaction: if a SQLite write lock poisons
+    it, this raises ``OperationalError`` (see the needs_rollback check) so the
+    ``refresh_all_demo_dates`` wrapper can retry rather than commit a partial
+    refresh. Returns a dict of statistics about what was updated.
 
     Args:
         skip_mark_cache: If True, do not mark the global "refreshed today"
@@ -278,13 +317,26 @@ def refresh_all_demo_dates(skip_mark_cache=False):
             #     to today instead of drifting from their frozen clone dates.
             _safe(lambda: _refresh_exit_protocol_dates(base_date), 'exit_protocol_dates_updated')
 
+            # A "database is locked" swallowed by one of the directly-called
+            # refreshers above (e.g. _refresh_task_dates) leaves the connection
+            # flagged needs_rollback, silently no-opping every step after it and
+            # rolling the whole atomic back on exit. That half-applied state is
+            # exactly why demo Resets showed different Time Tracking data each
+            # time. Turn it into a real error so the caller retries the entire
+            # (idempotent) refresh instead of committing a partial one.
+            if transaction.get_connection().needs_rollback:
+                raise OperationalError(
+                    "demo date refresh transaction was poisoned (likely a SQLite "
+                    "write lock); rolling back to retry"
+                )
+
         # Mark refresh as complete
         if not skip_mark_cache:
             mark_demo_dates_refreshed()
-        
+
         logger.info(f"Demo dates refreshed: {stats}")
         return stats
-        
+
     except Exception as e:
         logger.error(f"Error refreshing demo dates: {e}")
         raise
@@ -760,38 +812,64 @@ def _refresh_time_entry_dates(base_date):
     """
     Refresh time entry work_date fields.
     ONLY refreshes entries for original seed demo tasks, not user-created.
+
+    Entries are spread WITHIN each task's (already-refreshed) work window,
+    keyed off each entry's ordinal position among its task's entries — mirroring
+    the seeder's spread (populate_all_demo_data._create_budget_and_time). The old
+    implementation scattered dates by ``entry.id % 30``, which was NOT stable
+    across a demo Reset: reseeding/re-cloning mints fresh primary keys, so the
+    same logical entry landed on a different day every reset (users saw the Time
+    Tracking dates shift on each Reset Demo). Anchoring to the task window +
+    ordinal index is both deterministic across resets AND consistent with the
+    task's actual start→completion span that the rest of the demo story tells.
     """
     try:
         from kanban.budget_models import TimeEntry
         from django.db.models import Q
-        
+
         demo_board_ids = _get_demo_board_ids()
-        # Only refresh time entries for SEED demo tasks (not user-created)
+        # Only refresh time entries for SEED demo tasks (not user-created).
+        # order_by('task_id', 'id') gives a STABLE per-task ordering: the entry's
+        # position within its task drives the date, never its absolute PK.
         entries = list(TimeEntry.objects.filter(
             task__column__board_id__in=demo_board_ids
         ).filter(
             Q(task__created_by_session__isnull=True) | Q(task__created_by_session='')
-        ))
-        
+        ).select_related('task').order_by('task_id', 'id'))
+
         if not entries:
             return 0
-        
-        entries_to_update = []
-        
+
+        entries_by_task = {}
         for entry in entries:
-            if not entry.work_date:
-                continue
-            
-            # Time entries in the past 30 days
-            days_offset = -(entry.id % 30 + 1)
-            entry.work_date = base_date + timedelta(days=days_offset)
-            entries_to_update.append(entry)
-        
+            entries_by_task.setdefault(entry.task_id, []).append(entry)
+
+        entries_to_update = []
+        for task_entries in entries_by_task.values():
+            task = task_entries[0].task
+            start = task.start_date
+            if not start:
+                continue  # no window to anchor to — leave existing dates alone
+            if task.completed_at:
+                end_date = timezone.localtime(task.completed_at).date()
+            else:
+                end_date = base_date
+            span_days = max((end_date - start).days, 1)
+            n = len(task_entries)
+            for i, entry in enumerate(task_entries):
+                if not entry.work_date:
+                    continue
+                # Same spread formula the seeder uses within the task window.
+                entry.work_date = start + timedelta(
+                    days=int((i + 1) * span_days / (n + 1))
+                )
+                entries_to_update.append(entry)
+
         if entries_to_update:
             TimeEntry.objects.bulk_update(entries_to_update, ['work_date'], batch_size=500)
-        
+
         return len(entries_to_update)
-        
+
     except Exception as e:
         logger.warning(f"Error refreshing time entry dates: {e}")
         return 0

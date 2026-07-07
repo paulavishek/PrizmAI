@@ -199,6 +199,17 @@ DATABASES = {
             # atomic transaction open while waiting for the Gemini API,
             # or when Celery Beat's DatabaseScheduler writes concurrently.
             'timeout': 30,
+            # Begin every atomic() with BEGIN IMMEDIATE so the write lock is
+            # acquired up front (and therefore honours the 30 s `timeout`
+            # above) instead of lazily upgrading a read transaction to a
+            # write one.  Without this, a transaction that SELECTs first and
+            # writes later raises "database is locked" IMMEDIATELY on the
+            # read->write upgrade when another connection holds the write
+            # lock — busy_timeout does NOT cover that case.  This was making
+            # the demo-date refresh during "Reset Demo" intermittently abort
+            # mid-way (poisoning its transaction), so each Reset showed
+            # different Time Tracking data.  Requires Django >= 5.1.
+            'transaction_mode': 'IMMEDIATE',
         },
     }
 }
