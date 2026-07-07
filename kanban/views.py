@@ -194,6 +194,28 @@ def dashboard(request):
                 sandbox, _ = DemoSandbox.objects.get_or_create(user=request.user)
                 _reassign_demo_tasks_to_user(sandbox, request.user)
 
+            # Catch-up: repair the personal timesheet for sandboxes provisioned
+            # before per-user time-entry isolation. Remaps the primary persona's
+            # cloned time entries to the real user so the time-tracking dashboard
+            # (filtered by user=request.user) shows their own isolated copy
+            # instead of falling back to shared persona data. Idempotent.
+            try:
+                from kanban.sandbox_views import _remap_demo_time_entries_to_owner
+                _remap_demo_time_entries_to_owner(request.user)
+            except Exception:
+                pass
+
+            # Catch-up: clone demo calendar events into the user's sandbox boards
+            # for sandboxes provisioned before per-user calendar isolation. Events
+            # were only seeded on the shared template board and surfaced
+            # inconsistently across users; each user now gets their own copy.
+            # Clone-if-empty, so this is idempotent.
+            try:
+                from kanban.sandbox_views import _clone_calendar_events_for_user
+                _clone_calendar_events_for_user(request.user)
+            except Exception:
+                pass
+
             # Catch-up: add the user to sandbox chat rooms if a prior
             # provisioning pass missed them. Sandbox boards are not
             # ``is_official_demo_board``, so the Messages badge endpoint
@@ -1716,6 +1738,7 @@ def toggle_demo_mode(request):
     from kanban.sandbox_views import (
         _join_demo_org, _leave_demo_org,
         _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+        _remap_demo_time_entries_to_owner, _clone_calendar_events_for_user,
     )
 
     if not profile.is_viewing_demo:
@@ -1740,6 +1763,8 @@ def toggle_demo_mode(request):
             # Re-enter existing sandbox instantly
             _join_demo_org(request.user)
             _reassign_demo_tasks_to_user(existing, request.user)
+            _remap_demo_time_entries_to_owner(request.user)
+            _clone_calendar_events_for_user(request.user)
             from kanban.tasks.sandbox_provisioning import touch_sandbox_access
             touch_sandbox_access(request.user)
             profile.is_viewing_demo = True
@@ -1950,6 +1975,7 @@ def switch_workspace(request):
     from kanban.sandbox_views import (
         _join_demo_org, _leave_demo_org,
         _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
+        _remap_demo_time_entries_to_owner, _clone_calendar_events_for_user,
     )
 
     workspace_id = request.POST.get('workspace_id')
@@ -1981,6 +2007,8 @@ def switch_workspace(request):
                 existing = request.user.demo_sandbox
                 _join_demo_org(request.user)
                 _reassign_demo_tasks_to_user(existing, request.user)
+                _remap_demo_time_entries_to_owner(request.user)
+                _clone_calendar_events_for_user(request.user)
                 from kanban.tasks.sandbox_provisioning import touch_sandbox_access
                 touch_sandbox_access(request.user)
             except DemoSandbox.DoesNotExist:

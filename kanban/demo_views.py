@@ -1925,6 +1925,34 @@ def reset_demo_data(request):
             except Exception:
                 pass
 
+            # Repair the personal timesheet on the user's existing sandbox boards.
+            # This reset path repopulates the official templates in place but does
+            # not re-clone the sandbox copies, so their cloned time entries are
+            # still owned by the primary persona. Remap them to the user so the
+            # time-tracking dashboard shows their own isolated copy. Idempotent.
+            try:
+                from kanban.sandbox_views import _remap_demo_time_entries_to_owner
+                _remap_demo_time_entries_to_owner(request.user)
+            except Exception:
+                pass
+
+            # Clone demo calendar events into the user's sandbox boards so the
+            # calendar is per-user (seeded only on the shared template board).
+            # This reset path does not re-provision the sandbox, so purge the
+            # user's existing sandbox events first — the clone (clone-if-empty)
+            # then repopulates them fresh from the just-refreshed templates.
+            try:
+                from kanban.models import Board, CalendarEvent
+                from kanban.sandbox_views import _clone_calendar_events_for_user
+                _sb_ids = list(
+                    Board.objects.filter(owner=request.user, is_sandbox_copy=True)
+                    .values_list('id', flat=True)
+                )
+                CalendarEvent.objects.filter(board_id__in=_sb_ids).delete()
+                _clone_calendar_events_for_user(request.user)
+            except Exception:
+                pass
+
             # Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
