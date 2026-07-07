@@ -60,9 +60,11 @@ def _can_create_workspace(user):
     org = profile.organization
     if not org:
         return True  # No org yet — first-time user
-    # Demo-exploring users should always be able to create their own workspace
-    if (getattr(profile, 'is_viewing_demo', False)
-            and profile.onboarding_status in ('demo_exploring', 'pending')):
+    # Users currently viewing a demo sandbox don't own that org — always let
+    # them escape into setting up their own workspace, regardless of
+    # onboarding_status (real users landing in demo default to 'completed',
+    # never having gone through the v2 wizard).
+    if getattr(profile, 'is_viewing_demo', False):
         return True
     return org.created_by_id == user.id
 
