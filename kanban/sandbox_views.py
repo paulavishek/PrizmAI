@@ -364,14 +364,24 @@ def _duplicate_board(template_board, user):
         pass  # Commitment copying is best-effort; don't block provisioning
 
     # --- Time Entries (for time tracking views) ---
+    # The time-tracking dashboard is a *personal* timesheet: it filters entries by
+    # ``user=request.user``. Seeded demo entries are owned by personas, so remap the
+    # primary persona (priya.sharma)'s entries to the sandbox owner — this gives each
+    # user their own isolated copy of "Priya's timesheet" (matching the demo's
+    # intended fallback view) instead of everyone falling back to shared persona data
+    # read off the official demo boards. Other personas' entries stay persona-owned
+    # as board context.
     try:
+        from django.contrib.auth.models import User
         from kanban.budget_models import TimeEntry
+        _primary_persona = User.objects.filter(username='priya.sharma').first()
+        _primary_persona_id = _primary_persona.id if _primary_persona else None
         for te in TimeEntry.objects.filter(task__column__board=template_board).select_related('task'):
             new_task = task_map.get(te.task_id)
             if new_task:
                 new_te = TimeEntry.objects.create(
                     task=new_task,
-                    user=te.user,
+                    user=user if te.user_id == _primary_persona_id else te.user,
                     hours_spent=te.hours_spent,
                     work_date=te.work_date,
                     description=te.description,
@@ -2006,6 +2016,91 @@ def _clone_discovery_ideas_for_user(user):
                     if tpl_task and match.phase != tpl_task.phase:
                         match.phase = tpl_task.phase
                         match.save(update_fields=['phase'])
+
+
+def _remap_demo_time_entries_to_owner(user):
+    """Repair pre-existing sandboxes so the time-tracking dashboard is per-user.
+
+    The dashboard is a personal timesheet filtered by ``user=request.user``.
+    Sandboxes provisioned before the clone fix carry the primary persona
+    (priya.sharma)'s seeded time entries owned by the persona, so the real user
+    owns none and falls back to shared persona data. Remap those persona-owned
+    entries on the user's own sandbox boards to the user, matching the isolation
+    model used by [[_reassign_demo_tasks_to_user]] and
+    [[_clone_discovery_ideas_for_user]].
+
+    Idempotent: only priya-owned rows are targeted and reassigned to ``user``, so
+    a second pass finds nothing.
+    """
+    from django.contrib.auth.models import User
+    from kanban.models import Board
+    from kanban.budget_models import TimeEntry
+
+    persona = User.objects.filter(username='priya.sharma').first()
+    if not persona:
+        return
+    sandbox_boards = Board.objects.filter(owner=user, is_sandbox_copy=True)
+    if not sandbox_boards.exists():
+        return
+    TimeEntry.objects.filter(
+        user=persona,
+        task__column__board__in=sandbox_boards,
+    ).update(user=user)
+
+
+def _clone_calendar_events_for_user(user):
+    """Clone the demo CalendarEvents into the user's own sandbox boards.
+
+    Calendar events are seeded only on the official demo template board and were
+    never cloned per user, so the calendar view read them off the shared template
+    (``board__is_official_demo_board=True``). Their teammate-visibility then
+    depended on which persona team happened to be a member of the user's sandbox,
+    so different users saw different (or no) events. To obey the per-user sandbox
+    isolation model ([[project_demo_sandbox_isolation_model]], same fix as
+    [[_remap_demo_time_entries_to_owner]] and [[_clone_discovery_ideas_for_user]]),
+    every user gets their own copy of the events on their own board.
+
+    The clone's ``created_by`` is remapped to the sandbox owner so the events are
+    always visible via the calendar's "my own events" clause (the seeded creators
+    — alex/sam/jordan — are not members of the sandbox board, so a persona
+    ``created_by`` would stay invisible). ``linked_task`` is re-pointed at the
+    matching cloned task by title; participants (valid persona users) are kept for
+    display.
+
+    Clone-if-empty: skips any sandbox board that already has events, so it is
+    idempotent across re-entries and never wipes events the user created
+    themselves. Fresh (re-)provision purges sandbox events first
+    (``_purge_existing_sandbox``), so this repopulates them cleanly.
+    """
+    from kanban.models import Board, CalendarEvent, Task
+
+    sandbox_boards = Board.objects.filter(
+        owner=user, is_sandbox_copy=True, cloned_from__isnull=False,
+    ).select_related('cloned_from')
+    for sb in sandbox_boards:
+        if CalendarEvent.objects.filter(board=sb).exists():
+            continue  # already populated (cloned or user-created) — leave untouched
+        template = sb.cloned_from
+        # Board cloning copies tasks by title, so map linked tasks by title.
+        sb_tasks = {t.title: t for t in Task.objects.filter(column__board=sb)}
+        for ev in CalendarEvent.objects.filter(board=template).prefetch_related('participants'):
+            new_linked = sb_tasks.get(ev.linked_task.title) if ev.linked_task_id else None
+            clone = CalendarEvent.objects.create(
+                title=ev.title,
+                description=ev.description,
+                event_type=ev.event_type,
+                visibility=ev.visibility,
+                start_datetime=ev.start_datetime,
+                end_datetime=ev.end_datetime,
+                is_all_day=ev.is_all_day,
+                location=ev.location,
+                board=sb,
+                linked_task=new_linked,
+                created_by=user,
+            )
+            participants = list(ev.participants.all())
+            if participants:
+                clone.participants.set(participants)
 
 
 def _leave_demo_org(user):

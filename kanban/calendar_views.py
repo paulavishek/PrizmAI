@@ -144,15 +144,21 @@ def _event_workspace_scope(user):
     """A ``Q`` limiting CalendarEvents to the user's current workspace mode.
 
     CalendarEvent has no workspace field, so the only reliable anchor is the
-    event's board: demo events live on sandbox (or template) boards, real events
+    event's board: demo events live on the user's own sandbox boards, real events
     on real boards.  Without this, the "my own events" visibility clause
     (``created_by=user``) would surface a user's *demo* events in their real
     workspace and vice-versa.  Board-less events have no workspace anchor, so
     they are treated as personal/real and never shown inside demo mode.
+
+    Note: demo events are cloned per-user onto their sandbox boards
+    (``_clone_calendar_events_for_user``); we deliberately do NOT scope to the
+    shared official demo board here, so users read only their own isolated copy
+    rather than the shared template events (which surfaced inconsistently across
+    users depending on sandbox membership).
     """
     profile = getattr(user, 'profile', None)
     if getattr(profile, 'is_viewing_demo', False):
-        return Q(board__is_sandbox_copy=True) | Q(board__is_official_demo_board=True)
+        return Q(board__is_sandbox_copy=True)
     return (
         Q(board__isnull=True) |
         Q(board__is_sandbox_copy=False, board__is_official_demo_board=False)

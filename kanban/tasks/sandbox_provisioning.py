@@ -413,6 +413,27 @@ def _provision_sandbox(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not clone Discovery demo ideas during provision: %s", e)
 
+    # Belt-and-suspenders: ensure the primary persona's cloned time entries are
+    # owned by the sandbox owner so the time-tracking dashboard is per-user. The
+    # board clone above already remaps them; this is idempotent and also self-heals
+    # any sandbox that predates that fix.
+    try:
+        from kanban.sandbox_views import _remap_demo_time_entries_to_owner
+        with allow_demo_writes():
+            _remap_demo_time_entries_to_owner(user)
+    except Exception as e:
+        logger.warning("Could not remap demo time entries during provision: %s", e)
+
+    # Clone the demo calendar events into the user's own sandbox boards so the
+    # calendar is per-user (events are seeded only on the shared template board and
+    # were never cloned). Clone-if-empty, so this is idempotent.
+    try:
+        from kanban.sandbox_views import _clone_calendar_events_for_user
+        with allow_demo_writes():
+            _clone_calendar_events_for_user(user)
+    except Exception as e:
+        logger.warning("Could not clone demo calendar events during provision: %s", e)
+
     # ── Essential work is done ────────────────────────────────────────────────
     # The sandbox boards now exist with the correct columns, tasks, assignments
     # and refreshed dates — everything the user actually looks at on the board
