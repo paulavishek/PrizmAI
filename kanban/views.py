@@ -6263,11 +6263,18 @@ def load_demo_data(request):
 
             # Get the demo boards
             demo_board_names = ['Software Development']
+            # Never attach a real user to the official demo template board:
+            # membership there violates the demo isolation invariant and lets
+            # the user own artifacts (tasks/time entries) that _duplicate_board
+            # then clones into every sandbox. Users get their own sandbox copy
+            # via provisioning, not a membership on the template.
+            # See [[project_demo_reset_official_board_invariants]].
             demo_boards = Board.objects.filter(
                 organization__in=demo_orgs,
-                name__in=demo_board_names
+                name__in=demo_board_names,
+                is_official_demo_board=False,
             )
-            
+
             if not demo_boards.exists():
                 messages.error(request, 'Demo boards not found. Please contact administrator to load the initial demo data.')
                 return redirect('dashboard')

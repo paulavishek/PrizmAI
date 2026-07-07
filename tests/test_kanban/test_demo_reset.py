@@ -129,3 +129,52 @@ class DemoResetSyncTestCase(TestCase):
             Board.objects.filter(owner=self.user, is_sandbox_copy=True).count(),
             1,
         )
+
+    def test_clone_skips_real_user_time_entries_on_template(self):
+        """Real-user TimeEntry rows on the template must NOT be cloned.
+
+        Regression for the divergent-timesheet bug: _duplicate_board used to
+        copy every template TimeEntry verbatim, so a stray real-user row on the
+        official board got replicated into every new sandbox as that user's own,
+        inflating their Total Hours on every reset. The clone now copies only
+        persona-owned (@demo.prizmai.local) rows, remapping priya.sharma's to the
+        sandbox owner.
+        """
+        from datetime import date
+        from decimal import Decimal
+        from kanban.budget_models import TimeEntry
+
+        template_task = Task.objects.filter(column__board=self.template_board).first()
+
+        # Primary persona entry — should clone AND remap to the sandbox owner.
+        priya = User.objects.create_user(
+            'priya.sharma', email='priya.sharma@demo.prizmai.local', password='x',
+        )
+        UserProfile.objects.get_or_create(user=priya)
+        TimeEntry.objects.create(
+            task=template_task, user=priya,
+            hours_spent=Decimal('4.00'), work_date=date(2026, 7, 1),
+        )
+        # Real-user pollution on the template — must be skipped by the clone.
+        polluter = User.objects.create_user(
+            'polluter', email='polluter@gmail.com', password='x',
+        )
+        UserProfile.objects.get_or_create(user=polluter)
+        TimeEntry.objects.create(
+            task=template_task, user=polluter,
+            hours_spent=Decimal('9.99'), work_date=date(2026, 7, 2),
+        )
+
+        self._provision(is_reset=False)
+        board = Board.objects.get(owner=self.user, is_sandbox_copy=True)
+        sandbox_entries = TimeEntry.objects.filter(task__column__board=board)
+
+        # Owner gets exactly the remapped priya entry; the polluter row is gone.
+        self.assertEqual(sandbox_entries.count(), 1)
+        entry = sandbox_entries.first()
+        self.assertEqual(entry.user_id, self.user.id, 'priya entry must remap to sandbox owner')
+        self.assertEqual(entry.hours_spent, Decimal('4.00'))
+        self.assertFalse(
+            sandbox_entries.filter(user=polluter).exists(),
+            'real-user pollution must never be cloned into a sandbox',
+        )
