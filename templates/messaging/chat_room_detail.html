@@ -327,6 +327,11 @@
     .search-bar-wrapper.open {
         max-height: 80px;
     }
+    .search-anchor {
+        position: relative; /* positioning context for .search-results-panel; must stay a
+                                normal block box (not flex/grid) so top:100% resolves directly
+                                below the search bar instead of the flex container's origin */
+    }
     .search-bar-inner {
         display: flex;
         align-items: center;
@@ -356,10 +361,10 @@
     }
     #searchCloseBtn:hover { background: #e0d5f8; color: #333; }
 
-    /* Results overlay — anchored to the chat-container (position: relative set inline) */
+    /* Results overlay — anchored to .search-anchor, directly below the search bar */
     .search-results-panel {
         position: absolute;
-        top: auto;   /* JS sets this after bar opens */
+        top: 100%;
         left: 0;
         right: 0;
         z-index: 120;
@@ -367,9 +372,21 @@
         border: 1px solid #d0c8f0;
         border-top: none;
         border-radius: 0 0 8px 8px;
-        max-height: 400px;
+        max-height: 300px;
         overflow-y: auto;
         box-shadow: 0 6px 18px rgba(102,126,234,0.18);
+    }
+    .search-results-header {
+        padding: 0.5rem 1rem 0.4rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #5a2d82;
+        background: #f8f4ff;
+    }
+    .search-results-divider {
+        margin: 0;
+        border: none;
+        border-top: 1px solid #e0d5f8;
     }
     .search-result-item {
         padding: 0.65rem 1rem;
@@ -1692,10 +1709,12 @@ function aiSummarizeThread() {
     const spinner = document.getElementById('summarize-spinner');
     const panel = document.getElementById('ai-thread-summary');
     const textEl = document.getElementById('ai-summary-text');
+    const copyBtn = document.getElementById('btn-copy-summary');
 
     btn.disabled = true;
     spinner.style.display = 'inline-block';
     panel.classList.add('d-none');
+    copyBtn.classList.add('d-none');
 
     fetch(AI_SUMMARIZE_URL, {
         method: 'POST',
@@ -1709,6 +1728,7 @@ function aiSummarizeThread() {
         } else {
             textEl.textContent = data.summary;
             panel.className = 'alert alert-info mb-0';
+            copyBtn.classList.remove('d-none');
         }
         panel.classList.remove('d-none');
     })
@@ -1720,6 +1740,22 @@ function aiSummarizeThread() {
     .finally(() => {
         btn.disabled = false;
         spinner.style.display = 'none';
+    });
+}
+
+function aiCopySummary() {
+    const textEl = document.getElementById('ai-summary-text');
+    const copyBtn = document.getElementById('btn-copy-summary');
+    const text = textEl.textContent || '';
+
+    navigator.clipboard.writeText(text).then(() => {
+        const original = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check me-1"></i> Copied';
+        setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
+    }).catch(() => {
+        const original = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-times me-1"></i> Failed';
+        setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
     });
 }
 
@@ -1968,6 +2004,14 @@ function _formatSearchDate(isoString) {
     return d.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function _searchResultsHeaderHtml(count, query) {
+    const q = _escapeSearchHtml(query);
+    const label = count === 0
+        ? `No messages found for "${q}"`
+        : `Search Results for "${q}" (${count} found)`;
+    return `<div class="search-results-header"><i class="fas fa-search me-1"></i>${label}</div><hr class="search-results-divider">`;
+}
+
 function performSearch() {
     const q = document.getElementById('searchInput').value.trim();
     const senderId = document.getElementById('senderFilter').value;
@@ -1989,10 +2033,10 @@ function performSearch() {
     .then(r => r.json())
     .then(data => {
         if (!data.results || data.results.length === 0) {
-            _showSearchPanel(`<div class="search-status-msg">No messages found for &#39;${_escapeSearchHtml(q)}&#39;</div>`);
+            _showSearchPanel(_searchResultsHeaderHtml(0, data.query));
             return;
         }
-        let html = '';
+        let html = _searchResultsHeaderHtml(data.results.length, data.query);
         data.results.forEach(msg => {
             html += `<div class="search-result-item" onclick="jumpToMessage(${msg.id})">
                 <div class="search-result-meta">
@@ -2091,25 +2135,31 @@ document.addEventListener('keydown', function (e) {
                 </div>
             </div>
 
-            <!-- In-room message search bar (collapses via max-height transition) -->
-            <div id="searchBarWrapper" class="search-bar-wrapper">
-                <div class="search-bar-inner">
-                    <input type="text" id="searchInput" class="form-control form-control-sm"
-                           placeholder="Search messages..." autocomplete="off">
-                    <select id="senderFilter" class="form-select form-select-sm">
-                        <option value="">All senders</option>
-                        {# NOTE: members.all() is used here. The room creator is expected to be in members.
-                           If edge cases arise where the creator is not a member, they won't appear. #}
-                        {% for member in chat_room.members.all %}
-                            <option value="{{ member.id }}">{{ member.get_full_name|default:member.username }}</option>
-                        {% endfor %}
-                    </select>
-                    <button id="searchCloseBtn" type="button" title="Close search" onclick="closeSearch()">&times;</button>
+            <!-- Search bar + results overlay share a plain block positioning context (.search-anchor)
+                 so the results panel's top:100% resolves directly below the bar. Must not be flex/grid,
+                 and the panel must stay a sibling of #searchBarWrapper (not a child) since the bar's
+                 overflow:hidden is load-bearing for its accordion transition and would clip the panel. -->
+            <div id="searchAnchor" class="search-anchor">
+                <!-- In-room message search bar (collapses via max-height transition) -->
+                <div id="searchBarWrapper" class="search-bar-wrapper">
+                    <div class="search-bar-inner">
+                        <input type="text" id="searchInput" class="form-control form-control-sm"
+                               placeholder="Search messages..." autocomplete="off">
+                        <select id="senderFilter" class="form-select form-select-sm">
+                            <option value="">All senders</option>
+                            {# NOTE: members.all() is used here. The room creator is expected to be in members.
+                               If edge cases arise where the creator is not a member, they won't appear. #}
+                            {% for member in chat_room.members.all %}
+                                <option value="{{ member.id }}">{{ member.get_full_name|default:member.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <button id="searchCloseBtn" type="button" title="Close search" onclick="closeSearch()">&times;</button>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Search results overlay panel (anchors to chat-container via position:relative) -->
-            <div id="searchResultsPanel" class="search-results-panel d-none"></div>
+                <!-- Search results overlay panel (anchors to .search-anchor via position:relative) -->
+                <div id="searchResultsPanel" class="search-results-panel d-none"></div>
+            </div>
 
             <!-- AI Tools Toolbar -->
             <div class="ai-toolbar">
@@ -2133,7 +2183,12 @@ document.addEventListener('keydown', function (e) {
                         <strong><i class="fas fa-robot me-1"></i> AI Thread Summary</strong>
                         <p id="ai-summary-text" class="mb-0 mt-1"></p>
                     </div>
-                    <button type="button" class="btn-close ms-3 flex-shrink-0" onclick="document.getElementById('ai-thread-summary').classList.add('d-none')" aria-label="Close"></button>
+                    <div class="d-flex align-items-start ms-3 flex-shrink-0">
+                        <button type="button" id="btn-copy-summary" class="btn btn-sm btn-outline-secondary d-none me-2" onclick="aiCopySummary()" title="Copy summary to clipboard">
+                            <i class="fas fa-copy me-1"></i> Copy
+                        </button>
+                        <button type="button" class="btn-close" onclick="document.getElementById('ai-thread-summary').classList.add('d-none')" aria-label="Close"></button>
+                    </div>
                 </div>
             </div>
 
