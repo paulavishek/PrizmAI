@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 import json
 
-from kanban.models import Board
+from kanban.models import Board, Task
 from kanban.decorators import demo_write_guard
 from kanban.utils.demo_protection import get_user_boards
 from kanban.favorite_views import is_user_favorite as _is_fav
@@ -310,17 +310,49 @@ def apply_resolution(request, conflict_id, resolution_id):
         
         # Apply resolution
         resolution.apply(request.user)
-        
+
         # Update conflict with feedback
         conflict.resolve(resolution, request.user, feedback, effectiveness)
-        
+
         messages.success(request, f"Resolution applied successfully: {resolution.title}")
-        
-        return JsonResponse({
+
+        response_data = {
             'success': True,
             'message': 'Resolution applied successfully',
             'redirect': f'/kanban/conflicts/{conflict.id}/'
-        })
+        }
+
+        # Rescheduling a task's dates here does NOT cascade to tasks that
+        # depend on it (that only happens via the Gantt drag "Shift N tasks"
+        # banner/cascade endpoint). Surface the same affected-dependents info
+        # so the frontend can offer that cascade right after applying.
+        if resolution.resolution_type in ('reschedule', 'adjust_dates'):
+            task_id = resolution.implementation_data.get('task_id')
+            if task_id:
+                task = Task.objects.filter(id=task_id).first()
+                if task and task.due_date:
+                    effective_due_date = task.due_date.date()
+                    dependents = task.dependent_tasks.filter(
+                        start_date__isnull=False,
+                        start_date__lt=effective_due_date
+                    ).values('id', 'title', 'start_date')
+                    response_data['rescheduled_task'] = {
+                        'id': task.id,
+                        'title': task.title,
+                        'start_date': task.start_date.isoformat() if task.start_date else None,
+                        'due_date': effective_due_date.isoformat(),
+                    }
+                    response_data['affected_dependents'] = [
+                        {
+                            'id': d['id'],
+                            'title': d['title'],
+                            'start_date': d['start_date'].isoformat() if d['start_date'] else None,
+                        }
+                        for d in dependents
+                    ]
+                    response_data['total_dependents'] = task.dependent_tasks.count()
+
+        return JsonResponse(response_data)
         
     except Exception as e:
         logger.error(f"Error applying resolution: {e}", exc_info=True)

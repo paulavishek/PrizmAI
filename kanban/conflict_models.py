@@ -7,7 +7,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class ConflictDetection(models.Model):
@@ -392,31 +392,90 @@ class ConflictResolution(models.Model):
                 # Task or user no longer exists, skip auto-apply
                 pass
         
-        elif resolution_type == 'reschedule' and 'task_id' in data:
+        elif resolution_type in ('reschedule', 'adjust_dates') and 'task_id' in data:
             try:
                 task = Task.objects.get(id=data['task_id'])
-                if 'new_start_date' in data:
-                    task.start_date = parse_date(data['new_start_date'])
-                if 'new_due_date' in data:
-                    task.due_date = parse_date(data['new_due_date'])
-                task.save()
-            except Task.DoesNotExist:
-                # Task no longer exists, skip auto-apply
-                pass
-        
-        elif resolution_type == 'adjust_dates' and 'task_id' in data:
-            try:
-                task = Task.objects.get(id=data['task_id'])
-                if 'new_start_date' in data:
-                    task.start_date = parse_date(data['new_start_date'])
-                if 'new_due_date' in data:
-                    task.due_date = parse_date(data['new_due_date'])
+                self._reschedule_task(task, data, parse_date, Task)
                 task.save()
             except Task.DoesNotExist:
                 # Task no longer exists, skip auto-apply
                 pass
         
         # Add more auto-apply logic for other resolution types as needed
+
+    def _reschedule_task(self, task, data, parse_date, Task):
+        """Mutate ``task``'s dates for a reschedule/adjust_dates resolution.
+
+        Prefers recomputing from the blocking task's LIVE due date via
+        ``after_task_id`` (robust to demo date-refresh drift, which shifts task
+        dates forward but never updates the frozen ``new_start_date`` snapshot
+        stored at suggestion time). Duration is preserved: the due date moves by
+        the same delta as the start date so the task keeps its original length.
+        Falls back to the stored ``new_start_date``/``new_due_date`` when no
+        blocking task is available.
+        """
+        new_start = None
+
+        after_task_id = data.get('after_task_id')
+        if not after_task_id:
+            # Legacy resolutions (generated before after_task_id was stored, and
+            # the demo-template resolutions cloned into every sandbox) don't carry
+            # it, so they would fall back to a frozen, now-stale new_start_date.
+            # Derive the blocking task from the conflict's overlapping pair: it's
+            # the task that ISN'T the one being rescheduled. conflict_data task
+            # ids are remapped on sandbox clone, so they point at live tasks with
+            # live due dates — this is what makes the reschedule actually clear
+            # the overlap instead of nudging the start by a stale delta.
+            conflict_data = getattr(self.conflict, 'conflict_data', None) or {}
+            resched_id = data.get('task_id')
+            for candidate in (conflict_data.get('task1_id'), conflict_data.get('task2_id')):
+                if candidate and candidate != resched_id:
+                    after_task_id = candidate
+                    break
+
+        if after_task_id:
+            blocking = Task.objects.filter(id=after_task_id).first()
+            if blocking and blocking.due_date:
+                blocking_due = (
+                    blocking.due_date.date()
+                    if hasattr(blocking.due_date, 'date')
+                    else blocking.due_date
+                )
+                new_start = blocking_due + timedelta(days=1)
+
+        if new_start is None and 'new_start_date' in data:
+            new_start = parse_date(data['new_start_date'])
+
+        def _set_due_date(new_due_date):
+            """Set task.due_date to the given date, preserving the original
+            due date's time-of-day and timezone. due_date is a DateTimeField;
+            assigning a bare date would create a naive datetime that shifts
+            across midnight under USE_TZ (Asia/Kolkata) — the same reason the
+            Gantt cascade API uses .replace() rather than a raw assignment."""
+            if hasattr(task.due_date, 'replace') and hasattr(task.due_date, 'hour'):
+                task.due_date = task.due_date.replace(
+                    year=new_due_date.year, month=new_due_date.month, day=new_due_date.day,
+                )
+            else:
+                task.due_date = new_due_date
+
+        if new_start is not None:
+            old_start = task.start_date
+            old_due = task.due_date
+            # Preserve the task's original duration by shifting the due date by
+            # the same delta as the start date.
+            if old_start and old_due:
+                old_due_date = old_due.date() if hasattr(old_due, 'date') else old_due
+                old_start_date = old_start.date() if hasattr(old_start, 'date') else old_start
+                _set_due_date(new_start + (old_due_date - old_start_date))
+            task.start_date = new_start
+
+        # An explicit new_due_date in the data (e.g. schedule "extend due date")
+        # always wins over the duration-preserving calculation above.
+        if 'new_due_date' in data:
+            parsed_due = parse_date(data['new_due_date'])
+            if parsed_due is not None:
+                _set_due_date(parsed_due)
 
 
 class ResolutionPattern(models.Model):
