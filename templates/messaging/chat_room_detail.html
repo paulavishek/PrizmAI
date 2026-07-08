@@ -1741,7 +1741,7 @@ function aiExtractTasksThread() {
             alert('AI error: ' + data.error);
             return;
         }
-        _showTaskSuggestionsModal(data.tasks || []);
+        _showTaskSuggestionsModal(data.tasks || [], data.target_column);
     })
     .catch(() => alert('Request failed. Please check your connection and try again.'))
     .finally(() => {
@@ -1764,7 +1764,7 @@ function aiExtractTasksFromMessage(messageId) {
             alert('AI error: ' + data.error);
             return;
         }
-        _showTaskSuggestionsModal(data.tasks || []);
+        _showTaskSuggestionsModal(data.tasks || [], data.target_column);
     })
     .catch(() => alert('Request failed. Please check your connection and try again.'));
 }
@@ -1777,8 +1777,9 @@ const PRIORITY_BADGE = {
     urgent: 'bg-danger',
 };
 
-function _showTaskSuggestionsModal(tasks) {
+function _showTaskSuggestionsModal(tasks, targetColumn) {
     _aiPendingTasks = tasks;
+    document.getElementById('ai-target-column-name').textContent = targetColumn || 'To Do';
     const listEl = document.getElementById('ai-task-list');
     const noTasksEl = document.getElementById('ai-no-tasks-msg');
 
@@ -2413,7 +2414,7 @@ document.addEventListener('keydown', function (e) {
                 <p class="text-muted small mb-3">
                     <i class="fas fa-info-circle me-1"></i>
                     Review the tasks below. Uncheck any you don't want to create.
-                    Confirmed tasks will be added to the <strong>To&nbsp;Do</strong> column on
+                    Confirmed tasks will be added to the <strong id="ai-target-column-name">To&nbsp;Do</strong> column on
                     board <strong id="ai-target-board-name">{{ chat_room.board.name }}</strong>.
                 </p>
                 <div id="ai-task-list">

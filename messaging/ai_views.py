@@ -32,6 +32,20 @@ def _require_room_member(request, room):
     return room.members.filter(pk=request.user.pk).exists()
 
 
+def _resolve_task_target_column(board):
+    """Column AI-extracted tasks land in: prefer a To Do-type column
+    (which also covers a "Backlog" column — see TODO_KEYWORDS in
+    column_semantics.py), falling back to the first column by position.
+    Shared by the extract preview endpoints and confirm_create_tasks so the
+    "will be added to X" wording never drifts from where tasks actually land.
+    """
+    from kanban.column_semantics import column_type_q
+    return (
+        Column.objects.filter(column_type_q('todo', field=''), board=board).order_by("position").first()
+        or Column.objects.filter(board=board).order_by("position").first()
+    )
+
+
 def _build_message_transcript(messages):
     """Build a readable transcript string from a queryset of ChatMessage objects."""
     lines = []
@@ -184,7 +198,13 @@ Example format:
                 "priority_reasoning": str(t.get("priority_reasoning", "")).strip(),
             })
 
-    return JsonResponse({"tasks": clean_tasks, "extraction_method": "ai", "source": "single_message"})
+    target_column = _resolve_task_target_column(room.board)
+    return JsonResponse({
+        "tasks": clean_tasks,
+        "extraction_method": "ai",
+        "source": "single_message",
+        "target_column": target_column.name if target_column else None,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +281,13 @@ If there are no actionable tasks, return an empty array: []"""
                 "mentioned_by": str(t.get("mentioned_by", "")).strip(),
             })
 
-    return JsonResponse({"tasks": clean_tasks, "extraction_method": "ai", "source": "thread"})
+    target_column = _resolve_task_target_column(room.board)
+    return JsonResponse({
+        "tasks": clean_tasks,
+        "extraction_method": "ai",
+        "source": "thread",
+        "target_column": target_column.name if target_column else None,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -291,13 +317,7 @@ def confirm_create_tasks(request, room_id):
         return JsonResponse({"error": "No tasks provided."}, status=400)
 
     board = room.board
-
-    # Resolve target column: prefer a To Do-type column, fallback to first by position
-    from kanban.column_semantics import column_type_q
-    column = (
-        Column.objects.filter(column_type_q('todo', field=''), board=board).order_by("position").first()
-        or Column.objects.filter(board=board).order_by("position").first()
-    )
+    column = _resolve_task_target_column(board)
 
     if not column:
         return JsonResponse({"error": "No columns found on this board. Please create a column first."}, status=400)
