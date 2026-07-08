@@ -27,8 +27,10 @@ urlpatterns = [
     # Task-stakeholder involvement
     path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/', 
          stakeholder_views.task_stakeholder_involvement, name='task_stakeholder_involvement'),
-    path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/add/', 
+    path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/add/',
          stakeholder_views.add_task_stakeholder, name='add_task_stakeholder'),
+    path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/suggest/',
+         stakeholder_views.suggest_task_stakeholders, name='suggest_task_stakeholders'),
     path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/<int:involvement_id>/edit/', 
          stakeholder_views.edit_task_stakeholder, name='edit_task_stakeholder'),
     path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/<int:involvement_id>/remove/', 

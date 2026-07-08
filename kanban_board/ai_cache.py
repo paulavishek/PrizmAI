@@ -76,6 +76,7 @@ AI_CACHE_TTLS = {
     'task_enhancement': 900,          # 15 minutes
     'coaching_suggestion': 1800,      # 30 minutes
     'coaching_advice': 1800,          # 30 minutes
+    'stakeholder_suggestion': 1800,   # 30 minutes
     
     # Short caches (5-15 minutes) - More dynamic results
     'task_description': 900,          # 15 minutes
