@@ -13,6 +13,10 @@
         background: white;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         transition: transform 0.2s;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     .metric-card:hover {
         transform: translateY(-5px);
@@ -85,15 +89,15 @@
     </div>
 
     <!-- Key Metrics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
+    <div class="row mb-4 align-items-stretch">
+        <div class="col-md-3 d-flex">
             <div class="metric-card">
                 <i class="fas fa-check-circle text-success fa-2x mb-2"></i>
                 <p class="metric-value text-success">{{ total_resolved }}</p>
                 <p class="metric-label mb-0">Total Resolved</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 d-flex">
             <div class="metric-card">
                 <i class="fas fa-clock text-primary fa-2x mb-2"></i>
                 <p class="metric-value text-primary">
@@ -108,7 +112,7 @@
                 <p class="metric-label mb-0">Avg Resolution Time</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 d-flex">
             <div class="metric-card">
                 <i class="fas fa-star text-warning fa-2x mb-2"></i>
                 <p class="metric-value text-warning">
@@ -122,7 +126,7 @@
                 <small class="text-muted">Out of 5 stars</small>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 d-flex">
             <div class="metric-card">
                 <i class="fas fa-comments text-info fa-2x mb-2"></i>
                 <p class="metric-value text-info">{{ rated_count }}</p>
@@ -186,7 +190,12 @@
                                 </div>
                                 
                                 <div class="col-md-3 text-end">
-                                    {% if pattern.confidence_boost > 0 %}
+                                    {% if pattern.times_used < 5 %}
+                                    <span class="trend-badge badge bg-light text-dark border">
+                                        <i class="fas fa-hourglass-half"></i> {{ pattern.times_used }}/5
+                                    </span>
+                                    <p class="mb-0 small text-muted mt-1">Building confidence</p>
+                                    {% elif pattern.confidence_boost > 0 %}
                                     <span class="trend-badge badge bg-success">
                                         <i class="fas fa-arrow-up"></i> +{{ pattern.confidence_boost|floatformat:0 }}%
                                     </span>

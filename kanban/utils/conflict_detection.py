@@ -576,6 +576,66 @@ class ConflictResolutionSuggester:
         }
         return reasoning_map.get((conflict_type, resolution_type), '')
 
+    @staticmethod
+    def pick_reassignment_candidate(board, excluded_user_id, task=None):
+        """
+        Pick the best other board member as a reassignment target, using the
+        same weighted scoring (skill match 30%, availability 25%, velocity 20%,
+        reliability 15%, quality 10%) the AI Resource Optimization panel uses
+        — not availability/workload alone — so this can't recommend a
+        candidate who's a poor skill match just because they're less loaded,
+        nor one who's already more loaded than the excluded (overbooked) user.
+
+        ``task`` (optional): the task being reassigned. When provided, skill
+        match is scored against its title/description via
+        ResourceLevelingService.analyze_task_assignment. Without it, falls
+        back to ranking by availability (utilization) alone.
+
+        Returns (target_member, ai_confidence) or (None, None) if there are no
+        other board members.
+        """
+        from kanban.resource_leveling import ResourceLevelingService
+
+        board_members = list(User.objects.filter(board_memberships__board=board).exclude(id=excluded_user_id))
+        if not board_members:
+            return None, None
+
+        leveling_service = ResourceLevelingService(workspace=board.workspace)
+        overbooked_profile = leveling_service.get_or_create_profile(
+            User.objects.get(id=excluded_user_id), board=board
+        )
+
+        target_member = None
+        target_utilization = None
+
+        if task is not None:
+            analysis = leveling_service.analyze_task_assignment(
+                task, potential_assignees=board_members, board=board
+            )
+            scored_candidates = [
+                c for c in analysis.get('all_candidates', []) if c['user_id'] != excluded_user_id
+            ]
+            if scored_candidates:
+                top = max(scored_candidates, key=lambda c: c['overall_score'])
+                target_member = next((m for m in board_members if m.id == top['user_id']), None)
+                target_utilization = top['actual_utilization']
+
+        if target_member is None:
+            # No task context (or no scored candidates) — fall back to
+            # ranking by availability alone.
+            candidates = [
+                (member, leveling_service.get_or_create_profile(member, board=board).utilization_percentage)
+                for member in board_members
+            ]
+            target_member, target_utilization = min(candidates, key=lambda c: c[1])
+
+        # Confidence scales with how much lower the candidate's utilization is
+        # versus the overbooked user's — a bigger gap is stronger evidence the
+        # reassignment will actually help.
+        gap = overbooked_profile.utilization_percentage - target_utilization
+        ai_confidence = max(50, min(90, round(70 + gap / 4)))
+        return target_member, ai_confidence
+
     def _suggest_resource_resolutions(self):
         """Suggest resolutions for resource conflicts."""
         suggestions = []
@@ -615,30 +675,26 @@ class ConflictResolutionSuggester:
         
         # Suggestion 1: Reassign one task to another user
         if task1 and task2:
-            # Find users with lower workload
             board = self.conflict.board
-            board_members = User.objects.filter(board_memberships__board=board)
-            
-            for member in board_members:
-                if member.id != user_id:
-                    # Suggest reassigning task2 to this member
-                    resolution = ConflictResolution.objects.create(
-                        conflict=self.conflict,
-                        resolution_type='reassign',
-                        title=f"Reassign '{task2.title}' to {member.get_full_name() or member.username}",
-                        description=f"Move task '{task2.title}' from {user_name} to {member.get_full_name() or member.username} to balance workload.",
-                        ai_confidence=70,
-                        ai_reasoning=self._get_resolution_reasoning('reassign'),
-                        auto_applicable=True,
-                        implementation_data={
-                            'task_id': task2.id,
-                            'old_assignee_id': user_id,
-                            'new_assignee_id': member.id
-                        },
-                        estimated_impact="Reduces workload conflict and balances team capacity"
-                    )
-                    suggestions.append(resolution)
-                    break  # Only suggest first available member
+            target_member, ai_confidence = self.pick_reassignment_candidate(board, user_id, task=task2)
+
+            if target_member:
+                resolution = ConflictResolution.objects.create(
+                    conflict=self.conflict,
+                    resolution_type='reassign',
+                    title=f"Reassign '{task2.title}' to {target_member.get_full_name() or target_member.username}",
+                    description=f"Move task '{task2.title}' from {user_name} to {target_member.get_full_name() or target_member.username} to balance workload.",
+                    ai_confidence=ai_confidence,
+                    ai_reasoning=self._get_resolution_reasoning('reassign'),
+                    auto_applicable=True,
+                    implementation_data={
+                        'task_id': task2.id,
+                        'old_assignee_id': user_id,
+                        'new_assignee_id': target_member.id
+                    },
+                    estimated_impact="Reduces workload conflict and balances team capacity"
+                )
+                suggestions.append(resolution)
         
         # Suggestion 2: Reschedule one task
         if task2:

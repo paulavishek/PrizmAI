@@ -1139,6 +1139,50 @@ def _duplicate_board(template_board, user):
                 )
                 resolution_map[cr.pk] = new_cr
 
+                # A cloned 'reassign' suggestion's title/description hardcode
+                # a specific assignee name computed from the TEMPLATE board's
+                # workload at whatever time it was originally generated.
+                # Copying it verbatim means the same stale target survives
+                # every Reset Demo indefinitely, and can recommend a
+                # candidate who's actually more loaded than the overbooked
+                # user on THIS sandbox board. Recompute the target against
+                # this board's live workload instead.
+                if cr.resolution_type == 'reassign' and new_conflict.conflict_type == 'resource':
+                    try:
+                        from kanban.utils.conflict_detection import ConflictResolutionSuggester
+
+                        excluded_user_id = (new_conflict.conflict_data or {}).get('user_id')
+                        if not excluded_user_id:
+                            affected_user = new_conflict.affected_users.first()
+                            excluded_user_id = affected_user.id if affected_user else None
+
+                        task_id = (new_cr.implementation_data or {}).get('task_id')
+                        task = Task.objects.filter(id=task_id).first() if task_id else None
+
+                        if excluded_user_id and task:
+                            target_member, ai_confidence = ConflictResolutionSuggester.pick_reassignment_candidate(
+                                new_board, excluded_user_id, task=task
+                            )
+                            if target_member:
+                                overbooked_user = User.objects.filter(id=excluded_user_id).first()
+                                overbooked_name = (
+                                    (new_conflict.conflict_data or {}).get('user_name')
+                                    or (overbooked_user.get_full_name() or overbooked_user.username if overbooked_user else '')
+                                )
+                                target_name = target_member.get_full_name() or target_member.username
+                                new_cr.title = f"Reassign '{task.title}' to {target_name}"
+                                new_cr.description = (
+                                    f"Move task '{task.title}' from {overbooked_name} to {target_name} to balance workload."
+                                )
+                                new_cr.ai_confidence = ai_confidence
+                                new_cr.implementation_data = {
+                                    **(new_cr.implementation_data or {}),
+                                    'new_assignee_id': target_member.id,
+                                }
+                                new_cr.save(update_fields=['title', 'description', 'ai_confidence', 'implementation_data'])
+                    except Exception:
+                        pass
+
         # Fix chosen_resolution FK on conflicts
         for old_pk, new_cd in conflict_map.items():
             old_cd = ConflictDetection.objects.get(pk=old_pk)

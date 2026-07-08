@@ -1278,7 +1278,7 @@ def _refresh_conflict_dates(now):
             elif status == 'ignored':
                 days_offset = -(conflict.id % 14 + 1)
             else:  # active
-                days_offset = -(conflict.id % 3)
+                days_offset = -(conflict.id % 25 + 3)
             
             # ConflictDetection uses detected_at, not created_at
             if hasattr(conflict, 'detected_at'):
