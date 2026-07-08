@@ -642,17 +642,21 @@ class ConflictResolutionSuggester:
         
         # Suggestion 2: Reschedule one task
         if task2:
-            # Try to get due date from conflict_data first
-            task1_due = data.get('task1_dates', {}).get('due')
-            if task1_due:
-                new_start = datetime.fromisoformat(task1_due.replace('Z', '+00:00')).date() + timedelta(days=1)
-            elif task1.due_date:
-                # Fall back to task's actual due date
+            # Prefer the blocking task's LIVE due date. The conflict_data
+            # snapshot (task1_dates.due) is captured at detection time and is
+            # NOT updated by the demo date-refresh, so it drifts stale and can
+            # collapse new_start to a no-op. Only fall back to the snapshot when
+            # the live task has no due date.
+            if task1.due_date:
                 task1_due_date = task1.due_date.date() if hasattr(task1.due_date, 'date') else task1.due_date
                 new_start = task1_due_date + timedelta(days=1)
             else:
-                new_start = None
-            
+                task1_due = data.get('task1_dates', {}).get('due')
+                if task1_due:
+                    new_start = datetime.fromisoformat(task1_due.replace('Z', '+00:00')).date() + timedelta(days=1)
+                else:
+                    new_start = None
+
             if new_start:
                 resolution = ConflictResolution.objects.create(
                     conflict=self.conflict,
@@ -662,8 +666,12 @@ class ConflictResolutionSuggester:
                     ai_confidence=85,
                     ai_reasoning=self._get_resolution_reasoning('reschedule'),
                     auto_applicable=True,
+                    # after_task_id lets _auto_apply recompute the new start from
+                    # the blocking task's LIVE due date at apply time (robust to
+                    # demo date drift); new_start_date is only a fallback.
                     implementation_data={
                         'task_id': task2.id,
+                        'after_task_id': task1.id,
                         'new_start_date': str(new_start)
                     },
                     estimated_impact="Eliminates overlap and creates sequential workflow"
@@ -741,7 +749,23 @@ class ConflictResolutionSuggester:
             logger.warning(f"Could not find task for dependency conflict {self.conflict.id}")
             return suggestions
         
-        # Suggestion 1: Adjust dates to after dependencies
+        # Suggestion 1: Adjust dates to after dependencies.
+        # The blocking task = the dependency with the latest due date. When one
+        # exists we can auto-apply: _auto_apply recomputes the new start from
+        # that task's LIVE due date (via after_task_id) and preserves duration.
+        # Without a dated dependency we can't compute anything, so the card
+        # stays manual (auto_applicable=False) rather than silently no-op.
+        blocking_task = task.dependencies.filter(
+            due_date__isnull=False
+        ).order_by('-due_date').first()
+        dep_impl_data = {}
+        dep_auto = False
+        if blocking_task:
+            dep_impl_data = {
+                'task_id': task.id,
+                'after_task_id': blocking_task.id,
+            }
+            dep_auto = True
         resolution = ConflictResolution.objects.create(
             conflict=self.conflict,
             resolution_type='adjust_dates',
@@ -749,7 +773,8 @@ class ConflictResolutionSuggester:
             description=f"Adjust dates for '{task.title}' to start after dependencies are complete.",
             ai_confidence=80,
             ai_reasoning=self._get_resolution_reasoning('adjust_dates'),
-            auto_applicable=False,
+            auto_applicable=dep_auto,
+            implementation_data=dep_impl_data,
             estimated_impact="Ensures proper task sequencing"
         )
         suggestions.append(resolution)

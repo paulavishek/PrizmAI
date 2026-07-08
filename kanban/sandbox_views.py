@@ -1056,6 +1056,29 @@ def _duplicate_board(template_board, user):
             ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern,
         )
 
+        def _remap_blob_task_ids(blob):
+            """conflict_data/implementation_data embed raw task PKs (task_id,
+            task1_id, task2_id) captured against the TEMPLATE board's tasks.
+            The M2M fields (ConflictDetection.tasks, etc.) get remapped to this
+            sandbox's cloned tasks via task_map below, but these JSON blobs
+            don't — so without this, resolution auto-apply (and the dependency
+            cascade it triggers) silently reads/writes the shared template
+            board's tasks instead of the sandbox owner's own copy. Drop the key
+            entirely when the referenced task wasn't cloned (e.g. archived)
+            rather than leaving a stale cross-board id behind.
+            """
+            if not isinstance(blob, dict):
+                return blob
+            remapped = dict(blob)
+            for key in ('task_id', 'task1_id', 'task2_id'):
+                if key in remapped and remapped[key] is not None:
+                    mapped = task_map.get(remapped[key])
+                    if mapped:
+                        remapped[key] = mapped.id
+                    else:
+                        del remapped[key]
+            return remapped
+
         conflict_map = {}
         for cd in ConflictDetection.objects.filter(board=template_board):
             old_pk = cd.pk
@@ -1066,7 +1089,7 @@ def _duplicate_board(template_board, user):
                 title=cd.title,
                 description=cd.description,
                 board=new_board,
-                conflict_data=cd.conflict_data,
+                conflict_data=_remap_blob_task_ids(cd.conflict_data),
                 ai_confidence_score=cd.ai_confidence_score,
                 suggested_resolutions=cd.suggested_resolutions,
                 resolution_feedback=cd.resolution_feedback,
@@ -1107,7 +1130,7 @@ def _duplicate_board(template_board, user):
                     ai_confidence=cr.ai_confidence,
                     ai_reasoning=copied_reasoning,
                     auto_applicable=cr.auto_applicable,
-                    implementation_data=cr.implementation_data,
+                    implementation_data=_remap_blob_task_ids(cr.implementation_data),
                     applied_at=cr.applied_at,
                     applied_by=cr.applied_by,
                     times_suggested=cr.times_suggested,
