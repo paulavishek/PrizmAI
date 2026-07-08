@@ -353,6 +353,74 @@ def task_stakeholder_involvement(request, board_id, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+def suggest_task_stakeholders(request, board_id, task_id):
+    """AI-driven stakeholder relevance suggestions for a task."""
+    import time
+    from api.ai_usage_utils import check_ai_quota, track_ai_request
+    from .stakeholder_ai import suggest_stakeholders_for_task
+
+    board = check_board_access(request.user, board_id)
+    if not board:
+        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+
+    task = get_object_or_404(Task, pk=task_id, column__board=board)
+    stakeholders = ProjectStakeholder.objects.filter(board=board, is_active=True)
+
+    if not stakeholders.exists():
+        return JsonResponse({'success': True, 'suggestions': [], 'no_stakeholders': True})
+
+    has_quota, quota, remaining = check_ai_quota(request.user)
+    if not has_quota:
+        return JsonResponse({
+            'success': False,
+            'error': 'AI usage quota exceeded',
+            'quota_exceeded': True,
+            'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests.'
+        }, status=429)
+
+    start_time = time.time()
+    try:
+        result = suggest_stakeholders_for_task(task, stakeholders)
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        # Only a genuine, uncached AI call should count against quota. Cache
+        # hits cost nothing; a degraded (AI-failed) result is logged as a
+        # failed attempt, which track_ai_request never charges to quota.
+        if not result['from_cache']:
+            track_ai_request(
+                user=request.user,
+                feature='stakeholder_suggestion',
+                request_type='suggest',
+                board_id=board_id,
+                success=not result['degraded'],
+                error_message='' if not result['degraded'] else 'AI call failed; used deterministic fallback',
+                response_time_ms=response_time_ms,
+            )
+
+        _, quota, remaining = check_ai_quota(request.user)
+        return JsonResponse({
+            'success': True,
+            'suggestions': result['suggestions'],
+            'degraded': result['degraded'],
+            'no_stakeholders': False,
+            'ai_usage': {'remaining': remaining, 'used': quota.requests_used},
+        })
+    except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='stakeholder_suggestion',
+            request_type='suggest',
+            board_id=board_id,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms,
+        )
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
 def add_task_stakeholder(request, board_id, task_id):
     """Add a stakeholder to a task"""
     board = check_board_access(request.user, board_id, require_edit=True)
