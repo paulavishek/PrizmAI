@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 from .models import TaskThreadComment, ChatRoom, ChatMessage, FileAttachment
 from django.contrib.auth.models import User
 
@@ -51,10 +52,26 @@ class ChatRoomForm(forms.ModelForm):
     def __init__(self, *args, board=None, **kwargs):
         super().__init__(*args, **kwargs)
         if board:
-            # Show all active users except the board creator.
-            self.fields['members'].queryset = User.objects.filter(is_active=True).exclude(
-                id=board.created_by_id
-            )
+            if board.is_official_demo_board or board.is_sandbox_copy or (
+                board.workspace_id and board.workspace.is_demo
+            ):
+                # Demo/sandbox boards only ever have the demo personas plus
+                # the sandbox owner (board creator) as candidate members —
+                # every other active account in the system (other testers'
+                # real logins, fixtures, etc.) isn't part of this sandbox
+                # and must not be offered here.
+                users = User.objects.filter(is_active=True).filter(
+                    Q(profile__is_demo_account=True) | Q(id=board.created_by_id)
+                )
+            else:
+                users = User.objects.filter(is_active=True).exclude(id=board.created_by_id)
+            if self.instance.pk:
+                # A room's current members must always stay selectable.
+                # ModelForm.save() replaces the members set with exactly
+                # what's submitted, so anyone missing from the rendered
+                # checkboxes would be silently removed from the room.
+                users = users | self.instance.members.filter(is_active=True)
+            self.fields['members'].queryset = users.distinct()
             self.fields['members'].help_text = (
                 'Selected users will be added to the room immediately and notified.'
             )
