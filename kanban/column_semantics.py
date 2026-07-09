@@ -15,6 +15,7 @@ on the name when the type is left on "auto" (empty string).
 Import from here — do not re-implement the substring checks inline.
 """
 
+import re
 from functools import reduce
 from operator import or_
 
@@ -51,16 +52,72 @@ REVIEW_KEYWORDS = ('review', 'qa', 'testing', 'approval', 'verify', 'validate')
 IN_PROGRESS_KEYWORDS = ('in progress', 'in-progress', 'doing', 'wip', 'active', 'working')
 TODO_KEYWORDS = ('to do', 'to-do', 'todo', 'backlog', 'new', 'ideas', 'not started', 'planned')
 
-# Precedence: the first category whose keywords match wins. Done is checked
-# before Review/In-Progress so "Done - reviewed" resolves to done, and Blocked
-# is checked early so "Blocked / on hold" resolves to blocked.
+# Precedence: the first category whose keywords match (and aren't negated,
+# see NEGATION_CUES below) wins. Interim/workflow states are checked before
+# the final Done state, so "Done - Needs Review" resolves to review, and
+# Blocked is checked early so "Blocked / on hold" resolves to blocked. Todo
+# stays last — its keywords ("new", "planned", ...) are the least specific.
 _PRECEDENCE = (
-    (DONE, DONE_KEYWORDS),
     (BLOCKED, BLOCKED_KEYWORDS),
     (REVIEW, REVIEW_KEYWORDS),
     (IN_PROGRESS, IN_PROGRESS_KEYWORDS),
+    (DONE, DONE_KEYWORDS),
     (TODO, TODO_KEYWORDS),
 )
+
+# ── Regex matching (word-boundary aware, negation-aware) ─────────────────────
+# A plain `kw in name.lower()` substring check has two failure modes:
+#  1. False negatives on unlisted synonyms ("Wrapped Up" isn't in DONE_KEYWORDS).
+#  2. False positives when the keyword appears as part of another word or is
+#     itself negated: "Blockade"/"Unblocked" contain "block"; "Undone"/
+#     "Not Done Yet" contain "done". Word-boundary matching alone already
+#     fixes concatenated forms ("Undone", "Blockade") since `\b` never fires
+#     between two word characters. It does NOT fix a negation cue that's
+#     space/hyphen-separated from the keyword ("Not Done", "Non-Done") — a
+#     hyphen or space is itself a word-boundary, so the keyword still matches
+#     on its own. NEGATION_CUES below catches that second case.
+#
+# Some keywords ("block", "stall", "review", "verify", "validate") are bare
+# stems the old substring check relied on to also catch their inflections
+# ("Blocked", "Blocking", "Reviewed", ...). A strict `\bblock\b` rejects
+# "Blocked" outright (no boundary between "block" and "-ed"), which would be
+# a regression, not a fix. _INFLECTION_SUFFIXES allows exactly those endings
+# — not a bare `\w*`, which would let "blockade" match again.
+NEGATION_CUES = ('not', 'non', 'never', 'no longer', 'no')
+_INFLECTION_SUFFIXES = ('s', 'd', 'ed', 'ing')
+
+_KEYWORD_PATTERNS = {}
+_NEGATION_PATTERNS = {}
+
+
+def _keyword_fragment(kw):
+    escaped = re.escape(kw)
+    if ' ' in kw or '-' in kw:
+        return escaped  # multi-word phrase ("in progress") — no suffix.
+    suffix_alt = '|'.join(_INFLECTION_SUFFIXES)
+    return f'{escaped}(?:{suffix_alt})?'
+
+
+def _compile_keyword_patterns():
+    cue_alt = '|'.join(re.escape(c) for c in NEGATION_CUES)
+    for _category, keywords in _PRECEDENCE:
+        for kw in keywords:
+            if kw in _KEYWORD_PATTERNS:
+                continue
+            fragment = _keyword_fragment(kw)
+            _KEYWORD_PATTERNS[kw] = re.compile(r'\b' + fragment + r'\b', re.IGNORECASE)
+            # Negation cue, then up to two filler words, then the keyword —
+            # separated by spaces and/or hyphens ("Not Done", "Non-Done",
+            # "No Longer Blocked").
+            _NEGATION_PATTERNS[kw] = re.compile(
+                r'\b(?:' + cue_alt + r')\b'
+                r'(?:[\s\-]+\w+){0,2}[\s\-]+'
+                r'\b' + fragment + r'\b',
+                re.IGNORECASE,
+            )
+
+
+_compile_keyword_patterns()
 
 # Back-compat: `ai_assistant` imported this frozenset directly. Kept as an alias
 # (exact-name membership) so existing imports keep working; new code should use
@@ -74,11 +131,22 @@ def classify_column_name(name):
     """Return the status category derived purely from a column *name* string.
 
     Returns one of TODO / IN_PROGRESS / REVIEW / DONE / BLOCKED / OTHER.
+
+    Matching is word-boundary aware (so "Blockade" doesn't trigger Blocked)
+    and negation-aware (so "Not Done Yet" doesn't trigger Done). Negation only
+    cancels the specific keyword it negates — an unrelated positive keyword
+    elsewhere in the same name still wins, e.g. "In Progress, Not Blocked"
+    resolves to in_progress, not other.
     """
     low = (name or '').lower()
+    if not low:
+        return OTHER
     for category, keywords in _PRECEDENCE:
-        if any(kw in low for kw in keywords):
-            return category
+        for kw in keywords:
+            if _NEGATION_PATTERNS[kw].search(low):
+                continue
+            if _KEYWORD_PATTERNS[kw].search(low):
+                return category
     return OTHER
 
 
@@ -138,6 +206,12 @@ def column_type_q(category, field='column'):
     name heuristic). ``field`` is the relation path to the Column from the model
     being queried: ``'column'`` for Task, or ``''`` when querying Column itself.
 
+    Uses the same word-boundary + negation-aware regexes as
+    ``classify_column_name`` (via ``name__iregex``, supported on SQLite through
+    Django's Python-``re``-backed REGEXP function, and natively on Postgres),
+    so a column named "Undone" or "Not Done Yet" is not matched by
+    ``column_type_q('done')`` — kept consistent with ``Column.is_done()``.
+
     Example: ``Task.objects.filter(column_type_q('done'))``.
     """
     prefix = f'{field}__' if field else ''
@@ -145,9 +219,11 @@ def column_type_q(category, field='column'):
     keywords = _KEYWORDS_BY_TYPE.get(category, ())
     if not keywords:
         return explicit
-    name_q = reduce(
-        or_,
-        (Q(**{f'{prefix}name__icontains': kw}) for kw in keywords),
+    keyword_qs = (
+        Q(**{f'{prefix}name__iregex': _KEYWORD_PATTERNS[kw].pattern})
+        & ~Q(**{f'{prefix}name__iregex': _NEGATION_PATTERNS[kw].pattern})
+        for kw in keywords
     )
+    name_q = reduce(or_, keyword_qs)
     auto = Q(**{f'{prefix}column_type': ''}) & name_q
     return explicit | auto

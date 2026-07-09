@@ -30,9 +30,11 @@ class ClassifyColumnNameTests(TestCase):
         self.assertEqual(cs.classify_column_name('Blocked'), cs.BLOCKED)
         self.assertEqual(cs.classify_column_name('On Hold'), cs.BLOCKED)
 
-    def test_precedence_done_beats_review(self):
-        # "done" is checked before "review", so this resolves to done.
-        self.assertEqual(cs.classify_column_name('Completed reviewed'), cs.DONE)
+    def test_precedence_review_beats_done(self):
+        # Interim states are checked before Done, so a name that mentions
+        # both resolves to the interim state, not done.
+        self.assertEqual(cs.classify_column_name('Completed reviewed'), cs.REVIEW)
+        self.assertEqual(cs.classify_column_name('Done - Needs Review'), cs.REVIEW)
 
     def test_unknown_is_other(self):
         self.assertEqual(cs.classify_column_name('Xyzzy'), cs.OTHER)
@@ -44,6 +46,22 @@ class ClassifyColumnNameTests(TestCase):
         self.assertFalse(cs.is_done_column('In Progress'))
         self.assertTrue(cs.is_todo_column('Backlog'))
         self.assertTrue(cs.is_blocked_column('Blocked'))
+
+    def test_word_boundary_avoids_partial_matches(self):
+        # These contain a keyword as a *substring* but not as a whole word.
+        self.assertEqual(cs.classify_column_name('Blockade'), cs.OTHER)
+        self.assertEqual(cs.classify_column_name('Unblocked'), cs.OTHER)
+        self.assertEqual(cs.classify_column_name('Undone'), cs.OTHER)
+        self.assertEqual(cs.classify_column_name('Quarantine'), cs.OTHER)
+
+    def test_negation_cancels_the_matched_keyword(self):
+        self.assertEqual(cs.classify_column_name('Not Done Yet'), cs.OTHER)
+        self.assertEqual(cs.classify_column_name('Non-Done'), cs.OTHER)
+        self.assertEqual(cs.classify_column_name('No Longer Blocked'), cs.OTHER)
+
+    def test_negation_only_cancels_the_negated_keyword(self):
+        # "Not Blocked" is neutralized, but "In Progress" still matches.
+        self.assertEqual(cs.classify_column_name('In Progress, Not Blocked'), cs.IN_PROGRESS)
 
 
 class ColumnResolverTests(TestCase):
@@ -121,3 +139,39 @@ class ProgressOnMoveTests(TestCase):
         task.save()
         task.refresh_from_db()
         self.assertEqual(task.progress, 10)
+
+
+class ColumnTypeQTests(TestCase):
+    """column_type_q() is a separate SQL/ORM implementation used by board
+    stats, Spectra column lookups, and other queryset filters — it must stay
+    consistent with classify_column_name()/Column.is_done() rather than drift
+    back to plain icontains false positives."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user('sqlmatcher', password='x')
+        cls.board = Board.objects.create(name='B', created_by=cls.owner)
+
+    def test_excludes_negated_and_partial_matches(self):
+        undone = Column.objects.create(name='Undone', board=self.board, position=0)
+        not_done_yet = Column.objects.create(name='Not Done Yet', board=self.board, position=1)
+        achieved = Column.objects.create(name='Achieved', board=self.board, position=2)
+
+        Task.objects.create(title='A', column=undone, position=0, created_by=self.owner)
+        Task.objects.create(title='B', column=not_done_yet, position=0, created_by=self.owner)
+        Task.objects.create(title='C', column=achieved, position=0, created_by=self.owner)
+
+        done_titles = set(
+            Task.objects.filter(cs.column_type_q('done')).values_list('title', flat=True)
+        )
+        self.assertEqual(done_titles, {'C'})
+
+    def test_explicit_type_still_matches_via_q(self):
+        custom = Column.objects.create(
+            name='Victory Lap', board=self.board, position=0, column_type=cs.DONE,
+        )
+        Task.objects.create(title='D', column=custom, position=0, created_by=self.owner)
+        done_titles = set(
+            Task.objects.filter(cs.column_type_q('done')).values_list('title', flat=True)
+        )
+        self.assertEqual(done_titles, {'D'})
