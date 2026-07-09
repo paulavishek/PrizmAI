@@ -26,7 +26,7 @@ from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, 
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 from .favorite_views import is_user_favorite as _is_fav
-from .utils.sanitize import csv_safe_cell
+from .utils.sanitize import csv_safe_cell, html_to_plain_text
 from .ai_briefing import build_action_plan_cached as _build_action_plan_cached
 from decision_center.models import DecisionItem, DecisionCenterSettings, DecisionCenterBriefing
 
@@ -5006,7 +5006,7 @@ def export_board(request, board_id):
             
             task_data = {
                 'title': task.title,
-                'description': task.description,
+                'description': html_to_plain_text(task.description),
                 'position': task.position,
                 'created_at': task.created_at.isoformat(),
                 'updated_at': task.updated_at.isoformat(),
@@ -5028,7 +5028,8 @@ def export_board(request, board_id):
     elif export_format == 'csv':
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{board.name}_export.csv"'
-        
+        response.write('﻿')  # BOM so Excel opens the file as UTF-8 instead of falling back to cp1252
+
         writer = csv.writer(response)
         writer.writerow(['Column', 'Task Title', 'Description', 'Position', 'Created At', 'Updated At', 
                          'Due Date', 'Assigned To', 'Created By', 'Labels', 'Priority', 'Progress'])
@@ -5040,7 +5041,7 @@ def export_board(request, board_id):
                 writer.writerow([csv_safe_cell(v) for v in (
                     column.name,
                     task.title,
-                    task.description,
+                    html_to_plain_text(task.description),
                     task.position,
                     task.created_at,
                     task.updated_at,
