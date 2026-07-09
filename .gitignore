@@ -1,3 +1,6 @@
+# Local debug/scratch output (not tracked)
+lss_debug_response.txt
+
 # Python
 __pycache__/
 *.py[cod]
