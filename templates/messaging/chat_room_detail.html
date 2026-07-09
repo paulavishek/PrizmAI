@@ -140,9 +140,64 @@
     }
 
     .chat-input-area {
+        position: relative;
         padding: 1rem;
         border-top: 1px solid #ddd;
         background: white;
+    }
+
+    /* ---- @mention autocomplete ---- */
+    .mention-dropdown {
+        display: none;
+        position: absolute;
+        bottom: 100%;
+        left: 1rem;
+        right: 1rem;
+        margin-bottom: 0.25rem;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 20;
+    }
+
+    .mention-dropdown.show {
+        display: block;
+    }
+
+    .mention-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+
+    .mention-item:hover,
+    .mention-item.active {
+        background: #f0f0ff;
+    }
+
+    .mention-item .mention-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #6c5ce7;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
+    .mention-item .mention-username {
+        color: #666;
+        font-size: 0.8rem;
     }
 
     .chat-form {
@@ -940,11 +995,121 @@
 
     // Handle Enter key to send message
     document.querySelector('input[name="message"]').addEventListener('keypress', function(e) {
+        if (window.mentionDropdownOpen) return; // let the @mention dropdown handle Enter
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             document.querySelector('.chat-form').dispatchEvent(new Event('submit'));
         }
     });
+
+    // --- @mention autocomplete ---
+    (function() {
+        const messageInputEl = document.querySelector('input[name="message"]');
+        const mentionDropdown = document.getElementById('mentionDropdown');
+        const chatMembers = Array.from(document.querySelectorAll('#members-presence-list li[data-user-id]'))
+            .map(function(li) {
+                return {
+                    username: li.dataset.username,
+                    fullName: li.querySelector(':scope > div > div').textContent.replace(/\s*Creator\s*$/, '').trim()
+                };
+            })
+            .filter(function(m) { return m.username && m.username !== currentUsername; });
+
+        let mentionMatches = [];
+        let mentionActiveIndex = -1;
+        let mentionStart = -1; // index of '@' within the input value
+        window.mentionDropdownOpen = false;
+
+        function closeMentionDropdown() {
+            mentionDropdown.classList.remove('show');
+            mentionDropdown.innerHTML = '';
+            mentionMatches = [];
+            mentionActiveIndex = -1;
+            mentionStart = -1;
+            window.mentionDropdownOpen = false;
+        }
+
+        function renderMentionDropdown() {
+            mentionDropdown.innerHTML = mentionMatches.map(function(m, i) {
+                return '<div class="mention-item' + (i === mentionActiveIndex ? ' active' : '') + '" data-index="' + i + '">' +
+                    '<span class="mention-avatar">' + m.fullName.charAt(0).toUpperCase() + '</span>' +
+                    '<span>' + m.fullName + ' <span class="mention-username">@' + m.username + '</span></span>' +
+                    '</div>';
+            }).join('');
+            mentionDropdown.classList.add('show');
+            window.mentionDropdownOpen = true;
+        }
+
+        function selectMention(index) {
+            const m = mentionMatches[index];
+            if (!m) return;
+            const value = messageInputEl.value;
+            const cursor = messageInputEl.selectionStart;
+            const before = value.slice(0, mentionStart);
+            const after = value.slice(cursor);
+            const insertion = '@' + m.username + ' ';
+            messageInputEl.value = before + insertion + after;
+            const newCursor = (before + insertion).length;
+            messageInputEl.setSelectionRange(newCursor, newCursor);
+            closeMentionDropdown();
+            messageInputEl.focus();
+        }
+
+        messageInputEl.addEventListener('input', function() {
+            const cursor = messageInputEl.selectionStart;
+            const uptoCursor = messageInputEl.value.slice(0, cursor);
+            const match = uptoCursor.match(/(?:^|\s)@(\w*)$/);
+            if (!match) {
+                closeMentionDropdown();
+                return;
+            }
+            const query = match[1].toLowerCase();
+            mentionStart = cursor - match[1].length - 1;
+            mentionMatches = chatMembers.filter(function(m) {
+                if (m.username.toLowerCase().startsWith(query)) return true;
+                return m.fullName.toLowerCase().split(/\s+/).some(function(w) { return w.startsWith(query); });
+            }).slice(0, 6);
+            if (mentionMatches.length === 0) {
+                closeMentionDropdown();
+                return;
+            }
+            mentionActiveIndex = 0;
+            renderMentionDropdown();
+        });
+
+        messageInputEl.addEventListener('keydown', function(e) {
+            if (!window.mentionDropdownOpen) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                mentionActiveIndex = (mentionActiveIndex + 1) % mentionMatches.length;
+                renderMentionDropdown();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                mentionActiveIndex = (mentionActiveIndex - 1 + mentionMatches.length) % mentionMatches.length;
+                renderMentionDropdown();
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                selectMention(mentionActiveIndex);
+            } else if (e.key === 'Escape') {
+                closeMentionDropdown();
+            }
+        });
+
+        // Use mousedown (fires before the input's blur) so selecting an item doesn't
+        // require a second click to refocus the input.
+        mentionDropdown.addEventListener('mousedown', function(e) {
+            const item = e.target.closest('.mention-item');
+            if (!item) return;
+            e.preventDefault();
+            selectMention(parseInt(item.dataset.index, 10));
+        });
+
+        document.addEventListener('click', function(e) {
+            if (e.target !== messageInputEl && !mentionDropdown.contains(e.target)) {
+                closeMentionDropdown();
+            }
+        });
+    })();
 
     // --- Typing sender ---
     // Sends 'typing' on keydown and auto-sends 'stop_typing' after 3 s of silence.
@@ -2297,7 +2462,7 @@ document.addEventListener('keydown', function (e) {
                     <div class="alert alert-info alert-sm mb-2 p-2" role="alert">
                         <small><i class="fas fa-info-circle"></i> Files are uploaded to this room and visible to all members in the <strong>Files</strong> section on the right.</small>
                     </div>
-                    <form id="chatFileForm" method="post" action="{% url 'messaging:upload_chat_room_file' room_id=chat_room.id %}" enctype="multipart/form-data">
+                    <form id="chatFileForm" class="no-validate" method="post" action="{% url 'messaging:upload_chat_room_file' room_id=chat_room.id %}" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="input-group input-group-sm">
                             <input type="file" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" required>
@@ -2312,9 +2477,10 @@ document.addEventListener('keydown', function (e) {
                     </form>
                 </div>
                 
-                <form class="chat-form" method="post" action="{% url 'messaging:send_chat_message' room_id=chat_room.id %}">
+                <div class="mention-dropdown" id="mentionDropdown"></div>
+                <form class="chat-form no-validate" method="post" action="{% url 'messaging:send_chat_message' room_id=chat_room.id %}">
                     {% csrf_token %}
-                    <input type="text" name="message" class="form-control" placeholder="Type your message... (use @username to mention)" required autofocus>
+                    <input type="text" name="message" class="form-control" placeholder="Type your message... (use @username to mention)" required autofocus autocomplete="off">
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary flex-grow-1" title="Send (or press Enter)">
                             <i class="fas fa-paper-plane"></i> Send
@@ -2361,7 +2527,7 @@ document.addEventListener('keydown', function (e) {
             <h5><i class="fas fa-users me-2"></i> Members ({{ chat_room.members.count }})</h5>
             <ul class="members-list" id="members-presence-list">
                 {% for member in chat_room.members.all %}
-                    <li class="d-flex align-items-start gap-2 py-1" data-user-id="{{ member.id }}">
+                    <li class="d-flex align-items-start gap-2 py-1" data-user-id="{{ member.id }}" data-username="{{ member.username }}">
                         <span class="presence-dot status-offline" id="presence-dot-{{ member.id }}" title="Offline"></span>
                         <div>
                             <div>
