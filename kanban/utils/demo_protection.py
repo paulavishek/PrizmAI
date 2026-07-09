@@ -75,6 +75,23 @@ def user_is_demo(user):
     return bool(getattr(profile, 'is_viewing_demo', False))
 
 
+def is_demo_persona(user):
+    """Return True for shared demo-persona login accounts.
+
+    Personas (priya.sharma / marcus.chen / elena.vasquez, and the separate
+    alex_chen_demo / sam_rivera_demo / jordan_taylor_demo team) are shared
+    test credentials printed on-screen so any real user can log in as them to
+    test cross-account flows (e.g. Messaging). They must never be treated as
+    an independent tenant with their own sandbox: provisioning one for a
+    persona triggers ``_duplicate_board``'s membership-cap logic, which
+    silently steals that persona's guest membership away from whichever real
+    user's sandbox they were actually being used to test. See
+    [[project_persona_membership_bleed]].
+    """
+    email = (getattr(user, 'email', '') or '').lower()
+    return '@demo.prizmai.local' in email
+
+
 def get_user_boards(user):
     """Return a Board queryset scoped to the user's current workspace mode.
 
@@ -100,6 +117,30 @@ def get_user_boards(user):
     active_ws = getattr(profile, 'active_workspace', None)
 
     if is_demo:
+        # Demo personas (priya/marcus/elena, alex/sam/jordan — identified by
+        # @demo.prizmai.local email) are shared login credentials meant only
+        # to be a GUEST member on a real user's sandbox for testing
+        # cross-account flows like Messaging. They must never appear to own
+        # a board themselves: the official template board's `owner` field is
+        # seed-data flavor (e.g. priya.sharma is narratively the "Backend
+        # Lead" owner of the template), and a persona can also end up owning
+        # a stray personal sandbox if someone logs in directly as them and
+        # provisions. Either would otherwise leak into their own dashboard
+        # as a bogus "extra" board. Scope personas to sandbox-copy boards
+        # where they're a genuine guest member (never the owner).
+        if is_demo_persona(user):
+            if active_ws:
+                demo_boards = Board.objects.filter(
+                    workspace=active_ws,
+                    is_sandbox_copy=True,
+                    memberships__user=user,
+                ).exclude(owner=user).distinct()
+            else:
+                demo_boards = Board.objects.none()
+            if demo_boards.exists():
+                return demo_boards
+            return Board.objects.filter(is_official_demo_board=True).distinct()
+
         # The user's sandbox copies (the cloned demo boards) ...
         sandbox_q = Q(owner=user, is_sandbox_copy=True)
         if active_ws:

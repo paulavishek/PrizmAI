@@ -84,14 +84,38 @@ def _duplicate_board(template_board, user):
     # Copy ONLY demo persona memberships so assignees resolve correctly.
     # Real users must NEVER be copied — each user's sandbox is private.
     # Demo personas are identified by their @demo.prizmai.local email.
+    persona_users = []
     for membership in template_board.memberships.select_related('user').all():
         if membership.user == user:
             continue  # already owner
         member_email = getattr(membership.user, 'email', '') or ''
         if '@demo.prizmai.local' not in member_email:
             continue  # skip real users — sandbox isolation
+        persona_users.append(membership.user)
+
+    if persona_users:
+        # Demo personas (Priya/Marcus/Elena) are shared login credentials
+        # printed on-screen for every real user to test cross-account flows
+        # (e.g. Messaging). Without capping this, a persona accumulates a
+        # BoardMembership on every sandbox ever cloned by every real user,
+        # forever — letting anyone signed in with the shared persona
+        # credentials browse every other user's private sandbox boards, and
+        # cluttering the persona's own dashboard/messaging hub with dozens of
+        # stale "Software Development" cards. Cap each persona to sandbox
+        # boards owned by the CURRENT user only — but never touch a
+        # membership row where the persona IS the board's owner (a persona
+        # can end up with their own personally-provisioned sandbox, e.g. if
+        # someone logs in directly as marcus.chen and provisions; that board
+        # is a separate, legitimate sandbox and must keep its owner row).
+        from django.db.models import F
+        BoardMembership.objects.filter(
+            user__in=persona_users,
+            board__is_sandbox_copy=True,
+        ).exclude(board__owner=user).exclude(user=F('board__owner')).delete()
+
+    for persona_user in persona_users:
         BoardMembership.objects.get_or_create(
-            board=new_board, user=membership.user,
+            board=new_board, user=persona_user,
             defaults={'role': 'member'},
         )
 
@@ -2722,6 +2746,22 @@ def reset_my_demo(request):
     cannot be killed by a 120s task time-limit, so it completes even if it has to
     wait on SQLite's write lock.
     """
+    # Demo persona accounts (priya/marcus/elena etc.) are shared guest-only
+    # test logins with no sandbox of their own to reset — provisioning one
+    # for them here would trigger _duplicate_board's membership-cap logic
+    # and silently steal their guest membership away from whichever real
+    # user's sandbox they were actually being used to test. See
+    # is_demo_persona() docstring / [[project_persona_membership_bleed]].
+    from kanban.utils.demo_protection import is_demo_persona
+    if is_demo_persona(request.user):
+        return JsonResponse(
+            {'status': 'error',
+             'message': 'Demo persona accounts share a login across every '
+                        'tester and have no individual sandbox to reset. '
+                        'Log in as your own account to reset your demo.'},
+            status=400,
+        )
+
     # Switch the active workspace to the demo up front so the post-reset
     # dashboard renders the demo (see the cross-process-race note that motivated
     # this; it is now committed in the same process that does the reset).
