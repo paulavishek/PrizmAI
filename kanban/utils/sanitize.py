@@ -10,6 +10,8 @@ All consumer code should import `sanitize_html` or `sanitize_html_safe` from her
 rather than defining their own bleach configuration.
 """
 
+import html
+
 import bleach
 from django.utils.safestring import mark_safe
 
@@ -70,6 +72,16 @@ def sanitize_html_safe(html_content):
     template rendering without auto-escaping.
     """
     return mark_safe(sanitize_html(html_content))
+
+
+def html_to_plain_text(html_content):
+    """
+    Strip tags and decode entities from sanitized rich-text content, for
+    plain-text contexts (e.g. data exports) where markup would just be noise.
+    """
+    if not html_content:
+        return ''
+    return html.unescape(bleach.clean(html_content, tags=[], strip=True)).strip()
 
 
 # Characters that spreadsheet apps (Excel, Google Sheets, LibreOffice) treat as
