@@ -206,18 +206,6 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
                 <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
-                        <i class="fas fa-user-shield me-1"></i> Demo Admin
-                    </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
-                        <strong>Username:</strong> demo_admin_solo
-                    </div>
-                    <div style="font-family: monospace; color: #333;">
-                        <strong>Password:</strong> demo123
-                    </div>
-                </div>
-                
-                <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
-                    <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
                         <i class="fas fa-user-tie me-1"></i> Priya Sharma (Backend Lead)
                     </div>
                     <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
@@ -258,7 +246,7 @@
             <div style="font-size: 0.9rem; color: #333;">
                 <strong style="color: #f57f17;"><i class="fas fa-lightbulb me-1"></i> How to Test:</strong>
                 <ol style="margin: 0.5rem 0 0 1rem; padding: 0; font-size: 0.85rem;">
-                    <li>Open a chat room in this window (as demo_admin_solo)</li>
+                    <li>Open a chat room in this window (as {{ user.username }})</li>
                     <li>Open a new <strong>incognito/private window</strong></li>
                     <li>Login as a different user (e.g., marcus.chen / DemoUser@2026)</li>
                     <li>Navigate to the same chat room</li>

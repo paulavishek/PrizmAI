@@ -151,14 +151,20 @@ def dashboard(request):
         boards = (sandbox_boards | user_created_boards).distinct()
         if not sandbox_boards.exists():
             # Sandbox missing — auto-re-provision synchronously so the user
-            # sees their sandbox immediately on this page load
+            # sees their sandbox immediately on this page load.
+            # EXCEPT for demo persona accounts (priya/marcus/elena etc.) —
+            # they're shared guest-only test logins and must never get their
+            # own independently-provisioned sandbox (see is_demo_persona()
+            # docstring / [[project_persona_membership_bleed]]). They fall
+            # straight through to the official-template read-only fallback.
             from kanban.models import DemoSandbox
+            from kanban.utils.demo_protection import is_demo_persona
             has_sandbox = False
             try:
                 has_sandbox = hasattr(request.user, 'demo_sandbox') and request.user.demo_sandbox is not None
             except Exception:
                 pass
-            if not has_sandbox:
+            if not has_sandbox and not is_demo_persona(request.user):
                 from kanban.tasks.sandbox_provisioning import provision_sandbox_task
                 try:
                     provision_sandbox_task(request.user.id)
@@ -1777,6 +1783,22 @@ def toggle_demo_mode(request):
             return redirect('dashboard')
         except DemoSandbox.DoesNotExist:
             pass
+
+        # Demo persona accounts (priya/marcus/elena etc.) are shared
+        # guest-only test logins — never provision an independent sandbox
+        # for them (see is_demo_persona() docstring /
+        # [[project_persona_membership_bleed]]). Just flip is_viewing_demo so
+        # they browse the official template / their existing guest boards.
+        from kanban.utils.demo_protection import is_demo_persona
+        if is_demo_persona(request.user):
+            profile.is_viewing_demo = True
+            profile.active_workspace = demo_ws
+            fields = ['is_viewing_demo', 'active_workspace']
+            if _update_onboarding:
+                profile.onboarding_status = 'demo_exploring'
+                fields.append('onboarding_status')
+            profile.save(update_fields=fields)
+            return redirect('dashboard')
 
         # No sandbox yet — provision asynchronously (or sync fallback)
         from kanban.tasks.sandbox_provisioning import provision_sandbox_task
