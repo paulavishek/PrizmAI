@@ -269,15 +269,27 @@ function initColumnOrdering() {
     
     if (!refreshButton) return;
     
-    // Check column count and show helpful notification
+    // Check column count and show helpful notification (once per board)
     const columnCount = document.querySelectorAll('.kanban-column').length;
     if (columnCount > 6) {
-        setTimeout(() => {
-            showNotification(
-                `💡 Tip: With ${columnCount} columns, you can use the "Quick Column Reorder" panel below for easier rearrangement!`, 
-                'info'
-            );
-        }, 2000);
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        let tipBoardId;
+        for (let i = 0; i < pathParts.length; i++) {
+            if (pathParts[i] === 'board' || pathParts[i] === 'boards') {
+                tipBoardId = pathParts[i + 1];
+                break;
+            }
+        }
+        const tipStorageKey = `columnReorderTipSeen_${tipBoardId || 'unknown'}`;
+        if (!localStorage.getItem(tipStorageKey)) {
+            setTimeout(() => {
+                showNotification(
+                    `💡 Tip: With ${columnCount} columns, you can use the "Quick Column Reorder" panel below for easier rearrangement!`,
+                    'info'
+                );
+            }, 2000);
+            localStorage.setItem(tipStorageKey, '1');
+        }
     }
     
     // Add event listener to the refresh button
