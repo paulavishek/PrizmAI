@@ -530,8 +530,12 @@ class TaskForm(forms.ModelForm):
             if parent_task == self.instance:
                 raise forms.ValidationError({'parent_task': 'A task cannot be its own parent.'})
             
-            # Check if this would create a circular dependency
-            if hasattr(self.instance, 'has_circular_dependency') and self.instance.has_circular_dependency(parent_task):
+            # Check if this would create a circular dependency. Only relevant when
+            # editing an existing task — a brand-new task has no pk yet and thus no
+            # subtasks, so has_circular_dependency() would query a reverse relation
+            # (self.subtasks.all()) on an unsaved instance and raise ValueError.
+            if (self.instance.pk and hasattr(self.instance, 'has_circular_dependency')
+                    and self.instance.has_circular_dependency(parent_task)):
                 raise forms.ValidationError({
                     'parent_task': f'Cannot set "{parent_task.title}" as parent - this would create a circular dependency.'
                 })

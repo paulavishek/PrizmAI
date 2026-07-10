@@ -2375,6 +2375,9 @@ def add_checklist_item(request):
         data = json.loads(request.body)
         task_id = data.get('task_id')
         title = data.get('title', '').strip()
+        priority = data.get('priority', 'low')
+        if priority not in dict(ChecklistItem.PRIORITY_CHOICES):
+            priority = 'low'
 
         if not task_id or not title:
             return JsonResponse({'error': 'task_id and title are required'}, status=400)
@@ -2389,7 +2392,7 @@ def add_checklist_item(request):
             title=title,
             position=task.checklist_items.count(),
             source='manual',
-            priority='low',
+            priority=priority,
         )
         return JsonResponse({
             'success': True,
@@ -2398,6 +2401,7 @@ def add_checklist_item(request):
                 'title': item.title,
                 'is_completed': False,
                 'source': 'manual',
+                'priority': item.priority,
             },
             'checklist_progress': task.checklist_progress,
         })
