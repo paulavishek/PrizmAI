@@ -363,11 +363,15 @@ class ResourceLevelingService:
         availability_score = max(100 - adjusted_utilization, 0)
         
         # 3. Velocity score (normalized to 0-100)
-        # Only use velocity if they have history, otherwise use neutral baseline
-        if has_history:
+        # Require a minimum sample (N>=5 completed tasks) before trusting a PERSONAL
+        # velocity multiplier — with N=1 a single fast/slow task wildly skews it and
+        # makes the assignee engine ("top-tier velocity") contradict the deadline
+        # engine. Below the threshold, fall back to a neutral baseline.
+        has_velocity_confidence = profile.total_tasks_completed >= 5
+        if has_velocity_confidence:
             velocity_normalized = min(profile.velocity_score * 50, 100)  # 2.0 velocity = 100 points
         else:
-            velocity_normalized = 50.0  # Neutral - no data available
+            velocity_normalized = 50.0  # Neutral - insufficient history for personal velocity
         
         # 4. Reliability score (on-time completion rate)
         # Only use if they have history, otherwise neutral
@@ -419,7 +423,23 @@ class ResourceLevelingService:
         # Predict completion time (use actual task count for workload calculation)
         estimated_hours = self._predict_completion_time_with_workload(profile, task, total_task_count)
         estimated_completion_date = timezone.now() + timedelta(hours=estimated_hours)
-        
+
+        # Deadline feasibility: can this candidate realistically finish by the task's
+        # due date? A candidate who overshoots the deadline is penalised so the engine
+        # doesn't recommend someone with capacity but no calendar runway.
+        meets_deadline = None
+        deadline_gap_days = None
+        due = getattr(task, 'due_date', None)
+        if due:
+            if timezone.is_naive(due):
+                due = timezone.make_aware(due)
+            gap_days = (estimated_completion_date - due).total_seconds() / 86400
+            deadline_gap_days = round(gap_days, 1)
+            meets_deadline = gap_days <= 0
+            if not meets_deadline:
+                # Scaled, capped penalty (5 pts/day late, max 25).
+                overall_score = max(overall_score - min(25.0, gap_days * 5.0), 0)
+
         return {
             'user_id': profile.user.id,
             'username': profile.user.username,
@@ -432,6 +452,11 @@ class ResourceLevelingService:
             'quality': round(quality_normalized, 1),
             'estimated_hours': round(estimated_hours, 1),
             'estimated_completion': estimated_completion_date.isoformat(),
+            # Sample size behind the velocity/reliability figures (for N<5 guarding).
+            'total_completed': profile.total_tasks_completed,
+            # Deadline feasibility signals (None when no due date is set).
+            'meets_deadline': meets_deadline,
+            'deadline_gap_days': deadline_gap_days,
             # Projected state — used for ranking and scoring so the engine doesn't
             # over-stack on a single person across a multi-suggestion run.
             'current_workload': total_task_count,

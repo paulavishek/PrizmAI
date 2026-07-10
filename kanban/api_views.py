@@ -112,7 +112,21 @@ def generate_task_description_api(request):
                     context['recent_comments'] = list(comments)
             except Task.DoesNotExist:
                 pass  # Proceed without context
-            
+
+        # Merge in form context the user has already entered (new-task path has no task_id,
+        # so these are the only signals available for a context-aware description).
+        form_context = {
+            'priority': data.get('priority'),
+            'risk_level': data.get('risk_level'),
+            'risk_indicators': data.get('risk_indicators'),
+            'mitigation_strategies': data.get('mitigation_strategies'),
+            'required_skills': data.get('required_skills'),
+            'tags': data.get('tags'),
+        }
+        form_context = {k: v for k, v in form_context.items() if v}
+        if form_context:
+            context = {**(context or {}), **form_context}
+
         # Call AI util function to generate description
         description = generate_task_description(title, context=context)
         
@@ -1425,6 +1439,11 @@ def predict_deadline_api(request):
         estimated_hours = data.get('estimated_hours')
         estimated_cost = data.get('estimated_cost')
         hourly_rate = data.get('hourly_rate')
+
+        # AI-decomposed effort total (days) from the subtask breakdown widget, when run.
+        # This is a stronger effort signal than the manual estimated_hours field.
+        subtask_effort_days = data.get('subtask_effort_days')
+        subtask_count = data.get('subtask_count')
         
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
@@ -1474,6 +1493,8 @@ def predict_deadline_api(request):
                 'estimated_hours': estimated_hours,
                 'estimated_cost': estimated_cost,
                 'hourly_rate': hourly_rate,
+                'subtask_effort_days': subtask_effort_days,
+                'subtask_count': subtask_count,
             }
             result = predict_deadline_task.delay(
                 task_data_for_celery, {}, board.id, request.user.id
@@ -1587,8 +1608,11 @@ def predict_deadline_api(request):
             'estimated_hours': estimated_hours,
             'estimated_cost': estimated_cost,
             'hourly_rate': hourly_rate,
+            # AI-decomposed effort from the subtask breakdown (stronger effort signal)
+            'subtask_effort_days': subtask_effort_days,
+            'subtask_count': subtask_count,
         }
-        
+
         # Call AI function
         prediction = predict_realistic_deadline(task_data, team_context)
         
@@ -5670,6 +5694,25 @@ def suggest_assignee_api(request):
                 workload_impact=data.get('workload_impact', 'medium'),
                 assigned_to=None,
             )
+            # Set due/start dates so the engine can judge deadline feasibility.
+            from datetime import datetime as _dt_parse
+            def _parse_dt(val):
+                if not val:
+                    return None
+                for fmt in ('%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+                    try:
+                        return _dt_parse.strptime(val[:16] if 'T' in val or ' ' in val else val, fmt)
+                    except (ValueError, TypeError):
+                        continue
+                return None
+            _due = _parse_dt(data.get('due_date'))
+            _start = _parse_dt(data.get('start_date'))
+            if _due:
+                task.due_date = timezone.make_aware(_due) if timezone.is_naive(_due) else _due
+            if _start:
+                task.start_date = timezone.make_aware(_start) if timezone.is_naive(_start) else _start
+            # Stash AI-decomposed effort for the deadline-feasibility check.
+            task._subtask_effort_days = data.get('subtask_effort_days')
             # Set required_skills if provided
             required_skills = data.get('required_skills')
             if required_skills:
@@ -5722,8 +5765,10 @@ def suggest_assignee_api(request):
             'risk_level': getattr(task, 'risk_level', data.get('risk_level', '')),
             'risk_score': getattr(task, 'risk_score', data.get('risk_score')),
             'skill_match_score': getattr(task, 'skill_match_score', data.get('skill_match_score')),
+            # AI-decomposed effort total (days) for the impossible-timeline check.
+            'subtask_effort_days': getattr(task, '_subtask_effort_days', data.get('subtask_effort_days')),
         }
-        
+
         # Call AI for enhanced reasoning and explainability
         ai_suggestion = suggest_optimal_assignee(
             task_data_for_ai, candidates, board_context
