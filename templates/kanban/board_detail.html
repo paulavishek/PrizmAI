@@ -327,49 +327,28 @@
     .card-aging-badge.aging-warning { background: #fef3c7; color: #92400e; }
     .card-aging-badge.aging-critical { background: #fee2e2; color: #991b1b; }
 
-    /* Individual aging alert — must clearly point at the specific card it's about */
-    .aging-alert-tip {
-        position: absolute;
-        z-index: 9998;
-        max-width: 260px;
-        background: var(--card-bg, #fff);
-        border: 1px solid #f59e0b;
-        border-radius: 8px;
-        box-shadow: 0 6px 20px rgba(0,0,0,.22);
-        padding: 10px 12px;
-        font-size: .78rem;
-        line-height: 1.4;
-        animation: aging-tip-in .18s ease-out;
-    }
-    .aging-alert-tip::before {
-        content: '';
-        position: absolute;
-        top: -7px;
-        left: var(--aging-tip-arrow-left, 16px);
-        width: 12px;
-        height: 12px;
-        background: var(--card-bg, #fff);
-        border-left: 1px solid #f59e0b;
-        border-top: 1px solid #f59e0b;
-        transform: rotate(45deg);
-    }
     @keyframes aging-tip-in {
         from { opacity: 0; transform: translateY(-4px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    /* Ring drawn around the exact card the tip refers to, so it's unambiguous
-       even when the next card is aging too. */
-    .kanban-task-v2.aging-alert-highlight {
+    /* Subtle ring cue on every aging card (tier-colored). The card's left border
+       is already spoken for by task priority, so this uses an outline + glow
+       instead of a second border, to avoid colliding with that channel. */
+    .kanban-task-v2.aging-ring-warning {
         outline: 2px solid #f59e0b;
         outline-offset: 2px;
         box-shadow: 0 0 0 4px rgba(245, 158, 11, .18);
     }
+    .kanban-task-v2.aging-ring-critical {
+        outline: 2px solid #dc3545;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgba(220, 53, 69, .18);
+    }
 
-    /* Overflow banner — a full-width strip sitting ABOVE the column header (not
-       crammed into its already-busy name/count/WIP-badge row) once aging cards
-       exceed the individual-alert threshold (see MAX_INDIVIDUAL_AGING_ALERTS in
-       kanban_aging.js). .column-aging-banner-slot is empty (no height) when there's
-       nothing to show. */
+    /* Aging banner — a full-width strip sitting ABOVE the column header (not
+       crammed into its already-busy name/count/WIP-badge row), shown whenever a
+       column has any aging cards (see kanban_aging.js). .column-aging-banner-slot
+       is empty (no height) when there's nothing to show. */
     .column-aging-banner {
         display: flex;
         align-items: center;

@@ -6,21 +6,20 @@
  * -critical / -show). This keeps the badge correct after a drag-drop move (which does not reload)
  * and as days roll over, with zero extra server work per task.
  *
- * Beyond the badge, each column gets a live aging-alert layer:
- *   - Up to MAX_INDIVIDUAL_AGING_ALERTS aging cards each get their own floating alert, anchored
- *     to that specific card.
- *   - Past that threshold, individual alerts are replaced by a single column-header banner
- *     ("N tasks aging — View") that filters the column down to just its aging cards.
+ * Beyond the badge, each aging card gets:
+ *   - A subtle tier-colored outline/glow ring (.aging-ring-warning / .aging-ring-critical) —
+ *     doesn't touch the left border, which is already used for task priority.
+ *   - Its column shows a single header banner ("N tasks aging — View") the moment it has ANY
+ *     aging cards (one rule, not a per-count individual-vs-banner split), which filters the
+ *     column down to just its aging cards.
  * Both recompute live as cards move/complete (recalc/recalcAll re-derive tiers, then
- * updateAllColumnAgingSummaries() re-renders the alert layer) — no page reload needed.
+ * updateAllColumnAgingSummaries() re-renders the banner layer) — no page reload needed.
  *
  * Exposes window.PrizmAging.{recalc, recalcAll, updateAllColumnAgingSummaries} so kanban.js can
  * refresh a card's badge (and the column alert layer) on move.
  */
 (function () {
     'use strict';
-
-    const MAX_INDIVIDUAL_AGING_ALERTS = 2;
 
     // Whole calendar days elapsed between an ISO timestamp and now, floored.
     function daysSince(iso) {
@@ -32,23 +31,23 @@
         return Math.floor(ms / 86400000);
     }
 
-    // Render (or hide) the aging badge for one card element.
+    // Render (or hide) the aging badge + ring cue for one card element.
     function recalc(cardEl) {
         const badge = cardEl.querySelector('.card-aging-badge');
         if (!badge) return;
         const column = cardEl.closest('.kanban-column');
         if (!column || column.dataset.agingEnabled !== '1') {
-            hide(badge);
+            hide(cardEl, badge);
             return;
         }
         const days = daysSince(cardEl.dataset.columnEnteredAt);
-        if (days === null) { hide(badge); return; }
+        if (days === null) { hide(cardEl, badge); return; }
 
         const show = parseInt(column.dataset.agingShow, 10) || 1;
         const warning = parseInt(column.dataset.agingWarning, 10) || 0;
         const critical = parseInt(column.dataset.agingCritical, 10) || 0;
 
-        if (days < show) { hide(badge); return; }
+        if (days < show) { hide(cardEl, badge); return; }
 
         let state = 'aging-neutral';
         if (critical && days >= critical) state = 'aging-critical';
@@ -59,11 +58,15 @@
         badge.classList.add(state);
         badge.innerHTML = '<i class="far fa-clock"></i>' + days + 'd';
         badge.title = 'In this column for ' + days + ' day' + (days === 1 ? '' : 's');
+
+        cardEl.classList.toggle('aging-ring-warning', state === 'aging-warning');
+        cardEl.classList.toggle('aging-ring-critical', state === 'aging-critical');
     }
 
-    function hide(badge) {
+    function hide(cardEl, badge) {
         badge.hidden = true;
         badge.classList.add('d-none');
+        cardEl.classList.remove('aging-ring-warning', 'aging-ring-critical');
     }
 
     function recalcAll() {
@@ -71,13 +74,7 @@
         updateAllColumnAgingSummaries();
     }
 
-    /* ---- Live per-column aging alerts (individual tips + overflow banner) ---- */
-
-    // taskId -> open tip element, for cards currently showing their own floating alert.
-    const openTips = new Map();
-    // taskIds the user has closed (X or click-away) THIS page view. Not persisted —
-    // the task is still genuinely aging, so it's expected back on the next load.
-    const closedAlertTaskIds = new Set();
+    /* ---- Live per-column aging banner ---- */
 
     function agingTierOf(cardEl) {
         const badge = cardEl.querySelector('.card-aging-badge');
@@ -92,88 +89,15 @@
     }
 
     function updateColumnAgingSummary(columnEl) {
-        const cards = Array.from(columnEl.querySelectorAll('.kanban-task-v2'));
-        const agingCards = cards.filter(function (c) { return agingTierOf(c) !== null; });
-
+        const agingCards = currentAgingCards(columnEl);
         if (agingCards.length === 0) {
-            clearIndividualAlerts(columnEl);
             removeBanner(columnEl);
-            return;
-        }
-
-        if (agingCards.length <= MAX_INDIVIDUAL_AGING_ALERTS) {
-            removeBanner(columnEl);
-            const keep = new Set(agingCards.map(function (c) { return c.dataset.taskId; }));
-            clearIndividualAlerts(columnEl, keep);
-            agingCards.forEach(showIndividualAlert);
         } else {
-            clearIndividualAlerts(columnEl);
             showBanner(columnEl, agingCards);
         }
     }
 
-    // ---- Individual floating alerts ----
-
-    function showIndividualAlert(cardEl) {
-        const taskId = cardEl.dataset.taskId;
-        if (!taskId || openTips.has(taskId) || closedAlertTaskIds.has(taskId)) return;
-        const badge = cardEl.querySelector('.card-aging-badge');
-        if (!badge) return;
-        const columnEl = cardEl.closest('.kanban-column');
-
-        cardEl.classList.add('aging-alert-highlight');
-
-        const tip = document.createElement('div');
-        tip.className = 'aging-alert-tip';
-        tip.dataset.taskId = taskId;
-        tip.dataset.columnId = columnEl ? columnEl.dataset.columnId : '';
-        tip.innerHTML =
-            '<div class="aging-alert-tip-inner">' +
-            '<i class="fas fa-hourglass-half text-warning me-1"></i>' +
-            'This task has been sitting a while. Tune aging thresholds from a column’s ' +
-            '<i class="fas fa-ellipsis-v"></i> menu → <strong>Aging Alerts</strong>.' +
-            '<button type="button" class="btn-close btn-close-sm ms-2" aria-label="Dismiss"></button>' +
-            '</div>';
-        document.body.appendChild(tip);
-
-        const r = badge.getBoundingClientRect();
-        tip.style.top = (window.scrollY + r.bottom + 10) + 'px';
-        tip.style.left = (window.scrollX + r.left) + 'px';
-        // Arrow sits directly above the badge that triggered the tip, regardless
-        // of where the tip box itself ends up horizontally.
-        const arrowOffset = Math.max(8, Math.min(r.width / 2 + 4, tip.offsetWidth - 20));
-        tip.style.setProperty('--aging-tip-arrow-left', arrowOffset + 'px');
-
-        openTips.set(taskId, tip);
-
-        // Only the X closes an individual alert. A "click outside" listener would
-        // fire for every OTHER open tip too (closing tip A's X is itself a click
-        // outside tip B), silently closing alerts the user never touched.
-        tip.querySelector('.btn-close').addEventListener('click', function () {
-            closedAlertTaskIds.add(taskId);
-            closeIndividualAlert(taskId, tip);
-        });
-    }
-
-    // Internal cleanup (card stopped aging, column moved to banner mode, etc.) —
-    // does NOT count as a user dismissal, so it's not added to closedAlertTaskIds.
-    function closeIndividualAlert(taskId, tip) {
-        tip.remove();
-        openTips.delete(taskId);
-        const card = document.querySelector('.kanban-task-v2[data-task-id="' + taskId + '"]');
-        if (card) card.classList.remove('aging-alert-highlight');
-    }
-
-    function clearIndividualAlerts(columnEl, keepTaskIds) {
-        const columnId = columnEl.dataset.columnId;
-        openTips.forEach(function (tip, taskId) {
-            if (tip.dataset.columnId !== columnId) return;
-            if (keepTaskIds && keepTaskIds.has(taskId)) return;
-            closeIndividualAlert(taskId, tip);
-        });
-    }
-
-    // ---- Overflow banner (column has more aging cards than the individual-alert threshold) ----
+    // ---- Column-header banner ----
 
     function showBanner(columnEl, agingCards) {
         const slot = columnEl.querySelector('.column-aging-banner-slot');
