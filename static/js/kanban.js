@@ -1199,10 +1199,12 @@ function updateTaskPosition(taskId, columnId, position = 0) {
             // Update column scrolling after task move
             updateColumnScrolling();
 
-            // Task entered a new column → reset its aging badge (day count starts over).
+            // Task entered a new column → reset its aging badge (day count starts over)
+            // and refresh both the old and new columns' aging alerts/banners live.
             if (taskEl && window.PrizmAging) {
                 taskEl.dataset.columnEnteredAt = new Date().toISOString();
                 window.PrizmAging.recalc(taskEl);
+                window.PrizmAging.updateAllColumnAgingSummaries();
             }
 
             // Dispatch custom event for task moved

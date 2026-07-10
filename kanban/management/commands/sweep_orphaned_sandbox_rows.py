@@ -18,6 +18,7 @@ Google Cloud, where such orphans would otherwise raise IntegrityErrors.
 It deletes:
   * ProjectSignal / ProjectConfidenceScore whose ``board`` no longer exists
   * TaskActivity whose ``task`` no longer exists
+  * ProjectStakeholder whose ``board`` no longer exists
 
 All targets reference their parent via a CASCADE FK, so under normal FK
 enforcement (PostgreSQL) there should be nothing to delete — a clean run is the
@@ -40,6 +41,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from kanban.models import Board, Task, TaskActivity
         from kanban.project_signals_models import ProjectSignal, ProjectConfidenceScore
+        from kanban.stakeholder_models import ProjectStakeholder
 
         dry_run = options['dry_run']
 
@@ -53,6 +55,8 @@ class Command(BaseCommand):
              ProjectConfidenceScore.objects.exclude(board_id__in=board_ids)),
             ('TaskActivity (task missing)',
              TaskActivity.objects.exclude(task_id__in=task_ids)),
+            ('ProjectStakeholder (board missing)',
+             ProjectStakeholder.objects.exclude(board_id__in=board_ids)),
         ]
 
         total = 0

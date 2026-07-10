@@ -2692,12 +2692,6 @@ def board_detail(request, board_id):
             'aging_subtitle': aging_subtitle,
         }
 
-    # Aging onboarding: has THIS user already dismissed the one-time tooltip on THIS board?
-    from kanban.models import AgingOnboardingDismissal
-    aging_onboarding_dismissed = AgingOnboardingDismissal.objects.filter(
-        user=request.user, board=board
-    ).exists()
-
     # Board members list for inline assignee picker.
     from kanban.models import BoardMembership
     board_members_list = (
@@ -2780,7 +2774,6 @@ def board_detail(request, board_id):
         'can_delete_board': can_delete_board,
         'can_manage_invites': can_manage_invites,  # For invite button visibility
         'column_meta': column_meta,  # Per-column WIP/count metadata
-        'aging_onboarding_dismissed': aging_onboarding_dismissed,  # One-time aging tooltip state
         'board_members_list': board_members_list,  # For inline assignee picker
         'task_prefix': board.get_task_prefix(),  # For task ID on kanban cards
         'hospice_risk_score': hospice_risk_score,
@@ -5536,9 +5529,6 @@ def edit_board(request, board_id):
         if form.is_valid():
             form.save()
 
-            # Saving board settings counts as configuring aging — suppress onboarding tooltip.
-            mark_board_aging_configured(board)
-
             # Handle strategy linking/unlinking — scope to the user's workspace
             strategy_id = request.POST.get('strategy_id', '').strip()
             if strategy_id:
@@ -6837,15 +6827,6 @@ def column_update_color(request, column_id):
     return JsonResponse({'success': True, 'color': column.color})
 
 
-def mark_board_aging_configured(board):
-    """Flag a board as having had its aging settings configured (suppresses the one-time
-    onboarding tooltip). Called from BOTH save paths — board settings (edit_board) and the
-    per-column popover (column_update_aging) — so the two can't drift."""
-    if not board.aging_configured:
-        board.aging_configured = True
-        board.save(update_fields=['aging_configured'])
-
-
 @login_required
 @require_http_methods(["POST"])
 def column_update_aging(request, column_id):
@@ -6880,20 +6861,9 @@ def column_update_aging(request, column_id):
         column.aging_critical_days = None
 
     column.save(update_fields=['aging_mode', 'aging_warning_days', 'aging_critical_days'])
-    mark_board_aging_configured(column.board)
 
     eff = column.effective_aging()
     return JsonResponse({'success': True, 'aging_mode': column.aging_mode, 'effective': eff})
-
-
-@login_required
-@require_http_methods(["POST"])
-def dismiss_aging_onboarding(request, board_id):
-    """Mark the one-time aging onboarding tooltip as dismissed for this user+board."""
-    from kanban.models import AgingOnboardingDismissal
-    board = get_object_or_404(Board, id=board_id)
-    AgingOnboardingDismissal.objects.get_or_create(user=request.user, board=board)
-    return JsonResponse({'success': True})
 
 
 @login_required
