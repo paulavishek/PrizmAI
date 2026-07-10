@@ -327,6 +327,102 @@
     .card-aging-badge.aging-warning { background: #fef3c7; color: #92400e; }
     .card-aging-badge.aging-critical { background: #fee2e2; color: #991b1b; }
 
+    /* Individual aging alert — must clearly point at the specific card it's about */
+    .aging-alert-tip {
+        position: absolute;
+        z-index: 9998;
+        max-width: 260px;
+        background: var(--card-bg, #fff);
+        border: 1px solid #f59e0b;
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0,0,0,.22);
+        padding: 10px 12px;
+        font-size: .78rem;
+        line-height: 1.4;
+        animation: aging-tip-in .18s ease-out;
+    }
+    .aging-alert-tip::before {
+        content: '';
+        position: absolute;
+        top: -7px;
+        left: var(--aging-tip-arrow-left, 16px);
+        width: 12px;
+        height: 12px;
+        background: var(--card-bg, #fff);
+        border-left: 1px solid #f59e0b;
+        border-top: 1px solid #f59e0b;
+        transform: rotate(45deg);
+    }
+    @keyframes aging-tip-in {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    /* Ring drawn around the exact card the tip refers to, so it's unambiguous
+       even when the next card is aging too. */
+    .kanban-task-v2.aging-alert-highlight {
+        outline: 2px solid #f59e0b;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, .18);
+    }
+
+    /* Overflow banner — a full-width strip sitting ABOVE the column header (not
+       crammed into its already-busy name/count/WIP-badge row) once aging cards
+       exceed the individual-alert threshold (see MAX_INDIVIDUAL_AGING_ALERTS in
+       kanban_aging.js). .column-aging-banner-slot is empty (no height) when there's
+       nothing to show. */
+    .column-aging-banner {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .72rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px 6px 0 0;
+        animation: aging-tip-in .18s ease-out;
+    }
+    .column-aging-banner.aging-banner-warning { background: #fef3c7; color: #92400e; }
+    .column-aging-banner.aging-banner-critical { background: #fee2e2; color: #991b1b; }
+    .column-aging-banner-count { flex: 1; }
+    .column-aging-banner-view {
+        border: none;
+        background: rgba(0,0,0,.08);
+        color: inherit;
+        font-size: .68rem;
+        font-weight: 700;
+        border-radius: 6px;
+        padding: 1px 8px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .column-aging-banner-view:hover { background: rgba(0,0,0,.16); }
+
+    /* "View" filter notice — mirrors the click-to-filter notice on stakeholder_list.html */
+    .aging-filter-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: .72rem;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #f59e0b;
+        border-radius: 6px;
+        padding: 4px 8px;
+        margin: 0 0 8px;
+    }
+    .aging-filter-notice-clear {
+        border: none;
+        background: rgba(0,0,0,.08);
+        color: inherit;
+        font-size: .68rem;
+        font-weight: 600;
+        border-radius: 6px;
+        padding: 1px 8px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .aging-filter-notice-clear:hover { background: rgba(0,0,0,.16); }
+
     /* Label pills */
     .card-label-primary {
         display: inline-flex;
@@ -964,9 +1060,7 @@
 </div>
 
 <!-- Kanban Board -->
-<div class="kanban-board" id="kanban-board" data-board-id="{{ board.id }}"
-     data-aging-configured="{{ board.aging_configured|yesno:'1,0' }}"
-     data-aging-onboarding-dismissed="{{ aging_onboarding_dismissed|yesno:'1,0' }}">
+<div class="kanban-board" id="kanban-board" data-board-id="{{ board.id }}">
     {% for column in columns %}
     {% with col_meta=column_meta|get_item:column.id %}
     <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true"
@@ -974,6 +1068,7 @@
          data-aging-warning="{{ col_meta.aging.warning }}"
          data-aging-critical="{{ col_meta.aging.critical }}"
          data-aging-show="{{ col_meta.aging.show }}">
+        <div class="column-aging-banner-slot"></div>
         {# -- Column Header (redesigned) -- #}
         <div class="kanban-column-header kanban-column-header--{{ column.color|default:'blue' }} {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}" data-column-name="{{ column.name }}">
             <div class="d-flex justify-content-between align-items-center w-100">

@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Verify first.** Before proposing or editing, `Grep`/`Read` the actual code path involved. Confirm a model field, signal, or helper exists before writing code that calls it.
 - **Acknowledge gaps.** If a referenced file/feature can't be found, search for it explicitly (it's likely under a differently-named app or file) or ask — don't invent a plausible-sounding path.
 - Check `MANUAL_TEST_PLAN.md`, `FEATURES.md`, and the relevant `docs/` guide before assuming how a feature is *supposed* to work — several major subsystems (Automations, RBAC, demo data, Celery) have dedicated docs described below.
+- **Don't self-verify UI/frontend changes by launching the dev server and driving a browser (Playwright, chromium-cli, curl against a live `runserver`, etc.).** The user runs the app and checks the browser themselves — it's faster for them and avoids burning tokens/time on screenshots, and concurrent DB access from a driver script alongside `runserver` has caused spurious SQLite `OperationalError`s on this project. After a UI change: run the non-interactive checks that do apply (tests, `makemigrations --check`), describe what changed and how to see it, and let the user confirm visually.
 
 ## Development Commands
 

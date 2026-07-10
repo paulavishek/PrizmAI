@@ -192,7 +192,6 @@ urlpatterns = [
     path('columns/<int:column_id>/update-wip/', views.column_update_wip, name='column_update_wip'),
     path('columns/<int:column_id>/update-color/', views.column_update_color, name='column_update_color'),
     path('columns/<int:column_id>/update-aging/', views.column_update_aging, name='column_update_aging'),
-    path('boards/<int:board_id>/dismiss-aging-onboarding/', views.dismiss_aging_onboarding, name='dismiss_aging_onboarding'),
     path('columns/<int:column_id>/delete/', views.delete_column, name='delete_column'),    path('boards/<int:board_id>/add-lean-labels/', views.add_lean_labels, name='add_lean_labels'),
     
     # Test page for AI features

@@ -789,11 +789,6 @@ class Board(models.Model):
         default=14,
         help_text="Days a task can sit in a column before its aging badge turns red (critical)."
     )
-    aging_configured = models.BooleanField(
-        default=False,
-        help_text="True once anyone has saved aging settings on this board; suppresses the one-time onboarding tooltip."
-    )
-
     # Hierarchy: Mission → Strategy → Board
     strategy = models.ForeignKey(
         'Strategy',
@@ -1140,20 +1135,6 @@ class Column(models.Model):
             critical = board.aging_critical_days
         show = max(1, math.ceil(warning / 2))
         return {'enabled': True, 'warning': warning, 'critical': critical, 'show': show}
-
-class AgingOnboardingDismissal(models.Model):
-    """Records that a user has seen and dismissed the one-time task-aging onboarding tooltip
-    on a given board. Server-side so it persists across devices/browsers."""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='aging_onboarding_dismissals')
-    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='aging_onboarding_dismissals')
-    dismissed_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ('user', 'board')
-
-    def __str__(self):
-        return f"Aging onboarding dismissed: {self.user} on {self.board}"
-
 
 class TaskLabel(models.Model):
     CATEGORY_CHOICES = [

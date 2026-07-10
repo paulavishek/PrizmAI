@@ -6,9 +6,7 @@ Covers:
     and the DERIVED grey "show" threshold (ceil(warning/2), min 1).
   * BoardForm validation: critical must exceed warning.
   * create_column auto-disables aging for Done/Backlog-style names.
-  * column_update_aging endpoint: happy paths, validation, RBAC (non-member 403),
-    and that it flags the board as configured (suppresses onboarding).
-  * dismiss_aging_onboarding persists a per-(user, board) dismissal.
+  * column_update_aging endpoint: happy paths, validation, RBAC (non-member 403).
 """
 
 from django.contrib.auth.models import User
@@ -20,7 +18,7 @@ from django.utils import timezone
 
 from accounts.models import Organization, UserProfile
 from kanban.models import (
-    Board, Column, Task, AgingOnboardingDismissal,
+    Board, Column, Task,
     column_name_disables_aging,
 )
 from kanban.forms import BoardForm
@@ -156,9 +154,6 @@ class ColumnUpdateAgingEndpointTest(TestCase):
         t['col'].refresh_from_db()
         self.assertEqual(t['col'].aging_mode, 'custom')
         self.assertEqual(t['col'].aging_warning_days, 3)
-        # Saving aging config marks the board configured (suppresses onboarding).
-        t['board'].refresh_from_db()
-        self.assertTrue(t['board'].aging_configured)
 
     def test_custom_rejects_inverted_thresholds(self):
         t = _make_tenant('kappa')
@@ -306,18 +301,3 @@ class StalledBriefingPlanTest(TestCase):
 
         summary = _rule_based_summary(plan, 'stalled', 0, '')
         self.assertIn('stopped moving', summary.lower())
-
-
-class DismissOnboardingTest(TestCase):
-    def test_dismiss_persists(self):
-        t = _make_tenant('xi')
-        client = Client()
-        client.force_login(t['user'])
-        resp = client.post(reverse('dismiss_aging_onboarding', args=[t['board'].id]))
-        self.assertEqual(resp.status_code, 200)
-        self.assertTrue(AgingOnboardingDismissal.objects.filter(
-            user=t['user'], board=t['board']).exists())
-        # Idempotent — second call doesn't error or duplicate.
-        client.post(reverse('dismiss_aging_onboarding', args=[t['board'].id]))
-        self.assertEqual(AgingOnboardingDismissal.objects.filter(
-            user=t['user'], board=t['board']).count(), 1)

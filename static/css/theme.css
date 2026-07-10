@@ -413,10 +413,6 @@ a:hover {
     border-color: var(--border-color);
 }
 
-.btn-close {
-    filter: invert(1);
-}
-
 body.dark-mode .btn-close {
     filter: invert(0.8);
 }
