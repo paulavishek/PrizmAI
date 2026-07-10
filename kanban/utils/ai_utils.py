@@ -351,23 +351,69 @@ def generate_task_description(title: str, context: Optional[Dict] = None) -> Opt
                 context_parts.append(f"LSS Classification: {context['lss_classification']}")
             if context.get('complexity_score'):
                 context_parts.append(f"Complexity Score: {context['complexity_score']}/10")
+            if context.get('risk_level'):
+                context_parts.append(f"Risk Level: {context['risk_level']}")
+            if context.get('risk_indicators'):
+                context_parts.append(f"Risk Indicators being monitored: {str(context['risk_indicators'])[:400]}")
+            if context.get('mitigation_strategies'):
+                context_parts.append(f"Mitigation Strategies already noted: {str(context['mitigation_strategies'])[:400]}")
+            if context.get('required_skills'):
+                skills = context['required_skills']
+                skills_txt = ', '.join(skills) if isinstance(skills, list) else str(skills)
+                context_parts.append(f"Tech stack / required skills: {skills_txt[:300]}")
+            if context.get('tags'):
+                tags = context['tags']
+                tags_txt = ', '.join(tags) if isinstance(tags, list) else str(tags)
+                context_parts.append(f"Tags/labels: {tags_txt[:200]}")
             if context.get('recent_comments'):
                 context_parts.append(f"Recent discussion: {'; '.join(context['recent_comments'][:3])[:300]}")
             context_info = "\n".join(context_parts)
-        
+
+        # Detect security/incident signals from the title + provided context so the
+        # description can lead with immediate mitigation rather than a relaxed roadmap.
+        _signal_text = " ".join([
+            title,
+            str(context.get('risk_indicators', '')) if context else '',
+            str(context.get('tags', '')) if context else '',
+            str(context.get('required_skills', '')) if context else '',
+        ]).lower()
+        _incident_terms = ('bleed', 'leak', 'leakage', 'breach', 'security', 'vulnerab',
+                           'exploit', 'data loss', 'outage', 'incident')
+        is_incident = any(term in _signal_text for term in _incident_terms)
+
+        incident_rule = ""
+        incident_field = ""
+        if is_incident:
+            incident_rule = (
+                "\n- SECURITY/INCIDENT SIGNAL DETECTED: This task concerns a security, data-leak "
+                "or incident scenario. Add an \"immediate_mitigation\" section listing 1-3 fast, "
+                "reversible containment actions to stop the bleed NOW (e.g. feature flag off, "
+                "roll back the offending module, force cache clear, restrict access) BEFORE the "
+                "longer structural fix. Do NOT conflate scaling/performance work (e.g. connection "
+                "pooling) with logical data-isolation/security controls — call out that they are "
+                "separate concerns if both appear."
+                "\n- If the title mentions an AI/LLM context (e.g. an assistant, prompt, or model "
+                "payload), include an action step to audit and filter the AI's context/payload "
+                "construction, not just the database layer."
+            )
+            incident_field = '\n    "immediate_mitigation": ["Fast containment action 1", "Fast containment action 2"],'
+
         prompt = f"""Generate a task description for: "{title}"
 {context_info}
 
 RULES:
+- Ground the description in the provided context above (tech stack, tags, risk indicators); do not invent an unrelated stack
+- TECHNOLOGY FIDELITY (positive constraint): You MUST reproduce, verbatim, every explicit technology, framework, tool, or named architectural solution that appears in the context above (e.g. "Redis", "Celery", "PgBouncer", "row-level security") inside the Action Steps. Use the exact proper nouns.
+- TECHNOLOGY FIDELITY (negative constraint): Do NOT substitute a named technology with a generic equivalent (never turn "Redis-based debouncer" or "Celery queue" into "streaming or batching techniques"). If the PM named a specific mitigation, it must appear as its own concrete Action Step.
 - DO NOT include time estimates, effort predictions, or deadlines
 - DO NOT suggest priority levels
 - Keep each section brief and actionable
-- Include explainability fields so the user understands how this description was generated
+- Include explainability fields so the user understands how this description was generated{incident_rule}
 
 Return JSON only:
 {{
     "objective": "1-2 sentence goal",
-    "key_deliverables": ["Deliverable 1", "Deliverable 2", "Deliverable 3"],
+    "key_deliverables": ["Deliverable 1", "Deliverable 2", "Deliverable 3"],{incident_field}
     "action_steps": ["Step 1", "Step 2", "Step 3", "Step 4"],
     "potential_obstacles": ["Risk/obstacle 1", "Risk/obstacle 2"],
     "success_criteria": "How to know this task is complete",
@@ -396,7 +442,12 @@ Return JSON only:
                     md_parts.append("\n**Key Deliverables:**")
                     for item in result['key_deliverables'][:5]:
                         md_parts.append(f"- {item}")
-                
+
+                if result.get('immediate_mitigation'):
+                    md_parts.append("\n**⚠️ Immediate Mitigation / Fallback:**")
+                    for item in result['immediate_mitigation'][:3]:
+                        md_parts.append(f"- {item}")
+
                 if result.get('action_steps'):
                     md_parts.append("\n**Action Steps:**")
                     for item in result['action_steps'][:6]:
@@ -1865,6 +1916,11 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         estimated_hours = task_data.get('estimated_hours')
         estimated_cost = task_data.get('estimated_cost')
         hourly_rate = task_data.get('hourly_rate')
+
+        # AI-decomposed effort from the subtask breakdown (days). When present this is
+        # a stronger effort signal than the manual estimated_hours field.
+        subtask_effort_days = task_data.get('subtask_effort_days')
+        subtask_count = task_data.get('subtask_count')
         
         # Extract team context
         assignee_avg_completion = team_context.get('assignee_avg_completion_days', 0)
@@ -1876,8 +1932,17 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         assignee_completed_count = team_context.get('assignee_completed_tasks_count', 0)
         assignee_velocity = team_context.get('assignee_velocity_hours_per_day', 8)
         
-        # Calculate performance comparison
-        if team_avg_completion > 0 and assignee_avg_completion > 0:
+        # Calculate performance comparison.
+        # Require a minimum sample (N>=5) before trusting the assignee's PERSONAL
+        # average — with N=1 the "X% slower/faster" figure is noise and contradicts
+        # the assignee engine. Below the threshold, fall back to the team baseline.
+        if assignee_completed_count < 5:
+            performance_note = (
+                f"Velocity data insufficient for {assigned_to} "
+                f"({assignee_completed_count} completed task(s), N<5) — using team baseline "
+                f"speed for the estimate."
+            )
+        elif team_avg_completion > 0 and assignee_avg_completion > 0:
             if assignee_avg_completion < team_avg_completion:
                 performance_note = f"{assigned_to} is {round((1 - assignee_avg_completion/team_avg_completion) * 100)}% FASTER than team average"
             elif assignee_avg_completion > team_avg_completion:
@@ -1916,9 +1981,27 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 estimated_hours_note = f"Estimated Effort: {hours_val:.1f} hours"
         else:
             estimated_hours_note = "Estimated Effort: Not specified"
-        
-        # Determine data availability for honest AI reasoning
-        has_assignee_history = assignee_completed_count > 0
+
+        # AI-decomposed effort note — the sum of the subtask breakdown day estimates.
+        # This takes precedence over the manual estimated_hours when the two disagree.
+        subtask_effort_note = ""
+        try:
+            if subtask_effort_days is not None and float(subtask_effort_days) > 0:
+                days_val = float(subtask_effort_days)
+                count_txt = f" across {int(subtask_count)} subtasks" if subtask_count else ""
+                subtask_effort_note = (
+                    f"AI-DECOMPOSED EFFORT: {days_val:.1f} working days{count_txt} "
+                    f"(summed from the AI subtask breakdown). Treat this as the PRIMARY "
+                    f"effort signal — the timeline must not be shorter than this decomposed "
+                    f"total, even if the manual estimate above is smaller."
+                )
+        except (TypeError, ValueError):
+            subtask_effort_note = ""
+
+        # Determine data availability for honest AI reasoning. Treat <5 completed
+        # tasks as "no reliable personal history" so the timeline leans on the team
+        # average rather than a single-sample personal velocity.
+        has_assignee_history = assignee_completed_count >= 5
         has_team_history = team_completed_count > 0
         
         if has_assignee_history:
@@ -1941,6 +2024,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         Priority: {priority} | Assigned: {assigned_to}
         Complexity: {complexity_score}/10 ({complexity_label}) | Current workload: {current_workload} active tasks
         {estimated_hours_note}
+        {subtask_effort_note}
         {start_date_note}
         Skill Match: {skill_match_note}
         Collaboration Required: {'Yes' if collaboration_required else 'No'}
@@ -2103,6 +2187,121 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         return None
 
 
+def _skill_match_extremes(candidates: List[Dict]) -> tuple:
+    """Return (highest_skill_name, lowest_skill_name) by skill_match score.
+
+    Names are display_name (falling back to username). Returns (None, None) when
+    there are no candidates. When every candidate ties, both names are equal so
+    callers can suppress 'highest/lowest' phrasing entirely.
+    """
+    if not candidates:
+        return None, None
+
+    def _name(c: Dict) -> str:
+        return c.get('display_name') or c.get('username') or 'Unknown'
+
+    def _score(c: Dict) -> float:
+        try:
+            return float(c.get('skill_match', 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    highest = max(candidates, key=_score)
+    lowest = min(candidates, key=_score)
+    return _name(highest), _name(lowest)
+
+
+def _correct_skill_match_superlatives(ai_response: Dict, candidates: List[Dict]) -> None:
+    """Strip skill-match superlative claims from AI text that contradict the numbers.
+
+    The candidate factor scores are computed deterministically in Python and fed to
+    the model, but 'highest/lowest/best/worst skill match' phrasing is free-text the
+    LLM writes and can invert the ranking. This scans the reasoning / alternatives /
+    factor descriptions and neutralises any superlative that names the wrong candidate
+    (or that appears when all scores tie). Mutates ai_response in place and records a
+    warning when a correction is applied.
+    """
+    if not isinstance(ai_response, dict) or not candidates:
+        return
+
+    highest_name, lowest_name = _skill_match_extremes(candidates)
+    if not highest_name:
+        return
+    all_tied = highest_name == lowest_name
+
+    # Matches e.g. "the lowest skill match score", "highest skill-match", "best skill match".
+    # Optionally consumes a leading article so replacements don't leave "the a notable…".
+    superlative_re = re.compile(
+        r'(?:\b(?:the|a|an)\s+)?'
+        r'\b(highest|lowest|best|worst|strongest|weakest|top|greatest)\b'
+        r'([\s\w-]*?)\bskill[\s-]*match\b',
+        re.IGNORECASE,
+    )
+    high_words = {'highest', 'best', 'strongest', 'top', 'greatest'}
+    low_words = {'lowest', 'worst', 'weakest'}
+
+    corrections = {'count': 0}
+
+    def _mentions(text: str, name: str) -> bool:
+        return bool(name) and name.lower() in (text or '').lower()
+
+    def _fix(text: str) -> str:
+        if not isinstance(text, str) or not text:
+            return text
+
+        def _repl(match: re.Match) -> str:
+            word = match.group(1).lower()
+            # The candidate this superlative is attached to is whoever the surrounding
+            # sentence names; approximate by checking the whole text for the expected name.
+            if all_tied:
+                corrections['count'] += 1
+                return 'comparable skill match'
+            if word in high_words and not _mentions(text, highest_name):
+                corrections['count'] += 1
+                return 'a notable skill match'
+            if word in low_words and not _mentions(text, lowest_name):
+                corrections['count'] += 1
+                return 'a lower skill match'
+            return match.group(0)
+
+        return superlative_re.sub(_repl, text)
+
+    if 'reasoning' in ai_response:
+        ai_response['reasoning'] = _fix(ai_response.get('reasoning'))
+
+    for alt in ai_response.get('alternatives', []) or []:
+        if isinstance(alt, dict) and 'brief_reason' in alt:
+            # For an alternative, judge the superlative against THIS candidate's name.
+            name = alt.get('display_name') or alt.get('username') or ''
+            text = alt.get('brief_reason')
+            if isinstance(text, str) and text:
+                def _repl_alt(match: re.Match) -> str:
+                    word = match.group(1).lower()
+                    if all_tied:
+                        corrections['count'] += 1
+                        return 'comparable skill match'
+                    if word in high_words and name.lower() != (highest_name or '').lower():
+                        corrections['count'] += 1
+                        return 'a notable skill match'
+                    if word in low_words and name.lower() != (lowest_name or '').lower():
+                        corrections['count'] += 1
+                        return 'a lower skill match'
+                    return match.group(0)
+                alt['brief_reason'] = superlative_re.sub(_repl_alt, text)
+
+    for factor in ai_response.get('factors', []) or []:
+        if isinstance(factor, dict) and 'description' in factor:
+            factor['description'] = _fix(factor.get('description'))
+
+    if corrections['count']:
+        # Internal diagnostic only — must NOT leak into user-facing `warnings`,
+        # which the assignee UI renders as ⚠️ flags.
+        logger.info(
+            "Corrected %d skill-match superlative(s) that contradicted the computed scores.",
+            corrections['count'],
+        )
+
+
 def suggest_optimal_assignee(task_data: Dict, candidates_with_scores: List[Dict], board_context: Dict) -> Optional[Dict]:
     """
     Use AI to analyze scored candidates and suggest the optimal assignee with full explainability.
@@ -2125,17 +2324,63 @@ def suggest_optimal_assignee(task_data: Dict, candidates_with_scores: List[Dict]
         # Build candidate profiles text
         candidates_text = ""
         for i, c in enumerate(candidates_with_scores, 1):
+            n_done = c.get('total_completed')
+            velocity_conf = "" if n_done is None else (
+                f" [velocity data insufficient: only {n_done} completed task(s), N<5]"
+                if n_done < 5 else f" [based on {n_done} completed tasks]"
+            )
+            meets = c.get('meets_deadline')
+            if meets is True:
+                deadline_line = "  - Deadline Fit: CAN finish by the due date\n"
+            elif meets is False:
+                gap = c.get('deadline_gap_days')
+                deadline_line = f"  - Deadline Fit: CANNOT finish by the due date (over by ~{gap} day(s))\n"
+            else:
+                deadline_line = ""
             candidates_text += f"""
 Candidate {i}: {c.get('display_name', c.get('username', 'Unknown'))} (ID: {c.get('user_id')})
   - Overall Score: {c.get('overall_score', 0):.1f}/100
   - Skill Match: {c.get('skill_match', 0):.1f}/100
   - Availability: {c.get('availability', 0):.1f}/100 (Utilization: {c.get('utilization', 0):.1f}%, Active Tasks: {c.get('current_workload', 0)})
-  - Velocity: {c.get('velocity', 0):.1f}/100
+  - Velocity: {c.get('velocity', 0):.1f}/100{velocity_conf}
   - Reliability (On-time %): {c.get('reliability', 0):.1f}/100
   - Quality Score: {c.get('quality', 0):.1f}/100
   - Estimated Completion: {c.get('estimated_hours', 0):.1f} hours (by {c.get('estimated_completion', 'N/A')})
-"""
-        
+{deadline_line}"""
+
+        # Determine the true highest/lowest skill-match candidates so the AI's
+        # narrative cannot contradict the injected numbers (see post-validation below).
+        highest_skill_name, lowest_skill_name = _skill_match_extremes(candidates_with_scores)
+        skill_extremes_note = ""
+        if highest_skill_name and lowest_skill_name:
+            if highest_skill_name == lowest_skill_name:
+                skill_extremes_note = (
+                    f"NOTE: All candidates share the same skill-match score, so do NOT describe "
+                    f"any candidate as having the 'highest' or 'lowest' skill match."
+                )
+            else:
+                skill_extremes_note = (
+                    f"FACTUAL SKILL-MATCH RANKING (do NOT contradict this): "
+                    f"'{highest_skill_name}' has the HIGHEST skill-match score and "
+                    f"'{lowest_skill_name}' has the LOWEST skill-match score. "
+                    f"Only use 'highest/lowest skill match' phrasing consistent with this ranking."
+                )
+
+        # Feasibility note: if NO candidate can meet the deadline, the schedule itself
+        # is the problem — the model must say so rather than cheerfully picking the
+        # "least late" person. Only meaningful when a due date produced fit signals.
+        deadline_flags = [c.get('meets_deadline') for c in candidates_with_scores]
+        feasibility_note = ""
+        if deadline_flags and all(f is False for f in deadline_flags):
+            effort = task_data.get('subtask_effort_days')
+            effort_txt = f" (~{effort} days of decomposed effort)" if effort else ""
+            feasibility_note = (
+                f"CRITICAL — IMPOSSIBLE TIMELINE: NO candidate can finish this task by the "
+                f"due date{effort_txt}. You MUST state plainly that the timeline is not "
+                f"achievable regardless of who is assigned, and recommend extending the "
+                f"deadline or reducing scope BEFORE naming a recommended assignee."
+            )
+
         # Build required skills text
         required_skills = task_data.get('required_skills', [])
         if isinstance(required_skills, list) and required_skills:
@@ -2171,7 +2416,10 @@ Each candidate has been scored on 5 factors (0-100 scale) using historical perfo
 - **Reliability**: Their on-time task completion rate
 - **Quality**: Their quality score based on past work
 
+{feasibility_note}
+
 {candidates_text}
+{skill_extremes_note}
 
 ## Your Task
 Analyze all candidates holistically. Consider:
@@ -2218,7 +2466,11 @@ Respond with ONLY valid JSON in this exact format:
     }}
 }}
 
-IMPORTANT: Include 3-5 factors in the factors array. Include up to 3 alternatives (fewer if less than 4 candidates). Provide at least 1 assumption in explainability."""
+IMPORTANT: Include 3-5 factors in the factors array. Include up to 3 alternatives (fewer if less than 4 candidates). Provide at least 1 assumption in explainability.
+CRITICAL: Any 'highest/lowest/best/worst skill match' phrasing MUST agree with the FACTUAL SKILL-MATCH RANKING above and with the numeric Skill Match scores. Never call a candidate the lowest skill match if another candidate has a lower score.
+CRITICAL: If a candidate is marked "velocity data insufficient (N<5)", do NOT praise their velocity (e.g. "top-tier velocity"). Say their velocity is unproven and you are using the team baseline.
+CRITICAL: Respect each candidate's "Deadline Fit". Do NOT claim someone can deliver on time if they are marked as CANNOT finish by the due date. If an IMPOSSIBLE TIMELINE note is present, follow it exactly.
+CRITICAL: Output ONLY the final reasoning. Do NOT narrate your instructions, confirm adjustments, or add meta-commentary about how you worded or corrected anything."""
 
         ai_response_text = generate_ai_content(prompt, task_type='assignee_suggestion')
         
@@ -2262,7 +2514,10 @@ IMPORTANT: Include 3-5 factors in the factors array. Include up to 3 alternative
                 'data_quality': 'medium',
                 'assumptions': ['Used algorithmic scoring as primary signal.']
             }
-        
+
+        # Guardrail: correct any skill-match superlative the AI got backwards.
+        _correct_skill_match_superlatives(ai_response, candidates_with_scores)
+
         return ai_response
         
     except Exception as e:
@@ -2804,6 +3059,11 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
         4. For missing/neutral factors, make NO adjustment – do not assume difficulty.
         5. Final score must be between 1 and 10.
         6. In your "reasoning" field, explicitly name each factor and how it moved the score.
+        7. CONSISTENCY CHECK: The manual "Estimated Hours" is a HINT, not ground truth. If your
+           own subtask breakdown implies substantially more effort than that estimate (e.g. the
+           subtasks sum to multiple days but the estimate is only a few hours), do NOT let the
+           small estimate LOWER the complexity score. Treat Estimated Hours as neutral in that
+           case and note the contradiction in your reasoning.
 
         ## Output Format
         Return ONLY valid JSON – no extra text, no markdown.
@@ -2836,13 +3096,70 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
         }}
         """
         
+        def _parse_effort_days(subtasks):
+            """Sum subtask effort strings ("0.5 day", "1 day", "0.5-1 day") into days.
+            Ranges are averaged; hour-denominated values are converted at 8h/day.
+            Returns None when nothing parseable is found."""
+            if not isinstance(subtasks, list) or not subtasks:
+                return None
+            total = 0.0
+            matched = 0
+            for st in subtasks:
+                raw = str((st or {}).get('estimated_effort', '')) if isinstance(st, dict) else ''
+                nums = re.findall(r'\d+(?:\.\d+)?', raw)
+                if not nums:
+                    continue
+                is_range = bool(re.search(r'\d\s*-\s*\d', raw)) and len(nums) >= 2
+                value = (float(nums[0]) + float(nums[1])) / 2 if is_range else float(nums[0])
+                total += value / 8 if re.search(r'hour|hr', raw, re.IGNORECASE) else value
+                matched += 1
+            if matched == 0:
+                return None
+            return round(total, 1)
+
         def _enrich_result(result):
             """Guarantee factors_considered / factors_missing are always present so
-            the frontend can always render the explainability panel."""
+            the frontend can always render the explainability panel, and flag a manual
+            Estimated Hours value that contradicts the AI's own subtask decomposition."""
             if not result.get('factors_considered'):
                 result['factors_considered'] = factors_provided
             if not result.get('factors_missing'):
                 result['factors_missing'] = factors_missing
+
+            # Contradiction guardrail: if a manual estimate was provided but the AI's
+            # subtask breakdown implies materially more effort, surface it rather than
+            # silently letting the small estimate lower the complexity score.
+            try:
+                if estimated_hours is not None and float(estimated_hours) > 0:
+                    subtask_days = _parse_effort_days(result.get('subtasks'))
+                    if subtask_days is not None and subtask_days > 0:
+                        manual_days = float(estimated_hours) / 8.0
+                        # Decomposition implies at least ~2x the manual estimate.
+                        if subtask_days >= max(manual_days * 2, manual_days + 0.5):
+                            result['estimate_contradiction'] = {
+                                'manual_estimate_hours': round(float(estimated_hours), 1),
+                                'decomposed_effort_days': subtask_days,
+                                'message': (
+                                    f"Your manual estimate of {float(estimated_hours):.1f}h "
+                                    f"(~{manual_days:.1f} day) is much lower than the AI's own "
+                                    f"breakdown, which totals ~{subtask_days:.1f} days. The "
+                                    f"complexity score was NOT lowered by the small estimate — "
+                                    f"consider revising Estimated Hours."
+                                )
+                            }
+                            # Neutralise any "Estimated Hours -> lowers" factor so the
+                            # explainability panel doesn't credit the contradicted estimate.
+                            for f in result.get('factors_considered', []):
+                                if isinstance(f, dict) and f.get('name') == 'Estimated Hours' \
+                                        and f.get('direction') == 'lowers':
+                                    f['direction'] = 'neutral'
+                                    f['note'] = (
+                                        f"{f.get('note', '')} — ignored: contradicts the "
+                                        f"~{subtask_days:.1f}-day subtask breakdown"
+                                    ).strip(' —')
+            except (TypeError, ValueError):
+                pass
+
             return result
 
         def _fix_unescaped_json_strings(text):
