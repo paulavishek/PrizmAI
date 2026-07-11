@@ -1828,15 +1828,16 @@
         <div class="gantt-filters mb-3">
             <form method="GET" action="" class="d-flex flex-wrap align-items-center gap-2" id="gantt-filter-form">
                 <!-- Search Input -->
-                <div class="filter-group flex-grow-1" style="min-width: 200px; max-width: 300px;">
+                <div class="filter-group flex-grow-1" style="min-width: 200px; max-width: 340px;">
                     <div class="input-group">
                         <span class="input-group-text bg-white border-end-0">
                             <i class="fas fa-search text-muted"></i>
                         </span>
-                        <input type="text" name="search" class="form-control border-start-0" 
-                               placeholder="Search tasks..." 
+                        <input type="text" name="search" class="form-control border-start-0"
+                               placeholder="Search tasks..."
                                value="{{ search_query }}"
                                id="gantt-search-input">
+                        <button type="submit" class="btn btn-primary" id="gantt-search-btn">Search</button>
                     </div>
                 </div>
                 
@@ -1844,10 +1845,9 @@
                 <div class="filter-group">
                     <select name="status" class="form-select" id="gantt-status-filter" onchange="this.form.submit()">
                         <option value="">All Status</option>
-                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active Only</option>
-                        <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>To Do</option>
-                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>In Progress</option>
-                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✅ Done</option>
+                        {% for col in board_columns %}
+                        <option value="{{ col.0 }}" {% if status_filter == col.0|stringformat:"s" %}selected{% endif %}>{{ col.1 }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 
@@ -1889,26 +1889,11 @@
                     <i class="fas fa-filter me-1"></i>
                     Showing {{ tasks.count }} task{{ tasks.count|pluralize }}
                     {% if search_query %} matching "{{ search_query }}"{% endif %}
-                    {% if status_filter %} with status: {{ status_filter }}{% endif %}
+                    {% if status_filter_column_name %} in column: {{ status_filter_column_name }}{% endif %}
                     {% if priority_filter %} with priority: {{ priority_filter }}{% endif %}
                 </small>
             </div>
             {% endif %}
-
-            <script>
-            // P3-01: Debounced auto-submit for Gantt search input
-            (function() {
-                var ganttSearchInput = document.getElementById('gantt-search-input');
-                if (!ganttSearchInput) return;
-                var t = null;
-                ganttSearchInput.addEventListener('input', function() {
-                    clearTimeout(t);
-                    t = setTimeout(function() {
-                        document.getElementById('gantt-filter-form').submit();
-                    }, 300);
-                });
-            })();
-            </script>
         </div>
 
         {% if has_phases %}
