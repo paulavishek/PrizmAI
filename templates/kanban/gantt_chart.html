@@ -2872,7 +2872,8 @@
     function toggleCriticalPath(enabled) {
         showCriticalPath = enabled;
         applyCriticalPathStyling();
-        
+        buildTaskTable();
+
         // Update legend visibility
         const legend = document.getElementById('critical-path-legend');
         if (legend) {
