@@ -1205,6 +1205,34 @@
         stroke: #ef4444;
         stroke-width: 3;
     }
+
+    /* Chevron arrowhead (fixed size, does not scale with stroke-width) */
+    .fc-chevron {
+        stroke: none;
+    }
+
+    /* Hover focus mode: fade unrelated, highlight neighbours */
+    .fc-task-node,
+    .fc-dependency-arrow,
+    .fc-chevron {
+        transition: opacity 0.15s ease, stroke-width 0.15s ease;
+    }
+
+    .fc-task-node.fc-dimmed,
+    .fc-dependency-arrow.fc-dimmed,
+    .fc-chevron.fc-dimmed {
+        opacity: 0.12;
+    }
+
+    .fc-dependency-arrow.fc-active {
+        opacity: 1;
+        stroke: #fbbf24;
+        stroke-width: 3.5;
+    }
+
+    .fc-dependency-arrow.fc-active.critical-arrow {
+        stroke: #f87171;
+    }
     
     /* Phase separator lines */
     .fc-phase-separator {
@@ -2154,12 +2182,13 @@
                 <h5 class="modal-title" id="criticalPathFlowchartModalLabel">
                     <i class="fas fa-sitemap me-2"></i>Critical Path Network Diagram
                 </h5>
-                <div class="d-flex align-items-center gap-3 ms-auto">
-                    <div class="form-check form-switch text-white">
-                        <input class="form-check-input" type="checkbox" id="flowchart-phase-filter" checked>
-                        <label class="form-check-label small" for="flowchart-phase-filter">Show All Phases</label>
-                    </div>
-                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-phase-select" style="width: auto;">
+                <div class="d-flex align-items-center gap-2 ms-auto">
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-path-select" style="width: auto;" title="Filter by path type">
+                        <option value="all">All Paths</option>
+                        <option value="critical">Critical Path only</option>
+                        <option value="non-critical">Non-Critical only</option>
+                    </select>
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-phase-select" style="width: auto;" title="Filter by phase">
                         <option value="all">All Phases</option>
                     </select>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -2176,6 +2205,14 @@
                         <div class="legend-item-fc d-flex align-items-center gap-2">
                             <div class="legend-box non-critical"></div>
                             <span class="text-white small">Non-Critical (has slack)</span>
+                        </div>
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <div class="legend-box start-node"></div>
+                            <span class="text-white small">Start (no predecessors)</span>
+                        </div>
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <div class="legend-box end-node"></div>
+                            <span class="text-white small">End (no successors)</span>
                         </div>
                         <div class="legend-item-fc d-flex align-items-center gap-2">
                             <svg width="40" height="20">
@@ -2765,7 +2802,7 @@
                 task.slack = Math.round((task.LS - task.ES) / (1000 * 60 * 60 * 24));
                 
                 // Log detailed info for each task
-                console.log(`  Task ${taskId} "${task.name.substring(0, 20)}...": ES=${task.ES.toDateString()}, LS=${task.LS.toDateString()}, Slack=${task.slack} days ${task.slack <= 1 ? 'ðŸ”´ CRITICAL' : 'âšª Non-critical'}`);
+                console.log(`  Task ${taskId} "${task.name.substring(0, 20)}...": ES=${task.ES.toDateString()}, LS=${task.LS.toDateString()}, Slack=${task.slack} days ${task.slack <= 1 ? '🔴 CRITICAL' : '⚪ Non-critical'}`);
                 
                 // Tasks with zero or near-zero slack are on the critical path
                 // Use <= 1 to account for rounding errors
@@ -5894,7 +5931,7 @@
     /**
      * Generate the critical path network diagram flowchart
      */
-    function generateCriticalPathFlowchart(phaseFilter = 'all') {
+    function generateCriticalPathFlowchart(phaseFilter = 'all', pathFilter = 'all') {
         const svgContainer = document.getElementById('flowchart-svg');
         const statsElement = document.getElementById('flowchart-stats');
         if (!svgContainer) return;
@@ -5912,16 +5949,15 @@
         // Clear existing content
         svgContainer.innerHTML = '';
 
-        // Get task data and filter by phase if needed
-        let taskList = tasks.filter(t => 
-            t.start && t.end && 
-            t.start !== '' && t.end !== '' && 
-            !t.name.includes('Phase') || !t.name.includes('tasks')
+        // Build the task map from the WHOLE project (all valid tasks), not just the
+        // selected phase. The critical path is a project-wide, cross-phase chain, so
+        // the CPM must see every task; the phase dropdown only filters what is DISPLAYED.
+        // Exclude phase-header / summary rows (e.g. "Phase 2 (11 tasks)") which are not real tasks.
+        let taskList = tasks.filter(t =>
+            t.start && t.end &&
+            t.start !== '' && t.end !== '' &&
+            !(t.name.includes('Phase') && t.name.includes('tasks'))
         );
-
-        if (phaseFilter !== 'all') {
-            taskList = taskList.filter(t => t.phase === phaseFilter);
-        }
 
         if (taskList.length === 0) {
             svgContainer.innerHTML = `
@@ -5991,18 +6027,8 @@
             task.isEnd = task.successors.length === 0;
         });
 
-        // Group tasks by phase first (needed for per-phase critical path calculation)
-        const phaseTasksMap = new Map();
-        taskMap.forEach((task, taskId) => {
-            const phase = task.phase || 'No Phase';
-            if (!phaseTasksMap.has(phase)) {
-                phaseTasksMap.set(phase, []);
-            }
-            phaseTasksMap.get(phase).push(taskId);
-        });
-
-        // Calculate critical path per phase for accurate highlighting
-        // This ensures each phase shows its own critical path
+        // CPM helper: forward/backward pass + slack over a given set of task ids.
+        // Called once with the WHOLE task set for a single, continuous project-wide critical path.
         function calculateCriticalPathForTasks(taskIds) {
             if (taskIds.length === 0) return;
 
@@ -6062,29 +6088,31 @@
             });
         }
 
-        // If viewing all phases, calculate critical path per phase separately
-        // This ensures each phase shows its own critical path
-        if (phaseFilter === 'all') {
-            phaseTasksMap.forEach((taskIds, phase) => {
-                calculateCriticalPathForTasks(taskIds);
-            });
-        } else {
-            // Single phase view - calculate for all visible tasks
-            calculateCriticalPathForTasks(Array.from(taskMap.keys()));
-        }
+        // TRUE project-wide critical path: run a SINGLE global CPM pass over the entire
+        // task graph. Computing it per-phase (as before) made each phase its own mini-project
+        // with its own local start/end, which broke the 0-slack chain at every phase boundary
+        // and produced disconnected "critical islands". One global pass keeps the critical
+        // path a continuous, unbroken chain from project start to project end.
+        calculateCriticalPathForTasks(Array.from(taskMap.keys()));
 
         // Calculate overall project end for stats
         const projectEnd = Math.max(...Array.from(taskMap.values()).map(t => t.EF || 0));
 
-        // Use phaseTasksMap for layout (already created above)
-        const phaseGroups = phaseTasksMap;
+        // Layout groups: only the phase(s) the user chose to DISPLAY (critical status is global).
+        const phaseGroups = new Map();
+        taskMap.forEach((task, taskId) => {
+            if (phaseFilter !== 'all' && task.phase !== phaseFilter) return;
+            const phase = task.phase || 'No Phase';
+            if (!phaseGroups.has(phase)) phaseGroups.set(phase, []);
+            phaseGroups.get(phase).push(taskId);
+        });
 
         // Layout configuration
         const nodeWidth = 180;
         const nodeHeight = 70;
-        const horizontalGap = 80;
+        const horizontalGap = 120;
         const verticalGap = 40;
-        const phaseGap = 100;
+        const phaseGap = 200;
         const padding = 160;
 
         // Calculate positions using layered approach per phase
@@ -6225,45 +6253,93 @@
             }
         });
 
+        // Visibility per the path-type filter (All / Critical only / Non-Critical only)
+        const isNodeVisible = (t) => pathFilter === 'all'
+            || (pathFilter === 'critical' && t.isCritical)
+            || (pathFilter === 'non-critical' && !t.isCritical);
+
+        // Arrowhead sits this many px before the node's left edge (mirrors the Gantt chevron offset)
+        const ARROW_GAP = 14;
+
         // Draw dependency arrows first (so they appear behind nodes)
         taskMap.forEach((task, taskId) => {
             const fromPos = nodePositions.get(taskId);
-            if (!fromPos) return;
+            if (!fromPos || !isNodeVisible(task)) return;
 
             task.successors.forEach(succId => {
                 const toPos = nodePositions.get(succId);
                 if (!toPos) return;
 
                 const succTask = taskMap.get(succId);
-                const isCriticalArrow = task.isCritical && succTask && succTask.isCritical;
+                if (!succTask || !isNodeVisible(succTask)) return;
+                const isCriticalArrow = task.isCritical && succTask.isCritical;
 
-                // Calculate arrow path (from right of source to left of target)
+                // Calculate arrow path (from right of source to just before left of target)
                 const startX = fromPos.x + nodeWidth;
                 const startY = fromPos.y + nodeHeight / 2;
-                const endX = toPos.x;
+                const endX = toPos.x - ARROW_GAP;
                 const endY = toPos.y + nodeHeight / 2;
 
                 // Create curved path
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (startX + endX) / 2;
-                
+
                 // Bezier curve for smoother arrows
                 const d = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
-                
+
                 path.setAttribute('d', d);
                 path.setAttribute('class', `fc-dependency-arrow ${isCriticalArrow ? 'critical-arrow' : ''}`);
-                path.setAttribute('marker-end', `url(#arrowhead-fc${isCriticalArrow ? '-critical' : ''})`);
+                path.setAttribute('data-from', taskId);
+                path.setAttribute('data-to', succId);
                 svgContainer.appendChild(path);
+
+                // Standalone chevron arrowhead (like the main Gantt) instead of marker-end.
+                // A fixed-size polygon does NOT scale with stroke-width, so critical (3px)
+                // and non-critical (2px) arrows get identical, undistorted heads. The curve
+                // arrives horizontally at (endX, endY), so the chevron points right into the node.
+                const chevronColor = isCriticalArrow ? '#ef4444' : '#f59e0b';
+                const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                chevron.setAttribute('class', `fc-chevron ${isCriticalArrow ? 'critical-arrow' : ''}`);
+                chevron.setAttribute('fill', chevronColor);
+                chevron.setAttribute('points', `${endX - 9},${endY - 5} ${endX + 1},${endY} ${endX - 9},${endY + 5}`);
+                chevron.setAttribute('data-from', taskId);
+                chevron.setAttribute('data-to', succId);
+                svgContainer.appendChild(chevron);
             });
         });
+
+        // Hover focus mode: dim everything unrelated, highlight the hovered node's
+        // direct predecessors/successors and their connecting arrows.
+        function applyHoverFocus(hoveredId) {
+            const related = new Set([hoveredId]);
+            const ht = taskMap.get(hoveredId);
+            if (ht) {
+                ht.dependencies.forEach(d => related.add(d));
+                ht.successors.forEach(s => related.add(s));
+            }
+            svgContainer.querySelectorAll('.fc-task-node').forEach(n => {
+                n.classList.toggle('fc-dimmed', !related.has(n.getAttribute('data-node-id')));
+            });
+            svgContainer.querySelectorAll('.fc-dependency-arrow, .fc-chevron').forEach(a => {
+                const active = a.getAttribute('data-from') === hoveredId || a.getAttribute('data-to') === hoveredId;
+                a.classList.toggle('fc-active', active);
+                a.classList.toggle('fc-dimmed', !active);
+            });
+        }
+        function clearHoverFocus() {
+            svgContainer.querySelectorAll('.fc-dimmed, .fc-active').forEach(el => {
+                el.classList.remove('fc-dimmed', 'fc-active');
+            });
+        }
 
         // Draw task nodes
         taskMap.forEach((task, taskId) => {
             const pos = nodePositions.get(taskId);
-            if (!pos) return;
+            if (!pos || !isNodeVisible(task)) return;
 
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('class', `fc-task-node ${task.isCritical ? 'critical' : 'non-critical'} ${task.isStart ? 'start-node' : ''} ${task.isEnd ? 'end-node' : ''}`);
+            g.setAttribute('data-node-id', taskId);
             g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
 
             // Background rect
@@ -6299,7 +6375,7 @@
             slackText.setAttribute('y', 40);
             slackText.setAttribute('text-anchor', 'middle');
             slackText.setAttribute('class', 'fc-task-slack');
-            slackText.textContent = task.isCritical ? 'ðŸ”¥ Slack: 0 days' : `â± Slack: ${task.slack} days`;
+            slackText.textContent = task.isCritical ? '🔥 Slack: 0 days' : `⌛ Slack: ${task.slack} days`;
             g.appendChild(slackText);
 
             // Duration
@@ -6310,6 +6386,10 @@
             durationText.setAttribute('class', 'fc-task-duration');
             durationText.textContent = `Duration: ${task.duration} days`;
             g.appendChild(durationText);
+
+            // Hover focus: highlight this node's neighbours, fade the rest
+            g.addEventListener('mouseenter', () => applyHoverFocus(taskId));
+            g.addEventListener('mouseleave', clearHoverFocus);
 
             // Click handler to navigate to task
             g.style.cursor = 'pointer';
@@ -6346,24 +6426,28 @@
         const showFlowchartBtn = document.getElementById('show-critical-path-flowchart');
         const flowchartModal = document.getElementById('criticalPathFlowchartModal');
         const phaseSelect = document.getElementById('flowchart-phase-select');
-        
+        const pathSelect = document.getElementById('flowchart-path-select');
+
+        // Re-render using the current phase + path dropdown values
+        function regenerateFlowchart() {
+            generateCriticalPathFlowchart(
+                phaseSelect ? phaseSelect.value : 'all',
+                pathSelect ? pathSelect.value : 'all'
+            );
+        }
+
         if (showFlowchartBtn && flowchartModal) {
             showFlowchartBtn.addEventListener('click', function() {
                 const modal = new bootstrap.Modal(flowchartModal);
                 modal.show();
-                
+
                 // Generate flowchart when modal opens
-                setTimeout(() => {
-                    generateCriticalPathFlowchart('all');
-                }, 100);
+                setTimeout(regenerateFlowchart, 100);
             });
-            
-            // Re-generate on phase filter change
-            if (phaseSelect) {
-                phaseSelect.addEventListener('change', function() {
-                    generateCriticalPathFlowchart(this.value);
-                });
-            }
+
+            // Re-generate on phase or path filter change
+            if (phaseSelect) phaseSelect.addEventListener('change', regenerateFlowchart);
+            if (pathSelect) pathSelect.addEventListener('change', regenerateFlowchart);
         }
 
         // ============================================
