@@ -3751,27 +3751,13 @@ def gantt_chart(request, board_id):
             Q(title__icontains=search_query) | Q(description__icontains=search_query)
         )
     
-    # Apply status filter (based on column name patterns)
-    if status_filter:
-        if status_filter == 'todo':
-            # Tasks not in progress or done columns
-            tasks = tasks.exclude(
-                Q(column__name__icontains='progress') | 
-                Q(column__name__icontains='done') | 
-                Q(column__name__icontains='complete')
-            )
-        elif status_filter == 'in_progress':
-            tasks = tasks.filter(column__name__icontains='progress')
-        elif status_filter == 'done':
-            tasks = tasks.filter(
-                Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-            )
-        elif status_filter == 'active':
-            # Active = To Do + In Progress (exclude completed)
-            tasks = tasks.exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-            )
-    
+    # Apply status filter — matches an exact column on this board (by id), so
+    # the dropdown always reflects this board's real columns instead of a
+    # fixed set of semantic categories that may not match how a given board
+    # names/splits its columns (e.g. Backlog vs To Do).
+    if status_filter and status_filter.isdigit():
+        tasks = tasks.filter(column_id=int(status_filter), column__board=board)
+
     # Apply priority filter
     if priority_filter:
         tasks = tasks.filter(priority=priority_filter)
@@ -3861,6 +3847,13 @@ def gantt_chart(request, board_id):
         Q(board_memberships__board=board) | Q(created_boards=board)
     ).distinct().order_by('username')
 
+    # Human-readable name of the selected status-filter column, for the
+    # "Showing N tasks... with status: X" summary (status_filter itself is a
+    # column id, not a readable label).
+    status_filter_column_name = None
+    if status_filter and status_filter.isdigit():
+        status_filter_column_name = dict(board_columns).get(int(status_filter))
+
     context = {
         'board': board,
         'tasks': tasks,
@@ -3873,6 +3866,7 @@ def gantt_chart(request, board_id):
         # Gantt filter context
         'search_query': search_query,
         'status_filter': status_filter,
+        'status_filter_column_name': status_filter_column_name,
         'priority_filter': priority_filter,
         'assignee_filter': assignee_filter,
         'assignees': assignees,
