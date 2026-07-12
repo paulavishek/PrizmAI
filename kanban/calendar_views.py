@@ -993,9 +993,25 @@ def calendar_event_rsvp(request, event_id):
     link.save(update_fields=['status', 'responded_at'])
 
     event = link.event
+    past_tense = 'accepted' if action == 'accept' else 'declined'
+
+    # The original "invited you... open the event to accept or decline" notification(s)
+    # sent to this recipient are now stale — update them in place so the notification
+    # list and AI digest reflect the response instead of re-prompting for it.
+    organizer_name = event.created_by.get_full_name() or event.created_by.username
+    responded_text = (
+        f'You {past_tense} {organizer_name}\'s invitation to '
+        f'"{event.title}" on {event.start_datetime.strftime("%b %d, %Y")}.'
+    )
+    from messaging.models import Notification
+    Notification.objects.filter(
+        recipient=request.user,
+        notification_type='EVENT_INVITED',
+        action_url=f'/calendar/events/{event.id}/',
+    ).update(text=responded_text, ai_summary=responded_text[:200])
+
     if event.created_by_id != request.user.id:
         responder = request.user.get_full_name() or request.user.username
-        past_tense = 'accepted' if action == 'accept' else 'declined'
         _create_notification(
             recipient=event.created_by,
             sender=request.user,
