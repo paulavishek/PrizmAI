@@ -183,7 +183,7 @@ class Command(BaseCommand):
                 'title': 'Team Lunch - Sprint 2 Celebration',
                 'description': 'Celebrating successful Sprint 2 delivery! Dashboard UI and Authentication shipped on time.',
                 'event_type': 'team_event',
-                'visibility': 'team',
+                'visibility': 'public',
                 'start_datetime': timezone.make_aware(datetime.combine(self.today + timedelta(days=7), time(12, 0))),
                 'end_datetime': timezone.make_aware(datetime.combine(self.today + timedelta(days=7), time(13, 30))),
                 'location': 'Downtown Bistro',

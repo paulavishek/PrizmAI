@@ -319,21 +319,22 @@ def unified_calendar_events_api(request):
     event_qs = CalendarEvent.objects.filter(
         # My own events — all types, all visibility
         Q(created_by=request.user) |
-        # Events I'm invited to, team-visible only. Declining removes it from
+        # Events I'm invited to, team- or public-visible. Declining removes it from
         # my calendar (a pending invite still shows — same as Google/Outlook,
         # where you see the event before responding).
         Q(
             participant_links__user=request.user,
             participant_links__status__in=[CalendarEventParticipant.PENDING, CalendarEventParticipant.ACCEPTED],
-            visibility='team',
+            visibility__in=['team', 'public'],
         ) |
-        # Teammate events shared as team-visible.  A team-visible MEETING shows
-        # other teammates a sanitized "busy" block (see title sanitization below)
-        # so the "Team can see I'm busy" promise holds for the default event type.
+        # Teammate events shared as team- or public-visible. A team-visible MEETING
+        # shows other teammates a sanitized "busy" block (see title sanitization
+        # below) so the "Team can see I'm busy" promise holds; public team_events
+        # are shown in full instead of being hidden.
         Q(
             created_by__in=board_member_ids,
             event_type__in=['out_of_office', 'busy_block', 'team_event', 'meeting'],
-            visibility='team',
+            visibility__in=['team', 'public'],
         )
     ).select_related('board', 'linked_task', 'created_by').prefetch_related(
         'participants', 'participant_links__user'
@@ -484,9 +485,9 @@ def unified_calendar_events_api(request):
 
         # A sanitized "busy"/OOO block (teammate_status) must not leak the reason
         # in the JSON payload either — the title is already redacted above, so
-        # blank out notes, location and participants for non-team_event blocks.
-        # (team_event is intentionally fully shared.)
-        sanitized = (layer == 'teammate_status') and ev.event_type != 'team_event'
+        # blank out notes, location and participants unless visibility='public'
+        # (only team_event events can be public — see create/edit views).
+        sanitized = (layer == 'teammate_status') and ev.visibility != 'public'
         participant_names = [] if sanitized else [p.username for p in ev.participants.all()]
         events.append({
             'id': f'event-{ev.id}',
@@ -713,9 +714,16 @@ def calendar_create_event(request):
     if event_type not in ('meeting', 'out_of_office', 'busy_block', 'team_event'):
         event_type = 'meeting'
 
-    # Visibility field
+    # Visibility field. 'public' is only reachable via event_type='team_event' —
+    # team_event is always fully shared board-wide, so its visibility is forced
+    # to 'public' regardless of what was submitted; any other type is not
+    # allowed to claim 'public' (that would bypass the "team" redaction).
     visibility = data.get('visibility', 'team')
-    if visibility not in ('team', 'private'):
+    if visibility not in ('team', 'public', 'private'):
+        visibility = 'team'
+    if event_type == 'team_event':
+        visibility = 'public'
+    elif visibility == 'public':
         visibility = 'team'
 
     description = data.get('description', '').strip()
@@ -906,10 +914,11 @@ def calendar_event_detail(request, event_id):
         event.created_by == request.user or
         event.participants.filter(id=request.user.id).exists()
     )
-    if not can_view and event.visibility == 'team':
-        # Board members may view team-shared OOO/busy/team events.  Use the same
-        # demo-aware teammate scope as the calendar feed so a block that is
-        # visible on the grid is also openable (and vice-versa).
+    if not can_view and event.visibility in ('team', 'public'):
+        # Board members may view team-shared OOO/busy/team events, and public
+        # team_events. Use the same demo-aware teammate scope as the calendar
+        # feed so a block that is visible on the grid is also openable (and
+        # vice-versa).
         shared_boards = _teammate_boards(
             request.user, _user_boards(request.user)
         ).filter(
@@ -938,11 +947,11 @@ def calendar_event_detail(request, event_id):
 
     # If the viewer is neither the creator nor a participant, they are only here
     # via "Team can see I'm busy" visibility — show a sanitized busy/OOO block so
-    # the reason (title, notes, location, participants) is not leaked.  Team
-    # events are intentionally fully shared, so they are never sanitized.
+    # the reason (title, notes, location, participants) is not leaked. Events
+    # marked visibility='public' (only team_event can be) are never sanitized.
     is_mine = event.created_by_id == request.user.id
     is_participant = event.participants.filter(id=request.user.id).exists()
-    sanitized = (not is_mine) and (not is_participant) and event.event_type != 'team_event'
+    sanitized = (not is_mine) and (not is_participant) and event.visibility != 'public'
     owner_name = event.created_by.get_full_name() or event.created_by.username
     if sanitized:
         display_title = (
@@ -1055,6 +1064,13 @@ def calendar_event_edit(request, event_id):
         event.description = request.POST.get('description', '').strip() or None
         event.location = request.POST.get('location', '').strip() or None
         event.visibility = request.POST.get('visibility', event.visibility)
+        if event.visibility not in ('team', 'public', 'private'):
+            event.visibility = 'team'
+        # 'public' is only reachable via event_type='team_event' (see create view).
+        if event.event_type == 'team_event':
+            event.visibility = 'public'
+        elif event.visibility == 'public':
+            event.visibility = 'team'
 
         is_all_day = request.POST.get('is_all_day') == 'on'
         event.is_all_day = is_all_day
