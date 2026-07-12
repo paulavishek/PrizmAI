@@ -3009,6 +3009,8 @@ class CalendarEvent(models.Model):
 
     visibility controls who sees the event on the calendar:
       team    (default) — teammates see you're blocked (but not the private reason)
+      public            — full details (title, notes, participants) visible to
+                           every board member; only reachable via event_type='team_event'
       private           — only you see it; completely hidden from others
     """
     EVENT_TYPE_CHOICES = [
@@ -3020,6 +3022,7 @@ class CalendarEvent(models.Model):
 
     VISIBILITY_CHOICES = [
         ('team',    "Team can see I'm busy"),
+        ('public',  'Public (visible to entire board)'),
         ('private', 'Private (only me)'),
     ]
 

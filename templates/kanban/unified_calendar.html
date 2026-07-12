@@ -293,6 +293,7 @@
             <label class="form-label fw-semibold">Visibility</label>
             <select class="form-select" id="event-visibility">
               <option value="team">Team can see I’m busy</option>
+              <option value="public">🌐 Public (visible to entire board)</option>
               <option value="private">🔒 Private (only me)</option>
             </select>
             <small class="text-muted" id="event-visibility-hint" style="font-size:0.78rem;">Teammates see you’re blocked but not the reason.</small>
@@ -1027,6 +1028,21 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('event-all-day').checked = true;
             document.getElementById('event-datetime-row').style.display = 'none';
             document.getElementById('event-allday-row').style.removeProperty('display');
+        }
+        // Team Event is always fully shared board-wide — lock visibility to
+        // "Public" instead of silently overriding whatever the creator picked.
+        const visSelect = document.getElementById('event-visibility');
+        const visHint = document.getElementById('event-visibility-hint');
+        if (type === 'team_event') {
+            visSelect.value = 'public';
+            visSelect.disabled = true;
+            visHint.textContent = 'Team Events are always visible to the whole board — title, notes and participants are shown to everyone.';
+        } else {
+            visSelect.disabled = false;
+            if (visSelect.value === 'public') {
+                visSelect.value = 'team';
+            }
+            visHint.textContent = 'Teammates see you’re blocked but not the reason.';
         }
     }
     document.getElementById('event-type').addEventListener('change', function() {
