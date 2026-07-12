@@ -639,12 +639,13 @@ def ai_digest_notifications(request):
     try:
         from kanban.utils.ai_utils import generate_ai_content
         prompt = f"""You are a professional project management assistant for PrizmAI.
-Below are {notification_count} recent notifications for a user. Write a short morning-briefing-style
-summary in plain prose — no bullet points, no asterisks, no lists. Maximum 4–5 sentences total.
+Below are {notification_count} recent notifications for a user. Write a short summary in plain
+prose — no bullet points, no asterisks, no lists. Maximum 4–5 sentences total. Do not open with
+a time-of-day greeting (e.g. "Good morning") — you don't know what time it is for this user.
 
 Group notifications by automation rule name or board where applicable. Mention the total count,
 highlight any patterns (e.g. all from the same board, all triggered by the same rule, all related
-to overdue tasks). Write as if you are a concise chief-of-staff handing the user a verbal briefing.
+to overdue tasks).
 
 Notifications:
 {notifications_text}
@@ -653,7 +654,10 @@ Rules:
 - Plain sentences only — no bullet points, no dashes, no asterisks, no markdown formatting
 - Maximum 4–5 sentences regardless of notification count
 - Group by rule name or board, mention totals and patterns
-- Professional, direct tone — like a morning briefing, not a list"""
+- Professional, direct tone — no time-of-day greetings
+- Only summarize what is in the notifications below — do not promise future actions,
+  ongoing monitoring, or follow-up (e.g. never say things like "I will keep an eye on..."
+  or "I'll notify you if..."). This is a one-time summary, not a standing service."""
 
         digest = generate_ai_content(prompt, task_type='simple')
         if digest:
