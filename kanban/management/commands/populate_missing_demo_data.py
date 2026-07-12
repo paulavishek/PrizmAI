@@ -234,10 +234,11 @@ class Command(BaseCommand):
             ev = CalendarEvent.objects.create(
                 board=self.board,
                 linked_task=linked_task,
+                is_demo=True,
                 **ev_data,
             )
             if participants:
-                ev.participants.set(participants)
+                ev.participants.set(participants, through_defaults={'status': 'accepted'})
             count += 1
 
         self.stdout.write(f'   [OK] Created {count} calendar events')

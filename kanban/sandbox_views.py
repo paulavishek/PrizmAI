@@ -2201,10 +2201,13 @@ def _clone_calendar_events_for_user(user):
                 board=sb,
                 linked_task=new_linked,
                 created_by=user,
+                is_demo=True,
             )
             participants = list(ev.participants.all())
             if participants:
-                clone.participants.set(participants)
+                # Cloned demo participants are already-established attendees in
+                # the seed narrative, not real pending invites to respond to.
+                clone.participants.set(participants, through_defaults={'status': 'accepted'})
 
 
 def _leave_demo_org(user):
@@ -2512,7 +2515,7 @@ def _purge_existing_sandbox(user):
     try:
         from kanban.models import CalendarEvent
         # Clean user-created calendar events (not board-scoped ones)
-        CalendarEvent.objects.filter(created_by=user, board__isnull=True).delete()
+        CalendarEvent.objects.filter(created_by=user, board__isnull=True, is_demo=True).delete()
     except Exception:
         logger.warning(
             "_purge_existing_sandbox: a cleanup step failed for user %s "

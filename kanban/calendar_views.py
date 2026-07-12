@@ -27,7 +27,7 @@ from django.views.decorators.http import require_POST, require_GET
 
 from django.db.models import Max
 
-from .models import Board, Column, Task, TaskActivity, CalendarEvent
+from .models import Board, Column, Task, TaskActivity, CalendarEvent, CalendarEventParticipant
 from .decorators import demo_write_guard
 
 logger = logging.getLogger(__name__)
@@ -143,26 +143,15 @@ def _json_for_script(obj):
 def _event_workspace_scope(user):
     """A ``Q`` limiting CalendarEvents to the user's current workspace mode.
 
-    CalendarEvent has no workspace field, so the only reliable anchor is the
-    event's board: demo events live on the user's own sandbox boards, real events
-    on real boards.  Without this, the "my own events" visibility clause
-    (``created_by=user``) would surface a user's *demo* events in their real
-    workspace and vice-versa.  Board-less events have no workspace anchor, so
-    they are treated as personal/real and never shown inside demo mode.
-
-    Note: demo events are cloned per-user onto their sandbox boards
-    (``_clone_calendar_events_for_user``); we deliberately do NOT scope to the
-    shared official demo board here, so users read only their own isolated copy
-    rather than the shared template events (which surfaced inconsistently across
-    users depending on sandbox membership).
+    Keyed on ``CalendarEvent.is_demo``, set once at creation time (mirrors
+    ``DecisionCenterBriefing.is_demo``).  Previously this inferred demo-ness
+    from the event's board (``board__is_sandbox_copy``), which meant board-less
+    events — the "Board (optional)" dropdown defaults to none — had no
+    workspace anchor at all and were silently excluded from every fetch made
+    while viewing demo mode, even though the event was created there.
     """
-    profile = getattr(user, 'profile', None)
-    if getattr(profile, 'is_viewing_demo', False):
-        return Q(board__is_sandbox_copy=True)
-    return (
-        Q(board__isnull=True) |
-        Q(board__is_sandbox_copy=False, board__is_official_demo_board=False)
-    )
+    from kanban.utils.demo_protection import user_is_demo
+    return Q(is_demo=user_is_demo(user))
 
 
 # ---------------------------------------------------------------------------
@@ -330,8 +319,14 @@ def unified_calendar_events_api(request):
     event_qs = CalendarEvent.objects.filter(
         # My own events — all types, all visibility
         Q(created_by=request.user) |
-        # Events I'm invited to, team-visible only
-        Q(participants=request.user, visibility='team') |
+        # Events I'm invited to, team-visible only. Declining removes it from
+        # my calendar (a pending invite still shows — same as Google/Outlook,
+        # where you see the event before responding).
+        Q(
+            participant_links__user=request.user,
+            participant_links__status__in=[CalendarEventParticipant.PENDING, CalendarEventParticipant.ACCEPTED],
+            visibility='team',
+        ) |
         # Teammate events shared as team-visible.  A team-visible MEETING shows
         # other teammates a sanitized "busy" block (see title sanitization below)
         # so the "Team can see I'm busy" promise holds for the default event type.
@@ -340,7 +335,9 @@ def unified_calendar_events_api(request):
             event_type__in=['out_of_office', 'busy_block', 'team_event', 'meeting'],
             visibility='team',
         )
-    ).select_related('board', 'linked_task', 'created_by').prefetch_related('participants').distinct()
+    ).select_related('board', 'linked_task', 'created_by').prefetch_related(
+        'participants', 'participant_links__user'
+    ).distinct()
 
     # Demo / real workspace isolation — task scoping already separates the two
     # via `boards`, but events bypassed that (they're matched by created_by /
@@ -429,8 +426,12 @@ def unified_calendar_events_api(request):
     for ev in event_qs:
         is_mine = (ev.created_by_id == request.user.id)
         # Participants who are invited to an event should see full details, not the
-        # sanitized teammate_status view.
-        is_invited = not is_mine and any(p.id == request.user.id for p in ev.participants.all())
+        # sanitized teammate_status view — unless they've declined, in which case
+        # they fall back to whatever teammate-visibility they'd otherwise get.
+        is_invited = not is_mine and any(
+            link.user_id == request.user.id and link.status != CalendarEventParticipant.DECLINED
+            for link in ev.participant_links.all()
+        )
         layer = 'event' if (is_mine or is_invited) else 'teammate_status'
 
         # Use explicit astimezone() — bypasses Django's thread-local timezone
@@ -445,9 +446,20 @@ def unified_calendar_events_api(request):
             end_str_fc      = (local_end.date() + timedelta(days=1)).isoformat()
             ev_end_date_str = local_end.strftime('%Y-%m-%d')  # inclusive last calendar day
         else:
-            start_str_fc    = ev.start_datetime.isoformat()
-            end_str_fc      = ev.end_datetime.isoformat()
-            ev_end_date_str = ev.end_datetime.astimezone(_srv_tz).strftime('%Y-%m-%d')
+            # Emit a *floating* local string (no UTC offset) rather than
+            # ev.start_datetime.isoformat(). FullCalendar only converts an
+            # offset-bearing string into the configured `timeZone` when a
+            # named-timezone plugin (moment-timezone/luxon) is loaded — this
+            # project vendors the core Standard Bundle only, so an offset
+            # string like "...T02:44:00+00:00" was rendered as literal
+            # "2:44a" instead of being shifted to the configured Asia/Kolkata
+            # zone. Pre-converting server-side (as the is_all_day branch
+            # above already does) sidesteps the missing plugin entirely.
+            local_start_dt  = ev.start_datetime.astimezone(_srv_tz)
+            local_end_dt    = ev.end_datetime.astimezone(_srv_tz)
+            start_str_fc    = local_start_dt.strftime('%Y-%m-%dT%H:%M:%S')
+            end_str_fc      = local_end_dt.strftime('%Y-%m-%dT%H:%M:%S')
+            ev_end_date_str = local_end_dt.strftime('%Y-%m-%d')
 
         linked_task_title = ev.linked_task.title if ev.linked_task else None
 
@@ -727,6 +739,8 @@ def calendar_create_event(request):
         except (ValueError, TypeError):
             pass
 
+    from kanban.utils.demo_protection import user_is_demo
+
     event = CalendarEvent.objects.create(
         title=title,
         description=description or None,
@@ -739,6 +753,7 @@ def calendar_create_event(request):
         board=board,
         linked_task=linked_task,
         created_by=request.user,
+        is_demo=user_is_demo(request.user),
     )
 
     # Participants — only relevant for Meeting and Team Event
@@ -765,7 +780,8 @@ def calendar_create_event(request):
             notification_type='EVENT_INVITED',
             text=(
                 f'{request.user.get_full_name() or request.user.username} invited you to '
-                f'"{event.title}" on {event.start_datetime.strftime("%b %d, %Y")}{board_context}.'
+                f'"{event.title}" on {event.start_datetime.strftime("%b %d, %Y")}{board_context}. '
+                f'Open the event to accept or decline.'
             ),
             action_url=f'/calendar/events/{event.id}/',
         )
@@ -776,8 +792,13 @@ def calendar_create_event(request):
         fc_start = event.start_datetime.date().isoformat()
         fc_end = (event.end_datetime.date() + timedelta(days=1)).isoformat()
     else:
-        fc_start = event.start_datetime.isoformat()
-        fc_end = event.end_datetime.isoformat()
+        # Floating local string — see the matching comment in
+        # unified_calendar_events_api; an offset-bearing ISO string here would
+        # render correctly on this optimistic add but then "jump" once the
+        # calendar's next real fetch renders the same event unconverted.
+        _srv_tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
+        fc_start = event.start_datetime.astimezone(_srv_tz).strftime('%Y-%m-%dT%H:%M:%S')
+        fc_end = event.end_datetime.astimezone(_srv_tz).strftime('%Y-%m-%dT%H:%M:%S')
 
     return JsonResponse({
         'success': True,
@@ -877,7 +898,7 @@ def _calendar_back_url(request, event):
 def calendar_event_detail(request, event_id):
     """Simple detail/edit page for a CalendarEvent."""
     event = get_object_or_404(
-        CalendarEvent.objects.prefetch_related('participants'),
+        CalendarEvent.objects.prefetch_related('participants', 'participant_links__user'),
         id=event_id,
     )
     # Only creator or participants can view, OR board members for team-visible events
@@ -932,6 +953,9 @@ def calendar_event_detail(request, event_id):
     else:
         display_title = event.title
 
+    participant_links = list(event.participant_links.all())
+    my_link = next((l for l in participant_links if l.user_id == request.user.id), None)
+
     context = {
         'event': event,
         'back_url': back_url,
@@ -940,8 +964,51 @@ def calendar_event_detail(request, event_id):
         'event_end_display': event_end_display,
         'sanitized': sanitized,
         'display_title': display_title,
+        'participant_links': [] if sanitized else participant_links,
+        'my_rsvp_status': my_link.status if my_link else None,
     }
     return render(request, 'kanban/calendar_event_detail.html', context)
+
+
+@login_required
+@require_POST
+@demo_write_guard
+def calendar_event_rsvp(request, event_id):
+    """Accept or decline an invitation (the invited participant only).
+
+    Mirrors messaging.views.respond_chat_room_invitation — a single POST
+    action endpoint reached from the event detail page (which the
+    EVENT_INVITED notification links to).
+    """
+    link = get_object_or_404(
+        CalendarEventParticipant, event_id=event_id, user=request.user,
+    )
+    action = request.POST.get('action')
+    if action not in ('accept', 'decline'):
+        from django.http import HttpResponseBadRequest
+        return HttpResponseBadRequest('Invalid action.')
+
+    link.status = CalendarEventParticipant.ACCEPTED if action == 'accept' else CalendarEventParticipant.DECLINED
+    link.responded_at = timezone.now()
+    link.save(update_fields=['status', 'responded_at'])
+
+    event = link.event
+    if event.created_by_id != request.user.id:
+        responder = request.user.get_full_name() or request.user.username
+        past_tense = 'accepted' if action == 'accept' else 'declined'
+        _create_notification(
+            recipient=event.created_by,
+            sender=request.user,
+            notification_type='EVENT_INVITED',
+            text=f'{responder} {past_tense} your invitation to "{event.title}".',
+            action_url=f'/calendar/events/{event.id}/',
+        )
+
+    from django.urls import reverse
+    detail_url = reverse('calendar_event_detail', args=[event.id])
+    if request.GET.get('from') == 'unified':
+        detail_url += '?from=unified'
+    return redirect(detail_url)
 
 
 @login_required
@@ -994,11 +1061,18 @@ def calendar_event_edit(request, event_id):
 
         event.save()
 
-        # Update participants for non-solo types
+        # Update participants for non-solo types. A plain .set() would reset
+        # everyone back to PENDING on every save, wiping out RSVPs that
+        # already came in — so existing links are left untouched and only
+        # the diff (added/removed) is applied.
         if event.event_type not in CalendarEvent.SOLO_TYPES:
-            participant_ids = request.POST.getlist('participants')
-            participants = User.objects.filter(id__in=participant_ids).exclude(id=request.user.id)
-            event.participants.set(participants)
+            participant_ids = set(request.POST.getlist('participants'))
+            new_participants = User.objects.filter(id__in=participant_ids).exclude(id=request.user.id)
+            new_ids = set(new_participants.values_list('id', flat=True))
+            current_ids = set(event.participants.values_list('id', flat=True))
+            event.participant_links.filter(user_id__in=(current_ids - new_ids)).delete()
+            for uid in (new_ids - current_ids):
+                CalendarEventParticipant.objects.get_or_create(event=event, user_id=uid)
         else:
             event.participants.clear()
 
@@ -1008,11 +1082,18 @@ def calendar_event_edit(request, event_id):
             detail_url += '?from=unified'
         return redirect(detail_url)
 
+    status_by_user_id = dict(event.participant_links.values_list('user_id', 'status'))
+    status_labels = dict(CalendarEventParticipant.STATUS_CHOICES)
+    participant_choices = list(participant_qs)
+    for u in participant_choices:
+        status = status_by_user_id.get(u.id)
+        u.rsvp_suffix = f' — {status_labels[status]}' if status and status != CalendarEventParticipant.ACCEPTED else ''
+
     context = {
         'event': event,
         'back_url': back_url,
         'back_origin': 'unified' if back_url == '/calendar/' else 'board',
-        'participant_choices': participant_qs,
+        'participant_choices': participant_choices,
         'current_participant_ids': list(event.participants.values_list('id', flat=True)),
     }
     return render(request, 'kanban/calendar_event_edit.html', context)
