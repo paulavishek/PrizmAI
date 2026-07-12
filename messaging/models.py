@@ -232,15 +232,18 @@ From: {self.sender.get_full_name() or self.sender.username}
 Message: {self.text}
 
 Requirements:
-- Be actionable and direct
+- Be a factual restatement of what happened, not a call to action
 - Keep it under 100 characters
-- Focus on what the PM needs to know/do
+- Don't tell the reader to accept, decline, approve, reject, or respond —
+  this notification list only ever links out to "View X"; it has no inline
+  response controls, so implying one is misleading
 - Don't include quotes or special formatting
 
 Example outputs:
 - "Sarah mentioned you on API redesign task"
 - "New comment on Sprint Planning - review needed"
 - "John replied to your design feedback"
+- "testuser1 invited you to Event 1 on Jul 17"
 """
             summary = generate_ai_content(prompt, task_type='simple')
             if summary:

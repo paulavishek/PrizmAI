@@ -1800,7 +1800,9 @@ def reset_demo_data(request):
                     created_by__username__in=['priya.sharma', 'marcus.chen', 'elena.vasquez']
                 ).delete()
                 # Also clean user-created events without board association
-                CalendarEvent.objects.filter(created_by=request.user, board__isnull=True).delete()
+                CalendarEvent.objects.filter(
+                    created_by=request.user, board__isnull=True, is_demo=True,
+                ).delete()
             except Exception:
                 pass
 

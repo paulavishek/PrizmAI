@@ -48,6 +48,41 @@
             </div>
             {% endif %}
         </div>
+        {% if my_rsvp_status == 'pending' %}
+        <div class="alert alert-primary d-flex justify-content-between align-items-center mb-0 rounded-0" style="border-left:none; border-right:none; border-top:none;">
+            <span><i class="fas fa-calendar-check me-1"></i> You're invited — will you attend?</span>
+            <div class="d-flex gap-2">
+                <form method="post" action="{% url 'calendar_event_rsvp' event.id %}{% if back_origin == 'unified' %}?from=unified{% endif %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="accept">
+                    <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i>Accept</button>
+                </form>
+                <form method="post" action="{% url 'calendar_event_rsvp' event.id %}{% if back_origin == 'unified' %}?from=unified{% endif %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="decline">
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-times me-1"></i>Decline</button>
+                </form>
+            </div>
+        </div>
+        {% elif my_rsvp_status == 'accepted' %}
+        <div class="alert alert-success d-flex justify-content-between align-items-center mb-0 rounded-0" style="border-left:none; border-right:none; border-top:none;">
+            <span><i class="fas fa-check-circle me-1"></i> You accepted this invitation.</span>
+            <form method="post" action="{% url 'calendar_event_rsvp' event.id %}{% if back_origin == 'unified' %}?from=unified{% endif %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="decline">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Change to Decline</button>
+            </form>
+        </div>
+        {% elif my_rsvp_status == 'declined' %}
+        <div class="alert alert-secondary d-flex justify-content-between align-items-center mb-0 rounded-0" style="border-left:none; border-right:none; border-top:none;">
+            <span><i class="fas fa-times-circle me-1"></i> You declined this invitation.</span>
+            <form method="post" action="{% url 'calendar_event_rsvp' event.id %}{% if back_origin == 'unified' %}?from=unified{% endif %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="accept">
+                <button type="submit" class="btn btn-sm btn-outline-success">Change to Accept</button>
+            </form>
+        </div>
+        {% endif %}
         <div class="card-body">
             <table class="table table-borderless mb-0" style="font-size:0.95rem;">
                 <tbody>
@@ -96,21 +131,21 @@
                     </tr>
                     {% endif %}
                     {% if not event.is_solo_type and not sanitized %}
-                    {% with participants=event.participants.all %}
                     <tr>
                         <th>Participants</th>
                         <td>
                             <span class="badge bg-primary text-white border me-1">
                                 {{ event.created_by.get_full_name|default:event.created_by.username }} (organizer)
                             </span>
-                            {% for p in participants %}
-                            {% if p != event.created_by %}
-                            <span class="badge bg-light text-dark border me-1">{{ p.get_full_name|default:p.username }}</span>
-                            {% endif %}
+                            {% for link in participant_links %}
+                            <span class="badge border me-1 {% if link.status == 'accepted' %}bg-success text-white{% elif link.status == 'declined' %}bg-light text-muted text-decoration-line-through{% else %}bg-warning-subtle text-dark{% endif %}"
+                                  title="{{ link.get_status_display }}">
+                                {{ link.user.get_full_name|default:link.user.username }}
+                                {% if link.status == 'pending' %}(pending){% elif link.status == 'declined' %}(declined){% endif %}
+                            </span>
                             {% endfor %}
                         </td>
                     </tr>
-                    {% endwith %}
                     {% endif %}
                     {% if event.description and not sanitized %}
                     <tr>

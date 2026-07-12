@@ -133,6 +133,7 @@ urlpatterns = [
     path('calendar/events/<int:event_id>/', calendar_views.calendar_event_detail, name='calendar_event_detail'),
     path('calendar/events/<int:event_id>/edit/', calendar_views.calendar_event_edit, name='calendar_event_edit'),
     path('calendar/events/<int:event_id>/delete/', calendar_views.calendar_event_delete, name='calendar_event_delete'),
+    path('calendar/events/<int:event_id>/rsvp/', calendar_views.calendar_event_rsvp, name='calendar_event_rsvp'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
     path('boards/<int:board_id>/prizmbrief/', prizmbrief_views.prizmbrief_setup, name='prizmbrief_setup'),

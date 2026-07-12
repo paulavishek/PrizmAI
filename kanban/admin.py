@@ -4,7 +4,7 @@ from .models import (
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation,
-    CalendarEvent,
+    CalendarEvent, CalendarEventParticipant,
     GoalVersion, MissionVersion, StrategyVersion,
     StrategicUpdate, StrategicFollower,
     UserFavorite, ChecklistItem,
@@ -193,12 +193,18 @@ class WorkspaceInvitationAdmin(admin.ModelAdmin):
     readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
 
 
+class CalendarEventParticipantInline(admin.TabularInline):
+    model = CalendarEventParticipant
+    extra = 0
+    readonly_fields = ('created_at',)
+
+
 @admin.register(CalendarEvent)
 class CalendarEventAdmin(admin.ModelAdmin):
     list_display = ('title', 'event_type', 'start_datetime', 'end_datetime', 'is_all_day', 'board', 'created_by', 'created_at')
     list_filter = ('event_type', 'is_all_day', 'start_datetime')
     search_fields = ('title', 'description', 'created_by__username', 'board__name')
-    filter_horizontal = ('participants',)
+    inlines = [CalendarEventParticipantInline]
     readonly_fields = ('created_at', 'updated_at')
 
 @admin.register(Column)

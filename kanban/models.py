@@ -3043,6 +3043,13 @@ class CalendarEvent(models.Model):
     location = models.CharField(max_length=255, blank=True, null=True,
                                 help_text="Optional physical or virtual meeting location")
 
+    # Workspace-mode discriminator, mirroring DecisionCenterBriefing.is_demo.
+    # Board-linked events can infer demo-ness from board.is_sandbox_copy, but a
+    # board-less event (board is optional) has no such anchor, so without this
+    # flag it silently vanished from the calendar on next fetch after creation
+    # in demo mode (_event_workspace_scope had nothing to match it against).
+    is_demo = models.BooleanField(default=False, db_index=True)
+
     # Optional board association
     board = models.ForeignKey(
         Board,
@@ -3067,6 +3074,7 @@ class CalendarEvent(models.Model):
     )
     participants = models.ManyToManyField(
         User,
+        through='CalendarEventParticipant',
         blank=True,
         related_name='calendar_events',
         help_text="Users invited to this event (for Meetings and Team Events only)",
@@ -3102,6 +3110,38 @@ class CalendarEvent(models.Model):
     def is_solo_type(self):
         """True for event types that don't make sense to invite participants to."""
         return self.event_type in self.SOLO_TYPES
+
+
+class CalendarEventParticipant(models.Model):
+    """Through-model for CalendarEvent.participants, carrying RSVP status.
+
+    Being added as a participant is an *invitation*, not attendance — the
+    invitee must accept before they're a confirmed attendee (mirrors Google
+    Calendar / Outlook). Defaults to 'pending' so ``.add()``/``.set()`` calls
+    without ``through_defaults`` still work; call sites that add someone who
+    is already confirmed (demo seed data, sandbox clones, an organizer adding
+    themselves) pass ``through_defaults={'status': ACCEPTED}``.
+    """
+    PENDING = 'pending'
+    ACCEPTED = 'accepted'
+    DECLINED = 'declined'
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (ACCEPTED, 'Accepted'),
+        (DECLINED, 'Declined'),
+    ]
+
+    event = models.ForeignKey(CalendarEvent, on_delete=models.CASCADE, related_name='participant_links')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calendar_event_links')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('event', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} — {self.event.title} ({self.status})"
 
 
 # ---------------------------------------------------------------------------

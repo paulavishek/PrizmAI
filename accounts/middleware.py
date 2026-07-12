@@ -1,4 +1,4 @@
-import pytz
+import zoneinfo
 from django.utils import timezone
 
 
@@ -9,6 +9,16 @@ class TimezoneMiddleware:
     Once activated, all Django template date/time filters and
     ``timezone.localtime()`` calls automatically convert UTC datetimes
     to the user's timezone for the duration of the request.
+
+    Uses ``zoneinfo``, not ``pytz``. Django 5.x removed its special pytz
+    handling from ``timezone.make_aware()`` (no more implicit ``.localize()``
+    call), so activating a raw pytz tzinfo object here made every later
+    ``make_aware()`` call in the app silently attach that zone's *first*
+    historical UTC offset instead of its current one — for Asia/Kolkata that's
+    the pre-1906 +5:53:20 Local Mean Time instead of +5:30 IST, a ~23-minute
+    error on every saved date/time for any user with a timezone preference set.
+    ``zoneinfo.ZoneInfo`` resolves the offset for the actual moment given, so
+    it isn't subject to this trap.
     """
 
     def __init__(self, get_response):
@@ -30,8 +40,8 @@ class TimezoneMiddleware:
 
         if tzname:
             try:
-                timezone.activate(pytz.timezone(tzname))
-            except pytz.UnknownTimeZoneError:
+                timezone.activate(zoneinfo.ZoneInfo(tzname))
+            except zoneinfo.ZoneInfoNotFoundError:
                 timezone.deactivate()
         else:
             timezone.deactivate()

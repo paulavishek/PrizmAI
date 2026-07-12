@@ -592,6 +592,8 @@ class SpectraActionService:
             if event_type not in valid_types:
                 event_type = 'meeting'
 
+            from kanban.utils.demo_protection import user_is_demo
+
             with transaction.atomic():
                 event = CalendarEvent.objects.create(
                     title=title,
@@ -602,9 +604,11 @@ class SpectraActionService:
                     description=collected_data.get('description', ''),
                     board=board,
                     created_by=user,
+                    is_demo=user_is_demo(user),
                 )
-                # Add creator as participant
-                event.participants.add(user)
+                # Add creator as participant — accepted, since organizing your
+                # own event isn't an invitation you need to respond to.
+                event.participants.add(user, through_defaults={'status': 'accepted'})
 
                 # Resolve and add other participants
                 participants = collected_data.get('participants', [])
