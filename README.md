@@ -1023,6 +1023,7 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 |---|---|
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, workflows, and best practices |
 | **[FEATURES.md](FEATURES.md)** | Detailed feature descriptions and AI capabilities |
+| **[Case Studies](docs/case-studies/README.md)** | End-to-end walkthroughs of running real projects in PrizmAI, by domain |
 | **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference |
 | **[SETUP.md](SETUP.md)** | Installation and configuration guide |
 | **[SECURITY.md](SECURITY.md)** | Security policy and vulnerability reporting |
