@@ -244,6 +244,15 @@ Think of this as a fire drill for your project. PrizmAI's AI pretends to be ever
 
 ---
 
+### Want the full end-to-end walkthrough?
+
+These examples are quick snapshots. For complete, start-to-finish narratives — covering
+Pre-Mortem, Scope Autopsy, Stress Test, What-If & Shadow Boards, the Decision Center, and
+Exit Protocol as a project manager actually uses them — see the
+**[Case Studies](docs/case-studies/README.md)** (Marketing, Software, and Construction).
+
+---
+
 ## ❓ Common Questions
 
 ### "How is PrizmAI different from Trello/Asana/Jira?"
