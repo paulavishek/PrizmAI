@@ -199,6 +199,7 @@ def _refresh_all_demo_dates_once(skip_mark_cache=False):
         'boards_deadline_updated': 0,
         'column_entered_at_updated': 0,
         'memory_nodes_updated': 0,
+        'calendar_events_updated': 0,
     }
     
     now = timezone.now()
@@ -225,6 +226,11 @@ def _refresh_all_demo_dates_once(skip_mark_cache=False):
             # 1b. Refresh column-entry timestamps so Task Aging badges always show
             #     a realistic spread (grey / amber / red) on demo boards.
             stats['column_entered_at_updated'] = _refresh_column_entered_at(now, base_date)
+
+            # 1c. Refresh CalendarEvent dates (meetings, OOO, busy blocks) so
+            #     the demo calendar always shows current dates instead of
+            #     drifting into the past.
+            stats['calendar_events_updated'] = _refresh_calendar_event_dates(now, base_date)
 
             # 2. Refresh Time Entry dates
             stats['time_entries_updated'] = _refresh_time_entry_dates(base_date)
@@ -508,6 +514,79 @@ def _is_seed_demo_data(obj):
         return session is None or session == ''
     # If the model doesn't have created_by_session field, assume it's seed data
     return True
+
+
+
+# Fixed day-offsets (from "today") for each demo CalendarEvent, keyed by
+# title. Mirrors the small fixed-narrative-set pattern used by
+# _OVERDUE_PINS in _refresh_task_dates below, rather than the generic
+# created_at-relative shift used for bulk datasets — there are only a
+# handful of these, each with a specific narrative role (see
+# populate_calendar_demo_data), so pinning them directly to a day-offset
+# from "today" is simpler and keeps them exactly in sync with the task
+# deadlines they're written to overlap (e.g. "Marcus Chen - PTO" and
+# "Focus Block: File Upload Review" both pin to the same day-offset as the
+# "File Upload System" task's due date).
+_CALENDAR_EVENT_PINS = {
+    'Daily Standup':                       {'day_offset': 0,  'time': (9, 0),  'duration_min': 15},
+    'Sprint 3 Planning':                   {'day_offset': 2,  'time': (10, 0), 'duration_min': 90},
+    'Architecture Review: Search Engine':  {'day_offset': 4,  'time': (14, 0), 'duration_min': 60},
+    'Sprint 2 Retrospective':              {'day_offset': -3, 'time': (15, 0), 'duration_min': 60},
+    'Team Lunch - Sprint 2 Celebration':   {'day_offset': 7,  'time': (12, 0), 'duration_min': 90},
+    'Marcus Chen - PTO':                   {'day_offset': 2,  'all_day': True},
+    'Focus Block: Code Review':            {'day_offset': 1,  'time': (13, 0), 'duration_min': 120},
+    'Stakeholder Demo - Core Features':    {'day_offset': 6,  'time': (11, 0), 'duration_min': 60},
+    'Focus Block: File Upload Review':     {'day_offset': 2,  'time': (10, 0), 'duration_min': 120},
+    '1:1: Priya & Marcus':                 {'day_offset': 3,  'time': (16, 0), 'duration_min': 30},
+    'All-Hands: Q3 Roadmap Review':        {'day_offset': 9,  'time': (11, 0), 'duration_min': 60},
+}
+
+
+def _refresh_calendar_event_dates(now, base_date):
+    """
+    Refresh demo CalendarEvent start/end datetimes to fixed day-offsets from
+    "today", keyed by title via _CALENDAR_EVENT_PINS.
+
+    _get_demo_board_ids() already covers both template boards and every
+    sandbox copy, and _clone_calendar_events_for_user (kanban/sandbox_views.py)
+    clones events onto each sandbox with identical titles — so this single
+    query refreshes the template board and every user's cloned events in one
+    pass, no sandbox-specific logic needed.
+    """
+    try:
+        import datetime as _dt
+        from kanban.models import CalendarEvent
+
+        demo_board_ids = _get_demo_board_ids()
+        if not demo_board_ids:
+            return 0
+
+        events = CalendarEvent.objects.filter(
+            board_id__in=demo_board_ids, title__in=_CALENDAR_EVENT_PINS.keys(),
+        )
+
+        updated = 0
+        for ev in events:
+            pin = _CALENDAR_EVENT_PINS[ev.title]
+            target_date = base_date + timedelta(days=pin['day_offset'])
+            if pin.get('all_day'):
+                new_start = timezone.make_aware(_dt.datetime.combine(target_date, _dt.time(0, 0)))
+                new_end = timezone.make_aware(_dt.datetime.combine(target_date, _dt.time(23, 59)))
+            else:
+                hour, minute = pin['time']
+                new_start = timezone.make_aware(_dt.datetime.combine(target_date, _dt.time(hour, minute)))
+                new_end = new_start + timedelta(minutes=pin['duration_min'])
+
+            if ev.start_datetime != new_start or ev.end_datetime != new_end:
+                CalendarEvent.objects.filter(pk=ev.pk).update(
+                    start_datetime=new_start, end_datetime=new_end,
+                )
+                updated += 1
+
+        return updated
+    except Exception as e:
+        logger.warning(f"Error refreshing calendar event dates: {e}")
+        return 0
 
 
 def _refresh_task_dates(now, base_date):
