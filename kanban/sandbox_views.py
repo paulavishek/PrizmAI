@@ -2164,19 +2164,37 @@ def _clone_calendar_events_for_user(user):
     [[_remap_demo_time_entries_to_owner]] and [[_clone_discovery_ideas_for_user]]),
     every user gets their own copy of the events on their own board.
 
-    The clone's ``created_by`` is remapped to the sandbox owner so the events are
-    always visible via the calendar's "my own events" clause (the seeded creators
-    — alex/sam/jordan — are not members of the sandbox board, so a persona
-    ``created_by`` would stay invisible). ``linked_task`` is re-pointed at the
-    matching cloned task by title; participants (valid persona users) are kept for
-    display.
+    Most clones' ``created_by`` is remapped to the sandbox owner so the events are
+    visible via the calendar's "my own events" clause and the owner "owns" their
+    calendar. ``linked_task`` is re-pointed at the matching cloned task by title;
+    participants (valid persona users) are kept for display.
+
+    A small subset (``_PERSONA_OWNED_TITLES``) deliberately KEEPS its persona
+    ``created_by`` instead of remapping. Personas are genuine members of the
+    sandbox board (see _duplicate_board), so these render to the owner as sanitized
+    "Priya — busy" / "Marcus — Out of Office" teammate-status blocks via the
+    calendar's teammate-visibility clause — this is what keeps the "Team can see
+    I'm busy" feature demonstrable. Because the owner is neither their creator nor a
+    participant, they appear exactly once (no "my own events" duplicate). Before the
+    events feed was board-scoped these would have collided with the template
+    originals; now that duplicate is gone ([[project_calendar_event_duplication]]).
 
     Clone-if-empty: skips any sandbox board that already has events, so it is
     idempotent across re-entries and never wipes events the user created
     themselves. Fresh (re-)provision purges sandbox events first
     (``_purge_existing_sandbox``), so this repopulates them cleanly.
     """
-    from kanban.models import Board, CalendarEvent, Task
+    from kanban.models import Board, CalendarEvent, CalendarEventParticipant, Task
+
+    # Seeded events kept persona-owned so the owner sees genuine teammate
+    # busy/OOO blocks (matched by title — populate_calendar_demo_data). Chosen
+    # because the sandbox owner is not a participant in any of them, so they read
+    # naturally as "someone else is busy" rather than the owner's own events.
+    _PERSONA_OWNED_TITLES = {
+        'Marcus Chen - PTO',
+        'Architecture Review: Search Engine',
+        '1:1: Priya & Marcus',
+    }
 
     sandbox_boards = Board.objects.filter(
         owner=user, is_sandbox_copy=True, cloned_from__isnull=False,
@@ -2187,8 +2205,11 @@ def _clone_calendar_events_for_user(user):
         template = sb.cloned_from
         # Board cloning copies tasks by title, so map linked tasks by title.
         sb_tasks = {t.title: t for t in Task.objects.filter(column__board=sb)}
-        for ev in CalendarEvent.objects.filter(board=template).prefetch_related('participants'):
+        for ev in CalendarEvent.objects.filter(board=template).prefetch_related('participant_links'):
             new_linked = sb_tasks.get(ev.linked_task.title) if ev.linked_task_id else None
+            # Keep persona ownership for the teammate-status subset; everything
+            # else is owned by the sandbox owner.
+            clone_creator = ev.created_by if ev.title in _PERSONA_OWNED_TITLES else user
             clone = CalendarEvent.objects.create(
                 title=ev.title,
                 description=ev.description,
@@ -2200,14 +2221,20 @@ def _clone_calendar_events_for_user(user):
                 location=ev.location,
                 board=sb,
                 linked_task=new_linked,
-                created_by=user,
+                created_by=clone_creator,
                 is_demo=True,
             )
-            participants = list(ev.participants.all())
-            if participants:
-                # Cloned demo participants are already-established attendees in
-                # the seed narrative, not real pending invites to respond to.
-                clone.participants.set(participants, through_defaults={'status': 'accepted'})
+            # Preserve each participant's real RSVP status from the seed
+            # narrative (pending/declined/accepted) rather than flattening
+            # everyone to "accepted" — the demo deliberately seeds RSVP variety
+            # (see populate_calendar_demo_data) and every real user only ever
+            # sees their own sandbox clone, so this is the only place that
+            # variety would ever be visible.
+            for link in ev.participant_links.all():
+                CalendarEventParticipant.objects.create(
+                    event=clone, user=link.user, status=link.status,
+                    responded_at=link.responded_at,
+                )
 
 
 def _leave_demo_org(user):

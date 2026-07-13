@@ -2944,15 +2944,29 @@ class Command(BaseCommand):
         """Best-effort calls to feature-specific sub-seeders. Failures are non-fatal."""
         subs = [
             'populate_commitment_demo_data',
+            'populate_calendar_demo_data',
             'populate_knowledge_demo_data',
             'populate_discovery_demo_data',
             'populate_automation_demo_data',
             'fix_premortem_stress_demo',
             'seed_exit_protocol_demo',
         ]
+        # populate_calendar_demo_data links some events to Task rows by title
+        # (linked_task). _reset_demo_data() above deletes and recreates every
+        # Task on --reset, which cascades linked_task to NULL on any
+        # already-existing CalendarEvent (on_delete=SET_NULL) — so on every
+        # --reset after the first, this subseeder's own idempotency check
+        # ("events already exist, skip") would otherwise leave those links
+        # permanently null instead of re-pointing them at the fresh Task rows.
+        # Forward --reset through so it recreates (and correctly re-links)
+        # its events whenever the board's tasks were just rebuilt.
+        subs_needing_reset_passthrough = {'populate_calendar_demo_data'}
         for name in subs:
             try:
-                call_command(name)
+                if self.reset and name in subs_needing_reset_passthrough:
+                    call_command(name, '--reset')
+                else:
+                    call_command(name)
                 self.stdout.write(f'  [OK] {name}')
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'  [WARN] {name} skipped: {e}'))

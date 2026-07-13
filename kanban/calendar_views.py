@@ -11,6 +11,7 @@ Provides:
 - calendar_event_delete     — delete a CalendarEvent
 """
 
+import colorsys
 import json
 import logging
 import zoneinfo
@@ -114,10 +115,70 @@ _UNASSIGNED_COLOR = '#9ca3af'  # neutral grey for unassigned tasks
 
 
 def _assignee_color(user_id):
-    """Return a deterministic, palette-based colour for a given user_id."""
+    """Return a deterministic, palette-based colour for a given user_id.
+
+    NOTE: this hashes on ``user_id % palette_len``, so two users whose ids are
+    congruent mod the palette length collide (e.g. the viewer and a teammate both
+    landing on the same red). Prefer ``_build_assignee_color_map`` when colouring a
+    *known set* of people (the calendar legend + task bars) so displayed users are
+    guaranteed distinct; this single-id form is kept only as a fallback.
+    """
     if user_id is None:
         return _UNASSIGNED_COLOR
     return _ASSIGNEE_PALETTE[user_id % len(_ASSIGNEE_PALETTE)]
+
+
+def _hsl_to_hex(h, s, l):
+    """Convert HSL (each 0..1) to a ``#rrggbb`` hex string. (colorsys speaks HLS.)"""
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return f'#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}'
+
+
+def _assignee_color_for_index(index):
+    """Distinct colour for the Nth assignee (0-based) in a displayed set.
+
+    The first ``len(_ASSIGNEE_PALETTE)`` people get the hand-tuned palette (vivid,
+    mutually distinct, and deliberately clear of the priority colours). Beyond that
+    we *generate* extra colours by golden-angle hue rotation, which keeps successive
+    hues far apart, so an arbitrarily large board (15, 30, … members) stays
+    distinguishable without a fixed cap or any manual colour picking.
+    """
+    palette_len = len(_ASSIGNEE_PALETTE)
+    if index < palette_len:
+        return _ASSIGNEE_PALETTE[index]
+    # 137.508° golden angle → maximally-spread hues; fixed S/L mirror the palette's
+    # vividness so _lighten_hex() still yields a readable pastel bar.
+    hue = (index * 137.508) % 360.0
+    return _hsl_to_hex(hue / 360.0, 0.62, 0.45)
+
+
+def _build_assignee_color_map(user_ids):
+    """Map each user_id to a *distinct* colour, collision-free for any number of
+    users (the first 10 curated, the rest generated — see _assignee_color_for_index).
+
+    Assignment is by position in the id-sorted unique set, so the mapping is
+    deterministic and — crucially — identical between the page view (legend chips)
+    and the events feed (task-bar colours) as long as both build it from the same
+    universe of users. This replaces the ``user_id % palette`` hashing that let two
+    displayed teammates share a colour.
+    """
+    unique_sorted = sorted({uid for uid in user_ids if uid is not None})
+    return {uid: _assignee_color_for_index(i) for i, uid in enumerate(unique_sorted)}
+
+
+def _lighten_hex(hex_color, amount=0.55):
+    """Blend a hex colour toward white by `amount` (0=unchanged, 1=white).
+
+    Used to derive a pastel task-bar background while keeping the original
+    saturated hue available (as border/tooltip accent) so assignee identity
+    survives the softening — see month-view density fix.
+    """
+    hex_color = hex_color.lstrip('#')
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    r = round(r + (255 - r) * amount)
+    g = round(g + (255 - g) * amount)
+    b = round(b + (255 - b) * amount)
+    return f'#{r:02x}{g:02x}{b:02x}'
 
 
 # Characters that are safe in JSON but break (or escape) an inline <script>:
@@ -195,21 +256,28 @@ def unified_calendar(request):
     ]
 
     # Teammates list with assigned colours (for filter chips & availability mode)
-    # Current user is listed first so they can filter their own tasks too
+    # Current user is listed first so they can filter their own tasks too.
+    # Colours come from a collision-free map over the viewer + every board member,
+    # so no two displayed people share a colour (the old per-id hashing collided
+    # e.g. the viewer with Priya). The events feed rebuilds the identical map so
+    # task-bar colours match these chips.
+    _color_map = _build_assignee_color_map(
+        [request.user.id] + [u.id for u in participant_qs]
+    )
     _me_display = request.user.get_full_name() or request.user.username
     teammates_data = [
         {
             'id': request.user.id,
             'username': request.user.username,
             'display': f'{_me_display} (You)',
-            'color': _assignee_color(request.user.id),
+            'color': _color_map.get(request.user.id, _UNASSIGNED_COLOR),
         }
     ] + [
         {
             'id': u.id,
             'username': u.username,
             'display': u.get_full_name() or u.username,
-            'color': _assignee_color(u.id),
+            'color': _color_map.get(u.id, _UNASSIGNED_COLOR),
         }
         for u in participant_qs
     ]
@@ -231,8 +299,13 @@ def unified_calendar(request):
     overdue_count = user_tasks_qs.filter(
         due_date__lt=now, progress__lt=100
     ).count()
+    # Count events actually visible on the grid this month — events on the user's
+    # own boards (incl. teammate busy/OOO blocks shown there), plus their board-less
+    # events and any they're invited to. Mirrors the feed's board scope so the
+    # headline stat matches the number of event blocks the user can see (the old
+    # created_by/participant-only count under-reported teammate-visible events).
     events_this_month = CalendarEvent.objects.filter(
-        Q(created_by=request.user) | Q(participants=request.user),
+        Q(board__in=boards) | Q(created_by=request.user) | Q(participants=request.user),
         start_datetime__range=(month_start, month_end),
     ).filter(_event_workspace_scope(request.user)).distinct().count()
 
@@ -261,6 +334,8 @@ def unified_calendar(request):
         'overdue_count': overdue_count,
         'events_this_month': events_this_month,
         'current_month': now.strftime('%B %Y'),
+        'month_start_iso': month_start.date().isoformat(),
+        'month_end_iso': month_end.date().isoformat(),
         'all_tasks_json': _json_for_script(_all_tasks),
     }
     return render(request, 'kanban/unified_calendar.html', context)
@@ -279,6 +354,10 @@ def unified_calendar_events_api(request):
     Also accepts ?boards=1,2,3 to filter by board ids.
     """
     boards = _user_boards(request.user)
+    # Full board set for event *isolation* scoping — captured before the optional
+    # ?boards= chip narrows `boards` (the chip filters which tasks show, not which
+    # workspace's events you're allowed to see). See the board-scope filter below.
+    scope_boards = boards
 
     # Optional board filter
     board_filter = request.GET.get('boards', '')
@@ -288,6 +367,17 @@ def unified_calendar_events_api(request):
             boards = boards.filter(id__in=board_ids)
         except ValueError:
             pass
+
+    # Collision-free assignee → colour map, built from the SAME universe as the
+    # page legend (viewer + all board members) so task-bar colours match the
+    # Teammates chips. Built from the unfiltered `scope_boards` so a board-chip
+    # filter never reshuffles colours.
+    _color_member_ids = [request.user.id] + list(
+        User.objects.filter(
+            Q(board_memberships__board__in=scope_boards) | Q(created_boards__in=scope_boards)
+        ).values_list('id', flat=True)
+    )
+    color_map = _build_assignee_color_map(_color_member_ids)
 
     # Date range from FullCalendar
     start_str = request.GET.get('start')
@@ -347,6 +437,32 @@ def unified_calendar_events_api(request):
     # participant / teammate, not board).  See _event_workspace_scope().
     event_qs = event_qs.filter(_event_workspace_scope(request.user))
 
+    # Board isolation — the OR clauses above match events by creator / participant
+    # / teammate but NOT by board, so an event on a board the viewer doesn't belong
+    # to could leak in. This is how the demo showed events *twice*: each demo user
+    # gets a per-user clone of the seeded events on their own sandbox board
+    # (_clone_calendar_events_for_user), while the ORIGINAL persona-created events
+    # still live on the shared official template board — which the teammate clause
+    # happily matched (personas are members of the sandbox), producing a duplicate
+    # of every seeded event. Scope events to boards the viewer actually belongs to
+    # (mirrors how `boards` scopes tasks), which also gives events the cross-tenant
+    # isolation tasks always had. Two escape hatches, ANDed on top of the OR match:
+    #   * board-less events (the "Board (optional)" default) have no board to scope
+    #     against — keep them (they're still gated by the creator/participant match).
+    #   * events I'm an explicit invitee of must always reach me even if they live on
+    #     a board I'm not a member of (invitations cross board boundaries — see
+    #     calendar_create_event; being invited is itself the access grant).
+    event_qs = event_qs.filter(
+        Q(board__in=scope_boards) |
+        Q(board__isnull=True) |
+        Q(
+            participant_links__user=request.user,
+            participant_links__status__in=[
+                CalendarEventParticipant.PENDING, CalendarEventParticipant.ACCEPTED,
+            ],
+        )
+    ).distinct()
+
     if start_str and end_str:
         try:
             # FullCalendar sends ISO strings like "2026-02-01T00:00:00"
@@ -378,10 +494,10 @@ def unified_calendar_events_api(request):
         )
         if is_mine:
             layer = 'mine'
-            color = _assignee_color(task.assigned_to_id)
+            color = color_map.get(task.assigned_to_id, _UNASSIGNED_COLOR)
         else:
             layer = 'teammate'
-            color = _assignee_color(task.assigned_to_id)
+            color = color_map.get(task.assigned_to_id, _UNASSIGNED_COLOR)
 
         assignee_name = None
         if task.assigned_to:
@@ -406,7 +522,9 @@ def unified_calendar_events_api(request):
             'start': start_str_task,
             'end': end_str_task,
             'url': f'/tasks/{task.id}/',
-            'color': color,
+            'backgroundColor': _lighten_hex(color, 0.55),
+            'borderColor': color,
+            'textColor': '#1f2937',
             'source': 'task',
             'extendedProps': {
                 'source': 'task',
