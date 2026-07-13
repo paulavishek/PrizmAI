@@ -319,13 +319,15 @@ def unified_calendar_events_api(request):
     event_qs = CalendarEvent.objects.filter(
         # My own events — all types, all visibility
         Q(created_by=request.user) |
-        # Events I'm invited to, team- or public-visible. Declining removes it from
-        # my calendar (a pending invite still shows — same as Google/Outlook,
-        # where you see the event before responding).
+        # Events I'm invited to — any visibility, including private. Being an
+        # explicit invitee is itself the access grant (mirrors the participant
+        # check in calendar_event_detail); `visibility` only gates *other*,
+        # non-invited teammates below. Declining removes it from my calendar
+        # (a pending invite still shows — same as Google/Outlook, where you
+        # see the event before responding).
         Q(
             participant_links__user=request.user,
             participant_links__status__in=[CalendarEventParticipant.PENDING, CalendarEventParticipant.ACCEPTED],
-            visibility__in=['team', 'public'],
         ) |
         # Teammate events shared as team- or public-visible. A team-visible MEETING
         # shows other teammates a sanitized "busy" block (see title sanitization

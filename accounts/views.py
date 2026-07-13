@@ -106,8 +106,17 @@ def quick_demo_login(request, username):
 
     # Remember the real user before switching to demo
     real_username = None
-    if request.user.is_authenticated and request.user.username not in DEMO_USERNAMES:
-        real_username = request.user.username
+    if request.user.is_authenticated:
+        if request.user.username not in DEMO_USERNAMES:
+            real_username = request.user.username
+        else:
+            # Already viewing as another demo persona (e.g. hopping straight
+            # from Elena to Marcus via the "Sign in as any of these demo
+            # users" dropdown) — carry the original real user forward.
+            # login() below flushes the session on this pk change, which
+            # would otherwise silently drop 'real_user_username', permanently
+            # losing the way back to the real account for this session.
+            real_username = request.session.get('real_user_username')
 
     # Authenticate with the known demo password
     user = authenticate(request=request, username=username, password=DEMO_PASSWORD)
