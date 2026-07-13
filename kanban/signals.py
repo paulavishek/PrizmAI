@@ -1790,11 +1790,14 @@ def create_board_preset_for_board(sender, instance, created, **kwargs):
 def _recalc_user_workload(user):
     """Recalculate and persist current_workload_hours for a user's profile."""
     from django.db.models import Q as _Q
+    from kanban.utils.demo_protection import get_user_boards
     try:
         profile = user.profile
     except Exception:
         return
-    active_count = user.assigned_tasks.exclude(
+    active_count = user.assigned_tasks.filter(
+        column__board__in=get_user_boards(user)
+    ).exclude(
         _Q(column__name__icontains='done') | _Q(column__name__icontains='complete')
     ).count()
     profile.current_workload_hours = active_count * 8

@@ -328,6 +328,17 @@ def profile_view(request):
             onboarding_status='pending',
         )
 
+    # Recompute workload live rather than trusting the Task-post_save-signal
+    # cache: tasks assigned via bulk operations (seeders, imports, sandbox
+    # clones) never trigger that signal, so current_workload_hours can sit
+    # stale (often at its 0 default) indefinitely. Recalculating here — using
+    # the same logic the signal uses — guarantees the number on this page is
+    # always accurate regardless of how the underlying tasks were assigned.
+    # This also mutates `profile` in place (same cached instance), so
+    # profile.utilization_percentage below reflects the fresh value.
+    from kanban.signals import _recalc_user_workload
+    _recalc_user_workload(request.user)
+
     # ------------------------------------------------------------------
     # AI context variables — computed once, used for GET and all re-renders
     # ------------------------------------------------------------------

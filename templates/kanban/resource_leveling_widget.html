@@ -399,7 +399,9 @@ function displayWorkloadSummary(data) {
     const updatedLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     container.innerHTML = `
         <div class="d-flex justify-content-between align-items-baseline mb-3">
-            <h6 class="text-muted mb-0">Team Workload</h6>
+            <h6 class="text-muted mb-0">Team Workload
+                <i class="fas fa-info-circle" style="font-size:0.72rem;" title="Workload for this board only, weighted by task complexity (load points, not hours) — used to generate reassignment suggestions. Not capped at 100%, so true overload is visible."></i>
+            </h6>
             <small class="text-muted" style="font-size:0.72rem;" title="Workload bars and capacity alert recalculated from live database state. Total team utilization is invariant under task reassignment — it changes only when work is added or removed.">
                 <i class="fas fa-sync-alt"></i> Updated ${updatedLabel}
             </small>
