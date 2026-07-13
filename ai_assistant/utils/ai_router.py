@@ -545,8 +545,8 @@ class AIRouter:
             else:
                 return False
             return True
-        except (AIProviderError, NotImplementedError, ImproperlyConfigured,
-                Exception):
+        except Exception:
+            # Any failure (bad key, network, quota, unknown model, misconfig) → invalid.
             return False
 
     # ------------------------------------------------------------------
@@ -596,8 +596,10 @@ class AIRouter:
             system_prompt (str, optional): Prepended as context before the prompt.
             conversation_history (list, optional): Accepted for interface
                 consistency but not used — Gemini is called statelessly.
-            complexity (str): 'simple' → gemini-2.5-flash-lite (faster/cheaper);
-                              'complex' → gemini-2.5-flash (full model).
+            complexity (str): 'simple'/'complex' → GEMINI_MODEL_SIMPLE/COMPLEX
+                              (both default to gemini-3.1-flash-lite);
+                              'premium' → GEMINI_MODEL_PREMIUM (gemini-2.5-flash,
+                              the large-document escape hatch).
 
         Returns:
             dict: {'text': str, 'model': str, 'tokens_used': int | None}
@@ -755,7 +757,8 @@ class AIRouter:
             api_key (str): OpenAI API key (platform or BYOK).
             system_prompt (str, optional): System context.
             conversation_history (list, optional): Prior turns.
-            complexity (str): 'simple' → gpt-4o-mini; 'complex' → gpt-4o.
+            complexity (str): 'simple' → OPENAI_MODEL_SIMPLE (gpt-5.6-terra);
+                              'complex'/'premium' → OPENAI_MODEL_COMPLEX/PREMIUM (gpt-5.6-sol).
 
         Returns:
             dict: {'text': str, 'model': str, 'tokens_used': int | None}
@@ -781,14 +784,15 @@ class AIRouter:
             )
 
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
+        # simple → light model; complex → heavy model; premium → escape-hatch (heavy) model.
         if model_override:
             model = model_override
-        elif complexity in ('complex', 'premium'):
-            # 'premium' is the Gemini escape-hatch tier; for a BYOK OpenAI user it maps to
-            # their full model, not the cheap one.
-            model = getattr(settings, 'OPENAI_MODEL_COMPLEX', getattr(settings, 'OPENAI_MODEL', 'gpt-4o'))
+        elif complexity == 'premium':
+            model = getattr(settings, 'OPENAI_MODEL_PREMIUM', 'gpt-5.6-sol')
+        elif complexity == 'complex':
+            model = getattr(settings, 'OPENAI_MODEL_COMPLEX', getattr(settings, 'OPENAI_MODEL', 'gpt-5.6-sol'))
         else:
-            model = getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
+            model = getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-5.6-terra')
 
         # Build the messages list in OpenAI's native format.
         # Canonical conversation_history format: [{'role': 'user'|'assistant', 'content': str}]
@@ -858,7 +862,8 @@ class AIRouter:
             api_key (str): Anthropic API key (platform or BYOK).
             system_prompt (str, optional): System context.
             conversation_history (list, optional): Prior turns.
-            complexity (str): 'simple' → claude-haiku-4-5; 'complex' → claude-sonnet-4-6.
+            complexity (str): 'simple' → ANTHROPIC_MODEL_SIMPLE (claude-sonnet-5);
+                              'complex'/'premium' → ANTHROPIC_MODEL_COMPLEX/PREMIUM (claude-opus-4-8).
 
         Returns:
             dict: {'text': str, 'model': str, 'tokens_used': int | None}
@@ -884,15 +889,24 @@ class AIRouter:
             )
 
         # Select model: BYOK model override takes priority; otherwise use complexity-based defaults.
+        # simple → light model; complex → heavy model; premium → escape-hatch (heavy) model.
         if model_override:
             model = model_override
-        elif complexity in ('complex', 'premium'):
-            # 'premium' is the Gemini escape-hatch tier; for a BYOK Anthropic user it maps to
-            # their full model, not the cheap one.
-            model = getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6'))
+        elif complexity == 'premium':
+            model = getattr(settings, 'ANTHROPIC_MODEL_PREMIUM', 'claude-opus-4-8')
+        elif complexity == 'complex':
+            model = getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', getattr(settings, 'ANTHROPIC_MODEL', 'claude-opus-4-8'))
         else:
-            model = getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5')
-        max_tokens = getattr(settings, 'ANTHROPIC_MAX_TOKENS', 2048)
+            model = getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-sonnet-5')
+
+        # Anthropic requires max_tokens to be explicit. 'simple' uses the tight default budget;
+        # 'complex'/'premium' emit large structured JSON (budget recommendations, discovery,
+        # retrospectives) and need headroom so payloads don't truncate mid-object — mirror the
+        # Gemini tiered-budget approach (_call_gemini uses 16384 for non-simple tiers).
+        if complexity == 'simple':
+            max_tokens = getattr(settings, 'ANTHROPIC_MAX_TOKENS', 2048)
+        else:
+            max_tokens = 16384
 
         # Build the messages list in Anthropic's native format.
         # IMPORTANT: Anthropic does NOT accept role='system' inside the messages list.
@@ -1028,20 +1042,27 @@ class AIRouter:
 
     @staticmethod
     def get_model_name(provider, complexity='simple'):
-        """Returns the default model name for a provider at a given complexity level."""
+        """Returns the default model name for a provider at a given complexity level.
+
+        Fallback strings mirror the settings defaults in kanban_board/settings.py; keep
+        them in sync when the tier ladder changes.
+        """
         from django.conf import settings
         mapping = {
             'gemini': {
-                'simple': getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-2.5-flash-lite'),
-                'complex': getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-2.5-flash'),
+                'simple': getattr(settings, 'GEMINI_MODEL_SIMPLE', 'gemini-3.1-flash-lite'),
+                'complex': getattr(settings, 'GEMINI_MODEL_COMPLEX', 'gemini-3.1-flash-lite'),
+                'premium': getattr(settings, 'GEMINI_MODEL_PREMIUM', 'gemini-2.5-flash'),
             },
             'openai': {
-                'simple': getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-4o-mini'),
-                'complex': getattr(settings, 'OPENAI_MODEL_COMPLEX', 'gpt-4o'),
+                'simple': getattr(settings, 'OPENAI_MODEL_SIMPLE', 'gpt-5.6-terra'),
+                'complex': getattr(settings, 'OPENAI_MODEL_COMPLEX', 'gpt-5.6-sol'),
+                'premium': getattr(settings, 'OPENAI_MODEL_PREMIUM', 'gpt-5.6-sol'),
             },
             'anthropic': {
-                'simple': getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5'),
-                'complex': getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', 'claude-sonnet-4-6'),
+                'simple': getattr(settings, 'ANTHROPIC_MODEL_SIMPLE', 'claude-sonnet-5'),
+                'complex': getattr(settings, 'ANTHROPIC_MODEL_COMPLEX', 'claude-opus-4-8'),
+                'premium': getattr(settings, 'ANTHROPIC_MODEL_PREMIUM', 'claude-opus-4-8'),
             },
         }
         return mapping.get(provider, {}).get(complexity, 'unknown')

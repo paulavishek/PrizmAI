@@ -394,33 +394,44 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 
 # AI Provider Model Configuration
-# Change OPENAI_MODEL to 'gpt-4o-mini' for lower cost at the expense of quality.
-OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o')
-# Change ANTHROPIC_MODEL to 'claude-haiku-4-5' for lower cost.
-ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6')
+# Legacy single-model vars — kept only as backward-compatible fallback defaults for the
+# tiered constants below (existing production .env files may still set these).  These
+# represent the "full" model, so they feed the COMPLEX tier's fallback chain.
+OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.6-sol')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-opus-4-8')
 # Maximum tokens Anthropic will generate per response. Anthropic requires this to be explicit.
+# This is the SIMPLE-tier / BYOK-override default; complex/premium get a larger budget in
+# _call_anthropic (see ai_router.py) so large structured-JSON payloads don't truncate.
 ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', '2048'))
 
-# Tiered model selection — AIRouter uses these to pick cheap vs. full models based on
-# task complexity.  Defaults preserve backward compatibility with existing OPENAI_MODEL
-# and ANTHROPIC_MODEL env vars already set in production.
+# Tiered model selection — AIRouter maps a task's `complexity` ('simple' | 'complex' |
+# 'premium') to a concrete model per provider.  Every value is os.getenv-overridable so any
+# tier can be rolled back to a different model instantly, without a code change.
 #
-# Gemini cost strategy (see plan i-am-planning-to-steady-coral):
+# Gemini cost strategy:
 #   simple/complex both default to the economical gemini-3.1-flash-lite (matches/beats
 #   2.5-flash on reasoning at ~40% lower output cost). The expensive gemini-2.5-flash is
 #   reserved as the PREMIUM "escape hatch" — used only for genuinely large-document
 #   requests (long-context retrieval / factual grounding), wired at two size-triggered
-#   call sites. Revert any tier to gemini-2.5-flash via env override for instant rollback.
+#   call sites.
+#
+# Anthropic (Claude) ladder: Sonnet 5 for the light tier, Opus 4.8 for heavy + premium.
+#   (Haiku deliberately not used.)
+# OpenAI (GPT) ladder: GPT-5.6 generation — gpt-5.6-terra light, gpt-5.6-sol heavy + premium.
+#   NOTE: confirm the exact GPT-5.6 API id strings against OpenAI's current model list
+#   before relying on these in production; override via env if OpenAI renames them.
 GEMINI_MODEL_SIMPLE = os.getenv('GEMINI_MODEL_SIMPLE', 'gemini-3.1-flash-lite')
 GEMINI_MODEL_COMPLEX = os.getenv('GEMINI_MODEL_COMPLEX', 'gemini-3.1-flash-lite')
 GEMINI_MODEL_PREMIUM = os.getenv('GEMINI_MODEL_PREMIUM', 'gemini-2.5-flash')
 # Function-calling (Spectra chat action extraction) has its own knob so it can be reverted
 # to gemini-2.5-flash independently of the general complex tier if any action flow regresses.
 GEMINI_MODEL_FUNCTION_CALLING = os.getenv('GEMINI_MODEL_FUNCTION_CALLING', 'gemini-3.1-flash-lite')
-OPENAI_MODEL_SIMPLE = os.getenv('OPENAI_MODEL_SIMPLE', 'gpt-4o-mini')
-OPENAI_MODEL_COMPLEX = os.getenv('OPENAI_MODEL_COMPLEX', os.getenv('OPENAI_MODEL', 'gpt-4o'))
-ANTHROPIC_MODEL_SIMPLE = os.getenv('ANTHROPIC_MODEL_SIMPLE', 'claude-haiku-4-5')
-ANTHROPIC_MODEL_COMPLEX = os.getenv('ANTHROPIC_MODEL_COMPLEX', os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6'))
+OPENAI_MODEL_SIMPLE = os.getenv('OPENAI_MODEL_SIMPLE', 'gpt-5.6-terra')
+OPENAI_MODEL_COMPLEX = os.getenv('OPENAI_MODEL_COMPLEX', os.getenv('OPENAI_MODEL', 'gpt-5.6-sol'))
+OPENAI_MODEL_PREMIUM = os.getenv('OPENAI_MODEL_PREMIUM', os.getenv('OPENAI_MODEL_COMPLEX', 'gpt-5.6-sol'))
+ANTHROPIC_MODEL_SIMPLE = os.getenv('ANTHROPIC_MODEL_SIMPLE', 'claude-sonnet-5')
+ANTHROPIC_MODEL_COMPLEX = os.getenv('ANTHROPIC_MODEL_COMPLEX', os.getenv('ANTHROPIC_MODEL', 'claude-opus-4-8'))
+ANTHROPIC_MODEL_PREMIUM = os.getenv('ANTHROPIC_MODEL_PREMIUM', os.getenv('ANTHROPIC_MODEL_COMPLEX', 'claude-opus-4-8'))
 
 # AI Router kill-switch — set AI_ROUTER_ENABLED=false in production to instantly bypass
 # the router and call Gemini directly.  Use this only during production incidents.
