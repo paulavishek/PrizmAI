@@ -164,6 +164,44 @@ class CloneCalendarEventsRsvpStatusTests(TestCase):
         # not flattened participant statuses.
         self.assertEqual(cloned_event.created_by_id, viewer.id)
 
+    def test_new_clone_records_cloned_from_lineage(self):
+        viewer = User.objects.create_user('demo_prospect_lineage', password='x')
+        UserProfile.objects.get_or_create(user=viewer)
+        sandbox_board = Board.objects.create(
+            name='demo_prospect_lineage sandbox', organization=self.demo_org, workspace=self.demo_ws,
+            owner=viewer, created_by=viewer, is_sandbox_copy=True,
+            is_official_demo_board=False, is_seed_demo_data=False,
+            cloned_from=self.template_board,
+        )
+
+        _clone_calendar_events_for_user(viewer)
+
+        cloned_event = CalendarEvent.objects.get(board=sandbox_board, title='Sprint Planning')
+        self.assertEqual(cloned_event.cloned_from_id, self.template_event.id)
+
+    def test_reentry_backfills_cloned_from_on_preexisting_clone(self):
+        """Sandboxes cloned before CalendarEvent.cloned_from existed have no
+        lineage on their events. The next time _clone_calendar_events_for_user
+        runs for that owner (dashboard re-entry, toggle-demo, Reset Demo), the
+        already-populated branch must repair it rather than leaving it null
+        forever."""
+        viewer = User.objects.create_user('demo_prospect_reentry', password='x')
+        UserProfile.objects.get_or_create(user=viewer)
+        sandbox_board = Board.objects.create(
+            name='demo_prospect_reentry sandbox', organization=self.demo_org, workspace=self.demo_ws,
+            owner=viewer, created_by=viewer, is_sandbox_copy=True,
+            is_official_demo_board=False, is_seed_demo_data=False,
+            cloned_from=self.template_board,
+        )
+        _clone_calendar_events_for_user(viewer)
+        # Simulate pre-fix data: strip the lineage the clone loop just set.
+        CalendarEvent.objects.filter(board=sandbox_board).update(cloned_from=None)
+
+        _clone_calendar_events_for_user(viewer)  # re-entry, e.g. next dashboard load
+
+        cloned_event = CalendarEvent.objects.get(board=sandbox_board, title='Sprint Planning')
+        self.assertEqual(cloned_event.cloned_from_id, self.template_event.id)
+
 
 class CalendarFeedBoardScopeTests(TestCase):
     """Regression: the unified events feed must return each seeded event exactly
@@ -204,6 +242,17 @@ class CalendarFeedBoardScopeTests(TestCase):
         )
         BoardMembership.objects.create(board=cls.template_board, user=cls.priya, role='owner')
         BoardMembership.objects.create(board=cls.template_board, user=cls.marcus, role='member')
+
+        # Personas can log in directly (they're real, shared credentials) and
+        # browse a teammate's sandbox — give them the same "viewing demo"
+        # profile state a direct login sets, so get_user_boards() scopes them
+        # the way it does for the real priya.sharma/marcus.chen accounts.
+        for persona in (cls.priya, cls.marcus):
+            profile, _ = UserProfile.objects.get_or_create(user=persona)
+            profile.organization = cls.demo_org
+            profile.active_workspace = cls.demo_ws
+            profile.is_viewing_demo = True
+            profile.save()
 
         now = timezone.now()
         # Public team_event — the visible duplicate in the bug report.
@@ -275,6 +324,107 @@ class CalendarFeedBoardScopeTests(TestCase):
         # Marcus-owned OOO, which the teammate clause matches (Marcus is in d's
         # board_member_ids) but the board scope correctly excludes.
         self.assertTrue(feed_pks.isdisjoint(a_event_pks))
+
+    def test_persona_as_viewer_sees_own_organized_events_exactly_once(self):
+        """Priya is a real login (not a prospect) who is both creator AND an
+        accepted participant on each of these template events — exactly the
+        case _make_prospect's viewer never exercises, since a prospect is
+        never a participant on the template original. Reproduces the "Daily
+        Standup / Sprint 3 Planning / 1:1: Priya & Marcus / Stakeholder Demo
+        / Team Lunch all render twice" bug report: each independently
+        matches the feed via created_by=her (or the invited-participant
+        escape hatch) on the template original, AND via ordinary board scope
+        on her sandbox-clone, once a teammate's sandbox exists.
+        """
+        now = timezone.now()
+        titles = [
+            'Daily Standup', 'Sprint 3 Planning',
+            '1:1: Priya & Marcus', 'Stakeholder Demo - Core Features',
+        ]
+        for title in titles:
+            ev = CalendarEvent.objects.create(
+                title=title, event_type='meeting', visibility='team',
+                start_datetime=now, end_datetime=now + timezone.timedelta(hours=1),
+                board=self.template_board, created_by=self.priya, is_demo=True,
+            )
+            CalendarEventParticipant.objects.create(
+                event=ev, user=self.priya, status=CalendarEventParticipant.ACCEPTED,
+            )
+        # cls.team_event already exists (created_by=priya) — add the explicit
+        # self-RSVP the real narrative has, rather than creating a duplicate
+        # title.
+        CalendarEventParticipant.objects.create(
+            event=self.team_event, user=self.priya, status=CalendarEventParticipant.ACCEPTED,
+        )
+        titles.append('Team Lunch - Sprint 2 Celebration')
+
+        # A different real user provisions their own sandbox — clones every
+        # template event above onto their own board (Priya is added as a
+        # guest member by _make_prospect's default persona_members=True).
+        self._make_prospect('scope_prospect_persona_viewer')
+
+        feed_titles = [ev['title'] for ev in self._feed_events(self.priya)]
+        for title in titles:
+            self.assertEqual(
+                feed_titles.count(title), 1,
+                f"{title!r} should appear exactly once, got {feed_titles.count(title)}",
+            )
+
+    def test_persona_viewer_read_path_backfills_legacy_clone_without_owner_action(self):
+        """A sandbox owner who never re-triggers their own provisioning flow
+        (dashboard re-entry, toggle-demo, Reset Demo) must not leave a
+        persona viewer stuck seeing the duplicate forever — the backfill
+        that repairs CalendarEvent.cloned_from lineage also runs from
+        unified_calendar_events_api itself, scoped to whatever sandbox
+        boards the *viewer* has in scope, regardless of ownership.
+        """
+        now = timezone.now()
+        standup = CalendarEvent.objects.create(
+            title='Daily Standup', event_type='meeting', visibility='team',
+            start_datetime=now, end_datetime=now + timezone.timedelta(hours=1),
+            board=self.template_board, created_by=self.priya, is_demo=True,
+        )
+        CalendarEventParticipant.objects.create(
+            event=standup, user=self.priya, status=CalendarEventParticipant.ACCEPTED,
+        )
+
+        _, sandbox = self._make_prospect('scope_prospect_legacy')
+        # Simulate a clone created before CalendarEvent.cloned_from existed —
+        # _make_prospect already cloned it (and set cloned_from correctly),
+        # so null it back out to reproduce pre-fix data.
+        CalendarEvent.objects.filter(board=sandbox, title='Daily Standup').update(cloned_from=None)
+
+        # No call to _clone_calendar_events_for_user(prospect) here — proves
+        # the repair happens on Priya's own request, not the sandbox owner's.
+        feed_titles = [ev['title'] for ev in self._feed_events(self.priya)]
+        self.assertEqual(feed_titles.count('Daily Standup'), 1)
+
+    def test_backfill_skips_ambiguous_title_start_datetime_pairs(self):
+        """Two template events sharing (title, start_datetime) give the
+        backfill no reliable way to pick the right one — it must leave
+        cloned_from unset rather than guess."""
+        from kanban.sandbox_views import _backfill_cloned_from_lineage
+
+        now = timezone.now()
+        CalendarEvent.objects.create(
+            title='Ambiguous Meeting', event_type='meeting', visibility='team',
+            start_datetime=now, end_datetime=now + timezone.timedelta(hours=1),
+            board=self.template_board, created_by=self.priya, is_demo=True,
+        )
+        CalendarEvent.objects.create(
+            title='Ambiguous Meeting', event_type='meeting', visibility='team',
+            start_datetime=now, end_datetime=now + timezone.timedelta(hours=1),
+            board=self.template_board, created_by=self.marcus, is_demo=True,
+        )
+        _, sandbox = self._make_prospect('scope_prospect_ambiguous')
+        clone = CalendarEvent.objects.filter(board=sandbox, title='Ambiguous Meeting').first()
+        clone.cloned_from = None
+        clone.save(update_fields=['cloned_from'])
+
+        _backfill_cloned_from_lineage(sandbox, self.template_board)
+
+        clone.refresh_from_db()
+        self.assertIsNone(clone.cloned_from_id)
 
 
 class AssigneeColorMapTests(SimpleTestCase):

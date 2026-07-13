@@ -2200,9 +2200,13 @@ def _clone_calendar_events_for_user(user):
         owner=user, is_sandbox_copy=True, cloned_from__isnull=False,
     ).select_related('cloned_from')
     for sb in sandbox_boards:
-        if CalendarEvent.objects.filter(board=sb).exists():
-            continue  # already populated (cloned or user-created) — leave untouched
         template = sb.cloned_from
+        if CalendarEvent.objects.filter(board=sb).exists():
+            # Already populated (cloned or user-created) — leave the events
+            # themselves untouched, but repair cloned_from lineage on any rows
+            # cloned before that field existed, so the feed can dedupe them.
+            _backfill_cloned_from_lineage(sb, template)
+            continue
         # Board cloning copies tasks by title, so map linked tasks by title.
         sb_tasks = {t.title: t for t in Task.objects.filter(column__board=sb)}
         for ev in CalendarEvent.objects.filter(board=template).prefetch_related('participant_links'):
@@ -2223,6 +2227,7 @@ def _clone_calendar_events_for_user(user):
                 linked_task=new_linked,
                 created_by=clone_creator,
                 is_demo=True,
+                cloned_from=ev,
             )
             # Preserve each participant's real RSVP status from the seed
             # narrative (pending/declined/accepted) rather than flattening
@@ -2235,6 +2240,38 @@ def _clone_calendar_events_for_user(user):
                     event=clone, user=link.user, status=link.status,
                     responded_at=link.responded_at,
                 )
+
+
+def _backfill_cloned_from_lineage(sandbox_board, template_board):
+    """Repairs CalendarEvent.cloned_from lineage for sandbox clones created
+    before that field existed. Matches by (title, start_datetime) — the clone
+    loop above never mutates either — and skips any title+start_datetime pair
+    that isn't unique on the template board rather than guessing wrong.
+
+    Called both from the sandbox owner's own provisioning flows above, and
+    from unified_calendar_events_api for any sandbox board a *viewer*
+    currently has in scope (regardless of whether they own it) — a demo
+    persona browsing a teammate's sandbox needs this repaired on her own
+    request, not just on the owner's.
+    """
+    from kanban.models import CalendarEvent
+
+    missing = CalendarEvent.objects.filter(board=sandbox_board, cloned_from__isnull=True)
+    if not missing.exists():
+        return
+    by_key, ambiguous = {}, set()
+    for ev in CalendarEvent.objects.filter(board=template_board):
+        key = (ev.title, ev.start_datetime)
+        if key in by_key:
+            ambiguous.add(key)
+        else:
+            by_key[key] = ev.id
+    for clone in missing:
+        key = (clone.title, clone.start_datetime)
+        if key in ambiguous or key not in by_key:
+            continue
+        clone.cloned_from_id = by_key[key]
+        clone.save(update_fields=['cloned_from'])
 
 
 def _leave_demo_org(user):

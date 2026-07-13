@@ -3070,6 +3070,19 @@ class CalendarEvent(models.Model):
         help_text="Link to a task to give teammates context (e.g. 'busy on Auth System')",
     )
 
+    # Lineage back to the shared demo template event this sandbox clone was
+    # cloned from (mirrors Board.cloned_from). Lets the calendar feed
+    # recognize when a viewer independently matches both the template
+    # original and its own sandbox clone (e.g. a demo persona who is a
+    # genuine participant on both) and suppress the shadowed original.
+    cloned_from = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='sandbox_clones',
+        help_text='Template-board event this sandbox clone was cloned from.',
+    )
+
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
