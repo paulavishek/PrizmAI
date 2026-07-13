@@ -359,6 +359,17 @@ def unified_calendar_events_api(request):
     # workspace's events you're allowed to see). See the board-scope filter below.
     scope_boards = boards
 
+    # Repair CalendarEvent.cloned_from lineage for any sandbox board in scope,
+    # regardless of whether the viewer owns it. A demo persona (Priya, Marcus,
+    # Elena) is a genuine login who can view a *teammate's* sandbox without
+    # ever triggering that teammate's own provisioning flows (which only ever
+    # repair boards they own) — this repairs lineage on the viewer's own
+    # request instead, which is what the shadowed-original dedup below
+    # depends on. Cheap no-op once a board's clones are already backfilled.
+    from kanban.sandbox_views import _backfill_cloned_from_lineage
+    for _sb in scope_boards.filter(is_sandbox_copy=True, cloned_from__isnull=False).select_related('cloned_from'):
+        _backfill_cloned_from_lineage(_sb, _sb.cloned_from)
+
     # Optional board filter
     board_filter = request.GET.get('boards', '')
     if board_filter:
@@ -544,7 +555,19 @@ def unified_calendar_events_api(request):
         })
 
     # --- Calendar Events ---
-    for ev in event_qs:
+    # Demo personas are genuine participants on BOTH the shared template-board
+    # original (reached via the "invited participant crosses board boundaries"
+    # escape hatch above) AND their own per-user sandbox clone (reached via
+    # ordinary board scope) — two independently-correct rows for one logical
+    # event. Suppress the original whenever its clone is also in this same
+    # result set; this can only fire when both are present, so it never hides
+    # an event that reaches the feed on its own. No-op for real (non-demo) data.
+    event_list = list(event_qs)
+    shadowed_ids = {ev.cloned_from_id for ev in event_list if ev.cloned_from_id}
+
+    for ev in event_list:
+        if ev.id in shadowed_ids:
+            continue
         is_mine = (ev.created_by_id == request.user.id)
         # Participants who are invited to an event should see full details, not the
         # sanitized teammate_status view — unless they've declined, in which case
