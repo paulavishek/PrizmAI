@@ -128,6 +128,7 @@
                         </div>
                         <div class="text-muted mb-2" style="font-size:0.8rem;">
                             <i class="fas fa-briefcase me-1"></i>{{ profile.weekly_capacity_hours }}h/wk &bull; {{ profile.utilization_percentage|floatformat:0 }}% utilized
+                            <i class="fas fa-info-circle ms-1" title="Workload across all your active boards (flat estimate: 8h per active task), capped at 100%."></i>
                         </div>
                         {% if profile.skills %}
                         <div class="d-flex flex-wrap gap-2 align-items-center">

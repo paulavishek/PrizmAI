@@ -65,7 +65,7 @@ class ResourceLevelingService:
             user=user,
             defaults={
                 'workspace': self.workspace,
-                'weekly_capacity_hours': 40.0,
+                'weekly_capacity_hours': self._get_declared_capacity_hours(user),
                 'velocity_score': 1.0,
                 'quality_score': 3.0
             }
@@ -79,17 +79,46 @@ class ResourceLevelingService:
             # Initialize with historical data
             profile.update_metrics(board=board)
 
+        # Keep capacity in sync with the user's declared profile hours so the
+        # AI modal's utilization % is measured against the same weekly capacity
+        # shown on the user's profile page, instead of a hardcoded default.
+        self._sync_profile_capacity(user, profile)
+
         # Always refresh current workload to ensure real-time accuracy
         profile.update_current_workload(board=board)
-        
+
         # Merge user's declared profile skills into AI skill_keywords so the
         # resource optimizer can use them for skill matching and qualification.
         # Declared skills get a weight of 5 (moderate confidence) so they
         # contribute meaningfully but don't overwhelm task-history-derived skills.
         self._sync_profile_skills(user, profile)
-        
+
         return profile
-    
+
+    def _get_declared_capacity_hours(self, user):
+        """User's declared weekly capacity (accounts.UserProfile), falling back
+        to 40.0 when no UserProfile exists yet."""
+        try:
+            return float(user.profile.weekly_capacity_hours)
+        except Exception:
+            return 40.0
+
+    def _sync_profile_capacity(self, user, performance_profile):
+        """
+        Sync the AI performance profile's weekly capacity from the user's
+        declared UserProfile.weekly_capacity_hours (set on the profile page).
+
+        Without this, UserPerformanceProfile.weekly_capacity_hours silently
+        stays at its 40.0 creation default forever — there is no product UI to
+        edit it directly — so the AI Resource Optimization modal's utilization
+        % is measured against a different capacity than the one shown on the
+        user's own profile page.
+        """
+        declared = self._get_declared_capacity_hours(user)
+        if performance_profile.weekly_capacity_hours != declared:
+            performance_profile.weekly_capacity_hours = declared
+            performance_profile.save(update_fields=['weekly_capacity_hours'])
+
     def _sync_profile_skills(self, user, performance_profile):
         """
         Merge user-declared skills from UserProfile into the AI's skill_keywords.
