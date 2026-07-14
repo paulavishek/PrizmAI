@@ -70,7 +70,54 @@ class UserProfile(models.Model):
         default='light',
         help_text='Preferred display mode for the interface'
     )
-    
+
+    # AI response-style profile ("custom instructions" / style memory).
+    # Applied to narrative AI surfaces (PrizmBrief, Retrospectives, AI Coach,
+    # Spectra chat) via accounts.style_profile.build_ai_style_directive().
+    # 'default' + blank custom_ai_instructions => no directive emitted, so
+    # existing behavior is preserved for anyone who never touches these.
+    RESPONSE_TONE_CHOICES = [
+        ('default', 'Default'),
+        ('formal', 'Formal'),
+        ('conversational', 'Conversational'),
+        ('executive', 'Executive'),
+    ]
+    RESPONSE_LENGTH_CHOICES = [
+        ('default', 'Default'),
+        ('brief', 'Brief'),
+        ('standard', 'Standard'),
+        ('detailed', 'Detailed'),
+    ]
+    RESPONSE_STRUCTURE_CHOICES = [
+        ('default', 'Default'),
+        ('bullets', 'Bullet-heavy'),
+        ('narrative', 'Narrative paragraphs'),
+    ]
+    response_tone = models.CharField(
+        max_length=20,
+        choices=RESPONSE_TONE_CHOICES,
+        default='default',
+        help_text='Preferred tone for AI-generated prose (briefs, retros, coaching, Spectra)'
+    )
+    response_length = models.CharField(
+        max_length=20,
+        choices=RESPONSE_LENGTH_CHOICES,
+        default='default',
+        help_text='Preferred length/verbosity for AI-generated prose'
+    )
+    response_structure = models.CharField(
+        max_length=20,
+        choices=RESPONSE_STRUCTURE_CHOICES,
+        default='default',
+        help_text='Preferred structure (bullets vs narrative paragraphs) for AI-generated prose'
+    )
+    custom_ai_instructions = models.TextField(
+        blank=True,
+        default='',
+        max_length=600,
+        help_text='Free-text catch-all: anything the AI should always remember about your preferred format'
+    )
+
     # Welcome modal tracking
     has_seen_welcome = models.BooleanField(
         default=False,

@@ -174,10 +174,11 @@
                         </div>
                     </div>
 
-                    <!-- Remaining form fields (excluding profile_picture which is rendered above) -->
+                    <!-- Remaining form fields (excluding profile_picture and the AI-style fields,
+                         which are rendered above / in their own sub-section below) -->
                     <p class="required-fields-hint"><span class="required-asterisk">*</span> indicates a required field</p>
                     {% for field in form %}
-                        {% if field.html_name != 'profile_picture' %}
+                        {% if field.html_name != 'profile_picture' and field.html_name != 'response_tone' and field.html_name != 'response_length' and field.html_name != 'response_structure' and field.html_name != 'custom_ai_instructions' %}
                         <div class="mb-3 {% if field.field.required %}required{% endif %}">
                             {{ field.label_tag }}
                             {{ field }}
@@ -193,7 +194,39 @@
                         </div>
                         {% endif %}
                     {% endfor %}
-                    
+
+                    <!-- ── Response Style & AI Instructions ─────────────────────────── -->
+                    <hr class="my-4">
+                    <h6 class="fw-semibold mb-1"><i class="fas fa-robot me-2"></i>Response Style &amp; AI Instructions</h6>
+                    <p class="form-text text-muted mb-3">
+                        These preferences shape AI-generated briefs, retrospectives, coaching, and Spectra replies.
+                        Leave on <em>Default</em> to keep the standard style.
+                    </p>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.response_tone.label_tag }}
+                            {{ form.response_tone }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.response_length.label_tag }}
+                            {{ form.response_length }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.response_structure.label_tag }}
+                            {{ form.response_structure }}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.custom_ai_instructions.label_tag }}
+                        {{ form.custom_ai_instructions }}
+                        {% if form.custom_ai_instructions.help_text %}
+                            <div class="form-text text-muted">{{ form.custom_ai_instructions.help_text }}</div>
+                        {% endif %}
+                        {% for error in form.custom_ai_instructions.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
                     <button type="submit" class="btn btn-primary mt-3">Save Changes</button>
                 </form>
             </div>

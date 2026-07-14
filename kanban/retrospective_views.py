@@ -228,7 +228,7 @@ def retrospective_create(request, board_id):
             manual_actions = [action.strip() for action in manual_actions if action.strip()]
             
             # Generate retrospective
-            generator = RetrospectiveGenerator(board, period_start, period_end)
+            generator = RetrospectiveGenerator(board, period_start, period_end, user=request.user)
             
             retrospective = generator.create_retrospective(
                 created_by=request.user,

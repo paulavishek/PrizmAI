@@ -324,6 +324,7 @@ def prizmbrief_setup(request, board_id):
         'purpose_label': _label(PURPOSE_CHOICES, purpose),
         'mode':          mode,
         'user_name':     request.user.get_full_name() or request.user.username.replace('_', ' ').title(),
+        'user':          request.user,
     }
 
     raw_text = generate_prizmbrief(brief_data)

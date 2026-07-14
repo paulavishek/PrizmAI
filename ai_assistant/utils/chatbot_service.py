@@ -4246,6 +4246,17 @@ When answering questions about organizational goals, missions, or strategies, us
             else:
                 logger.debug("No specific context found for query")
 
+            # User response-style profile (persisted custom instructions). Empty
+            # unless the user set non-default prefs; kept subordinate to Spectra's
+            # own answer-format rules by the directive's own wording.
+            try:
+                from accounts.style_profile import directive_for_user
+                style_directive = directive_for_user(self.user)
+                if style_directive:
+                    system_prompt += "\n\n" + style_directive
+            except Exception as _style_exc:
+                logger.debug(f"Style-profile directive skipped: {_style_exc}")
+
             query_classification = classify_query_type(prompt)
             query_type = query_classification['type']
             temperature = query_classification['temperature']
