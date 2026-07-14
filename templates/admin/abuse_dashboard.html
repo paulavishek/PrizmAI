@@ -54,7 +54,7 @@
     }
     
     .section-card {
-        background: white;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         margin-bottom: 20px;
@@ -63,7 +63,7 @@
     
     .section-header {
         padding: 15px 20px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-bottom: 1px solid #e9ecef;
         display: flex;
         justify-content: space-between;
@@ -73,7 +73,7 @@
     .section-header h2 {
         margin: 0;
         font-size: 1.1rem;
-        color: #333;
+        color: var(--text-primary);
     }
     
     .section-body {
@@ -93,7 +93,7 @@
     }
     
     .visitor-table th {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         font-weight: 600;
         font-size: 0.85rem;
         text-transform: uppercase;
@@ -101,7 +101,7 @@
     }
     
     .visitor-table tr:hover {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
     }
     
     .badge {
@@ -187,7 +187,7 @@
     
     .limitation-bar {
         height: 8px;
-        background: #e9ecef;
+        background: var(--bg-tertiary);
         border-radius: 4px;
         overflow: hidden;
         margin-top: 5px;
@@ -220,14 +220,14 @@
     }
     
     .nav-tabs a:hover { 
-        background: #f9fafb;
-        color: #1f2937;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
     }
     
     .nav-tabs a.active { 
-        background: white;
+        background: var(--card-bg);
         color: #667eea;
-        border-color: #e5e7eb;
+        border-color: var(--border-color);
         border-bottom-color: white;
     }
 </style>
@@ -298,13 +298,13 @@
             <div class="subtitle">Avg {{ aggregate_stats.avg_sessions_per_visitor|floatformat:1|default:0 }} per visitor</div>
         </div>
         
-        <div class="stat-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333;">
+        <div class="stat-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: var(--text-primary);">
             <h3>Active (Last {{ days }} days)</h3>
             <div class="value">{{ recent_records|default:0 }}</div>
             <div class="subtitle">Recently active visitors</div>
         </div>
         
-        <div class="stat-card" style="background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%); color: #333;">
+        <div class="stat-card" style="background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%); color: var(--text-primary);">
             <h3>Projects Created</h3>
             <div class="value">{{ aggregate_stats.total_projects|default:0 }}</div>
             <div class="subtitle">In demo mode</div>
@@ -393,7 +393,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="5" style="text-align: center; color: #999; padding: 30px;">
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                 No high risk visitors detected 🎉
                             </td>
                         </tr>
@@ -438,7 +438,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="4" style="text-align: center; color: #999; padding: 30px;">
+                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                 No recent activity
                             </td>
                         </tr>

@@ -11,7 +11,7 @@
         height: 600px;
         border: 1px solid #ddd;
         border-radius: 8px;
-        background: white;
+        background: var(--card-bg);
         overflow: hidden;
     }
 
@@ -37,7 +37,7 @@
     .message {
         margin-bottom: 1rem;
         padding: 0.75rem;
-        background: white;
+        background: var(--card-bg);
         border-radius: 8px;
         border-left: 3px solid #667eea;
     }
@@ -59,12 +59,12 @@
 
     .message-content {
         margin-top: 0.25rem;
-        color: #333;
+        color: var(--text-primary);
     }
 
     .message-time {
         font-size: 0.8rem;
-        color: #999;
+        color: var(--text-muted);
         margin-top: 0.25rem;
     }
 
@@ -99,7 +99,7 @@
     }
 
     .message-read-btn.read {
-        color: #999;
+        color: var(--text-muted);
         cursor: default;
         text-decoration: line-through;
     }
@@ -143,7 +143,7 @@
         position: relative;
         padding: 1rem;
         border-top: 1px solid #ddd;
-        background: white;
+        background: var(--card-bg);
     }
 
     /* ---- @mention autocomplete ---- */
@@ -154,7 +154,7 @@
         left: 1rem;
         right: 1rem;
         margin-bottom: 0.25rem;
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #ddd;
         border-radius: 6px;
         box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
@@ -266,7 +266,7 @@
     #ai-compose-preview .ai-rewritten-text {
         font-size: 0.95rem;
         line-height: 1.5;
-        color: #333;
+        color: var(--text-primary);
         white-space: pre-wrap;
         word-break: break-word;
     }
@@ -349,7 +349,7 @@
     }
     .presence-toggle-row .form-check-label {
         font-size: 0.8rem;
-        color: #6c757d;
+        color: var(--text-muted);
         cursor: pointer;
     }
 
@@ -414,7 +414,7 @@
         flex-shrink: 0;
         border-radius: 3px;
     }
-    #searchCloseBtn:hover { background: #e0d5f8; color: #333; }
+    #searchCloseBtn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 
     /* Results overlay — anchored to .search-anchor, directly below the search bar */
     .search-results-panel {
@@ -423,7 +423,7 @@
         left: 0;
         right: 0;
         z-index: 120;
-        background: #fff;
+        background: var(--card-bg);
         border: 1px solid #d0c8f0;
         border-top: none;
         border-radius: 0 0 8px 8px;
@@ -453,12 +453,12 @@
     .search-result-item:hover { background: #f5f0ff; }
     .search-result-meta {
         font-size: 0.78rem;
-        color: #888;
+        color: var(--text-muted);
         margin-bottom: 0.2rem;
     }
     .search-result-content {
         font-size: 0.88rem;
-        color: #333;
+        color: var(--text-primary);
         word-break: break-word;
     }
     .search-status-msg {
@@ -2003,7 +2003,7 @@ function _showTaskSuggestionsModal(tasks, targetColumn) {
                 confidenceHtml = `
                 <div class="d-flex align-items-center mt-1" title="AI Confidence: ${pct}%">
                     <small class="text-muted me-1" style="font-size:0.72rem;">Confidence:</small>
-                    <div style="flex:1;max-width:100px;height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;">
+                    <div style="flex:1;max-width:100px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;">
                         <div style="width:${pct}%;height:100%;background:${confColor};border-radius:3px;"></div>
                     </div>
                     <small class="ms-1 fw-semibold" style="font-size:0.72rem;color:${confColor};">${pct}%</small>
@@ -2391,7 +2391,7 @@ document.addEventListener('keydown', function (e) {
                         <h6 class="mb-2" style="color: #1b5e20;"><strong>🔓 Test Real-Time Messaging with Multiple Users</strong></h6>
                         <p class="mb-2" style="font-size: 0.9rem;">Want to see messages arrive in real-time? <strong>Open an incognito/private window</strong> and login as a different user to experience true real-time delivery!</p>
                         
-                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #81c784; margin-bottom: 0.75rem;">
+                        <div style="background: var(--card-bg); padding: 0.75rem; border-radius: 6px; border: 1px solid #81c784; margin-bottom: 0.75rem;">
                             <strong style="color: #2e7d32; font-size: 0.9rem;"><i class="fas fa-users me-1"></i> Available Demo Accounts (password <code style="background: #f1f8f4; padding: 0.2rem 0.4rem; border-radius: 3px;">DemoUser@2026</code>):</strong>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin-top: 0.5rem;">
                                 <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
@@ -2406,7 +2406,7 @@ document.addEventListener('keydown', function (e) {
                             </div>
                         </div>
                         
-                        <div style="font-size: 0.85rem; color: #333;">
+                        <div style="font-size: 0.85rem; color: var(--text-primary);">
                             <strong style="color: #1b5e20;"><i class="fas fa-lightbulb me-1"></i> Quick Test:</strong>
                             <ol style="margin: 0.3rem 0 0 1.2rem; padding: 0; font-size: 0.85rem;">
                                 <li>Keep this window open</li>

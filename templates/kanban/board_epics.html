@@ -6,19 +6,19 @@
 {% block extra_css %}
 <style>
     .epics-container {
-        background: #fff;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         padding: 24px;
         margin-bottom: 24px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
     }
 
     .epic-card {
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
         border-left: 4px solid #f59e0b;
         border-radius: 8px;
-        background: #fff;
+        background: var(--card-bg);
         margin-bottom: 12px;
         transition: box-shadow 0.15s ease;
     }
@@ -36,7 +36,7 @@
     .epic-chevron {
         transition: transform 0.15s ease;
         font-size: 0.75rem;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
     .epic-title-line {
         display: flex;
@@ -57,7 +57,7 @@
     .epic-title-text {
         font-weight: 600;
         font-size: 1rem;
-        color: #1e293b;
+        color: var(--text-primary);
     }
     .epic-meta-line {
         display: flex;
@@ -66,7 +66,7 @@
         margin-top: 8px;
         flex-wrap: wrap;
         font-size: 0.85rem;
-        color: #64748b;
+        color: var(--text-secondary);
     }
     .epic-meta-line > span {
         display: inline-flex;
@@ -148,12 +148,12 @@
     .epic-child-status.todo { color: #cbd5e1; }
     .epic-child-title {
         flex-grow: 1;
-        color: #1e293b;
+        color: var(--text-primary);
         text-decoration: none;
     }
     .epic-child-title:hover { color: #2563eb; text-decoration: underline; }
     .epic-child-meta {
-        color: #64748b;
+        color: var(--text-secondary);
         font-size: 0.78rem;
         white-space: nowrap;
     }
@@ -161,8 +161,17 @@
     .epics-empty {
         text-align: center;
         padding: 48px 24px;
-        color: #64748b;
+        color: var(--text-secondary);
     }
+
+    /* ── Dark Mode — priority pills → dark tints; accent statuses brightened ── */
+    [data-bs-theme="dark"] .epic-priority-low    { background: rgba(148,163,184,0.20); color: #cbd5e1; }
+    [data-bs-theme="dark"] .epic-priority-medium { background: rgba(96,165,250,0.20);  color: #93c5fd; }
+    [data-bs-theme="dark"] .epic-priority-high   { background: rgba(245,158,11,0.20);  color: #fdd663; }
+    [data-bs-theme="dark"] .epic-priority-urgent { background: rgba(239,68,68,0.20);   color: #f28b82; }
+    [data-bs-theme="dark"] .epic-child-status.in-progress { color: #93c5fd; }
+    [data-bs-theme="dark"] .epic-child-title:hover,
+    [data-bs-theme="dark"] .task-title-link:hover { color: #93c5fd; }
 </style>
 {% endblock %}
 

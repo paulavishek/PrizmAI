@@ -50,9 +50,10 @@ function initializeCharts() {
         return;
     }
     
-    // Chart.js configurations
+    // Chart.js configurations — text color follows the active theme so axis
+    // labels/legends are legible in dark mode (see static/js/chart-theme.js).
     Chart.defaults.font.family = 'Nunito';
-    Chart.defaults.color = '#858796';
+    Chart.defaults.color = (window.getChartTheme ? window.getChartTheme().textColor : '#858796');
     
     // Check for Spectra dynamic chart configs
     const configEl = document.getElementById('promoted-chart-configs');

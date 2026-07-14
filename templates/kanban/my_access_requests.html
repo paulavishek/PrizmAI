@@ -6,7 +6,7 @@
 <style>
     .mar-container { max-width: 700px; margin: 40px auto 0; }
     .mar-card {
-        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        background: var(--card-bg); border: 1px solid #e5e7eb; border-radius: 12px;
         padding: 1.25rem; margin-bottom: 1rem;
         display: flex; align-items: center; gap: 1rem;
     }
@@ -18,11 +18,11 @@
     .mar-icon.pending { background: #fef3c7; color: #f59e0b; }
     .mar-icon.approved { background: #d1fae5; color: #10b981; }
     .mar-icon.denied { background: #fee2e2; color: #ef4444; }
-    .mar-icon.cancelled { background: #f3f4f6; color: #9ca3af; }
-    .mar-icon.expired { background: #f3f4f6; color: #9ca3af; }
+    .mar-icon.cancelled { background: var(--bg-tertiary); color: var(--text-muted); }
+    .mar-icon.expired { background: var(--bg-tertiary); color: var(--text-muted); }
     .mar-info { flex: 1; }
     .mar-board { font-weight: 600; }
-    .mar-meta { font-size: .82rem; color: #888; }
+    .mar-meta { font-size: .82rem; color: var(--text-muted); }
 </style>
 {% endblock %}
 

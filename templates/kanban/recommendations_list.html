@@ -20,7 +20,7 @@
     .recommendation-card.priority-medium { border-left-color: #ffc107; }
     .recommendation-card.priority-low { border-left-color: #6c757d; }
     
-    .status-badge-pending { background-color: #ffc107; color: #000; }
+    .status-badge-pending { background-color: #ffc107; color: #212529; }
     .status-badge-accepted { background-color: #28a745; }
     .status-badge-rejected { background-color: #dc3545; }
     .status-badge-implemented { background-color: #17a2b8; }
@@ -29,7 +29,7 @@
         border-left: 3px solid #007bff;
         padding: 10px 15px;
         margin-bottom: 10px;
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         border-radius: 0 4px 4px 0;
     }
     
@@ -178,7 +178,7 @@
                                         <small class="text-muted">Risk buffer to prevent overruns</small>
                                         {% else %}
                                         <h6 class="text-muted mb-2">Estimated Savings</h6>
-                                        <h3 class="mb-0" style="color: #2c3e50;">
+                                        <h3 class="mb-0" style="color: var(--text-primary);">
                                             <i class="fas fa-piggy-bank text-success"></i>
                                             {{ board.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
                                         </h3>

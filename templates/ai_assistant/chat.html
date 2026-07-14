@@ -17,7 +17,7 @@
     
     .chat-sidebar {
         width: 300px;
-        background: white;
+        background: var(--card-bg);
         border-right: 1px solid #ddd;
         display: flex;
         flex-direction: column;
@@ -61,7 +61,7 @@
         font-weight: 600;
         font-size: 14px;
         margin-bottom: 4px;
-        color: #333;
+        color: var(--text-primary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -69,7 +69,7 @@
     
     .session-meta {
         font-size: 12px;
-        color: #999;
+        color: var(--text-muted);
     }
     
     .chat-main {
@@ -79,7 +79,7 @@
     }
     
     .chat-header {
-        background: white;
+        background: var(--card-bg);
         border-bottom: 1px solid #ddd;
         padding: 15px 20px;
         display: flex;
@@ -90,7 +90,7 @@
     .chat-title {
         font-size: 18px;
         font-weight: 600;
-        color: #333;
+        color: var(--text-primary);
         display: flex;
         align-items: center;
         gap: 10px;
@@ -115,7 +115,7 @@
     
     .title-edit-icon {
         cursor: pointer;
-        color: #999;
+        color: var(--text-muted);
         font-size: 14px;
         transition: color 0.3s;
     }
@@ -151,7 +151,7 @@
     }
     
     .model-option.active {
-        background: white;
+        background: var(--card-bg);
         color: #667eea;
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
@@ -200,8 +200,8 @@
     }
     
     .message.assistant .message-content {
-        background: white;
-        color: #333;
+        background: var(--card-bg);
+        color: var(--text-primary);
         border: 1px solid #ddd;
         max-width: 85%;
         padding: 16px 20px;
@@ -211,7 +211,7 @@
     
     .message-info {
         font-size: 11px;
-        color: #999;
+        color: var(--text-muted);
         margin-top: 5px;
     }
     
@@ -219,7 +219,7 @@
         display: flex;
         gap: 4px;
         padding: 12px 16px;
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #ddd;
         border-radius: 10px;
         width: fit-content;
@@ -247,7 +247,7 @@
     }
     
     .chat-input-area {
-        background: white;
+        background: var(--card-bg);
         border-top: 1px solid #ddd;
         padding: 15px 20px;
     }
@@ -460,7 +460,7 @@
     }
     
     .message.assistant .message-content tbody tr:nth-child(even) {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
     }
     
     .message.assistant .message-content tbody tr:hover {
@@ -641,33 +641,33 @@
         
         <!-- Messages Area -->
         <div class="chat-messages" id="chat-messages">
-            <div id="spectra-welcome" style="text-align: center; color: #999; margin: auto; max-width: 600px;">
+            <div id="spectra-welcome" style="text-align: center; color: var(--text-muted); margin: auto; max-width: 600px;">
                 <div style="font-size: 40px; margin-bottom: 10px;">🤖</div>
                 <p id="welcome-message" style="margin-bottom: 18px;">Hello, I'm <strong style="color:#667eea;">Spectra</strong>. {% if is_viewing_demo %}You're in your <strong>Sandbox</strong>. I've analyzed {{ active_boards_count }} board{{ active_boards_count|pluralize }}. Feel free to experiment — this is your private copy! What can I help with?{% elif active_boards_count > 0 %}I've analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I help with?{% else %}You have no active boards in your workspace yet. Ask me anything about your workspace!{% endif %}</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin: 0 auto 16px auto; max-width: 520px;">
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">💬 <strong style="color:#444;">Ask Anything</strong></div>
-                        <div style="font-size: 12px; color: #888;">Project status, risks, tasks, resources, strategy</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">💬 <strong style="color:var(--text-secondary);">Ask Anything</strong></div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Project status, risks, tasks, resources, strategy</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">� <strong style="color:#444;">Reports & Insights</strong></div>
-                        <div style="font-size: 12px; color: #888;">Overdue tasks, workload, sprint health</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">� <strong style="color:var(--text-secondary);">Reports & Insights</strong></div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Overdue tasks, workload, sprint health</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">🎯 <strong style="color:#444;">Goals & Strategy</strong></div>
-                        <div style="font-size: 12px; color: #888;">Mission, OKRs, strategic alignment</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">🎯 <strong style="color:var(--text-secondary);">Goals & Strategy</strong></div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Mission, OKRs, strategic alignment</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">⚠️ <strong style="color:#444;">Risks & Blockers</strong></div>
-                        <div style="font-size: 12px; color: #888;">Identify risks, dependencies, bottlenecks</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">⚠️ <strong style="color:var(--text-secondary);">Risks & Blockers</strong></div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Identify risks, dependencies, bottlenecks</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">👥 <strong style="color:#444;">Team & Resources</strong></div>
-                        <div style="font-size: 12px; color: #888;">Who's working on what, capacity</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">👥 <strong style="color:var(--text-secondary);">Team & Resources</strong></div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Who's working on what, capacity</div>
                     </div>
                     <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
-                        <div style="font-size: 15px; margin-bottom: 4px;">📚 <strong style="color:#444;">Wiki & Docs</strong></div>
-                        <div style="font-size: 12px; color: #888;">Search your project documentation</div>
+                        <div style="font-size: 15px; margin-bottom: 4px;">📚 <strong style="color:var(--text-secondary);">Wiki & Docs</strong></div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Search your project documentation</div>
                     </div>
                 </div>
                 <p style="font-size: 12px; color: #bbb;">Try clicking a suggestion below, or type anything to get started.</p>
@@ -719,34 +719,34 @@
         <!-- No Session State - Prompt user to create a new chat -->
         <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 40px; text-align: center;">
             <div style="font-size: 80px; margin-bottom: 20px;">🤖</div>
-            <h2 style="color: #333; margin-bottom: 15px;">Welcome to Spectra</h2>
+            <h2 style="color: var(--text-primary); margin-bottom: 15px;">Welcome to Spectra</h2>
             <p style="color: #666; max-width: 540px; margin-bottom: 20px;">
                 Your AI project assistant — ask questions, get insights, and explore your project data.
             </p>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 560px; margin-bottom: 24px; text-align: left;">
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">💬 <strong style="color:#444;">Ask</strong></div>
-                    <div style="font-size: 11px; color: #888;">Status, risks, workload</div>
+                    <div style="font-size: 14px;">💬 <strong style="color:var(--text-secondary);">Ask</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Status, risks, workload</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">� <strong style="color:#444;">Reports</strong></div>
-                    <div style="font-size: 11px; color: #888;">Overdue, sprint health, trends</div>
+                    <div style="font-size: 14px;">� <strong style="color:var(--text-secondary);">Reports</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Overdue, sprint health, trends</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">🎯 <strong style="color:#444;">Goals</strong></div>
-                    <div style="font-size: 11px; color: #888;">OKRs, strategy, alignment</div>
+                    <div style="font-size: 14px;">🎯 <strong style="color:var(--text-secondary);">Goals</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">OKRs, strategy, alignment</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">⚠️ <strong style="color:#444;">Risks</strong></div>
-                    <div style="font-size: 11px; color: #888;">Blockers, dependencies</div>
+                    <div style="font-size: 14px;">⚠️ <strong style="color:var(--text-secondary);">Risks</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Blockers, dependencies</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">👥 <strong style="color:#444;">Team</strong></div>
-                    <div style="font-size: 11px; color: #888;">Capacity, assignments</div>
+                    <div style="font-size: 14px;">👥 <strong style="color:var(--text-secondary);">Team</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Capacity, assignments</div>
                 </div>
                 <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
-                    <div style="font-size: 14px;">📚 <strong style="color:#444;">Docs</strong></div>
-                    <div style="font-size: 11px; color: #888;">Wiki and documentation</div>
+                    <div style="font-size: 14px;">📚 <strong style="color:var(--text-secondary);">Docs</strong></div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Wiki and documentation</div>
                 </div>
             </div>
             <button class="btn btn-primary btn-lg" onclick="createNewSession()">
@@ -821,7 +821,7 @@
                 if (data.messages.length === 0) {
                     // Show welcome message if no messages
                     container.innerHTML = `
-                        <div style="text-align: center; color: #999; margin: auto;">
+                        <div style="text-align: center; color: var(--text-muted); margin: auto;">
                             <div style="font-size: 40px; margin-bottom: 10px;">🤖</div>
                             <p>Hello, I'm Spectra. {% if is_viewing_demo %}You're in your <strong>Sandbox</strong>. I've analyzed {{ active_boards_count }} board{{ active_boards_count|pluralize }}. Feel free to experiment — this is your private copy! What can I clarify for you?{% elif active_boards_count > 0 %}I have analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I clarify for you?{% else %}You have no active boards in your workspace yet. I can help you create one, or ask me anything!{% endif %}</p>
                         </div>
@@ -1280,7 +1280,7 @@
             if (data.status === 'success') {
                 // Clear messages from UI
                 document.getElementById('chat-messages').innerHTML = `
-                    <div style="text-align: center; color: #999; margin: auto;">
+                    <div style="text-align: center; color: var(--text-muted); margin: auto;">
                         <div style="font-size: 40px; margin-bottom: 10px;">💬</div>
                         <p>Chat cleared. Start a new conversation!</p>
                     </div>

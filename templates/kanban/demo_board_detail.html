@@ -58,13 +58,13 @@
 }
 
 .column-ordering-panel.collapsed {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
 }
 
 .column-ordering-badge {
     display: inline-flex;
     align-items: center;
-    background-color: #ffffff;
+    background-color: var(--card-bg);
     border: 1px solid #dee2e6;
     border-radius: 6px;
     padding: 8px 12px;
@@ -95,7 +95,7 @@
 
 .column-ordering-badge span {
     font-weight: 500;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 kbd {
@@ -124,7 +124,7 @@ kbd {
 }
 
 .kanban-task {
-    background: white;
+    background: var(--card-bg);
     border-radius: 6px;
     padding: 15px;
     margin-bottom: 10px;
@@ -151,7 +151,7 @@ kbd {
 .task-title {
     font-weight: 600;
     margin-bottom: 8px;
-    color: #333;
+    color: var(--text-primary);
     font-size: 0.95rem;
 }
 
@@ -191,8 +191,8 @@ kbd {
 }
 
 .priority-low {
-    background-color: #e9ecef;
-    color: #495057;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
 }
 
 .priority-medium {
@@ -245,7 +245,7 @@ kbd {
 
 /* Feature sections */
 .feature-section {
-    background: white;
+    background: var(--card-bg);
     border-radius: 8px;
     padding: 20px;
     margin-bottom: 20px;
@@ -296,7 +296,7 @@ kbd {
 
 .stat-item {
     flex: 1;
-    background: white;
+    background: var(--card-bg);
     padding: 15px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -355,7 +355,7 @@ kbd {
 .preview-item {
     padding: 10px;
     border-left: 3px solid #667eea;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 4px;
     margin-bottom: 10px;
     transition: all 0.2s ease;
@@ -369,7 +369,7 @@ kbd {
 .preview-item-link {
     padding: 10px;
     border-left: 3px solid #667eea;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 4px;
     margin-bottom: 10px;
     cursor: pointer;
@@ -737,7 +737,7 @@ kbd {
                 <div class="d-flex align-items-center">
                     <span class="column-position-badge">{{ column.position|add:1 }}</span>
                     <span class="column-name-text">{{ column.name }}</span>
-                    <span class="ms-2" style="font-size: 0.8rem; color: #6c757d; white-space: nowrap;">
+                    <span class="ms-2" style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">
                         <span style="font-weight: 500;">Tasks:</span> <span class="column-task-count"></span>
                     </span>
                 </div>

@@ -6,7 +6,7 @@
 {% block extra_css %}
 <style>
     .profile-section-header {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-bottom: 1px solid #dee2e6;
         padding: 0.75rem 1.25rem;
         border-radius: 0;
@@ -15,7 +15,7 @@
         margin: 0;
         font-size: 0.95rem;
         font-weight: 600;
-        color: #343a40;
+        color: var(--text-primary);
     }
     .avatar-upload-wrapper {
         display: flex;
@@ -578,7 +578,7 @@
                     </div>
 
                 </div>
-                <div class="card-footer d-flex justify-content-end" style="background:#f8f9fa;">
+                <div class="card-footer d-flex justify-content-end" style="background:var(--bg-tertiary);">
                     <button type="submit" class="btn btn-primary" id="user-ai-save-btn">
                         <i class="fas fa-save me-1"></i> Save AI Preferences
                     </button>

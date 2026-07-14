@@ -112,6 +112,50 @@
 .risk-pill.not_assessed  { background: #f1f5f9; color: #64748b; }
 .risk-pill.not_assessed .pill-dot  { background: #94a3b8; }
 
+/* ══════════════════════════════════════════════════════════════════════
+   Dark Mode — semantic status pills. Light pastels + dark text become
+   translucent dark tints + bright text so they read clearly on near-black
+   while keeping their color coding (green/amber/red/blue/grey).
+   ══════════════════════════════════════════════════════════════════════ */
+[data-bs-theme="dark"] .status-badge.active,
+[data-bs-theme="dark"] .update-entry .update-status.on_track,
+[data-bs-theme="dark"] .status-pill.on_track,
+[data-bs-theme="dark"] .status-pill.on-track,
+[data-bs-theme="dark"] .risk-pill.low {
+    background: rgba(16, 185, 129, 0.20); color: #81c995;
+}
+[data-bs-theme="dark"] .status-badge.paused,
+[data-bs-theme="dark"] .update-entry .update-status.at_risk,
+[data-bs-theme="dark"] .version-entry .version-reason.scope_change,
+[data-bs-theme="dark"] .status-pill.at_risk,
+[data-bs-theme="dark"] .status-pill.at-risk,
+[data-bs-theme="dark"] .risk-pill.medium {
+    background: rgba(245, 158, 11, 0.20); color: #fdd663;
+}
+[data-bs-theme="dark"] .update-entry .update-status.off_track,
+[data-bs-theme="dark"] .version-entry .version-reason.strategic_pivot,
+[data-bs-theme="dark"] .status-pill.late,
+[data-bs-theme="dark"] .risk-pill.high {
+    background: rgba(239, 68, 68, 0.20); color: #f28b82;
+}
+[data-bs-theme="dark"] .status-badge.pending,
+[data-bs-theme="dark"] .status-badge.completed,
+[data-bs-theme="dark"] .version-entry .version-reason.minor_tweak {
+    background: rgba(129, 140, 248, 0.20); color: #a5b4fc;
+}
+[data-bs-theme="dark"] .status-badge.archived,
+[data-bs-theme="dark"] .update-entry .update-status.blocked,
+[data-bs-theme="dark"] .status-pill.not_assessed,
+[data-bs-theme="dark"] .risk-pill.not_assessed {
+    background: rgba(148, 163, 184, 0.20); color: #cbd5e1;
+}
+[data-bs-theme="dark"] .health-ring.health-good   { color: #81c995; }
+[data-bs-theme="dark"] .health-ring.health-warn   { color: #fdd663; }
+[data-bs-theme="dark"] .health-ring.health-danger { color: #f28b82; }
+[data-bs-theme="dark"] .stale-banner {
+    background: rgba(245, 158, 11, 0.12); border-color: #b7791f; color: #fdd663;
+}
+
 /* Responsive: sidebar under on small screens */
 @media (max-width: 991.98px) {
     .strategic-sidebar { max-width: 100%; }

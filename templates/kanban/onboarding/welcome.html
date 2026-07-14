@@ -13,7 +13,7 @@
         border-radius: 1.25rem;
         overflow: hidden;
         box-shadow: 0 8px 40px rgba(80, 70, 229, 0.10), 0 1.5px 6px rgba(0,0,0,0.06);
-        background: #fff;
+        background: var(--card-bg);
     }
     .welcome-left {
         flex: 1 1 50%;
@@ -21,7 +21,7 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
-        background: #fff;
+        background: var(--card-bg);
         position: relative;
         z-index: 2;
     }
@@ -230,12 +230,12 @@
     }
     .welcome-logo:hover { color: #4338ca; text-decoration: none; }
     .welcome-tagline {
-        color: #6b7280;
+        color: var(--text-muted);
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
     .feature-box {
-        background: #f8f9fc;
+        background: var(--bg-tertiary);
         border: 1px solid #e5e7eb;
         border-radius: 0.85rem;
         padding: 1.5rem 1.5rem 1.25rem;
@@ -244,7 +244,7 @@
     .feature-box-title {
         font-weight: 700;
         font-size: 1rem;
-        color: #1e293b;
+        color: var(--text-primary);
         margin-bottom: 1rem;
     }
     .feature-item {
@@ -252,7 +252,7 @@
         align-items: flex-start;
         gap: 0.65rem;
         margin-bottom: 0.75rem;
-        color: #475569;
+        color: var(--text-secondary);
         font-size: 0.95rem;
         line-height: 1.45;
     }
@@ -293,9 +293,9 @@
         padding: 0.75rem 1.75rem;
         border-radius: 0.6rem;
         border: 1.5px solid #d1d5db;
-        background: #fff;
+        background: var(--card-bg);
         background-image: none !important;
-        color: #374151;
+        color: var(--text-secondary);
         font-weight: 500;
         font-size: 1rem;
         text-align: center;
@@ -315,7 +315,7 @@
         background: none;
         border: none;
         padding: 0.35rem 0.75rem;
-        color: #6b7280;
+        color: var(--text-muted);
         font-size: 0.9rem;
         font-weight: 500;
         cursor: pointer;
@@ -436,7 +436,7 @@
         <div class="sparkle-dot" style="width:5px;height:5px;background:#2ecc71;top:75%;left:8%;animation-delay:2s;"></div>
         <div class="sparkle-dot" style="width:3px;height:3px;background:#ef9f27;top:92%;left:70%;animation-delay:3s;"></div>
         <div class="sparkle-dot" style="width:4px;height:4px;background:#d4537e;top:18%;left:85%;animation-delay:1.5s;"></div>
-        <div class="sparkle-dot" style="width:3px;height:3px;background:#fff;top:60%;left:50%;animation-delay:2.5s;"></div>
+        <div class="sparkle-dot" style="width:3px;height:3px;background:var(--card-bg);top:60%;left:50%;animation-delay:2.5s;"></div>
 
         <!-- Scanning lines for AI vibe -->
         <div class="scan-line" style="width:60%;left:20%;animation-delay:0s;"></div>

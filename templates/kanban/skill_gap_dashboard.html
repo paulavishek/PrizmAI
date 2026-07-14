@@ -6,8 +6,8 @@
 {% block extra_css %}
 <style>
     .stat-card {
-        background: #fff;
-        color: #212529;
+        background: var(--card-bg);
+        color: var(--text-primary);
         border: 1px solid #dee2e6;
         border-radius: 10px;
         padding: 20px;
@@ -19,11 +19,11 @@
         font-size: 2.5rem;
         font-weight: bold;
         margin-bottom: 5px;
-        color: #6c757d;
+        color: var(--text-muted);
     }
     
     .stat-card p, .stat-card small {
-        color: #6c757d;
+        color: var(--text-muted);
     }
     
     .stat-card.warning {
@@ -68,7 +68,7 @@
     }
     
     .skill-matrix-table th {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
         font-weight: 600;
     }
     
@@ -84,7 +84,7 @@
     .empty-state {
         text-align: center;
         padding: 60px 20px;
-        color: #6c757d;
+        color: var(--text-muted);
     }
     
     .empty-state i {

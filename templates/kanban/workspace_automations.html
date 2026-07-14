@@ -58,10 +58,10 @@
     display: inline-flex; align-items: center; gap: 5px;
   }
   .chip-active   { background: #d1fae5; color: #065f46; }
-  .chip-inactive { background: #f3f4f6; color: #4b5563; }
+  .chip-inactive { background: var(--bg-tertiary); color: var(--text-secondary); }
   .chip-sched    { background: #ede9fe; color: #5b21b6; }
   body.dark-mode .chip-active   { background: rgba(16,185,129,.2); color: #6ee7b7; }
-  body.dark-mode .chip-inactive { background: rgba(107,114,128,.2); color: #9ca3af; }
+  body.dark-mode .chip-inactive { background: rgba(107,114,128,.2); color: var(--text-muted); }
   body.dark-mode .chip-sched    { background: rgba(109,40,217,.25); color: #c4b5fd; }
 
   .ws-card-actions { margin-top: auto; display: flex; gap: 8px; }

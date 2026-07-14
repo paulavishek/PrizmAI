@@ -92,7 +92,7 @@
                     <div class="d-flex gap-1 flex-shrink-0">
                         <span class="badge badge-stage-{{ idea.stage }}">{{ idea.get_stage_display }}</span>
                         {% if not idea.is_scored %}
-                        <span class="badge" style="background:#e5e7eb;color:#6b7280;">Unscored</span>
+                        <span class="badge" style="background:#e5e7eb;color:var(--text-muted);">Unscored</span>
                         {% endif %}
                     </div>
                 </div>
@@ -171,7 +171,7 @@
                        title="{{ task.title }}">
                         <i class="fas fa-check-circle me-1"></i>{{ task.title|truncatechars:30 }}
                     </a>
-                    <div style="font-size:0.75rem; color:#6b7280; margin-top:3px;">In column: <strong>{{ task.column.name }}</strong></div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:3px;">In column: <strong>{{ task.column.name }}</strong></div>
                     {% endfor %}
                 </div>
                 {% else %}

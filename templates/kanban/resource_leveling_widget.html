@@ -69,7 +69,7 @@
                         <a href="#" class="task-link text-dark"></a>
                     </h6>
                     <p class="reassign-line text-muted small mb-1"></p>
-                    <p class="clean-reason small mb-1" style="color:#334155;"></p>
+                    <p class="clean-reason small mb-1" style="color:var(--text-secondary);"></p>
                     <div class="speed-regression-warning d-none mt-1 mb-1">
                         <small class="text-warning"><i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> This reassignment prioritizes workload balance, not speed. The suggested person may take longer to complete this task.</small>
                     </div>
@@ -225,11 +225,11 @@
 
 /* Expires-time milestone styling. The label ticks every minute via JS;
    colors escalate as expiry approaches so users can scan urgency at a glance. */
-.expires-info.expires-soft { color: #6c757d; }                                          /* >12h, normal muted */
+.expires-info.expires-soft { color: var(--text-muted); }                                          /* >12h, normal muted */
 .expires-info.expires-warn { color: #b45309; font-weight: 600; }                        /* ≤12h */
 .expires-info.expires-orange { color: #c2410c; font-weight: 600; }                      /* ≤6h */
 .expires-info.expires-urgent { color: #b91c1c; font-weight: 700; }                      /* ≤1h */
-.expires-info.expires-expired { color: #6b7280; text-decoration: line-through; }        /* past expiry */
+.expires-info.expires-expired { color: var(--text-muted); text-decoration: line-through; }        /* past expiry */
 .expires-info.expires-urgent .expires-icon { animation: pulse-expires 1.5s ease-in-out infinite; }
 @keyframes pulse-expires {
     0%, 100% { opacity: 1; }

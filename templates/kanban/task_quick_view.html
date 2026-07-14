@@ -63,7 +63,7 @@
         <div class="qv-field">
             <label class="qv-label">Priority</label>
             <select class="form-select form-select-sm qv-priority-select" data-task-id="{{ task.id }}"
-                    style="{% if task.priority == 'high' or task.priority == 'urgent' %}border-color:#dc3545;color:#dc3545;font-weight:600;{% elif task.priority == 'medium' %}border-color:#f59e0b;color:#92600a;font-weight:600;{% else %}border-color:#6c757d;color:#6c757d;{% endif %}">
+                    style="{% if task.priority == 'high' or task.priority == 'urgent' %}border-color:#dc3545;color:#dc3545;font-weight:600;{% elif task.priority == 'medium' %}border-color:#f59e0b;color:#92600a;font-weight:600;{% else %}border-color:#6c757d;color:var(--text-muted);{% endif %}">
                 <option value="low"    {% if task.priority == 'low'    %}selected{% endif %}>Low</option>
                 <option value="medium" {% if task.priority == 'medium' %}selected{% endif %}>Medium</option>
                 <option value="high"   {% if task.priority == 'high'   %}selected{% endif %}>High</option>

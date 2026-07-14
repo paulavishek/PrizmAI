@@ -9,7 +9,7 @@
     .constraint-badge-on-track  { background: rgba(40,167,69,.15);  color: #1a6e30; border: 1px solid rgba(40,167,69,.4); }
     .constraint-badge-at-risk   { background: rgba(255,193,7,.15);  color: #856404; border: 1px solid rgba(255,193,7,.4); }
     .constraint-badge-over      { background: rgba(220,53,69,.15);  color: #842029; border: 1px solid rgba(220,53,69,.4); }
-    .constraint-badge-unknown   { background: rgba(108,117,125,.1); color: #6c757d; border: 1px solid rgba(108,117,125,.3); }
+    .constraint-badge-unknown   { background: rgba(108,117,125,.1); color: var(--text-muted); border: 1px solid rgba(108,117,125,.3); }
 
     /* ── Constraint cards ── */
     .constraint-card {
@@ -23,14 +23,14 @@
     .constraint-card.time  { border-top-color: #dc3545; }
 
     .big-number { font-size: 2.2rem; font-weight: 700; line-height: 1; }
-    .sub-label  { font-size: .78rem; color: #6c757d; margin-top: 2px; }
+    .sub-label  { font-size: .78rem; color: var(--text-muted); margin-top: 2px; }
 
     /* ── What‑if simulator ── */
     .sim-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-    .sim-label { width: 90px; font-weight: 600; font-size: .85rem; color: #495057; flex-shrink: 0; }
+    .sim-label { width: 90px; font-weight: 600; font-size: .85rem; color: var(--text-secondary); flex-shrink: 0; }
     .sim-slider { flex: 1; }
     .sim-value  { width: 120px; text-align: right; font-size: .85rem; font-weight: 600; }
-    .sim-impact { font-size: .78rem; color: #6c757d; }
+    .sim-impact { font-size: .78rem; color: var(--text-muted); }
 
     /* ── AI result pane ── */
     .health-score-circle {
@@ -41,9 +41,9 @@
     .health-circle-healthy  { border-color: #198754; color: #198754; background: rgba(25,135,84,.08); }
     .health-circle-at-risk  { border-color: #ffc107; color: #856404; background: rgba(255,193,7,.08); }
     .health-circle-critical { border-color: #dc3545; color: #dc3545; background: rgba(220,53,69,.08); }
-    .health-circle-unknown  { border-color: #6c757d; color: #6c757d; background: rgba(108,117,125,.08); }
+    .health-circle-unknown  { border-color: #6c757d; color: var(--text-muted); background: rgba(108,117,125,.08); }
 
-    .scenario-card { border-left: 4px solid #0d6efd; border-radius: 6px; padding: 14px 16px; background: #f8f9fa; margin-bottom: 12px; }
+    .scenario-card { border-left: 4px solid #0d6efd; border-radius: 6px; padding: 14px 16px; background: var(--bg-tertiary); margin-bottom: 12px; }
     .scenario-card.reduce-scope    { border-color: #0d6efd; }
     .scenario-card.increase-budget { border-color: #198754; }
     .scenario-card.extend-timeline { border-color: #dc3545; }
@@ -51,7 +51,7 @@
     /* ── Relationship matrix ── */
     .matrix-table th, .matrix-table td { text-align: center; vertical-align: middle; padding: 10px; }
     .matrix-table thead th { background: #f1f3f5; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
-    .matrix-table .driver-cell { font-weight: 600; background: #f8f9fa; }
+    .matrix-table .driver-cell { font-weight: 600; background: var(--bg-tertiary); }
 </style>
 {% endblock %}
 
@@ -390,7 +390,7 @@
                     <!-- Target + predicted dates -->
                     <div class="row text-center mb-2">
                         <div class="col-6">
-                            <div class="big-number" style="font-size:1.0rem; color:#495057;">{{ time_data.target_date }}</div>
+                            <div class="big-number" style="font-size:1.0rem; color:var(--text-secondary);">{{ time_data.target_date }}</div>
                             <div class="sub-label">
                                 Target
                                 {% if time_data.deadline_source == 'burndown' %}
@@ -647,7 +647,7 @@
                                 data-bs-toggle="tooltip"
                                 data-bs-placement="right"
                                 title="This score blends three dimensions into one number. Because budget and scope can be perfect while schedule lags, the composite may read higher than the AI's standalone opinion below, which weights velocity more aggressively. Both views are intentional — they highlight different risks."
-                                style="cursor:help; color:#6c757d;"
+                                style="cursor:help; color:var(--text-muted);"
                                 aria-label="Why this score may differ from the AI analysis"
                             ><i class="fas fa-info-circle"></i> May differ from AI score below</span>
                         </small>
@@ -895,7 +895,7 @@
                                 data-bs-toggle="tooltip"
                                 data-bs-placement="right"
                                 title="The AI analyses narrative risk — if velocity has stalled it will flag 'At Risk' even when budget and scope are healthy. The Project Confidence score above averages all three dimensions mathematically. Use both together: the composite tells you the balanced picture; the AI tells you what's most likely to hurt you first."
-                                style="cursor:help; color:#6c757d;"
+                                style="cursor:help; color:var(--text-muted);"
                                 aria-label="How this score relates to Project Confidence"
                             ><i class="fas fa-info-circle"></i> Complements the composite score above</span>
                         </small>
@@ -927,14 +927,14 @@
                                 <span>{{ ai_result.overall_health_score }}</span>
                                 <small style="font-size:.6rem; font-weight:400;">/ 10</small>
                             </div>
-                            <div class="text-center mt-1" style="font-size:.65rem; color:#6c757d; white-space:nowrap;">
+                            <div class="text-center mt-1" style="font-size:.65rem; color:var(--text-muted); white-space:nowrap;">
                                 Health Score
                                 <span
                                     tabindex="0"
                                     data-bs-toggle="tooltip"
                                     data-bs-placement="bottom"
                                     title="Health score out of 10. Below 3 = Critical, 3&#8211;5 = At Risk, 6&#8211;8 = Healthy, 9&#8211;10 = Excellent."
-                                    style="cursor:help; color:#6c757d;"
+                                    style="cursor:help; color:var(--text-muted);"
                                     aria-label="Health score scale info"
                                 >ⓘ</span>
                             </div>

@@ -149,3 +149,18 @@
         max-height: 450px;
     }
 }
+
+/* Dark Mode — light section/card surfaces → theme tokens; heading → bright */
+[data-bs-theme="dark"] .lean-six-sigma-section {
+    background: var(--bg-tertiary);
+}
+[data-bs-theme="dark"] .six-sigma-image-container {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+[data-bs-theme="dark"] .lean-six-sigma-section h5 {
+    color: var(--text-primary);
+}
+[data-bs-theme="dark"] .d-flex:hover h5 {
+    color: #8fb3ff;
+}

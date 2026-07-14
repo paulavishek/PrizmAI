@@ -17,7 +17,7 @@
     .wi-stat-card.danger  { border-left-color: #dc3545; }
 
     /* ─── Slider section ──────────────────────────────────────── */
-    .slider-group { background: #f8f9fa; border-radius: .5rem; padding: 1rem 1.25rem; margin-bottom: .75rem; }
+    .slider-group { background: var(--bg-tertiary); border-radius: .5rem; padding: 1rem 1.25rem; margin-bottom: .75rem; }
     .slider-group label { font-weight: 600; }
     .slider-value { font-size: 1.3rem; font-weight: 700; min-width: 70px; text-align: right; }
 
@@ -71,17 +71,17 @@
     .impact-table th { width: 28%; }
     .delta-positive { color: #dc3545; font-weight: 600; }
     .delta-negative { color: #28a745; font-weight: 600; }
-    .delta-neutral  { color: #6c757d; }
+    .delta-neutral  { color: var(--text-muted); }
 
     /* ─── Feasibility gauge ───────────────────────────────────── */
-    .feasibility-bar { height: 28px; border-radius: 14px; background: #e9ecef; overflow: hidden; }
+    .feasibility-bar { height: 28px; border-radius: 14px; background: var(--bg-tertiary); overflow: hidden; }
     .feasibility-fill {
         height: 100%; border-radius: 14px; transition: width .6s ease;
         background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
     }
 
     /* ─── Conflict badges ─────────────────────────────────────── */
-    .conflict-item { padding: .5rem .75rem; border-left: 3px solid; border-radius: .25rem; margin-bottom: .5rem; background: #fff; }
+    .conflict-item { padding: .5rem .75rem; border-left: 3px solid; border-radius: .25rem; margin-bottom: .5rem; background: var(--card-bg); }
     .conflict-item.critical { border-left-color: #dc3545; background: #fff5f5; }
     .conflict-item.high     { border-left-color: #fd7e14; background: #fff8f0; }
     .conflict-item.medium   { border-left-color: #ffc107; background: #fffbea; }
@@ -98,8 +98,8 @@
     }
 
     /* ─── Saved scenarios ─────────────────────────────────────── */
-    .scenario-item { border-left: 3px solid #0d6efd; padding: .75rem 1rem; background: #f8f9fa; border-radius: .25rem; margin-bottom: .5rem; }
-    .scenario-item:hover { background: #e9ecef; }
+    .scenario-item { border-left: 3px solid #0d6efd; padding: .75rem 1rem; background: var(--bg-tertiary); border-radius: .25rem; margin-bottom: .5rem; }
+    .scenario-item:hover { background: var(--bg-tertiary); }
 
     /* ─── Warnings ────────────────────────────────────────────── */
     .warning-list li { font-size: .9rem; color: #856404; }

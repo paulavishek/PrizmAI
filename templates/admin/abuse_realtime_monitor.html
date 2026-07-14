@@ -30,14 +30,14 @@
     }
     
     .nav-tabs a:hover { 
-        background: #f9fafb;
-        color: #1f2937;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
     }
     
     .nav-tabs a.active { 
-        background: white;
+        background: var(--card-bg);
         color: #667eea;
-        border-color: #e5e7eb;
+        border-color: var(--border-color);
         border-bottom-color: white;
     }
     
@@ -122,7 +122,7 @@
     }
     
     .alert-time {
-        color: #999;
+        color: var(--text-muted);
         font-size: 0.85rem;
     }
     
@@ -133,7 +133,7 @@
     }
     
     .section-card {
-        background: white;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         overflow: hidden;
@@ -141,7 +141,7 @@
     
     .section-header {
         padding: 15px 20px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-bottom: 1px solid #e9ecef;
         display: flex;
         justify-content: space-between;
@@ -175,7 +175,7 @@
     }
     
     .session-item:hover {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
     }
     
     .session-item.new {
@@ -214,7 +214,7 @@
     
     .session-time {
         font-size: 0.8rem;
-        color: #999;
+        color: var(--text-muted);
     }
     
     .badge {
@@ -265,7 +265,7 @@
     .empty-state {
         padding: 40px;
         text-align: center;
-        color: #999;
+        color: var(--text-muted);
     }
     
     .empty-state .icon {
@@ -427,7 +427,7 @@
                         <li class="flagged-item">
                             <span class="badge badge-warning">⚠️</span>
                             <code>{{ visitor.ip_address }}</code>
-                            <span style="color: #999; font-size: 0.85rem;">
+                            <span style="color: var(--text-muted); font-size: 0.85rem;">
                                 {{ visitor.total_sessions_created }} sessions
                             </span>
                         </li>
