@@ -430,8 +430,11 @@
     font-weight: 700;
 }
 
+/* Exclude badges: their background is a solid semantic color that doesn't
+   shift with the theme (bg-warning/bg-danger/etc), so their text color must
+   come from Bootstrap's own text-* utility on the badge, not the theme token. */
 .modal-body p,
-.modal-body span,
+.modal-body span:not(.badge),
 .modal-body div {
     color: var(--text-primary) !important;
 }
@@ -490,7 +493,10 @@
     font-weight: 600;
 }
 
-.modal-body .text-dark,
+/* Exclude badges: their background is a solid semantic color (yellow/red/etc),
+   not the modal surface, so .text-dark there should stay true dark for
+   contrast regardless of theme — not fade to the --text-secondary token. */
+.modal-body .text-dark:not(.badge),
 .modal-body .text-secondary {
     color: var(--text-secondary) !important;
 }
