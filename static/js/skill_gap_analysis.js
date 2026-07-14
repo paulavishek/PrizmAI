@@ -393,7 +393,7 @@ class SkillGapAnalyzer {
                 </div>
                 ${gap.recommendations_pending ? `
                     <div class="mt-2">
-                        <small class="text-warning"><i class="fas fa-spinner fa-spin me-1"></i>AI recommendations generating...</small>
+                        <small class="text-warning"><span class="prizm-spinner prizm-spinner--sm me-1 align-middle"></span>AI recommendations generating…</small>
                     </div>
                 ` : gap.recommendations && gap.recommendations.length > 0 ? `
                     <div class="mt-2">

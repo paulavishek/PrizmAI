@@ -89,7 +89,7 @@ function escapeHtmlNarrative(s) {
 }
 function refreshPortfolioNarrative(recordType, recordId) {
     var btn = event ? event.target.closest('button') : null;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating\u2026'; }
+    var busy = btn ? PrizmLoading.buttonBusy(btn, { label: 'Generating\u2026' }) : null;
     fetch('/api/strategic/' + recordType + '/' + recordId + '/generate-portfolio-narrative/', {
         method: 'POST',
         headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'}
@@ -116,7 +116,7 @@ function refreshPortfolioNarrative(recordType, recordId) {
     .finally(function() {
         // Only restore the button's own label if it's still in the DOM (the
         // success path above already replaced it with a fresh, enabled button).
-        if (btn && document.body.contains(btn)) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic me-1"></i>Generate'; }
+        if (busy && btn && document.body.contains(btn)) { busy.done(); }
     });
 }
 </script>

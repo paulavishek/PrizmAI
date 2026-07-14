@@ -433,28 +433,7 @@ function toggleRecommendationCard(recId) {
 
 function generateRecommendations() {
     const btn = event.target.closest('button');
-    btn.disabled = true;
-
-    var msgs = PrizmLoading.messages.budget;
-    var msgIndex = 0;
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + msgs[0];
-
-    var totalDuration = 55000;
-    var interval = Math.floor(totalDuration / (msgs.length - 1));
-    var rotateTimer = null;
-
-    function advanceMessage() {
-        msgIndex++;
-        if (msgIndex < msgs.length) {
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + msgs[msgIndex];
-        }
-        if (msgIndex >= msgs.length - 1) {
-            clearInterval(rotateTimer);
-        }
-    }
-
-    rotateTimer = setInterval(advanceMessage, interval);
+    const busy = PrizmLoading.buttonBusy(btn, { messageKey: 'budget' });
 
     fetch("{% url 'ai_generate_recommendations' board.id %}", {
         method: 'POST',
@@ -465,24 +444,19 @@ function generateRecommendations() {
     })
     .then(response => response.json())
     .then(data => {
-        clearInterval(rotateTimer);
         if (data.success && data.count > 0) {
             location.reload();
         } else if (data.success && data.count === 0) {
+            busy.done();
             alert('AI could not generate recommendations at this time. Please try again.');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
         } else {
+            busy.done();
             alert('Error: ' + (data.error || 'Unknown error'));
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
         }
     })
     .catch(error => {
-        clearInterval(rotateTimer);
+        busy.done();
         alert('Error generating recommendations: ' + error);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
     });
 }
 </script>

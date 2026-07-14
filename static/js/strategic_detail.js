@@ -83,9 +83,7 @@
         regenBtn.addEventListener('click', function () {
             var url = this.dataset.url;
             if (!url) return;
-            var original = this.innerHTML;
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating…';
+            var busy = PrizmLoading.buttonBusy(this, { label: 'Generating…' });
 
             var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
             var headers = { 'X-Requested-With': 'XMLHttpRequest' };
@@ -109,8 +107,7 @@
             })
             .catch(function (err) {
                 alert(err.message || 'Failed to generate summary.');
-                self.disabled = false;
-                self.innerHTML = original;
+                busy.done();
             });
         });
     });

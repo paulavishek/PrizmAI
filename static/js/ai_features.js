@@ -2917,7 +2917,7 @@ function createChecklistFromBreakdown() {
     if (!confirm(`This will add ${data.subtasks.length} checklist items to this task. Proceed?`)) return;
 
     const btn = document.querySelector('button[onclick="createChecklistFromBreakdown()"]');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding…'; }
+    const busy = btn ? PrizmLoading.buttonBusy(btn, { label: 'Adding…' }) : null;
 
     fetch('/api/create-checklist-items/', {
         method: 'POST',
@@ -2937,7 +2937,7 @@ function createChecklistFromBreakdown() {
         }
     })
     .catch(err => { console.error(err); alert('Failed to create checklist items.'); })
-    .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-tasks me-1"></i>Add as Sub-task Checklist'; } });
+    .finally(() => { if (busy) busy.done(); });
 }
 
 
@@ -2988,7 +2988,7 @@ function createEpicWithChildren() {
     if (!confirm(msg)) return;
 
     const btn = document.querySelector('button[onclick="createEpicWithChildren()"]');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating…'; }
+    const busy = btn ? PrizmLoading.buttonBusy(btn, { label: 'Creating…' }) : null;
 
     const requestData = {
         board_id: parseInt(boardId),
@@ -3052,7 +3052,7 @@ function createEpicWithChildren() {
         }
     })
     .catch(err => { console.error(err); alert('Failed to create Epic.'); })
-    .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-crown me-1"></i>Create as Epic with Child Tasks'; } });
+    .finally(() => { if (busy) busy.done(); });
 }
 
 

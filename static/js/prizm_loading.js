@@ -215,6 +215,211 @@
         return PrizmLoading.rotateMessages(messageEl, messages, totalDuration);
     };
 
+    /* ── Spectra loader — the canonical AI loading visual ───────────────────
+       Pulsing robot icon + cycling context messages + animated progress bar.
+       This is the single standardized look promoted from the Discovery
+       "Score with Spectra" animation. Rendered by renderSpectra() and driven
+       by _cycleSpectra() (messages + progress bar move in lockstep).
+    */
+
+    var SPECTRA_DEFAULT_SUBTITLE = 'Spectra is analysing…';
+
+    /**
+     * Resolve a messages array from opts: explicit `messages` wins, else look
+     * up `messageKey` in PrizmLoading.messages, else DEFAULT_MESSAGES.
+     */
+    function resolveMessages(opts) {
+        if (opts.messages && opts.messages.length) return opts.messages;
+        if (opts.messageKey && PrizmLoading.messages[opts.messageKey]) {
+            return PrizmLoading.messages[opts.messageKey];
+        }
+        return DEFAULT_MESSAGES;
+    }
+
+    /**
+     * Inject the canonical Spectra markup into an element.
+     * @returns {{ icon, msgEl, barEl }} references for the driver.
+     */
+    PrizmLoading.renderSpectra = function (el, opts) {
+        opts = opts || {};
+        var subtitle = opts.subtitle != null ? opts.subtitle : SPECTRA_DEFAULT_SUBTITLE;
+        var subtitleHTML = subtitle
+            ? '<div class="prizm-spectra-subtitle">' + subtitle + '</div>'
+            : '';
+        el.innerHTML =
+            '<div class="prizm-spectra-loading">' +
+                '<i class="fas fa-robot prizm-spectra-icon" aria-hidden="true"></i>' +
+                '<div class="prizm-spectra-message" role="status" aria-live="polite"></div>' +
+                subtitleHTML +
+                '<div class="prizm-spectra-progress">' +
+                    '<div class="prizm-spectra-progress__bar" role="progressbar" ' +
+                    'aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>' +
+                '</div>' +
+            '</div>';
+        return {
+            msgEl: el.querySelector('.prizm-spectra-message'),
+            barEl: el.querySelector('.prizm-spectra-progress__bar')
+        };
+    };
+
+    /**
+     * Cycle messages + advance the progress bar in lockstep.
+     * Progress is spread evenly from 8%..93% across the messages and never
+     * auto-reaches 100% — call complete() when the real work finishes.
+     *
+     * @returns {{ stop: Function, complete: Function }}
+     */
+    PrizmLoading._cycleSpectra = function (msgEl, barEl, messages, totalDuration) {
+        messages = messages && messages.length ? messages : DEFAULT_MESSAGES;
+        totalDuration = totalDuration || DEFAULT_DURATION;
+
+        var n = messages.length;
+        function pctFor(i) {
+            if (n <= 1) return 93;
+            return Math.round(8 + (85 * i) / (n - 1));
+        }
+        function setBar(pct) {
+            if (!barEl) return;
+            barEl.style.width = pct + '%';
+            barEl.setAttribute('aria-valuenow', String(pct));
+        }
+
+        if (msgEl) {
+            msgEl.style.transition = 'opacity 0.4s ease';
+            msgEl.textContent = messages[0];
+            msgEl.style.opacity = '1';
+        }
+        setBar(pctFor(0));
+
+        var idx = 0;
+        var stopped = false;
+        var interval = n > 1 ? Math.floor(totalDuration / (n - 1)) : totalDuration;
+        var timer = n > 1 ? setInterval(step, interval) : null;
+
+        function step() {
+            if (stopped) return;
+            if (idx >= n - 1) { clearInterval(timer); timer = null; return; }
+            idx++;
+            if (msgEl) {
+                msgEl.style.opacity = '0';
+                setTimeout(function () {
+                    if (stopped || !msgEl) return;
+                    msgEl.textContent = messages[idx];
+                    msgEl.style.opacity = '1';
+                }, 200);
+            }
+            setBar(pctFor(idx));
+            if (idx >= n - 1) { clearInterval(timer); timer = null; }
+        }
+
+        return {
+            stop: function () {
+                stopped = true;
+                if (timer) { clearInterval(timer); timer = null; }
+            },
+            complete: function () {
+                stopped = true;
+                if (timer) { clearInterval(timer); timer = null; }
+                setBar(100);
+            }
+        };
+    };
+
+    /**
+     * Show the Spectra loader in a container (inline) or as a full-screen /
+     * scoped overlay.
+     *
+     * @param {HTMLElement} container
+     * @param {Object} opts
+     * @param {string[]} [opts.messages]      — explicit rotating messages
+     * @param {string}   [opts.messageKey]    — key into PrizmLoading.messages
+     * @param {string}   [opts.subtitle]      — static subtitle (default set; '' hides)
+     * @param {number}   [opts.totalDuration] — ms to spread messages across
+     * @param {boolean}  [opts.overlay]       — render as an overlay instead of inline
+     * @param {boolean}  [opts.preserveContent]— overlay: keep container content behind
+     * @returns {{ stop: Function, complete: Function, remove: Function }}
+     */
+    PrizmLoading.showSpectra = function (container, opts) {
+        opts = opts || {};
+        var messages = resolveMessages(opts);
+
+        var host, restore;
+        if (opts.overlay) {
+            var overlay = document.createElement('div');
+            overlay.className = 'prizm-loading-overlay';
+            var box = document.createElement('div');
+            box.className = 'prizm-loading-container';
+            overlay.appendChild(box);
+            var target = container || document.body;
+            if (target !== document.body) {
+                overlay.style.position = 'absolute';
+                if (getComputedStyle(target).position === 'static') {
+                    target.style.position = 'relative';
+                }
+            }
+            target.appendChild(overlay);
+            host = box;
+            restore = function () {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            };
+        } else {
+            var saved = container.innerHTML;
+            host = container;
+            restore = function () { container.innerHTML = saved; };
+        }
+
+        var refs = PrizmLoading.renderSpectra(host, opts);
+        var driver = PrizmLoading._cycleSpectra(
+            refs.msgEl, refs.barEl, messages, opts.totalDuration
+        );
+
+        return {
+            stop: function () { driver.stop(); },
+            complete: function () { driver.complete(); },
+            remove: function () { driver.stop(); restore(); }
+        };
+    };
+
+    /**
+     * Put a trigger button into a standardized busy-state: compact spinner +
+     * (optionally cycling) label, disabled. Use for buttons whose AI result
+     * renders into a separate panel (give that panel showSpectra).
+     *
+     * @param {HTMLElement} btn
+     * @param {Object} [opts]
+     * @param {string[]} [opts.messages]   — cycling label messages
+     * @param {string}   [opts.messageKey] — key into PrizmLoading.messages
+     * @param {string}   [opts.label]      — single static label (no cycling)
+     * @param {number}   [opts.totalDuration]
+     * @returns {{ done: Function }}
+     */
+    PrizmLoading.buttonBusy = function (btn, opts) {
+        opts = opts || {};
+        if (!btn) return { done: function () {} };
+        var savedHTML = btn.innerHTML;
+        var wasDisabled = btn.disabled;
+        btn.disabled = true;
+        btn.innerHTML =
+            '<span class="prizm-spinner prizm-spinner--sm align-middle me-2"></span>' +
+            '<span class="prizm-btn-busy-label align-middle"></span>';
+        var labelEl = btn.querySelector('.prizm-btn-busy-label');
+        var handle = { stop: function () {} };
+        if (opts.label && !opts.messages && !opts.messageKey) {
+            labelEl.textContent = opts.label;
+        } else {
+            handle = PrizmLoading.rotateMessages(
+                labelEl, resolveMessages(opts), opts.totalDuration
+            );
+        }
+        return {
+            done: function () {
+                handle.stop();
+                btn.innerHTML = savedHTML;
+                btn.disabled = wasDisabled;
+            }
+        };
+    };
+
     /* ── Predefined message sets for common AI features ─────────────────── */
     PrizmLoading.messages = {
         aiDescription: [
@@ -558,6 +763,35 @@
             'Evaluating team capacity\u2026',
             'Considering dependency timelines\u2026',
             'Calculating recommended deadline\u2026'
+        ],
+        epicHealth: [
+            'Analyzing Epic health…',
+            'Rolling up child task progress…',
+            'Evaluating blockers and risk signals…',
+            'Assessing schedule and scope drift…',
+            'Preparing the health summary…'
+        ],
+        memorySearch: [
+            'Searching organizational memory\u2026',
+            'Scanning decisions, lessons & risk events\u2026',
+            'Matching against your query\u2026',
+            'Ranking the most relevant memories\u2026',
+            'Compiling results\u2026'
+        ],
+        memoryConnections: [
+            'Mapping related memories\u2026',
+            'Tracing decision and lesson links\u2026',
+            'Evaluating connection strength\u2026',
+            'Preparing the connection map\u2026'
+        ],
+        spectraScore: [
+            'Reading your idea\u2026',
+            'Analysing business impact potential\u2026',
+            'Estimating implementation effort\u2026',
+            'Evaluating strategic fit for your organisation\u2026',
+            'Calculating confidence score\u2026',
+            'Placing idea on the Impact\u2013Effort matrix\u2026',
+            'Finalising Spectra\u2019s recommendation\u2026'
         ]
     };
 
@@ -589,14 +823,26 @@
             return false;
         }
 
-        function startRotation(msgEl, container) {
+        function isSpectra(el) {
+            return el.getAttribute('data-prizm-variant') === 'spectra';
+        }
+
+        function startRotation(msgEl) {
             var id = getUid(msgEl);
             if (activeHandles[id]) return; // already running
             var key = msgEl.getAttribute('data-prizm-messages');
             var msgs = PrizmLoading.messages[key];
             if (!msgs) return;
             var dur = parseInt(msgEl.getAttribute('data-prizm-duration'), 10) || DEFAULT_DURATION;
-            activeHandles[id] = PrizmLoading.rotateMessages(msgEl, msgs, dur);
+            if (isSpectra(msgEl)) {
+                var subtitle = msgEl.getAttribute('data-prizm-subtitle');
+                var refs = PrizmLoading.renderSpectra(
+                    msgEl, { subtitle: subtitle != null ? subtitle : undefined }
+                );
+                activeHandles[id] = PrizmLoading._cycleSpectra(refs.msgEl, refs.barEl, msgs, dur);
+            } else {
+                activeHandles[id] = PrizmLoading.rotateMessages(msgEl, msgs, dur);
+            }
         }
 
         function stopRotation(msgEl) {
@@ -604,6 +850,11 @@
             if (!activeHandles[id]) return;
             activeHandles[id].stop();
             delete activeHandles[id];
+            if (isSpectra(msgEl)) {
+                // Clear injected markup; next show re-renders fresh from message[0].
+                msgEl.innerHTML = '';
+                return;
+            }
             // Reset to first message for next trigger
             var key = msgEl.getAttribute('data-prizm-messages');
             var msgs = PrizmLoading.messages[key];
@@ -622,7 +873,7 @@
             if (isHidden(container)) {
                 stopRotation(msgEl);
             } else {
-                startRotation(msgEl, container);
+                startRotation(msgEl);
             }
         }
 
@@ -639,20 +890,29 @@
             var allMsg = document.querySelectorAll('[data-prizm-messages]');
             var observed = new Set();
             allMsg.forEach(function (span) {
-                // Find the nearest toggled parent (with d-none or display:none)
-                var container = span.parentElement;
-                while (container && container !== document.body) {
-                    if (container.classList.contains('d-none') ||
-                        container.style.display === 'none' ||
-                        container.hasAttribute('data-prizm-container')) {
-                        break;
-                    }
-                    container = container.parentElement;
-                }
-                if (!container || container === document.body) {
+                // If the annotated element is itself the toggle target (e.g. the
+                // spectra partial container), observe it directly; otherwise walk
+                // up to the nearest toggled parent (d-none / display:none).
+                var container = span;
+                var selfToggles = span.classList.contains('d-none') ||
+                    span.style.display === 'none' ||
+                    span.hasAttribute('data-prizm-variant') ||
+                    span.hasAttribute('data-prizm-container');
+                if (!selfToggles) {
                     container = span.parentElement;
+                    while (container && container !== document.body) {
+                        if (container.classList.contains('d-none') ||
+                            container.style.display === 'none' ||
+                            container.hasAttribute('data-prizm-container')) {
+                            break;
+                        }
+                        container = container.parentElement;
+                    }
+                    if (!container || container === document.body) {
+                        container = span.parentElement;
+                    }
                 }
-                if (!observed.has(container)) {
+                if (container && !observed.has(container)) {
                     observed.add(container);
                     observer.observe(container, {
                         attributes: true,

@@ -819,9 +819,15 @@ function generateAISummary(boardId) {
     if (typeof triggerAITask === 'function') {
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
-        textElement.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:120px"></div>' +
-            '<div class="ai-progress-bar mt-2"><div id="ai-summary-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
-            '<p id="ai-summary-status" class="ai-status-text">Preparing…</p>';
+        // Spectra-styled loader, driven by the real WebSocket status/progress.
+        textElement.innerHTML =
+            '<div class="prizm-spectra-loading">' +
+                '<i class="fas fa-robot prizm-spectra-icon" aria-hidden="true"></i>' +
+                '<p id="ai-summary-status" class="prizm-spectra-message">Preparing…</p>' +
+                '<div class="prizm-spectra-progress">' +
+                    '<div id="ai-summary-progress" class="prizm-spectra-progress__bar" style="width:0%"></div>' +
+                '</div>' +
+            '</div>';
 
         triggerAITask('/api/summarize-board-analytics/' + boardId + '/', {
             method: 'GET',
@@ -1037,9 +1043,15 @@ function analyzeWorkflow(boardId) {
     if (typeof triggerAITask === 'function') {
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
-        contentElement.innerHTML = '<div class="ai-skeleton ai-skeleton--shimmer" style="height:120px"></div>' +
-            '<div class="ai-progress-bar mt-2"><div id="workflow-progress" class="ai-progress-bar__fill" style="width:0%"></div></div>' +
-            '<p id="workflow-status" class="ai-status-text">Preparing…</p>';
+        // Spectra-styled loader, driven by the real WebSocket status/progress.
+        contentElement.innerHTML =
+            '<div class="prizm-spectra-loading">' +
+                '<i class="fas fa-robot prizm-spectra-icon" aria-hidden="true"></i>' +
+                '<p id="workflow-status" class="prizm-spectra-message">Preparing…</p>' +
+                '<div class="prizm-spectra-progress">' +
+                    '<div id="workflow-progress" class="prizm-spectra-progress__bar" style="width:0%"></div>' +
+                '</div>' +
+            '</div>';
 
         triggerAITask('/api/analyze-workflow-optimization/', {
             method: 'POST',

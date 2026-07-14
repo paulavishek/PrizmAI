@@ -159,8 +159,7 @@
         impactPanel.classList.add('show');
         impactLoading.style.display = 'block';
         impactResults.style.display = 'none';
-        btnAnalyze.disabled = true;
-        btnAnalyze.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Analyzing…';
+        var busy = PrizmLoading.buttonBusy(btnAnalyze, { label: 'Analyzing…' });
 
         fetch(CFG.urls.simulate, {
             method: 'POST',
@@ -174,8 +173,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             impactLoading.style.display = 'none';
-            btnAnalyze.disabled = false;
-            btnAnalyze.innerHTML = '<i class="fas fa-flask me-2"></i> Analyze Impact';
+            busy.done();
             if (data.success) {
                 lastResults = data.results;
                 renderResults(data.results);
@@ -186,8 +184,7 @@
         })
         .catch(function(err) {
             impactLoading.style.display = 'none';
-            btnAnalyze.disabled = false;
-            btnAnalyze.innerHTML = '<i class="fas fa-flask me-2"></i> Analyze Impact';
+            busy.done();
             showToast('Network error: ' + err, 'danger');
         });
     });

@@ -179,8 +179,8 @@
                     {% if latest_snapshot.gemini_recommendation %}
                         <div class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</div>
                     {% elif ai_pending %}
-                        <p class="text-muted mb-0" id="ai-pending">
-                            <i class="fas fa-spinner fa-spin me-2"></i>Generating AI analysis… this usually takes a few seconds.
+                        <p class="text-muted mb-0 d-flex align-items-center" id="ai-pending">
+                            <span class="prizm-spinner prizm-spinner--sm me-2"></span>Generating AI analysis… this usually takes a few seconds.
                         </p>
                         <script>
                             // The recommendation is backfilled by a background task.

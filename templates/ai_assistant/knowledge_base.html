@@ -61,9 +61,8 @@
 <script>
     function refreshKB() {
         const btn = event.target.closest('button');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Refreshing...';
-        
+        const busy = PrizmLoading.buttonBusy(btn, { label: 'Refreshing…' });
+
         fetch('{% url "ai_assistant:refresh_kb" %}', {
             method: 'POST',
             headers: {
@@ -77,8 +76,7 @@
         })
         .catch(err => {
             alert('Error: ' + err);
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Refresh KB';
+            busy.done();
         });
     }
 </script>

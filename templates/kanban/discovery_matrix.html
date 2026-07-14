@@ -441,9 +441,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // ── Score idea from matrix ────────────────────────────────────────────
 function scoreIdea(ideaId, btn) {
-    const original = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scoring…';
+    const busy = PrizmLoading.buttonBusy(btn, { label: 'Scoring…' });
     fetch(`/discovery/${ideaId}/score/`, {
         method: 'POST',
         headers: {
@@ -454,9 +452,9 @@ function scoreIdea(ideaId, btn) {
     .then(r => r.json())
     .then(data => {
         if (data.ok) window.location.reload();
-        else { btn.disabled = false; btn.innerHTML = original; alert(data.error || 'Scoring failed.'); }
+        else { busy.done(); alert(data.error || 'Scoring failed.'); }
     })
-    .catch(() => { btn.disabled = false; btn.innerHTML = original; alert('Network error.'); });
+    .catch(() => { busy.done(); alert('Network error.'); });
 }
 </script>
 {% endblock %}
