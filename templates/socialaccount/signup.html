@@ -24,7 +24,7 @@
     .auth-card {
         width: 100%;
         max-width: 520px;
-        background: #ffffff;
+        background: var(--card-bg);
         border-radius: 16px;
         box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(0,0,0,0.08);
         padding: 2.75rem 2.75rem 2.25rem;
@@ -47,13 +47,13 @@
     .auth-heading {
         font-size: 1.5rem;
         font-weight: 700;
-        color: #111827;
+        color: var(--text-primary);
         margin-bottom: 0.35rem;
     }
     .auth-label {
         font-size: 0.875rem;
         font-weight: 500;
-        color: #374151;
+        color: var(--text-secondary);
         margin-bottom: 0.35rem;
         display: block;
     }
@@ -63,8 +63,8 @@
         border-radius: 10px;
         padding: 0.6rem 0.85rem;
         font-size: 0.95rem;
-        color: #111827;
-        background: #fff;
+        color: var(--text-primary);
+        background: var(--card-bg);
         transition: border-color 0.15s, box-shadow 0.15s;
         outline: none;
     }
@@ -95,7 +95,7 @@
         padding: 1rem 1.1rem;
         margin-bottom: 1.5rem;
         font-size: 0.875rem;
-        color: #374151;
+        color: var(--text-secondary);
         line-height: 1.5;
     }
     .consent-box label {
@@ -122,27 +122,27 @@
         border-radius: 10px;
         border: 1.5px solid #e5e7eb;
         background: transparent;
-        color: #6b7280;
+        color: var(--text-muted);
         font-size: 0.9rem;
         font-weight: 500;
         text-decoration: none;
         transition: background 0.15s, border-color 0.15s;
     }
     .btn-cancel:hover {
-        background: #f9fafb;
+        background: var(--bg-tertiary);
         border-color: #d1d5db;
-        color: #374151;
+        color: var(--text-secondary);
     }
     .help-note {
         margin-top: 1.5rem;
         font-size: 0.8rem;
-        color: #9ca3af;
+        color: var(--text-muted);
     }
     .help-note a {
-        color: #6b7280;
+        color: var(--text-muted);
         text-decoration: underline;
     }
-    .help-note a:hover { color: #374151; }
+    .help-note a:hover { color: var(--text-secondary); }
     .invalid-feedback { font-size: 0.8rem; color: #dc2626; margin-top: 0.3rem; }
 </style>
 {% endblock %}
@@ -183,7 +183,7 @@
                         {% for error in form.username.errors %}{{ error }}{% endfor %}
                     </div>
                 {% endif %}
-                <small style="font-size:0.8rem;color:#9ca3af;">This will be your unique identifier on PrizmAI. It's pre-filled from your Google name but you can change it.</small>
+                <small style="font-size:0.8rem;color:var(--text-muted);">This will be your unique identifier on PrizmAI. It's pre-filled from your Google name but you can change it.</small>
             </div>
 
             {% if form.email %}
@@ -201,7 +201,7 @@
             <!-- Consent checkbox -->
             <div class="mb-1" style="display:flex;gap:0.65rem;align-items:flex-start;">
                 <input class="form-check-input" type="checkbox" id="terms-checkbox" style="margin-top:3px;flex-shrink:0;">
-                <label class="form-check-label" for="terms-checkbox" style="font-size:0.875rem;color:#374151;line-height:1.5;cursor:pointer;">
+                <label class="form-check-label" for="terms-checkbox" style="font-size:0.875rem;color:var(--text-secondary);line-height:1.5;cursor:pointer;">
                     I agree to create a PrizmAI account with my Google credentials.
                 </label>
             </div>

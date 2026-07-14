@@ -16,7 +16,7 @@
   .spectra-debug .dot.red { background: #e53935; }
   .spectra-debug .dot.blue { background: #2196f3; }
   .spectra-debug pre { background: #272822; color: #f8f8f2; padding: 1em; border-radius: 4px; overflow-x: auto; max-height: 600px; white-space: pre-wrap; word-wrap: break-word; font-size: 12px; }
-  .spectra-debug .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #eee; color: #333; margin-right: 4px; }
+  .spectra-debug .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: var(--bg-tertiary); color: var(--text-primary); margin-right: 4px; }
   .spectra-debug .pill.warn { background: #fff3cd; color: #856404; }
   .spectra-debug .msg-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
   .spectra-debug .msg-pair .msg { padding: 1em; border-radius: 4px; }
@@ -42,13 +42,13 @@
       <strong>User</strong>
       {% if user_message %}
         <p><small>{{ user_message.created_at|date:"Y-m-d H:i:s" }}</small></p>
-        <pre style="background:#fff;color:#000;white-space:pre-wrap;">{{ user_message.content }}</pre>
+        <pre style="background:var(--card-bg);color:var(--text-primary);white-space:pre-wrap;">{{ user_message.content }}</pre>
       {% else %}<em>(no prior user message found)</em>{% endif %}
     </div>
     <div class="msg assistant">
       <strong>Spectra</strong>
       <p><small>{{ message.created_at|date:"Y-m-d H:i:s" }} · {{ message.tokens_used }} tokens</small></p>
-      <pre style="background:#fff;color:#000;white-space:pre-wrap;">{{ message.content }}</pre>
+      <pre style="background:var(--card-bg);color:var(--text-primary);white-space:pre-wrap;">{{ message.content }}</pre>
     </div>
   </div>
 

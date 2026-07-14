@@ -19,17 +19,17 @@
     .ask-header h1 {
         font-size: 36px;
         font-weight: 700;
-        color: #1e293b;
+        color: var(--text-primary);
         margin-bottom: 10px;
     }
 
     .ask-header p {
         font-size: 18px;
-        color: #64748b;
+        color: var(--text-muted);
     }
 
     .question-box {
-        background: white;
+        background: var(--card-bg);
         padding: 40px;
         border-radius: 15px;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -52,14 +52,14 @@
     }
 
     .example-questions {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         padding: 25px;
         border-radius: 12px;
         margin-top: 30px;
     }
 
     .example-question {
-        background: white;
+        background: var(--card-bg);
         padding: 15px 20px;
         margin: 10px 0;
         border-radius: 8px;
@@ -82,12 +82,12 @@
     }
 
     .advice-box h4 {
-        color: #1e293b;
+        color: var(--text-primary);
         margin-bottom: 15px;
     }
 
     .advice-content {
-        color: #475569;
+        color: var(--text-secondary);
         line-height: 1.8;
         white-space: pre-wrap;
     }
@@ -222,15 +222,15 @@
                     <div class="card-body py-3 px-3" style="font-size: 0.875rem;">
                         <div id="adviceDataSources" style="display:none;" class="mb-2">
                             <strong style="font-size:0.8rem;"><i class="bi bi-database me-1 text-info"></i>Data Sources Used</strong>
-                            <ul id="adviceDataSourcesList" class="mt-1 mb-0 ps-3" style="color:#64748b; font-size:0.825rem;"></ul>
+                            <ul id="adviceDataSourcesList" class="mt-1 mb-0 ps-3" style="color:var(--text-muted); font-size:0.825rem;"></ul>
                         </div>
                         <div id="adviceAssumptions" style="display:none;" class="mb-2">
                             <strong style="font-size:0.8rem;"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Assumptions</strong>
-                            <ul id="adviceAssumptionsList" class="mt-1 mb-0 ps-3" style="color:#64748b; font-size:0.825rem;"></ul>
+                            <ul id="adviceAssumptionsList" class="mt-1 mb-0 ps-3" style="color:var(--text-muted); font-size:0.825rem;"></ul>
                         </div>
                         <div id="adviceFrameworks" style="display:none;">
                             <strong style="font-size:0.8rem;"><i class="bi bi-book me-1 text-success"></i>Applicable Frameworks</strong>
-                            <ul id="adviceFrameworksList" class="mt-1 mb-0 ps-3" style="color:#64748b; font-size:0.825rem;"></ul>
+                            <ul id="adviceFrameworksList" class="mt-1 mb-0 ps-3" style="color:var(--text-muted); font-size:0.825rem;"></ul>
                         </div>
                     </div>
                 </div>

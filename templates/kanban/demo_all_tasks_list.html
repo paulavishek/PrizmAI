@@ -6,7 +6,7 @@
 <style>
 /* Task List Styles */
 .task-list-container {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     min-height: 100vh;
     padding: 20px 0;
 }
@@ -27,7 +27,7 @@
 }
 
 .stat-card {
-    background: white;
+    background: var(--card-bg);
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -54,7 +54,7 @@
 }
 
 .stat-card .stat-label {
-    color: #6c757d;
+    color: var(--text-muted);
     font-size: 0.9rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -77,8 +77,8 @@
 .stat-card.stat-in-progress .stat-number { color: #ffc107; }
 .stat-card.stat-in-progress .stat-icon { color: #ffc107; }
 
-.stat-card.stat-not-started .stat-number { color: #6c757d; }
-.stat-card.stat-not-started .stat-icon { color: #6c757d; }
+.stat-card.stat-not-started .stat-number { color: var(--text-muted); }
+.stat-card.stat-not-started .stat-icon { color: var(--text-muted); }
 
 .stat-card.stat-overdue .stat-number { color: #dc3545; }
 .stat-card.stat-overdue .stat-icon { color: #dc3545; }
@@ -88,7 +88,7 @@
 
 /* Table Styles */
 .tasks-table-container {
-    background: white;
+    background: var(--card-bg);
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     overflow: hidden;
@@ -109,8 +109,8 @@
 }
 
 .tasks-table thead th {
-    background: #f8f9fa;
-    color: #495057;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
     font-weight: 600;
     text-transform: uppercase;
     font-size: 0.85rem;
@@ -125,7 +125,7 @@
 }
 
 .tasks-table tbody tr:hover {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     transform: scale(1.01);
 }
 
@@ -162,7 +162,7 @@
 
 .priority-high {
     background: #ffc107;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .priority-medium {
@@ -178,7 +178,7 @@
 .progress-bar-wrapper {
     width: 100px;
     height: 8px;
-    background: #e9ecef;
+    background: var(--bg-tertiary);
     border-radius: 10px;
     overflow: hidden;
     position: relative;
@@ -193,10 +193,10 @@
 .board-badge {
     display: inline-block;
     padding: 4px 10px;
-    background: #e9ecef;
+    background: var(--bg-tertiary);
     border-radius: 5px;
     font-size: 0.8rem;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 .pagination {
@@ -206,7 +206,7 @@
 .no-tasks-message {
     text-align: center;
     padding: 60px 20px;
-    color: #6c757d;
+    color: var(--text-muted);
 }
 
 .no-tasks-icon {
@@ -216,7 +216,7 @@
 }
 
 .back-button {
-    background: white;
+    background: var(--card-bg);
     color: #667eea;
     border: 2px solid white;
     padding: 8px 20px;

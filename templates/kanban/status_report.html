@@ -6,13 +6,13 @@
 {% block extra_css %}
 <style>
     .report-card {
-        background: #fff;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         padding: 32px;
     }
     .report-output {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 8px;
         padding: 24px;
         font-size: 1rem;
@@ -26,13 +26,13 @@
         font-weight: 700;
         margin-top: 1.4rem;
         margin-bottom: 0.4rem;
-        color: #212529;
+        color: var(--text-primary);
     }
     .report-output h3 {
         font-size: 1rem;
         font-weight: 600;
         margin-top: 1rem;
-        color: #495057;
+        color: var(--text-secondary);
     }
     .report-output ul, .report-output ol { padding-left: 1.5rem; margin-bottom: 0.5rem; }
     .report-output li { margin-bottom: 0.25rem; }
@@ -65,7 +65,7 @@
     .report-wrapper { position: relative; }
     .report-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     .history-panel {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 10px;
         border: 1px solid #e9ecef;
         padding: 16px;
@@ -81,11 +81,11 @@
         transition: background 0.15s;
         border: 1px solid transparent;
     }
-    .history-item:hover { background: #e9ecef; border-color: #dee2e6; }
+    .history-item:hover { background: var(--bg-tertiary); border-color: var(--border-color); }
     .history-item + .history-item { margin-top: 4px; }
     .history-summary {
         font-size: 0.75rem;
-        color: #6c757d;
+        color: var(--text-muted);
         margin-top: 2px;
         white-space: nowrap;
         overflow: hidden;
@@ -217,7 +217,7 @@
                 <!-- Confidence Meter -->
                 <div class="d-flex align-items-center" title="AI Confidence">
                     <small class="text-muted me-1" style="font-size:0.75rem;">Confidence:</small>
-                    <div style="width:80px;height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;">
+                    <div style="width:80px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;">
                         <div id="sr-conf-bar" style="height:100%;border-radius:3px;transition:width 0.5s;"></div>
                     </div>
                     <small class="ms-1 fw-semibold" id="sr-conf-pct" style="font-size:0.75rem;"></small>
@@ -225,13 +225,13 @@
             </div>
             <div class="collapse" id="statusReportExplain">
                 {% if report_explainability.rag_reasoning %}
-                <div class="mb-2 p-2 rounded" style="background:#fff;border:1px solid #e0e0e0;">
+                <div class="mb-2 p-2 rounded" style="background:var(--card-bg);border:1px solid #e0e0e0;">
                     <strong style="font-size:0.8rem;"><i class="fas fa-lightbulb text-warning me-1"></i>RAG Reasoning:</strong>
                     <p class="mb-0 mt-1 small">{{ report_explainability.rag_reasoning }}</p>
                 </div>
                 {% endif %}
                 {% if report_explainability.key_data_drivers %}
-                <div class="mb-2 p-2 rounded" style="background:#fff;border:1px solid #e0e0e0;">
+                <div class="mb-2 p-2 rounded" style="background:var(--card-bg);border:1px solid #e0e0e0;">
                     <strong style="font-size:0.8rem;"><i class="fas fa-chart-bar text-info me-1"></i>Key Data Drivers:</strong>
                     <ul class="mb-0 mt-1 small ps-3">
                         {% for driver in report_explainability.key_data_drivers %}
@@ -376,30 +376,30 @@ function downloadPDF() {
 <style>
   @page { margin: 1.5cm; }
   * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; margin: 0; color: #212529; }
-  h2 { font-size: 1.05rem; font-weight: 700; margin: 1.2rem 0 0.3rem; color: #212529; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; margin: 0; color: var(--text-primary); }
+  h2 { font-size: 1.05rem; font-weight: 700; margin: 1.2rem 0 0.3rem; color: var(--text-primary); }
   ul, ol { padding-left: 1.5rem; margin: 0.3rem 0 0.5rem; }
   li { margin-bottom: 0.2rem; }
   p { margin: 0 0 0.5rem; }
   strong { font-weight: 700; }
   .report-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0d6efd; padding-bottom: 10px; margin-bottom: 18px; }
   .report-header h1 { font-size: 13pt; margin: 0; }
-  .report-header .subtitle { font-size: 9pt; color: #6c757d; margin-top: 3px; }
-  .report-header .meta { font-size: 9pt; color: #6c757d; text-align: right; }
-  .report-output { border-left: 3px solid #0d6efd; padding: 14px 18px; background: #f8f9fa; border-radius: 4px; margin-bottom: 18px; line-height: 1.7; }
+  .report-header .subtitle { font-size: 9pt; color: var(--text-muted); margin-top: 3px; }
+  .report-header .meta { font-size: 9pt; color: var(--text-muted); text-align: right; }
+  .report-output { border-left: 3px solid #0d6efd; padding: 14px 18px; background: var(--bg-tertiary); border-radius: 4px; margin-bottom: 18px; line-height: 1.7; }
   .explainability { border: 1px solid #d0e3ff; border-radius: 6px; padding: 14px 16px; background: linear-gradient(135deg,#f0f7ff,#f8f0ff); margin-top: 4px; }
   .explainability h3 { font-size: 0.88rem; font-weight: 700; margin: 0 0 10px; }
   .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; }
   .conf-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .conf-label { font-size: 0.78rem; color: #6c757d; }
-  .conf-bar-wrap { width: 80px; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; }
+  .conf-label { font-size: 0.78rem; color: var(--text-muted); }
+  .conf-bar-wrap { width: 80px; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
   .conf-bar { height: 100%; border-radius: 3px; }
   .conf-pct { font-size: 0.78rem; font-weight: 700; }
-  .explain-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 9px 12px; margin-bottom: 8px; }
+  .explain-section { background: var(--card-bg); border: 1px solid #e0e0e0; border-radius: 4px; padding: 9px 12px; margin-bottom: 8px; }
   .explain-label { font-size: 0.78rem; font-weight: 700; margin-bottom: 4px; }
   .explain-section p, .explain-section li { font-size: 0.82rem; }
-  .data-complete { font-size: 0.8rem; color: #6c757d; margin-top: 4px; }
-  .pdf-footer { margin-top: 24px; border-top: 1px solid #dee2e6; padding-top: 8px; font-size: 8pt; color: #6c757d; text-align: center; }
+  .data-complete { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+  .pdf-footer { margin-top: 24px; border-top: 1px solid #dee2e6; padding-top: 8px; font-size: 8pt; color: var(--text-muted); text-align: center; }
 </style>
 </head><body>
 <div class="report-header">
@@ -524,15 +524,15 @@ function downloadHistoryPDF(reportDate) {
 <meta charset="utf-8">
 <title>Status Report — {{ board.name|escapejs }} — ${reportDate}</title>
 <style>
-  body { font-family: 'Segoe UI', sans-serif; font-size: 11pt; margin: 32px; color: #212529; }
-  h1,h2,h3 { color: #212529; }
+  body { font-family: 'Segoe UI', sans-serif; font-size: 11pt; margin: 32px; color: var(--text-primary); }
+  h1,h2,h3 { color: var(--text-primary); }
   h2 { font-size: 1.1rem; font-weight: 700; margin-top: 1.4rem; }
   ul, ol { padding-left: 1.5rem; }
   li { margin-bottom: 0.25rem; }
   p { margin-bottom: 0.5rem; }
   .report-header { border-bottom: 2px solid #0d6efd; padding-bottom: 8px; margin-bottom: 16px; }
   .report-header h1 { font-size: 14pt; margin: 0; }
-  .report-header p { font-size: 9pt; color: #6c757d; margin: 4px 0 0; }
+  .report-header p { font-size: 9pt; color: var(--text-muted); margin: 4px 0 0; }
 </style>
 </head><body>
 <div class="report-header">

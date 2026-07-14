@@ -33,7 +33,7 @@
 
   /* ── Zone 2: Slide cards ───────────────────────────────────── */
   .pb-slide-card {
-    background: #fff;
+    background: var(--card-bg);
     border-radius: 14px;
     box-shadow: 0 3px 20px rgba(0,0,0,0.07);
     padding: 28px 32px;
@@ -55,26 +55,26 @@
   .pb-slide-title {
     font-size: 1.15rem;
     font-weight: 700;
-    color: #212529;
+    color: var(--text-primary);
     margin-bottom: 16px;
   }
   .pb-slide-body {
     font-size: 0.94rem;
     line-height: 1.75;
-    color: #343a40;
+    color: var(--text-primary);
   }
   .pb-slide-body h2 {
     font-size: 1.05rem;
     font-weight: 700;
     margin-top: 1.2rem;
     margin-bottom: 0.35rem;
-    color: #212529;
+    color: var(--text-primary);
   }
   .pb-slide-body h3 {
     font-size: 0.97rem;
     font-weight: 600;
     margin-top: 0.9rem;
-    color: #495057;
+    color: var(--text-secondary);
   }
   .pb-slide-body ul,
   .pb-slide-body ol {
@@ -83,7 +83,7 @@
   }
   .pb-slide-body li { margin-bottom: 0.25rem; }
   .pb-slide-body p  { margin-bottom: 0.5rem; }
-  .pb-slide-body strong { color: #212529; }
+  .pb-slide-body strong { color: var(--text-primary); }
   .pb-slide-body em {
     display: block;
     margin-top: 0.8rem;
@@ -97,21 +97,21 @@
   .pb-copy-slide-btn {
     position: absolute;
     top: 16px; right: 20px;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border: 1px solid #dee2e6;
     border-radius: 6px;
     padding: 4px 11px;
     font-size: 0.78rem;
     cursor: pointer;
     transition: background 0.15s;
-    color: #495057;
+    color: var(--text-secondary);
   }
-  .pb-copy-slide-btn:hover { background: #e9ecef; }
+  .pb-copy-slide-btn:hover { background: var(--bg-tertiary); }
   .pb-copy-slide-btn.copied { background: #d4edda; border-color: #c3e6cb; color: #155724; }
 
   /* ── Zone 3: Bottom action bar ────────────────────────────── */
   .pb-action-bar {
-    background: #fff;
+    background: var(--card-bg);
     border-radius: 14px;
     box-shadow: 0 3px 20px rgba(0,0,0,0.07);
     padding: 24px 32px;
@@ -136,7 +136,7 @@
   }
   .pb-action-btn:hover { opacity: 0.88; transform: translateY(-1px); }
   .pb-btn-primary   { background: #667eea; color: #fff; }
-  .pb-btn-secondary { background: #f8f9fa; color: #495057; border: 1px solid #dee2e6; }
+  .pb-btn-secondary { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid #dee2e6; }
   .pb-btn-regen     { background: #764ba2; color: #fff; }
 </style>
 {% endblock %}

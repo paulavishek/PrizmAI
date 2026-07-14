@@ -331,6 +331,41 @@
         margin-left: 10px;
     }
 
+    /* ── Dark Mode overrides — surfaces→tokens, dark text→bright, keep semantics ── */
+    [data-bs-theme="dark"] .suggestion-card,
+    [data-bs-theme="dark"] .suggestion-card.critical,
+    [data-bs-theme="dark"] .suggestion-card.high,
+    [data-bs-theme="dark"] .suggestion-card.medium,
+    [data-bs-theme="dark"] .suggestion-card.low,
+    [data-bs-theme="dark"] .suggestion-card.info,
+    [data-bs-theme="dark"] .empty-state,
+    [data-bs-theme="dark"] .stat-card,
+    [data-bs-theme="dark"] .btn-feedback {
+        background: var(--card-bg);
+        border-color: var(--border-color);
+    }
+    [data-bs-theme="dark"] .ask-coach-box { background: var(--bg-tertiary); }
+    [data-bs-theme="dark"] .confidence-bar { background: var(--bg-tertiary); }
+    [data-bs-theme="dark"] .coach-header { border-bottom-color: var(--border-color); }
+    [data-bs-theme="dark"] .section-title { border-bottom-color: var(--border-color); }
+    [data-bs-theme="dark"] .coach-title,
+    [data-bs-theme="dark"] .suggestion-title,
+    [data-bs-theme="dark"] .section-title { color: var(--text-primary); }
+    [data-bs-theme="dark"] .suggestion-message,
+    [data-bs-theme="dark"] .actions-list li,
+    [data-bs-theme="dark"] .stat-label { color: var(--text-secondary); }
+    [data-bs-theme="dark"] .coach-subtitle,
+    [data-bs-theme="dark"] .btn-dismiss,
+    [data-bs-theme="dark"] .empty-state i,
+    [data-bs-theme="dark"] .days-active { color: var(--text-muted); }
+    /* Brand-purple accents → lighter on dark */
+    [data-bs-theme="dark"] .stat-value,
+    [data-bs-theme="dark"] .btn-feedback,
+    [data-bs-theme="dark"] .actions-list li:before { color: #a5b4fc; }
+    [data-bs-theme="dark"] .btn-feedback { border-color: #a5b4fc; }
+    /* Green impact badge → dark tint */
+    [data-bs-theme="dark"] .impact-badge { background: rgba(16,185,129,0.18); color: #81c995; }
+
     /* Toast notifications */
     #coach-toast-container {
         position: fixed;

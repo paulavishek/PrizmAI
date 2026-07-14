@@ -22,7 +22,7 @@
     .rec-title {
         font-size: 1.8rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .summary-stats {
@@ -33,7 +33,7 @@
     }
 
     .stat-box {
-        background: white;
+        background: var(--card-bg);
         padding: 15px;
         border-radius: 6px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -48,12 +48,12 @@
 
     .stat-label {
         font-size: 0.85rem;
-        color: #7f8c8d;
+        color: var(--text-muted);
         margin-top: 5px;
     }
 
     .filter-bar {
-        background: white;
+        background: var(--card-bg);
         padding: 15px;
         border-radius: 6px;
         margin-bottom: 20px;
@@ -71,14 +71,14 @@
 
     .filter-label {
         font-weight: 500;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .filter-button {
         padding: 6px 12px;
         border: 2px solid #ecf0f1;
         border-radius: 4px;
-        background: white;
+        background: var(--card-bg);
         cursor: pointer;
         transition: all 0.2s;
         font-size: 0.9rem;
@@ -100,7 +100,7 @@
     }
 
     .recommendation-card {
-        background: white;
+        background: var(--card-bg);
         border-radius: 6px;
         padding: 20px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -169,7 +169,7 @@
     .rec-title-text {
         font-size: 1.1rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
         margin-top: 5px;
     }
 
@@ -182,7 +182,7 @@
         border-radius: 50%;
         background: #ecf0f1;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .rec-priority.high {
@@ -210,13 +210,13 @@
     }
 
     .detail-label {
-        color: #7f8c8d;
+        color: var(--text-muted);
         font-weight: 500;
         margin-bottom: 3px;
     }
 
     .detail-value {
-        color: #2c3e50;
+        color: var(--text-primary);
         font-weight: 600;
     }
 
@@ -229,7 +229,7 @@
     .affected-title {
         font-size: 0.85rem;
         font-weight: 600;
-        color: #7f8c8d;
+        color: var(--text-muted);
         margin-bottom: 8px;
         text-transform: uppercase;
     }
@@ -245,7 +245,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         font-size: 0.85rem;
-        color: #2c3e50;
+        color: var(--text-primary);
     }
 
     .rec-actions {
@@ -310,7 +310,7 @@
     .empty-state {
         text-align: center;
         padding: 60px 20px;
-        color: #7f8c8d;
+        color: var(--text-muted);
     }
 
     .empty-icon {
@@ -386,7 +386,7 @@
             <div class="rec-header-row">
                 <div style="flex: 1;">
                     <div class="rec-title-text">{{ rec.title }}</div>
-                    <div style="font-size: 0.85rem; color: #95a5a6; margin-top: 3px;">
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 3px;">
                         <span class="status-badge status-{{ rec.status }}">{{ rec.status|upper }}</span>
                         <span style="margin-left: 10px;">Created {{ rec.created_at|timesince }} ago</span>
                     </div>

@@ -1,15 +1,22 @@
 /**
  * AI Explainability Styles
  * Styling for explainable AI components and visualizations
+ *
+ * Dark mode: structural surfaces/text/borders use the app's theme tokens
+ * (--card-bg, --text-primary/-secondary/-muted, --border-color, --link-color
+ * from css/theme.css), so panels follow data-bs-theme in both light and dark.
+ * Semantic STATUS colors (scenario/health/urgency pastels, badges, and the
+ * brand-gradient headers) are intentionally kept as fixed hues — they encode
+ * meaning and are handled in a dedicated status-color pass, not here.
  */
 
 /* ==================== Confidence Meters ==================== */
 .confidence-meter {
     padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
     border-radius: 8px;
     margin-bottom: 1rem;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .confidence-meter .progress {
@@ -25,29 +32,29 @@
 /* ==================== Factor Breakdown ==================== */
 .factor-breakdown {
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
     border-radius: 8px;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .factor-item {
     padding: 0.75rem;
-    background: rgba(248, 249, 250, 0.95);
+    background: var(--bg-tertiary);
     border-radius: 6px;
     border-left: 4px solid #6c757d;
     transition: all 0.3s ease;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .factor-item:hover {
-    background: rgba(233, 236, 239, 0.95);
+    background: var(--btn-hover-bg);
     transform: translateX(4px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .factor-name {
     font-size: 0.95rem;
-    color: #212529 !important;
+    color: var(--text-primary) !important;
     font-weight: 600;
 }
 
@@ -55,7 +62,7 @@
     font-size: 1.1rem;
     min-width: 60px;
     text-align: right;
-    color: #212529 !important;
+    color: var(--text-primary) !important;
     font-weight: 700;
 }
 
@@ -63,14 +70,14 @@
     font-size: 0.85rem;
     line-height: 1.4;
     margin-top: 0.25rem;
-    color: var(--text-secondary, #495057) !important;
+    color: var(--text-secondary) !important;
     font-weight: 500;
 }
 
 .factor-item .progress {
     height: 6px;
     border-radius: 3px;
-    background-color: #e9ecef;
+    background-color: var(--bg-tertiary);
 }
 
 .factor-item .progress-bar {
@@ -80,14 +87,14 @@
 
 /* ==================== Calculation Explanation ==================== */
 .calculation-explanation {
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: linear-gradient(135deg, rgba(248, 249, 250, 0.98) 0%, rgba(233, 236, 239, 0.98) 100%);
-    color: #212529;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .calculation-explanation .card-title {
-    color: #212529;
+    color: var(--text-primary);
     font-size: 1rem;
     font-weight: 700;
 }
@@ -96,22 +103,22 @@
     font-family: 'Courier New', monospace;
     font-size: 1rem;
     font-weight: 600;
-    color: #212529;
+    color: var(--text-primary);
     text-align: center;
     padding: 0.5rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
     border-radius: 6px;
     margin: 0.5rem 0;
-    border: 1px dashed #adb5bd;
+    border: 1px dashed var(--border-color);
 }
 
 .metric-box {
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
     border-radius: 6px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     transition: transform 0.2s ease;
-    color: #212529;
+    color: var(--text-primary);
     min-height: 70px;
     display: flex;
     flex-direction: column;
@@ -142,79 +149,79 @@
     font-weight: 600;
     letter-spacing: 0.5px;
     margin-bottom: 0.25rem;
-    color: #495057;
+    color: var(--text-secondary);
     font-size: 0.8rem;
 }
 
 .metric-value {
     font-weight: 700;
-    color: #212529;
+    color: var(--text-primary);
     line-height: 1;
 }
 
 /* ==================== Impact Breakdown ==================== */
 .impact-breakdown {
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
     border-radius: 8px;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .impact-item {
     padding: 0.5rem;
-    background: rgba(248, 249, 250, 0.95);
+    background: var(--bg-tertiary);
     border-radius: 6px;
     transition: background-color 0.2s ease;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .impact-item:hover {
-    background: rgba(233, 236, 239, 0.95);
+    background: var(--btn-hover-bg);
 }
 
 .impact-item .progress {
     height: 6px;
     border-radius: 3px;
-    background-color: #dee2e6;
+    background-color: var(--bg-tertiary);
 }
 
 .impact-item i {
-    color: #495057;
+    color: var(--text-secondary);
     font-size: 1rem;
 }
 
 /* ==================== Assumptions & Limitations ==================== */
 .explainability-panel .accordion-item {
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--border-color);
     margin-bottom: 0.5rem;
     border-radius: 6px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
 }
 
 .explainability-panel .accordion-button {
     font-weight: 600;
     font-size: 0.9rem;
-    color: #212529;
-    background-color: rgba(248, 249, 250, 0.95);
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
     padding: 0.75rem 1rem;
 }
 
 .explainability-panel .accordion-button:not(.collapsed) {
-    background-color: rgba(231, 241, 255, 0.95);
-    color: #0056b3;
+    background-color: var(--bg-tertiary);
+    color: var(--link-color);
 }
 
 .explainability-panel .accordion-button:focus {
     box-shadow: none;
-    border-color: #dee2e6;
+    border-color: var(--border-color);
 }
 
 .explainability-panel .accordion-body {
     font-size: 0.9rem;
     padding: 1rem;
-    color: #212529;
-    background: rgba(255, 255, 255, 0.95);
+    color: var(--text-primary);
+    background: var(--card-bg);
 }
 
 .explainability-panel .accordion-body ul {
@@ -224,13 +231,13 @@
 .explainability-panel .accordion-body li {
     margin-bottom: 0.5rem;
     line-height: 1.5;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 /* ==================== Skill Match Explanation ==================== */
 .skill-match-explanation {
     padding: 1rem;
-    background: #ffffff;
+    background: var(--card-bg);
     border-radius: 8px;
 }
 
@@ -239,10 +246,10 @@
 }
 
 .skill-comparison thead th {
-    background-color: #f8f9fa;
+    background-color: var(--bg-tertiary);
     font-weight: 600;
-    color: #495057;
-    border-bottom: 2px solid #dee2e6;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-color);
     padding: 0.85rem 0.75rem;
     font-size: 0.875rem;
 }
@@ -264,7 +271,7 @@
 /* ==================== Deadline Prediction Explanation ==================== */
 .deadline-prediction-explanation {
     padding: 1rem;
-    background: #ffffff;
+    background: var(--card-bg);
     border-radius: 8px;
 }
 
@@ -273,7 +280,7 @@
 .assumptions-section,
 .risk-factors-section {
     padding: 1rem;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 6px;
     border-left: 4px solid #6c757d;
 }
@@ -298,29 +305,29 @@
 /* ==================== Explainability Panel ==================== */
 .explainability-panel {
     padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card-bg);
     border-radius: 8px;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .explainability-panel h6 {
-    color: #ffffff;
+    color: var(--text-primary);
     font-weight: 700;
     margin-bottom: 1rem;
 }
 
 .explainability-panel h5 {
-    color: #ffffff;
+    color: var(--text-primary);
     font-weight: 700;
 }
 
 .explainability-panel .card {
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.2s ease;
-    background: rgba(255, 255, 255, 0.95);
-    color: #212529;
+    background: var(--card-bg);
+    color: var(--text-primary);
 }
 
 .explainability-panel .card:hover {
@@ -328,14 +335,14 @@
 }
 
 .explainability-panel .card-title {
-    color: #212529;
+    color: var(--text-primary);
     font-weight: 700;
 }
 
 .explainability-panel .card-text,
 .explainability-panel p,
 .explainability-panel li {
-    color: #212529;
+    color: var(--text-primary);
 }
 
 /* ==================== Tooltips & Info Icons ==================== */
@@ -387,79 +394,49 @@
     .calculation-breakdown .row {
         flex-direction: column;
     }
-    
+
     .calculation-breakdown .col-4 {
         margin-bottom: 1rem;
     }
-    
+
     .factor-contribution {
         font-size: 1rem;
     }
-    
+
     .metric-value {
         font-size: 2rem !important;
     }
 }
 
-/* ==================== Dark Mode Support ==================== */
-/* Note: Explainability panels use light backgrounds for better readability in modals */
-@media (prefers-color-scheme: dark) {
-    /* Keep panels light for readability on dark modal backgrounds */
-    .confidence-meter,
-    .factor-breakdown,
-    .impact-breakdown,
-    .explainability-panel,
-    .calculation-explanation,
-    .metric-box,
-    .factor-item,
-    .impact-item {
-        background: rgba(255, 255, 255, 0.95) !important;
-        color: #212529 !important;
-    }
-    
-    .factor-name,
-    .factor-contribution,
-    .factor-description,
-    .metric-value,
-    .metric-label,
-    .explainability-panel h5,
-    .explainability-panel h6,
-    .explainability-panel .card-title,
-    .explainability-panel p,
-    .explainability-panel li {
-        color: #212529 !important;
-    }
-}
-
 /* ==================== Utility Classes for High Contrast ==================== */
 .text-dark-readable {
-    color: #ffffff !important;
+    color: var(--text-primary) !important;
     font-weight: 500;
 }
 
 .bg-white-readable {
-    background: rgba(255, 255, 255, 0.95) !important;
+    background: var(--card-bg) !important;
 }
 
-/* Modal body uses light background - text should be DARK for readability */
+/* Modal body follows the theme — headings/text use theme tokens so they stay
+   legible on both light and dark modal surfaces. */
 .modal-body h1,
 .modal-body h2,
 .modal-body h3,
 .modal-body h4,
 .modal-body h5,
 .modal-body h6 {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
     font-weight: 700;
 }
 
-/* Ensure all paragraph text is readable - DARK text on light background */
 .modal-body p,
 .modal-body span,
 .modal-body div {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
-/* Alert boxes with proper contrast */
+/* Alert boxes with proper contrast (semantic status colors kept intentional) */
 .modal-body .alert {
     background-color: #f8f9fa !important;
     border: 1px solid #dee2e6 !important;
@@ -482,31 +459,27 @@
     color: inherit !important;
 }
 
-/* Ensure list items are readable - DARK text */
 .modal-body ul li,
 .modal-body ol li {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
-/* Force DARK text for specific AI explainability elements */
 .factor-breakdown h6,
 .impact-breakdown h6,
 .explainability-panel h6,
 .confidence-meter span,
 .modal-body .fw-bold,
 .modal-body .fw-semibold {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
-/* Icons should be dark colored */
 .modal-body i.bi {
-    color: #495057 !important;
+    color: var(--text-secondary) !important;
 }
 
-/* Small text should be muted gray for readability */
 .modal-body .text-muted,
 .modal-body .small {
-    color: var(--text-secondary, #495057) !important;
+    color: var(--text-secondary) !important;
 }
 
 /* Badge contrast improvements */
@@ -517,37 +490,33 @@
     font-weight: 600;
 }
 
-/* Ensure text-muted is actually muted gray, not white */
 .modal-body .text-dark,
 .modal-body .text-secondary {
-    color: var(--text-secondary, #495057) !important;
+    color: var(--text-secondary) !important;
 }
 
-/* Specific fix for factor items in modal - DARK text */
 .modal-body .factor-item,
 .modal-body .factor-item * {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
 .modal-body .factor-item .factor-name,
 .modal-body .factor-item .factor-contribution,
 .modal-body .factor-item .factor-description {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
-/* Card text should be dark */
 .modal-body .card,
 .modal-body .card-body,
 .modal-body .card-title,
 .modal-body .card-text {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
-/* Table text should be dark */
 .modal-body table,
 .modal-body th,
 .modal-body td {
-    color: #212529 !important;
+    color: var(--text-primary) !important;
 }
 
 /* ==================== Print Styles ==================== */
@@ -555,16 +524,16 @@
     .explainability-panel {
         page-break-inside: avoid;
     }
-    
+
     .factor-item,
     .metric-box {
         page-break-inside: avoid;
     }
-    
+
     .accordion-button {
         display: none;
     }
-    
+
     .accordion-collapse {
         display: block !important;
     }
@@ -612,7 +581,7 @@
 /* ==================== NEW: Why This Section ==================== */
 .why-this-section {
     border-left: 4px solid #0d6efd;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    background: var(--bg-tertiary);
     padding: 1rem;
     border-radius: 0 8px 8px 0;
     margin: 1rem 0;
@@ -629,7 +598,7 @@
 .why-this-section .why-this-header h6 {
     margin: 0;
     font-weight: 700;
-    color: #0d6efd;
+    color: var(--link-color);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -645,7 +614,7 @@
 
 .why-this-section .why-this-content {
     margin-top: 1rem;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .why-this-section .why-this-content.collapsed {
@@ -654,8 +623,8 @@
 
 /* ==================== NEW: Reasoning Section ==================== */
 .reasoning-card {
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     overflow: hidden;
     margin: 1rem 0;
@@ -674,17 +643,17 @@
 
 .reasoning-card-body {
     padding: 1rem;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .reasoning-methodology {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     padding: 0.75rem;
     border-radius: 6px;
     border-left: 3px solid #6c757d;
     margin-bottom: 1rem;
     font-style: italic;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 .reasoning-factor-table {
@@ -696,26 +665,26 @@
 .reasoning-factor-table td {
     padding: 0.5rem;
     text-align: left;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .reasoning-factor-table th {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     font-weight: 600;
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
 }
 
 .reasoning-factor-table tr:hover td {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
 }
 
 /* ==================== NEW: Action Items ==================== */
 .action-items-section {
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1rem;
     margin: 1rem 0;
@@ -725,7 +694,7 @@
     display: flex;
     gap: 1rem;
     padding: 0.75rem;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 6px;
     margin-bottom: 0.5rem;
     border-left: 4px solid #6c757d;
@@ -766,19 +735,19 @@
 
 .action-item-title {
     font-weight: 600;
-    color: #212529;
+    color: var(--text-primary);
     margin-bottom: 0.25rem;
 }
 
 .action-item-rationale {
     font-size: 0.85rem;
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
 }
 
 /* ==================== NEW: Alternatives Comparison ==================== */
 .alternatives-section {
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1rem;
     margin: 1rem 0;
@@ -788,10 +757,10 @@
     display: flex;
     align-items: stretch;
     padding: 0.75rem;
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 6px;
     margin-bottom: 0.5rem;
-    border: 1px solid #e9ecef;
+    border: 1px solid var(--border-color);
     transition: all 0.2s ease;
 }
 
@@ -820,13 +789,13 @@
 
 .alternative-title {
     font-weight: 600;
-    color: #212529;
+    color: var(--text-primary);
     margin-bottom: 0.25rem;
 }
 
 .alternative-description {
     font-size: 0.85rem;
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
     margin-bottom: 0.25rem;
 }
 
@@ -842,8 +811,8 @@
 
 /* ==================== NEW: Scenario Analysis ==================== */
 .scenario-analysis {
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1rem;
     margin: 1rem 0;
@@ -915,13 +884,13 @@
 
 .scenario-probability {
     font-size: 0.8rem;
-    color: var(--text-secondary, #495057);
+    color: #495057;
 }
 
 /* ==================== NEW: Health Assessment ==================== */
 .health-assessment {
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1rem;
     margin: 1rem 0;
@@ -967,7 +936,7 @@
 
 .health-score {
     font-size: 0.9rem;
-    color: var(--text-secondary, #495057);
+    color: #495057;
 }
 
 .health-factors-table {
@@ -980,15 +949,15 @@
 .health-factors-table td {
     padding: 0.5rem;
     text-align: left;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .health-factors-table th {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     font-weight: 600;
     font-size: 0.85rem;
     text-transform: uppercase;
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
 }
 
 .health-trend {
@@ -1012,8 +981,8 @@
 
 /* ==================== NEW: AI Insight Card ==================== */
 .ai-insight-card {
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -1055,16 +1024,16 @@
 
 .ai-insight-body {
     padding: 1.25rem;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 .ai-insight-summary {
     font-size: 1rem;
     line-height: 1.6;
-    color: #495057;
+    color: var(--text-secondary);
     margin-bottom: 1rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .ai-insight-sections {
@@ -1074,7 +1043,7 @@
 }
 
 .ai-insight-section {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 8px;
     padding: 1rem;
 }
@@ -1084,7 +1053,7 @@
     font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
     margin-bottom: 0.75rem;
     display: flex;
     align-items: center;
@@ -1121,11 +1090,11 @@
 }
 
 .explainability-modal .nav-tabs {
-    border-bottom: 2px solid #e9ecef;
+    border-bottom: 2px solid var(--border-color);
 }
 
 .explainability-modal .nav-link {
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
     font-weight: 600;
     border: none;
     padding: 0.75rem 1rem;
@@ -1145,11 +1114,11 @@
 .explainability-tooltip {
     max-width: 300px;
     padding: 0.75rem;
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    color: #212529;
+    color: var(--text-primary);
     font-size: 0.85rem;
 }
 
@@ -1157,7 +1126,7 @@
     font-weight: 700;
     margin-bottom: 0.5rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1173,7 +1142,7 @@
 .explainability-tooltip-bar {
     flex: 1;
     height: 6px;
-    background: #e9ecef;
+    background: var(--bg-tertiary);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -1192,7 +1161,7 @@
 
 .explainability-tooltip-factors li {
     padding: 0.25rem 0;
-    color: var(--text-secondary, #495057);
+    color: var(--text-secondary);
     font-size: 0.8rem;
 }
 
@@ -1205,13 +1174,13 @@
 
 /* ==================== Explainability Details Panel ==================== */
 .explainability-details {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-radius: 8px;
     padding: 1rem;
 }
 
 .explainability-details h6 {
-    color: #495057;
+    color: var(--text-secondary);
     font-size: 0.75rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1229,38 +1198,67 @@
     .scenario-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .alternative-card {
         flex-direction: column;
         text-align: center;
     }
-    
+
     .alternative-rank {
         margin: 0 auto 0.5rem auto;
     }
-    
+
     .action-item {
         flex-direction: column;
         text-align: center;
     }
-    
+
     .action-item-icon {
         margin-bottom: 0.5rem;
     }
-    
+
     .health-status-indicator {
         flex-direction: column;
         text-align: center;
     }
-    
+
     .ai-insight-header {
         flex-wrap: wrap;
     }
-    
+
     .ai-insight-header-badge {
         margin-left: 0;
         margin-top: 0.5rem;
         width: 100%;
         text-align: center;
     }
+}
+
+/* ==================== Dark Mode: readable text on light status pastels ====
+   A handful of status blocks above intentionally keep light pastel backgrounds
+   to preserve their semantic color coding. Pin their text dark in dark mode so
+   the (light) surface + (dark) text stay legible until the dedicated
+   status-color pass gives them true dark variants. */
+[data-bs-theme="dark"] .risk-factors-section,
+[data-bs-theme="dark"] .action-item.urgency-high,
+[data-bs-theme="dark"] .action-item.urgency-medium,
+[data-bs-theme="dark"] .action-item.urgency-low,
+[data-bs-theme="dark"] .scenario-card,
+[data-bs-theme="dark"] .health-status-indicator,
+[data-bs-theme="dark"] .alternative-rank,
+[data-bs-theme="dark"] .alternative-tradeoffs,
+[data-bs-theme="dark"] .explainability-badge {
+    color: #212529;
+}
+[data-bs-theme="dark"] .scenario-card .scenario-value,
+[data-bs-theme="dark"] .scenario-card .scenario-title,
+[data-bs-theme="dark"] .health-status-indicator .health-title,
+[data-bs-theme="dark"] .health-status-indicator .health-score,
+[data-bs-theme="dark"] .action-item.urgency-high .action-item-title,
+[data-bs-theme="dark"] .action-item.urgency-high .action-item-rationale,
+[data-bs-theme="dark"] .action-item.urgency-medium .action-item-title,
+[data-bs-theme="dark"] .action-item.urgency-medium .action-item-rationale,
+[data-bs-theme="dark"] .action-item.urgency-low .action-item-title,
+[data-bs-theme="dark"] .action-item.urgency-low .action-item-rationale {
+    color: #212529;
 }

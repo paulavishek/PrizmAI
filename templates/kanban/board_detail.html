@@ -669,7 +669,20 @@
         border-color: var(--link-color);
         color: #fff;
     }
-    
+
+    /* ── Dark Mode — column headers, panels, search, badges (task cards already
+       use tokens). Surfaces→tokens, dark text→bright, semantic pills→dark tints. ── */
+    [data-bs-theme="dark"] .kanban-column-header { background-color: var(--bg-tertiary); border-bottom-color: var(--border-color); }
+    [data-bs-theme="dark"] .column-ordering-panel,
+    [data-bs-theme="dark"] .column-ordering-panel.collapsed,
+    [data-bs-theme="dark"] .search-panel { background: var(--bg-tertiary); border-color: var(--border-color); }
+    [data-bs-theme="dark"] .column-ordering-badge { background-color: var(--card-bg); border-color: var(--border-color); }
+    [data-bs-theme="dark"] .column-task-count { color: var(--text-muted); }
+    [data-bs-theme="dark"] .column-ordering-badge span { color: var(--text-secondary); }
+    /* Semantic card-aging pills → dark tints */
+    [data-bs-theme="dark"] .card-aging-badge.aging-neutral  { background: rgba(148,163,184,0.20); color: #cbd5e1; }
+    [data-bs-theme="dark"] .card-aging-badge.aging-warning  { background: rgba(245,158,11,0.20); color: #fdd663; }
+    [data-bs-theme="dark"] .card-aging-badge.aging-critical { background: rgba(239,68,68,0.20); color: #f28b82; }
 </style>
 {% endblock %}
 

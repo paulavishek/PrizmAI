@@ -6,7 +6,7 @@
 {% block extra_css %}
 <style>
     .calendar-container {
-        background: #fff;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         padding: 24px;
@@ -55,7 +55,7 @@
     .list-view-row:hover { filter: brightness(0.97); }
     .list-view-date-col { min-width: 130px; flex-shrink: 0; }
     .stat-card {
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 8px;
         padding: 16px;
         text-align: center;
@@ -678,7 +678,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             // My own event
             const privBadge = p.visibility === 'private'
-                ? '<br><span style="color:#9ca3af;">🔒 Private — only you see this</span>' : '';
+                ? '<br><span style="color:var(--text-muted);">🔒 Private — only you see this</span>' : '';
             return `
                 <strong>${title}</strong><br>
                 🗓 ${p.event_type}

@@ -22,19 +22,19 @@
         padding: 0.75rem 1rem;
         margin-bottom: 0.5rem;
         border-radius: 0 0.5rem 0.5rem 0;
-        background: #fff;
+        background: var(--card-bg);
         position: relative;
     }
     .hierarchy-card.goal-card   { border-color: #667eea; background: #f5f3ff; }
     .hierarchy-card.mission-card { border-color: #22c55e; }
     .hierarchy-card.strategy-card { border-color: #f59e0b; }
     .hierarchy-card.board-card  { border-color: #3b82f6; }
-    .hierarchy-card.task-card   { border-color: #94a3b8; background: #f8fafc; }
+    .hierarchy-card.task-card   { border-color: #94a3b8; background: var(--bg-tertiary); }
 
     .item-title {
         font-weight: 600;
         font-size: 0.95rem;
-        color: #1e293b;
+        color: var(--text-primary);
         word-break: break-word;
     }
 
@@ -43,7 +43,7 @@
         border-radius: 0.25rem;
         padding: 0.25rem 0.5rem;
         font-weight: 600;
-        background: #fff;
+        background: var(--card-bg);
         width: 100%;
         font-size: 0.95rem;
     }
@@ -67,8 +67,8 @@
 
     .badge-col { font-size: 0.75rem; }
     .task-list { list-style: none; padding: 0; margin: 0; }
-    .task-list li { font-size: 0.85rem; color: #475569; padding: 0.2rem 0; }
-    .task-list li::before { content: "•"; color: #94a3b8; margin-right: 0.4rem; }
+    .task-list li { font-size: 0.85rem; color: var(--text-secondary); padding: 0.2rem 0; }
+    .task-list li::before { content: "•"; color: var(--text-muted); margin-right: 0.4rem; }
 
     .collapse-toggle {
         cursor: pointer;
@@ -82,12 +82,12 @@
         border: none;
         padding: 0.2rem 0.35rem;
         cursor: pointer;
-        color: #94a3b8;
+        color: var(--text-muted);
         font-size: 0.85rem;
         border-radius: 0.25rem;
         transition: color 0.15s, background 0.15s;
     }
-    .hitl-action-btn:hover { color: #475569; background: #f1f5f9; }
+    .hitl-action-btn:hover { color: var(--text-secondary); background: var(--bg-tertiary); }
     .hitl-action-btn.btn-delete:hover { color: #dc2626; background: #fef2f2; }
 
     .cascade-warning { opacity: 0.5; }
@@ -104,7 +104,7 @@
         margin-top: 0.35rem;
     }
     .rename-notice a.disabled-link {
-        color: #9ca3af;
+        color: var(--text-muted);
         text-decoration: none;
         cursor: not-allowed;
     }
@@ -220,11 +220,11 @@
                     </div>
                     <div id="explainAssumptions" class="mb-2" style="display:none;">
                         <strong style="font-size: 0.8rem;"><i class="bi bi-exclamation-triangle me-1 text-info"></i>Assumptions</strong>
-                        <ul id="explainAssumptionsList" class="mt-1 mb-0 ps-3" style="font-size: 0.825rem; color: #64748b;"></ul>
+                        <ul id="explainAssumptionsList" class="mt-1 mb-0 ps-3" style="font-size: 0.825rem; color: var(--text-muted);"></ul>
                     </div>
                     <div id="explainHints" style="display:none;">
                         <strong style="font-size: 0.8rem;"><i class="bi bi-pencil-square me-1 text-success"></i>Customization Hints</strong>
-                        <ul id="explainHintsList" class="mt-1 mb-0 ps-3" style="font-size: 0.825rem; color: #64748b;"></ul>
+                        <ul id="explainHintsList" class="mt-1 mb-0 ps-3" style="font-size: 0.825rem; color: var(--text-muted);"></ul>
                     </div>
                 </div>
             </div>
@@ -437,7 +437,7 @@
                 '</div>' +
             '</div>' +
             '<span class="item-title" data-level="mission" data-mi="' + mi + '">' + esc(mission.name) + '</span>' +
-            (mission.why ? '<small class="d-block mt-1" style="font-size:0.78rem;color:#64748b;"><i class="bi bi-info-circle me-1 text-success"></i><em>' + esc(mission.why) + '</em></small>' : '');
+            (mission.why ? '<small class="d-block mt-1" style="font-size:0.78rem;color:var(--text-muted);"><i class="bi bi-info-circle me-1 text-success"></i><em>' + esc(mission.why) + '</em></small>' : '');
 
         wrapper.appendChild(card);
 

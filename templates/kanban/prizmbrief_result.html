@@ -286,6 +286,44 @@
     0%, 80% { opacity: 1; }
     100% { opacity: 0; }
   }
+
+  /* ── Dark Mode — surfaces→tokens, dark text→bright, keep brand/semantic ── */
+  [data-bs-theme="dark"] .pb-slide-card,
+  [data-bs-theme="dark"] .pb-action-bar,
+  [data-bs-theme="dark"] .pb-saved-list {
+    background: var(--card-bg);
+  }
+  [data-bs-theme="dark"] .pb-copy-slide-btn,
+  [data-bs-theme="dark"] .pb-btn-secondary,
+  [data-bs-theme="dark"] .pb-saved-list-item .item-actions a {
+    background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-secondary);
+  }
+  [data-bs-theme="dark"] .pb-saved-list-item { border-color: var(--border-color); }
+  [data-bs-theme="dark"] .pb-save-section { border-top-color: var(--border-color); }
+  [data-bs-theme="dark"] .pb-slide-title,
+  [data-bs-theme="dark"] .pb-slide-body h2,
+  [data-bs-theme="dark"] .pb-slide-body strong,
+  [data-bs-theme="dark"] .pb-saved-list-title,
+  [data-bs-theme="dark"] .pb-saved-list-item .item-name { color: var(--text-primary); }
+  [data-bs-theme="dark"] .pb-slide-body,
+  [data-bs-theme="dark"] .pb-slide-body h3 { color: var(--text-secondary); }
+  [data-bs-theme="dark"] .pb-save-counter,
+  [data-bs-theme="dark"] .pb-saved-list-item .item-meta { color: var(--text-muted); }
+  /* Brand-purple accents → lighter on dark */
+  [data-bs-theme="dark"] .pb-slide-number,
+  [data-bs-theme="dark"] .pb-slide-body em,
+  [data-bs-theme="dark"] .pb-helper-toggle,
+  [data-bs-theme="dark"] .pb-saved-list-item .item-meta .badge { color: #a5b4fc; }
+  [data-bs-theme="dark"] .pb-slide-card,
+  [data-bs-theme="dark"] .pb-saved-list-item { border-left-color: #a5b4fc; }
+  /* Tinted helper/warn boxes → dark tints */
+  [data-bs-theme="dark"] .pb-helper-box { background: rgba(102,126,234,0.15); border-color: rgba(102,126,234,0.4); color: #c9b8f5; }
+  [data-bs-theme="dark"] .pb-warn-bar { background: rgba(245,158,11,0.12); border-color: #b7791f; color: #fdd663; }
+  /* Semantic save-feedback tints */
+  [data-bs-theme="dark"] .pb-save-feedback.success,
+  [data-bs-theme="dark"] .pb-copy-slide-btn.copied,
+  [data-bs-theme="dark"] .pb-saved-new-tag { background: rgba(16,185,129,0.18); color: #81c995; border-color: rgba(16,185,129,0.4); }
+  [data-bs-theme="dark"] .pb-save-feedback.error { background: rgba(239,68,68,0.18); color: #f28b82; }
 </style>
 {% endblock %}
 

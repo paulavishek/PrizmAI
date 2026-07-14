@@ -2137,7 +2137,7 @@
                         <label class="form-check-label small" for="time-is-billable">Billable</label>
                     </div>
 
-                    <button type="submit" class="btn btn-sm w-100" style="background:#fff;color:#378ADD;border:1px solid #378ADD;border-radius:6px;">
+                    <button type="submit" class="btn btn-sm w-100" style="background:var(--card-bg);color:#378ADD;border:1px solid #378ADD;border-radius:6px;">
                         <i class="fas fa-plus"></i> Log Time
                     </button>
                 </form>
@@ -2345,6 +2345,11 @@
     }
     /* Hide Save button when Activity tab is active */
     #stickyFormActions { z-index: 10; }
+
+    /* ── Dark Mode — timeline surfaces → tokens ── */
+    [data-bs-theme="dark"] .timeline-line { background-color: var(--border-color); }
+    [data-bs-theme="dark"] .timeline-item-marker { background-color: var(--card-bg); box-shadow: 0 0 0 2px var(--border-color); }
+    [data-bs-theme="dark"] .timeline-item-content { background-color: var(--bg-tertiary); }
 </style>
 
 <script>
@@ -4716,6 +4721,14 @@ function updateChecklistProgress(progress) {
 #quill-editor-container .ql-editor { min-height: 120px; }
 #quill-editor-container.ql-focused,
 #quill-editor-container:focus-within { border-color: #0d6efd; box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); }
+
+/* Dark Mode: the Quill editor is kept a LIGHT writing surface (its toolbar
+   icons are dark strokes designed for a light toolbar). Per the two-way rule,
+   force the typed text + placeholder DARK so they stay readable — otherwise
+   they'd inherit the theme's light body color and vanish on the white editor. */
+[data-bs-theme="dark"] #quill-editor-container { border-color: var(--border-color); }
+[data-bs-theme="dark"] #quill-editor-container .ql-editor { color: #212529; }
+[data-bs-theme="dark"] #quill-editor-container .ql-editor.ql-blank::before { color: #6c757d; }
 </style>
 <script src="{% static 'vendor/quill.js' %}?v={{ STATIC_VERSION|default:'12' }}"></script>
 <script>

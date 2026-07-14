@@ -27,7 +27,7 @@
     }
 
     .room-card {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         padding: 1.25rem 1.25rem 1rem;
@@ -86,14 +86,14 @@
         cursor: pointer;
         transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         text-decoration: none;
-        color: #64748b;
+        color: var(--text-muted);
         padding: 0;
         line-height: 1;
     }
 
     .room-action-btn:hover {
-        color: #334155;
-        background: #f1f5f9;
+        color: var(--text-secondary);
+        background: var(--bg-tertiary);
         border-color: #cbd5e1;
     }
 
@@ -106,7 +106,7 @@
     .room-name {
         font-size: 1.05rem;
         font-weight: 700;
-        color: #1e293b;
+        color: var(--text-primary);
         margin-bottom: 0.35rem;
         white-space: nowrap;
         overflow: hidden;
@@ -115,7 +115,7 @@
 
     .room-description {
         font-size: 0.85rem;
-        color: #64748b;
+        color: var(--text-muted);
         margin-bottom: 0.75rem;
         line-height: 1.4;
         flex-grow: 1;
@@ -136,7 +136,7 @@
 
     .room-members {
         font-size: 0.8rem;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
 
     .room-open-btn {

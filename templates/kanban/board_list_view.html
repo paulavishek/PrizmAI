@@ -10,12 +10,12 @@
        ============================================ */
 
     .list-view-container {
-        background: #fff;
+        background: var(--card-bg);
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         padding: 24px;
         margin-bottom: 24px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
     }
 
     .list-view-header {
@@ -31,13 +31,13 @@
         margin: 0;
         font-size: 1.3rem;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--text-primary);
     }
 
     /* ── Filter Bar ────────────────────────────── */
     .list-filter-bar {
         background: #f8fafc;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
         border-radius: 10px;
         padding: 16px 20px;
         margin-bottom: 20px;
@@ -52,7 +52,7 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: .5px;
-        color: #64748b;
+        color: var(--text-secondary);
         margin-bottom: 4px;
     }
 
@@ -78,20 +78,20 @@
     .list-group-header .group-label {
         font-weight: 600;
         font-size: .9rem;
-        color: #1e293b;
+        color: var(--text-primary);
     }
     .list-group-header .group-count {
         font-size: .75rem;
-        color: #64748b;
-        background: #fff;
+        color: var(--text-secondary);
+        background: var(--card-bg);
         padding: 2px 8px;
         border-radius: 10px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
     }
     .list-group-header .chevron {
         margin-left: auto;
         transition: transform .2s;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
     .list-group-header.collapsed .chevron { transform: rotate(-90deg); }
 
@@ -107,25 +107,25 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .5px;
-        color: #64748b;
+        color: var(--text-secondary);
         padding: 8px 12px;
         border-bottom: 2px solid #e2e8f0;
         white-space: nowrap;
         position: sticky;
         top: 0;
-        background: #fff;
+        background: var(--card-bg);
         z-index: 1;
     }
     .list-task-table th a {
-        color: #64748b;
+        color: var(--text-secondary);
         text-decoration: none;
     }
-    .list-task-table th a:hover { color: #334155; }
+    .list-task-table th a:hover { color: var(--text-secondary); }
     .list-task-table th .sort-icon { font-size: .6rem; margin-left: 3px; }
     .list-task-table td {
         padding: 10px 12px;
         font-size: .8125rem;
-        color: #334155;
+        color: var(--text-secondary);
         border-bottom: 1px solid #f1f5f9;
         vertical-align: middle;
     }
@@ -139,7 +139,7 @@
 
     /* Task title link */
     .task-title-link {
-        color: #1e293b;
+        color: var(--text-primary);
         text-decoration: none;
         font-weight: 500;
     }
@@ -210,7 +210,7 @@
     .list-empty-state {
         text-align: center;
         padding: 60px 20px;
-        color: #94a3b8;
+        color: var(--text-muted);
     }
     .list-empty-state i { font-size: 3rem; margin-bottom: 16px; }
 
@@ -223,7 +223,7 @@
     }
     .summary-chip {
         background: #f8fafc;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 10px 16px;
         min-width: 120px;
@@ -232,11 +232,11 @@
     .summary-chip .chip-value {
         font-size: 1.4rem;
         font-weight: 700;
-        color: #1e293b;
+        color: var(--text-primary);
     }
     .summary-chip .chip-label {
         font-size: .7rem;
-        color: #64748b;
+        color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: .5px;
     }

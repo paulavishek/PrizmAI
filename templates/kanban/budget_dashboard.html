@@ -35,7 +35,7 @@
     }
     
     .recommendation-card .card-body:hover {
-        background-color: #f8f9fa;
+        background-color: var(--bg-tertiary);
     }
     
     .recommendation-card.priority-urgent { border-left-color: #dc3545; }
@@ -335,7 +335,7 @@
                                     </div>
                                     <div>
                                         {% if rec.estimated_savings and rec.estimated_savings > 0 %}
-                                        <span class="fw-bold" style="color: #2c3e50;">
+                                        <span class="fw-bold" style="color: var(--text-primary);">
                                             <i class="fas fa-piggy-bank text-success"></i> Save {{ metrics.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
                                         </span>
                                         {% else %}

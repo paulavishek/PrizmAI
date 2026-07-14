@@ -23,7 +23,7 @@
     .auth-card {
         width: 100%;
         max-width: 460px;
-        background: #ffffff;
+        background: var(--card-bg);
         border-radius: 16px;
         box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(0,0,0,0.08);
         padding: 2.75rem 2.75rem 2.25rem;
@@ -55,19 +55,19 @@
     .lockout-heading {
         font-size: 1.4rem;
         font-weight: 700;
-        color: #111827;
+        color: var(--text-primary);
         text-align: center;
         margin-bottom: 0.75rem;
     }
     .lockout-message {
         text-align: center;
-        color: #6b7280;
+        color: var(--text-muted);
         font-size: 0.95rem;
         line-height: 1.6;
         margin-bottom: 1.75rem;
     }
     .lockout-message strong {
-        color: #374151;
+        color: var(--text-secondary);
     }
     .lockout-actions {
         display: flex;
@@ -99,8 +99,8 @@
         padding: 0.72rem;
         border-radius: 6px;
         border: 1.5px solid #d1d5db;
-        background: #fff;
-        color: #374151;
+        background: var(--card-bg);
+        color: var(--text-secondary);
         font-weight: 500;
         font-size: 1rem;
         text-align: center;
@@ -111,15 +111,15 @@
     }
     .lockout-btn-secondary:hover {
         border-color: #9ca3af;
-        background: #f9fafb;
-        color: #111827;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
         text-decoration: none;
     }
     .lockout-footer {
         text-align: center;
         margin-top: 1.4rem;
         font-size: 0.85rem;
-        color: #9ca3af;
+        color: var(--text-muted);
     }
 </style>
 {% endblock %}

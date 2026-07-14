@@ -49,7 +49,7 @@
             transition: background-color 0.15s ease;
         }
         .share-nav-btn:hover {
-            background-color: #F9FAFB !important;
+            background-color: var(--bg-tertiary) !important;
         }
         /* ════ Quick-View Drawer (shared) ════ */
         .task-drawer {
@@ -319,7 +319,7 @@
                 {% if is_viewing_demo %}
                 <div class="demo-info-dropdown" id="demoInfoDropdown">
                     <button type="button" id="demo-info-btn" class="tws-btn" onclick="toggleDemoInfo(event)" title="Demo workspace info"
-                            style="border:1px solid #6366f1;color:#6366f1;background:transparent;font-weight:600;font-size:0.78rem;">
+                            style="border:1px solid var(--tws-chip-indigo);color:var(--tws-chip-indigo);background:transparent;font-weight:600;font-size:0.78rem;">
                         <i class="fas fa-info-circle me-1"></i>Demo Info
                     </button>
                     {% include 'demo/partials/demo_info_dropdown.html' %}
@@ -327,7 +327,7 @@
                 {% endif %}
                 {% if is_viewing_demo %}
                 <button type="button" id="reset-demo-btn" class="tws-btn tws-btn-reset" onclick="resetMyDemo()" title="Reset demo to fresh state"
-                        style="border:1.5px solid #d97706 !important;background:transparent !important;color:#d97706 !important;font-weight:600 !important;">
+                        style="border:1.5px solid var(--tws-chip-amber) !important;background:transparent !important;color:var(--tws-chip-amber) !important;font-weight:600 !important;">
                     <i class="fas fa-redo me-1"></i>Reset Demo
                 </button>
                 {% endif %}
@@ -337,7 +337,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="workspace_id" value="{{ real_workspaces.0.pk }}">
                     <button type="submit" class="tws-btn" title="Return to your workspace"
-                            style="border:1px solid #6366f1;color:#6366f1;background:transparent;font-weight:600;font-size:0.78rem;">
+                            style="border:1px solid var(--tws-chip-indigo);color:var(--tws-chip-indigo);background:transparent;font-weight:600;font-size:0.78rem;">
                         <i class="fas fa-briefcase me-1"></i>My Workspace
                     </button>
                 </form>
@@ -346,7 +346,7 @@
                 <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="tws-btn" title="Explore the demo workspace"
-                            style="border:1px solid #f59e0b;color:#f59e0b;background:transparent;font-weight:500;font-size:0.78rem;">
+                            style="border:1px solid var(--tws-chip-amber-alt);color:var(--tws-chip-amber-alt);background:transparent;font-weight:500;font-size:0.78rem;">
                         <i class="fas fa-flask me-1"></i>Demo
                     </button>
                 </form>
@@ -368,7 +368,7 @@
                 {% endif %}
                 {% if user.is_authenticated and not is_demo_account %}
                 <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
-                        style="background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:6px;">
+                        style="background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:6px;">
                     <i class="fas fa-share-alt"></i>
                 </button>
                 {% endif %}
@@ -779,7 +779,11 @@
     
     <!-- Unified Display Mode JS -->
     <script src="{% static 'js/display-mode.js' %}"></script>
-    
+
+    <!-- Shared Chart.js theming (getChartTheme + recolor-on-toggle).
+         Loads before any page's chart scripts so PrizmCharts.register() exists. -->
+    <script src="{% static 'js/chart-theme.js' %}"></script>
+
     <!-- Timezone Selector JS -->
     {% if user.is_authenticated %}
     <script src="{% static 'js/timezone-selector.js' %}"></script>

@@ -43,7 +43,7 @@
     }
 
     .board-card {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 1.5rem;
@@ -58,7 +58,7 @@
     .board-name {
         font-size: 1.25rem;
         font-weight: 600;
-        color: #333;
+        color: var(--text-primary);
         margin-bottom: 0.5rem;
     }
 
@@ -103,7 +103,7 @@
     }
 
     .notifications-mini {
-        background: white;
+        background: var(--card-bg);
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 1.5rem;
@@ -143,7 +143,7 @@
 
     .help-box li {
         margin: 0.25rem 0;
-        color: #333;
+        color: var(--text-primary);
     }
 
     /* Workspace badge on board cards */
@@ -159,8 +159,8 @@
         white-space: nowrap;
     }
     .workspace-badge-regular {
-        background: #e9ecef;
-        color: #495057;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
     }
     .workspace-badge-demo {
         background: #ede0fa;
@@ -196,11 +196,11 @@
         <h4 style="margin-top: 0; color: #2e7d32;">
             <i class="fas fa-key me-2"></i>Test Real-Time Messaging with Multiple Accounts
         </h4>
-        <p style="margin-bottom: 1rem; color: #333;">
+        <p style="margin-bottom: 1rem; color: var(--text-primary);">
             To experience real message sending and receiving, login as different users in separate browser windows or incognito/private tabs:
         </p>
         
-        <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 2px solid #81c784; margin-bottom: 1rem;">
+        <div style="background: var(--card-bg); padding: 1.5rem; border-radius: 8px; border: 2px solid #81c784; margin-bottom: 1rem;">
             <h5 style="margin: 0 0 1rem 0; color: #2e7d32;"><i class="fas fa-users-cog me-2"></i>Available Demo Accounts:</h5>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
@@ -208,10 +208,10 @@
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
                         <i class="fas fa-user-tie me-1"></i> Priya Sharma (Backend Lead)
                     </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                    <div style="font-family: monospace; color: var(--text-primary); margin-bottom: 0.25rem;">
                         <strong>Username:</strong> priya.sharma
                     </div>
-                    <div style="font-family: monospace; color: #333;">
+                    <div style="font-family: monospace; color: var(--text-primary);">
                         <strong>Password:</strong> DemoUser@2026
                     </div>
                 </div>
@@ -220,10 +220,10 @@
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
                         <i class="fas fa-code me-1"></i> Marcus Chen (Frontend / UX)
                     </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                    <div style="font-family: monospace; color: var(--text-primary); margin-bottom: 0.25rem;">
                         <strong>Username:</strong> marcus.chen
                     </div>
-                    <div style="font-family: monospace; color: #333;">
+                    <div style="font-family: monospace; color: var(--text-primary);">
                         <strong>Password:</strong> DemoUser@2026
                     </div>
                 </div>
@@ -232,10 +232,10 @@
                     <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
                         <i class="fas fa-chart-line me-1"></i> Elena Vasquez (DevOps / QA)
                     </div>
-                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                    <div style="font-family: monospace; color: var(--text-primary); margin-bottom: 0.25rem;">
                         <strong>Username:</strong> elena.vasquez
                     </div>
-                    <div style="font-family: monospace; color: #333;">
+                    <div style="font-family: monospace; color: var(--text-primary);">
                         <strong>Password:</strong> DemoUser@2026
                     </div>
                 </div>
@@ -243,7 +243,7 @@
         </div>
         
         <div style="background: #fff8e1; padding: 1rem; border-radius: 6px; border: 1px solid #ffecb3;">
-            <div style="font-size: 0.9rem; color: #333;">
+            <div style="font-size: 0.9rem; color: var(--text-primary);">
                 <strong style="color: #f57f17;"><i class="fas fa-lightbulb me-1"></i> How to Test:</strong>
                 <ol style="margin: 0.5rem 0 0 1rem; padding: 0; font-size: 0.85rem;">
                     <li>Open a chat room in this window (as {{ user.username }})</li>

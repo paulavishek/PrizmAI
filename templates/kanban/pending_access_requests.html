@@ -6,7 +6,7 @@
 <style>
     .ar-container { max-width: 700px; margin: 40px auto 0; }
     .ar-card {
-        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        background: var(--card-bg); border: 1px solid #e5e7eb; border-radius: 12px;
         padding: 1.25rem; margin-bottom: 1rem;
         display: flex; align-items: center; gap: 1rem;
         transition: box-shadow .2s;
@@ -20,13 +20,13 @@
     }
     .ar-info { flex: 1; }
     .ar-name { font-weight: 600; }
-    .ar-meta { font-size: .82rem; color: #888; }
+    .ar-meta { font-size: .82rem; color: var(--text-muted); }
     .ar-actions { display: flex; gap: .5rem; flex-shrink: 0; }
     .badge-pending { background: #fef3c7; color: #92400e; }
     .badge-approved { background: #d1fae5; color: #065f46; }
     .badge-denied { background: #fee2e2; color: #991b1b; }
-    .badge-cancelled { background: #f3f4f6; color: #6b7280; }
-    .badge-expired { background: #f3f4f6; color: #6b7280; }
+    .badge-cancelled { background: var(--bg-tertiary); color: var(--text-muted); }
+    .badge-expired { background: var(--bg-tertiary); color: var(--text-muted); }
     .section-title { font-size: 1rem; font-weight: 600; color: #667eea; margin: 1.5rem 0 .75rem; }
 </style>
 {% endblock %}

@@ -6,7 +6,7 @@
 <style>
 /* Task List Styles */
 .task-list-container {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     min-height: 100vh;
     padding: 20px 0;
 }
@@ -27,7 +27,7 @@
 }
 
 .stat-card {
-    background: white;
+    background: var(--card-bg);
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -54,7 +54,7 @@
 }
 
 .stat-card .stat-label {
-    color: #6c757d;
+    color: var(--text-muted);
     font-size: 0.9rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -77,15 +77,15 @@
 .stat-card.stat-in-progress .stat-number { color: #ffc107; }
 .stat-card.stat-in-progress .stat-icon { color: #ffc107; }
 
-.stat-card.stat-not-started .stat-number { color: #6c757d; }
-.stat-card.stat-not-started .stat-icon { color: #6c757d; }
+.stat-card.stat-not-started .stat-number { color: var(--text-muted); }
+.stat-card.stat-not-started .stat-icon { color: var(--text-muted); }
 
 .stat-card.stat-priority .stat-number { color: #dc3545; }
 .stat-card.stat-priority .stat-icon { color: #dc3545; }
 
 /* Table Styles */
 .tasks-table-container {
-    background: white;
+    background: var(--card-bg);
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     overflow: hidden;
@@ -106,11 +106,11 @@
 }
 
 .tasks-table thead th {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-bottom: 2px solid #dee2e6;
     padding: 15px;
     font-weight: 600;
-    color: #495057;
+    color: var(--text-secondary);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -122,7 +122,7 @@
 }
 
 .tasks-table tbody tr:hover {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     transform: scale(1.01);
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
@@ -135,12 +135,12 @@
 
 .task-title-cell {
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .task-title-cell small {
     display: block;
-    color: #6c757d;
+    color: var(--text-muted);
     font-weight: normal;
     margin-top: 5px;
 }
@@ -156,7 +156,7 @@
 
 .priority-low {
     background: #e2e3e5;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 .priority-medium {
@@ -181,7 +181,7 @@
 .progress {
     height: 25px;
     border-radius: 20px;
-    background: #e9ecef;
+    background: var(--bg-tertiary);
 }
 
 .progress-bar {
@@ -217,18 +217,18 @@
 }
 
 .column-badge {
-    background: #e9ecef;
+    background: var(--bg-tertiary);
     padding: 5px 12px;
     border-radius: 5px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #495057;
+    color: var(--text-secondary);
 }
 
 .empty-state {
     text-align: center;
     padding: 60px 20px;
-    color: #6c757d;
+    color: var(--text-muted);
 }
 
 .empty-state i {
@@ -252,7 +252,7 @@
 
 /* Pagination Styles */
 .pagination-container {
-    background: #f8f9fa;
+    background: var(--bg-tertiary);
     border-top: 2px solid #e9ecef;
 }
 
@@ -284,9 +284,9 @@
 }
 
 .pagination .page-item.disabled .page-link {
-    background: #e9ecef;
-    border-color: #dee2e6;
-    color: #6c757d;
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-muted);
 }
 
 /* Responsive */

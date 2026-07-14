@@ -168,6 +168,35 @@
     font-style: italic;
     padding: 12px 0;
   }
+
+  /* ── Dark Mode — the two-way rule: white cards → dark surfaces so the
+     (bright) text becomes readable; borders/greys → tokens; accents lightened. ── */
+  [data-bs-theme="dark"] .pb-card,
+  [data-bs-theme="dark"] .pb-saved-item {
+    background: var(--card-bg); border-color: var(--border-color);
+  }
+  [data-bs-theme="dark"] .pb-option { border-color: var(--border-color); }
+  [data-bs-theme="dark"] .pb-option:hover,
+  [data-bs-theme="dark"] .pb-option.selected { background: rgba(102,126,234,0.15); border-color: #a5b4fc; }
+  [data-bs-theme="dark"] .pb-saved-actions button,
+  [data-bs-theme="dark"] .pb-saved-actions a { background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-secondary); }
+  [data-bs-theme="dark"] .pb-page-header,
+  [data-bs-theme="dark"] .pb-saved-section { border-bottom-color: var(--border-color); border-top-color: var(--border-color); }
+  /* Text → tokens (dark bg needs bright text) */
+  [data-bs-theme="dark"] .pb-page-header h1,
+  [data-bs-theme="dark"] .pb-question-label,
+  [data-bs-theme="dark"] .pb-option-label,
+  [data-bs-theme="dark"] .pb-saved-title,
+  [data-bs-theme="dark"] .pb-saved-item-name { color: var(--text-primary); }
+  [data-bs-theme="dark"] .pb-page-header .sub,
+  [data-bs-theme="dark"] .pb-option-desc,
+  [data-bs-theme="dark"] .pb-saved-item-meta,
+  [data-bs-theme="dark"] .pb-empty-saved { color: var(--text-muted); }
+  /* Brand-purple accents → lighter on dark */
+  [data-bs-theme="dark"] .pb-saved-item { border-left-color: #a5b4fc; }
+  [data-bs-theme="dark"] .pb-saved-item-meta .badge { background: rgba(102,126,234,0.20); color: #a5b4fc; }
+  /* Error alert → dark tint */
+  [data-bs-theme="dark"] .pb-alert-err { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #f28b82; }
 </style>
 {% endblock %}
 

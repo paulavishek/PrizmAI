@@ -22,6 +22,14 @@
     --btn-hover-bg: #dde2e6;
     --card-bg: #ffffff;
     --footer-bg: #f8f9fa;
+    /* Chart.js canvas text (titles/axis labels) — canvas ignores CSS, so this
+       is mirrored in static/js/chart-theme.js. Keep the two in sync. */
+    --chart-title-color: #1a3d7c;
+    /* Topbar chip accents (Demo Info / Reset Demo / My Workspace) — brightened
+       in dark mode so they don't read dark-on-dark. */
+    --tws-chip-indigo: #6366f1;
+    --tws-chip-amber: #d97706;
+    --tws-chip-amber-alt: #f59e0b;
 }
 
 /* Dark Mode Colors */
@@ -31,9 +39,12 @@ body.dark-mode,
     --bg-primary: #1a1a1a;
     --bg-secondary: #2d2d2d;
     --bg-tertiary: #3a3a3a;
-    --text-primary: #e8e8e8;
-    --text-secondary: #b0b0b0;
-    --text-muted: #9ca3af;
+    /* Bright text on dark — house rule: text on dark backgrounds should read as
+       clear white, not faded grey. These are intentionally high; keep a faint
+       step between them for hierarchy only. */
+    --text-primary: #f2f4f7;
+    --text-secondary: #d6dae1;
+    --text-muted: #c3c8d0;
     --border-color: #444444;
     --border-light: #3a3a3a;
     --shadow-color: rgba(0, 0, 0, 0.3);
@@ -48,6 +59,66 @@ body.dark-mode,
     --btn-hover-bg: #444444;
     --card-bg: #2d2d2d;
     --footer-bg: #1a1a1a;
+    --chart-title-color: #8fb3ff;
+    --tws-chip-indigo: #a5b4fc;
+    --tws-chip-amber: #fbbf24;
+    --tws-chip-amber-alt: #fbbf24;
+}
+
+/* ── Dark Mode: bright-text house rule ────────────────────────────────────
+   On dark backgrounds, faded greys and dark accent-blues read as low-contrast.
+   Force Bootstrap's muted/secondary text and colored HEADINGS to bright,
+   readable values in dark mode. Scoped to text roles (not links/buttons/badges)
+   so brand accents on interactive elements are preserved. */
+[data-bs-theme="dark"] .text-muted,
+[data-bs-theme="dark"] .text-secondary,
+[data-bs-theme="dark"] small.text-muted {
+    color: var(--text-secondary) !important;
+}
+
+/* Colored section/card/chart titles (e.g. .text-primary / .text-info headings)
+   are too dark on near-black — make headings bright white instead. Semantic
+   status headings (danger/warning/success) keep their high-contrast colors. */
+[data-bs-theme="dark"] h1.text-primary, [data-bs-theme="dark"] h2.text-primary,
+[data-bs-theme="dark"] h3.text-primary, [data-bs-theme="dark"] h4.text-primary,
+[data-bs-theme="dark"] h5.text-primary, [data-bs-theme="dark"] h6.text-primary,
+[data-bs-theme="dark"] h1.text-info, [data-bs-theme="dark"] h2.text-info,
+[data-bs-theme="dark"] h3.text-info, [data-bs-theme="dark"] h4.text-info,
+[data-bs-theme="dark"] h5.text-info, [data-bs-theme="dark"] h6.text-info,
+[data-bs-theme="dark"] .card-header .text-primary,
+[data-bs-theme="dark"] .card-header .text-info {
+    color: var(--text-primary) !important;
+}
+
+/* Semantic TEXT colors (not backgrounds/badges): the solid Bootstrap hues
+   (#dc3545 red, #198754 green, #ffc107 amber) are too dark on near-black.
+   Brighten to light tints so they stay readable and keep their meaning.
+   Targets .text-* utilities only — .bg-danger/.badge backgrounds keep their
+   solid colors (white text on them is already high-contrast). */
+[data-bs-theme="dark"] .text-danger  { color: #f28b82 !important; }
+[data-bs-theme="dark"] .text-success { color: #81c995 !important; }
+[data-bs-theme="dark"] .text-warning { color: #fdd663 !important; }
+[data-bs-theme="dark"] .text-primary { color: #8fb3ff !important; }
+
+/* Global surface safety net: Bootstrap's .bg-white / .bg-light utilities are
+   hardcoded light and don't flip. Map them to theme surfaces so utility-class
+   cards/panels stop rendering as white boxes in dark mode. (Inline
+   style="background:#fff" can't be caught here — those are fixed per-template.) */
+[data-bs-theme="dark"] .bg-white { background-color: var(--card-bg) !important; }
+[data-bs-theme="dark"] .bg-light { background-color: var(--bg-tertiary) !important; }
+
+/* Bootstrap .text-dark / .text-black literally mean "dark text" — invisible on
+   a dark background. Force them bright in dark mode (rule 1: dark bg → light
+   text). Very common on headings across templates, so this is a big safe win. */
+[data-bs-theme="dark"] .text-dark,
+[data-bs-theme="dark"] .text-black { color: var(--text-primary) !important; }
+
+/* .table-light thead/rows are hardcoded light — darken them so their cell text
+   (which follows the theme) stays readable instead of dark-on-light-on-dark. */
+[data-bs-theme="dark"] .table-light {
+    --bs-table-bg: var(--bg-tertiary);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
 }
 
 /* ── Dark Mode: Signature Primary Button ─────────────────────────── */
