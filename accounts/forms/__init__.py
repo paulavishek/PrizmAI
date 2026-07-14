@@ -204,7 +204,11 @@ class UserProfileForm(forms.ModelForm):
     
     class Meta:
         model = UserProfile
-        fields = ['profile_picture', 'weekly_capacity_hours', 'timezone']
+        fields = [
+            'profile_picture', 'weekly_capacity_hours', 'timezone',
+            'response_tone', 'response_length', 'response_structure',
+            'custom_ai_instructions',
+        ]
         widgets = {
             'profile_picture': forms.FileInput(attrs={'class': 'form-control'}),
             'weekly_capacity_hours': forms.NumberInput(attrs={
@@ -212,12 +216,27 @@ class UserProfileForm(forms.ModelForm):
                 'min': 1,
                 'max': 168
             }),
+            'response_tone': forms.Select(attrs={'class': 'form-select'}),
+            'response_length': forms.Select(attrs={'class': 'form-select'}),
+            'response_structure': forms.Select(attrs={'class': 'form-select'}),
+            'custom_ai_instructions': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'maxlength': 600,
+                'placeholder': 'Anything the AI should always remember about your preferred format '
+                               '(e.g. "Always start with a one-line TL;DR").'
+            }),
         }
         labels = {
             'weekly_capacity_hours': 'Weekly Working Hours',
+            'response_tone': 'Tone',
+            'response_length': 'Length',
+            'response_structure': 'Structure',
+            'custom_ai_instructions': 'Custom instructions',
         }
         help_texts = {
             'weekly_capacity_hours': 'How many hours per week are you available for work?',
+            'custom_ai_instructions': 'Applied to AI-generated briefs, retrospectives, coaching, and Spectra replies.',
         }
     
     def clean_weekly_capacity_hours(self):

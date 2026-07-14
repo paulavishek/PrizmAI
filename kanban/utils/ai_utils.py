@@ -5848,6 +5848,7 @@ def generate_prizmbrief(brief_data: Dict) -> Optional[str]:
         audience_label  = brief_data.get('audience_label', audience)
         purpose_label   = brief_data.get('purpose_label', 'Project Status Update')
         mode            = brief_data.get('mode', 'executive_summary')
+        brief_user      = brief_data.get('user')
 
         total_tasks     = brief_data.get('total_tasks', 0)
         completed       = brief_data.get('completed', 0)
@@ -5938,6 +5939,13 @@ AUDIENCE FOCUS — Technical Team / Developers:
 - Omit: Deep budget financials (show headline only).
 - Tone: Precise, technical, no marketing fluff."""
 
+        # ── User response-style profile (persisted custom instructions) ───────
+        # Empty string unless the user set non-default prefs; the directive is
+        # explicitly subordinate to the slide-format rules below.
+        from accounts.style_profile import directive_for_user
+        style_directive = directive_for_user(brief_user)
+        style_block = ("\n" + style_directive + "\n") if style_directive else ""
+
         # ── Slide count instruction ───────────────────────────────────────────
         if mode == 'executive_summary':
             slide_count_instruction = """
@@ -5995,7 +6003,7 @@ for each slide indicating the best chart or graphic type.
 {workload_summary}
 
 {audience_instructions}
-
+{style_block}
 {slide_count_instruction}
 
 ## Output Rules

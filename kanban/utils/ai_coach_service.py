@@ -19,10 +19,17 @@ class AICoachService:
     Provides contextual advice and explanations
     """
     
-    def __init__(self):
-        """Initialize AI coach service"""
+    def __init__(self, user=None):
+        """Initialize AI coach service
+
+        Args:
+            user: (optional) the requesting user, used to apply their persisted
+                AI response-style profile to coaching prose. Left None for
+                non-interactive/batch generation (no directive applied).
+        """
         from ai_assistant.utils.ai_router import AIRouter
         self.router = AIRouter()
+        self.user = user
         self.gemini_available = True  # AIRouter handles availability internally
         
         # Initialize AI cache manager
@@ -46,6 +53,14 @@ class AICoachService:
         Returns:
             AI response text or None
         """
+        # Apply the requesting user's response-style profile (persisted custom
+        # instructions). Empty unless they set non-default prefs. Prepended to
+        # the prompt so the cache key naturally varies per style.
+        from accounts.style_profile import directive_for_user
+        style_directive = directive_for_user(self.user)
+        if style_directive:
+            prompt = style_directive + "\n\n" + prompt
+
         # Try cache first
         if self.ai_cache:
             cached = self.ai_cache.get(prompt, operation, context_id)

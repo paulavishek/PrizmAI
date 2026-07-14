@@ -3,6 +3,7 @@ AI-Powered Retrospective Generator
 Analyzes project data and generates retrospective insights using Gemini AI
 """
 
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -19,18 +20,21 @@ class RetrospectiveGenerator:
     Generate AI-powered retrospectives from project data
     """
     
-    def __init__(self, board, period_start, period_end):
+    def __init__(self, board, period_start, period_end, user=None):
         """
         Initialize retrospective generator
-        
+
         Args:
             board: Board instance
             period_start: Start date of retrospective period
             period_end: End date of retrospective period
+            user: (optional) the requesting user, used to apply their persisted
+                AI response-style profile to the generated insights.
         """
         self.board = board
         self.period_start = period_start
         self.period_end = period_end
+        self.user = user
         self.router = AIRouter()
     
     def collect_metrics(self):
@@ -422,9 +426,17 @@ class RetrospectiveGenerator:
 
         # Build comprehensive prompt
         prompt = self._build_retrospective_prompt(metrics, patterns, board_members)
-        
-        # Create context ID for caching based on board and period
-        context_id = f"board_{self.board.id}:{self.period_start.isoformat()}:{self.period_end.isoformat()}"
+
+        # User response-style profile (persisted custom instructions). Empty
+        # unless the requesting user set non-default prefs.
+        from accounts.style_profile import directive_for_user
+        style_directive = directive_for_user(self.user)
+
+        # Create context ID for caching based on board and period. Fold a short
+        # fingerprint of the style directive in so two users with different
+        # style prefs don't share a cached (differently-styled) retrospective.
+        style_fp = hashlib.md5(style_directive.encode('utf-8')).hexdigest()[:8] if style_directive else 'none'
+        context_id = f"board_{self.board.id}:{self.period_start.isoformat()}:{self.period_end.isoformat()}:style_{style_fp}"
         
         # Try cache first
         ai_cache = self._get_ai_cache()
@@ -444,10 +456,13 @@ class RetrospectiveGenerator:
         # AIRouter raises AIProviderError on failure (it never returns an error
         # dict), so the failure path must be a try/except to fall back gracefully.
         try:
+            system_prompt = "You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement."
+            if style_directive:
+                system_prompt += "\n\n" + style_directive
             response = self.router.complete(
                 prompt=prompt,
                 user=None,
-                system_prompt="You are an expert agile coach and project management consultant specializing in retrospectives and continuous improvement.",
+                system_prompt=system_prompt,
                 complexity='complex',
             )
         except AIProviderError as exc:

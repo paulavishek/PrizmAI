@@ -672,6 +672,7 @@ class SpectraActionService:
                 board=board,
                 period_start=start_dt.date() if hasattr(start_dt, 'date') else start_dt,
                 period_end=end_dt.date() if hasattr(end_dt, 'date') else end_dt,
+                user=user,
             )
             retro = generator.create_retrospective(
                 created_by=user,

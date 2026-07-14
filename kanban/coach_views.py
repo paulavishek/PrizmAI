@@ -161,7 +161,7 @@ def generate_suggestions(request, board_id):
             logger.warning("Custom-field coach summary failed: %s", _cf_exc)
         
         # Initialize AI coach service
-        ai_coach = AICoachService()
+        ai_coach = AICoachService(user=request.user)
         learning_system = FeedbackLearningSystem()
         
         # Log AI availability status
@@ -438,7 +438,7 @@ def ask_coach(request, board_id):
                 }, status=400)
             
             # Get AI coaching advice
-            ai_coach = AICoachService()
+            ai_coach = AICoachService(user=request.user)
             advice_result = ai_coach.generate_coaching_advice(board, request.user, question)
             
             # Extract advice text and explainability from dict or plain string
