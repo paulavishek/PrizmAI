@@ -468,6 +468,24 @@
         border-color: rgba(129,140,248,0.30);
     }
     [data-bs-theme="dark"] .ai-briefing-row p { color: #cfd3e3 !important; }
+    [data-bs-theme="dark"] .ai-briefing-row strong[style*="color:#4f46e5"] { color: #a5b4fc !important; }
+    [data-bs-theme="dark"] #focus-briefing-card p[style*="color:#374151"] { color: #cfd3e3 !important; }
+
+    /* SPI/CPI "Dragged by" offender bands: hardcoded pale peach/mint
+       backgrounds don't adapt to dark mode, so the mint one in particular
+       reads as "no box at all" against a near-black card. */
+    [data-bs-theme="dark"] #spi-offender-note {
+        background: rgba(234,88,12,0.18) !important;
+        border-top-color: rgba(234,88,12,0.4) !important;
+    }
+    [data-bs-theme="dark"] #spi-offender-note span,
+    [data-bs-theme="dark"] #spi-offender-note a { color: #fdba8c !important; }
+    [data-bs-theme="dark"] #cpi-offender-note {
+        background: rgba(34,197,94,0.18) !important;
+        border-top-color: rgba(34,197,94,0.4) !important;
+    }
+    [data-bs-theme="dark"] #cpi-offender-note span,
+    [data-bs-theme="dark"] #cpi-offender-note a { color: #81c995 !important; }
     .briefing-item {
         background: white;
         border-radius: 8px;
@@ -1024,9 +1042,7 @@
         {% if dc_headline %}
         <div class="ai-briefing-row d-flex align-items-start justify-content-between gap-3 mb-2">
             <p class="mb-0 d-flex align-items-start gap-2" style="color:#374151; line-height:1.5;">
-                {% if daily_briefing.pulse_status == 'off_track' %}<i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#dc2626;"></i>
-                {% elif daily_briefing.pulse_status == 'at_risk' %}<i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#d97706;"></i>
-                {% else %}<i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#16a34a;"></i>{% endif %}
+                <i class="fas fa-robot flex-shrink-0 ai-briefing-bot" style="color:#6366f1;"></i>
                 <span style="font-size:0.86rem;"><strong style="color:#4f46e5;">AI Briefing:</strong> {{ dc_headline }}</span>
             </p>
             {% if daily_briefing.action_plan %}
@@ -1058,7 +1074,7 @@
         </div>
 
         {# ── Footer: open the full Decision Center ── #}
-        <div class="mt-2 pt-2" style="border-top:1px solid #eef0f5;">
+        <div class="mt-2 pt-2" style="border-top:1px solid var(--border-light, #eef0f5);">
             <a href="{% url 'decision_center:decision_center' %}" class="btn btn-sm btn-outline-primary">
                 Open Decision Center{% if dc_action_count %} (<span id="dc-action-count-2">{{ dc_action_count }}</span> Action{{ dc_action_count|pluralize }} Required){% endif %} <i class="fas fa-arrow-right ms-1"></i>
             </a>
@@ -3993,14 +4009,32 @@ document.addEventListener('DOMContentLoaded', function () {
             var MAX_GAUGE = 1.0;
             var capped = Math.min(Math.max(value, 0), MAX_GAUGE);
             var remaining = Math.max(0, MAX_GAUGE - capped);
-            var color = value >= 1.0 ? 'rgba(28,200,138,0.85)' : value >= 0.8 ? 'rgba(245,158,11,0.85)' : 'rgba(231,74,59,0.85)';
-            new Chart(canvas, {
+            var rgb = value >= 1.0 ? [28,200,138] : value >= 0.8 ? [245,158,11] : [231,74,59];
+            var color = 'rgba(' + rgb.join(',') + ',0.85)';
+            // The unfilled track was a flat near-transparent black — invisible on a
+            // dark card. Pull a theme-aware track tint from chart-theme.js and keep
+            // it live-updated when the user toggles light/dark without reloading.
+            var trackColor = (window.getChartTheme && window.getChartTheme().isDark)
+                ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.07)';
+
+            var chart = new Chart(canvas, {
                 type: 'doughnut',
                 data: {
                     datasets: [{
                         data: [capped, remaining],
-                        backgroundColor: [color, 'rgba(0,0,0,0.07)'],
+                        // Gradient + rounded caps for a smoother, less "flat" arc.
+                        backgroundColor: function (ctx) {
+                            if (ctx.dataIndex === 1) return trackColor;
+                            var area = ctx.chart.chartArea;
+                            if (!area) return color;
+                            var g = ctx.chart.ctx.createLinearGradient(area.left, area.top, area.right, area.top);
+                            g.addColorStop(0, 'rgba(' + rgb.join(',') + ',0.6)');
+                            g.addColorStop(1, 'rgba(' + rgb.join(',') + ',0.95)');
+                            return g;
+                        },
                         borderWidth: 0,
+                        borderRadius: 6,
+                        spacing: 1,
                     }],
                 },
                 options: {
@@ -4012,6 +4046,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     plugins: { legend: { display: false }, tooltip: { enabled: false } },
                 },
             });
+            if (window.PrizmCharts) {
+                PrizmCharts.register(chart);
+                window.addEventListener('displayModeChanged', function () {
+                    trackColor = (window.getChartTheme && window.getChartTheme().isDark)
+                        ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.07)';
+                    chart.update('none');
+                });
+            }
             // Update overlay labels
             var valEl  = document.getElementById(valueTextId);
             var subEl  = document.getElementById(subTextId);

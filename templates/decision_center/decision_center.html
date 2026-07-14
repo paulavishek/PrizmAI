@@ -13,10 +13,19 @@
     .dc-badge-action   { background: rgba(220,53,69,.1); color: #dc3545; }
     .dc-badge-awareness{ background: rgba(13,202,240,.1); color: #0dcaf0; }
     .dc-badge-quickwin { background: rgba(25,135,84,.1);  color: #198754; }
+    [data-bs-theme="dark"] .dc-badge-action    { background: rgba(220,53,69,.2);  color: #f28b82; }
+    [data-bs-theme="dark"] .dc-badge-awareness { background: rgba(13,202,240,.2); color: #7dd3fc; }
+    [data-bs-theme="dark"] .dc-badge-quickwin  { background: rgba(25,135,84,.2);  color: #81c995; }
     .dc-briefing {
         background: linear-gradient(135deg, #f8f9ff 0%, #eef1ff 100%);
         border: 1px solid #d4d9ff;
         border-radius: 0.75rem;
+    }
+    /* Light gradient never adapted for dark mode: bright dark-mode text
+       (.text-primary/.text-muted inside) was rendering light-on-light. */
+    [data-bs-theme="dark"] .dc-briefing {
+        background: linear-gradient(135deg, rgba(99,102,241,0.14) 0%, rgba(99,102,241,0.06) 100%);
+        border-color: rgba(129,140,248,0.35);
     }
     .dc-collapse-toggle { cursor: pointer; user-select: none; }
     .dc-collapse-toggle .fa-chevron-down { transition: transform .2s; }
@@ -26,10 +35,12 @@
     /* ── Tab styles ── */
     .dc-tabs .nav-link { color: var(--text-muted); font-weight: 500; border: none; border-bottom: 2px solid transparent; padding-bottom: .6rem; }
     .dc-tabs .nav-link.active { color: #4f46e5; border-bottom-color: #4f46e5; background: none; }
+    [data-bs-theme="dark"] .dc-tabs .nav-link.active { color: #ffffff; border-bottom-color: #a5b4fc; }
     .dc-tabs .nav-link .badge { font-size: .7rem; }
     .dc-wakeup-label { color: var(--text-muted); font-size: .82rem; }
     .dc-archive-badge-resolved { display:inline-block; background: rgba(25,135,84,.12); color: #198754; font-size: .7rem; font-weight:600; padding: .2rem .5rem; border-radius: .25rem; }
     .dc-archive-badge-dismissed { display:inline-block; background: rgba(107,114,128,.12); color: var(--text-muted); font-size: .7rem; font-weight:600; padding: .2rem .5rem; border-radius: .25rem; }
+    [data-bs-theme="dark"] .dc-archive-badge-resolved { background: rgba(25,135,84,.22); color: #81c995; }
 </style>
 {% endblock %}
 

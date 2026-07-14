@@ -285,6 +285,40 @@ textarea::placeholder {
     border-color: var(--border-color);
 }
 
+/* Outline buttons keep Bootstrap's solid light-mode hues in dark mode
+   (buttons are excluded from the global bright-text rule above so brand
+   accents stay recognizable), but those hues read too dark against
+   near-black cards. Keep a tinted border for identity, brighten the label
+   itself to white so it reads clearly — matching the solid .btn-success
+   "Resolved" button's white text. */
+[data-bs-theme="dark"] .btn-outline-primary {
+    color: #ffffff;
+    border-color: var(--link-color);
+}
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: var(--link-color);
+    border-color: var(--link-color);
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-secondary {
+    color: #ffffff;
+    border-color: var(--border-color);
+}
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+    background-color: var(--border-color);
+    border-color: var(--border-color);
+    color: #ffffff;
+}
+[data-bs-theme="dark"] .btn-outline-danger {
+    color: #ffffff;
+    border-color: #f28b82;
+}
+[data-bs-theme="dark"] .btn-outline-danger:hover {
+    background-color: #f28b82;
+    border-color: #f28b82;
+    color: #1a1a1a;
+}
+
 /* Alert Theme */
 .alert {
     border-color: var(--border-color);

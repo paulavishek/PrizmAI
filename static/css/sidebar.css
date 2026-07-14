@@ -956,6 +956,13 @@
 .dc-badge-info    { background: rgba(14,165,233,0.1); color: #0284c7; }
 .dc-badge-success { background: rgba(34,197,94,0.1);  color: #16a34a; }
 .dc-badge-warning { background: rgba(245,158,11,0.12); color: #b45309; }
+/* Dark mode: the light rgba tints above read fine on a white card, but on a
+   near-black card the solid text colors (#dc2626 etc.) are still too dark to
+   read. Bump the tint opacity and switch to the bright dark-mode accent hues. */
+[data-bs-theme="dark"] .dc-badge-danger  { background: rgba(239,68,68,0.18);  color: #f28b82; }
+[data-bs-theme="dark"] .dc-badge-info    { background: rgba(14,165,233,0.18); color: #7dd3fc; }
+[data-bs-theme="dark"] .dc-badge-success { background: rgba(34,197,94,0.18);  color: #81c995; }
+[data-bs-theme="dark"] .dc-badge-warning { background: rgba(245,158,11,0.2); color: #fdd663; }
 .dc-loading-skeleton {
     display: inline-flex;
     gap: 12px;
@@ -1037,6 +1044,38 @@
     color: var(--text-muted);
     flex-shrink: 0;
     white-space: nowrap;
+}
+/* Dark mode: every kpi-pill background above is a hardcoded pale tint (#fff,
+   #f0f7ff, #fff5f5, ...) that never adapts, so the bright dark-mode text
+   colors (from theme.css .text-primary/.text-danger/etc.) end up light-on-light
+   and unreadable. Give each pill a dark tinted background + bright border,
+   and force the number itself to pure white for maximum contrast. */
+[data-bs-theme="dark"] .kpi-pill {
+    background: var(--card-bg);
+    border-color: var(--border-color);
+}
+[data-bs-theme="dark"] #kpi-strip .kpi-pill:first-child {
+    background: rgba(59,130,246,0.16);
+    border-color: #3b82f6;
+}
+[data-bs-theme="dark"] #kpi-strip .kpi-pill:nth-child(2) {
+    background: rgba(34,197,94,0.16);
+    border-color: #22c55e;
+}
+[data-bs-theme="dark"] .kpi-pill:nth-child(3):not(.kpi-pill-alert) {
+    background: var(--card-bg);
+    border-color: var(--border-color);
+}
+[data-bs-theme="dark"] .kpi-pill-alert {
+    background: rgba(239,68,68,0.18) !important;
+    border-color: #ef4444 !important;
+}
+[data-bs-theme="dark"] .kpi-pill-warn {
+    background: rgba(245,158,11,0.18) !important;
+    border-color: #f59e0b !important;
+}
+[data-bs-theme="dark"] .kpi-pill strong {
+    color: #ffffff !important;
 }
 /* KPI strip pipe separator */
 .kpi-strip-separator {
