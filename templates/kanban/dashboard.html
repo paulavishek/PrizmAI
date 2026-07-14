@@ -49,6 +49,15 @@
         color: white;
     }
 
+    /* High Risk Tasks modal — "High" Risk Level pill: the bright bg-warning
+       yellow + Bootstrap's text-dark got fought over by unrelated global CSS
+       (ai_explainability.css modal-body overrides), so pin it here instead —
+       this is the last stylesheet loaded for this page, guaranteed to win. */
+    #highRiskModal .badge.bg-warning {
+        background-color: #92400e !important;
+        color: #fff !important;
+    }
+
     /* Demo onboarding panel CSS moved to templates/demo/partials/demo_info_dropdown.html */
 
     /* Welcome Modal Styles */
@@ -3909,6 +3918,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                 },
             });
+            // Recolor axis/legend text on light/dark toggle — otherwise colors
+            // baked in at init time (e.g. dark-mode light-grey text) stay stuck
+            // when the user switches modes without reloading the page.
+            if (window.PrizmCharts) PrizmCharts.register(_metricsMissionChart);
         }
 
         // --- Strategy horizontal bar chart ---
@@ -3963,6 +3976,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                 },
             });
+            if (window.PrizmCharts) PrizmCharts.register(_metricsStrategyChart);
             }
         }
         // --- Velocity sparkline (weekly task completions) ---
@@ -3971,7 +3985,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var weekLabels = ['6w ago','5w ago','4w ago','3w ago','2w ago','Last week','This week'];
             var sparkData = chartData.velocity_weeks;
             var maxVal = Math.max.apply(null, sparkData);
-            new Chart(vCanvas, {
+            var _velocityChart = new Chart(vCanvas, {
                 type: 'line',
                 data: {
                     labels: weekLabels,
@@ -3999,6 +4013,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                 },
             });
+            if (window.PrizmCharts) PrizmCharts.register(_velocityChart);
         }
 
         // --- SPI / CPI Gauge half-donuts ---
