@@ -725,9 +725,7 @@ function showCoachToast(message, type) {
 
 function generateSuggestions() {
     const btn = event.target.closest('button');
-    const originalHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
+    const busy = PrizmLoading.buttonBusy(btn, { label: 'Generating…' });
 
     fetch("{% url 'coach_generate_suggestions' board.id %}", {
         method: 'POST',
@@ -754,8 +752,7 @@ function generateSuggestions() {
         showCoachToast('Failed to generate suggestions. Please try again.', 'error');
     })
     .finally(() => {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
+        busy.done();
     });
 }
 

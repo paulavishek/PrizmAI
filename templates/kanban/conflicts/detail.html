@@ -381,14 +381,13 @@
                             </div>
                         </form>
                     {% else %}
-                        <div class="text-center py-4">
-                            <div class="prizm-spinner prizm-spinner--lg"></div>
-                            <p class="mt-3 prizm-loading-message-inline" id="conflict-gen-msg">Generating AI resolution suggestions…</p>
-                        </div>
+                        <div id="conflict-gen-loader"></div>
                         <script>
                             (function() {
-                                var el = document.getElementById('conflict-gen-msg');
-                                if (el) PrizmLoading.rotateMessages(el, PrizmLoading.messages.conflictResolution);
+                                var host = document.getElementById('conflict-gen-loader');
+                                if (host && window.PrizmLoading) {
+                                    PrizmLoading.showSpectra(host, { messageKey: 'conflictResolution', subtitle: '' });
+                                }
                             })();
                         </script>
                     {% endif %}

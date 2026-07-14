@@ -808,8 +808,7 @@
 window.CSRF_TOKEN = '{{ csrf_token }}';
 
 function classifyBoard(btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Analysing...';
+    const busy = PrizmLoading.buttonBusy(btn, { label: 'Analysing…' });
     fetch("{% url 'classify_board_api' board.id %}", {
         method: 'POST',
         headers: {'X-CSRFToken': '{{ csrf_token }}'}
@@ -818,13 +817,11 @@ function classifyBoard(btn) {
             location.reload();
         } else {
             showToast(data.error || 'Classification failed.', 'danger');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-magic me-1"></i>Analyse Now';
+            busy.done();
         }
     }).catch(() => {
         showToast('Network error.', 'danger');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-magic me-1"></i>Analyse Now';
+        busy.done();
     });
 }
 

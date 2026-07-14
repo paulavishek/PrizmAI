@@ -144,9 +144,7 @@ function refreshAllBranchScores() {
     const btn = document.getElementById('refreshScoresBtn');
     if (!btn) return;
 
-    const originalHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing…';
+    const busy = PrizmLoading.buttonBusy(btn, { label: 'Refreshing…' });
 
     fetch(`/api/boards/${getBoardId()}/shadow/refresh/`, {
         method: 'POST',
@@ -162,14 +160,12 @@ function refreshAllBranchScores() {
             // to pick them up everywhere on the page.
             window.location.reload();
         } else {
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
+            busy.done();
             alertError('Could not refresh: ' + (data.error || 'Unknown error'));
         }
     })
     .catch(e => {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
+        busy.done();
         alertError('Could not refresh: ' + e.message);
     });
 }

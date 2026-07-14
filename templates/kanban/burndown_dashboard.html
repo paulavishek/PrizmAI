@@ -359,10 +359,7 @@
                     <i class="fas fa-sync-alt"></i> Generate New Prediction
                 </button>
             </div>
-            <div id="burndown-loading" class="text-center mt-3" style="display:none;" data-prizm-container>
-                <div class="prizm-spinner prizm-spinner--sm"></div>
-                <span class="ms-2 prizm-loading-message-inline" data-prizm-messages="burndown">Generating burndown analysis…</span>
-            </div>
+            <div id="burndown-loading" style="display:none;" data-prizm-variant="spectra" data-prizm-messages="burndown"></div>
         </div>
     </div>
 
@@ -644,9 +641,7 @@
 <script>
     function generatePrediction() {
         const btn = event.target.closest('button');
-        const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-        btn.disabled = true;
+        const busy = PrizmLoading.buttonBusy(btn, { label: 'Generating…' });
         var loadingEl = document.getElementById('burndown-loading');
         if (loadingEl) loadingEl.style.display = '';
 
@@ -669,15 +664,13 @@
                     location.reload();
                 } else {
                     alert('Error: ' + data.error);
-                    btn.innerHTML = originalHtml;
-                    btn.disabled = false;
+                    busy.done();
                     if (loadingEl) loadingEl.style.display = 'none';
                 }
             })
             .catch(error => {
                 alert('Error generating prediction: ' + error.message);
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
+                busy.done();
                 if (loadingEl) loadingEl.style.display = 'none';
             });
     }

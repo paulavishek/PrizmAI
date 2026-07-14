@@ -39,12 +39,8 @@
 .score-value-label { font-size: 0.78rem; color: var(--text-secondary, #6b7280); margin-bottom: 6px; }
 .score-reasoning { font-size: 0.83rem; color: var(--text-secondary, #6b7280); margin-top: 0.6rem; border-top: 1px dashed var(--border-color, #e5e7eb); padding-top: 0.6rem; }
 
-/* Spectra scoring animation */
-@keyframes spectraPulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.55; transform: scale(1.12); }
-}
-.spectra-pulse { animation: spectraPulse 1.6s ease-in-out infinite; }
+/* Spectra scoring animation now lives in the shared prizm_loading.css
+   (.prizm-spectra-* / prizm-spectra-pulse) — driven by PrizmLoading.showSpectra. */
 
 /* Comments */
 .comment-item {
@@ -462,51 +458,16 @@ document.getElementById('stageConfirmOkBtn').addEventListener('click', function 
 
 function rescoreIdea() {
     const card = document.getElementById('spectraScoreCard');
+    const saved = card.innerHTML;
 
-    const messages = [
-        { text: 'Reading your idea\u2026',                              progress: 8  },
-        { text: 'Analysing business impact potential\u2026',            progress: 22 },
-        { text: 'Estimating implementation effort\u2026',               progress: 37 },
-        { text: 'Evaluating strategic fit for your organisation\u2026', progress: 52 },
-        { text: 'Calculating confidence score\u2026',                   progress: 66 },
-        { text: 'Placing idea on the Impact\u2013Effort matrix\u2026',  progress: 80 },
-        { text: 'Finalising Spectra\u2019s recommendation\u2026',       progress: 93 },
-    ];
-
-    const unscoredHTML = `
-        <h6 class="fw-bold mb-3"><i class="fas fa-robot me-1 text-primary"></i>Spectra AI Score</h6>
-        <p class="text-muted mb-3" style="font-size:0.875rem;">This idea hasn&rsquo;t been scored by Spectra yet. Click below to get AI-powered impact, effort, and confidence estimates.</p>
-        <button class="btn btn-primary btn-sm w-100" id="scoreBtn" onclick="rescoreIdea()">
-            <i class="fas fa-robot me-1"></i>Score with Spectra
-        </button>`;
-
-    card.innerHTML = `
-        <h6 class="fw-bold mb-3"><i class="fas fa-robot me-1 text-primary"></i>Spectra AI Score</h6>
-        <div class="text-center py-2">
-            <i class="fas fa-robot fa-2x text-primary mb-3 spectra-pulse" style="display:block;"></i>
-            <div id="spectraLoadingMsg" style="font-size:0.875rem; font-weight:600; color:var(--text-primary,#111827); min-height:2.4em; transition:opacity 0.4s ease;">${messages[0].text}</div>
-            <div style="font-size:0.75rem; color:var(--text-secondary,#6b7280); margin-top:0.3rem;">Spectra is analysing your idea&hellip;</div>
-            <div class="progress mt-3" style="height:5px; border-radius:3px;">
-                <div id="spectraProgressBar" class="progress-bar bg-primary" style="width:${messages[0].progress}%; transition:width 2.2s ease;"></div>
-            </div>
-        </div>`;
-
-    let msgIndex = 0;
-    const INTERVAL_MS = 2400;
-
-    const interval = setInterval(() => {
-        if (msgIndex >= messages.length - 1) { clearInterval(interval); return; }
-        msgIndex++;
-        const msgEl = document.getElementById('spectraLoadingMsg');
-        const barEl = document.getElementById('spectraProgressBar');
-        if (!msgEl) { clearInterval(interval); return; }
-        msgEl.style.opacity = '0';
-        setTimeout(() => {
-            msgEl.textContent = messages[msgIndex].text;
-            msgEl.style.opacity = '1';
-        }, 200);
-        if (barEl) barEl.style.width = messages[msgIndex].progress + '%';
-    }, INTERVAL_MS);
+    // Keep the panel header, render the shared Spectra loader into a slot below it.
+    card.innerHTML =
+        '<h6 class="fw-bold mb-3"><i class="fas fa-robot me-1 text-primary"></i>Spectra AI Score</h6>' +
+        '<div id="spectraLoadingSlot"></div>';
+    const loader = PrizmLoading.showSpectra(document.getElementById('spectraLoadingSlot'), {
+        messageKey: 'spectraScore',
+        subtitle: 'Spectra is analysing your idea\u2026'
+    });
 
     fetch(`/discovery/${IDEA_ID}/score/`, {
         method: 'POST',
@@ -514,11 +475,10 @@ function rescoreIdea() {
     })
     .then(r => r.json())
     .then(data => {
-        clearInterval(interval);
-        if (data.ok) window.location.reload();
-        else { card.innerHTML = unscoredHTML; alert(data.error || 'Scoring failed.'); }
+        if (data.ok) { loader.complete(); window.location.reload(); }
+        else { loader.stop(); card.innerHTML = saved; alert(data.error || 'Scoring failed.'); }
     })
-    .catch(() => { clearInterval(interval); card.innerHTML = unscoredHTML; alert('Network error.'); });
+    .catch(() => { loader.stop(); card.innerHTML = saved; alert('Network error.'); });
 }
 
 function submitComment() {

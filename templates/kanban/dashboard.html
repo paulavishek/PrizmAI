@@ -221,8 +221,9 @@
 
     /* Spinner inside button */
     .btn-spinner { display: none; }
-    .btn-loading .btn-spinner { display: inline-block; }
-    .btn-loading .btn-label  { display: none; }
+    .btn-loading .btn-spinner { display: inline-block; vertical-align: middle; }
+    /* Keep the label visible during loading so the button shows its status
+       ("Refreshing…") next to the spinner, consistent with the Spectra loader. */
 
     /* Summary flash highlight when a new result arrives */
     @keyframes summaryfade {
@@ -3772,7 +3773,7 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.disabled = true;
             if (!btn.querySelector('.btn-spinner')) {
                 var spinner = document.createElement('span');
-                spinner.className = 'btn-spinner spinner-border spinner-border-sm me-1';
+                spinner.className = 'btn-spinner prizm-spinner prizm-spinner--sm me-1';
                 spinner.setAttribute('role', 'status');
                 btn.prepend(spinner);
             }

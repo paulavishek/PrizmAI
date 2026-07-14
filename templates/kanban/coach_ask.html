@@ -194,6 +194,8 @@
         </button>
     </div>
 
+    {% include "partials/spectra_loading.html" with target_id="ask" messages_key="coach" subtitle="Spectra is thinking…" %}
+
     <div id="adviceContainer" style="display: none;">
         <div class="advice-box">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
@@ -385,12 +387,13 @@ function askCoach() {
     }
     
     const btn = document.getElementById('askBtn');
-    const originalHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Thinking...';
+    const busy = PrizmLoading.buttonBusy(btn, { label: 'Thinking…' });
 
-    // Hide previous advice
+    // Hide previous advice, show the Spectra loader
     document.getElementById('adviceContainer').style.display = 'none';
+    const askLoading = document.getElementById('ask-loading');
+    askLoading.classList.remove('d-none');
+    askLoading.scrollIntoView({ behavior: 'smooth', block: 'center' });
     
     fetch("{% url 'coach_ask' board.id %}", {
         method: 'POST',
@@ -427,8 +430,8 @@ function askCoach() {
         showAskToast('Failed to get advice. Please try again.', 'error');
     })
     .finally(() => {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
+        busy.done();
+        document.getElementById('ask-loading').classList.add('d-none');
     });
 }
 
