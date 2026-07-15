@@ -205,6 +205,8 @@ app.conf.task_routes = {
     # NB: the task name is 'kanban.sandbox_provisioning.provision_sandbox'
     # (see provision_sandbox_task's @shared_task name=), NOT 'provision_sandbox_task'.
     'kanban.sandbox_provisioning.*': {'queue': 'interactive'},
+    # NB: migration routing lives in settings.CELERY_TASK_ROUTES (the effective
+    # config) — see there, not here.
 }
 
 

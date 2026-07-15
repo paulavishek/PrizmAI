@@ -429,25 +429,14 @@ class AIRouter:
         """
         Return a Fernet instance using the AI_KEY_ENCRYPTION_KEY setting.
 
+        Delegates to the shared ``kanban_board.encryption`` module so all
+        secret encryption in PrizmAI shares one implementation.
+
         Raises:
             ImproperlyConfigured: If AI_KEY_ENCRYPTION_KEY is missing or empty.
         """
-        # To generate a valid key, run in Python:
-        #   from cryptography.fernet import Fernet
-        #   print(Fernet.generate_key().decode())
-        from cryptography.fernet import Fernet
-
-        key = getattr(settings, 'AI_KEY_ENCRYPTION_KEY', None)
-        if not key:
-            raise ImproperlyConfigured(
-                "AI_KEY_ENCRYPTION_KEY is not set in Django settings. "
-                "Generate a Fernet key with: "
-                "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode()) "
-                "and add it to your .env file as AI_KEY_ENCRYPTION_KEY."
-            )
-        if isinstance(key, str):
-            key = key.encode()
-        return Fernet(key)
+        from kanban_board.encryption import get_fernet
+        return get_fernet()
 
     def _encrypt_key(self, raw_key: str) -> str:
         """
@@ -455,6 +444,7 @@ class AIRouter:
 
         Call this from views when a user saves a BYOK key.  Never store
         the raw key anywhere — only store the string this method returns.
+        Thin wrapper over ``kanban_board.encryption.encrypt_secret``.
 
         Args:
             raw_key (str): The plain-text API key entered by the user.
@@ -465,15 +455,16 @@ class AIRouter:
         Raises:
             ImproperlyConfigured: If AI_KEY_ENCRYPTION_KEY is not configured.
         """
-        f = self._get_fernet()
-        return f.encrypt(raw_key.encode()).decode()
+        from kanban_board.encryption import encrypt_secret
+        return encrypt_secret(raw_key)
 
     def _decrypt_key(self, encrypted_key: str) -> str:
         """
         Decrypt a Fernet-encrypted API key back to plain text.
 
         Call this only immediately before making an API call.  Never log
-        or store the decrypted result.
+        or store the decrypted result.  Thin wrapper over
+        ``kanban_board.encryption.decrypt_secret``.
 
         Args:
             encrypted_key (str): The encrypted string from the database.
@@ -486,8 +477,8 @@ class AIRouter:
             Exception: If decryption fails (key may be corrupted, or the
                 encryption key may have changed since the key was stored).
         """
-        f = self._get_fernet()
-        return f.decrypt(encrypted_key.encode()).decode()
+        from kanban_board.encryption import decrypt_secret
+        return decrypt_secret(encrypted_key)
 
     # ------------------------------------------------------------------
     # Platform key helper

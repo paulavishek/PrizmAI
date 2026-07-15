@@ -787,6 +787,11 @@ CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
 CELERY_TASK_ROUTES = {
     'kanban.ai_summary.*': {'queue': 'summaries'},
     'kanban.ai_streaming.*': {'queue': 'ai_tasks'},
+    # Live project migration is user-triggered + progress-watched, so keep it on
+    # the dedicated 'interactive' worker (same queue as sandbox provisioning),
+    # off the heavy default queue. NB: this dict (settings.CELERY_TASK_ROUTES) is
+    # the *effective* route config — it overrides app.conf.task_routes in celery.py.
+    'kanban.migration.*': {'queue': 'interactive'},
 }
 
 # ---------------------------------------------------------------------------

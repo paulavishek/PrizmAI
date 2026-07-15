@@ -17,6 +17,9 @@
                 <button class="btn btn-outline-success shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#importBoardModal">
                     <i class="fas fa-file-import fa-sm me-1"></i> Import Board
                 </button>
+                <a href="{% url 'integrations:migrate_start' %}" class="btn btn-outline-primary shadow-sm me-2">
+                    <i class="fas fa-cloud-download-alt fa-sm me-1"></i> Migrate from Tool
+                </a>
                 <a href="{% url 'create_board' %}" class="d-none d-sm-inline-block btn btn-primary shadow-sm">
                     <i class="fas fa-plus fa-sm text-white-50 me-2"></i> New Board
                 </a>
