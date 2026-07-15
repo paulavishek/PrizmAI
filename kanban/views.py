@@ -2837,6 +2837,11 @@ def task_detail(request, task_id):
         return redirect(f'/milestones/{task.id}/{qs}')
 
     if request.method == 'POST':
+        # RBAC: editing the task requires write access (viewers are read-only).
+        # Mirror the read gate above — demo workspaces intentionally bypass RBAC.
+        if not is_demo_context(request, board=board):
+            from kanban.simple_access import check_modify_or_403
+            check_modify_or_403(request.user, board)
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
             # --- Snapshot AI-relevant fields before save for stale detection ---
@@ -6795,6 +6800,8 @@ def task_update_assignee(request, task_id):
 def column_update_wip(request, column_id):
     """Set or clear the WIP limit on a column."""
     column = get_object_or_404(Column, id=column_id)
+    if not request.user.has_perm('prizmai.edit_board', column.board):
+        return JsonResponse({'error': 'You do not have permission to modify this board.'}, status=403)
     raw = request.POST.get('wip_limit', '').strip()
     if raw == '' or raw.lower() == 'none':
         column.wip_limit = None

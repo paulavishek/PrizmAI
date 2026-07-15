@@ -22,6 +22,7 @@ from kanban.retrospective_models import (
     RetrospectiveActionItem, RetrospectiveTrend
 )
 from kanban.utils.retrospective_generator import RetrospectiveGenerator
+from kanban.simple_access import check_access_or_403, check_modify_or_403
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,8 @@ def _add_manual_actions(retrospective, board, actions_list):
 def retrospective_list(request, board_id):
     """List all retrospectives for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     retrospectives = ProjectRetrospective.objects.filter(board=board).select_related(
         'created_by', 'finalized_by'
     ).prefetch_related('lessons', 'action_items', 'metrics')
@@ -123,6 +125,7 @@ def retrospective_list(request, board_id):
 def retrospective_detail(request, board_id, retro_id):
     """View detailed retrospective"""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     retrospective = get_object_or_404(
         ProjectRetrospective.objects.select_related('created_by', 'finalized_by'),
         id=retro_id,
@@ -180,7 +183,8 @@ def retrospective_detail(request, board_id, retro_id):
 def retrospective_create(request, board_id):
     """Create a new retrospective"""
     board = get_object_or_404(Board, id=board_id)
-    
+    check_modify_or_403(request.user, board)
+
     if request.method == 'GET':
         # Show form for date selection
         # Suggest default period (last 14 days for sprint, last 30 for project)
@@ -280,8 +284,9 @@ def retrospective_create(request, board_id):
 def retrospective_finalize(request, board_id, retro_id):
     """Finalize a retrospective"""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
-    
+
     # Add team notes if provided
     team_notes = request.POST.get('team_notes', '')
     if team_notes:
@@ -297,6 +302,7 @@ def retrospective_finalize(request, board_id, retro_id):
 def retrospective_dashboard(request, board_id):
     """Dashboard showing improvement trends over time"""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     
     # Get recent retrospectives
     retrospectives = ProjectRetrospective.objects.filter(
@@ -379,6 +385,7 @@ def retrospective_dashboard(request, board_id):
 def lesson_update_status(request, board_id, lesson_id):
     """Update lesson learned status"""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     lesson = get_object_or_404(LessonLearned, id=lesson_id, board=board)
     
     new_status = request.POST.get('status')
@@ -406,6 +413,7 @@ def lesson_update_status(request, board_id, lesson_id):
 def action_update_status(request, board_id, action_id):
     """Update action item status"""
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     action = get_object_or_404(RetrospectiveActionItem, id=action_id, board=board)
     
     new_status = request.POST.get('status')
@@ -438,7 +446,8 @@ def action_update_status(request, board_id, action_id):
 def lessons_learned_list(request, board_id):
     """View all lessons learned across retrospectives"""
     board = get_object_or_404(Board, id=board_id)
-    
+    check_access_or_403(request.user, board)
+
     lessons = LessonLearned.objects.filter(board=board).select_related(
         'retrospective', 'action_owner'
     )
@@ -482,6 +491,7 @@ def lessons_learned_list(request, board_id):
 def retrospective_actions_list(request, board_id):
     """View all action items across all retrospectives for a board"""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
 
     all_board_actions = RetrospectiveActionItem.objects.filter(board=board)
 
@@ -626,8 +636,9 @@ def retrospective_export(request, board_id, retro_id):
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
     from io import BytesIO
     from django.http import HttpResponse
-    
+
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
     
     # Get related data

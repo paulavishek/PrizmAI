@@ -28,6 +28,9 @@ from kanban.stress_test_prompt import (
 from kanban.stress_test_data import build_board_stress_test_data
 from kanban.audit_utils import log_audit
 from kanban.decorators import demo_write_guard, demo_ai_guard
+from kanban.simple_access import (
+    check_access_or_403, check_modify_or_403, can_manage_board,
+)
 from api.ai_usage_utils import track_ai_request, require_ai_quota, check_ai_quota
 
 logger = logging.getLogger(__name__)
@@ -150,6 +153,7 @@ def _repair_truncated_json(text: str) -> str:
 def stress_test_dashboard(request, board_id):
     """Main Stress Test page — shows latest session or empty state."""
     board = get_object_or_404(Board, id=board_id)
+    check_access_or_403(request.user, board)
 
     sessions = StressTestSession.objects.filter(board=board).select_related(
         'immunity_score'
@@ -238,6 +242,7 @@ def run_stress_test(request, board_id):
     from ai_assistant.utils.ai_router import AIRouter
 
     board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     board_data = build_board_stress_test_data(board, request.user)
 
     start_time = time.time()
@@ -442,6 +447,8 @@ def run_stress_test(request, board_id):
 @demo_write_guard
 def apply_vaccine(request, board_id, vaccine_id):
     """Toggle a vaccine's is_applied state."""
+    board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     vaccine = get_object_or_404(Vaccine, pk=vaccine_id, board_id=board_id)
 
     vaccine.is_applied = not vaccine.is_applied
@@ -475,7 +482,7 @@ def reset_stress_test_history(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
 
-    if board.created_by != request.user and not request.user.is_staff:
+    if not can_manage_board(request.user, board):
         return JsonResponse(
             {'success': False, 'error': 'Only the board owner can reset stress test history.'},
             status=403,
@@ -505,6 +512,8 @@ def reset_stress_test_history(request, board_id):
 @demo_write_guard
 def mark_scenario_addressed(request, board_id, scenario_id):
     """Toggle a scenario's is_addressed state."""
+    board = get_object_or_404(Board, id=board_id)
+    check_modify_or_403(request.user, board)
     scenario = get_object_or_404(
         StressTestScenario, pk=scenario_id, session__board_id=board_id
     )

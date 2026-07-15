@@ -2126,9 +2126,11 @@ def create_subtasks_api(request):
         parent_task_obj = None
         if parent_task_id:
             try:
-                parent_task_obj = Task.objects.get(id=parent_task_id)
+                # Scope the parent to THIS board — never link to a task the
+                # caller can't see (cross-board reference leak otherwise).
+                parent_task_obj = Task.objects.get(id=parent_task_id, column__board=board)
             except Task.DoesNotExist:
-                pass  # Proceed without parent if invalid
+                pass  # Proceed without parent if invalid / not on this board
         
         for i, subtask_data in enumerate(subtasks):
             try:
@@ -2509,13 +2511,16 @@ def create_epic_with_children(request):
 
             epic_task = Task.objects.create(**epic_kwargs)
 
-            # Handle assigned_to (user id)
+            # Handle assigned_to (user id) — only assign to someone who can
+            # actually access this board, never an arbitrary user id.
             if data.get('assigned_to'):
                 try:
                     from django.contrib.auth.models import User
+                    from kanban.simple_access import can_be_assigned_to_board
                     assignee = User.objects.get(id=int(data['assigned_to']))
-                    epic_task.assigned_to = assignee
-                    epic_task.save(update_fields=['assigned_to'])
+                    if can_be_assigned_to_board(assignee, board):
+                        epic_task.assigned_to = assignee
+                        epic_task.save(update_fields=['assigned_to'])
                 except (User.DoesNotExist, ValueError, TypeError):
                     pass
 
