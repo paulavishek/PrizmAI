@@ -505,6 +505,55 @@ def some_view(request, board_id):
 | `task_cost_edit` | No board permission check — any user could edit any task's cost | Added `has_perm('prizmai.edit_board', board)`, `raise Http404` |
 | `create_split_time_entries` | No per-task board permission in batch creation | Added per-task `has_perm('prizmai.edit_board', board)` check |
 
+### Audit #3 — Pre-Launch Adversarial Pass (July 15, 2026)
+
+**Context:** Final security audit before the Google Cloud launch. The tenant-isolation core held up (workspace switching is ownership-guarded, the demo bypass is not reachable by real users, the DRF `api/v1` layer is workspace-scoped, and `BoardAccessEnforcementMiddleware` backstops cross-tenant board **reads**). The gaps that remained were all **write-level**: endpoints that a read-authorized `viewer` could POST to because the view never checked `edit_board` (the middleware only backstops reads).
+
+#### Verified gaps fixed
+
+| Location | Issue | Fix |
+|----------|-------|-----|
+| `kanban/retrospective_views.py` (all 10 views) | **Zero** access checks — any read-authorized user could run/finalize retrospectives, update lesson/action status, export. | Added `check_access_or_403` (reads) / `check_modify_or_403` (writes) after each `get_object_or_404(Board, …)`. |
+| `kanban/stress_test_views.py` (5 views) | Same — viewers could run AI stress tests, apply vaccines, mark scenarios addressed. | `check_access_or_403` / `check_modify_or_403`; `reset_stress_test_history` broadened to `can_manage_board` (keeps JSON 403). |
+| `kanban/views.py → task_detail` (POST) | **Core task-edit path** checked only `view_board` — a viewer could edit any task they could see. | Added `check_modify_or_403` in the POST branch (demo workspaces still bypass, mirroring the read gate). |
+| `kanban/api_views.py → create_subtasks_api` | `parent_task_id` fetched with no board scope (cross-board reference leak). | Scoped to `column__board=board`. |
+| `kanban/api_views.py → create_epic_with_children` | `assigned_to` accepted an arbitrary user id. | Validated via `can_be_assigned_to_board(assignee, board)`. |
+
+#### Systemic sweep — secondary modules gated only at read level
+
+A follow-on sweep of **every board-routed POST** found the same viewer-write pattern across more modules. All were bounded to viewer/member by the middleware read-backstop (no cross-tenant exposure). Fixed:
+
+| Location | Was | Now |
+|----------|-----|-----|
+| `kanban/prizmbrief_views.py` — `save_brief` / `rename_brief` / `delete_brief` | `view_board` only (shared `_check_board_access`) | Added `require_edit=True` param → `edit_board`. |
+| `kanban/views.py → column_update_wip` | **No** board check (only the middleware) | Added `has_perm('prizmai.edit_board', column.board)` — matching the sibling `column_update_color`/`column_update_aging`. |
+| `exit_protocol/views.py` — `recalculate_health_score`, `complete_checklist_item` | `check_access_or_403` (read) | `check_modify_or_403`. |
+| `kanban/automation_views.py` — `template_use`, `scheduled_rule_create_form` | `can_access_board` (read) | `has_perm('prizmai.edit_board', board)` — matching `rule_create`. |
+| `kanban/resource_leveling_views.py` — `create_leveling_suggestion`, `accept_all_suggestions`, `optimize_board_workload`, `balance_workload`, `update_performance_profiles` | **No** access check | `can_modify_board_content` → JSON 403 (boolean guard, not the raising `check_*_or_403` — those views wrap bodies in `try/except Exception` which would swallow `PermissionDenied` into a 500). Read endpoints (`analyze_task_assignment`, `get_board_suggestions`, `get_team_workload_report`) got `can_access_board`. |
+
+**Confirmed NOT gaps** during the sweep (false positives of the initial scan): `whatif_save`/`whatif_delete` (already `edit_board`), all `budget_*` (`_require_budget_access` → `delete_board`), `stakeholder_*` writes (`check_board_access(require_edit=True)`), `requirements` writes (`_get_board_and_check_access(require_edit=True)`), `invite_to_board`/`update_member_role` (`_can_manage_invites`).
+
+#### Systemic controls added
+
+1. **`@board_permission_required(perm)` decorator** (`kanban/simple_access.py`) — resolves `board_id`/`pk`, enforces `is_demo_context OR has_perm(perm, board)`, injects `kwargs['board']`, returns the standard Spectra denial. Honors the full rules predicate set (unlike the membership-only `require_board_access`), so it is the right gate for board-scoped **write** views and for `pk`-routed views the middleware deliberately skips. Implements §13.2's suggestion.
+
+2. **Behavioral regression tests** (`tests/test_kanban/test_rbac_matrix.py`) — `ThirdPassWriteGateTests` (retrospective / stress-test / task-detail) and `SecondaryModuleWriteGateTests` (prizmbrief / columns / exit-protocol / resource-leveling): viewer denied / member allowed, exercised over HTTP with `force_login`.
+
+   > **Why not a static build-guard?** A source-introspection test that enumerates board-routed POST views and greps for an edit token was prototyped and **abandoned**: `inspect.getsource`/`unwrap` over decorated Django views gave wildly inconsistent results (57 / 19 / 0 / 112 offenders depending on extraction method), producing false positives on views that *did* have `edit_board`. It cannot be trusted as a build gate. Behavioral tests are the reliable form; a full enumerator would have to exercise each endpoint, not read its source.
+
+#### Deferred / flagged (product decisions — not changed this pass)
+
+Two things were evaluated and deliberately **not** hard-gated:
+
+- A method-based **runtime** middleware write-gate — rejected because this codebase uses POST heavily for read-only AI generation, so "POST ⇒ edit_board" would misfire on ~14 read endpoints.
+- Three **borderline** board-scoped POSTs currently reachable by viewers, left as **product decisions** (blocking viewers may be undesirable): `ask_coach` (viewer asking the AI coach about a board they can read), `trigger_detection` (member-scoped, non-destructive conflict analysis), `requirement_add_comment` (collaborative commenting). Recommendation: decide per-feature whether viewers should perform these; if not, gate `requirement_add_comment` via `_get_board_and_check_access(require_edit=True)` and the others via `check_modify_or_403`.
+
+**AI-quota abuse** (the `999999` default in `api/ai_usage_models.py`) remains out of scope for this RBAC pass.
+
+#### Canonical decision (§13.9)
+
+Three overlapping access systems coexist (`has_perm` rules, `simple_access`, `get_user_boards`). They intentionally diverge on org-admin reach (rules honor `is_org_admin`; `simple_access`/DRF do not). **Source of truth:** `request.user.has_perm('prizmai.*', board)` for single-object checks; `get_user_boards()` for list querysets; `simple_access` helpers (`check_access_or_403` / `check_modify_or_403` / `can_manage_board`) as the raise/deny wrappers over the membership model. New write views should prefer `@board_permission_required('prizmai.edit_board')` or an inline `check_modify_or_403`.
+
 ---
 
 ## 12. Feature-by-Feature RBAC Coverage

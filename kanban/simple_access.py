@@ -245,11 +245,57 @@ def require_task_access(view_func):
         if not can_access_task(request.user, task):
             board = task.column.board
             return _spectra_denial_response(request, board, trigger='task_view')
-        
+
         kwargs['task'] = task
         return view_func(request, *args, **kwargs)
-    
+
     return wrapper
+
+
+def board_permission_required(permission):
+    """Require a django-rules board permission (e.g. ``'prizmai.edit_board'``).
+
+    Resolves the board from the view's ``board_id`` (or ``pk``) URL kwarg,
+    fetches it once, and enforces the canonical gate used everywhere else::
+
+        is_demo_context(request, board) OR request.user.has_perm(permission, board)
+
+    On success the resolved board is injected as ``kwargs['board']`` so the view
+    need not re-fetch it. On failure it returns the standard Spectra denial
+    (JSON for AJAX/API, HTML page otherwise) at HTTP 403.
+
+    Unlike ``require_board_access`` (which uses the membership-only
+    ``can_access_board``), this decorator honors the full rules predicate set —
+    org admins, ancestor owners, viewer/member/owner roles — so it is the right
+    tool for board-scoped *write* views and for ``pk``-routed views the
+    ``BoardAccessEnforcementMiddleware`` deliberately skips.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            from django.shortcuts import get_object_or_404
+            from kanban.models import Board
+            from kanban.permissions import is_demo_context
+
+            board_id = kwargs.get('board_id') or kwargs.get('pk')
+            if board_id:
+                board = get_object_or_404(Board, id=board_id)
+            elif 'board' in kwargs:
+                board = kwargs['board']
+            else:
+                raise ValueError("Board not found in view kwargs")
+
+            if not (is_demo_context(request, board=board)
+                    or request.user.has_perm(permission, board)):
+                trigger = 'board_view' if permission.endswith('view_board') else 'board_edit'
+                return _spectra_denial_response(request, board, trigger=trigger)
+
+            kwargs['board'] = board
+            return view_func(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 # ============================================================================

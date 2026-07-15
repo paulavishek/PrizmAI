@@ -685,7 +685,7 @@ def rule_toggle(request, board_id, rule_id):
 def template_use(request, board_id, template_id):
     """Create an AutomationRule from a template and redirect to the builder."""
     board = get_object_or_404(Board, id=board_id)
-    if not can_access_board(request.user, board):
+    if not request.user.has_perm('prizmai.edit_board', board):
         messages.error(request, 'Access denied.')
         return redirect('automations_list', board_id=board_id)
 
@@ -836,7 +836,7 @@ def scheduled_rule_create_form(request, board_id):
     import datetime as dt
     board = get_object_or_404(Board, id=board_id)
 
-    if not can_access_board(request.user, board):
+    if not request.user.has_perm('prizmai.edit_board', board):
         messages.error(request, 'You do not have access to this board.')
         return redirect('automations_list', board_id=board_id)
 

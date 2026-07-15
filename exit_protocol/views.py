@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from kanban.models import Board, BoardMembership
-from kanban.simple_access import check_access_or_403, check_management_or_403
+from kanban.simple_access import check_access_or_403, check_modify_or_403, check_management_or_403
 from kanban.audit_utils import log_audit
 
 from .models import (
@@ -205,7 +205,7 @@ def exit_protocol_dashboard(request, board_id):
 def recalculate_health_score(request, board_id):
     """Manually triggers a health score recomputation for this board."""
     board = get_object_or_404(Board, id=board_id)
-    check_access_or_403(request.user, board)
+    check_modify_or_403(request.user, board)
 
     from .tasks import compute_board_health_score
     # Run synchronously with force=True to bypass the new-board age guard.
@@ -259,7 +259,7 @@ def initiate_hospice(request, board_id):
 @demo_write_guard
 def complete_checklist_item(request, board_id, item_id):
     board = get_object_or_404(Board, id=board_id)
-    check_access_or_403(request.user, board)
+    check_modify_or_403(request.user, board)
 
     session = get_object_or_404(HospiceSession, board=board)
 

@@ -417,10 +417,16 @@ def _saved_brief_count(user, board):
     return SavedBrief.objects.filter(user=user, board=board).count()
 
 
-def _check_board_access(request, board_id):
-    """Shared board-access check; returns (board, error_response) tuple."""
+def _check_board_access(request, board_id, require_edit=False):
+    """Shared board-access check; returns (board, error_response) tuple.
+
+    When ``require_edit`` is True the user must also have edit rights, so
+    read-only viewers cannot save/rename/delete briefs.
+    """
     board = get_object_or_404(Board, id=board_id)
     if not request.user.has_perm('prizmai.view_board', board):
+        return board, JsonResponse({'error': 'Access denied.'}, status=403)
+    if require_edit and not request.user.has_perm('prizmai.edit_board', board):
         return board, JsonResponse({'error': 'Access denied.'}, status=403)
     return board, None
 
@@ -431,7 +437,7 @@ def save_brief(request, board_id):
     """AJAX: Save the current brief. Body is JSON with name, slides, full_text, meta."""
     import json
 
-    board, err = _check_board_access(request, board_id)
+    board, err = _check_board_access(request, board_id, require_edit=True)
     if err:
         return err
 
@@ -510,7 +516,7 @@ def rename_brief(request, board_id, brief_id):
     """AJAX: Rename a saved brief."""
     import json
 
-    board, err = _check_board_access(request, board_id)
+    board, err = _check_board_access(request, board_id, require_edit=True)
     if err:
         return err
 
@@ -534,7 +540,7 @@ def rename_brief(request, board_id, brief_id):
 @require_POST
 def delete_brief(request, board_id, brief_id):
     """AJAX: Delete a saved brief."""
-    board, err = _check_board_access(request, board_id)
+    board, err = _check_board_access(request, board_id, require_edit=True)
     if err:
         return err
 

@@ -19,7 +19,7 @@ from kanban.resource_leveling_models import (
     ResourceLevelingSuggestion,
     TaskAssignmentHistory
 )
-from kanban.simple_access import can_modify_board_content
+from kanban.simple_access import can_modify_board_content, can_access_board
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,8 @@ def analyze_task_assignment(request, task_id):
             return JsonResponse({
                 'error': 'Task is not associated with a board'
             }, status=400)
+        if not can_access_board(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -92,6 +94,8 @@ def create_leveling_suggestion(request, task_id):
             return JsonResponse({
                 'error': 'Task is not associated with a board'
             }, status=400)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -222,6 +226,8 @@ def accept_all_suggestions(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
 
         suggestions = ResourceLevelingSuggestion.objects.filter(
             task__column__board=board,
@@ -280,6 +286,8 @@ def get_board_suggestions(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_access_board(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -433,6 +441,8 @@ def get_team_workload_report(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_access_board(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()
@@ -479,6 +489,8 @@ def optimize_board_workload(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Parse body
         try:
@@ -524,6 +536,8 @@ def balance_workload(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Parse body
         try:
@@ -641,6 +655,8 @@ def update_performance_profiles(request, board_id):
     """
     try:
         board = get_object_or_404(Board, id=board_id)
+        if not can_modify_board_content(request.user, board):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Initialize service
         service = ResourceLevelingService()

@@ -395,3 +395,178 @@ class SecondPassHardeningTests(TestCase):
         )
         self.assertIn(resp.status_code, (302, 403))
         self.assertEqual(Requirement.objects.filter(board=self.board).count(), 0)
+
+
+class ThirdPassWriteGateTests(TestCase):
+    """Launch-hardening pass 3: viewer-write enforcement on the secondary
+    feature modules that previously carried NO access check at all
+    (retrospective, stress-test) plus the core task-detail edit POST.
+
+    A viewer passes the read backstop (``view_board``) but must be blocked
+    from every write. A stranger must be blocked from reads too.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner_u = User.objects.create_user('tp_owner', password='x')
+        cls.org = Organization.objects.create(
+            name='TP Org', is_demo=False, created_by=cls.owner_u,
+        )
+        cls.ws = Workspace.objects.create(
+            name='TP WS', organization=cls.org, is_demo=False,
+            is_active=True, created_by=cls.owner_u,
+        )
+        cls.board = Board.objects.create(
+            name='TP Board', organization=cls.org, workspace=cls.ws,
+            created_by=cls.owner_u,
+        )
+        col = Column.objects.create(name='To Do', board=cls.board, position=0)
+        cls.task = Task.objects.create(title='Original', column=col, created_by=cls.owner_u)
+
+        cls.member_u = User.objects.create_user('tp_member', password='x')
+        cls.viewer_u = User.objects.create_user('tp_viewer', password='x')
+        BoardMembership.objects.create(board=cls.board, user=cls.member_u, role='member')
+        BoardMembership.objects.create(board=cls.board, user=cls.viewer_u, role='viewer')
+        for u in (cls.owner_u, cls.member_u, cls.viewer_u):
+            _mk_profile(u, cls.org, cls.ws)
+
+        cls.stranger_u = User.objects.create_user('tp_stranger', password='x')
+        cls.other_org = Organization.objects.create(
+            name='TP Other', is_demo=False, created_by=cls.stranger_u,
+        )
+        cls.other_ws = Workspace.objects.create(
+            name='TP Other WS', organization=cls.other_org, is_demo=False,
+            is_active=True, created_by=cls.stranger_u,
+        )
+        _mk_profile(cls.stranger_u, cls.other_org, cls.other_ws)
+
+    # ── Retrospective module (was completely unguarded) ──────────────────────
+    def test_stranger_denied_retrospective_list(self):
+        self.client.force_login(self.stranger_u)
+        resp = self.client.get(reverse('retrospective_list', args=[self.board.id]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_viewer_denied_retrospective_create(self):
+        # create is write-gated for BOTH methods — the form itself is off-limits.
+        self.client.force_login(self.viewer_u)
+        resp = self.client.get(reverse('retrospective_create', args=[self.board.id]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_member_allowed_retrospective_create_form(self):
+        self.client.force_login(self.member_u)
+        resp = self.client.get(reverse('retrospective_create', args=[self.board.id]))
+        self.assertEqual(resp.status_code, 200)
+
+    # ── Stress-test module (was completely unguarded) ────────────────────────
+    def test_stranger_denied_stress_test_dashboard(self):
+        self.client.force_login(self.stranger_u)
+        resp = self.client.get(reverse('stress_test_dashboard', args=[self.board.id]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_viewer_denied_run_stress_test(self):
+        # Must reject BEFORE any AI work — asserts the gate is ahead of AIRouter.
+        self.client.force_login(self.viewer_u)
+        resp = self.client.post(reverse('run_stress_test', args=[self.board.id]))
+        self.assertEqual(resp.status_code, 403)
+
+    # ── Core task-detail edit POST (was view_board only) ──────────────────────
+    def test_viewer_cannot_edit_task_via_task_detail(self):
+        self.client.force_login(self.viewer_u)
+        resp = self.client.post(
+            reverse('task_detail', args=[self.task.id]),
+            data={'title': 'Hacked', 'description': 'x'},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, 'Original')
+
+    def test_member_can_reach_task_detail_edit(self):
+        self.client.force_login(self.member_u)
+        resp = self.client.post(
+            reverse('task_detail', args=[self.task.id]),
+            data={'title': 'Legit Update', 'description': 'x'},
+        )
+        # Not a permission denial — either a redirect on save or a re-rendered form.
+        self.assertNotEqual(resp.status_code, 403)
+
+
+class SecondaryModuleWriteGateTests(TestCase):
+    """Pass-3 systemic sweep: board-scoped POST endpoints in the secondary
+    feature modules that previously gated only at READ level (or not at all),
+    letting a read-only ``viewer`` mutate data. The middleware backstop blocks
+    non-members on reads, so the exposure was viewer/member write-escalation —
+    these tests lock the write gate on each fixed endpoint.
+
+    Covered modules: prizmbrief, columns (WIP), exit-protocol checklist,
+    resource-leveling. (A source-introspection "static guard" was prototyped
+    but proved unreliable across decorated Django views — behavioral checks are
+    the trustworthy form.)
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner_u = User.objects.create_user('sm_owner', password='x')
+        cls.org = Organization.objects.create(
+            name='SM Org', is_demo=False, created_by=cls.owner_u,
+        )
+        cls.ws = Workspace.objects.create(
+            name='SM WS', organization=cls.org, is_demo=False,
+            is_active=True, created_by=cls.owner_u,
+        )
+        cls.board = Board.objects.create(
+            name='SM Board', organization=cls.org, workspace=cls.ws,
+            created_by=cls.owner_u,
+        )
+        cls.column = Column.objects.create(name='To Do', board=cls.board, position=0)
+
+        cls.member_u = User.objects.create_user('sm_member', password='x')
+        cls.viewer_u = User.objects.create_user('sm_viewer', password='x')
+        BoardMembership.objects.create(board=cls.board, user=cls.member_u, role='member')
+        BoardMembership.objects.create(board=cls.board, user=cls.viewer_u, role='viewer')
+        for u in (cls.owner_u, cls.member_u, cls.viewer_u):
+            _mk_profile(u, cls.org, cls.ws)
+
+    # ── prizmbrief (was view_board only) ─────────────────────────────────────
+    def test_viewer_denied_save_brief(self):
+        self.client.force_login(self.viewer_u)
+        resp = self.client.post(
+            reverse('prizmbrief_save', args=[self.board.id]),
+            data='{"name": "x", "slides": [], "full_text": "y"}',
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    # ── columns: WIP limit (had NO board check at all) ───────────────────────
+    def test_viewer_denied_column_update_wip(self):
+        self.client.force_login(self.viewer_u)
+        resp = self.client.post(
+            reverse('column_update_wip', args=[self.column.id]),
+            data={'wip_limit': '5'},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.column.refresh_from_db()
+        self.assertIsNone(self.column.wip_limit)
+
+    def test_member_allowed_column_update_wip(self):
+        self.client.force_login(self.member_u)
+        resp = self.client.post(
+            reverse('column_update_wip', args=[self.column.id]),
+            data={'wip_limit': '7'},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    # ── exit-protocol checklist (read-level check_access → now modify) ───────
+    def test_viewer_denied_complete_checklist_item(self):
+        self.client.force_login(self.viewer_u)
+        resp = self.client.post(
+            reverse('exit_protocol:complete_checklist_item', args=[self.board.id, 'item-1']),
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    # ── resource-leveling (had no access check beyond the middleware) ────────
+    def test_viewer_denied_optimize_board_workload(self):
+        self.client.force_login(self.viewer_u)
+        resp = self.client.post(
+            reverse('optimize_board_workload', args=[self.board.id]),
+        )
+        self.assertEqual(resp.status_code, 403)
