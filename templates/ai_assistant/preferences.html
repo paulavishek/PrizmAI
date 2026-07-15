@@ -27,18 +27,6 @@
                         
                         <div class="mb-3">
                             <div class="form-check form-switch">
-                                {{ form.enable_web_search }}
-                                <label class="form-check-label" for="{{ form.enable_web_search.id_for_label }}">
-                                    Enable Web Search (RAG)
-                                </label>
-                            </div>
-                            <small class="form-text text-muted d-block mt-2">
-                                Allow the assistant to search the web for recent information
-                            </small>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
                                 {{ form.enable_task_insights }}
                                 <label class="form-check-label" for="{{ form.enable_task_insights.id_for_label }}">
                                     Enable Task Insights
@@ -74,39 +62,7 @@
                         </div>
                         
                         <hr>
-                        
-                        <!-- Notification Preferences -->
-                        <h5 class="mb-3"><i class="fas fa-bell me-2"></i> Notification Preferences</h5>
-                        
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
-                                {{ form.notify_on_risk }}
-                                <label class="form-check-label" for="{{ form.notify_on_risk.id_for_label }}">
-                                    Notify on Risk Detection
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
-                                {{ form.notify_on_overload }}
-                                <label class="form-check-label" for="{{ form.notify_on_overload.id_for_label }}">
-                                    Notify on Team Overload
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
-                                {{ form.notify_on_dependency_issues }}
-                                <label class="form-check-label" for="{{ form.notify_on_dependency_issues.id_for_label }}">
-                                    Notify on Dependency Issues
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <hr>
-                        
+
                         <!-- Display Preferences -->
                         <h5 class="mb-3"><i class="fas fa-palette me-2"></i> Display Preferences</h5>
                         
