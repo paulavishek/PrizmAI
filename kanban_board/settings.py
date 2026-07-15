@@ -455,7 +455,10 @@ AI_KEY_ENCRYPTION_KEY = _raw_encryption_key
 # Google Custom Search API (for RAG - Retrieval Augmented Generation)
 GOOGLE_SEARCH_API_KEY = os.getenv('GOOGLE_SEARCH_API_KEY', '')
 GOOGLE_SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID', '')
-ENABLE_WEB_SEARCH = os.getenv('ENABLE_WEB_SEARCH', 'True').lower() == 'true'
+# Web search is disabled product-wide: Spectra answers from project data + built-in
+# knowledge only (see system-prompt rule 13). Defaults off; the toggle is hidden in
+# the preferences UI. Set ENABLE_WEB_SEARCH=True in the env only to re-enable it.
+ENABLE_WEB_SEARCH = os.getenv('ENABLE_WEB_SEARCH', 'False').lower() == 'true'
 
 # AI Assistant Settings
 AI_ASSISTANT_CONFIG = {
