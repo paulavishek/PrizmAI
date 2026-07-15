@@ -79,6 +79,10 @@ from kanban.tasks.ai_streaming_tasks import (
     send_ai_message_task,
 )
 
+from kanban.tasks.migration_tasks import (
+    run_source_migration,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',

@@ -13,6 +13,7 @@ from .trello_adapter import TrelloAdapter
 from .jira_adapter import JiraAdapter
 from .asana_adapter import AsanaAdapter
 from .monday_adapter import MondayAdapter
+from .monday_api_adapter import MondayApiAdapter
 from .csv_adapter import CSVAdapter
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ class AdapterFactory:
         'asana': AsanaAdapter,
         'monday': MondayAdapter,
         'monday.com': MondayAdapter,
+        'monday_api': MondayApiAdapter,  # live GraphQL shape (see monday_connector)
         'csv': CSVAdapter,
         'generic': CSVAdapter,
     }

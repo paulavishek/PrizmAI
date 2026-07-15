@@ -28,7 +28,7 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib import messages
 
 from kanban.models import Board, Column, Task
-from integrations.models import GitHubIntegration
+from integrations.models import GitHubIntegration, SourceConnection
 from integrations.forms import GitHubIntegrationForm
 
 # ---------------------------------------------------------------------------
@@ -204,3 +204,201 @@ def github_integration_settings(request, board_id):
         "form": form,
         "receiver_url": receiver_url,
     })
+
+
+# ---------------------------------------------------------------------------
+# Live Migration: import a whole project from another PM tool via its API
+# ---------------------------------------------------------------------------
+
+# Per-provider UI metadata: credential fields, where to get a token, and a short
+# "what to expect" list shown as a banner when the tool is selected.
+_PROVIDER_HELP = {
+    "jira": {
+        "label": "Jira",
+        "needs_site": True,
+        "needs_email": True,
+        "site_hint": "https://your-team.atlassian.net",
+        "token_url": "https://id.atlassian.com/manage-profile/security/api-tokens",
+        "expectations": [
+            "Each Jira <strong>Epic</strong> becomes its own <strong>Board</strong>; issues with no epic go to a “General” board.",
+            "Issues become <strong>Tasks</strong>, and each status becomes a column.",
+            "Priority, labels, assignees, due dates and story points are carried across.",
+            "The Epic card itself is not duplicated as a task.",
+            "An <strong>AI audit</strong> runs automatically the moment your project lands.",
+        ],
+    },
+    "asana": {
+        "label": "Asana",
+        "needs_site": False,
+        "needs_email": False,
+        "token_url": "https://app.asana.com/0/my-apps",
+        "expectations": [
+            "Your Asana <strong>project</strong> becomes one <strong>Board</strong> under a new Strategy.",
+            "Each <strong>section</strong> becomes a column; tasks become <strong>Tasks</strong>.",
+            "Assignees, due dates, tags and completion status are carried across.",
+            "An <strong>AI audit</strong> runs automatically the moment your project lands.",
+        ],
+    },
+    "monday": {
+        "label": "Monday.com",
+        "needs_site": False,
+        "needs_email": False,
+        "token_url": "https://monday.com/developers/v2/try-it-yourself",
+        "expectations": [
+            "Your Monday <strong>board</strong> becomes one <strong>Board</strong> under a new Strategy.",
+            "Each <strong>group</strong> becomes a column; items become <strong>Tasks</strong>.",
+            "Status, owner, due date and labels are carried across.",
+            "An <strong>AI audit</strong> runs automatically the moment your project lands.",
+        ],
+    },
+}
+
+
+def _resolve_workspace(user):
+    """User's active workspace (never the demo one), creating a real one if needed."""
+    ws = None
+    try:
+        ws = user.profile.active_workspace
+        if ws and ws.is_demo:
+            ws = None
+    except Exception:
+        ws = None
+    if not ws:
+        from kanban.workspace_utils import get_or_create_real_workspace
+        ws = get_or_create_real_workspace(user)
+    return ws
+
+
+@login_required
+def migration_start(request):
+    """Landing page for the 'Migrate from another tool' onboarding wizard."""
+    from kanban.utils.connectors import ConnectorFactory
+
+    supported = set(ConnectorFactory.supported_providers())
+    providers = [
+        {"id": pid, **meta, "supported": pid in supported}
+        for pid, meta in _PROVIDER_HELP.items()
+    ]
+    # Show not-yet-live tools too, marked "coming soon", so the UI is honest.
+    for pid, disp in SourceConnection.PROVIDER_CHOICES:
+        if pid not in _PROVIDER_HELP:
+            providers.append({"id": pid, "label": disp, "supported": False})
+
+    return render(request, "integrations/migrate_start.html", {"providers": providers})
+
+
+@login_required
+@require_POST
+def migration_connect(request):
+    """
+    AJAX: save + validate credentials, then return the project list.
+
+    Persists (or updates) a workspace-scoped SourceConnection with the token
+    encrypted, tests the credentials, and returns selectable projects.
+    """
+    from kanban.utils.connectors import ConnectorFactory, ConnectorError
+
+    provider = (request.POST.get("provider") or "").strip().lower()
+    base_url = (request.POST.get("base_url") or "").strip()
+    account_email = (request.POST.get("account_email") or "").strip()
+    api_token = request.POST.get("api_token") or ""
+
+    if not ConnectorFactory.is_supported(provider):
+        return JsonResponse({"ok": False, "error": f"'{provider}' is not available yet."}, status=400)
+    if not api_token.strip():
+        return JsonResponse({"ok": False, "error": "An API token is required."}, status=400)
+
+    ws = _resolve_workspace(request.user)
+    # Block writing into the demo workspace.
+    if getattr(ws, "is_demo", False):
+        return JsonResponse({"ok": False, "error": "Migration is disabled in the demo workspace."}, status=403)
+
+    connection, _ = SourceConnection.objects.update_or_create(
+        workspace=ws, created_by=request.user, provider=provider,
+        defaults={
+            "base_url": base_url,
+            "account_email": account_email,
+            "status": SourceConnection.STATUS_CONNECTED,
+            "is_active": True,
+        },
+    )
+    connection.set_token(api_token)  # encrypts; raw token never stored/logged
+    connection.save()
+
+    connector = ConnectorFactory.get_connector(provider, connection)
+    try:
+        account = connector.test_connection()
+        projects = connector.list_projects()
+    except ConnectorError as exc:
+        connection.status = SourceConnection.STATUS_ERROR
+        connection.save(update_fields=["status"])
+        return JsonResponse({"ok": False, "error": exc.message}, status=400)
+
+    return JsonResponse({
+        "ok": True,
+        "connection_id": connection.id,
+        "account": account.get("account"),
+        "projects": projects,
+    })
+
+
+@login_required
+@require_POST
+def migration_run(request):
+    """AJAX: enqueue the migration Celery task; return its task id for polling."""
+    connection_id = request.POST.get("connection_id")
+    project_id = (request.POST.get("project_id") or "").strip()
+    project_name = (request.POST.get("project_name") or "").strip() or project_id
+
+    connection = get_object_or_404(SourceConnection, id=connection_id)
+    # Ownership + tenant scoping: only the creator may run their connection.
+    if connection.created_by_id != request.user.id:
+        from django.http import Http404
+        raise Http404
+    if getattr(connection.workspace, "is_demo", False):
+        return JsonResponse({"ok": False, "error": "Migration is disabled in the demo workspace."}, status=403)
+    if not project_id:
+        return JsonResponse({"ok": False, "error": "Pick a project to migrate."}, status=400)
+
+    from kanban.tasks.migration_tasks import run_source_migration
+    # Enqueue with an explicit queue so it reliably reaches the dedicated
+    # 'interactive' worker regardless of task_routes precedence (this project's
+    # effective routes come from settings.CELERY_TASK_ROUTES).
+    async_result = run_source_migration.apply_async(
+        args=[connection.id, project_id, project_name], queue="interactive"
+    )
+    return JsonResponse({"ok": True, "task_id": async_result.id})
+
+
+@login_required
+def migration_status(request, task_id):
+    """AJAX: poll live migration progress.
+
+    Reads the cache-based progress channel, then reconciles against Celery's
+    result backend (shared Redis) so the terminal done/error transition is
+    always detected even if a progress tick didn't propagate through the cache.
+    """
+    from kanban.utils.connectors.migration_progress import get_progress
+
+    data = dict(get_progress(task_id))
+
+    try:
+        from kanban_board.celery import app
+        res = app.AsyncResult(task_id)
+        if res.successful():
+            payload = res.result if isinstance(res.result, dict) else {}
+            if payload.get("state") == "done":
+                data["state"] = "done"
+                data["percent"] = 100
+                data.setdefault("message", "Migration complete!")
+                data["strategy_id"] = payload.get("strategy_id")
+                if payload.get("redirect_url"):
+                    data["redirect_url"] = payload["redirect_url"]
+        elif res.failed():
+            data["state"] = "error"
+            if not data.get("message") or data.get("state") == "pending":
+                data["message"] = "Migration failed. Please try again."
+    except Exception:
+        pass
+
+    return JsonResponse(data)
