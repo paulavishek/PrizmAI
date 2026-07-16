@@ -861,6 +861,22 @@
     [data-bs-theme="dark"] .hn-tabs { background: rgba(255,255,255,0.03); }
     [data-bs-theme="dark"] .hn-tabs .nav-link:hover { background: rgba(255,255,255,0.06); }
     [data-bs-theme="dark"] .hn-count { background: #3a3d4d; color: #c3c6d4; }
+    /* Tab labels: the light-mode colors (#b45309, #1d4ed8, #047857, #6d28d9) are
+       dark saturated shades tuned for a white bg and vanish on the dark surface.
+       Replicate the Goal-badge chip look instead — a tinted pill + bright text —
+       so the active tab reads as clearly here as the "Goal" badge does on the card. */
+    [data-bs-theme="dark"] #hn-tab-goals            { color: #b98a4a; }
+    [data-bs-theme="dark"] #hn-tab-goals:hover       { color: #fbbf24; }
+    [data-bs-theme="dark"] #hn-tab-goals.active      { color: #fbbf24; background: rgba(245,158,11,0.16); border-bottom-color: #f59e0b; }
+    [data-bs-theme="dark"] #hn-tab-missions          { color: #6b83b3; }
+    [data-bs-theme="dark"] #hn-tab-missions:hover    { color: #60a5fa; }
+    [data-bs-theme="dark"] #hn-tab-missions.active   { color: #60a5fa; background: rgba(59,130,246,0.16); border-bottom-color: #3b82f6; }
+    [data-bs-theme="dark"] #hn-tab-strategies        { color: #4c9b80; }
+    [data-bs-theme="dark"] #hn-tab-strategies:hover  { color: #34d399; }
+    [data-bs-theme="dark"] #hn-tab-strategies.active { color: #34d399; background: rgba(16,185,129,0.16); border-bottom-color: #10b981; }
+    [data-bs-theme="dark"] #hn-tab-boards            { color: #9081b8; }
+    [data-bs-theme="dark"] #hn-tab-boards:hover      { color: #a78bfa; }
+    [data-bs-theme="dark"] #hn-tab-boards.active     { color: #a78bfa; background: rgba(139,92,246,0.16); border-bottom-color: #8b5cf6; }
     /* Goal/mission/strategy/board cards: distinct surface + strong border so they
        stand apart from the dark page; keep the colored left accent bar. */
     [data-bs-theme="dark"] .hn-item {
@@ -874,6 +890,39 @@
     [data-bs-theme="dark"] .hn-item--strategy { border-left: 4px solid #10b981; }
     [data-bs-theme="dark"] .hn-item--board    { border-left: 4px solid #8b5cf6; }
     [data-bs-theme="dark"] .hn-preview-slot { border-top-color: rgba(255,255,255,0.12); }
+    /* Close button: light-mode uses a near-white pill (#f8fafc bg, light-grey
+       border/text) which reads fine on the light-mode card but floats as a
+       jarring white box against the dark surface here. */
+    [data-bs-theme="dark"] .hn-preview-slot .hn-preview-close {
+        color: #c3c6d4;
+        border-color: rgba(255,255,255,0.18);
+        background: rgba(255,255,255,0.08);
+    }
+    [data-bs-theme="dark"] .hn-preview-slot .hn-preview-close:hover {
+        color: #f28b82;
+        border-color: rgba(242,139,130,0.5);
+        background: rgba(242,139,130,0.12);
+    }
+    /* The expanded preview card is a pastel "light surface" chip by design
+       (like the Goal badge) — its title/text colors are dark shades meant to
+       sit on that light background. theme.css's global dark-mode rules were
+       bleeding through though: .card-body forces a near-black bg (the inline
+       pastel is only on the parent .card, not this child), and
+       .text-muted/.text-success/.text-warning/.text-danger/.text-dark plus
+       .btn-outline-primary/.btn-outline-secondary get brightened for dark
+       backgrounds elsewhere — both combine to put dark text on a dark bg.
+       Pin this component back to its light-surface look. */
+    [data-bs-theme="dark"] .hn-preview-slot .card-body {
+        background-color: transparent !important;
+        color: inherit !important;
+    }
+    [data-bs-theme="dark"] .hn-preview-slot .text-muted   { color: #57534e !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-success { color: #15803d !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-warning { color: #b45309 !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-danger  { color: #b91c1c !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .text-dark    { color: #1f2937 !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .btn-outline-primary   { color: #1d4ed8 !important; border-color: #1d4ed8 !important; }
+    [data-bs-theme="dark"] .hn-preview-slot .btn-outline-secondary { color: #475569 !important; border-color: #94a3b8 !important; }
 
     /* ── Dark-mode overrides for Performance Analytics inner cards (issue: light
        header strips + low-contrast text in dark). Inline header bg has no
@@ -1100,7 +1149,7 @@
                     <span style="font-size:0.84rem; color:#1e293b; font-weight:500;">{{ item.title }}</span>
                     {% if item.description %}<span class="text-muted" style="font-size:0.78rem;"> — {{ item.description }}</span>{% endif %}
                 </span>
-                <span class="text-muted flex-shrink-0" style="font-size:0.72rem; white-space:nowrap;">~{{ item.estimated_minutes }}m</span>
+                <span class="text-muted flex-shrink-0" style="font-size:0.72rem; white-space:nowrap;" title="Estimated time to review and decide — not to resolve the underlying issue">~{{ item.estimated_minutes }}m review</span>
             </a>
             {% empty %}
             <p class="mb-0 text-success small"><i class="fas fa-check-circle me-1"></i> All clear — no decisions pending</p>
