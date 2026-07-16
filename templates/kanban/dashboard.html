@@ -3968,6 +3968,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 options: {
                     responsive: false,
                     maintainAspectRatio: false,
+                    devicePixelRatio: window.devicePixelRatio || 1,
                     layout: { padding: { right: 16 } },
                     plugins: {
                         legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 6 } },
@@ -4040,6 +4041,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     indexAxis: 'y',
                     responsive: false,
                     maintainAspectRatio: false,
+                    devicePixelRatio: window.devicePixelRatio || 1,
                     plugins: {
                         legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 6 } },
                         tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + ctx.parsed.x + '%'; } } },
