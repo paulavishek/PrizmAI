@@ -736,8 +736,6 @@ def organizational_memory(request):
 
     total_nodes = accessible.count()
 
-    boards_count = Board.objects.filter(id__in=board_ids).count()
-
     oldest = accessible.order_by('created_at').values_list(
         'created_at', flat=True
     ).first()
@@ -798,7 +796,6 @@ def organizational_memory(request):
 
     context = {
         'total_nodes': total_nodes,
-        'boards_count': boards_count,
         'oldest_memory_date': oldest,
         'recent_queries': recent_queries,
         'recent_nodes': recent_nodes,

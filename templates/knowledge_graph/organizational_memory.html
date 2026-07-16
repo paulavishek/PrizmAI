@@ -14,8 +14,8 @@
 .source-chip { font-size: 0.8rem; cursor: default; }
 .feedback-btn { cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
 .feedback-btn:hover, .feedback-btn.active { opacity: 1; }
-.org-mem-stat-btn { background: none; border: none; color: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer; display: block; width: 100%; transition: background 0.15s; text-align: center; }
-.org-mem-stat-btn:hover { background: rgba(255,255,255,0.18); }
+.org-mem-stat-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.35); color: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer; display: block; width: 100%; transition: background 0.15s, border-color 0.15s; text-align: center; }
+.org-mem-stat-btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.6); }
 .recent-memory-card { transition: box-shadow 0.15s; border-left: 3px solid #667eea; }
 .recent-memory-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .browse-memory-card { transition: box-shadow 0.15s; }
@@ -60,30 +60,17 @@
             </div>
             <div class="col-md-5">
                 <div class="row text-center">
-                    <div class="col-4">
+                    <div class="col-6">
                         <button class="org-mem-stat-btn" id="statMemoriesBtn" title="Browse all memories">
                             <div class="org-mem-stat">{{ total_nodes }}</div>
                             <small class="opacity-75">Memories</small>
                         </button>
                     </div>
-                    <div class="col-4">
-                        <button class="org-mem-stat-btn" id="statProjectsBtn" title="Browse by project">
-                            <div class="org-mem-stat">{{ boards_count }}</div>
-                            <small class="opacity-75">Projects</small>
-                        </button>
-                    </div>
-                    <div class="col-4">
-                        {% if oldest_memory_date %}
-                        <button class="org-mem-stat-btn" id="statEarliestBtn" title="Browse oldest memories first">
-                            <div class="org-mem-stat" style="font-size:1.1rem;">{{ oldest_memory_date|date:"M Y" }}</div>
-                            <small class="opacity-75">Earliest</small>
-                        </button>
-                        {% else %}
+                    <div class="col-6">
                         <div style="padding:6px 8px;text-align:center;">
-                            <div class="org-mem-stat">—</div>
+                            <div class="org-mem-stat" style="font-size:1.1rem;">{{ oldest_memory_date|date:"M Y"|default:"—" }}</div>
                             <small class="opacity-75">Earliest</small>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -915,12 +902,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const statMemoriesBtn = document.getElementById('statMemoriesBtn');
     if (statMemoriesBtn) statMemoriesBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
-
-    const statProjectsBtn = document.getElementById('statProjectsBtn');
-    if (statProjectsBtn) statProjectsBtn.addEventListener('click', () => openBrowsePanel('newest', ''));
-
-    const statEarliestBtn = document.getElementById('statEarliestBtn');
-    if (statEarliestBtn) statEarliestBtn.addEventListener('click', () => openBrowsePanel('oldest', ''));
 
     const browseAllBtn = document.getElementById('browseAllBtn');
     if (browseAllBtn) browseAllBtn.addEventListener('click', () => openBrowsePanel('newest', ''));

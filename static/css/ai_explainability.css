@@ -458,6 +458,29 @@
     color: #856404 !important;
 }
 
+/* Dark-mode counterparts: the light-mode colors above are hardcoded (not
+   theme tokens), so without these the .modal-body ol/li override further
+   down forces list text to var(--text-primary) (near-white) while the alert
+   background stays hardcoded light — text becomes unreadable on its own
+   background. */
+[data-bs-theme="dark"] .modal-body .alert {
+    background-color: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-bs-theme="dark"] .modal-body .alert-info {
+    background-color: rgba(13, 202, 240, 0.15) !important;
+    border-color: #0dcaf0 !important;
+    color: var(--text-primary) !important;
+}
+
+[data-bs-theme="dark"] .modal-body .alert-warning {
+    background-color: rgba(255, 193, 7, 0.15) !important;
+    border-color: #ffc107 !important;
+    color: var(--text-primary) !important;
+}
+
 .modal-body .alert-heading {
     color: inherit !important;
 }
