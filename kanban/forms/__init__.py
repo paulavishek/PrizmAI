@@ -64,8 +64,20 @@ class BoardForm(forms.ModelForm):
             'num_phases': 'Set the number of phases for your project (e.g., 3 for Phase 1, Phase 2, Phase 3). Set to 0 if you don\'t need phase-based organization.',
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # create_board.html doesn't render these (only edit_board.html does),
+        # so without this they're required-but-missing and fail validation
+        # silently on the create form.
+        self.fields['aging_warning_days'].required = False
+        self.fields['aging_critical_days'].required = False
+
     def clean(self):
         cleaned = super().clean()
+        if cleaned.get('aging_warning_days') is None:
+            cleaned['aging_warning_days'] = Board._meta.get_field('aging_warning_days').default
+        if cleaned.get('aging_critical_days') is None:
+            cleaned['aging_critical_days'] = Board._meta.get_field('aging_critical_days').default
         if cleaned.get('aging_enabled'):
             warning = cleaned.get('aging_warning_days')
             critical = cleaned.get('aging_critical_days')
