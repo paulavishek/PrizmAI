@@ -107,6 +107,45 @@ body.dark-mode,
 [data-bs-theme="dark"] .bg-white { background-color: var(--card-bg) !important; }
 [data-bs-theme="dark"] .bg-light { background-color: var(--bg-tertiary) !important; }
 
+/* Searchable checkbox UI that JS builds in place of raw <select multiple>
+   listboxes (task_detail.html / create_task.html "P1-03" enhancement) —
+   token-driven so it follows dark mode instead of the hardcoded #fff it used
+   to inline. Used for Timeline Dependencies, Related Tasks, and multi-select
+   custom fields (e.g. "Environment"). */
+.pz-multiselect-wrapper {
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background-color: var(--input-bg);
+}
+.pz-multiselect-search {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 5px 10px;
+    font-size: 0.875rem;
+    outline: none;
+    border-radius: 6px 6px 0 0;
+    background-color: var(--input-bg);
+    color: var(--input-text);
+}
+.pz-multiselect-search::placeholder { color: var(--text-muted); }
+.pz-multiselect-list {
+    max-height: 140px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+.pz-multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    user-select: none;
+    color: var(--input-text);
+}
+.pz-multiselect-option:hover { background-color: var(--bg-tertiary); }
+
 /* Bootstrap .text-dark / .text-black literally mean "dark text" — invisible on
    a dark background. Force them bright in dark mode (rule 1: dark bg → light
    text). Very common on headings across templates, so this is a big safe win. */
@@ -317,6 +356,57 @@ textarea::placeholder {
     background-color: #f28b82;
     border-color: #f28b82;
     color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-success {
+    color: #ffffff;
+    border-color: #81c995;
+}
+[data-bs-theme="dark"] .btn-outline-success:hover {
+    background-color: #81c995;
+    border-color: #81c995;
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-warning {
+    color: #ffffff;
+    border-color: #fdd663;
+}
+[data-bs-theme="dark"] .btn-outline-warning:hover {
+    background-color: #fdd663;
+    border-color: #fdd663;
+    color: #1a1a1a;
+}
+[data-bs-theme="dark"] .btn-outline-info {
+    color: #ffffff;
+    border-color: #6edff6;
+}
+[data-bs-theme="dark"] .btn-outline-info:hover {
+    background-color: #6edff6;
+    border-color: #6edff6;
+    color: #1a1a1a;
+}
+
+/* Task form field labels (Title, Description, Progress, etc.) are hardcoded
+   to a light-mode grey (see .task-form .form-label in styles.css) that reads
+   faded on a dark card. Brighten to match the sidebar's .text-muted labels. */
+[data-bs-theme="dark"] .task-form .form-label {
+    color: var(--text-primary);
+}
+
+/* .form-range (Task Complexity slider): Bootstrap's dark-theme track color
+   (--bs-tertiary-bg, ~#2b3035) is nearly indistinguishable from our card
+   background, making the track invisible. Use a lighter, visible track and
+   brighten the thumb to match the theme's link color. */
+[data-bs-theme="dark"] .form-range::-webkit-slider-runnable-track {
+    background-color: var(--border-color);
+}
+[data-bs-theme="dark"] .form-range::-moz-range-track {
+    background-color: var(--border-color);
+}
+[data-bs-theme="dark"] .form-range::-webkit-slider-thumb {
+    background-color: var(--link-color);
+}
+[data-bs-theme="dark"] .form-range::-moz-range-thumb {
+    background-color: var(--link-color);
 }
 
 /* Alert Theme */

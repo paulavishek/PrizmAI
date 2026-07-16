@@ -1103,9 +1103,11 @@
         new bootstrap.Tooltip(el);
     });
     // P1-03: Enhance raw multi-select listboxes with searchable checkbox UI
+    // Colors come from theme.css tokens via CSS classes (not inline styles) so
+    // this widget follows dark mode instead of hardcoding a light-mode look.
     document.querySelectorAll('select[multiple]').forEach(function(sel) {
         var wrapper = document.createElement('div');
-        wrapper.style.cssText = 'border:1px solid #ced4da;border-radius:6px;background:var(--card-bg);';
+        wrapper.className = 'pz-multiselect-wrapper';
         sel.parentNode.insertBefore(wrapper, sel);
         sel.style.display = 'none';
         wrapper.appendChild(sel);
@@ -1113,20 +1115,18 @@
         var search = document.createElement('input');
         search.type = 'text';
         search.placeholder = 'Search…';
-        search.style.cssText = 'width:100%;border:none;border-bottom:1px solid #e5e7eb;padding:5px 10px;font-size:0.875rem;outline:none;border-radius:6px 6px 0 0;';
+        search.className = 'pz-multiselect-search';
         wrapper.insertBefore(search, sel);
         // Scrollable option list
         var list = document.createElement('div');
-        list.style.cssText = 'max-height:140px;overflow-y:auto;padding:4px 0;';
+        list.className = 'pz-multiselect-list';
         wrapper.insertBefore(list, sel);
         function renderList(filter) {
             list.innerHTML = '';
             Array.from(sel.options).forEach(function(opt) {
                 if (filter && opt.text.toLowerCase().indexOf(filter.toLowerCase()) === -1) return;
                 var label = document.createElement('label');
-                label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 10px;cursor:pointer;font-size:0.875rem;user-select:none;';
-                label.onmouseover = function() { label.style.background = '#f3f4f6'; };
-                label.onmouseout = function() { label.style.background = ''; };
+                label.className = 'pz-multiselect-option';
                 var cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.checked = opt.selected;
