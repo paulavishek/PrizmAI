@@ -135,6 +135,22 @@ class Command(BaseCommand):
         ]
         mission_names = [name for name, _ in missions_spec]
 
+        # One-line descriptions shown in the dashboard Hierarchy Navigator's
+        # expanded preview card — Goal and Board already have this via their
+        # own `description` fields, Mission/Strategy just never had one set.
+        MISSION_DESCRIPTIONS = {
+            'Core Product & Feature Delivery': (
+                'Ship the core features and workflows customers need for a '
+                'complete, usable v1.0 product.'
+            ),
+        }
+        STRATEGY_DESCRIPTIONS = {
+            'Authentication & Data Layer': (
+                'Build secure login, session management, and the underlying '
+                'data storage the rest of the product depends on.'
+            ),
+        }
+
         # Every demo mission name we have ever seeded — used so a re-run from a
         # DB built by an earlier (3-mission / 13-strategy) version of this
         # command cleanly removes the now-dropped missions during the collapse.
@@ -165,6 +181,7 @@ class Command(BaseCommand):
             for mission_name, strategy_names in spec:
                 mission = Mission.objects.create(
                     name=mission_name,
+                    description=MISSION_DESCRIPTIONS.get(mission_name, ''),
                     status='active',
                     organization_goal=goal,
                     created_by=creator,
@@ -174,6 +191,7 @@ class Command(BaseCommand):
                 for strategy_name in strategy_names:
                     strategies[strategy_name] = Strategy.objects.create(
                         name=strategy_name,
+                        description=STRATEGY_DESCRIPTIONS.get(strategy_name, ''),
                         status='active',
                         mission=mission,
                         created_by=creator,
