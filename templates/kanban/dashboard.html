@@ -587,6 +587,30 @@
     }
     .action-next-box i { color: #10b981; margin-top: 2px; flex-shrink: 0; }
 
+    /* PM Action Plan step cards — dark mode */
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="#eff6ff"] {
+        background: rgba(59,130,246,0.12) !important;
+        border-color: rgba(59,130,246,0.35) !important;
+    }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#1e3a8a"] { color: #cfe0ff !important; }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#1e40af"] { color: #8fb3ff !important; }
+    [data-bs-theme="dark"] .action-step-card {
+        background: var(--card-bg);
+        border-color: var(--border-color);
+    }
+    [data-bs-theme="dark"] .action-why-text { color: var(--text-secondary); }
+    [data-bs-theme="dark"] .step-critical .action-step-number { background: rgba(239,68,68,0.2); color: #f28b82; }
+    [data-bs-theme="dark"] .step-high     .action-step-number { background: rgba(245,158,11,0.2); color: #fdd663; }
+    [data-bs-theme="dark"] .step-overdue  .action-step-number { background: rgba(239,68,68,0.2); color: #f28b82; }
+    [data-bs-theme="dark"] .action-next-box {
+        background: rgba(16,185,129,0.12);
+        border-color: rgba(16,185,129,0.35);
+        color: #81c995;
+    }
+    [data-bs-theme="dark"] .action-next-box i { color: #81c995; }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#6b7280"] { color: var(--text-muted) !important; }
+    [data-bs-theme="dark"] #aiRecommendedActionsModal [style*="color:#dc2626"] { color: #f28b82 !important; }
+
     /* ================================================================
        ZONE 3 — ENLARGED CHART CARDS
        ================================================================ */
