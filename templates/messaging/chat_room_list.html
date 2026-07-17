@@ -151,11 +151,11 @@
 {% block content %}
 <div class="mb-3">
     {% if is_demo_board %}
-        <a href="{% url 'demo_board_detail' board_id=board.id %}" class="btn back-to-board-btn">
+        <a href="{% url 'demo_board_detail' board_id=board.id %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left me-2"></i> Back to Board
         </a>
     {% else %}
-        <a href="{% url 'board_detail' board_id=board.id %}" class="btn back-to-board-btn">
+        <a href="{% url 'board_detail' board_id=board.id %}" class="btn-prizm-back">
             <i class="fas fa-arrow-left me-2"></i> Back to Board
         </a>
     {% endif %}
