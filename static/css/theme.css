@@ -160,6 +160,19 @@ body.dark-mode,
     --bs-table-border-color: var(--border-color);
 }
 
+/* Same problem for .table-info / .table-secondary (e.g. timesheet's "today" /
+   "weekend" header columns) — hardcoded light backgrounds with dark text. */
+[data-bs-theme="dark"] .table-info {
+    --bs-table-bg: rgba(94, 157, 255, 0.18);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+}
+[data-bs-theme="dark"] .table-secondary {
+    --bs-table-bg: var(--bg-tertiary);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+}
+
 /* ── Dark Mode: Signature Primary Button ─────────────────────────── */
 body.dark-mode .btn-prizm-primary,
 [data-bs-theme="dark"] .btn-prizm-primary {

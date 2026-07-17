@@ -343,15 +343,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Daily Hours Chart
     const chartData = {{ chart_data|safe }};
     const ctx = document.getElementById('dailyHoursChart').getContext('2d');
-    new Chart(ctx, {
+    const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#444', gridColor: 'rgba(0,0,0,0.05)' };
+    const dailyHoursChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: chartData.map(d => d.day + ' ' + d.date.substring(5)),
             datasets: [{
                 label: 'Hours',
                 data: chartData.map(d => d.hours),
-                backgroundColor: 'rgba(13, 110, 253, 0.5)',
-                borderColor: 'rgba(13, 110, 253, 1)',
+                backgroundColor: chartTheme.isDark ? 'rgba(94, 157, 255, 0.7)' : 'rgba(13, 110, 253, 0.5)',
+                borderColor: chartTheme.isDark ? 'rgba(94, 157, 255, 1)' : 'rgba(13, 110, 253, 1)',
                 borderWidth: 1
             }]
         },
@@ -372,9 +373,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        color: chartTheme.textColor,
                         callback: function(value) {
                             return value + 'h';
                         }
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: chartTheme.textColor
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     }
                 }
             },
@@ -392,6 +405,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    if (window.PrizmCharts) {
+        PrizmCharts.register(dailyHoursChart);
+    }
 
     // Show day breakdown modal
     function showDayBreakdown(dateStr) {
