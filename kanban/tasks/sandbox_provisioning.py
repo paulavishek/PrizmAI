@@ -413,6 +413,17 @@ def _provision_sandbox(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not clone Discovery demo ideas during provision: %s", e)
 
+    # Clone the demo wiki (categories + pages) into the user's private per-user
+    # copy so wiki content is isolated per demo user (it is workspace-scoped but
+    # the demo workspace is shared). Templates were seeded before this; the clone
+    # re-points pages at the user's own category copies. Idempotent.
+    try:
+        from kanban.sandbox_views import _clone_wiki_for_user
+        with allow_demo_writes():
+            _clone_wiki_for_user(user)
+    except Exception as e:
+        logger.warning("Could not clone demo wiki during provision: %s", e)
+
     # Belt-and-suspenders: ensure the primary persona's cloned time entries are
     # owned by the sandbox owner so the time-tracking dashboard is per-user. The
     # board clone above already remaps them; this is idempotent and also self-heals

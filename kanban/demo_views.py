@@ -1927,6 +1927,17 @@ def reset_demo_data(request):
             except Exception:
                 pass
 
+            # Re-clone the per-user wiki. populate_all_demo_data --reset above
+            # purges + reseeds only the shared templates (sandbox_owner=None); the
+            # wiki views show the user only their own clones (sandbox_owner=user),
+            # so rebuild them here or the user lands on an empty Knowledge Hub.
+            # Idempotent (clears the user's existing clones first).
+            try:
+                from kanban.sandbox_views import _clone_wiki_for_user
+                _clone_wiki_for_user(request.user)
+            except Exception:
+                pass
+
             # Repair the personal timesheet on the user's existing sandbox boards.
             # This reset path repopulates the official templates in place but does
             # not re-clone the sandbox copies, so their cloned time entries are

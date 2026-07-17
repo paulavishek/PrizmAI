@@ -17,18 +17,29 @@ class WikiContextProvider(BaseContextProvider):
         'knowledge', 'kb', 'meeting notes', 'meeting',
     ]
 
-    def _get_summary_impl(self, board, user, is_demo_mode=False):
-        try:
-            from wiki.models import WikiPage
-        except ImportError:
-            return ''
+    def _wiki_pages_for(self, user, is_demo_mode):
+        """Published wiki pages scoped like the app's wiki_scope_q.
 
-        # WikiPage is workspace-scoped (the tenant boundary), not board-scoped
+        WikiPage is workspace-scoped (the tenant boundary), but the shared demo
+        workspace isolates per user via sandbox_owner (each demo user gets their
+        own wiki clones). Scope to the user's own clones in demo so Spectra never
+        surfaces another demo user's — or the shared template's — wiki content.
+        """
+        from wiki.models import WikiPage
+        if is_demo_mode:
+            return WikiPage.objects.filter(sandbox_owner=user, is_published=True)
         ws = self._get_user_workspace(user)
         if ws is not None:
-            pages = WikiPage.objects.filter(workspace=ws, is_published=True)
-        else:
-            pages = WikiPage.objects.none()
+            return WikiPage.objects.filter(
+                workspace=ws, sandbox_owner__isnull=True, is_published=True,
+            )
+        return WikiPage.objects.none()
+
+    def _get_summary_impl(self, board, user, is_demo_mode=False):
+        try:
+            pages = self._wiki_pages_for(user, is_demo_mode)
+        except ImportError:
+            return ''
 
         count = pages.count()
         if count == 0:
@@ -42,15 +53,9 @@ class WikiContextProvider(BaseContextProvider):
 
     def _get_detail_impl(self, board, user, query='', is_demo_mode=False):
         try:
-            from wiki.models import WikiPage
+            pages = self._wiki_pages_for(user, is_demo_mode)
         except ImportError:
             return ''
-
-        ws = self._get_user_workspace(user)
-        if ws is not None:
-            pages = WikiPage.objects.filter(workspace=ws, is_published=True)
-        else:
-            pages = WikiPage.objects.none()
 
         if not pages.exists():
             return '**📚 Wiki:** No published pages.\n'
