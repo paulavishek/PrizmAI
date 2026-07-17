@@ -482,6 +482,121 @@
     .message-flash {
         animation: messageFlash 1.5s ease-out forwards;
     }
+
+    /* ---- Dark mode overrides (hardcoded light surfaces don't flip on their own) ---- */
+    [data-bs-theme="dark"] .chat-container {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .chat-messages {
+        background-color: var(--bg-primary);
+    }
+
+    [data-bs-theme="dark"] .chat-header {
+        border-bottom-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .message {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .message.own {
+        background: rgba(118, 75, 162, 0.18);
+    }
+
+    [data-bs-theme="dark"] .chat-input-area {
+        border-top-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .mention-dropdown {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .mention-item:hover,
+    [data-bs-theme="dark"] .mention-item.active {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .mention-item .mention-username {
+        color: var(--text-muted);
+    }
+
+    [data-bs-theme="dark"] .ai-toolbar {
+        background: rgba(118, 75, 162, 0.15);
+        border-bottom-color: rgba(118, 75, 162, 0.35);
+    }
+
+    [data-bs-theme="dark"] .ai-toolbar .ai-label {
+        color: #c9a8f0;
+    }
+
+    [data-bs-theme="dark"] #ai-thread-summary {
+        background: rgba(118, 75, 162, 0.15);
+    }
+
+    [data-bs-theme="dark"] #ai-compose-preview {
+        background: rgba(118, 75, 162, 0.15);
+    }
+
+    [data-bs-theme="dark"] #ai-compose-preview .ai-alt-chip {
+        background: rgba(118, 75, 162, 0.3);
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] #ai-compose-preview .ai-alt-chip:hover {
+        background: rgba(118, 75, 162, 0.45);
+    }
+
+    [data-bs-theme="dark"] .msg-ai-extract-btn {
+        color: #c9a8f0;
+    }
+
+    [data-bs-theme="dark"] .msg-ai-extract-btn:hover {
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] .last-seen-text {
+        color: var(--text-muted);
+    }
+
+    [data-bs-theme="dark"] .presence-toggle-row {
+        border-top-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .search-bar-wrapper {
+        background: rgba(118, 75, 162, 0.15);
+        border-bottom-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] #searchCloseBtn {
+        color: var(--text-muted);
+    }
+
+    [data-bs-theme="dark"] .search-results-panel {
+        border-color: var(--border-color);
+        background: var(--card-bg);
+    }
+
+    [data-bs-theme="dark"] .search-results-header {
+        background: rgba(118, 75, 162, 0.2);
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] .search-results-divider {
+        border-top-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .search-result-item {
+        border-bottom-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .search-result-item:hover {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .search-status-msg {
+        color: var(--text-muted);
+    }
 </style>
 {% endblock %}
 

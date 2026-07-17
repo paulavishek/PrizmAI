@@ -170,6 +170,77 @@
         background: #fff3cd;
         color: #856404;
     }
+
+    /* ---- Dark mode overrides (hardcoded light surfaces don't flip on their own) ---- */
+    [data-bs-theme="dark"] .board-card {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .board-members {
+        color: var(--text-secondary);
+    }
+
+    [data-bs-theme="dark"] .empty-state {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .notifications-mini {
+        border-color: var(--border-color);
+    }
+
+    [data-bs-theme="dark"] .notification-mini-item {
+        background: var(--bg-tertiary);
+    }
+
+    [data-bs-theme="dark"] .notification-mini-item.unread {
+        background: rgba(102, 126, 234, 0.2);
+    }
+
+    [data-bs-theme="dark"] .help-box {
+        background: rgba(33, 150, 243, 0.15);
+        border-left-color: #64b5f6;
+    }
+
+    [data-bs-theme="dark"] .help-box h4 {
+        color: #8fcaff;
+    }
+
+    [data-bs-theme="dark"] .workspace-badge-demo {
+        background: rgba(154, 92, 219, 0.25);
+        color: #d9b8ff;
+    }
+
+    [data-bs-theme="dark"] .workspace-badge-sandbox {
+        background: rgba(255, 193, 7, 0.2);
+        color: #fdd663;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box {
+        background: linear-gradient(135deg, rgba(76, 175, 80, 0.18) 0%, rgba(76, 175, 80, 0.1) 100%) !important;
+        border-left-color: #81c995 !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box h4,
+    [data-bs-theme="dark"] .demo-info-box h5,
+    [data-bs-theme="dark"] .demo-info-box strong[style*="#2e7d32"],
+    [data-bs-theme="dark"] .demo-info-box strong[style*="#f57f17"] {
+        color: #81c995 !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box > div[style*="border: 2px solid"] {
+        background: var(--card-bg) !important;
+        border-color: var(--border-color) !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box div[style*="background: #f1f8f4"] {
+        background: var(--bg-tertiary) !important;
+        border-color: var(--border-color) !important;
+    }
+
+    [data-bs-theme="dark"] .demo-info-box div[style*="background: #fff8e1"] {
+        background: rgba(253, 214, 99, 0.12) !important;
+        border-color: rgba(253, 214, 99, 0.3) !important;
+    }
 </style>
 {% endblock %}
 
