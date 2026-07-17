@@ -431,7 +431,9 @@ if (ctx) {
     const detectedData = {{ trend_detected_json|safe }};
     const resolvedData = {{ trend_resolved_json|safe }};
 
-    new Chart(ctx, {
+    const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#444', gridColor: 'rgba(0,0,0,0.05)', titleColor: '#1a3d7c' };
+
+    const resolutionTrendsChart = new Chart(ctx, {
         type: 'bar',  // Changed from 'line' to 'bar'
         data: {
             labels: labels,
@@ -463,6 +465,9 @@ if (ctx) {
                 legend: {
                     display: true,
                     position: 'top',
+                    labels: {
+                        color: chartTheme.textColor
+                    }
                 },
                 tooltip: {
                     mode: 'index',
@@ -489,26 +494,39 @@ if (ctx) {
                     beginAtZero: true,
                     ticks: {
                         stepSize: 1,
-                        precision: 0
+                        precision: 0,
+                        color: chartTheme.textColor
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     },
                     title: {
                         display: true,
-                        text: 'Number of Conflicts'
+                        text: 'Number of Conflicts',
+                        color: chartTheme.titleColor
                     }
                 },
                 x: {
                     title: {
                         display: true,
-                        text: 'Date'
+                        text: 'Date',
+                        color: chartTheme.titleColor
+                    },
+                    grid: {
+                        color: chartTheme.gridColor
                     },
                     ticks: {
+                        color: chartTheme.textColor,
                         maxRotation: 45,
                         minRotation: 45,
-                        autoSkip: true,
-                        maxTicksLimit: 8,  // Show approximately every 7 days for a 30-day range
-                        callback: function(value, index, ticks) {
-                            // Show every 7th label for better readability
-                            if (index % 7 === 0 || index === ticks.length - 1) {
+                        // autoSkip picks ticks from the already-thinned list Chart.js
+                        // decides to draw, so filtering by index % 7 on top of it
+                        // compounds and leaves almost nothing on screen. Draw every
+                        // label ourselves (skip autoSkip) and blank out all but
+                        // every 7th day + the last day so spacing stays exact.
+                        autoSkip: false,
+                        callback: function(value, index) {
+                            if (index % 7 === 0 || index === labels.length - 1) {
                                 return this.getLabelForValue(value);
                             }
                             return '';
@@ -522,6 +540,10 @@ if (ctx) {
             }
         }
     });
+
+    if (window.PrizmCharts) {
+        PrizmCharts.register(resolutionTrendsChart);
+    }
     }  // end else (Chart available)
 }
 </script>
