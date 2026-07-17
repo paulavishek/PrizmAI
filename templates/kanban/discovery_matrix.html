@@ -225,8 +225,8 @@
             <p class="text-muted mb-0" style="font-size:0.875rem;">Ideas scored by Spectra, plotted by strategic value and implementation effort. Hover a chip for details.</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{% url 'discovery_dashboard' %}" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-list me-1"></i>Back to Inbox
+            <a href="{% url 'discovery_dashboard' %}" class="btn-prizm-back btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Back to Inbox
             </a>
             {% if not is_viewer %}
             <a href="{% url 'idea_create' %}" class="btn btn-primary btn-sm">
