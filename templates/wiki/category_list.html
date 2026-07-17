@@ -83,7 +83,7 @@
                             </a>
                         </div>
                         
-                        <a href="{% url 'wiki:page_list_by_category' category.id %}" class="text-decoration-none text-dark">
+                        <a href="{% url 'wiki:knowledge_hub_home' %}?category={{ category.id }}" class="text-decoration-none text-dark">
                             <div class="card-body">
                                 <div class="category-icon" style="color: {{ category.color }};">
                                     <i class="fas fa-{{ category.icon }}"></i>
@@ -114,7 +114,7 @@
                                 </div>
                                 
                                 <span class="page-count">
-                                    {{ category.pages.count }} page{{ category.pages.count|pluralize }}
+                                    {{ category.scoped_page_count }} page{{ category.scoped_page_count|pluralize }}
                                 </span>
                             </div>
                         </a>

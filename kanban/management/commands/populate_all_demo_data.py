@@ -15,7 +15,8 @@ organisation, owned by Priya Sharma, with:
   - 3 chat rooms with ~20 messages
   - 30 PriorityDecision records  (ML training data)
   - 25 historical completed tasks on a hidden archive board (ML training data)
-  - 3 wiki pages under an "Engineering" category
+  - 10 wiki pages across 4 categories (Getting Started, Engineering,
+    Architecture & Decisions, Process & Workflows)
 
 Every date is calculated relative to TODAY at runtime - re-running the command
 shifts the project forward so "today" always sits inside Phase 2 (~40% through).
@@ -341,6 +342,21 @@ class Command(BaseCommand):
             organization=self.demo_org, is_demo=True
         )
         CustomFieldDefinition.objects.filter(workspace__in=demo_workspaces).delete()
+
+        # Wiki: pages/categories are org-level (not board-scoped), so they were
+        # never cleaned by the board loop above. Without this, every reset left
+        # the previous seed's rows behind (get_or_create only adds, never
+        # removes) - accumulating orphaned pages/categories that broke DB
+        # migrations and produced empty/duplicate categories in the UI. Purge
+        # the whole demo-org wiki here so the reseed starts from a clean slate.
+        # Scoped to demo_org, so real users' wiki is untouched. WikiPage delete
+        # cascades to its versions/access/links; category delete cascades to any
+        # remaining pages.
+        wp_deleted = WikiPage.objects.filter(organization=self.demo_org).delete()[0]
+        wc_deleted = WikiCategory.objects.filter(organization=self.demo_org).delete()[0]
+        self.stdout.write(
+            f'  [OK] Wiki purged: {wp_deleted} pages, {wc_deleted} categories'
+        )
 
         self.stdout.write('  [OK] Reset complete')
 
@@ -2658,17 +2674,61 @@ class Command(BaseCommand):
     # Wiki pages
     # ------------------------------------------------------------------
     def _create_wiki_pages(self):
-        cat, _ = WikiCategory.objects.get_or_create(
-            name='Engineering',
-            organization=self.demo_org,
-            defaults={
+        # Wiki seed. Mostly documentation pages, plus a "Meeting Notes" category
+        # whose pages use the live Meeting AI Assistant (driven by the category's
+        # ai_assistant_type='meeting') so the demo can showcase transcript
+        # analysis. Only the standalone Meeting *Hub* was retired - the per-page
+        # meeting assistant is still active (see templates/wiki/page_detail.html).
+        #
+        # Every category and page is stamped with the demo Workspace so the two
+        # category-listing surfaces (Knowledge Hub widget + /wiki/categories/)
+        # agree - workspace is the tenant boundary the wiki reads scope on.
+        demo_ws = self.board.workspace
+        categories_data = [
+            ('getting-started', 'Getting Started', {
+                'description': 'Onboarding guides for new engineers.',
+                'icon': 'rocket', 'color': '#2ecc71', 'position': 0,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('engineering', 'Engineering', {
                 'description': 'Engineering reference pages and standards.',
                 'icon': 'code', 'color': '#6366f1', 'position': 1,
                 'ai_assistant_type': 'documentation',
-            },
-        )
+            }),
+            ('architecture', 'Architecture & Decisions', {
+                'description': 'System architecture and architecture decision records.',
+                'icon': 'sitemap', 'color': '#9b59b6', 'position': 2,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('process-workflows', 'Process & Workflows', {
+                'description': 'Team process, code review, and incident procedures.',
+                'icon': 'diagram-project', 'color': '#e74c3c', 'position': 3,
+                'ai_assistant_type': 'documentation',
+            }),
+            ('meeting-notes', 'Meeting Notes', {
+                'description': 'Meeting minutes and transcripts - analyzed by the '
+                               'AI Meeting Assistant.',
+                'icon': 'users', 'color': '#0ea5e9', 'position': 4,
+                'ai_assistant_type': 'meeting',
+            }),
+        ]
+        cats = {}
+        for slug, name, extra in categories_data:
+            cats[slug], _ = WikiCategory.objects.get_or_create(
+                name=name,
+                organization=self.demo_org,
+                defaults={'workspace': demo_ws, **extra},
+            )
+            # Ensure workspace + assistant type are correct even on an existing
+            # row (get_or_create won't update defaults on a match).
+            if cats[slug].workspace_id != getattr(demo_ws, 'id', None) or \
+                    cats[slug].ai_assistant_type != extra['ai_assistant_type']:
+                cats[slug].workspace = demo_ws
+                cats[slug].ai_assistant_type = extra['ai_assistant_type']
+                cats[slug].save(update_fields=['workspace', 'ai_assistant_type'])
+        cat = cats['engineering']
 
-        pages = [
+        engineering_pages = [
             ('API Design Standards', (
                 "# API Design Standards\n\n"
                 "All public endpoints live under `/api/v1/`. Versioning is path-based; "
@@ -2730,18 +2790,309 @@ class Command(BaseCommand):
                 "contribute to the goal are deferred to the backlog unless they are "
                 "blocking production issues.\n"
             )),
+            ('Docker Dev Environment Setup', (
+                "# Docker Dev Environment Setup\n\n"
+                "The whole stack runs via `docker-compose up` - Postgres, Redis, and the "
+                "Django app in hot-reload mode. This replaced the old per-service local "
+                "install process after Phase 1's onboarding retro flagged setup time as a "
+                "recurring drag on new engineers.\n\n"
+                "## Quick start\n\n"
+                "```bash\n"
+                "git clone git@acme-corp.demo:acme/main-project.git\n"
+                "cd main-project\n"
+                "cp .env.example .env\n"
+                "docker-compose up --build\n"
+                "docker-compose exec web python manage.py migrate\n"
+                "docker-compose exec web python manage.py populate_all_demo_data\n"
+                "```\n\n"
+                "## What's included\n\n"
+                "- `web` - Django app with hot reload, mounted from the repo checkout\n"
+                "- `db` - Postgres 15, data persisted in a named volume\n"
+                "- `redis` - cache + Celery broker\n"
+                "- `worker` - Celery worker (solo pool, matches production concurrency "
+                "assumptions on Windows)\n\n"
+                "## Result\n\n"
+                "New engineers are productive in under 30 minutes without pairing - no more "
+                "\"works on my machine\" issues from mismatched local Postgres/Redis versions. "
+                "This is now the only supported way to run the stack locally.\n\n"
+                "---\n\n"
+                "*Owner: Elena Vasquez - ping #dev-support with setup issues*\n"
+            )),
         ]
-        for title, content in pages:
-            WikiPage.objects.get_or_create(
-                title=title, category=cat, organization=self.demo_org,
+
+        architecture_pages = [
+            ('System Architecture Overview', (
+                "# System Architecture Overview\n\n"
+                "## Components\n\n"
+                "- **API Gateway** - request routing, rate limiting, auth token validation\n"
+                "- **Core API** (Django) - boards, tasks, users, and business logic; the "
+                "system of record backed by Postgres\n"
+                "- **AI Service** - task suggestions and resource optimization, called "
+                "through the shared AI router rather than direct provider SDK calls\n"
+                "- **Redis** - cache + Celery broker\n\n"
+                "## Data flow\n\n"
+                "1. Client request hits the gateway; token validated and rate-limited.\n"
+                "2. Request routed to the Core API.\n"
+                "3. Core API reads/writes Postgres, and calls the AI service for anything "
+                "requiring model inference.\n"
+                "4. Cacheable responses are stored in Redis with a short TTL.\n\n"
+                "## Tenancy\n\n"
+                "Workspace is the tenant boundary - every board, task, and wiki page scopes "
+                "to the active workspace, not the legacy Organization field.\n\n"
+                "---\n\n"
+                "*Questions? Ask in #architecture on Slack*\n"
+            )),
+            ('Architecture Decision Log', (
+                "# Architecture Decision Log\n\n"
+                "Phase 1's retrospective made \"ADR approved\" a Definition-of-Ready gate for "
+                "any task that introduces or changes architecture - decisions get written "
+                "down before implementation starts, not alongside it. This index tracks the "
+                "significant ones.\n\n"
+                "## ADR-001: Workspace as the tenant boundary\n"
+                "**Status:** Accepted\n"
+                "Organization was nullable and legacy-only; Workspace became the sole "
+                "scoping boundary for boards, wiki, and analytics queries.\n\n"
+                "## ADR-002: Docker-first local development\n"
+                "**Status:** Accepted\n"
+                "Replaced per-service local installs after onboarding time became a "
+                "recurring complaint. See [Docker Dev Environment Setup](docker-dev-environment-setup).\n\n"
+                "## ADR-003: RBAC via django-rules + object-level checks\n"
+                "**Status:** Accepted\n"
+                "Chose django-rules predicates over ad-hoc permission checks scattered "
+                "across views, layered with `simple_access` helpers for board-level access.\n\n"
+                "## ADR-004: AI calls only through the shared router\n"
+                "**Status:** Accepted\n"
+                "No feature code instantiates a provider SDK directly - `AIRouter.complete()` "
+                "owns BYOK/org/platform key resolution so provider swaps stay centralized.\n\n"
+                "---\n\n"
+                "*New ADRs go through the #architecture channel for review before merge*\n"
+            )),
+        ]
+
+        process_pages = [
+            ('Code Review Guidelines', (
+                "# Code Review Guidelines\n\n"
+                "## Author checklist\n\n"
+                "- [ ] Self-review your changes first\n"
+                "- [ ] All tests pass locally\n"
+                "- [ ] No debug code or stray console/print statements\n"
+                "- [ ] PR description is clear and links the related issue\n\n"
+                "## What reviewers look for\n\n"
+                "1. **Correctness** - does it do what it claims, and are edge cases handled?\n"
+                "2. **Design** - does it fit existing patterns, is it maintainable?\n"
+                "3. **Performance** - N+1 queries, unnecessary re-renders?\n"
+                "4. **Security** - input validation, auth checks on every new endpoint?\n"
+                "5. **Tests** - adequate coverage on the changed behavior?\n\n"
+                "## Turnaround targets\n\n"
+                "| PR size | Target |\n"
+                "|---|---|\n"
+                "| Small (< 200 lines) | < 4 hours |\n"
+                "| Medium (200-500 lines) | < 8 hours |\n"
+                "| Large (> 500 lines) | < 24 hours |\n\n"
+                "## Approvals required\n\n"
+                "Feature and refactor PRs need 2 approvals; bug fixes and hotfixes need 1 "
+                "(hotfixes can be post-merge in a SEV1/SEV2).\n\n"
+                "---\n\n"
+                "*Remember: we review code, not people.*\n"
+            )),
+            ('Incident Response Procedure', (
+                "# Incident Response Procedure\n\n"
+                "## Severity levels\n\n"
+                "| Level | Description | Response time |\n"
+                "|---|---|---|\n"
+                "| SEV1 | Complete outage | 15 minutes |\n"
+                "| SEV2 | Major degradation | 30 minutes |\n"
+                "| SEV3 | Minor issue | 4 hours |\n"
+                "| SEV4 | Low impact | Next business day |\n\n"
+                "## Response steps\n\n"
+                "1. **Detect** - monitoring alert, support report, or internal discovery\n"
+                "2. **Acknowledge** - on-call engineer within the severity's response time\n"
+                "3. **Assess** - severity, affected systems, initial impact\n"
+                "4. **Communicate** - status page update, `#incident-YYYY-MM-DD` channel\n"
+                "5. **Mitigate** - temporary fix or rollback, actions documented as you go\n"
+                "6. **Resolve** - permanent fix, verify, close out the status page update\n"
+                "7. **Post-mortem** - scheduled within 48 hours; root cause and action items\n\n"
+                "## On-call rotation\n\n"
+                "| Week | Primary | Secondary |\n"
+                "|---|---|---|\n"
+                "| Current | Marcus Chen | Priya Sharma |\n"
+                "| Next | Priya Sharma | Elena Vasquez |\n"
+                "| Following | Elena Vasquez | Marcus Chen |\n\n"
+                "---\n\n"
+                "*Stay calm, communicate clearly, fix the issue.*\n"
+            )),
+        ]
+
+        getting_started_pages = [
+            ('Team Setup Guide', (
+                "# Team Setup Guide\n\n"
+                "This guide gets you from a fresh checkout to a running dev environment.\n\n"
+                "## Prerequisites\n\n"
+                "- Docker Desktop (see [Docker Dev Environment Setup](docker-dev-environment-setup) "
+                "for the full stack) or Python 3.11+ / Node 18+ for a bare-metal setup\n"
+                "- Git configured with SSH keys\n\n"
+                "## First week checklist\n\n"
+                "- [ ] Complete security training\n"
+                "- [ ] Get the stack running locally (Docker path recommended)\n"
+                "- [ ] Meet with your team lead\n"
+                "- [ ] Pick up your first starter task from the board\n\n"
+                "## Who to contact\n\n"
+                "| Role | Person |\n"
+                "|---|---|\n"
+                "| Backend Lead | Priya Sharma |\n"
+                "| Frontend / UX | Marcus Chen |\n"
+                "| DevOps / QA | Elena Vasquez |\n\n"
+                "---\n\n"
+                "*Need help? Reach out in #dev-support on Slack*\n"
+            )),
+            ('New Engineer Onboarding Checklist', (
+                "# New Engineer Onboarding Checklist\n\n"
+                "## Day 1\n\n"
+                "- [ ] Laptop, accounts, and access badges provisioned\n"
+                "- [ ] Welcome meeting with your manager\n"
+                "- [ ] Review [Team Setup Guide](team-setup-guide) and get the stack running\n\n"
+                "## Week 1\n\n"
+                "- [ ] Shadow a team member\n"
+                "- [ ] Attend your first standup and sprint ceremony\n"
+                "- [ ] Read [Coding Standards]"
+                # noqa placeholder link resolved below via API Design Standards page instead
+                "(api-design-standards) and [Security Guidelines](security-guidelines)\n"
+                "- [ ] Pick up a starter task\n\n"
+                "## Week 2-4\n\n"
+                "- [ ] Complete your first pull request end to end (see "
+                "[Code Review Guidelines](code-review-guidelines))\n"
+                "- [ ] 30-day check-in with your manager\n\n"
+                "---\n\n"
+                "*This checklist is reviewed every retro - see [Architecture Decision Log]"
+                "(architecture-decision-log) for how process changes get adopted.*\n"
+            )),
+        ]
+
+        # Meeting Notes pages - transcript-shaped so the AI Meeting Assistant
+        # (green panel + Import Transcript on the page) has real content to
+        # analyze. transcript_metadata drives the participants/date/duration the
+        # assistant reads.
+        meeting_date_1 = (self.TODAY - timedelta(days=10)).isoformat()
+        meeting_date_2 = (self.TODAY - timedelta(days=3)).isoformat()
+        meeting_pages = [
+            ('Phase 2 Sprint Planning - Meeting Notes', {
+                'meeting_date': meeting_date_2,
+                'duration_minutes': 45,
+                'participants': ['Priya Sharma', 'Marcus Chen', 'Elena Vasquez'],
+            }, (
+                "# Phase 2 Sprint Planning - Meeting Notes\n\n"
+                f"**Date:** {meeting_date_2}  |  **Duration:** 45 min  |  "
+                "**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez\n\n"
+                "## Transcript\n\n"
+                "**Priya:** Let's lock the Phase 2 goal. The headline is the AI "
+                "onboarding wizard - everything else is secondary this sprint.\n\n"
+                "**Marcus:** The signup form and email verification are already "
+                "working. The wizard UI is about 60% done; the AI workspace "
+                "generation is the last piece.\n\n"
+                "**Elena:** I'll own the Docker onboarding path so new engineers "
+                "aren't blocked. I can have the compose setup documented by "
+                "Wednesday.\n\n"
+                "**Priya:** Good. Decision: AI workspace generation is the sprint "
+                "commitment; the analytics polish moves to the backlog.\n\n"
+                "## Decisions\n\n"
+                "- Sprint goal: ship the AI onboarding wizard end to end.\n"
+                "- Analytics dashboard polish deferred to next sprint.\n\n"
+                "## Action items\n\n"
+                "- **Marcus** - finish the wizard UI and wire up AI workspace "
+                "generation.\n"
+                "- **Elena** - publish the Docker onboarding guide in the "
+                "Engineering wiki.\n"
+                "- **Priya** - review the AI prompt design before Thursday.\n"
+            )),
+            ('Phase 1 Retrospective - Meeting Notes', {
+                'meeting_date': meeting_date_1,
+                'duration_minutes': 40,
+                'participants': ['Priya Sharma', 'Marcus Chen', 'Elena Vasquez'],
+            }, (
+                "# Phase 1 Retrospective - Meeting Notes\n\n"
+                f"**Date:** {meeting_date_1}  |  **Duration:** 40 min  |  "
+                "**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez\n\n"
+                "## Transcript\n\n"
+                "**Priya:** Phase 1 shipped on time. What went well, and what "
+                "slowed us down?\n\n"
+                "**Elena:** Onboarding setup time was the biggest drag - new "
+                "engineers lost a day to local Postgres/Redis mismatches.\n\n"
+                "**Marcus:** Agreed. On the plus side, code review turnaround was "
+                "fast once we set the size-based SLA.\n\n"
+                "**Priya:** Let's make the ADR gate a Definition-of-Ready item so "
+                "architecture decisions get written down before we build.\n\n"
+                "## What went well\n\n"
+                "- Shipped Phase 1 on schedule.\n"
+                "- Code review SLA kept PRs moving.\n\n"
+                "## What to improve\n\n"
+                "- Local dev setup time - adopt Docker-first onboarding.\n"
+                "- Capture architecture decisions earlier (ADR gate).\n\n"
+                "## Action items\n\n"
+                "- **Elena** - stand up the Docker dev environment and document it.\n"
+                "- **Priya** - add 'ADR approved' to the Definition of Ready.\n"
+            )),
+            ('Weekly Team Standup - Meeting Notes', {
+                'meeting_date': (self.TODAY - timedelta(days=1)).isoformat(),
+                'duration_minutes': 15,
+                'participants': ['Priya Sharma', 'Marcus Chen', 'Elena Vasquez'],
+            }, (
+                "# Weekly Team Standup - Meeting Notes\n\n"
+                f"**Date:** {(self.TODAY - timedelta(days=1)).isoformat()}  |  "
+                "**Duration:** 15 min  |  "
+                "**Attendees:** Priya Sharma, Marcus Chen, Elena Vasquez\n\n"
+                "## Transcript\n\n"
+                "**Marcus:** Yesterday I finished the wizard UI polish. Today I'm "
+                "wiring the AI workspace generation call. No blockers.\n\n"
+                "**Elena:** Docker onboarding guide is published. Today I'm adding "
+                "the Redis service to the compose file. Blocked on a port conflict "
+                "I'll sort out this morning.\n\n"
+                "**Priya:** I reviewed the AI prompt design - approved with minor "
+                "tweaks. Today I'm pairing with Marcus on the generation call.\n\n"
+                "## Blockers\n\n"
+                "- Elena: local port conflict on Redis (self-resolving today).\n\n"
+                "## Action items\n\n"
+                "- **Marcus & Priya** - pair on AI workspace generation.\n"
+                "- **Elena** - resolve the Redis port conflict and finish compose.\n"
+            )),
+        ]
+
+        # Per-category tags so the pills reflect the actual category instead of a
+        # uniform "engineering" tag on every page.
+        cat_tags = {
+            cats['engineering']: ['engineering', 'standards'],
+            cats['architecture']: ['architecture', 'adr'],
+            cats['process-workflows']: ['process', 'standards'],
+            cats['getting-started']: ['onboarding', 'setup'],
+            cats['meeting-notes']: ['meeting', 'notes'],
+        }
+
+        # (category, title, content, author, transcript_metadata)
+        page_specs = (
+            [(cat, title, content, self.priya, None) for title, content in engineering_pages]
+            + [(cats['architecture'], title, content, self.elena, None) for title, content in architecture_pages]
+            + [(cats['process-workflows'], title, content, self.marcus, None) for title, content in process_pages]
+            + [(cats['getting-started'], title, content, self.priya, None) for title, content in getting_started_pages]
+            + [(cats['meeting-notes'], title, content, self.marcus if i % 2 == 0 else self.priya, meta)
+               for i, (title, meta, content) in enumerate(meeting_pages)]
+        )
+        for category, title, content, author, transcript_metadata in page_specs:
+            page, created = WikiPage.objects.get_or_create(
+                title=title, category=category, organization=self.demo_org,
                 defaults={
+                    'workspace': demo_ws,
                     'content': content,
-                    'created_by': self.priya, 'updated_by': self.priya,
+                    'created_by': author, 'updated_by': author,
                     'is_published': True,
-                    'tags': ['engineering', 'standards'],
+                    'tags': cat_tags.get(category, ['standards']),
+                    'transcript_metadata': transcript_metadata or {},
                 },
             )
-        self.stdout.write('  [OK] Wiki: 1 category + 3 pages created')
+            if not created and page.workspace_id != getattr(demo_ws, 'id', None):
+                page.workspace = demo_ws
+                page.save(update_fields=['workspace'])
+        self.stdout.write(
+            f'  [OK] Wiki: {len(cats)} categories + {len(page_specs)} pages created'
+        )
 
     # ------------------------------------------------------------------
     # Custom fields

@@ -39,6 +39,19 @@ class WikiCategory(models.Model):
         blank=True,
         help_text='Workspace this category belongs to (scopes visibility).'
     )
+    # Sandbox isolation — wiki content is workspace-scoped, but the demo sandbox
+    # is a single shared workspace, so per-user isolation comes from cloning the
+    # demo content per user (mirrors Discovery / the per-user board copies).
+    # None = canonical demo template or a real-org row; set = a specific demo
+    # user's private sandbox copy. See project_demo_sandbox_isolation_model.
+    sandbox_owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        db_index=True,
+        related_name='sandbox_wiki_categories',
+        help_text="Owning demo user for sandbox-isolated copies; None for template/real rows.",
+    )
     icon = models.CharField(max_length=50, default='folder', help_text='Font Awesome icon name')
     color = models.CharField(max_length=7, default='#3498db', help_text='Hex color code')
     position = models.IntegerField(default=0)
@@ -100,6 +113,17 @@ class WikiPage(models.Model):
         null=True,
         blank=True,
         help_text='Workspace this page belongs to (scopes visibility).'
+    )
+    # Sandbox isolation — see WikiCategory.sandbox_owner. Demo wiki pages are
+    # cloned per user so one demo user's edits never bleed to another.
+    # None = canonical demo template or a real-org page; set = a demo user's copy.
+    sandbox_owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        db_index=True,
+        related_name='sandbox_wiki_pages',
+        help_text="Owning demo user for sandbox-isolated copies; None for template/real rows.",
     )
 
     # Page metadata

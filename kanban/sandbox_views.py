@@ -2168,6 +2168,101 @@ def _clone_discovery_ideas_for_user(user):
                         match.save(update_fields=['phase'])
 
 
+def _clone_wiki_for_user(user):
+    """Clone the canonical demo wiki into a private per-user copy.
+
+    Wiki content (categories + pages) is workspace-scoped, but the demo sandbox
+    is a single shared workspace — so without per-user copies every demo user
+    would see, edit, and delete every other demo user's wiki content. Mirror the
+    Discovery / per-user-board isolation model: each demo user gets their own
+    clone of the template categories and pages (``sandbox_owner=user``), and the
+    wiki scope helper (``wiki/scoping.py``) shows a demo user only their own
+    clones — never the shared templates (``sandbox_owner IS NULL``) or anyone
+    else's copies. See [[_clone_discovery_ideas_for_user]].
+
+    Idempotent: clears the user's existing clones first, so it can be called on
+    every (re-)provision and reset. Preserves author, timestamps, tags,
+    transcript metadata and slugs so the cloned wiki reads identically to the
+    template (only the owner differs).
+    """
+    from accounts.models import Organization
+    from wiki.models import WikiCategory, WikiPage
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+
+    # Clear existing clones for idempotency (reset re-clones from the template).
+    # Pages first (FK to category), then categories.
+    WikiPage.objects.filter(sandbox_owner=user).delete()
+    WikiCategory.objects.filter(sandbox_owner=user).delete()
+
+    # Clone the template categories, remembering template-id -> clone so cloned
+    # pages can be re-pointed at the user's own category copies.
+    cat_map = {}
+    template_cats = WikiCategory.objects.filter(
+        organization=demo_org, sandbox_owner__isnull=True,
+    )
+    for tpl in template_cats:
+        clone = WikiCategory.objects.create(
+            name=tpl.name,
+            slug=tpl.slug,
+            description=tpl.description,
+            organization=tpl.organization,
+            workspace=tpl.workspace,
+            icon=tpl.icon,
+            color=tpl.color,
+            position=tpl.position,
+            ai_assistant_type=tpl.ai_assistant_type,
+            sandbox_owner=user,
+        )
+        cat_map[tpl.id] = clone
+
+    # Clone the template pages into the matching cloned categories. Two related
+    # passes so intra-wiki parent_page links resolve to the user's own copies.
+    template_pages = list(WikiPage.objects.filter(
+        organization=demo_org, sandbox_owner__isnull=True,
+        category__in=template_cats,
+    ))
+    page_map = {}
+    for tpl in template_pages:
+        clone_cat = cat_map.get(tpl.category_id)
+        if clone_cat is None:
+            continue
+        clone = WikiPage.objects.create(
+            title=tpl.title,
+            slug=tpl.slug,
+            content=tpl.content,
+            category=clone_cat,
+            organization=tpl.organization,
+            workspace=tpl.workspace,
+            created_by=tpl.created_by,
+            updated_by=tpl.updated_by,
+            is_published=tpl.is_published,
+            is_pinned=tpl.is_pinned,
+            tags=tpl.tags,
+            transcript_metadata=tpl.transcript_metadata,
+            version=tpl.version,
+            sandbox_owner=user,
+        )
+        # Preserve the template's timestamps (created_at is auto_now_add and
+        # updated_at is auto_now, so both are overwritten on create) — the
+        # Knowledge Hub orders by -updated_at and shows the created date.
+        WikiPage.objects.filter(pk=clone.pk).update(
+            created_at=tpl.created_at, updated_at=tpl.updated_at,
+        )
+        page_map[tpl.id] = clone
+
+    # Second pass: re-point hierarchical parent_page links within the clone set.
+    for tpl in template_pages:
+        if tpl.parent_page_id and tpl.id in page_map:
+            parent_clone = page_map.get(tpl.parent_page_id)
+            if parent_clone is not None:
+                WikiPage.objects.filter(pk=page_map[tpl.id].pk).update(
+                    parent_page=parent_clone,
+                )
+
+
 def _remap_demo_time_entries_to_owner(user):
     """Repair pre-existing sandboxes so the time-tracking dashboard is per-user.
 
@@ -2674,10 +2769,25 @@ def _purge_existing_sandbox(user):
             "_purge_existing_sandbox: a cleanup step failed for user %s "
             "(continuing; see traceback)", uid, exc_info=True)
 
-    # ── Wiki pages / categories created by user in demo ──
+    # ── Wiki: the user's per-user demo clones ──
+    # Demo wiki is cloned per user (sandbox_owner=user); delete that whole set
+    # (pages first, then categories — pages FK to category) so a reset rebuilds
+    # it cleanly. Pages the user authored during the demo also carry
+    # sandbox_owner=user (set by the create view), so they're covered here.
+    # NOTE: we must NOT delete by created_by alone — a real user's real-workspace
+    # pages have sandbox_owner=None and would be wrongly purged. Legacy demo
+    # pages created before this fix (sandbox_owner=None) are scoped to the demo
+    # org so real content is never touched.
     try:
-        from wiki.models import WikiPage
-        WikiPage.objects.filter(created_by=user).delete()
+        from wiki.models import WikiPage, WikiCategory
+        from accounts.models import Organization
+        WikiPage.objects.filter(sandbox_owner=user).delete()
+        WikiCategory.objects.filter(sandbox_owner=user).delete()
+        demo_org = Organization.objects.filter(is_demo=True).first()
+        if demo_org:
+            WikiPage.objects.filter(
+                created_by=user, sandbox_owner__isnull=True, organization=demo_org,
+            ).delete()
     except Exception:
         logger.warning(
             "_purge_existing_sandbox: a cleanup step failed for user %s "

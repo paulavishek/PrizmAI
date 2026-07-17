@@ -2550,13 +2550,23 @@ class TaskFlowChatbotService:
         has no entries.  This bridges the gap where meetings are documented as
         wiki pages rather than via the dedicated MeetingNotes model.
 
-        Workspace-scoped (the tenant boundary)."""
+        Workspace-scoped (the tenant boundary). In the shared demo workspace,
+        wiki is isolated per user via sandbox_owner (each demo user has their own
+        clones), so scope to the current user's clones there to avoid bleed."""
         try:
             from wiki.models import WikiPage, WikiCategory
             from django.db.models import Q
+            from kanban.utils.demo_protection import user_is_demo
+
+            # Demo: only the current user's cloned wiki (sandbox_owner). Real:
+            # workspace rows, excluding any stray demo clone.
+            if user_is_demo(self.user):
+                owner_q = Q(sandbox_owner=self.user)
+            else:
+                owner_q = Q(workspace=workspace, sandbox_owner__isnull=True)
 
             meeting_categories = WikiCategory.objects.filter(
-                Q(workspace=workspace) & (
+                owner_q & (
                     Q(ai_assistant_type='meeting') | Q(name__icontains='meeting')
                 )
             )
@@ -2564,8 +2574,8 @@ class TaskFlowChatbotService:
                 return None
 
             pages = WikiPage.objects.filter(
+                owner_q,
                 category__in=meeting_categories,
-                workspace=workspace,
                 is_published=True,
             ).select_related('category', 'created_by').order_by('-updated_at')[:10]
 

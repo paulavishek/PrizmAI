@@ -41,8 +41,10 @@ urlpatterns = [
     path('categories/<int:pk>/delete/', views.WikiCategoryDeleteView.as_view(), name='category_delete'),
     
     # Page Management
-    path('', views.WikiPageListView.as_view(), name='page_list'),
-    path('category/<int:category_id>/', views.WikiPageListView.as_view(), name='page_list_by_category'),
+    # The old sidebar-style list page was retired in favour of the single
+    # Knowledge Hub; these URLs now redirect there (keeps bookmarks working).
+    path('', views.wiki_page_list_redirect, name='page_list'),
+    path('category/<int:category_id>/', views.wiki_page_list_redirect, name='page_list_by_category'),
     path('templates/', views.template_gallery, name='template_gallery'),
     path('create/', views.WikiPageCreateView.as_view(), name='page_create'),
     path('page/<slug:slug>/', views.WikiPageDetailView.as_view(), name='page_detail'),

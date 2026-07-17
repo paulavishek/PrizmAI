@@ -58,7 +58,7 @@ class WikiPageForm(forms.ModelForm):
             'is_pinned': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
-    def __init__(self, *args, organization=None, workspace=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, scope_q=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Convert tags list to comma-separated string for editing
@@ -66,9 +66,18 @@ class WikiPageForm(forms.ModelForm):
             if isinstance(self.instance.tags, list):
                 self.initial['tags'] = ', '.join(self.instance.tags)
 
+        # ``scope_q`` (the shared wiki_scope_q) is the single source of truth for
+        # visibility — in the demo workspace it isolates the choices to the user's
+        # own per-user clones (sandbox_owner), which a plain workspace filter
+        # can't do since all demo users share one workspace. Prefer it when given.
+        if scope_q is not None:
+            self.fields['category'].queryset = WikiCategory.objects.filter(scope_q).distinct()
+            self.fields['parent_page'].queryset = WikiPage.objects.filter(
+                scope_q
+            ).exclude(pk=self.instance.pk if self.instance.pk else None).distinct()
         # Workspace is the tenant boundary — when provided, scope the category /
         # parent-page choices strictly to it (org scoping below is legacy).
-        if workspace is not None:
+        elif workspace is not None:
             from django.db.models import Q
             ws_filter = Q(workspace=workspace)
             self.fields['category'].queryset = WikiCategory.objects.filter(ws_filter).distinct()
@@ -327,11 +336,20 @@ class QuickWikiLinkForm(forms.Form):
         })
     )
     
-    def __init__(self, *args, organization=None, workspace=None, **kwargs):
+    def __init__(self, *args, organization=None, workspace=None, scope_q=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         from django.db.models import Q
         from accounts.models import Organization
+
+        # ``scope_q`` (shared wiki_scope_q) isolates demo users to their own
+        # per-user wiki clones; prefer it over a plain workspace filter, which
+        # can't separate users inside the single shared demo workspace.
+        if scope_q is not None:
+            self.fields['wiki_pages'].queryset = WikiPage.objects.filter(
+                scope_q, is_published=True,
+            )
+            return
 
         # Workspace is the tenant boundary — when provided, scope linkable pages
         # strictly to it (org scoping below is legacy fallback).

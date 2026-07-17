@@ -491,8 +491,10 @@
                         <i class="fas fa-magic"></i> <span id="aiAnalysisBtnText">AI Analysis</span>
                     </button>
                     
-                    <!-- Editor Controls (Only for page owner/staff) -->
-                    {% if user == page.created_by or user.is_staff %}
+                    <!-- Editor Controls. Real workspaces: page owner/staff only
+                         (RBAC unchanged). Demo: full edit access for everyone,
+                         matching the demo banner + the wiki's MVP access model. -->
+                    {% if user == page.created_by or user.is_staff or is_viewing_demo %}
                         <div class="btn-group btn-group-sm" role="group">
                             <a href="{% url 'wiki:page_edit' page.slug %}" class="btn btn-outline-primary">
                                 <i class="fas fa-edit"></i> Edit
@@ -782,7 +784,7 @@
                     </div>
                     <div class="card-body">
                         {% for tag in page.tags %}
-                            <a href="{% url 'wiki:page_list' %}?q={{ tag }}" class="badge bg-light text-dark me-1 mb-1">
+                            <a href="{% url 'wiki:knowledge_hub_home' %}?q={{ tag }}" class="badge bg-light text-dark me-1 mb-1">
                                 {{ tag }}
                             </a>
                         {% endfor %}
@@ -799,7 +801,7 @@
                     <a href="{% url 'wiki:page_history' page.slug %}" class="list-group-item list-group-item-action">
                         <i class="fas fa-history"></i> View History
                     </a>
-                    {% if user == page.created_by or user.is_staff %}
+                    {% if user == page.created_by or user.is_staff or is_viewing_demo %}
                         <a href="{% url 'wiki:page_edit' page.slug %}" class="list-group-item list-group-item-action">
                             <i class="fas fa-edit"></i> Edit Page
                         </a>
@@ -807,7 +809,7 @@
                             <i class="fas fa-link"></i> Add Link
                         </a>
                     {% endif %}
-                    <a href="{% url 'wiki:page_list' %}" class="list-group-item list-group-item-action">
+                    <a href="{% url 'wiki:knowledge_hub_home' %}" class="list-group-item list-group-item-action">
                         <i class="fas fa-book"></i> All Pages
                     </a>
                 </div>
@@ -1031,7 +1033,7 @@
 // Global variables for the external script
 const wikiPageId = {{ page.id }};
 const csrfToken = '{{ csrf_token }}';
-const wikiListUrl = '{% url "wiki:page_list" %}';
+const wikiListUrl = '{% url "wiki:knowledge_hub_home" %}';
 const categoryAiType = '{{ page.category.ai_assistant_type }}';
 const categoryName = '{{ page.category.name }}';
 
