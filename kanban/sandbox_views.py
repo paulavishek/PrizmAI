@@ -26,6 +26,82 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def sync_persona_memberships_to_owner(owner_user):
+    """Make ``owner_user``'s sandbox the one demo personas (Priya/Marcus/Elena,
+    alex/sam/jordan) are currently guest-members of, evicting their
+    BoardMembership from every other real user's sandbox.
+
+    Personas are a single shared login (@demo.prizmai.local, password printed
+    on-screen), so leaving one a guest member of more than one real user's
+    sandbox at a time lets anyone signed in with those credentials browse
+    another user's private sandbox data — a genuine cross-tenant leak, not
+    just clutter. See [[project_persona_membership_bleed]].
+
+    Previously this capping only ran inline in ``_duplicate_board`` (i.e. only
+    at first provisioning / Reset Demo), so whichever real user's sandbox was
+    cloned *most recently* silently evicted every other real user's persona
+    membership — including on sandboxes that predated the newer one and were
+    never touched again. A persona logging in to test messaging against an
+    older sandbox would land on whichever sandbox last "won" instead of the
+    one the real user just visited. Calling this on every real-user
+    re-entry into an *existing* sandbox (not just at creation) keeps the cap
+    following actual usage instead of only the last provisioning event.
+
+    Never touches a sandbox a persona owns themselves (personas are meant to
+    be guest-only, but pre-fix data may still have one).
+    """
+    from django.contrib.auth.models import User
+    from django.db.models import F
+    from kanban.models import Board, BoardMembership
+
+    owner_boards = list(
+        Board.objects.filter(owner=owner_user, is_sandbox_copy=True)
+        .select_related('cloned_from')
+    )
+    if not owner_boards:
+        return
+
+    persona_ids = set()
+    for board in owner_boards:
+        template = board.cloned_from
+        if not template:
+            continue
+        for membership in template.memberships.select_related('user').all():
+            email = getattr(membership.user, 'email', '') or ''
+            if '@demo.prizmai.local' in email:
+                persona_ids.add(membership.user_id)
+
+    if not persona_ids:
+        return
+
+    persona_users = list(User.objects.filter(id__in=persona_ids))
+
+    # Evict guest membership from every OTHER real user's sandbox.
+    BoardMembership.objects.filter(
+        user__in=persona_users,
+        board__is_sandbox_copy=True,
+    ).exclude(board__owner=owner_user).exclude(user=F('board__owner')).delete()
+
+    # Re-affirm guest membership on THIS owner's sandbox(es), scoped to the
+    # personas that are actually members of the template each board was
+    # cloned from (don't invent new persona associations).
+    for board in owner_boards:
+        template = board.cloned_from
+        if not template:
+            continue
+        template_persona_ids = set(
+            template.memberships.filter(
+                user__email__icontains='@demo.prizmai.local'
+            ).values_list('user_id', flat=True)
+        )
+        for persona in persona_users:
+            if persona.id in template_persona_ids:
+                BoardMembership.objects.get_or_create(
+                    board=board, user=persona,
+                    defaults={'role': 'member'},
+                )
+
+
 def _duplicate_board(template_board, user):
     """
     Deep-copy a single template board for a sandbox user.
@@ -83,41 +159,11 @@ def _duplicate_board(template_board, user):
 
     # Copy ONLY demo persona memberships so assignees resolve correctly.
     # Real users must NEVER be copied — each user's sandbox is private.
-    # Demo personas are identified by their @demo.prizmai.local email.
-    persona_users = []
-    for membership in template_board.memberships.select_related('user').all():
-        if membership.user == user:
-            continue  # already owner
-        member_email = getattr(membership.user, 'email', '') or ''
-        if '@demo.prizmai.local' not in member_email:
-            continue  # skip real users — sandbox isolation
-        persona_users.append(membership.user)
-
-    if persona_users:
-        # Demo personas (Priya/Marcus/Elena) are shared login credentials
-        # printed on-screen for every real user to test cross-account flows
-        # (e.g. Messaging). Without capping this, a persona accumulates a
-        # BoardMembership on every sandbox ever cloned by every real user,
-        # forever — letting anyone signed in with the shared persona
-        # credentials browse every other user's private sandbox boards, and
-        # cluttering the persona's own dashboard/messaging hub with dozens of
-        # stale "Software Development" cards. Cap each persona to sandbox
-        # boards owned by the CURRENT user only — but never touch a
-        # membership row where the persona IS the board's owner (a persona
-        # can end up with their own personally-provisioned sandbox, e.g. if
-        # someone logs in directly as marcus.chen and provisions; that board
-        # is a separate, legitimate sandbox and must keep its owner row).
-        from django.db.models import F
-        BoardMembership.objects.filter(
-            user__in=persona_users,
-            board__is_sandbox_copy=True,
-        ).exclude(board__owner=user).exclude(user=F('board__owner')).delete()
-
-    for persona_user in persona_users:
-        BoardMembership.objects.get_or_create(
-            board=new_board, user=persona_user,
-            defaults={'role': 'member'},
-        )
+    # Demo personas (Priya/Marcus/Elena, alex/sam/jordan) are shared login
+    # credentials, so they're capped to being a guest member of exactly ONE
+    # real user's sandbox at a time — see sync_persona_memberships_to_owner()
+    # for why (cross-tenant leak) and [[project_persona_membership_bleed]].
+    sync_persona_memberships_to_owner(user)
 
     # --- TaskLabels (board FK) ---
     label_map = {}  # old label pk → new label instance

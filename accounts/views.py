@@ -118,9 +118,24 @@ def quick_demo_login(request, username):
             # losing the way back to the real account for this session.
             real_username = request.session.get('real_user_username')
 
+    # Before switching identity, cap the shared demo personas' board
+    # membership to THIS real user's sandbox — otherwise the persona we're
+    # about to become still points at whichever real user's sandbox was
+    # capped last (e.g. from an earlier provisioning elsewhere), and this
+    # session lands in the wrong person's chat rooms/boards instead of the
+    # one the real user just came from. See sync_persona_memberships_to_owner()
+    # / [[project_persona_membership_bleed]].
+    if real_username:
+        try:
+            real_user_obj = User.objects.get(username=real_username)
+            from kanban.sandbox_views import sync_persona_memberships_to_owner
+            sync_persona_memberships_to_owner(real_user_obj)
+        except User.DoesNotExist:
+            pass
+
     # Authenticate with the known demo password
     user = authenticate(request=request, username=username, password=DEMO_PASSWORD)
-    
+
     if user is not None:
         login(request, user)
         # Restore the real username into the new session so we can switch back

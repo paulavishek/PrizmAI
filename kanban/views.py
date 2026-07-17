@@ -1773,6 +1773,8 @@ def toggle_demo_mode(request):
             _clone_calendar_events_for_user(request.user)
             from kanban.tasks.sandbox_provisioning import touch_sandbox_access
             touch_sandbox_access(request.user)
+            from kanban.sandbox_views import sync_persona_memberships_to_owner
+            sync_persona_memberships_to_owner(request.user)
             profile.is_viewing_demo = True
             profile.active_workspace = demo_ws
             fields = ['is_viewing_demo', 'active_workspace']
@@ -2033,6 +2035,8 @@ def switch_workspace(request):
                 _clone_calendar_events_for_user(request.user)
                 from kanban.tasks.sandbox_provisioning import touch_sandbox_access
                 touch_sandbox_access(request.user)
+                from kanban.sandbox_views import sync_persona_memberships_to_owner
+                sync_persona_memberships_to_owner(request.user)
             except DemoSandbox.DoesNotExist:
                 from kanban.tasks.sandbox_provisioning import provision_sandbox_task
                 try:
