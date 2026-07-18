@@ -74,25 +74,29 @@
     background: var(--border-color, #e5e7eb);
     pointer-events: none;
 }
-/* Quadrant corner labels */
+/* Quadrant corner labels — flag/tag shape (notched corner), deliberately distinct
+   from the pill-shaped idea chips so the two never get visually confused */
 .scatter-q-label {
     position: absolute;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     pointer-events: none;
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 3px 10px;
-    border-radius: 20px;
+    padding: 4px 10px;
+    border-radius: 4px;
     border: 1px solid;
+    border-left-width: 3px;
     backdrop-filter: blur(2px);
     z-index: 2;
 }
-.scatter-q-label.ql-quickwin  { background: rgba(220,252,231,0.9); color: #15803d; border-color: #86efac; }
-.scatter-q-label.ql-strategic { background: rgba(219,234,254,0.9); color: #1d4ed8; border-color: #93c5fd; }
-.scatter-q-label.ql-fillin    { background: rgba(254,243,199,0.9); color: #b45309; border-color: #fcd34d; }
-.scatter-q-label.ql-deprio    { background: rgba(243,244,246,0.95); color: var(--text-secondary); border-color: #9ca3af; }
+.scatter-q-label.ql-quickwin  { background: rgba(220,252,231,0.9); color: #15803d; border-color: #86efac; border-left-color: #16a34a; }
+.scatter-q-label.ql-strategic { background: rgba(219,234,254,0.9); color: #1d4ed8; border-color: #93c5fd; border-left-color: #2563eb; }
+.scatter-q-label.ql-fillin    { background: rgba(254,243,199,0.9); color: #b45309; border-color: #fcd34d; border-left-color: #d97706; }
+.scatter-q-label.ql-deprio    { background: rgba(243,244,246,0.95); color: var(--text-secondary); border-color: #9ca3af; border-left-color: #6b7280; }
 /* Idea dots */
 .scatter-dot {
     position: absolute;
@@ -144,6 +148,25 @@
     text-decoration: line-through;
     border-style: dashed;
     filter: grayscale(60%);
+}
+
+[data-bs-theme="dark"] .scatter-q-label.ql-deprio {
+    background: rgba(75,85,99,0.9);
+    color: var(--text-primary);
+    border-color: #6b7280;
+    border-left-color: #9ca3af;
+}
+[data-bs-theme="dark"] .scatter-dot-deprioritize {
+    color: var(--text-primary);
+}
+[data-bs-theme="dark"] .scatter-dot-rejected {
+    opacity: 0.8;
+    filter: none;
+    color: var(--text-primary);
+}
+[data-bs-theme="dark"] .quadrant-empty-hint {
+    color: var(--text-primary);
+    opacity: 0.85;
 }
 
 .scatter-x-label {
