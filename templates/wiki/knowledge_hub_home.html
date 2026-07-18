@@ -49,6 +49,9 @@
             <a href="{% url 'dashboard' %}" class="btn-prizm-back me-2">
                 <i class="fas fa-arrow-left"></i> Back to Dashboard
             </a>
+            <a href="{% url 'wiki:category_list' %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-folder-open me-1"></i> Manage Categories
+            </a>
             <a href="{% url 'wiki:page_create' %}" class="btn btn-primary">
                 <i class="fas fa-file-alt me-1"></i> New Wiki Page
             </a>
@@ -274,11 +277,10 @@
                 <!-- Template Library (always visible) -->
                 {% if wiki_templates %}
                 <div class="card border-0 shadow-sm mb-3">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <div class="card-header bg-white">
                         <h6 class="mb-0">
                             <i class="fas fa-layer-group me-2 text-primary"></i>Template Library
                         </h6>
-                        <a href="{% url 'wiki:template_gallery' %}" class="btn btn-link btn-sm p-0 small">View all</a>
                     </div>
                     <div class="list-group list-group-flush">
                         {% for tpl in wiki_templates %}
@@ -322,24 +324,6 @@
                 </div>
                 {% endif %}
 
-                <!-- Quick Links -->
-                <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-white">
-                        <h6 class="mb-0">
-                            <i class="fas fa-link me-2"></i>Quick Actions
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-grid gap-2">
-                            <a href="{% url 'wiki:knowledge_hub_home' %}" class="btn btn-sm btn-outline-secondary">
-                                <i class="fas fa-book me-2"></i>All Wiki Pages
-                            </a>
-                            <a href="{% url 'wiki:category_list' %}" class="btn btn-sm btn-outline-secondary">
-                                <i class="fas fa-folder-open me-2"></i>Manage Categories
-                            </a>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
