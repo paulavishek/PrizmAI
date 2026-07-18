@@ -8,6 +8,7 @@
     <!-- Favicon -->
     {% load static %}
     {% load analytics_filters %}
+    {% load avatar_tags %}
     <link rel="icon" type="image/svg+xml" href="{% static 'kanban/images/favicon.svg' %}">
     <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
     
@@ -188,6 +189,9 @@
                 <span class="tws-btn tws-btn-active tws-ws-display" id="ws-name-display" title="Current workspace">
                     <i class="fas fa-briefcase me-1"></i><span id="ws-name-text">{{ active_workspace.name|truncatechars:24 }}</span>
                 </span>
+                {% if workspace_member_users %}
+                <span class="ms-1">{% avatar_stack workspace_member_users max_avatars=3 size="sm" %}</span>
+                {% endif %}
                 {% if can_rename_workspace %}
                 {# ── Workspace Settings gear dropdown ── #}
                 <div class="dropdown d-inline-block" id="ws-settings-dropdown">

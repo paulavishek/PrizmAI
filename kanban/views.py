@@ -277,6 +277,17 @@ def dashboard(request):
         ),
     )
 
+    # Prefetch member avatars for the board cards (batched, avoids N+1).
+    from django.db.models import Prefetch
+    from kanban.models import BoardMembership as _BoardMembership
+    boards = boards.prefetch_related(
+        Prefetch(
+            'memberships',
+            queryset=_BoardMembership.objects.select_related('user__profile').order_by('-added_at'),
+            to_attr='member_list',
+        )
+    )
+
     # ── Own vs shared board partition ────────────────────────────────
     # A board is "owned" when the user created it, is its owner, or it lives in
     # the active workspace. Anything else is a board shared *to* the user via
@@ -2190,6 +2201,17 @@ def board_list(request):
             filter=Q(columns__tasks__item_type='task', columns__tasks__progress=100),
             distinct=True,
         ),
+    )
+
+    # Prefetch member avatars for the board cards (batched, avoids N+1).
+    from django.db.models import Prefetch
+    from kanban.models import BoardMembership as _BoardMembership
+    boards = boards.prefetch_related(
+        Prefetch(
+            'memberships',
+            queryset=_BoardMembership.objects.select_related('user__profile').order_by('-added_at'),
+            to_attr='member_list',
+        )
     )
 
     # Own vs shared partition (mirrors the dashboard). Owned = created/owned by

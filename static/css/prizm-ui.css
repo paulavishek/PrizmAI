@@ -41,6 +41,16 @@
     --persona-green:  linear-gradient(135deg, #10b981 0%, #34d399 100%);
     --persona-amber:  linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
 
+    /* ── Deterministic per-user avatar colors (hash of user.id % 8) ── */
+    --avatar-c0: linear-gradient(135deg, #6c5ce7 0%, #8e7bf0 100%); /* purple */
+    --avatar-c1: linear-gradient(135deg, #10b981 0%, #34d399 100%); /* green */
+    --avatar-c2: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); /* amber */
+    --avatar-c3: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); /* blue */
+    --avatar-c4: linear-gradient(135deg, #ec4899 0%, #f472b6 100%); /* pink */
+    --avatar-c5: linear-gradient(135deg, #14b8a6 0%, #2dd4bf 100%); /* teal */
+    --avatar-c6: linear-gradient(135deg, #f97316 0%, #fb923c 100%); /* orange */
+    --avatar-c7: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); /* violet */
+
     /* ── Section chrome ────────────────────────────────────────── */
     --chip-bg:        rgba(102, 126, 234, 0.10);
     --chip-text:      #4c5480;
@@ -176,6 +186,39 @@
 .prizm-avatar--purple { background: var(--persona-purple); }
 .prizm-avatar--green  { background: var(--persona-green); }
 .prizm-avatar--amber  { background: var(--persona-amber); }
+
+.prizm-avatar--c0 { background: var(--avatar-c0); }
+.prizm-avatar--c1 { background: var(--avatar-c1); }
+.prizm-avatar--c2 { background: var(--avatar-c2); }
+.prizm-avatar--c3 { background: var(--avatar-c3); }
+.prizm-avatar--c4 { background: var(--avatar-c4); }
+.prizm-avatar--c5 { background: var(--avatar-c5); }
+.prizm-avatar--c6 { background: var(--avatar-c6); }
+.prizm-avatar--c7 { background: var(--avatar-c7); }
+
+.prizm-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.prizm-avatar--overflow {
+    background: var(--track-bg);
+    color: var(--chip-text);
+    font-size: 0.72em;
+}
+
+/* ── .prizm-avatar-stack — overlapping avatar circles + overflow chip ── */
+.prizm-avatar-stack {
+    display: inline-flex;
+    align-items: center;
+}
+.prizm-avatar-stack .prizm-avatar {
+    margin-left: -8px;
+    border: 2px solid var(--card-bg-surface);
+}
+.prizm-avatar-stack .prizm-avatar:first-child { margin-left: 0; }
 
 /* ============================================================
    .prizm-progress  —  thin rounded progress bar

@@ -69,6 +69,16 @@ def demo_context(request):
                 active_ws = getattr(profile, 'active_workspace', None)
                 context['active_workspace'] = active_ws
 
+                # Topbar avatar stack — small, capped query (at most 5 rows),
+                # only for a real (non-demo) active workspace.
+                if active_ws and not active_ws.is_demo:
+                    context['workspace_member_users'] = [
+                        m.user for m in
+                        active_ws.memberships.select_related('user__profile').order_by('-added_at')[:5]
+                    ]
+                else:
+                    context['workspace_member_users'] = []
+
                 from kanban.models import Workspace
                 from kanban.utils.demo_protection import get_demo_workspace
                 from kanban.permissions import owns_active_workspace
@@ -99,6 +109,7 @@ def demo_context(request):
             except Exception:
                 context['is_viewing_demo'] = False
                 context['active_workspace'] = None
+                context['workspace_member_users'] = []
                 context['user_workspaces'] = []
                 context['real_workspaces'] = []
                 context['demo_workspace'] = None
@@ -106,6 +117,7 @@ def demo_context(request):
         else:
             context['is_viewing_demo'] = False
             context['active_workspace'] = None
+            context['workspace_member_users'] = []
             context['user_workspaces'] = []
             context['real_workspaces'] = []
             context['demo_workspace'] = None

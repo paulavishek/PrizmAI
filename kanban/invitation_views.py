@@ -88,7 +88,7 @@ def manage_board_members(request, board_id):
 
     can_manage = _can_manage_invites(request.user, board)
 
-    memberships = board.memberships.select_related('user', 'added_by').order_by('user__username')
+    memberships = board.memberships.select_related('user__profile', 'added_by').order_by('user__username')
     pending_invitations = board.invitations.filter(
         status=BoardInvitation.STATUS_PENDING
     ).order_by('-created_at')
