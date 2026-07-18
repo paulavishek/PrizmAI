@@ -36,14 +36,16 @@ from kanban.custom_field_models import (
 )
 
 
-def apply_custom_field_filters(queryset, filter_params, workspace_id=None):
+def apply_custom_field_filters(queryset, filter_params, workspace_id=None, board=None):
     """
     Apply `cf_<id>` filters from `filter_params` to `queryset`.
 
     `queryset` must be a Task queryset. `filter_params` is a dict (or
     QueryDict). `workspace_id` is optional but recommended — without it the
     function can't validate that the referenced fields belong to the right
-    workspace and will trust the IDs.
+    workspace and will trust the IDs. Pass `board` to additionally scope field
+    definitions to the board owner's demo clones (mirrors the task-resolution
+    path) — defensive, since filter IDs already originate from the scoped widget.
     """
     if not filter_params:
         return queryset
@@ -52,7 +54,11 @@ def apply_custom_field_filters(queryset, filter_params, workspace_id=None):
     if not field_ids:
         return queryset
 
-    fields_qs = CustomFieldDefinition.objects.filter(id__in=field_ids, is_active=True)
+    from kanban.custom_field_scoping import custom_field_scope_q_for_board
+    fields_qs = CustomFieldDefinition.objects.filter(
+        custom_field_scope_q_for_board(board),
+        id__in=field_ids, is_active=True,
+    )
     if workspace_id is not None:
         fields_qs = fields_qs.filter(workspace_id=workspace_id)
     fields_by_id = {f.id: f for f in fields_qs}

@@ -222,6 +222,16 @@ def dashboard(request):
             except Exception:
                 pass
 
+            # Catch-up: clone the per-user custom-field schema (+ seeded values)
+            # for sandboxes provisioned before per-user custom-field isolation.
+            # Without this, the shared workspace-scoped definitions bleed across
+            # demo users. Idempotent (clears + re-clones the user's own set).
+            try:
+                from kanban.sandbox_views import _clone_custom_fields_for_user
+                _clone_custom_fields_for_user(request.user)
+            except Exception:
+                pass
+
             # Catch-up: add the user to sandbox chat rooms if a prior
             # provisioning pass missed them. Sandbox boards are not
             # ``is_official_demo_board``, so the Messages badge endpoint
@@ -1756,6 +1766,7 @@ def toggle_demo_mode(request):
         _join_demo_org, _leave_demo_org,
         _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
         _remap_demo_time_entries_to_owner, _clone_calendar_events_for_user,
+        _clone_custom_fields_for_user,
     )
 
     if not profile.is_viewing_demo:
@@ -1782,6 +1793,12 @@ def toggle_demo_mode(request):
             _reassign_demo_tasks_to_user(existing, request.user)
             _remap_demo_time_entries_to_owner(request.user)
             _clone_calendar_events_for_user(request.user)
+            # Self-heal custom fields for sandboxes provisioned before per-user
+            # custom-field isolation (idempotent — clears + re-clones).
+            try:
+                _clone_custom_fields_for_user(request.user)
+            except Exception:
+                pass
             from kanban.tasks.sandbox_provisioning import touch_sandbox_access
             touch_sandbox_access(request.user)
             from kanban.sandbox_views import sync_persona_memberships_to_owner
@@ -2011,6 +2028,7 @@ def switch_workspace(request):
         _join_demo_org, _leave_demo_org,
         _reassign_demo_tasks_to_user, _restore_demo_task_assignments,
         _remap_demo_time_entries_to_owner, _clone_calendar_events_for_user,
+        _clone_custom_fields_for_user,
     )
 
     workspace_id = request.POST.get('workspace_id')
@@ -2044,6 +2062,10 @@ def switch_workspace(request):
                 _reassign_demo_tasks_to_user(existing, request.user)
                 _remap_demo_time_entries_to_owner(request.user)
                 _clone_calendar_events_for_user(request.user)
+                try:
+                    _clone_custom_fields_for_user(request.user)
+                except Exception:
+                    pass
                 from kanban.tasks.sandbox_provisioning import touch_sandbox_access
                 touch_sandbox_access(request.user)
                 from kanban.sandbox_views import sync_persona_memberships_to_owner
@@ -2883,10 +2905,12 @@ def task_detail(request, task_id):
 
             # Snapshot non-excluded custom-field values before save for stale-banner detection.
             from kanban.custom_field_models import CustomFieldDefinition as _CFDef, TaskCustomFieldValue as _TCFV
+            from kanban.custom_field_scoping import custom_field_scope_q_for_board as _cf_scope
             _cf_ws_id = board.workspace_id
             _old_cf_snapshot = {}
             if _cf_ws_id:
                 _ai_cf_defs_qs = _CFDef.objects.filter(
+                    _cf_scope(board),
                     workspace_id=_cf_ws_id, is_active=True,
                     applies_to_tasks=True, exclude_from_ai=False,
                 )
@@ -3291,7 +3315,7 @@ def create_task(request, board_id, column_id=None):
     # with its defaults via the same serializer shape.
     from kanban.custom_field_serializers import serialize_field_definitions_for_workspace
     if board.workspace_id:
-        defs = serialize_field_definitions_for_workspace(board.workspace_id)
+        defs = serialize_field_definitions_for_workspace(board.workspace_id, board=board)
         custom_fields_for_task = [
             {
                 **d,

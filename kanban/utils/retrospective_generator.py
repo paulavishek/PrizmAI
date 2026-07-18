@@ -204,8 +204,11 @@ class RetrospectiveGenerator:
         if not workspace_id:
             return []
 
+        from kanban.custom_field_scoping import custom_field_scope_q_for_board
+
         fields = list(
             CustomFieldDefinition.objects
+            .filter(custom_field_scope_q_for_board(self.board))
             .filter(
                 workspace_id=workspace_id,
                 is_active=True,

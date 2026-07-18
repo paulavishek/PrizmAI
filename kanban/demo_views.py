@@ -1938,6 +1938,17 @@ def reset_demo_data(request):
             except Exception:
                 pass
 
+            # Re-clone the per-user custom-field schema (+ seeded task values).
+            # The reset above reseeds only the shared templates (sandbox_owner=
+            # None); the field views/serializers show the user only their own
+            # clones (sandbox_owner=user), so rebuild them here or the user's
+            # tasks lose their custom-field values. Idempotent.
+            try:
+                from kanban.sandbox_views import _clone_custom_fields_for_user
+                _clone_custom_fields_for_user(request.user)
+            except Exception:
+                pass
+
             # Repair the personal timesheet on the user's existing sandbox boards.
             # This reset path repopulates the official templates in place but does
             # not re-clone the sandbox copies, so their cloned time entries are

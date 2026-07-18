@@ -95,20 +95,48 @@ class CustomFieldDefinition(models.Model):
         null=True, blank=True,
         related_name='custom_fields_created',
     )
+    # Demo per-user isolation. The demo workspace is shared by every demo user,
+    # so a workspace-scoped field would otherwise bleed across all of them (one
+    # user's field edits/deletes hitting everyone). Mirror the Wiki/Discovery
+    # sandbox_owner pattern: template rows have sandbox_owner=NULL and each demo
+    # user gets private clones (sandbox_owner=user) via
+    # _clone_custom_fields_for_user. Real workspaces always keep NULL. Scope all
+    # reads through kanban.custom_field_scoping.custom_field_scope_q.
+    sandbox_owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='sandbox_custom_fields',
+        help_text='Demo-only: the sandbox user this cloned field belongs to. '
+                  'NULL on real-workspace fields and on shared demo templates.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['position', 'name']
         constraints = [
+            # Two partial constraints instead of one on (workspace,
+            # sandbox_owner, name): SQLite/Postgres treat NULL as DISTINCT in a
+            # unique index, so a single constraint spanning the nullable
+            # sandbox_owner would let two real-workspace rows (both NULL) share a
+            # name — silently weakening real uniqueness. Split it:
+            #   • real rows (sandbox_owner IS NULL): unique on (workspace, name)
+            #   • demo clones (sandbox_owner NOT NULL): unique per owner too
             UniqueConstraint(
                 fields=['workspace', 'name'],
-                condition=Q(is_active=True),
+                condition=Q(is_active=True, sandbox_owner__isnull=True),
                 name='uniq_active_field_name_per_workspace',
+            ),
+            UniqueConstraint(
+                fields=['workspace', 'sandbox_owner', 'name'],
+                condition=Q(is_active=True, sandbox_owner__isnull=False),
+                name='uniq_active_field_name_per_sandbox_owner',
             ),
         ]
         indexes = [
             models.Index(fields=['workspace', 'is_active', 'position']),
+            models.Index(fields=['sandbox_owner', 'is_active']),
         ]
 
     def __str__(self):

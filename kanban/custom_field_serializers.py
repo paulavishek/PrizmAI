@@ -56,6 +56,7 @@ def serialize_task_custom_fields(task):
 
     fields = (
         CustomFieldDefinition.objects
+        .filter(_scope_q_for_task(task))
         .filter(workspace_id=workspace_id, is_active=True, applies_to_tasks=True)
         .prefetch_related('options')
         .order_by('position', 'name')
@@ -170,6 +171,7 @@ def save_custom_field_values_from_post(task, post_data, user, files=None):
         return
 
     fields_qs = CustomFieldDefinition.objects.filter(
+        _scope_q_for_task(task),
         workspace_id=workspace_id, is_active=True, applies_to_tasks=True,
     )
     # On an Epic, only process fields that apply to Epics — so Epic-hidden
@@ -279,15 +281,22 @@ def _upsert_value(task, fdef, user, **typed_fields):
     return row
 
 
-def serialize_field_definitions_for_workspace(workspace_id):
+def serialize_field_definitions_for_workspace(workspace_id, board=None):
     """
     Return a list of field-definition dicts for a workspace (used by the
-    filter bar and admin UI). Includes options for list fields.
+    filter bar and the new-task form). Includes options for list fields.
+
+    Pass ``board`` whenever available so demo sandbox boards resolve their
+    OWNER's cloned fields (sandbox_owner) rather than the shared demo templates;
+    without a board the scope falls back to real/template rows
+    (sandbox_owner IS NULL).
     """
     from .custom_field_models import CustomFieldDefinition, FIELD_TYPE_LIST
+    from .custom_field_scoping import custom_field_scope_q_for_board
 
     fields = (
         CustomFieldDefinition.objects
+        .filter(custom_field_scope_q_for_board(board))
         .filter(workspace_id=workspace_id, is_active=True, applies_to_tasks=True)
         .prefetch_related('options')
         .order_by('position', 'name')
@@ -311,6 +320,16 @@ def serialize_field_definitions_for_workspace(workspace_id):
 
 
 # ── Internal helpers ────────────────────────────────────────────────────────
+
+
+def _scope_q_for_task(task):
+    """Demo per-user scope for a task's custom fields, driven by the task's
+    board owner (see kanban/custom_field_scoping.py). On a sandbox board it
+    resolves the board OWNER's cloned fields; everywhere else it resolves the
+    shared/real templates (sandbox_owner IS NULL)."""
+    from .custom_field_scoping import custom_field_scope_q_for_board
+    board = getattr(getattr(task, 'column', None), 'board', None)
+    return custom_field_scope_q_for_board(board)
 
 
 def _resolve_workspace_id(task):

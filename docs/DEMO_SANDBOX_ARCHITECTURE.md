@@ -139,6 +139,20 @@ The `_duplicate_board()` function deep-copies the following per template board:
 **Wiki:** WikiLink  
 **Commitments:** CommitmentProtocol + child models  
 
+### 3.3 Per-User Isolation for Non-Board (Workspace/Org-Scoped) Features
+
+Some features are scoped by **workspace** or **organization**, not by board. Because the demo is ONE shared workspace/org, scoping them by workspace alone would let every demo user see and edit every other demo user's data. These use the **`sandbox_owner` FK** pattern instead: template rows have `sandbox_owner=NULL` and each demo user gets private clones (`sandbox_owner=user`), rebuilt idempotently on every provision/reset/re-entry.
+
+| Feature | Model(s) with `sandbox_owner` | Clone helper (`kanban/sandbox_views.py`) | Read scope |
+|---------|------------------------------|------------------------------------------|-----------|
+| Discovery | `DiscoveryIdea` | `_clone_discovery_ideas_for_user` | `kanban/discovery_views.py::_idea_scope` |
+| Wiki | `WikiCategory`, `WikiPage` | `_clone_wiki_for_user` | `wiki/scoping.py::wiki_scope_q` |
+| **Custom Fields** | `CustomFieldDefinition` (options + `TaskCustomFieldValue` follow via FK) | `_clone_custom_fields_for_user` | `kanban/custom_field_scoping.py` |
+
+`custom_field_scoping.py` has **two** scoping surfaces: `custom_field_scope_q_for_user(user)` for the management UI (request/user-driven) and `custom_field_scope_q_for_board(board)` for the task→field resolution path (driven by the **board owner**, so a demo persona viewing a teammate's sandbox sees that owner's fields). The unique constraint is `(workspace, sandbox_owner, name)` so each demo user can hold a same-named field.
+
+**Guard:** `tests/test_kanban/test_demo_isolation_guard.py` fails when a new workspace/org-scoped model ships with neither a `board` FK nor a `sandbox_owner` field — catching this bug class (the recurring source of Wiki/Discovery/Calendar/TimeTracking/CustomFields bleed) at PR time. Genuinely-shared read-only scaffolding (missions/goals/strategies) and never-demo-seeded models are allow-listed with reasons.
+
 ---
 
 ## 4. Sandbox Lifecycle
