@@ -43,6 +43,16 @@
     .fc.fc-theme-standard th {
         border-color: #eef0f2;
     }
+    [data-bs-theme="dark"] .fc .fc-col-header-cell {
+        background: var(--bg-tertiary);
+    }
+    [data-bs-theme="dark"] .fc .fc-col-header-cell-cushion {
+        color: var(--text-primary);
+    }
+    [data-bs-theme="dark"] .fc.fc-theme-standard td,
+    [data-bs-theme="dark"] .fc.fc-theme-standard th {
+        border-color: var(--bg-tertiary);
+    }
     /* Custom list view (replaces FullCalendar's built-in listMonth, which
        re-lists a multi-day task on every day it spans) */
     .list-view-row {
@@ -54,6 +64,17 @@
     }
     .list-view-row:hover { filter: brightness(0.97); }
     .list-view-date-col { min-width: 130px; flex-shrink: 0; }
+    /* Row background/accent color comes from inline styles (same palette as
+       the grid view's fc-event colors), which are tuned for a light card —
+       in dark mode force a dark neutral surface + bright text instead of
+       letting the light pastel bg-color show through. */
+    [data-bs-theme="dark"] .list-view-row {
+        background: var(--bg-tertiary) !important;
+    }
+    [data-bs-theme="dark"] .list-view-row:hover { filter: brightness(1.15); }
+    [data-bs-theme="dark"] .list-view-title { color: var(--text-primary); }
+    [data-bs-theme="dark"] .list-view-date-col,
+    [data-bs-theme="dark"] .list-view-row .text-muted { color: #b0b6bd !important; }
     .stat-card {
         background: var(--bg-tertiary);
         border-radius: 8px;
@@ -733,11 +754,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 text: 'list',
                 click: function () { toggleListMode(); },
             },
+            // Plain 'dayGridMonth'/'timeGridWeek' toolbar buttons are no-ops
+            // (no viewDidMount fires) when list mode is active and the
+            // calendar's underlying view already matches the clicked button
+            // (e.g. list was toggled on from Week — clicking "week" again
+            // wouldn't change anything, leaving the list overlay stuck on).
+            // Exiting list mode explicitly here, before changeView, fixes that.
+            monthView: {
+                text: 'month',
+                click: function () { exitListMode(); calendar.changeView('dayGridMonth'); },
+            },
+            weekView: {
+                text: 'week',
+                click: function () { exitListMode(); calendar.changeView('timeGridWeek'); },
+            },
         },
         headerToolbar: {
             left:   'prev,next today',
             center: 'title',
-            right:  'dayGridMonth,timeGridWeek,listToggle',
+            right:  'monthView,weekView,listToggle',
         },
         height: 'auto',
         // Density controls — the timeGrid week/day view was cramming every
@@ -747,6 +782,7 @@ document.addEventListener('DOMContentLoaded', function () {
         nowIndicator: true,
         slotMinTime: '07:00:00',   // trim empty pre-dawn hours (working-day window)
         slotMaxTime: '20:00:00',   // ...and late-night hours
+        eventMinHeight: 30,        // short (e.g. 15-min) meetings still get room for their title
         eventMaxStack: 3,          // collapse dense overlaps to a "+N more" popover
         dayMaxEvents: 4,           // month view: cap per-day rows, overflow → "+N more"
         events: function (fetchInfo, successCallback, failureCallback) {
@@ -792,10 +828,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // our custom list overlay (or this is the initial page load) — make sure
         // the grid is actually visible and list mode's UI state is cleared.
         viewDidMount: function (info) {
-            if (listModeActive) {
-                listModeActive = false;
-                setListModeUI(false);
-            }
+            exitListMode();
+            updateGridButtonActiveState(info.view.type);
         },
         // Fires on every navigation (prev/next/today) AND on initial render —
         // this is what keeps date-range navigation working while our custom
@@ -820,6 +854,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (harness) harness.style.display = active ? 'none' : '';
         if (listEl) listEl.style.display = active ? '' : 'none';
         if (btn) btn.classList.toggle('fc-button-active', active);
+        if (active) updateGridButtonActiveState(null);
     }
 
     function toggleListMode() {
@@ -827,7 +862,28 @@ document.addEventListener('DOMContentLoaded', function () {
         setListModeUI(listModeActive);
         if (listModeActive) {
             renderListView(currentRangeStart, currentRangeEnd);
+        } else {
+            updateGridButtonActiveState(calendar.view.type);
         }
+    }
+
+    // Used by monthView/weekView toolbar buttons so a click always leaves
+    // list mode, even when it targets the view already active underneath
+    // (which wouldn't otherwise trigger viewDidMount).
+    function exitListMode() {
+        if (listModeActive) {
+            listModeActive = false;
+            setListModeUI(false);
+        }
+    }
+
+    // monthView/weekView are customButtons (not FullCalendar view buttons),
+    // so they don't get automatic .fc-button-active toggling — drive it manually.
+    function updateGridButtonActiveState(viewType) {
+        const monthBtn = document.querySelector('.fc-monthView-button');
+        const weekBtn = document.querySelector('.fc-weekView-button');
+        if (monthBtn) monthBtn.classList.toggle('fc-button-active', viewType === 'dayGridMonth');
+        if (weekBtn) weekBtn.classList.toggle('fc-button-active', viewType === 'timeGridWeek');
     }
 
     // Refetch/re-render whichever view (grid or list) is currently active —
