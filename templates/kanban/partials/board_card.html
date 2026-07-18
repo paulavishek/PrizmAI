@@ -1,0 +1,35 @@
+{% load avatar_tags kanban_filters %}
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <small class="text-muted">{{ board.task_count }} tasks</small>
+  {% if is_shared %}
+  <span class="badge {% if my_role == 'viewer' %}bg-secondary{% else %}bg-info{% endif %}" style="font-size:0.65rem;">
+    {{ my_role|default:"member"|title }}
+  </span>
+  {% elif board.strategy %}
+  <small class="text-muted" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;"><i class="fas fa-bullseye me-1"></i>{{ board.strategy.mission.name }}</small>
+  {% elif board.cloned_from.strategy %}
+  <small class="text-muted" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;"><i class="fas fa-bullseye me-1"></i>{{ board.cloned_from.strategy.mission.name }}</small>
+  {% endif %}
+</div>
+<div class="board-card-progress mb-2">
+  {% with total=board.task_count done=board.done_task_count %}
+  <div class="progress" style="height: 4px;">
+    {% if total > 0 %}
+    <div class="progress-bar {% if done == total %}bg-success{% elif done > 0 %}bg-primary{% else %}bg-secondary{% endif %}"
+         style="width: {% widthratio done total 100 %}%"></div>
+    {% else %}
+    <div class="progress-bar bg-secondary" style="width: 0%"></div>
+    {% endif %}
+  </div>
+  {% endwith %}
+</div>
+<div class="d-flex align-items-center justify-content-between">
+  {% if is_shared %}
+  <small class="text-muted" style="font-size:0.7rem;"><i class="fas fa-user-circle me-1"></i>{{ board.created_by.get_full_name|default:board.created_by.username|default:"Unknown" }}</small>
+  {% else %}
+  <span></span>
+  {% endif %}
+  {% if board.member_list %}
+  {% avatar_stack board.member_list|extract_users max_avatars=4 size="sm" %}
+  {% endif %}
+</div>

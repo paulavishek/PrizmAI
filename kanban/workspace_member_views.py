@@ -49,7 +49,7 @@ def manage_workspace_members(request):
 
     memberships = WorkspaceMembership.objects.filter(
         workspace=ws,
-    ).select_related('user', 'added_by').order_by('-added_at')
+    ).select_related('user__profile', 'added_by').order_by('-added_at')
 
     pending_invitations = WorkspaceInvitation.objects.filter(
         workspace=ws, status=WorkspaceInvitation.STATUS_PENDING,
