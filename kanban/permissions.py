@@ -125,9 +125,23 @@ def can_user_create_missions(user, request=None, parent_goal=None):
 
 @rules.predicate
 def is_org_admin(user, obj=None):
-    """Org admin scoped to the object's organization.
-    Only grants access if the user is an org admin AND belongs to the
-    same organization as the object being checked."""
+    """DEPRECATED — intentionally NOT wired into any permission rule.
+
+    This predicate granted access whenever the user was an org admin AND shared
+    the object's organization. That was a cross-workspace leak: invite acceptance
+    reassigns an invitee's ``profile.organization`` to the inviter's org (see
+    ``kanban/workspace_member_views.py`` and ``accounts/views.py`` accept flows),
+    so an org admin would gain view/edit/delete on a colleague's separate-
+    workspace boards and strategic records — violating the Workspace-is-the-
+    tenant-boundary model enforced everywhere else.
+
+    It is left defined (not deleted) so this history is greppable and the term is
+    never re-added to the rules below. Org-admin's legitimate reach is org-level
+    SETTINGS only (Workspace Preset tier, AI/BYOK config), gated via the plain
+    ``is_user_org_admin()`` helper — never via object permissions. Do NOT re-add
+    ``is_org_admin`` to any ``rules.add_perm`` call.
+
+    Original behavior (org admin AND same organization as the object):"""
     if not is_user_org_admin(user):
         return False
     if obj is None:
@@ -319,41 +333,55 @@ def is_demo_strategic_object(user, obj):
 
 # ── Permission rules ─────────────────────────────────────────────────────────
 
+# TENANT BOUNDARY = WORKSPACE. Org-admin status does NOT grant access to any
+# board or strategic record. `is_org_admin` is deliberately absent from every
+# rule below: a user reassigned into another user's Organization (which happens
+# on workspace/org invite acceptance) must NOT thereby gain view/edit/delete on
+# that colleague's separate-workspace boards or strategic records. Access flows
+# ONLY through ownership, ancestor ownership, explicit board/strategic
+# membership, or the demo predicates. Org-admin's legitimate reach is org-level
+# SETTINGS only (Workspace Preset tier, AI/BYOK config), enforced separately via
+# the `is_user_org_admin()` helper — never through these object rules. Django
+# superusers retain cross-tenant reach via the default ModelBackend. This aligns
+# the django-rules layer with the enforced access path in
+# `kanban/simple_access.py` / `ai_assistant.utils.rbac_utils.get_user_board_role`.
+
 # Board permissions.
 # is_ancestor_owner: owning a Strategy/Mission/Goal gives automatic board access.
 # is_demo_board: official demo boards are accessible to all authenticated users.
 rules.add_perm('prizmai.view_board',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_board_membership | is_demo_board)
+               is_record_owner | is_ancestor_owner | has_board_membership | is_demo_board)
 
 rules.add_perm('prizmai.edit_board',
-               is_org_admin | is_record_owner | is_ancestor_owner | is_board_member_role | is_board_owner_role | is_demo_board)
+               is_record_owner | is_ancestor_owner | is_board_member_role | is_board_owner_role | is_demo_board)
 
 rules.add_perm('prizmai.delete_board',
-               is_org_admin | is_record_owner | is_ancestor_owner)
+               is_record_owner | is_ancestor_owner)
 
 rules.add_perm('prizmai.invite_board_member',
-               is_org_admin | is_record_owner | is_ancestor_owner | is_board_owner_role)
+               is_record_owner | is_ancestor_owner | is_board_owner_role)
 
 # Strategic level permissions.
 # UPWARD VISIBILITY RULE: has_board_membership is deliberately NOT here.
 # Board membership never grants strategic-level edit access.
 # is_ancestor_owner IS included: owning a Goal gives Mission/Strategy access.
 rules.add_perm('prizmai.edit_strategy',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership)
+               is_record_owner | is_ancestor_owner | has_strategic_membership)
 
 rules.add_perm('prizmai.edit_mission',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership)
+               is_record_owner | is_ancestor_owner | has_strategic_membership)
 
 rules.add_perm('prizmai.edit_goal',
-               is_org_admin | is_record_owner)
-# Goal is the top level. No ancestor above to traverse.
-# Only Org Admin can be Goal Owner — effectively Org Admin only.
+               is_record_owner)
+# Goal is the top level. No ancestor above to traverse. Access requires being
+# the Goal's owner/creator (the workspace owner who created it) — org-admin
+# status alone no longer grants it.
 
 rules.add_perm('prizmai.view_strategy',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
+               is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
 
 rules.add_perm('prizmai.view_mission',
-               is_org_admin | is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
+               is_record_owner | is_ancestor_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
 
 rules.add_perm('prizmai.view_goal',
-               is_org_admin | is_record_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)
+               is_record_owner | has_strategic_membership | is_descendant_board_member | is_demo_strategic_object)

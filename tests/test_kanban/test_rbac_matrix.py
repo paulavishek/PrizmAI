@@ -115,51 +115,80 @@ class RBACMatrixTests(TestCase):
         )
         _mk_profile(cls.stranger_u, cls.other_org, cls.other_ws)
 
+    # NOTE ON org_admin_u: this user is an OrgAdmin in the SAME org (and same
+    # workspace) as the board, but has NO BoardMembership. Org-admin status no
+    # longer grants any board/strategic access — Workspace membership is the sole
+    # boundary (see kanban/permissions.py). So org_admin_u is DENIED throughout,
+    # exactly like the stranger. `test_membership_not_org_admin_grants_access`
+    # below proves that adding a membership (not the admin role) is what grants.
+
     # ── view_board ───────────────────────────────────────────────────────────
-    def test_view_board_allowed_for_members_and_admin(self):
-        for u in (self.owner_u, self.owner2_u, self.member_u, self.viewer_u, self.org_admin_u):
+    def test_view_board_allowed_for_members(self):
+        for u in (self.owner_u, self.owner2_u, self.member_u, self.viewer_u):
             self.assertTrue(u.has_perm('prizmai.view_board', self.board), u.username)
 
-    def test_view_board_denied_for_stranger(self):
+    def test_view_board_denied_for_stranger_and_non_member_org_admin(self):
         self.assertFalse(self.stranger_u.has_perm('prizmai.view_board', self.board))
+        # Org-admin status alone does NOT grant board access.
+        self.assertFalse(self.org_admin_u.has_perm('prizmai.view_board', self.board))
 
     # ── edit_board ───────────────────────────────────────────────────────────
-    def test_edit_board_allowed_for_owner_member_admin(self):
-        for u in (self.owner_u, self.owner2_u, self.member_u, self.org_admin_u):
+    def test_edit_board_allowed_for_owner_and_member(self):
+        for u in (self.owner_u, self.owner2_u, self.member_u):
             self.assertTrue(u.has_perm('prizmai.edit_board', self.board), u.username)
 
-    def test_edit_board_denied_for_viewer_and_stranger(self):
+    def test_edit_board_denied_for_viewer_stranger_and_non_member_org_admin(self):
         self.assertFalse(self.viewer_u.has_perm('prizmai.edit_board', self.board))
         self.assertFalse(self.stranger_u.has_perm('prizmai.edit_board', self.board))
+        self.assertFalse(self.org_admin_u.has_perm('prizmai.edit_board', self.board))
 
     # ── delete_board ─────────────────────────────────────────────────────────
-    def test_delete_board_for_creator_and_admin_only(self):
+    def test_delete_board_for_creator_only(self):
         self.assertTrue(self.owner_u.has_perm('prizmai.delete_board', self.board))
-        self.assertTrue(self.org_admin_u.has_perm('prizmai.delete_board', self.board))
 
-    def test_delete_board_denied_for_owner_role_member_viewer(self):
+    def test_delete_board_denied_for_owner_role_member_viewer_and_org_admin(self):
         # An 'owner' BoardMembership that isn't the creator must NOT delete.
         self.assertFalse(self.owner2_u.has_perm('prizmai.delete_board', self.board))
         self.assertFalse(self.member_u.has_perm('prizmai.delete_board', self.board))
         self.assertFalse(self.viewer_u.has_perm('prizmai.delete_board', self.board))
         self.assertFalse(self.stranger_u.has_perm('prizmai.delete_board', self.board))
+        # Org-admin status alone no longer grants delete.
+        self.assertFalse(self.org_admin_u.has_perm('prizmai.delete_board', self.board))
 
     # ── invite_board_member / _can_manage_invites (B2 regression) ────────────
-    def test_invite_permission_includes_owner_role_and_admin(self):
-        for u in (self.owner_u, self.owner2_u, self.org_admin_u):
+    def test_invite_permission_includes_owner_role(self):
+        for u in (self.owner_u, self.owner2_u):
             self.assertTrue(u.has_perm('prizmai.invite_board_member', self.board), u.username)
 
-    def test_invite_permission_denied_for_member_viewer_stranger(self):
-        for u in (self.member_u, self.viewer_u, self.stranger_u):
+    def test_invite_permission_denied_for_member_viewer_stranger_and_org_admin(self):
+        for u in (self.member_u, self.viewer_u, self.stranger_u, self.org_admin_u):
             self.assertFalse(u.has_perm('prizmai.invite_board_member', self.board), u.username)
 
     def test_can_manage_invites_honors_owner_role(self):
         # Regression: an 'owner'-role user who is NOT the creator was previously
         # denied member management. They must now be allowed.
         self.assertTrue(_can_manage_invites(self.owner2_u, self.board))
-        self.assertTrue(_can_manage_invites(self.org_admin_u, self.board))
         self.assertFalse(_can_manage_invites(self.member_u, self.board))
         self.assertFalse(_can_manage_invites(self.viewer_u, self.board))
+        # Org-admin status alone no longer grants member management.
+        self.assertFalse(_can_manage_invites(self.org_admin_u, self.board))
+
+    def test_membership_not_org_admin_grants_access(self):
+        """Positive control: an OrgAdmin gains access when (and only when) given
+        an explicit BoardMembership — proving membership, not the admin role, is
+        the grant. Uses a throwaway board so the class-level fixtures stay clean.
+        """
+        b2 = Board.objects.create(
+            name='Board2', organization=self.org, workspace=self.ws,
+            created_by=self.owner_u, owner=self.owner_u,
+        )
+        Column.objects.create(name='To Do', board=b2, position=0)
+        # No membership yet → org admin is denied.
+        self.assertFalse(self.org_admin_u.has_perm('prizmai.view_board', b2))
+        # Grant a member role → now allowed (via membership, not admin status).
+        BoardMembership.objects.create(board=b2, user=self.org_admin_u, role='member')
+        self.assertTrue(self.org_admin_u.has_perm('prizmai.view_board', b2))
+        self.assertTrue(self.org_admin_u.has_perm('prizmai.edit_board', b2))
 
     # ── simple_access helpers ────────────────────────────────────────────────
     def test_simple_access_modify_denies_viewer(self):
