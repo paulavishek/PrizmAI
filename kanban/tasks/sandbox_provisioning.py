@@ -424,6 +424,17 @@ def _provision_sandbox(self, user_id, is_reset=False):
     except Exception as e:
         logger.warning("Could not clone demo wiki during provision: %s", e)
 
+    # Clone the demo custom-field schema (+ seeded task values) into the user's
+    # private per-user set. Definitions are workspace-scoped but the demo
+    # workspace is shared, so without per-user clones every demo user would share
+    # (and edit/delete) one set of fields. Idempotent.
+    try:
+        from kanban.sandbox_views import _clone_custom_fields_for_user
+        with allow_demo_writes():
+            _clone_custom_fields_for_user(user)
+    except Exception as e:
+        logger.warning("Could not clone demo custom fields during provision: %s", e)
+
     # Belt-and-suspenders: ensure the primary persona's cloned time entries are
     # owned by the sandbox owner so the time-tracking dashboard is per-user. The
     # board clone above already remaps them; this is idempotent and also self-heals

@@ -37,7 +37,16 @@ logger = logging.getLogger(__name__)
 
 def _require_budget_access(request, board):
     """Return HttpResponseForbidden if user lacks Owner/OrgAdmin access to this board's budget.
-    Per spec: 'View budget fields' and 'Edit budget fields' are restricted to OrgAdmin + Owner only."""
+    Per spec: 'View budget fields' and 'Edit budget fields' are restricted to OrgAdmin + Owner only.
+
+    Demo bypass: RBAC is fully bypassed in the demo workspace, so a demo user
+    exploring any demo board (including the shared official template, which they
+    don't own) can open the budget dashboard. The ``delete_board`` permission
+    carries no demo term of its own, so the bypass must be explicit here — see
+    kanban/permissions.is_demo_context."""
+    from kanban.permissions import is_demo_context
+    if is_demo_context(request, board=board):
+        return None
     if not request.user.has_perm('prizmai.delete_board', board):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'error': 'You do not have permission to access budget information for this board.'}, status=403)

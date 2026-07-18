@@ -3121,8 +3121,12 @@ class Command(BaseCommand):
             return
 
         # ── Field definitions ─────────────────────────────────────────────
+        # sandbox_owner=None keeps these as the shared TEMPLATE definitions; each
+        # demo user gets private clones (sandbox_owner=user) via
+        # _clone_custom_fields_for_user, so template rows must never carry an
+        # owner (the (workspace, sandbox_owner, name) uniqueness depends on it).
         sprint_field, _ = CustomFieldDefinition.objects.get_or_create(
-            workspace=workspace, name='Sprint', is_active=True,
+            workspace=workspace, name='Sprint', is_active=True, sandbox_owner=None,
             defaults={
                 'field_type': 'list',
                 'is_required': False,
@@ -3142,7 +3146,7 @@ class Command(BaseCommand):
             sprint_opts[label] = opt
 
         story_points_field, _ = CustomFieldDefinition.objects.get_or_create(
-            workspace=workspace, name='Story Points', is_active=True,
+            workspace=workspace, name='Story Points', is_active=True, sandbox_owner=None,
             defaults={
                 'field_type': 'integer',
                 'is_required': False,
@@ -3152,7 +3156,7 @@ class Command(BaseCommand):
         )
 
         env_field, _ = CustomFieldDefinition.objects.get_or_create(
-            workspace=workspace, name='Environment', is_active=True,
+            workspace=workspace, name='Environment', is_active=True, sandbox_owner=None,
             defaults={
                 'field_type': 'list',
                 'is_required': False,
@@ -3170,7 +3174,7 @@ class Command(BaseCommand):
             env_opts[label] = opt
 
         category_field, _ = CustomFieldDefinition.objects.get_or_create(
-            workspace=workspace, name='Feature Category', is_active=True,
+            workspace=workspace, name='Feature Category', is_active=True, sandbox_owner=None,
             defaults={
                 'field_type': 'list',
                 'is_required': False,

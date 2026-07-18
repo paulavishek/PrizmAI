@@ -272,11 +272,21 @@ The Spectra AI assistant has **6 layers of defense** to enforce RBAC:
 
 ### How It Works
 
-- Each organization has one demo `Workspace` with `is_demo=True`.
-- `is_demo_context(request, board, workspace)` in `kanban/permissions.py` checks the current workspace.
-- The `is_demo_board` and `is_demo_strategic_object` predicates are included in all `view_*` and `edit_*` rules.
-- `@demo_write_guard` decorator on write endpoints prevents persistent modifications in demo mode.
+There are **two distinct** demo-bypass mechanisms — do not conflate them:
+
+1. **`is_demo_context(request, board, workspace)`** (`kanban/permissions.py`) — signal is `workspace.is_demo`. Because sandbox copies inherit the demo workspace, this covers **both** the official template board **and** every per-user sandbox copy. This is the bypass to reach for in **non-`has_perm` gates** (custom controllers, `simple_access`-style checks that carry no demo term). It must be called **explicitly** — it is not automatically consulted by `has_perm`.
+2. **`is_demo_board` predicate** (`kanban/permissions.py`) — signal is `is_official_demo_board` **only** (NOT sandbox copies). This is what actually grants demo access inside `has_perm`, and it is OR-ed into `view_board`/`edit_board` and the `view_*` strategic rules — **but not** `delete_board`, `invite_board_member`, `edit_goal`, or the `edit_*` strategic rules. On those, a demo user passes only via `is_record_owner` (their own sandbox board) — which is why gates like the budget dashboard (keyed on `delete_board`) needed an **explicit** `is_demo_context` call to avoid 403-ing a demo user on the shared official template board.
+
+- `@demo_write_guard` decorator on write endpoints prevents persistent modifications to seed data in demo mode (protection, not access-grant).
 - Demo data is protected at the model level via `pre_save` / `pre_delete` signals in `kanban/utils/demo_protection.py`.
+
+### Why the demo experience mostly "just works" despite the gaps
+
+`get_user_boards()` only surfaces the sandbox copies a demo user **owns** (plus the official template as a fallback). So ownership-based checks (`is_record_owner`) pass on the user's own boards, and `is_demo_board` covers the official template. The gap bites only when a demo user acts on a demo board they **don't own** (the official template via a `delete_board`-keyed gate, or a persona's board) — which is exactly where an explicit `is_demo_context` bypass is required.
+
+### When adding a new board gate
+
+Prefer the `simple_access.board_permission_required` decorator (it already does `is_demo_context(request, board) OR has_perm(...)`). For a hand-rolled gate, call `is_demo_context(request, board=board)` before any `has_perm`/`check_access_or_403`. Do **not** invent a new inline demo check (`organization.is_demo`, bare `is_official_demo_board`) — those diverge and were the source of the requirements-module gap (org-based, dead for sandbox boards which carry `organization=None`).
 
 ### Detection Hierarchy
 

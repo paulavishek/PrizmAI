@@ -37,8 +37,11 @@ def summarize_custom_fields_for_board(board, top_n=4):
     if not workspace_id:
         return []
 
+    from kanban.custom_field_scoping import custom_field_scope_q_for_board
+
     fields = (
         CustomFieldDefinition.objects
+        .filter(custom_field_scope_q_for_board(board))
         .filter(
             workspace_id=workspace_id,
             is_active=True,

@@ -644,7 +644,12 @@ def fetch_custom_fields_summary(board):
     # not an RBAC leak: a workspace member sees field names/types for the
     # whole workspace, but individual field VALUES on tasks are board-scoped
     # below in fetch_custom_fields_detail (which uses task__column__board=board).
+    # In the shared DEMO workspace, though, definitions are cloned per user, so
+    # scope by the board owner to avoid one demo user's fields showing to
+    # another via Spectra (see kanban/custom_field_scoping.py).
+    from kanban.custom_field_scoping import custom_field_scope_q_for_board
     all_active = CustomFieldDefinition.objects.filter(
+        custom_field_scope_q_for_board(board),
         workspace_id=workspace_id, is_active=True, applies_to_tasks=True,
     )
     visible = all_active.filter(exclude_from_ai=False).order_by('position', 'name')
@@ -672,8 +677,15 @@ def fetch_custom_fields_detail(board, value_sample_limit=20):
     if not workspace_id:
         return None
 
+    # Demo workspaces clone field definitions per user — scope by board owner so
+    # a demo user's fields never surface on another's board (see
+    # kanban/custom_field_scoping.py).
+    from kanban.custom_field_scoping import custom_field_scope_q_for_board
+    scope_q = custom_field_scope_q_for_board(board)
+
     visible = (
         CustomFieldDefinition.objects
+        .filter(scope_q)
         .filter(
             workspace_id=workspace_id,
             is_active=True,
@@ -693,6 +705,7 @@ def fetch_custom_fields_detail(board, value_sample_limit=20):
         })
 
     excluded_count = CustomFieldDefinition.objects.filter(
+        scope_q,
         workspace_id=workspace_id, is_active=True,
         applies_to_tasks=True, exclude_from_ai=True,
     ).count()

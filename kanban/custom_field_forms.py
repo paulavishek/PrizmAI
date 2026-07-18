@@ -38,20 +38,29 @@ class CustomFieldDefinitionForm(forms.ModelForm):
             'applies_to_epics': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
-    def __init__(self, *args, workspace=None, **kwargs):
+    def __init__(self, *args, workspace=None, sandbox_owner=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.workspace = workspace
+        # Demo per-user scope: uniqueness is checked within the same
+        # sandbox_owner partition so two demo users can each own a same-named
+        # field (mirrors the DB constraint on (workspace, sandbox_owner, name)).
+        # On edit, prefer the instance's existing owner.
+        self.sandbox_owner = (
+            getattr(self.instance, 'sandbox_owner', None) or sandbox_owner
+        )
 
     def clean_name(self):
         name = (self.cleaned_data.get('name') or '').strip()
         if not name:
             raise forms.ValidationError("Name is required.")
 
-        # Enforce active-name uniqueness per workspace (mirrors the DB constraint
-        # with a friendly error). The DB unique constraint is the safety net.
+        # Enforce active-name uniqueness per (workspace, sandbox_owner) (mirrors
+        # the DB constraint with a friendly error). The DB constraint is the
+        # safety net.
         if self.workspace is not None:
             qs = CustomFieldDefinition.objects.filter(
                 workspace=self.workspace, name__iexact=name, is_active=True,
+                sandbox_owner=self.sandbox_owner,
             )
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)

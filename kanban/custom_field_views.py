@@ -29,8 +29,10 @@ from .custom_field_models import (
     CustomFieldOption,
     FIELD_TYPE_LIST,
 )
+from .custom_field_scoping import custom_field_scope_q_for_user
 from .models import Workspace
 from .permissions import is_demo_context
+from .utils.demo_protection import user_is_demo
 
 
 def _require_workspace_admin(request, workspace):
@@ -57,6 +59,7 @@ def custom_field_list(request, workspace_id):
 
     fields = (
         CustomFieldDefinition.objects
+        .filter(custom_field_scope_q_for_user(request.user))
         .filter(workspace=workspace, is_active=True)
         .prefetch_related('options')
         .order_by('position', 'name')
@@ -74,17 +77,26 @@ def custom_field_create(request, workspace_id):
     if denied:
         return denied
 
+    create_owner = request.user if user_is_demo(request.user) else None
     if request.method == 'POST':
-        form = CustomFieldDefinitionForm(request.POST, workspace=workspace)
+        form = CustomFieldDefinitionForm(
+            request.POST, workspace=workspace, sandbox_owner=create_owner,
+        )
         if form.is_valid():
             with transaction.atomic():
                 fdef = form.save(commit=False)
                 fdef.workspace = workspace
                 fdef.created_by = request.user
+                # In demo, fields a user creates are their private clone-set
+                # member (sandbox_owner=user) so they never bleed to other demo
+                # users; real workspaces keep sandbox_owner=NULL.
+                if user_is_demo(request.user):
+                    fdef.sandbox_owner = request.user
                 # Position at the end of the list.
                 from django.db.models import Max
                 max_pos = (
                     CustomFieldDefinition.objects
+                    .filter(custom_field_scope_q_for_user(request.user))
                     .filter(workspace=workspace, is_active=True)
                     .aggregate(m=Max('position'))['m']
                 ) or 0
@@ -97,7 +109,9 @@ def custom_field_create(request, workspace_id):
             messages.success(request, f"Custom field '{fdef.name}' created.")
             return redirect('custom_field_list', workspace_id=workspace.id)
     else:
-        form = CustomFieldDefinitionForm(workspace=workspace)
+        form = CustomFieldDefinitionForm(
+            workspace=workspace, sandbox_owner=create_owner,
+        )
 
     return render(request, 'kanban/custom_fields/form.html', {
         'workspace': workspace,
@@ -115,7 +129,10 @@ def custom_field_edit(request, workspace_id, field_id):
         return denied
 
     fdef = get_object_or_404(
-        CustomFieldDefinition, id=field_id, workspace=workspace, is_active=True,
+        CustomFieldDefinition.objects.filter(
+            custom_field_scope_q_for_user(request.user)
+        ),
+        id=field_id, workspace=workspace, is_active=True,
     )
 
     if request.method == 'POST':
@@ -150,7 +167,10 @@ def custom_field_delete(request, workspace_id, field_id):
         return denied
 
     fdef = get_object_or_404(
-        CustomFieldDefinition, id=field_id, workspace=workspace, is_active=True,
+        CustomFieldDefinition.objects.filter(
+            custom_field_scope_q_for_user(request.user)
+        ),
+        id=field_id, workspace=workspace, is_active=True,
     )
     fdef.is_active = False
     fdef.save(update_fields=['is_active', 'updated_at'])

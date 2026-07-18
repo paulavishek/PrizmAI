@@ -34,10 +34,13 @@ def _get_board_and_check_access(request, board_id, require_edit=False):
     board = get_object_or_404(Board, pk=board_id)
     membership = BoardMembership.objects.filter(user=request.user, board=board).first()
 
-    # Demo boards always grant access
-    is_demo = getattr(board, 'is_sandbox_copy', False) or (
-        board.organization and board.organization.is_demo
-    )
+    # Demo boards always grant access — RBAC is fully bypassed in the demo
+    # workspace. Use the canonical is_demo_context (workspace.is_demo, which
+    # covers sandbox copies since they inherit the demo workspace) instead of
+    # the old organization.is_demo check, which was dead for sandbox boards
+    # (they carry organization=None). See kanban/permissions.is_demo_context.
+    from kanban.permissions import is_demo_context
+    is_demo = is_demo_context(request, board=board)
     if not is_demo:
         # Use the canonical RBAC rules. (BoardMembership.role is a CharField,
         # so the previous getattr(role, 'name') viewer check never fired — it

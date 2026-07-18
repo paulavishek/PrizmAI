@@ -2415,6 +2415,124 @@ def _backfill_cloned_from_lineage(sandbox_board, template_board):
         clone.save(update_fields=['cloned_from'])
 
 
+def _clone_custom_fields_for_user(user):
+    """Clone the demo custom-field schema (+ seeded task values) per user.
+
+    ``CustomFieldDefinition`` is workspace-scoped, but the demo workspace is
+    shared by every demo user — so without per-user copies every demo user would
+    see, rename, and delete every other demo user's custom fields (and the
+    ``(workspace, name)`` uniqueness would even stop two users making the same
+    field). Mirror the Discovery / Wiki isolation model
+    ([[_clone_wiki_for_user]], [[_clone_discovery_ideas_for_user]]): each demo
+    user gets their own clone of the template definitions + options
+    (``sandbox_owner=user``), and the scope helper
+    (``kanban/custom_field_scoping.py``) shows a demo user only their own clones
+    — never the shared templates (``sandbox_owner IS NULL``) or anyone else's.
+
+    Also re-creates the seeded ``TaskCustomFieldValue`` rows: the values are
+    seeded only on the template board's tasks and ``_duplicate_board`` does not
+    copy them, so without this step a fresh sandbox shows an empty schema with no
+    values. We match template tasks to the user's sandbox tasks by title (board
+    cloning copies tasks by title) and re-point each value at the cloned
+    definition + cloned options.
+
+    Idempotent: clears the user's existing clones first (which cascades their
+    ``TaskCustomFieldValue`` rows), so it can be called on every (re-)provision
+    and reset.
+    """
+    from accounts.models import Organization
+    from kanban.models import Board, Task, Workspace
+    from kanban.custom_field_models import (
+        CustomFieldDefinition, CustomFieldOption, TaskCustomFieldValue,
+    )
+
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        return
+    demo_ws = Workspace.objects.filter(is_demo=True).first()
+    if not demo_ws:
+        return
+
+    # Clear existing clones for idempotency. Deleting the definitions cascades
+    # their TaskCustomFieldValue rows (FK on_delete=CASCADE), so sandbox task
+    # values are cleared too before we re-create them below.
+    CustomFieldDefinition.objects.filter(sandbox_owner=user).delete()
+
+    # Clone the template definitions (sandbox_owner IS NULL on the demo
+    # workspace) into the user's private set, remembering the id maps so values
+    # and options re-point at the clones.
+    def_map = {}   # template def id -> clone def
+    opt_map = {}   # template option id -> clone option
+    template_defs = CustomFieldDefinition.objects.filter(
+        workspace=demo_ws, sandbox_owner__isnull=True,
+    ).prefetch_related('options')
+    for tpl in template_defs:
+        clone = CustomFieldDefinition.objects.create(
+            workspace=tpl.workspace,
+            name=tpl.name,
+            field_type=tpl.field_type,
+            is_required=tpl.is_required,
+            is_multi_select=tpl.is_multi_select,
+            default_text=tpl.default_text,
+            default_number=tpl.default_number,
+            default_date=tpl.default_date,
+            default_boolean=tpl.default_boolean,
+            applies_to_tasks=tpl.applies_to_tasks,
+            applies_to_boards=tpl.applies_to_boards,
+            applies_to_epics=tpl.applies_to_epics,
+            exclude_from_ai=tpl.exclude_from_ai,
+            is_active=tpl.is_active,
+            position=tpl.position,
+            created_by=tpl.created_by,
+            sandbox_owner=user,
+        )
+        def_map[tpl.id] = clone
+        for opt in tpl.options.all():
+            clone_opt = CustomFieldOption.objects.create(
+                field=clone,
+                value=opt.value,
+                is_default=opt.is_default,
+                position=opt.position,
+            )
+            opt_map[opt.id] = clone_opt
+
+    if not def_map:
+        return
+
+    # Re-create the seeded task values on the user's own sandbox tasks. Match
+    # sandbox tasks to their template originals by title within each cloned
+    # board (board cloning copies tasks by title; _reassign_demo_tasks_to_user
+    # never renames them).
+    sandbox_boards = Board.objects.filter(
+        owner=user, is_sandbox_copy=True, cloned_from__isnull=False,
+    ).select_related('cloned_from')
+    for sb in sandbox_boards:
+        template = sb.cloned_from
+        sb_tasks = {t.title: t for t in Task.objects.filter(column__board=sb)}
+        template_values = TaskCustomFieldValue.objects.filter(
+            task__column__board=template, field_id__in=def_map,
+        ).prefetch_related('selected_options')
+        for tv in template_values:
+            sb_task = sb_tasks.get(tv.task.title)
+            clone_def = def_map.get(tv.field_id)
+            if sb_task is None or clone_def is None:
+                continue
+            new_val = TaskCustomFieldValue.objects.create(
+                task=sb_task,
+                field=clone_def,
+                value_text=tv.value_text,
+                value_number=tv.value_number,
+                value_date=tv.value_date,
+                value_boolean=tv.value_boolean,
+                updated_by=tv.updated_by,
+            )
+            selected = [
+                opt_map[o.id] for o in tv.selected_options.all() if o.id in opt_map
+            ]
+            if selected:
+                new_val.selected_options.set(selected)
+
+
 def _leave_demo_org(user):
     """Remove the user from the demo organization, restoring their original org.
 
