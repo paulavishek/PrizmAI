@@ -274,6 +274,33 @@
         border-radius: 2px;
     }
 
+    .legend-color.legend-dashed {
+        height: 0;
+        background: none !important;
+        border-top-width: 2px;
+        border-top-style: dashed;
+        border-radius: 0;
+    }
+
+    /* Confidence Band / Ideal Burndown swatches use pale colors that read fine
+       against a dark card but wash out to near-invisible on a white one —
+       darken them in light mode only. */
+    .legend-color.legend-confidence-band {
+        background: rgba(102, 126, 234, 0.55) !important;
+    }
+
+    .legend-color.legend-ideal {
+        border-top-color: #94a3b8 !important;
+    }
+
+    [data-bs-theme="dark"] .legend-color.legend-confidence-band {
+        background: rgba(102, 126, 234, 0.3) !important;
+    }
+
+    [data-bs-theme="dark"] .legend-color.legend-ideal {
+        border-top-color: #cbd5e0 !important;
+    }
+
     .btn-generate {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -453,11 +480,11 @@
         </div>
         <div class="confidence-band-legend">
             <div class="legend-item">
-                <div class="legend-color" style="background: rgba(102, 126, 234, 0.3);"></div>
+                <div class="legend-color legend-confidence-band"></div>
                 <span>Confidence Band ({{ prediction.confidence_percentage }}%)</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background: #667eea;"></div>
+                <div class="legend-color legend-dashed" style="border-top-color: #667eea;"></div>
                 <span>Predicted Path</span>
             </div>
             <div class="legend-item">
@@ -465,7 +492,7 @@
                 <span>Actual Progress</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background: #cbd5e0; border-style: dashed;"></div>
+                <div class="legend-color legend-dashed legend-ideal"></div>
                 <span>Ideal Burndown</span>
             </div>
         </div>
@@ -751,6 +778,8 @@
             return;
         }
 
+        const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#4a5568', gridColor: '#e2e8f0', titleColor: '#4a5568' };
+
         // Combine historical and projected for actual line
         const historicalData = data.historical.map(p => ({ x: new Date(p.date), y: p.remaining }));
         const projectedData = data.projected.map(p => ({ x: new Date(p.date), y: p.remaining }));
@@ -758,7 +787,7 @@
         const lowerBand = data.confidence_bands.lower_band.map(p => ({ x: new Date(p.date), y: p.remaining }));
         const idealLine = data.ideal_line.map(p => ({ x: new Date(p.date), y: p.remaining }));
 
-        new Chart(ctx, {
+        const burndownChart = new Chart(ctx, {
             type: 'line',
             data: {
                 datasets: [
@@ -845,17 +874,17 @@
                         title: {
                             display: true,
                             text: 'Date',
-                            color: '#4a5568',
+                            color: chartTheme.titleColor,
                             font: {
                                 size: 14,
                                 weight: 'bold'
                             }
                         },
                         ticks: {
-                            color: '#4a5568'
+                            color: chartTheme.textColor
                         },
                         grid: {
-                            color: '#e2e8f0'
+                            color: chartTheme.gridColor
                         }
                     },
                     y: {
@@ -863,29 +892,32 @@
                         title: {
                             display: true,
                             text: 'Tasks Remaining',
-                            color: '#4a5568',
+                            color: chartTheme.titleColor,
                             font: {
                                 size: 14,
                                 weight: 'bold'
                             }
                         },
                         ticks: {
-                            color: '#4a5568',
+                            color: chartTheme.textColor,
                             precision: 0
                         },
                         grid: {
-                            color: '#e2e8f0'
+                            color: chartTheme.gridColor
                         }
                     }
                 }
             }
         });
+
+        if (window.PrizmCharts) PrizmCharts.register(burndownChart);
     }
 
     function renderVelocityChart(data) {
         const ctx = document.getElementById('velocityChart').getContext('2d');
+        const chartTheme = window.getChartTheme ? window.getChartTheme() : { textColor: '#4a5568', gridColor: '#e2e8f0', titleColor: '#4a5568' };
 
-        new Chart(ctx, {
+        const velocityChart = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: data.labels.map(d => new Date(d).toLocaleDateString()),
@@ -918,7 +950,8 @@
                                 label: {
                                     content: `Average: ${data.average.toFixed(1)}`,
                                     enabled: true,
-                                    position: 'end'
+                                    position: 'end',
+                                    color: chartTheme.textColor
                                 }
                             }
                         }
@@ -929,22 +962,36 @@
                         beginAtZero: true,
                         title: {
                             display: true,
-                            text: 'Tasks Completed'
+                            text: 'Tasks Completed',
+                            color: chartTheme.titleColor
+                        },
+                        ticks: {
+                            color: chartTheme.textColor
+                        },
+                        grid: {
+                            color: chartTheme.gridColor
                         }
                     },
                     x: {
                         title: {
                             display: true,
-                            text: 'Period'
+                            text: 'Period',
+                            color: chartTheme.titleColor
                         },
                         ticks: {
+                            color: chartTheme.textColor,
                             maxTicksLimit: 10,
                             maxRotation: 45
+                        },
+                        grid: {
+                            color: chartTheme.gridColor
                         }
                     }
                 }
             }
         });
+
+        if (window.PrizmCharts) PrizmCharts.register(velocityChart);
     }
     {% endif %}
 </script>
