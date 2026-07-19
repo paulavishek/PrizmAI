@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Acknowledge gaps.** If a referenced file/feature can't be found, search for it explicitly (it's likely under a differently-named app or file) or ask — don't invent a plausible-sounding path.
 - Check `MANUAL_TEST_PLAN.md`, `FEATURES.md`, and the relevant `docs/` guide before assuming how a feature is *supposed* to work — several major subsystems (Automations, RBAC, demo data, Celery) have dedicated docs described below.
 - **Don't self-verify UI/frontend changes by launching the dev server and driving a browser (Playwright, chromium-cli, curl against a live `runserver`, etc.).** The user runs the app and checks the browser themselves — it's faster for them and avoids burning tokens/time on screenshots, and concurrent DB access from a driver script alongside `runserver` has caused spurious SQLite `OperationalError`s on this project. After a UI change: run the non-interactive checks that do apply (tests, `makemigrations --check`), describe what changed and how to see it, and let the user confirm visually.
+- **Never add a `Co-Authored-By: Claude` (or similar Anthropic/AI) trailer to commit messages.** This is a resume/portfolio project — that trailer makes GitHub list "Claude" as a repo contributor alongside the user, which the user does not want recruiters to see. Commit using only the user's own git identity, no AI attribution of any kind.
 
 ## Development Commands
 
