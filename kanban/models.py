@@ -2283,7 +2283,7 @@ class TeamSkillProfile(models.Model):
         """Calculate team utilization"""
         if self.total_capacity_hours == 0:
             return 0
-        return min(100, (self.utilized_capacity_hours / self.total_capacity_hours) * 100)
+        return (self.utilized_capacity_hours / self.total_capacity_hours) * 100
     
     @property
     def available_skills(self):
