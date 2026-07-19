@@ -87,7 +87,8 @@ TASK_TEMPERATURE_MAP = {
     'critical_path': 0.4,                # Critical path needs accuracy
     'workflow_optimization': 0.4,        # Workflow suggestions should be consistent
     'assignee_suggestion': 0.3,          # Assignee matching should be highly consistent & factual
-    
+    'status_report': 0.3,                # Narrative should stay steady between regenerations
+
     # Dashboard/Insights (0.5) - Analytical with slight variation for freshness
     'dashboard_insights': 0.5,           # Insights can have slight variation
     'timeline_generation': 0.5,          # Timeline needs accuracy with some flexibility
@@ -5399,6 +5400,51 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         return None
 
 
+def _compute_status_report_rag(completion_pct, overdue_count, high_risk_count, budget_spent_pct):
+    """
+    Deterministic RAG (red/amber/green) classification for status reports.
+    The AI only narrates *why*; it never picks the status itself, so identical
+    board metrics always produce the same status on regeneration.
+    """
+    budget_gap = (budget_spent_pct - completion_pct) if budget_spent_pct is not None else None
+
+    red_drivers = []
+    amber_drivers = []
+
+    if overdue_count >= 3:
+        red_drivers.append(f"{overdue_count} overdue tasks")
+    elif overdue_count >= 1:
+        amber_drivers.append(f"{overdue_count} overdue task{'s' if overdue_count != 1 else ''}")
+
+    if budget_gap is not None and budget_gap > 20:
+        red_drivers.append(f"budget spend is {budget_gap:.0f} pts ahead of task completion")
+    elif budget_gap is not None and budget_gap > 10:
+        amber_drivers.append(f"budget spend is {budget_gap:.0f} pts ahead of task completion")
+
+    if budget_spent_pct is not None and budget_spent_pct >= 100:
+        red_drivers.append("budget is fully spent or over")
+
+    if high_risk_count >= 5:
+        red_drivers.append(f"{high_risk_count} high-risk tasks")
+    elif high_risk_count >= 3:
+        amber_drivers.append(f"{high_risk_count} high-risk tasks")
+
+    if red_drivers:
+        status = 'red'
+        drivers = red_drivers
+        reasoning = "Marked Off Track because " + "; ".join(drivers) + "."
+    elif amber_drivers:
+        status = 'amber'
+        drivers = amber_drivers
+        reasoning = "Marked At Risk because " + "; ".join(drivers) + "."
+    else:
+        status = 'green'
+        drivers = ["no significant overdue tasks", "budget pacing with progress", "risk levels normal"]
+        reasoning = "Marked On Track: no overdue tasks, budget pacing with progress, and risk levels are normal."
+
+    return status, reasoning, drivers[:3]
+
+
 def generate_status_report(report_data: Dict) -> Optional[Dict]:
     """
     Generate a concise, stakeholder-ready status report for a board
@@ -5442,6 +5488,14 @@ def generate_status_report(report_data: Dict) -> Optional[Dict]:
         if tasks_by_column: available_metrics += 1
         data_completeness = round(available_metrics / total_metrics, 2)
 
+        # RAG status is decided by fixed rules, not the LLM, so identical
+        # metrics always produce the same status on regeneration.
+        rag_status, rag_reasoning, rag_drivers = _compute_status_report_rag(
+            completion_pct, overdue, high_risk_count, budget_spent_pct=report_data.get('budget_spent_pct'),
+        )
+        rag_emoji = {'red': '🔴', 'amber': '🟡', 'green': '🟢'}[rag_status]
+        rag_label = {'red': 'Off Track', 'amber': 'At Risk', 'green': 'On Track'}[rag_status]
+
         prompt = f"""You are an experienced project manager writing a weekly status report with Explainable AI.
 Write a concise, professional stakeholder update for the project "{board_name}" using the metrics below.
 
@@ -5453,20 +5507,28 @@ Write a concise, professional stakeholder update for the project "{board_name}" 
 - Budget status: {budget_status}{(chr(10) + "- Budget vs progress: " + budget_vs_progress_note) if budget_vs_progress_note else ""}
 - Column breakdown: {column_summary}
 
+## Fixed RAG Status (already decided — do not change)
+Status: {rag_status} ({rag_emoji} {rag_label})
+Reasoning: {rag_reasoning}
+Key drivers: {', '.join(rag_drivers)}
+
 ## Instructions
 IMPORTANT — Budget: The "Budget status" line already states spent vs remaining explicitly.
 Quote those figures verbatim; NEVER infer "remaining" from a single percentage, and do not
-flip spent and remaining. If budget spent materially exceeds completion % (see "Budget vs
-progress" when present), treat it as a risk in your RAG assessment rather than calling the
-budget "healthy".
+flip spent and remaining.
+IMPORTANT — RAG Status: The status above has already been determined by rule-based analysis.
+Use it exactly as given — "{rag_status}" — in the "rag_status" field and as the {rag_emoji} icon
+in the Overall Status headline. Do not choose a different status. Write "rag_reasoning" and the
+Overall Status headline in your own words, but keep them consistent with the reasoning and
+drivers given above.
 Return your response as a JSON object with these keys:
 
 {{
-    "report": "The full status report as a markdown string with 4 sections: **Overall Status** (RAG 🟢/🟡/🔴 + headline), **Progress To Date** (2-3 bullets summarising cumulative progress), **Key Risks & Blockers** (2-3 bullets), **Next Steps** (2-3 action items)",
-    "rag_status": "green" or "amber" or "red",
-    "rag_reasoning": "1-2 sentences explaining WHY you chose this RAG status based on the specific metrics above",
+    "report": "The full status report as a markdown string with 4 sections: **Overall Status** ({rag_emoji} + headline consistent with the fixed status above), **Progress To Date** (2-3 bullets summarising cumulative progress), **Key Risks & Blockers** (2-3 bullets), **Next Steps** (2-3 action items)",
+    "rag_status": "{rag_status}",
+    "rag_reasoning": "1-2 sentences explaining WHY, consistent with the fixed reasoning above",
     "confidence_score": 0.0 to 1.0 (how confident you are in this assessment given available data),
-    "key_data_drivers": ["The top 2-3 metrics that most influenced your assessment"]
+    "key_data_drivers": ["The top 2-3 metrics that most influenced this assessment"]
 }}
 
 Keep the report concise, factual, and actionable. Write for a non-technical stakeholder audience.
@@ -5479,25 +5541,27 @@ Return ONLY the JSON object — no markdown fences, no extra prose."""
             clean = result_text.strip()
             if clean.startswith('```'):
                 clean = clean.split('```json')[-1].split('```')[0].strip() if '```json' in clean else clean.split('```')[1].split('```')[0].strip()
-            
+
             try:
                 result = json.loads(clean)
                 # Ensure all explainability fields are present
-                result.setdefault('rag_status', 'amber')
-                result.setdefault('rag_reasoning', 'Assessment based on available project metrics.')
                 result.setdefault('confidence_score', round(data_completeness * 0.9, 2))
-                result.setdefault('key_data_drivers', [])
+                result.setdefault('key_data_drivers', rag_drivers)
+                # RAG status/reasoning are rule-based, not AI-chosen — override
+                # whatever the model returned so repeat runs stay consistent.
+                result['rag_status'] = rag_status
+                result['rag_reasoning'] = rag_reasoning
                 result['data_completeness'] = data_completeness
                 return result
             except json.JSONDecodeError:
                 logger.warning("Status report JSON parse failed, falling back to plain text")
                 return {
                     'report': result_text,
-                    'rag_status': 'amber',
-                    'rag_reasoning': 'Could not parse structured response; showing raw report text.',
+                    'rag_status': rag_status,
+                    'rag_reasoning': rag_reasoning,
                     'confidence_score': round(data_completeness * 0.7, 2),
                     'data_completeness': data_completeness,
-                    'key_data_drivers': [],
+                    'key_data_drivers': rag_drivers,
                 }
         return None
     except Exception as e:

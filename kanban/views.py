@@ -6597,7 +6597,9 @@ def board_status_report(request, board_id):
                 )
                 if old_ids:
                     BoardStatusReport.objects.filter(id__in=old_ids).delete()
-                report_generated_at = timezone.now()
+                # Post/Redirect/Get: avoid re-submitting the generate POST (and
+                # re-calling the AI) on a browser refresh or reload() after this.
+                return redirect(reverse('board_status_report', args=[board.id]) + '?generated=1')
             else:
                 error = 'AI could not generate the report at this time. Please try again shortly.'
                 report_generated_at = None
@@ -6643,6 +6645,7 @@ def board_status_report(request, board_id):
 
     past_reports_data = [
         {
+            'id': rpt.id,
             'html': rpt.report_html,
             'rag_status': rpt.rag_status,
             'rag_reasoning': rpt.rag_reasoning,
@@ -6650,7 +6653,7 @@ def board_status_report(request, board_id):
             'data_completeness': rpt.data_completeness,
             'key_data_drivers': rpt.key_data_drivers,
             'provider_name': rpt.provider_name,
-            'created_at': rpt.created_at.strftime('%b %d, %Y %H:%M'),
+            'created_at': timezone.localtime(rpt.created_at).strftime('%b %d, %Y %H:%M'),
             'summary': _report_summary(rpt.report_text),
         }
         for rpt in past_reports
@@ -6666,9 +6669,26 @@ def board_status_report(request, board_id):
         'past_reports': past_reports,
         'past_reports_data': past_reports_data,
         'report_generated_at': report_generated_at if report_text else None,
-        'report_is_cached': request.method == 'GET' and bool(report_text),
+        'report_is_cached': request.method == 'GET' and bool(report_text) and request.GET.get('generated') != '1',
     }
     return render(request, 'kanban/status_report.html', context)
+
+
+@login_required
+@require_POST
+def delete_status_report(request, board_id, report_id):
+    """Delete a single saved AI status report snapshot for a board."""
+    from kanban.models import BoardStatusReport
+    from kanban.permissions import is_demo_context
+
+    board = get_object_or_404(Board, id=board_id)
+    report = get_object_or_404(BoardStatusReport, id=report_id, board=board)
+
+    if not is_demo_context(request, board=board) and not request.user.has_perm('prizmai.edit_board', board):
+        return JsonResponse({'success': False, 'error': 'You do not have permission to delete this report.'}, status=403)
+
+    report.delete()
+    return JsonResponse({'success': True})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

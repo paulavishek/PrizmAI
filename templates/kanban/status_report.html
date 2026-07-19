@@ -43,7 +43,14 @@
         padding: 20px 24px;
         border: 1px solid #bee3f8;
         margin-bottom: 24px;
+        color: #212529;
     }
+    body.dark-mode .info-banner {
+        background: linear-gradient(135deg, #1e3a52, #16283a);
+        border-color: #2d5a7a;
+        color: #e9ecef;
+    }
+    body.dark-mode .info-banner .text-muted { color: #adb5bd !important; }
     .generate-btn {
         background: linear-gradient(135deg, #0d6efd, #6610f2);
         border: none;
@@ -94,6 +101,40 @@
     }
     .rag-dot {
         width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .history-delete-btn {
+        padding: 2px 7px;
+        font-size: 0.7rem;
+        line-height: 1;
+    }
+    .report-saved-banner {
+        background: #f0f7ff;
+        border: 1px solid #bee3f8;
+        color: #212529;
+    }
+    body.dark-mode .report-saved-banner {
+        background: #16283a;
+        border-color: #2d5a7a;
+        color: #e9ecef;
+    }
+    body.dark-mode .report-saved-banner .text-muted { color: #adb5bd !important; }
+    .explainability-panel {
+        background: linear-gradient(135deg,#f0f7ff,#f8f0ff);
+        border: 1px solid #d0e3ff;
+        color: #212529;
+    }
+    body.dark-mode .explainability-panel {
+        background: linear-gradient(135deg,#1e2a4a,#2a1e3a);
+        border-color: #4a3a6a;
+        color: #e9ecef;
+    }
+    body.dark-mode .explainability-panel .text-muted { color: #adb5bd !important; }
+    .explain-subsection {
+        background: var(--card-bg);
+        border: 1px solid #e0e0e0;
+    }
+    body.dark-mode .explain-subsection {
+        border-color: var(--border-color, #3a3a3a);
     }
     @media print {
         .no-print { display: none !important; }
@@ -154,7 +195,7 @@
         <form method="post" id="report-form" class="no-print">
             {% csrf_token %}
             {% if report_text %}
-            <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background:#f0f7ff;border:1px solid #bee3f8;">
+            <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded report-saved-banner">
                 <i class="fas fa-info-circle text-primary"></i>
                 <span class="small text-muted flex-grow-1">This report was saved {{ report_generated_at|timesince }} ago. Generate a fresh one from current board data.</span>
                 <button type="submit" class="btn btn-sm btn-primary" id="generate-btn">
@@ -197,7 +238,7 @@
 
         {% if report_explainability %}
         <!-- Explainable AI Panel -->
-        <div class="mt-3 p-3 rounded" style="background:linear-gradient(135deg,#f0f7ff,#f8f0ff);border:1px solid #d0e3ff;">
+        <div class="mt-3 p-3 rounded explainability-panel">
             <div class="d-flex align-items-center mb-2">
                 <i class="fas fa-wand-magic-sparkles text-primary me-2"></i>
                 <strong style="font-size:0.9rem;">AI Explainability</strong>
@@ -225,13 +266,13 @@
             </div>
             <div class="collapse" id="statusReportExplain">
                 {% if report_explainability.rag_reasoning %}
-                <div class="mb-2 p-2 rounded" style="background:var(--card-bg);border:1px solid #e0e0e0;">
+                <div class="mb-2 p-2 rounded explain-subsection">
                     <strong style="font-size:0.8rem;"><i class="fas fa-lightbulb text-warning me-1"></i>RAG Reasoning:</strong>
                     <p class="mb-0 mt-1 small">{{ report_explainability.rag_reasoning }}</p>
                 </div>
                 {% endif %}
                 {% if report_explainability.key_data_drivers %}
-                <div class="mb-2 p-2 rounded" style="background:var(--card-bg);border:1px solid #e0e0e0;">
+                <div class="mb-2 p-2 rounded explain-subsection">
                     <strong style="font-size:0.8rem;"><i class="fas fa-chart-bar text-info me-1"></i>Key Data Drivers:</strong>
                     <ul class="mb-0 mt-1 small ps-3">
                         {% for driver in report_explainability.key_data_drivers %}
@@ -287,6 +328,10 @@
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-shrink-0">
                     <span class="text-muted" style="font-size:0.75rem;">{{ rpt.provider_name }}</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger history-delete-btn" title="Delete this report"
+                            onclick="deleteHistoryReport(event, {{ rpt.id }})">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
                     <i class="fas fa-chevron-right text-muted" style="font-size:0.7rem;"></i>
                 </div>
             </div>
@@ -301,6 +346,11 @@
 
 {% block extra_js %}
 <script>
+if (window.location.search.indexOf('generated=1') !== -1) {
+    var cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState(null, '', cleanUrl);
+}
+
 var reportForm = document.getElementById('report-form');
 if (reportForm) {
     reportForm.addEventListener('submit', function() {
@@ -490,7 +540,7 @@ function loadHistoryReport(index) {
           </div>
           <div class="modal-body">
             <div class="report-output mb-3" id="history-report-body">${rpt.html}</div>
-            <div class="p-3 rounded" style="background:linear-gradient(135deg,#f0f7ff,#f8f0ff);border:1px solid #d0e3ff;">
+            <div class="p-3 rounded explainability-panel">
               <div class="d-flex align-items-center gap-3 mb-1">
                 <span class="badge" style="background:${color};color:${rpt.rag_status==='amber'?'#212529':'#fff'};">${label}</span>
                 <small class="text-muted">Confidence: <strong>${confPct}%</strong> &nbsp;|&nbsp; Data: <strong>${dataPct}%</strong></small>
@@ -500,6 +550,9 @@ function loadHistoryReport(index) {
             </div>
           </div>
           <div class="modal-footer">
+            <button type="button" class="btn btn-outline-danger btn-sm me-auto" onclick="deleteHistoryReport(event, ${rpt.id}, true)">
+              <i class="fas fa-trash-alt me-1"></i>Delete
+            </button>
             <button type="button" class="btn btn-outline-primary btn-sm" onclick="downloadHistoryPDF('${rpt.created_at.replace(/'/g,"\\'")}')">
               <i class="fas fa-file-pdf me-1"></i>Download PDF
             </button>
@@ -512,6 +565,34 @@ function loadHistoryReport(index) {
     const bsModal = new bootstrap.Modal(document.getElementById('historyReportModal'));
     bsModal.show();
     document.getElementById('historyReportModal').addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+function deleteHistoryReport(event, reportId, closeModal) {
+    event.stopPropagation();
+    if (!confirm('Delete this saved report? This cannot be undone.')) return;
+
+    var token = null;
+    document.cookie.split(';').forEach(function(c) {
+        var p = c.trim().split('=');
+        if (p[0] === 'csrftoken') token = decodeURIComponent(p[1]);
+    });
+
+    fetch('{% url "delete_status_report" board.id 0 %}'.replace('/0/delete/', '/' + reportId + '/delete/'), {
+        method: 'POST',
+        headers: { 'X-CSRFToken': token, 'X-Requested-With': 'XMLHttpRequest' },
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.success) {
+            if (closeModal) {
+                const modalEl = document.getElementById('historyReportModal');
+                if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
+            }
+            window.location.reload();
+        } else {
+            alert(data.error || 'Could not delete this report.');
+        }
+    }).catch(function() {
+        alert('Could not delete this report. Please try again.');
+    });
 }
 
 function downloadHistoryPDF(reportDate) {
